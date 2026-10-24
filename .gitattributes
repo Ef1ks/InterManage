@@ -1,0 +1,7 @@
+# Skrypty powłoki muszą mieć końce linii LF, inaczej nie uruchomią się na Linuksie/macOS (np. przy core.autocrlf=true).
+* text=auto
+backend/mvnw text eol=lf
+*.sh text eol=lf
+.claude/skills/impeccable/scripts/impeccable text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

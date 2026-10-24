@@ -1,0 +1,69 @@
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
+
+import { AppLayout } from '@/components/layout/AppLayout'
+import { AccountPage } from '@/features/auth/AccountPage'
+import { ActivationPage } from '@/features/auth/ActivationPage'
+import { LoginPage } from '@/features/auth/LoginPage'
+import { RequireAuth } from '@/features/auth/RequireAuth'
+import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
+import { RolesPage } from '@/features/settings/RolesPage'
+import { UsersPage } from '@/features/settings/UsersPage'
+import { TOOL_ROUTES } from '@/features/tools/categories'
+import { ToolPlaceholderPage } from '@/features/tools/ToolPlaceholderPage'
+import type { PermissionCategory } from '@/lib/types'
+import { DashboardPage } from '@/pages/DashboardPage'
+
+const toolRoutes = (Object.keys(TOOL_ROUTES) as PermissionCategory[]).map((category) => ({
+  path: TOOL_ROUTES[category].path,
+  element: (
+    <RequireAuth permission={{ category }}>
+      <ToolPlaceholderPage category={category} />
+    </RequireAuth>
+  ),
+}))
+
+const router = createBrowserRouter([
+  { path: '/logowanie', element: <LoginPage /> },
+  { path: '/aktywacja', element: <ActivationPage /> },
+  {
+    path: '/ustaw-haslo',
+    element: (
+      <RequireAuth allowPasswordSetup>
+        <SetPasswordPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <DashboardPage /> },
+      { path: '/konto', element: <AccountPage /> },
+      ...toolRoutes,
+      {
+        path: '/ustawienia/role',
+        element: (
+          <RequireAuth ownerOnly>
+            <RolesPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: '/ustawienia/uzytkownicy',
+        element: (
+          <RequireAuth ownerOnly>
+            <UsersPage />
+          </RequireAuth>
+        ),
+      },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+])
+
+export function App() {
+  return <RouterProvider router={router} />
+}
