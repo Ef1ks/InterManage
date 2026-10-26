@@ -17,6 +17,13 @@ public record DocumentResponse(
         String supplierCode,
         String supplierName,
         String supplierDocumentNumber,
+        /** Numer z raportu; różni się od obowiązującego, gdy ktoś go poprawił ręcznie. */
+        String reportSupplierDocumentNumber,
+        /** Ręczna poprawka numeru dokumentu dostawcy: kiedy i kto ({@code null} = numer z raportu). */
+        Instant supplierDocumentNumberEditedAt,
+        String supplierDocumentNumberEditedBy,
+        /** Numer dokumentu dostawcy można poprawić (przyjęcia PZ, po nim faktury KSeF wiążą się z dostawą). */
+        boolean supplierDocumentNumberEditable,
         int lineCount,
         BigDecimal purchaseValue,
         BigDecimal saleValueGross,

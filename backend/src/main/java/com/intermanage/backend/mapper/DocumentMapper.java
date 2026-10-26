@@ -36,6 +36,9 @@ public interface DocumentMapper {
     @Mapping(target = "typeLabel", expression = "java(document.getType().label())")
     @Mapping(target = "typeSingular", expression = "java(document.getType().singular())")
     @Mapping(target = "gratisAllowed", expression = "java(document.getType().canBeGratis())")
+    @Mapping(target = "supplierDocumentNumberEditedBy", source = "document.supplierDocumentNumberEditedBy.displayName")
+    @Mapping(target = "supplierDocumentNumberEditable",
+            expression = "java(document.getType() == com.intermanage.backend.entity.DocumentType.PZ)")
     DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis);
 
     @Mapping(target = "supplierId", source = "supplier.id")

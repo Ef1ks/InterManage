@@ -25,13 +25,17 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 
 /**
- * Filtry listy faktur KSeF po stronie bazy. Faktury są wspólne dla firmy (NIP połączenia sklepu); sklep widzi te ze
- * swoimi IDWew i wszystkie bez IDWew, faktury pominiętych dostawców tylko na żądanie. "Wprowadzona" = numer faktury
+ * Filtry listy faktur KSeF po stronie bazy. Faktury są wspólne dla firmy (NIP połączenia sklepu). Sklep bez IDWew
+ * widzi wszystkie faktury firmy, sklep z IDWew - te ze swoimi IDWew i wszystkie bez IDWew (albo, na żądanie, tylko
+ * ze swoimi). Faktury pominiętych dostawców tylko na żądanie. "Wprowadzona" = numer faktury
  * jest numerem dokumentu dostawcy w przyjęciu PZ sklepu (bez względu na wielkość liter) albo sklep ją oznaczył ręcznie.
  */
 public final class KsefInvoiceSearch {
 
-    /** {@code internalId}: konkretny IDWew sklepu, {@link #WITHOUT_INTERNAL_ID} albo {@code null} (wszystkie). */
+    /**
+     * {@code internalId}: konkretny IDWew sklepu, {@link #OWN_INTERNAL_IDS} (tylko z IDWew sklepu),
+     * {@link #WITHOUT_INTERNAL_ID} (tylko bez IDWew) albo {@code null} (wszystkie widoczne w sklepie).
+     */
     public record Filter(String query, LocalDate from, LocalDate to, Entered entered, Kind kind, String internalId,
             boolean showSkipped) {
     }
@@ -45,6 +49,7 @@ public final class KsefInvoiceSearch {
     }
 
     public static final String WITHOUT_INTERNAL_ID = "NONE";
+    public static final String OWN_INTERNAL_IDS = "OWN";
 
     private static final Map<String, String> SORTABLE = Map.of(
             "issueDate", "issueDate",
@@ -104,17 +109,33 @@ public final class KsefInvoiceSearch {
         };
     }
 
-    /** Bez IDWew albo z IDWew sklepu; przy wybranym IDWew - tylko on (albo tylko faktury bez IDWew). */
+    /**
+     * Sklep bez IDWew: wszystkie faktury firmy. Sklep z IDWew: bez IDWew albo z jego IDWew; zawężenie do jego IDWew
+     * (wszystkich albo jednego) albo do faktur bez IDWew.
+     */
     private static Predicate visibleInStore(Root<KsefInvoice> root, CriteriaQuery<?> query, CriteriaBuilder cb,
             Collection<String> own, String selected) {
         Predicate without = cb.not(cb.exists(internalIds(root, query, cb, null)));
         if (WITHOUT_INTERNAL_ID.equals(selected)) {
             return without;
         }
+        if (own.isEmpty()) {
+            return selected == null ? cb.conjunction() : cb.disjunction();
+        }
+        Predicate withOwn = cb.exists(internalIds(root, query, cb, own));
+        if (OWN_INTERNAL_IDS.equals(selected)) {
+            return withOwn;
+        }
         if (selected != null) {
             return own.contains(selected) ? cb.exists(internalIds(root, query, cb, List.of(selected))) : cb.disjunction();
         }
-        return own.isEmpty() ? without : cb.or(without, cb.exists(internalIds(root, query, cb, own)));
+        return cb.or(without, withOwn);
+    }
+
+    /** To samo co {@link #visibleInStore} bez zawężeń, dla pojedynczej faktury. */
+    public static boolean visibleInStore(KsefInvoice invoice, Collection<String> own) {
+        return own.isEmpty() || invoice.getInternalIds().isEmpty()
+                || invoice.getInternalIds().stream().anyMatch(ref -> own.contains(ref.internalId()));
     }
 
     /** IDWew faktury - wszystkie ({@code among} = null) albo spośród podanych. */

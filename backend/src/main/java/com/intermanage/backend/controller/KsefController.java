@@ -29,6 +29,7 @@ import com.intermanage.backend.dto.KsefInternalIdRequest;
 import com.intermanage.backend.dto.KsefInvoicePage;
 import com.intermanage.backend.dto.KsefInvoiceSummary;
 import com.intermanage.backend.dto.KsefLinkConnectionRequest;
+import com.intermanage.backend.dto.KsefShareConnectionRequest;
 import com.intermanage.backend.dto.KsefOverview;
 import com.intermanage.backend.dto.KsefSettingsResponse;
 import com.intermanage.backend.dto.KsefSkippedSupplierRequest;
@@ -72,8 +73,8 @@ public class KsefController {
 
     /**
      * Strona faktur (po 100). {@code entered}: ALL / ENTERED / NOT_ENTERED, {@code kind}: ALL / INVOICES /
-     * CORRECTIONS, {@code internalId}: IDWew sklepu albo NONE (bez IDWew), {@code sort}: issueDate, number, seller,
-     * net, gross.
+     * CORRECTIONS, {@code internalId}: IDWew sklepu, OWN (tylko z IDWew sklepu) albo NONE (bez IDWew), {@code sort}:
+     * issueDate, number, seller, net, gross.
      */
     @GetMapping("/invoices")
     @PreAuthorize(VIEW)
@@ -165,6 +166,15 @@ public class KsefController {
             @Valid @RequestBody KsefLinkConnectionRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return connectionService.linkConnection(storeId, request.nip(), principal.getId());
+    }
+
+    /** Podłączenie innych sklepów użytkownika do firmy tego sklepu (bez wgrywania certyfikatu w każdym). */
+    @PostMapping("/settings/connection/share")
+    @PreAuthorize(EDIT)
+    public KsefSettingsResponse shareConnection(@PathVariable UUID storeId,
+            @Valid @RequestBody KsefShareConnectionRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return connectionService.shareConnection(storeId, request.storeIds(), principal.getId());
     }
 
     @PostMapping("/settings/test")

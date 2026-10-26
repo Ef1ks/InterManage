@@ -18,6 +18,7 @@ import com.intermanage.backend.dto.DocumentPage;
 import com.intermanage.backend.dto.DocumentResponse;
 import com.intermanage.backend.dto.DocumentsOverview;
 import com.intermanage.backend.dto.RegisterGratisRequest;
+import com.intermanage.backend.dto.SupplierDocumentNumberRequest;
 import com.intermanage.backend.security.AppUserPrincipal;
 import com.intermanage.backend.service.DocumentGratisService;
 import com.intermanage.backend.service.DocumentService;
@@ -69,6 +70,24 @@ public class DocumentController {
     @PreAuthorize(VIEW)
     public DocumentResponse document(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id) {
         return documentService.document(storeId, type, id);
+    }
+
+    /** Poprawia numer dokumentu dostawcy w przyjęciu PZ (import go nie nadpisze). */
+    @PutMapping("/{type}/{id}/supplier-document-number")
+    @PreAuthorize(EDIT)
+    public DocumentResponse editSupplierDocumentNumber(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @Valid @RequestBody SupplierDocumentNumberRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return documentService.editSupplierDocumentNumber(storeId, type, id, request.supplierDocumentNumber(),
+                principal.getId());
+    }
+
+    /** Cofa poprawkę numeru: znowu obowiązuje numer z raportu. */
+    @DeleteMapping("/{type}/{id}/supplier-document-number")
+    @PreAuthorize(EDIT)
+    public DocumentResponse restoreSupplierDocumentNumber(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id) {
+        return documentService.restoreSupplierDocumentNumber(storeId, type, id);
     }
 
     /** Rejestruje przeniesienie stanów jako gratis od dostawcy albo zmienia dostawcę. */

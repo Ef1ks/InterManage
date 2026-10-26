@@ -404,6 +404,13 @@ export type Document = DocumentSummary & {
   typeSingular: string
   /** Typ można rejestrować jako gratis (przeniesienia stanów). */
   gratisAllowed: boolean
+  /** Numer dokumentu dostawcy z raportu; inny niż obowiązujący, gdy ktoś go poprawił. */
+  reportSupplierDocumentNumber: string | null
+  /** Ręczna poprawka numeru dokumentu dostawcy ({@code null} = numer z raportu). */
+  supplierDocumentNumberEditedAt: string | null
+  supplierDocumentNumberEditedBy: string | null
+  /** Numer dokumentu dostawcy można poprawić (przyjęcia PZ). */
+  supplierDocumentNumberEditable: boolean
   updatedAt: string
   lines: DocumentLine[]
   /** Zamówienia garmażu jadące na tym dokumencie (tylko ruchy międzymagazynowe). */
@@ -537,7 +544,7 @@ export type KsefConnection = {
   testMessage: string | null
 }
 
-/** Firma (NIP) połączona z KSeF w innych sklepach - właściciel może do niej podłączyć sklep bez certyfikatu. */
+/** Firma (NIP) połączona z KSeF w innych sklepach użytkownika - może do niej podłączyć sklep bez certyfikatu. */
 export type KsefCompany = {
   nip: string
   stores: string[]
@@ -574,6 +581,16 @@ export type KsefSettings = {
   seenInternalIds: KsefSeenInternalId[]
   skippedSuppliers: KsefSkippedSupplier[]
   companies: KsefCompany[]
+  /** Inne aktywne sklepy użytkownika (przy połączonym sklepie) - do podłączenia ich do tej firmy. */
+  otherStores: KsefCompanyStore[]
+}
+
+/** Inny sklep użytkownika; {@code nip}: firma, z którą jest połączony, {@code null} = bez połączenia. */
+export type KsefCompanyStore = {
+  id: string
+  number: string
+  name: string
+  nip: string | null
 }
 
 export type KsefOverview = {

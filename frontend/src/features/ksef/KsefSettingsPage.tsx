@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { CircleAlertIcon, CircleCheckIcon, FileKeyIcon, LinkIcon, PlusIcon, ShieldCheckIcon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Form, FormActions, TextField } from '@/components/form'
+import { Form, FormActions, MultiComboboxField, TextField } from '@/components/form'
 import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,7 +11,7 @@ import { useKsefSettings, useKsefSettingsMutations } from '@/features/ksef/api'
 import { formatDateTime, formatDay, formatNip, invoicesWord } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
-import type { KsefCompany, KsefConnection, KsefSettings } from '@/lib/types'
+import type { KsefCompany, KsefCompanyStore, KsefConnection, KsefSettings } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
@@ -60,6 +60,9 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
       />
       {!settings.connection && <CompanyLinkCard storeId={storeId} companies={settings.companies} />}
       <ConnectionCard storeId={storeId} connection={settings.connection} />
+      {settings.connection && (
+        <CompanyStoresCard storeId={storeId} nip={settings.connection.nip} stores={settings.otherStores} />
+      )}
       <InternalIdsCard storeId={storeId} settings={settings} />
       <SkippedSuppliersCard storeId={storeId} settings={settings} />
     </div>
@@ -111,6 +114,88 @@ function CompanyLinkCard({ storeId, companies }: { storeId: string; companies: K
           </li>
         ))}
       </ul>
+    </Card>
+  )
+}
+
+/**
+ * Pozostałe sklepy tej samej firmy: połączenie (certyfikat, klucz, hasło) kopiuje się do wybranych sklepów naraz,
+ * więc przy kilku sklepach jednej firmy certyfikat wgrywa się tylko raz. Sklepów innej firmy się nie przełącza.
+ */
+function CompanyStoresCard({ storeId, nip, stores }: { storeId: string; nip: string; stores: KsefCompanyStore[] }) {
+  const { shareConnection } = useKsefSettingsMutations(storeId)
+  const [selected, setSelected] = useState<string[]>([])
+  const connected = stores.filter((store) => store.nip === nip)
+  const available = stores.filter((store) => store.nip === null)
+  const otherCompany = stores.filter((store) => store.nip !== null && store.nip !== nip)
+  if (stores.length === 0) return null
+
+  const label = (store: KsefCompanyStore) => `${store.number} · ${store.name}`
+  const onShare = () =>
+    shareConnection.mutate(selected, {
+      onSuccess: () => {
+        toast.success(
+          selected.length === 1 ? 'Sklep podłączony do firmy' : `Podłączono sklepy: ${selected.length}`,
+          { description: 'Widzą faktury firmy od razu, bez wgrywania certyfikatu.' },
+        )
+        setSelected([])
+      },
+      onError: (error) => toast.error(errorMessage(error, 'Nie udało się podłączyć sklepów')),
+    })
+
+  return (
+    <Card className="gap-4 p-5">
+      <div>
+        <h2 className="text-base font-semibold">Inne sklepy tej firmy</h2>
+        <p className="text-sm text-muted-foreground">
+          Podłącz pozostałe sklepy firmy NIP {formatNip(nip)} jednym kliknięciem - dostaną to samo połączenie, bez
+          wgrywania certyfikatu w każdym z nich.
+        </p>
+      </div>
+
+      {connected.length > 0 && (
+        <ul className="flex flex-wrap gap-2" aria-label="Sklepy połączone z tą firmą">
+          {connected.map((store) => (
+            <li
+              key={store.id}
+              className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1 text-sm tabular-nums"
+            >
+              <CircleCheckIcon className="size-3.5 text-emerald-600" aria-hidden />
+              {label(store)}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {available.length > 0 ? (
+        <div className="flex flex-wrap items-end gap-3">
+          <MultiComboboxField
+            label="Podłącz sklepy"
+            className="min-w-0 flex-1 basis-72"
+            placeholder="Wybierz sklepy…"
+            options={available.map((store) => ({ value: store.id, label: label(store) }))}
+            value={selected}
+            onChange={setSelected}
+          />
+          <Button
+            size="xl"
+            disabled={selected.length === 0}
+            loading={shareConnection.isPending}
+            onClick={onShare}
+          >
+            <LinkIcon />
+            Podłącz{selected.length > 0 && ` (${selected.length})`}
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Wszystkie Twoje sklepy bez połączenia są już podłączone.</p>
+      )}
+
+      {otherCompany.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Połączone z inną firmą: {otherCompany.map(label).join(', ')}. Tych sklepów nie przełączamy.
+        </p>
+      )}
     </Card>
   )
 }

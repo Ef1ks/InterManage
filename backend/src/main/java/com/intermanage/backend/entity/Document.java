@@ -60,8 +60,20 @@ public class Document {
     @Column(name = "supplier_name", length = 100)
     private String supplierName;
 
+    /** Obowiązujący numer dokumentu dostawcy: z raportu albo poprawiony ręcznie. */
     @Column(name = "supplier_document_number", length = 60)
     private String supplierDocumentNumber;
+
+    @Column(name = "report_supplier_document_number", length = 60)
+    private String reportSupplierDocumentNumber;
+
+    /** Ręczna poprawka numeru dokumentu dostawcy; dopóki jest, import nie zmienia obowiązującego numeru. */
+    @Column(name = "supplier_document_number_edited_at")
+    private Instant supplierDocumentNumberEditedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_document_number_edited_by")
+    private AppUser supplierDocumentNumberEditedBy;
 
     @Column(name = "line_count", nullable = false)
     private int lineCount;
@@ -115,13 +127,30 @@ public class Document {
     public boolean applyHeader(DocumentLineRow header, DocumentImport documentImport) {
         lastImport = documentImport;
         boolean changed = !header.documentDate().equals(documentDate)
-                || !Objects.equals(header.supplierDocumentNumber(), supplierDocumentNumber);
+                || !Objects.equals(header.supplierDocumentNumber(), reportSupplierDocumentNumber);
         documentDate = header.documentDate();
-        supplierDocumentNumber = header.supplierDocumentNumber();
+        reportSupplierDocumentNumber = header.supplierDocumentNumber();
+        if (supplierDocumentNumberEditedAt == null) {
+            supplierDocumentNumber = reportSupplierDocumentNumber;
+        }
         if (changed) {
             updatedAt = Instant.now();
         }
         return changed;
+    }
+
+    /** Ręczna poprawka numeru dokumentu dostawcy ({@code null} = brak numeru); kolejne importy jej nie nadpiszą. */
+    public void editSupplierDocumentNumber(String number, AppUser user) {
+        supplierDocumentNumber = number;
+        supplierDocumentNumberEditedAt = Instant.now();
+        supplierDocumentNumberEditedBy = user;
+    }
+
+    /** Cofa ręczną poprawkę: obowiązuje znowu numer z raportu. */
+    public void restoreReportSupplierDocumentNumber() {
+        supplierDocumentNumber = reportSupplierDocumentNumber;
+        supplierDocumentNumberEditedAt = null;
+        supplierDocumentNumberEditedBy = null;
     }
 
     /** Linia z pliku: nowa albo zaktualizowana. {@code true}, gdy coś się zmieniło. */
@@ -181,6 +210,18 @@ public class Document {
 
     public String getSupplierDocumentNumber() {
         return supplierDocumentNumber;
+    }
+
+    public String getReportSupplierDocumentNumber() {
+        return reportSupplierDocumentNumber;
+    }
+
+    public Instant getSupplierDocumentNumberEditedAt() {
+        return supplierDocumentNumberEditedAt;
+    }
+
+    public AppUser getSupplierDocumentNumberEditedBy() {
+        return supplierDocumentNumberEditedBy;
     }
 
     public int getLineCount() {

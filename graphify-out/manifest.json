@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1792990808.6727672,
-    "seen": 1792990864.3908794,
-    "ast_hash": "d2a2300db142af0b5dd344adb918df97",
+    "mtime": 1793012208.123272,
+    "seen": 1793012296.907784,
+    "ast_hash": "f15a63b1bead25ae74c45ca547f29c2f",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793009164.9814968,
-    "seen": 1793009193.6981218,
-    "ast_hash": "c3db92b6ed1f29dfab939b41c13a23ae",
+    "mtime": 1793012242.6709602,
+    "seen": 1793012296.9212267,
+    "ast_hash": "495f754f95700f72c62dfd33fff8bb14",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1968,9 +1968,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/controller/DocumentController.java": {
-    "mtime": 1792942034.469182,
-    "seen": 1792942411.8120987,
-    "ast_hash": "3aef3ea189ff1b13cda4403971fbd394",
+    "mtime": 1793009710.0210466,
+    "seen": 1793010157.903276,
+    "ast_hash": "b6aa721c99d625edc16d91d5becd3349",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dto/DocumentImportResponse.java": {
@@ -1992,9 +1992,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mapper/DocumentMapper.java": {
-    "mtime": 1792941907.6316893,
-    "seen": 1792942411.8167586,
-    "ast_hash": "f537bbd01e5b9131b4e868f55a43e18c",
+    "mtime": 1793009692.9035707,
+    "seen": 1793010157.9242797,
+    "ast_hash": "a612e21d2e295a8c46d1c2852f282f0a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/repository/DocumentImportRepository.java": {
@@ -2004,9 +2004,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/service/DocumentService.java": {
-    "mtime": 1792941925.8024597,
-    "seen": 1792942411.8183122,
-    "ast_hash": "7f7a237dc1007ad915698e7475f32df5",
+    "mtime": 1793009710.0210466,
+    "seen": 1793010157.931788,
+    "ast_hash": "937853b63cada27de9e3ee6bd48a0b0b",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DocumentImportIntegrationTests.java": {
@@ -2046,9 +2046,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/api.ts": {
-    "mtime": 1792942264.894077,
-    "seen": 1792942411.818842,
-    "ast_hash": "dc33eaa8f45b4fba2aafe3d99cfd4f88",
+    "mtime": 1793009996.0583534,
+    "seen": 1793010157.9477968,
+    "ast_hash": "fb6836a6684fa572f00fd71a2c33c6cf",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/format.ts": {
@@ -2094,9 +2094,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dto/DocumentResponse.java": {
-    "mtime": 1792941836.9131145,
-    "seen": 1792942411.8131344,
-    "ast_hash": "9b9cda4f1dfae3ffef4198e981540f2c",
+    "mtime": 1793009692.9035707,
+    "seen": 1793010157.9082775,
+    "ast_hash": "e76979425eceaf7b9b75370e2ee8908f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dto/DocumentSummary.java": {
@@ -2118,9 +2118,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/entity/Document.java": {
-    "mtime": 1792941781.415646,
-    "seen": 1792942411.8157234,
-    "ast_hash": "ad9ad1e73ed4a8002cf3ddf9306129ac",
+    "mtime": 1793009692.9025688,
+    "seen": 1793010157.9182796,
+    "ast_hash": "f2a1bb9ad8101b9380da9a58e60d00dc",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/entity/DocumentLine.java": {
@@ -2142,9 +2142,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentDetail.tsx": {
-    "mtime": 1792942348.6640122,
-    "seen": 1792942411.818842,
-    "ast_hash": "bfc6271e31c39c3893b8d8d89d76481e",
+    "mtime": 1793010027.8838055,
+    "seen": 1793010157.9467967,
+    "ast_hash": "3cfd13b129597339c68e5762acdce8f5",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentTypesGrid.tsx": {
@@ -2544,9 +2544,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/component/KsefClient.java": {
-    "mtime": 1792964639.05578,
-    "seen": 1792964719.7286148,
-    "ast_hash": "7663d1001654f7cd90d7617d51527667",
+    "mtime": 1793009820.0713227,
+    "seen": 1793010157.901276,
+    "ast_hash": "363fce406ab899d8e657ae5d99cdbf9c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/component/KsefCredentials.java": {
@@ -2574,9 +2574,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/controller/KsefController.java": {
-    "mtime": 1793008944.7029455,
-    "seen": 1793009193.6286576,
-    "ast_hash": "da1afa75244c541f208f2d4baef6f2b3",
+    "mtime": 1793012134.2800407,
+    "seen": 1793012296.8600605,
+    "ast_hash": "161e16c0dd0cad8943bbe6f04947e401",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dto/KsefConnectionResponse.java": {
@@ -2628,9 +2628,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dto/KsefSettingsResponse.java": {
-    "mtime": 1793008944.7039468,
-    "seen": 1793009193.6350255,
-    "ast_hash": "f2bf931023e36683d5f5b2427c374dd6",
+    "mtime": 1793012134.2790408,
+    "seen": 1793012296.8660603,
+    "ast_hash": "f7a169ab6b35929403075a7d33bedda1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dto/KsefSkippedSupplierRequest.java": {
@@ -2694,9 +2694,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/repository/KsefInvoiceSearch.java": {
-    "mtime": 1792990411.7903118,
-    "seen": 1792990864.3678021,
-    "ast_hash": "a0db54951055e44e1a35dba8c2b438c2",
+    "mtime": 1793009728.4941084,
+    "seen": 1793010157.92728,
+    "ast_hash": "196433dc74f7fbb17151ccf3e5e8a99b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/repository/KsefInvoiceTotalsRepository.java": {
@@ -2718,15 +2718,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/service/KsefConnectionService.java": {
-    "mtime": 1793008944.7029455,
-    "seen": 1793009193.6608827,
-    "ast_hash": "c07eb03d45ec4ce23de1ee8023049234",
+    "mtime": 1793012134.2790408,
+    "seen": 1793012296.889215,
+    "ast_hash": "f218e38c17479a9d5a579a6a4abeba95",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/service/KsefInvoiceService.java": {
-    "mtime": 1792990489.3570673,
-    "seen": 1792990864.3723118,
-    "ast_hash": "5611f9f6c693242083a934c5dd7a1398",
+    "mtime": 1793009728.4951074,
+    "seen": 1793010157.9327931,
+    "ast_hash": "525c78d3b4e8f003f622fb9e5f6565be",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/service/KsefSessionService.java": {
@@ -2736,15 +2736,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/service/KsefSyncService.java": {
-    "mtime": 1792990460.1351035,
-    "seen": 1792990864.3723118,
-    "ast_hash": "53416f3bb123e5822cb0bd888c8e67dc",
+    "mtime": 1793009841.506937,
+    "seen": 1793010157.9327931,
+    "ast_hash": "50cef2e2741b0406cbc8b0687753c750",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/KsefIntegrationTests.java": {
-    "mtime": 1793009060.3826578,
-    "seen": 1793009193.6629894,
-    "ast_hash": "f438d46b1a14f92248d7e7194403162f",
+    "mtime": 1793012167.3721845,
+    "seen": 1793012296.8902197,
+    "ast_hash": "b43fac9fa2e15bc209b7df07c12fbb9b",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/KsefSignatureTests.java": {
@@ -2754,9 +2754,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/InvoicesList.tsx": {
-    "mtime": 1792990874.020578,
-    "seen": 1792990947.411801,
-    "ast_hash": "3d7ce79a55c13b23ceaf6c8a9f5d86a0",
+    "mtime": 1793010065.923468,
+    "seen": 1793010157.9477968,
+    "ast_hash": "c7ceb5f4070e8888a52a14b00cf02368",
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/KsefPage.tsx": {
@@ -2766,15 +2766,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/KsefSettingsPage.tsx": {
-    "mtime": 1793008984.7624288,
-    "seen": 1793009193.6778915,
-    "ast_hash": "533384f97b46397413b3599920db6288",
+    "mtime": 1793012225.9378557,
+    "seen": 1793012296.9038694,
+    "ast_hash": "33d3adb666f15a28e3d59ee18397bf6e",
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/api.ts": {
-    "mtime": 1792990808.6727672,
-    "seen": 1792990864.3878796,
-    "ast_hash": "b20250c9cc7929a03d070a9f835f0ef8",
+    "mtime": 1793012208.1242719,
+    "seen": 1793012296.9038694,
+    "ast_hash": "25a1ecf268bbe8c230ba2cb780c6b93b",
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/format.ts": {
@@ -2808,9 +2808,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/component/KsefRateLimiter.java": {
-    "mtime": 1792989333.458207,
-    "seen": 1792989410.6440332,
-    "ast_hash": "c2f68bffaea5fa3c26ebf869e6a63f0b",
+    "mtime": 1793009802.310305,
+    "seen": 1793010157.901276,
+    "ast_hash": "a08d55bf0d3ecc3d86a4a690cca53eea",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/entity/KsefInvoiceXml.java": {
@@ -2826,9 +2826,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/KsefRateLimiterTests.java": {
-    "mtime": 1792989348.6349268,
-    "seen": 1792989410.6759694,
-    "ast_hash": "a4cd9b18480b1f2a0107d0be364441c2",
+    "mtime": 1793009974.5578332,
+    "seen": 1793010157.9337928,
+    "ast_hash": "6676cd639bbccf4db94e3c4c9865417a",
     "semantic_hash": ""
   },
   ".github/workflows/deploy.yml": {
@@ -2907,6 +2907,60 @@
     "mtime": 1793008246.8139129,
     "seen": 1793008277.8333814,
     "ast_hash": "a6040e12aa18a7e3d28b9f87eb31124c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/component/KsefRateHistory.java": {
+    "mtime": 1793009781.7021084,
+    "seen": 1793010157.901276,
+    "ast_hash": "df3455edb14db635c6103ab88795e575",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/dto/SupplierDocumentNumberRequest.java": {
+    "mtime": 1793009709.985623,
+    "seen": 1793010157.9162798,
+    "ast_hash": "76935d7940194b5c4d8a2e558a2af2d7",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/entity/KsefApiBlock.java": {
+    "mtime": 1793009781.6470814,
+    "seen": 1793010157.9192796,
+    "ast_hash": "84ada8734ca2383dde3be1584bcd70de",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/entity/KsefApiCall.java": {
+    "mtime": 1793009781.6284392,
+    "seen": 1793010157.9192796,
+    "ast_hash": "e33ca6211c89bee6824e369f139ec0c5",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/repository/KsefApiBlockRepository.java": {
+    "mtime": 1793009781.6834924,
+    "seen": 1793010157.92728,
+    "ast_hash": "5fadebc9b14fd92470fa75f2c237688a",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/repository/KsefApiCallRepository.java": {
+    "mtime": 1793009781.66504,
+    "seen": 1793010157.92728,
+    "ast_hash": "71f7aa44adae8ac6306dc9fde828361b",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/documents/SupplierDocumentNumber.tsx": {
+    "mtime": 1793010016.0095253,
+    "seen": 1793010157.9477968,
+    "ast_hash": "3559141064d4a5ce1dd783d8aad105da",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/dto/KsefCompanyStore.java": {
+    "mtime": 1793012134.2438781,
+    "seen": 1793012296.86506,
+    "ast_hash": "8459978dc46513286e27d60491466e54",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/dto/KsefShareConnectionRequest.java": {
+    "mtime": 1793012134.2243445,
+    "seen": 1793012296.8660603,
+    "ast_hash": "e5152b4148ce4cf0ca94da98eca26a9a",
     "semantic_hash": ""
   }
 }

@@ -204,10 +204,7 @@ public class KsefInvoiceService {
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono faktury"));
         KsefInvoice invoice = invoices.findByIdAndNip(id, nip)
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono faktury"));
-        Set<String> own = ownInternalIds(storeId);
-        boolean visible = invoice.getInternalIds().isEmpty()
-                || invoice.getInternalIds().stream().anyMatch(ref -> own.contains(ref.internalId()));
-        if (!visible) {
+        if (!KsefInvoiceSearch.visibleInStore(invoice, ownInternalIds(storeId))) {
             throw ApiException.notFound("Nie znaleziono faktury");
         }
         return invoice;

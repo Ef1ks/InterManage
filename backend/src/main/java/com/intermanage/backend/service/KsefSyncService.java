@@ -35,8 +35,9 @@ import com.intermanage.backend.repository.KsefSyncStateRepository;
  * dni, bo KSeF przyjmuje najwyżej 100. Faktury są wspólne dla sklepów firmy, więc pobieranie idzie raz na NIP, a nowy
  * sklep z połączeniem tej firmy od razu je widzi. Scalanie po numerze KSeF - ponowne pobranie niczego nie dubluje.
  * Zapytań o faktury jest w KSeF mało (16 na minutę, 20 na godzinę na kontekst), więc idą przez
- * {@link KsefRateLimiter}: krótkie limity przeczekuje, a gdy skończy się godzinowy (albo KSeF odpowie 429), postęp
- * zostaje zapisany i następne pobranie zaczyna od tego miejsca. Co {@code app.ksef.sync-interval} pobieranie rusza
+ * {@link KsefRateLimiter} (z historią w bazie, więc restart jej nie zeruje): krótkie limity przeczekuje, a gdy skończy
+ * się godzinowy (albo KSeF odpowie 429), postęp zostaje zapisany i następne pobranie zaczyna od tego miejsca. Strona
+ * to 250 faktur, więc godzina limitu to kilka tysięcy faktur; większa zaległość schodzi w kolejnych pobraniach. Co {@code app.ksef.sync-interval} pobieranie rusza
  * samo dla firm z działającym połączeniem.
  */
 @Service
@@ -44,6 +45,8 @@ public class KsefSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(KsefSyncService.class);
     private static final Duration WINDOW = Duration.ofDays(90);
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration RETRY_DELAY = Duration.ofSeconds(10);
 
     private final TransactionTemplate transaction;
     private final KsefConnectionRepository connections;
@@ -157,10 +160,7 @@ public class KsefSyncService {
                 int pageOffset = 0;
                 KsefInvoiceMetadata.Page page;
                 while (true) {
-                    Instant pageFrom = from;
-                    int offset = pageOffset;
-                    page = limiter.call(nip, KsefRateLimiter.Operation.METADATA,
-                            () -> client.purchaseInvoices(token, pageFrom, windowEnd, offset));
+                    page = query(nip, token, from, windowEnd, pageOffset);
                     save(nip, page.invoices(), counts);
                     if (!page.invoices().isEmpty()) {
                         // Faktury przychodzą rosnąco - wszystko przed ostatnią datą jest już zapisane.
@@ -170,7 +170,10 @@ public class KsefSyncService {
                     if (!page.hasMore()) {
                         break;
                     }
-                    if (page.isTruncated()) {
+                    // Następna strona od daty ostatniej faktury, nie przez pageOffset: KSeF liczy głębokie strony
+                    // coraz dłużej (timeouty). Faktury z tą samą datą przyjdą drugi raz i scalą się po numerze KSeF;
+                    // offset tylko wtedy, gdy cała strona ma jedną datę.
+                    if (cursor.isAfter(from)) {
                         from = cursor;
                         pageOffset = 0;
                     } else {
@@ -194,15 +197,45 @@ public class KsefSyncService {
             if (e.rateLimited()) {
                 long minutes = Math.max(1, (e.retryAfter().toSeconds() + 59) / 60);
                 String message = "Limit zapytań KSeF - pobrano " + counts.created + " " + invoicesWord(counts.created)
-                        + ", reszta za ok. " + minutes + " min";
+                        + ". Limit odnowi się za ok. " + minutes + " min, reszta pobierze się automatycznie.";
                 record(nip, true, message);
                 return;
+            }
+            if (e.temporary()) {
+                String message = e.getMessage() + " - pobrano " + counts.created + " " + invoicesWord(counts.created)
+                        + ", reszta przy następnym pobraniu.";
+                record(nip, false, message);
+                throw ApiException.badRequest("KSeF: " + message);
             }
             record(nip, false, e.getMessage());
             throw ApiException.badRequest("KSeF: " + e.getMessage());
         } catch (ApiException e) {
             record(nip, false, e.getMessage());
             throw e;
+        }
+    }
+
+    /**
+     * Strona metadanych w granicach limitów. Brak odpowiedzi albo błąd serwera KSeF powtarzamy kilka razy z przerwą;
+     * każda próba liczy się do limitu zapytań.
+     */
+    private KsefInvoiceMetadata.Page query(String nip, String token, Instant from, Instant to, int offset) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return limiter.call(nip, KsefRateLimiter.Operation.METADATA,
+                        () -> client.purchaseInvoices(token, from, to, offset));
+            } catch (KsefClient.KsefException e) {
+                if (!e.temporary() || attempt >= MAX_ATTEMPTS) {
+                    throw e;
+                }
+                log.info("KSeF nie odpowiedział (NIP {}, próba {}): {}", nip, attempt, e.getMessage());
+                try {
+                    Thread.sleep(RETRY_DELAY.multipliedBy(attempt));
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
         }
     }
 

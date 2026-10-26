@@ -6,8 +6,10 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,8 +21,8 @@ import org.springframework.stereotype.Component;
  * KSeF liczy zapytania na parę kontekst (NIP) + adres IP w oknach przesuwnych: sekunda, minuta i godzina naraz.
  * Wszystkie sklepy aplikacji wychodzą z jednego IP, więc liczymy po NIP-ie, z zapasem poniżej limitów KSeF.
  * Krótkie okna (sekunda, minuta) przeczekujemy, wyczerpana godzina albo blokada po 429 kończy się od razu
- * {@link KsefClient.KsefException} z czasem, po którym można spróbować znowu. Historia jest w pamięci, więc restart
- * aplikacji ją zeruje.
+ * {@link KsefClient.KsefException} z czasem, po którym można spróbować znowu. Historia jest w pamięci i w bazie
+ * ({@link History}): po restarcie limiter wczytuje zapytania z ostatniej godziny, bo KSeF liczy je dalej.
  */
 @Component
 public class KsefRateLimiter {
@@ -57,22 +59,63 @@ public class KsefRateLimiter {
         void sleep(Duration duration) throws InterruptedException;
     }
 
+    /** Trwała historia zapytań i blokad (w aplikacji baza: {@link KsefRateHistory}). */
+    public interface History {
+
+        List<Instant> recentCalls(String nip, Operation operation, Instant since);
+
+        void recordCall(String nip, Operation operation, Instant at);
+
+        Instant blockedUntil(String nip);
+
+        void block(String nip, Instant until);
+
+        /** Tylko pamięć (testy jednostkowe). */
+        History NONE = new History() {
+            @Override
+            public List<Instant> recentCalls(String nip, Operation operation, Instant since) {
+                return List.of();
+            }
+
+            @Override
+            public void recordCall(String nip, Operation operation, Instant at) {
+            }
+
+            @Override
+            public Instant blockedUntil(String nip) {
+                return null;
+            }
+
+            @Override
+            public void block(String nip, Instant until) {
+            }
+        };
+    }
+
     private final Clock clock;
     private final Sleeper sleeper;
     private final Map<String, Deque<Instant>> history = new HashMap<>();
     private final Map<String, Instant> blockedUntil = new HashMap<>();
+    /** Klucze (historia zapytań) i NIP-y (blokady) już wczytane z {@link History} od startu aplikacji. */
+    private final Set<String> loaded = new HashSet<>();
 
     private final boolean enabled;
+    private final History store;
 
     @Autowired
-    public KsefRateLimiter(@Value("${app.ksef.rate-limit-enabled}") boolean enabled) {
-        this(Clock.systemUTC(), Thread::sleep, enabled);
+    public KsefRateLimiter(@Value("${app.ksef.rate-limit-enabled}") boolean enabled, History store) {
+        this(Clock.systemUTC(), Thread::sleep, enabled, store);
     }
 
     public KsefRateLimiter(Clock clock, Sleeper sleeper, boolean enabled) {
+        this(clock, sleeper, enabled, History.NONE);
+    }
+
+    public KsefRateLimiter(Clock clock, Sleeper sleeper, boolean enabled, History store) {
         this.clock = clock;
         this.sleeper = sleeper;
         this.enabled = enabled;
+        this.store = store;
     }
 
     /** Zapytanie do KSeF w kontekście {@code nip} w granicach limitów; 429 z KSeF wstrzymuje cały kontekst. */
@@ -97,11 +140,25 @@ public class KsefRateLimiter {
             Duration wait;
             synchronized (this) {
                 Instant now = clock.instant();
+                if (loaded.add("block|" + nip)) {
+                    Instant saved = store.blockedUntil(nip);
+                    if (saved != null) {
+                        blockedUntil.merge(nip, saved, (current, next) -> next.isAfter(current) ? next : current);
+                    }
+                }
                 Instant blocked = blockedUntil.get(nip);
                 if (blocked != null && blocked.isAfter(now)) {
                     throw limited(operation, Duration.between(now, blocked), "KSeF wstrzymał zapytania");
                 }
-                Deque<Instant> calls = history.computeIfAbsent(nip + "|" + operation, key -> new ArrayDeque<>());
+                String key = nip + "|" + operation;
+                Deque<Instant> calls = history.computeIfAbsent(key, ignored -> new ArrayDeque<>());
+                if (loaded.add(key)) {
+                    // Pierwsze zapytanie po starcie: zapytania sprzed restartu wciąż liczą się w KSeF.
+                    store.recentCalls(nip, operation, now.minus(Duration.ofHours(1))).forEach(calls::addFirst);
+                    List<Instant> sorted = calls.stream().sorted().toList();
+                    calls.clear();
+                    calls.addAll(sorted);
+                }
                 while (!calls.isEmpty() && !calls.peekFirst().isAfter(now.minus(Duration.ofHours(1)))) {
                     calls.pollFirst();
                 }
@@ -110,6 +167,7 @@ public class KsefRateLimiter {
                         waitFor(calls, now, Duration.ofHours(1), operation.perHour));
                 if (wait.isZero()) {
                     calls.addLast(now);
+                    store.recordCall(nip, operation, now);
                     return;
                 }
                 if (wait.compareTo(MAX_WAIT) > 0) {
@@ -128,7 +186,8 @@ public class KsefRateLimiter {
     /** Blokada z KSeF (HTTP 429): do jej końca nie wysyłamy z tego kontekstu żadnych zapytań. */
     public synchronized void block(String nip, Duration retryAfter) {
         Instant until = clock.instant().plus(retryAfter).plus(BLOCK_MARGIN);
-        blockedUntil.merge(nip, until, (current, next) -> next.isAfter(current) ? next : current);
+        Instant merged = blockedUntil.merge(nip, until, (current, next) -> next.isAfter(current) ? next : current);
+        store.block(nip, merged);
     }
 
     /** Ile czekać, aż w oknie {@code window} zwolni się miejsce (najstarsze zapytanie z okna z niego wypadnie). */

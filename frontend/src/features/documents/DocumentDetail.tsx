@@ -12,6 +12,7 @@ import { deliPaths } from '@/features/deli-order/paths'
 import { useDocument } from '@/features/documents/api'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { BackToTypes } from '@/features/documents/DocumentsList'
+import { SupplierDocumentNumber } from '@/features/documents/SupplierDocumentNumber'
 import {
   countFormat,
   documentPaths,
@@ -114,7 +115,9 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
             {document.supplierCode && <span className="ml-1.5 text-muted-foreground tabular-nums">{document.supplierCode}</span>}
           </dd>
           <dt className="text-muted-foreground">Nr dok. dostawcy</dt>
-          <dd className="tabular-nums">{document.supplierDocumentNumber ?? '-'}</dd>
+          <dd>
+            <SupplierDocumentNumber storeId={storeId} document={document} />
+          </dd>
           <dt className="text-muted-foreground">Linie</dt>
           <dd className="tabular-nums">
             {countFormat.format(document.lineCount)}

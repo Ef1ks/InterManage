@@ -139,6 +139,8 @@ class KsefIntegrationTests {
         list(owner, storeId, "&internalId=NONE").andExpect(jsonPath("$.matchingCount").value(2));
         list(owner, storeId, "&internalId=" + ownId).andExpect(jsonPath("$.invoices[0].invoiceNumber").value("FV/2/2026"));
         list(owner, storeId, "&internalId=" + otherId).andExpect(jsonPath("$.matchingCount").value(0));
+        list(owner, storeId, "&internalId=OWN").andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.invoices[0].invoiceNumber").value("FV/2/2026"));
         list(owner, storeId, "&kind=CORRECTIONS").andExpect(jsonPath("$.invoices[0].correction").value(true));
         list(owner, storeId, "&query=energia").andExpect(jsonPath("$.matchingCount").value(1));
 
@@ -273,6 +275,85 @@ class KsefIntegrationTests {
     }
 
     @Test
+    void connectedStoreSharesConnectionWithOtherStoresOfCompany() throws Exception {
+        Cookie owner = login();
+        String main = createStore(owner);
+        String second = createStore(owner);
+        String third = createStore(owner);
+        String otherCompany = createStore(owner);
+        String otherNip = randomNip();
+        when(ksef.authenticate(anyString(), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, main, nip, "haslo-testowe").andExpect(status().isOk());
+        connection(owner, otherCompany, otherNip, "haslo-testowe").andExpect(status().isOk());
+        mvc.perform(get(url(main, "/settings")).cookie(owner))
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + second + "')]").exists())
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + otherCompany + "')].nip").value(otherNip));
+
+        // Dwa sklepy naraz, bez certyfikatu i bez osobnego logowania do KSeF.
+        send(owner, post(url(main, "/settings/connection/share")),
+                "{\"storeIds\":[\"" + second + "\",\"" + third + "\",\"" + main + "\"]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + second + "')].nip").value(nip))
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + third + "')].nip").value(nip));
+        mvc.perform(get(url(third, "/settings")).cookie(owner))
+                .andExpect(jsonPath("$.connection.nip").value(nip))
+                .andExpect(jsonPath("$.connection.testOk").value(true));
+        // Ponowne podłączenie niczego nie psuje, a sklepu innej firmy nie przełączamy.
+        send(owner, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + second + "\"]}")
+                .andExpect(status().isOk());
+        send(owner, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + otherCompany + "\"]}")
+                .andExpect(status().isConflict());
+
+        // Pracownik nie podłączy sklepu, do którego nie ma dostępu.
+        String foreign = createStore(owner);
+        Cookie employee = employee(owner, main);
+        mvc.perform(get(url(main, "/settings")).cookie(employee)).andExpect(jsonPath("$.otherStores.length()").value(0));
+        send(employee, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + foreign + "\"]}")
+                .andExpect(status().isNotFound());
+        mvc.perform(get(url(foreign, "/settings")).cookie(owner)).andExpect(jsonPath("$.connection").doesNotExist());
+    }
+
+    @Test
+    void storeWithoutInternalIdSeesAllAndFixedPzNumberLinksInvoice() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, storeId, nip, "haslo-testowe").andExpect(status().isOk());
+        OffsetDateTime stored = OffsetDateTime.of(2026, 10, 20, 8, 0, 0, 0, ZoneOffset.UTC);
+        when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
+                false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
+                        invoice("FV/20/2026", "1111111111", "MLECZARNIA", stored, "Vat", null),
+                        invoice("FV/21/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(1), "Vat", ownId),
+                        invoice("FV/22/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(2), "Vat", otherId))));
+        syncAndWait(owner, storeId).andExpect(jsonPath("$.syncMessage").value("Pobrano 3 faktury"));
+
+        // Sklep bez IDWew widzi wszystkie faktury firmy, także z IDWew.
+        list(owner, storeId, "").andExpect(jsonPath("$.matchingCount").value(3));
+        list(owner, storeId, "&internalId=NONE").andExpect(jsonPath("$.matchingCount").value(1));
+
+        // Literówka w numerze faktury w PZ: faktura nie jest wprowadzona, dopóki ktoś nie poprawi numeru.
+        insertDelivery(storeId, "PZ200", "FV-20/2026");
+        String pz = jdbc.queryForObject("select id from documents where store_id = ?::uuid and number = 'PZ200'",
+                String.class, storeId);
+        list(owner, storeId, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(0));
+        String documentUrl = "/api/stores/" + storeId + "/documents/pz/" + pz + "/supplier-document-number";
+        send(owner, put(documentUrl), "{\"supplierDocumentNumber\":\" FV/20/2026 \"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.supplierDocumentNumber").value("FV/20/2026"))
+                .andExpect(jsonPath("$.reportSupplierDocumentNumber").value("FV-20/2026"))
+                .andExpect(jsonPath("$.supplierDocumentNumberEditedBy").isNotEmpty());
+        list(owner, storeId, "&entered=ENTERED").andExpect(jsonPath("$.invoices[0].invoiceNumber").value("FV/20/2026"));
+
+        // Cofnięcie poprawki przywraca numer z raportu.
+        mvc.perform(delete(documentUrl).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.supplierDocumentNumber").value("FV-20/2026"))
+                .andExpect(jsonPath("$.supplierDocumentNumberEditedAt").doesNotExist());
+        list(owner, storeId, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(0));
+    }
+
+    @Test
     void employeeSeesAndLinksOnlyCompaniesFromOwnStores() throws Exception {
         Cookie owner = login();
         String connected = createStore(owner);
@@ -372,10 +453,12 @@ class KsefIntegrationTests {
                     updated_count, skipped_lines)
                 values (?::uuid, 'Zeszyt2.xlsx', 1, 1, 1, 0, 0) returning id""", String.class, storeId);
         jdbc.update("""
-                insert into documents (store_id, type, number, document_date, supplier_document_number, line_count,
-                    purchase_value, sale_value_gross, first_import_id, last_import_id)
-                values (?::uuid, 'PZ', ?, ?, ?, 1, 0, 0, ?::uuid, ?::uuid)""",
-                storeId, number, LocalDateTime.of(2026, 10, 20, 0, 0), supplierDocumentNumber, importId, importId);
+                insert into documents (store_id, type, number, document_date, supplier_document_number,
+                    report_supplier_document_number, line_count, purchase_value, sale_value_gross, first_import_id,
+                    last_import_id)
+                values (?::uuid, 'PZ', ?, ?, ?, ?, 1, 0, 0, ?::uuid, ?::uuid)""",
+                storeId, number, LocalDateTime.of(2026, 10, 20, 0, 0), supplierDocumentNumber, supplierDocumentNumber,
+                importId, importId);
     }
 
     private String createStore(Cookie owner) throws Exception {

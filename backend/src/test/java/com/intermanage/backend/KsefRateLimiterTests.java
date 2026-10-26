@@ -69,6 +69,40 @@ class KsefRateLimiterTests {
     }
 
     @Test
+    void historySurvivesRestart() {
+        List<Instant> saved = new ArrayList<>();
+        KsefRateLimiter.History store = new KsefRateLimiter.History() {
+            @Override
+            public List<Instant> recentCalls(String nip, Operation operation, Instant since) {
+                return saved.stream().filter(call -> call.isAfter(since)).toList();
+            }
+
+            @Override
+            public void recordCall(String nip, Operation operation, Instant at) {
+                saved.add(at);
+            }
+
+            @Override
+            public Instant blockedUntil(String nip) {
+                return null;
+            }
+
+            @Override
+            public void block(String nip, Instant until) {
+            }
+        };
+        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
+        KsefRateLimiter restarted = new KsefRateLimiter(clock, duration -> { }, true, store);
+        for (int i = 0; i < 16; i++) {
+            saved.add(now.minusSeconds(60L * (i + 2)));
+        }
+        // Nowa instancja (restart backendu) wie o 16 zapytaniach z ostatniej godziny i nie wyśle kolejnego.
+        KsefClient.KsefException limited = assertThrows(KsefClient.KsefException.class,
+                () -> restarted.acquire(NIP, Operation.METADATA));
+        assertThat(limited.rateLimited()).isTrue();
+    }
+
+    @Test
     void blockFromKsefStopsAllRequestsOfContext() {
         assertThrows(KsefClient.KsefException.class, () -> limiter.call(NIP, Operation.INVOICE, () -> {
             throw new KsefClient.KsefException("Przekroczony limit", Duration.ofSeconds(30));

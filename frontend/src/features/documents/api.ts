@@ -1,5 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { ksefKey } from '@/features/ksef/api'
 import { api } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
 import type { Document, DocumentPage, DocumentsOverview, Supplier } from '@/lib/types'
@@ -62,6 +63,28 @@ export function useDocumentGratis(storeId: string, typeCode: string, id: string)
     }),
     cancel: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
     restore: useMutation({ mutationFn: () => api<Document>(`${path}/restore`, { method: 'POST' }), onSuccess }),
+  }
+}
+
+/**
+ * Poprawka numeru dokumentu dostawcy w przyjęciu PZ i jej cofnięcie. Po tym numerze faktury KSeF wiążą się z dostawą,
+ * więc odświeżamy też listę faktur.
+ */
+export function useSupplierDocumentNumber(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/supplier-document-number`
+  const onSuccess = (document: Document) => {
+    queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+    queryClient.invalidateQueries({ queryKey: [...documentsKey(storeId), typeCode, 'list'] })
+    queryClient.invalidateQueries({ queryKey: ksefKey(storeId) })
+  }
+  return {
+    save: useMutation({
+      mutationFn: (supplierDocumentNumber: string) =>
+        api<Document>(path, { method: 'PUT', json: { supplierDocumentNumber } }),
+      onSuccess,
+    }),
+    restore: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
   }
 }
 

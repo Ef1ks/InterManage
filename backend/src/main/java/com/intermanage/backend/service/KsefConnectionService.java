@@ -27,6 +27,7 @@ import com.intermanage.backend.component.KsefClient;
 import com.intermanage.backend.component.KsefCredentials;
 import com.intermanage.backend.component.SecretCipher;
 import com.intermanage.backend.dto.KsefCompanyResponse;
+import com.intermanage.backend.dto.KsefCompanyStore;
 import com.intermanage.backend.dto.KsefSeenInternalId;
 import com.intermanage.backend.dto.KsefSettingsResponse;
 import com.intermanage.backend.entity.AppUser;
@@ -101,7 +102,21 @@ public class KsefConnectionService {
                                 seen.getInvoiceCount(), assigned.contains(seen.getInternalId())))
                         .toList(),
                 skippedSuppliers.findActive(storeId).stream().map(mapper::toResponse).toList(),
-                companies(storeId));
+                companies(storeId),
+                connection == null ? List.of() : otherStores(storeId));
+    }
+
+    /** Inne aktywne sklepy zalogowanego użytkownika z firmą, z którą są połączone (albo bez połączenia). */
+    private List<KsefCompanyStore> otherStores(UUID storeId) {
+        List<Store> candidates = stores.findActiveOrdered().stream()
+                .filter(store -> !store.getId().equals(storeId) && canAccess(store.getId()))
+                .toList();
+        Map<UUID, String> nips = connections.findAllById(candidates.stream().map(Store::getId).toList()).stream()
+                .collect(Collectors.toMap(KsefConnection::getStoreId, KsefConnection::getNip));
+        return candidates.stream()
+                .map(store -> new KsefCompanyStore(store.getId(), store.getNumber(), store.getName(),
+                        nips.get(store.getId())))
+                .toList();
     }
 
     /**
@@ -196,6 +211,38 @@ public class KsefConnectionService {
     private boolean canAccess(UUID storeId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null && storeAccess.canAccess(authentication, storeId);
+    }
+
+    /**
+     * Podłącza inne sklepy użytkownika do firmy tego sklepu: kopiuje im dane logowania i wynik ostatniego testu (to ten
+     * sam certyfikat i NIP, więc nie logujemy się do KSeF osobno dla każdego sklepu). Sklep połączony już z tą firmą
+     * zostaje bez zmian; sklepu połączonego z inną firmą nie przełączamy.
+     */
+    public KsefSettingsResponse shareConnection(UUID storeId, List<UUID> storeIds, UUID userId) {
+        transaction.executeWithoutResult(status -> {
+            KsefConnection source = connections.findById(storeId)
+                    .orElseThrow(() -> ApiException.notFound("Sklep nie ma jeszcze połączenia z KSeF"));
+            AppUser by = user(userId);
+            for (UUID targetId : storeIds.stream().distinct().filter(id -> !id.equals(storeId)).toList()) {
+                Store target = stores.findById(targetId).filter(store -> canAccess(store.getId()))
+                        .orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
+                KsefConnection existing = connections.findById(targetId).orElse(null);
+                if (existing != null && existing.getNip().equals(source.getNip())) {
+                    continue;
+                }
+                if (existing != null) {
+                    throw ApiException.conflict("Sklep " + target.getName() + " jest połączony z inną firmą (NIP "
+                            + existing.getNip() + ")");
+                }
+                KsefConnection connection = new KsefConnection(target.getId());
+                connection.copyCredentials(source, by);
+                if (source.getTestOk() != null) {
+                    connection.recordTest(source.getTestOk(), source.getTestMessage());
+                }
+                connections.save(connection);
+            }
+        });
+        return transaction.execute(status -> settings(storeId));
     }
 
     /** Logowanie do KSeF zapisanymi danymi; wynik zostaje zapisany przy połączeniu. */

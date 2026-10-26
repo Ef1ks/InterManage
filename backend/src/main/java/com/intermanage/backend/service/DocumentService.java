@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -148,6 +149,41 @@ public class DocumentService {
                                 link.getOrder().getStore().getName(), link.getOrder().getDeliveryDate()))
                         .toList();
         return documentMapper.toResponse(document, deliOrders, gratis.findActive(document.getId()).orElse(null));
+    }
+
+    /**
+     * Ręcznie poprawiony numer dokumentu dostawcy w przyjęciu PZ (po nim faktura KSeF wiąże się z dostawą). Numer
+     * z raportu zostaje zapisany obok, a kolejne importy nie nadpisują poprawki.
+     */
+    @Transactional
+    public DocumentResponse editSupplierDocumentNumber(UUID storeId, String typeCode, UUID id, String number,
+            UUID userId) {
+        Document document = editableDelivery(storeId, typeCode, id);
+        String trimmed = number == null || number.isBlank() ? null : number.strip();
+        if (Objects.equals(trimmed, document.getReportSupplierDocumentNumber())) {
+            document.restoreReportSupplierDocumentNumber();
+        } else {
+            document.editSupplierDocumentNumber(trimmed, userId != null ? users.getReferenceById(userId) : null);
+        }
+        documents.flush();
+        return document(storeId, typeCode, id);
+    }
+
+    /** Cofa ręczną poprawkę: obowiązuje znowu numer z raportu. */
+    @Transactional
+    public DocumentResponse restoreSupplierDocumentNumber(UUID storeId, String typeCode, UUID id) {
+        editableDelivery(storeId, typeCode, id).restoreReportSupplierDocumentNumber();
+        documents.flush();
+        return document(storeId, typeCode, id);
+    }
+
+    private Document editableDelivery(UUID storeId, String typeCode, UUID id) {
+        Document document = documents.findWithLines(storeId, type(typeCode), id)
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono dokumentu"));
+        if (document.getType() != DocumentType.PZ) {
+            throw ApiException.badRequest("Numer dokumentu dostawcy można poprawić tylko w przyjęciu towaru");
+        }
+        return document;
     }
 
     @Transactional(readOnly = true)

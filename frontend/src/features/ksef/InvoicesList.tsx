@@ -69,14 +69,15 @@ const EMPTY_FILTERS: Omit<KsefFilters, 'query'> = {
   to: '',
   entered: 'ALL',
   kind: 'ALL',
-  internalId: '',
+  internalId: 'ALL',
   showSkipped: false,
 }
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
 /**
- * Faktury zakupowe z KSeF: sklep widzi faktury ze swoimi IDWew i wszystkie bez IDWew. Filtry (daty wystawienia,
+ * Faktury zakupowe z KSeF: sklep bez IDWew widzi wszystkie faktury firmy, sklep z IDWew - ze swoimi IDWew i bez IDWew
+ * (albo, po wybraniu, tylko ze swoimi). Filtry (daty wystawienia,
  * status, rodzaj, IDWew, pominięci dostawcy), sortowanie i suma liczą się w bazie; kolejne strony po 100 dochodzą
  * przy przewijaniu. "Wprowadzona" = numer faktury jest w przyjęciu PZ albo ktoś ją oznaczył ręcznie.
  */
@@ -126,11 +127,16 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
   const today = todayIso()
 
   const internalIdOptions = [
-    { value: 'NONE', label: 'Bez IDWew' },
-    ...overview.internalIds.map((item) => ({
-      value: item.internalId,
-      label: item.name ? `${item.internalId} · ${item.name}` : item.internalId,
-    })),
+    { value: 'ALL', label: 'Z IDWew sklepu i bez IDWew' },
+    { value: 'OWN', label: 'Tylko z IDWew sklepu' },
+    // Przy kilku IDWew sklepu można zawęzić do jednego.
+    ...(overview.internalIds.length > 1
+      ? overview.internalIds.map((item) => ({
+          value: item.internalId,
+          label: `Tylko ${item.name ? `${item.name} (${item.internalId})` : item.internalId}`,
+        }))
+      : []),
+    { value: 'NONE', label: 'Tylko bez IDWew' },
   ]
 
   return (
@@ -177,7 +183,7 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
           {overview.internalIds.length > 0 && (
             <SelectField
               label="IDWew"
-              className="w-60"
+              className="w-72"
               options={internalIdOptions}
               value={filters.internalId}
               onChange={(value) => set('internalId', value)}
@@ -403,9 +409,21 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
             </span>
           )}
         </div>
-        <div className="text-xs text-muted-foreground" title="Numer KSeF">
-          {invoice.ksefNumber}
-          {invoice.internalIds.length > 0 && ` · IDWew ${invoice.internalIds.join(', ')}`}
+        {/* Numer KSeF i IDWew to dane techniczne: mniejszy krój o stałej szerokości i plakietka, żeby nie zlewały się
+            z dostawcą i kwotami w sąsiednich kolumnach. */}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[0.68rem] tracking-tight text-muted-foreground/75" title="Numer KSeF">
+            {invoice.ksefNumber}
+          </span>
+          {invoice.internalIds.map((internalId) => (
+            <span
+              key={internalId}
+              title={`IDWew ${internalId}`}
+              className="rounded-md bg-sky-50 px-1.5 py-px text-[0.68rem] font-medium text-sky-800 ring-1 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-800"
+            >
+              IDWew {internalId.slice(internalId.indexOf('-') + 1)}
+            </span>
+          ))}
         </div>
       </TableCell>
       <TableCell>{formatDate(invoice.issueDate)}</TableCell>

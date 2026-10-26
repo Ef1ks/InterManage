@@ -23,7 +23,10 @@ export type KsefColumn = 'issueDate' | 'number' | 'seller' | 'net' | 'gross'
 export type EnteredFilter = 'ALL' | 'ENTERED' | 'NOT_ENTERED'
 export type KindFilter = 'ALL' | 'INVOICES' | 'CORRECTIONS'
 
-/** Filtry listy; {@code internalId}: IDWew sklepu, "NONE" (bez IDWew) albo pusty (wszystkie). Daty RRRR-MM-DD. */
+/**
+ * Filtry listy; {@code internalId}: "ALL" (wszystkie widoczne w sklepie), "OWN" (tylko z IDWew sklepu), konkretny
+ * IDWew sklepu albo "NONE" (tylko bez IDWew). Daty RRRR-MM-DD.
+ */
 export type KsefFilters = {
   query: string
   from: string
@@ -50,7 +53,7 @@ export function useKsefInvoices(storeId: string, filters: KsefFilters, sort: Sor
       if (filters.query) params.set('query', filters.query)
       if (filters.from) params.set('from', filters.from)
       if (filters.to) params.set('to', filters.to)
-      if (filters.internalId) params.set('internalId', filters.internalId)
+      if (filters.internalId !== 'ALL') params.set('internalId', filters.internalId)
       return api<KsefInvoicePage>(`${ksefPath(storeId)}/invoices?${params}`)
     },
     initialPageParam: 0,
@@ -146,7 +149,13 @@ export function useKsefSettingsMutations(storeId: string) {
       }),
     ),
     test: useMutation(mutation(() => api<KsefSettings>(`${settingsPath}/test`, { method: 'POST' }))),
-    /** Podłączenie do firmy połączonej w innym sklepie (tylko właściciel) - faktury firmy są od razu widoczne. */
+    /** Podłączenie innych sklepów użytkownika do firmy tego sklepu - bez wgrywania certyfikatu w każdym. */
+    shareConnection: useMutation(
+      mutation((storeIds: string[]) =>
+        api<KsefSettings>(`${settingsPath}/connection/share`, { method: 'POST', json: { storeIds } }),
+      ),
+    ),
+    /** Podłączenie do firmy połączonej w innym sklepie użytkownika - faktury firmy są od razu widoczne. */
     linkConnection: useMutation(
       mutation((nip: string) =>
         api<KsefSettings>(`${settingsPath}/connection/link`, { method: 'POST', json: { nip } }),

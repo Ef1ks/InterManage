@@ -53,7 +53,8 @@ public class KsefClient {
     public KsefClient(KsefXadesSigner signer, JsonMapper json, @Value("${app.ksef.base-url}") String baseUrl) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(10));
-        requestFactory.setReadTimeout(Duration.ofSeconds(60));
+        // Strona 250 faktur z dużego okna potrafi się liczyć w KSeF ponad minutę.
+        requestFactory.setReadTimeout(Duration.ofSeconds(120));
         this.rest = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory)
                 .defaultHeader("X-Error-Format", "problem-details")
                 .defaultStatusHandler(HttpStatusCode::isError, (request, response) -> {
@@ -67,14 +68,28 @@ public class KsefClient {
     public record AccessToken(String token, Instant validUntil) {
     }
 
-    /** Wyjątek z KSeF; {@code retryAfter} ustawione przy przekroczeniu limitu zapytań (HTTP 429). */
+    /**
+     * Wyjątek z KSeF; {@code retryAfter} ustawione przy przekroczeniu limitu zapytań (HTTP 429), {@code temporary}
+     * przy braku odpowiedzi (timeout, zerwane połączenie) albo błędzie serwera KSeF (5xx) - takie zapytanie warto
+     * powtórzyć.
+     */
     public static class KsefException extends RuntimeException {
 
         private final Duration retryAfter;
+        private final boolean temporary;
 
         public KsefException(String message, Duration retryAfter) {
+            this(message, retryAfter, false);
+        }
+
+        public KsefException(String message, Duration retryAfter, boolean temporary) {
             super(message);
             this.retryAfter = retryAfter;
+            this.temporary = temporary;
+        }
+
+        public boolean temporary() {
+            return temporary;
         }
 
         public Duration retryAfter() {
@@ -160,7 +175,7 @@ public class KsefClient {
         try {
             return request.get();
         } catch (ResourceAccessException e) {
-            throw new KsefException("Brak połączenia z KSeF (" + e.getMostSpecificCause().getMessage() + ")", null);
+            throw new KsefException("Brak odpowiedzi z KSeF (" + e.getMostSpecificCause().getMessage() + ")", null, true);
         }
     }
 
@@ -180,7 +195,7 @@ public class KsefClient {
                 default -> "KSeF zwrócił błąd " + status;
             };
         }
-        return new KsefException(message, retryAfter);
+        return new KsefException(message, retryAfter, status >= 500);
     }
 
     private String messageFrom(String body) {
