@@ -30,6 +30,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -77,6 +79,9 @@ class KsefIntegrationTests {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
 
     @MockitoBean
     KsefClient ksef;
@@ -267,6 +272,34 @@ class KsefIntegrationTests {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void employeeSeesAndLinksOnlyCompaniesFromOwnStores() throws Exception {
+        Cookie owner = login();
+        String connected = createStore(owner);
+        String foreign = createStore(owner);
+        String shared = createStore(owner);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, connected, nip, "haslo-testowe").andExpect(status().isOk());
+
+        // Pracownik innego sklepu nie widzi, że firma jest połączona gdzie indziej, i nie skopiuje jej certyfikatu.
+        Cookie stranger = employee(owner, foreign);
+        mvc.perform(get(url(foreign, "/settings")).cookie(stranger))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.companies.length()").value(0));
+        send(stranger, post(url(foreign, "/settings/connection/link")), "{\"nip\":\"" + nip + "\"}")
+                .andExpect(status().isNotFound());
+
+        // Pracownik obu sklepów (np. kilka firm na jednym koncie) podłącza drugi sklep sam.
+        Cookie both = employee(owner, connected, shared);
+        mvc.perform(get(url(shared, "/settings")).cookie(both))
+                .andExpect(jsonPath("$.companies.length()").value(1))
+                .andExpect(jsonPath("$.companies[0].nip").value(nip));
+        send(both, post(url(shared, "/settings/connection/link")), "{\"nip\":\"" + nip + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.connection.nip").value(nip));
+    }
+
     /** Losowy NIP z poprawną cyfrą kontrolną. */
     private static String randomNip() {
         int[] weights = {6, 5, 7, 2, 3, 4, 5, 6, 7};
@@ -352,6 +385,27 @@ class KsefIntegrationTests {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(json, "$.id");
+    }
+
+    /** Pracownik z uprawnieniem KSEF_INVOICES:EDIT przypisany do podanych sklepów. */
+    private Cookie employee(Cookie owner, String... storeIds) throws Exception {
+        String roleJson = send(owner, post("/api/settings/roles"),
+                "{\"name\":\"KSeF " + UUID.randomUUID() + "\",\"permissions\":{\"KSEF_INVOICES\":\"EDIT\"}}")
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String username = "ksef" + UUID.randomUUID().toString().substring(0, 8);
+        String userId = jdbc.queryForObject("""
+                insert into users (username, display_name, password_hash, role_id)
+                values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
+                username, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
+        for (String storeId : storeIds) {
+            jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, storeId);
+        }
+        return mvc.perform(post("/api/auth/login").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "\",\"password\":\"haslo-pracownika\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie(JwtService.COOKIE_NAME);
     }
 
     private Cookie login() throws Exception {

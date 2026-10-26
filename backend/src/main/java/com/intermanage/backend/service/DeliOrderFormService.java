@@ -1,6 +1,9 @@
 package com.intermanage.backend.service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -8,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.dto.OrderFormResponse;
+import com.intermanage.backend.dto.PasteOrderProductsRequest;
+import com.intermanage.backend.dto.PasteOrderProductsResponse;
 import com.intermanage.backend.dto.ProductSearchResponse;
 import com.intermanage.backend.entity.OrderCategory;
 import com.intermanage.backend.entity.OrderSection;
@@ -108,6 +113,44 @@ public class DeliOrderFormService {
                 .orElseThrow(() -> ApiException.badRequest("Nie ma takiego produktu w kartotece tego sklepu"));
         category.addProduct(product);
         return current(storeId);
+    }
+
+    /**
+     * Dodaje produkty wklejone z Excela po bieżącym EAN-ie z kartoteki sklepu, w kolejności wklejenia. Produkt, który
+     * już jest w kategorii, zostaje na swoim miejscu i dostaje wklejoną jednostkę. Nieznane EAN-y nie blokują reszty,
+     * wracają w odpowiedzi.
+     */
+    @Transactional
+    public PasteOrderProductsResponse pasteProducts(UUID storeId, UUID categoryId,
+            List<PasteOrderProductsRequest.Row> rows) {
+        OrderCategory category = loadCategory(storeId, categoryId);
+        List<String> eans = rows.stream().map(row -> row.ean().trim()).toList();
+        // Ten sam EAN bywa przy kilku ITM8 (stary i nowy kod) - bierzemy aktywny.
+        Map<String, Product> byEan = new HashMap<>();
+        for (Product product : products.findByStoreIdAndEanIn(storeId, eans)) {
+            byEan.merge(product.getEan(), product,
+                    (current, other) -> Boolean.TRUE.equals(current.getActive()) ? current : other);
+        }
+
+        int added = 0;
+        int updated = 0;
+        List<String> notFound = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            Product product = byEan.get(eans.get(i));
+            if (product == null) {
+                notFound.add(eans.get(i));
+                continue;
+            }
+            boolean present = category.getProducts().stream()
+                    .anyMatch(item -> item.getProduct().getId().equals(product.getId()));
+            category.addProduct(product).setOrderUnit(rows.get(i).orderUnit());
+            if (present) {
+                updated++;
+            } else {
+                added++;
+            }
+        }
+        return new PasteOrderProductsResponse(current(storeId), added, updated, notFound.stream().distinct().toList());
     }
 
     /** Czy produkt zamawia się w kilogramach, czy w sztukach. Złożone zamówienia zachowują swoją jednostkę. */

@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * Ustawienia KSeF sklepu; {@code connection} puste, dopóki nikt nie wgrał certyfikatu. {@code companies}: firmy
- * połączone w innych sklepach - właściciel może do nich podłączyć ten sklep bez certyfikatu.
+ * połączone w innych sklepach, do których użytkownik ma dostęp - może do nich podłączyć ten sklep bez certyfikatu.
  */
 public record KsefSettingsResponse(
         KsefConnectionResponse connection,

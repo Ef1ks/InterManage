@@ -24,6 +24,9 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
 
     List<Product> findByIdInAndStoreId(Collection<UUID> ids, UUID storeId);
 
+    /** Produkty sklepu po bieżącym EAN-ie (np. lista wklejona z Excela). */
+    List<Product> findByStoreIdAndEanIn(UUID storeId, Collection<String> eans);
+
     /** Produkty sklepu, których nie było w danym imporcie (zostają w bazie z danymi z wcześniejszego). */
     long countByStoreAndLastSeenImportNot(Store store, ProductImport productImport);
 

@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.intermanage.backend.dto.AddOrderProductRequest;
 import com.intermanage.backend.dto.OrderFormResponse;
 import com.intermanage.backend.dto.OrderNameRequest;
+import com.intermanage.backend.dto.PasteOrderProductsRequest;
+import com.intermanage.backend.dto.PasteOrderProductsResponse;
 import com.intermanage.backend.dto.ProductSearchResponse;
 import com.intermanage.backend.dto.UpdateOrderUnitRequest;
 import com.intermanage.backend.service.DeliOrderFormService;
@@ -89,6 +91,14 @@ public class DeliOrderFormController {
     public OrderFormResponse addProduct(@PathVariable UUID storeId, @PathVariable UUID categoryId,
             @Valid @RequestBody AddOrderProductRequest request) {
         return formService.addProduct(storeId, categoryId, request.productId());
+    }
+
+    /** Lista produktów wklejona z Excela (EAN + jednostka); znanym produktom zmienia jednostkę. */
+    @PostMapping("/categories/{categoryId}/products/paste")
+    @PreAuthorize(EDIT)
+    public PasteOrderProductsResponse pasteProducts(@PathVariable UUID storeId, @PathVariable UUID categoryId,
+            @Valid @RequestBody PasteOrderProductsRequest request) {
+        return formService.pasteProducts(storeId, categoryId, request.rows());
     }
 
     @PutMapping("/categories/{categoryId}/products/{itemId}")

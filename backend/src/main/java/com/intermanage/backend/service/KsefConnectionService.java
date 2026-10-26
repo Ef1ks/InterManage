@@ -16,6 +16,8 @@ import javax.naming.InvalidNameException;
 import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -40,12 +42,14 @@ import com.intermanage.backend.repository.KsefInternalIdRepository;
 import com.intermanage.backend.repository.KsefInvoiceRepository;
 import com.intermanage.backend.repository.KsefSkippedSupplierRepository;
 import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.security.StoreAccess;
 
 /**
  * Ustawienia KSeF sklepu: połączenie (NIP firmy, certyfikat KSeF z kluczem i hasłem, test logowania), IDWew sklepu
  * i stali dostawcy pomijani na liście. Faktury są wspólne dla firmy, więc sklep z połączeniem firmy już połączonej
- * w innym sklepie od razu je widzi; właściciel może go podłączyć bez wgrywania certyfikatu
- * ({@link #linkConnection}). Usuwanie IDWew i dostawców to znacznik, który da się cofnąć.
+ * w innym sklepie od razu je widzi. Kto ma dostęp do obu sklepów, może go podłączyć bez wgrywania certyfikatu
+ * ({@link #linkConnection}); firm ze sklepów, do których nie ma dostępu, nie widzi. Usuwanie IDWew i dostawców to
+ * znacznik, który da się cofnąć.
  */
 @Service
 public class KsefConnectionService {
@@ -63,11 +67,13 @@ public class KsefConnectionService {
     private final SecretCipher cipher;
     private final KsefSessionService sessions;
     private final KsefMapper mapper;
+    private final StoreAccess storeAccess;
 
     public KsefConnectionService(TransactionTemplate transaction, KsefConnectionRepository connections,
             KsefInternalIdRepository internalIds, KsefSkippedSupplierRepository skippedSuppliers,
             KsefInvoiceRepository invoices, StoreRepository stores, AppUserRepository users,
-            KsefCredentials credentials, SecretCipher cipher, KsefSessionService sessions, KsefMapper mapper) {
+            KsefCredentials credentials, SecretCipher cipher, KsefSessionService sessions, KsefMapper mapper,
+            StoreAccess storeAccess) {
         this.transaction = transaction;
         this.connections = connections;
         this.internalIds = internalIds;
@@ -79,6 +85,7 @@ public class KsefConnectionService {
         this.cipher = cipher;
         this.sessions = sessions;
         this.mapper = mapper;
+        this.storeAccess = storeAccess;
     }
 
     @Transactional(readOnly = true)
@@ -97,10 +104,15 @@ public class KsefConnectionService {
                 companies(storeId));
     }
 
-    /** Firmy połączone z KSeF w innych sklepach (z ich nazwami) - do podłączenia sklepu bez certyfikatu. */
+    /**
+     * Firmy połączone z KSeF w innych sklepach zalogowanego użytkownika (z ich nazwami) - do podłączenia sklepu bez
+     * certyfikatu. Sklepy, do których użytkownik nie ma dostępu, i ich firmy są niewidoczne.
+     */
     private List<KsefCompanyResponse> companies(UUID storeId) {
         List<KsefConnection> others = connections.findAll().stream()
-                .filter(connection -> !connection.getStoreId().equals(storeId)).toList();
+                .filter(connection -> !connection.getStoreId().equals(storeId))
+                .filter(connection -> canAccess(connection.getStoreId()))
+                .toList();
         Map<UUID, String> names = stores.findAllById(others.stream().map(KsefConnection::getStoreId).toList())
                 .stream().collect(Collectors.toMap(Store::getId, Store::getName));
         return others.stream()
@@ -156,7 +168,8 @@ public class KsefConnectionService {
 
     /**
      * Podłącza sklep do firmy połączonej już z KSeF w innym sklepie: kopiuje jej dane logowania, więc sklep od razu
-     * widzi wspólne faktury firmy. Tylko dla właściciela, bo nie wymaga certyfikatu.
+     * widzi wspólne faktury firmy. Źródłem może być tylko sklep, do którego użytkownik ma dostęp: certyfikat firmy
+     * kopiuje ten, kto i tak mógłby w nim pracować.
      */
     public KsefSettingsResponse linkConnection(UUID storeId, String nip, UUID userId) {
         String cleanNip = nip(nip, "nip");
@@ -165,6 +178,7 @@ public class KsefConnectionService {
             Store store = store(storeId);
             KsefConnection source = connections.findByNip(cleanNip).stream()
                     .filter(connection -> !connection.getStoreId().equals(storeId))
+                    .filter(connection -> canAccess(connection.getStoreId()))
                     .findFirst()
                     .orElseThrow(() -> ApiException.notFound("Ta firma nie jest połączona z KSeF w innym sklepie"));
             KsefConnection connection = connections.findById(storeId)
@@ -176,6 +190,12 @@ public class KsefConnectionService {
             sessions.forget(previousNip);
         }
         return test(storeId);
+    }
+
+    /** Czy zalogowany użytkownik ma dostęp do sklepu (właściciel: każdy, pracownik: przypisane aktywne). */
+    private boolean canAccess(UUID storeId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && storeAccess.canAccess(authentication, storeId);
     }
 
     /** Logowanie do KSeF zapisanymi danymi; wynik zostaje zapisany przy połączeniu. */

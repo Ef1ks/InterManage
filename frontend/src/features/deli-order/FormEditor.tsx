@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Tabs } from '@base-ui/react/tabs'
-import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { CheckIcon, ClipboardPasteIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -19,9 +19,11 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
-import { useChangeOrderForm, useOrderForm } from '@/features/deli-order/api'
+import { useChangeOrderForm, useOrderForm, usePasteOrderProducts } from '@/features/deli-order/api'
+import { CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
 import { InvitationsPanel } from '@/features/deli-order/InvitationsPanel'
 import { NameDialog, type NameDialogState } from '@/features/deli-order/NameDialog'
+import { type PasteDialogState, PasteProductsDialog } from '@/features/deli-order/PasteProductsDialog'
 import { ProductSearchField } from '@/features/deli-order/ProductSearchField'
 import { UNIT_LABELS, UnitToggle } from '@/features/deli-order/QuantityInput'
 import { storeLabel } from '@/features/stores/current-store'
@@ -36,6 +38,8 @@ export function FormEditor({ store }: { store: StoreSummary }) {
   const canEdit = useCan('DELI_ORDERS', 'EDIT')
   const { data: form, isPending, isError, refetch } = useOrderForm(store.id)
   const change = useChangeOrderForm(store.id)
+  const paste = usePasteOrderProducts(store.id)
+  const [pasteDialog, setPasteDialog] = useState<PasteDialogState | null>(null)
   const [editing, setEditing] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
@@ -213,6 +217,13 @@ export function FormEditor({ store }: { store: StoreSummary }) {
                 onAddProduct={(category, productId) =>
                   change.mutate({ type: 'addProduct', categoryId: category.id, productId }, { onError: onChangeError })
                 }
+                onPasteProducts={(category, initialText) =>
+                  setPasteDialog({
+                    categoryName: category.name,
+                    initialText,
+                    onSubmit: (rows) => paste.mutateAsync({ categoryId: category.id, rows }),
+                  })
+                }
                 onRemoveProduct={(category, itemId) =>
                   change.mutate({ type: 'removeProduct', categoryId: category.id, itemId }, { onError: onChangeError })
                 }
@@ -227,8 +238,18 @@ export function FormEditor({ store }: { store: StoreSummary }) {
           ))}
         </Tabs.Root>
       )}
+      {activeSection && (
+        <CategoryNav
+          items={activeSection.categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            count: category.products.length,
+          }))}
+        />
+      )}
 
       <NameDialog state={nameDialog} onClose={() => setNameDialog(null)} />
+      <PasteProductsDialog state={pasteDialog} onClose={() => setPasteDialog(null)} />
 
       <AlertDialog open={confirmation !== null} onOpenChange={(open) => !open && setConfirmation(null)}>
         <AlertDialogContent>
@@ -265,6 +286,7 @@ type SectionPanelProps = {
   onRenameCategory: (category: OrderCategory) => void
   onDeleteCategory: (category: OrderCategory) => void
   onAddProduct: (category: OrderCategory, productId: string) => void
+  onPasteProducts: (category: OrderCategory, initialText: string) => void
   onRemoveProduct: (category: OrderCategory, itemId: string) => void
   onSetUnit: (category: OrderCategory, itemId: string, orderUnit: OrderUnit) => void
 }
@@ -280,6 +302,7 @@ function SectionPanel({
   onRenameCategory,
   onDeleteCategory,
   onAddProduct,
+  onPasteProducts,
   onRemoveProduct,
   onSetUnit,
 }: SectionPanelProps) {
@@ -322,6 +345,7 @@ function SectionPanel({
             onRename={() => onRenameCategory(category)}
             onDelete={() => onDeleteCategory(category)}
             onAddProduct={(productId) => onAddProduct(category, productId)}
+            onPasteProducts={(initialText) => onPasteProducts(category, initialText)}
             onRemoveProduct={(itemId) => onRemoveProduct(category, itemId)}
             onSetUnit={(itemId, orderUnit) => onSetUnit(category, itemId, orderUnit)}
           />
@@ -339,6 +363,7 @@ function CategoryCard({
   onRename,
   onDelete,
   onAddProduct,
+  onPasteProducts,
   onRemoveProduct,
   onSetUnit,
 }: {
@@ -349,13 +374,24 @@ function CategoryCard({
   onRename: () => void
   onDelete: () => void
   onAddProduct: (productId: string) => void
+  onPasteProducts: (initialText: string) => void
   onRemoveProduct: (itemId: string) => void
   onSetUnit: (itemId: string, orderUnit: OrderUnit) => void
 }) {
   const addedProductIds = new Set(category.products.map((product) => product.productId))
+  const [justAddedId, setJustAddedId] = useState<string | null>(null)
+  const addBarRef = useRef<HTMLDivElement>(null)
+  const justAddedVisible = justAddedId !== null && addedProductIds.has(justAddedId)
+
+  // Nowy produkt ląduje na końcu tabeli, tuż nad wyszukiwarką: przewijamy tak, żeby było widać oba.
+  useEffect(() => {
+    if (!justAddedVisible) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    addBarRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' })
+  }, [justAddedVisible, justAddedId])
 
   return (
-    <section aria-label={category.name}>
+    <section id={categoryAnchorId(category.id)} aria-label={category.name} className="scroll-mt-20">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-base font-semibold">{category.name}</h2>
         <span className="text-sm text-muted-foreground tabular-nums">{category.products.length}</span>
@@ -394,7 +430,10 @@ function CategoryCard({
             </TableHeader>
             <TableBody>
               {category.products.map((product) => (
-                <TableRow key={product.id} className="tabular-nums">
+                <TableRow
+                  key={product.id}
+                  className={cn('tabular-nums', product.productId === justAddedId && 'bg-muted/60')}
+                >
                   <TableCell className="py-2.5 pl-4 whitespace-normal">
                     <div className="font-medium">{product.name ?? 'Bez nazwy'}</div>
                     <div className="text-xs text-muted-foreground">
@@ -407,7 +446,6 @@ function CategoryCard({
                     {editing ? (
                       <UnitToggle
                         value={product.orderUnit}
-                        disabled={busy}
                         label={product.name ?? product.ean}
                         onChange={(orderUnit) => onSetUnit(product.id, orderUnit)}
                       />
@@ -438,13 +476,29 @@ function CategoryCard({
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">Brak produktów w tej kategorii.</p>
         )}
         {editing && (
-          <div className={cn('p-3', category.products.length > 0 && 'border-t')}>
-            <ProductSearchField
-              source={{ storeId }}
-              addedProductIds={addedProductIds}
-              onAdd={(product) => onAddProduct(product.id)}
-              disabled={busy}
-            />
+          <div ref={addBarRef} className={cn('flex gap-2 p-3', category.products.length > 0 && 'border-t')}>
+            {/* Pole nie blokuje się na czas zapisu (zmiany idą po kolei), więc fokus zostaje do wpisania kolejnego. */}
+            <div className="min-w-0 flex-1">
+              <ProductSearchField
+                source={{ storeId }}
+                addedProductIds={addedProductIds}
+                onAdd={(product) => {
+                  setJustAddedId(product.id)
+                  onAddProduct(product.id)
+                }}
+                onPasteList={onPasteProducts}
+              />
+            </div>
+            <Button
+              variant="outline"
+              className="h-10 shrink-0 rounded-xl"
+              aria-label="Wklej listę EAN-ów z Excela"
+              title="Wklej listę EAN-ów z Excela"
+              onClick={() => onPasteProducts('')}
+            >
+              <ClipboardPasteIcon />
+              <span className="max-sm:hidden">Wklej z Excela</span>
+            </Button>
           </div>
         )}
       </Card>

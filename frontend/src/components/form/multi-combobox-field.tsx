@@ -1,7 +1,8 @@
-import { useId, useMemo, useRef, type ReactNode } from 'react'
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Combobox } from '@base-ui/react/combobox'
 import { CheckIcon, XIcon } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export type ComboboxOption = {
@@ -43,6 +44,8 @@ export function MultiComboboxField({
   const id = useId()
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const selected = useMemo(() => options.filter((option) => value.includes(option.value)), [options, value])
+  // Lista zostaje otwarta po każdym zaznaczeniu, więc zamyka ją też przycisk „Gotowe” na dole.
+  const [open, setOpen] = useState(false)
 
   return (
     <div className={cn('grid gap-2', className)}>
@@ -53,6 +56,8 @@ export function MultiComboboxField({
 
       <Combobox.Root
         multiple
+        open={open}
+        onOpenChange={setOpen}
         items={options}
         value={selected}
         onValueChange={(next) => onChange(next.map((option) => option.value))}
@@ -114,6 +119,12 @@ export function MultiComboboxField({
                   </Combobox.Item>
                 )}
               </Combobox.List>
+              <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+                <span className="text-xs text-muted-foreground tabular-nums">Wybrano: {selected.length}</span>
+                <Button type="button" size="sm" onClick={() => setOpen(false)}>
+                  Gotowe
+                </Button>
+              </div>
             </Combobox.Popup>
           </Combobox.Positioner>
         </Combobox.Portal>

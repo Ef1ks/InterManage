@@ -108,16 +108,40 @@ function sendFormChange(storeId: string, change: FormChange): Promise<OrderForm>
   }
 }
 
+/**
+ * Zmiany formularza idą po kolei (wspólny `scope`): każda odpowiedź to cały formularz, więc dwie zmiany wysłane
+ * szybko jedna po drugiej (np. produkty dodawane Enterem) nie mogą wrócić w odwrotnej kolejności.
+ */
+const formScope = (storeId: string) => ({ id: `deli-form-${storeId}` })
+
 /** Każda zmiana formularza zwraca cały aktualny formularz, który od razu podmieniamy w cache. */
 export function useChangeOrderForm(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    scope: formScope(storeId),
     mutationFn: (change: FormChange) => sendFormChange(storeId, change),
     onSuccess: (form) => {
       queryClient.setQueryData(formKey(storeId), form)
       // Pierwszy dział sprawia, że sklep może zamawiać ze swojego formularza.
       queryClient.invalidateQueries({ queryKey: overviewKey(storeId) })
     },
+  })
+}
+
+export type PastedProduct = { ean: string; orderUnit: OrderUnit }
+export type PasteProductsResult = { form: OrderForm; added: number; updated: number; notFound: string[] }
+
+/** Lista produktów wklejona z Excela do kategorii (EAN + jednostka). */
+export function usePasteOrderProducts(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    scope: formScope(storeId),
+    mutationFn: ({ categoryId, rows }: { categoryId: string; rows: PastedProduct[] }) =>
+      api<PasteProductsResult>(`${basePath(storeId)}/categories/${categoryId}/products/paste`, {
+        method: 'POST',
+        json: { rows },
+      }),
+    onSuccess: (result) => queryClient.setQueryData(formKey(storeId), result.form),
   })
 }
 

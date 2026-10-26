@@ -158,9 +158,9 @@ public class KsefController {
         return connectionService.saveConnection(storeId, nip, certificate, privateKey, password, principal.getId());
     }
 
-    /** Podłączenie do firmy połączonej już w innym sklepie, bez certyfikatu - tylko właściciel. */
+    /** Podłączenie do firmy połączonej już w innym sklepie użytkownika, bez certyfikatu. */
     @PostMapping("/settings/connection/link")
-    @PreAuthorize("hasAuthority('ROLE_OWNER') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize(EDIT)
     public KsefSettingsResponse linkConnection(@PathVariable UUID storeId,
             @Valid @RequestBody KsefLinkConnectionRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {

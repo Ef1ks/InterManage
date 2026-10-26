@@ -45,7 +45,7 @@ export function AppLayout() {
     <div className="min-h-svh bg-muted/30 md:grid md:grid-cols-[15rem_1fr]">
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-60 border-r bg-background transition-transform md:static md:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 w-60 overflow-y-auto border-r bg-background transition-transform md:sticky md:top-0 md:h-svh md:translate-x-0',
           mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >

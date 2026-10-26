@@ -10,6 +10,7 @@ import { DateField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useDeliOverview, useSubmitOrder, useSupplierForm } from '@/features/deli-order/api'
+import { CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
 import { deliPaths } from '@/features/deli-order/paths'
 import { ProductSearchField } from '@/features/deli-order/ProductSearchField'
 import { QuantityInput, UnitToggle, parseQuantity } from '@/features/deli-order/QuantityInput'
@@ -250,7 +251,12 @@ function SupplierOrder({ storeId, supplier }: { storeId: string; supplier: DeliS
               <p className="text-sm text-muted-foreground">W tym dziale nie ma jeszcze produktów.</p>
             )}
             {section.categories.map((category) => (
-              <section key={category.id} aria-label={category.name}>
+              <section
+                key={category.id}
+                id={categoryAnchorId(category.id)}
+                aria-label={category.name}
+                className="scroll-mt-20"
+              >
                 <h2 className="mb-2 text-base font-semibold">{category.name}</h2>
                 <Card className="gap-0 divide-y py-0">
                   {category.products.length === 0 && (
@@ -292,6 +298,16 @@ function SupplierOrder({ storeId, supplier }: { storeId: string; supplier: DeliS
           </Tabs.Panel>
         ))}
       </Tabs.Root>
+      {activeSection && (
+        <CategoryNav
+          aboveStickyFooter
+          items={activeSection.categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            count: category.products.length,
+          }))}
+        />
+      )}
 
       <div className="sticky bottom-0 z-10 -mx-4 mt-6 border-t bg-background/95 px-4 py-4 backdrop-blur-sm md:-mx-6 md:px-6">
         {/* Na telefonie data i przycisk w jednym wierszu, status pod nimi - stopka nie zasłania produktów. */}

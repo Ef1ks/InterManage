@@ -7,7 +7,6 @@ import { Form, FormActions, TextField } from '@/components/form'
 import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useCurrentUser } from '@/features/auth/api'
 import { useKsefSettings, useKsefSettingsMutations } from '@/features/ksef/api'
 import { formatDateTime, formatDay, formatNip, invoicesWord } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
@@ -68,21 +67,19 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
 }
 
 /**
- * Firma połączona już w innym sklepie: właściciel podłącza do niej ten sklep bez certyfikatu (dane logowania są
- * kopiowane), a sklep od razu widzi faktury firmy. Pracownik widzi tylko podpowiedź.
+ * Firma połączona już w innym sklepie użytkownika: podłącza do niej ten sklep bez certyfikatu (dane logowania są
+ * kopiowane), a sklep od razu widzi faktury firmy. Serwer podaje tylko firmy ze sklepów, do których użytkownik ma
+ * dostęp.
  */
 function CompanyLinkCard({ storeId, companies }: { storeId: string; companies: KsefCompany[] }) {
-  const { owner } = useCurrentUser()
   const { linkConnection } = useKsefSettingsMutations(storeId)
   if (companies.length === 0) return null
   return (
     <Card className="gap-3 p-5">
       <div>
-        <h2 className="text-base font-semibold">Firma połączona w innym sklepie</h2>
+        <h2 className="text-base font-semibold">Firma połączona w Twoim innym sklepie</h2>
         <p className="text-sm text-muted-foreground">
-          {owner
-            ? 'Podłącz ten sklep do firmy bez wgrywania certyfikatu - zobaczy jej faktury od razu, bez czekania na pobranie.'
-            : 'Właściciel może podłączyć ten sklep do firmy bez wgrywania certyfikatu.'}
+          Podłącz ten sklep do firmy bez wgrywania certyfikatu - zobaczy jej faktury od razu, bez czekania na pobranie.
         </p>
       </div>
       <ul className="divide-y rounded-lg border">
@@ -92,27 +89,25 @@ function CompanyLinkCard({ storeId, companies }: { storeId: string; companies: K
               <p className="font-medium tabular-nums">NIP {formatNip(company.nip)}</p>
               <p className="truncate text-sm text-muted-foreground">{company.stores.join(', ')}</p>
             </div>
-            {owner && (
-              <Button
-                variant="outline"
-                loading={linkConnection.isPending && linkConnection.variables === company.nip}
-                disabled={linkConnection.isPending}
-                onClick={() =>
-                  linkConnection.mutate(company.nip, {
-                    onSuccess: (result) =>
-                      result.connection?.testOk
-                        ? toast.success('Sklep podłączony do firmy - faktury są już widoczne')
-                        : toast.error('Podłączono, ale logowanie do KSeF się nie udało', {
-                            description: result.connection?.testMessage ?? undefined,
-                          }),
-                    onError: (error) => toast.error(errorMessage(error, 'Nie udało się podłączyć sklepu')),
-                  })
-                }
-              >
-                <LinkIcon />
-                Podłącz
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              loading={linkConnection.isPending && linkConnection.variables === company.nip}
+              disabled={linkConnection.isPending}
+              onClick={() =>
+                linkConnection.mutate(company.nip, {
+                  onSuccess: (result) =>
+                    result.connection?.testOk
+                      ? toast.success('Sklep podłączony do firmy - faktury są już widoczne')
+                      : toast.error('Podłączono, ale logowanie do KSeF się nie udało', {
+                          description: result.connection?.testMessage ?? undefined,
+                        }),
+                  onError: (error) => toast.error(errorMessage(error, 'Nie udało się podłączyć sklepu')),
+                })
+              }
+            >
+              <LinkIcon />
+              Podłącz
+            </Button>
           </li>
         ))}
       </ul>

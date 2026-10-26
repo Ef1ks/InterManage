@@ -101,6 +101,43 @@ class DeliOrderFormIntegrationTests {
     }
 
     @Test
+    void pastedProductListAddsProductsByEanWithTheirUnits() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String otherStore = createStore(owner);
+        String kabanos = insertProduct(storeId, "KABANOSY 1KG", "szt.");
+        String pasztet = insertProduct(storeId, "PASZTET 200G", "kg");
+        String foreign = insertProduct(otherStore, "SZYNKA 1KG");
+        String kabanosEan = ean(kabanos);
+        String pasztetEan = ean(pasztet);
+
+        String form = send(owner, post(url(storeId, "/sections")), "{\"name\":\"Garmaż\"}")
+                .andReturn().getResponse().getContentAsString();
+        String section = id(form, "$.sections[0].id");
+        form = send(owner, post(url(storeId, "/sections/" + section + "/categories")), "{\"name\":\"Wędliny\"}")
+                .andReturn().getResponse().getContentAsString();
+        String category = id(form, "$.sections[0].categories[0].id");
+        send(owner, post(url(storeId, "/categories/" + category + "/products")), "{\"productId\":\"" + pasztet + "\"}");
+
+        // Nowy produkt dochodzi na koniec, znany zostaje na miejscu z nową jednostką, EAN z innego sklepu jest nieznany.
+        send(owner, post(url(storeId, "/categories/" + category + "/products/paste")), """
+                {"rows":[{"ean":"%s","orderUnit":"KG"},{"ean":"%s","orderUnit":"SZT"},
+                         {"ean":"%s","orderUnit":"KG"},{"ean":"0000000000000","orderUnit":"KG"}]}"""
+                .formatted(kabanosEan, pasztetEan, ean(foreign)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.added").value(1))
+                .andExpect(jsonPath("$.updated").value(1))
+                .andExpect(jsonPath("$.notFound.length()").value(2))
+                .andExpect(jsonPath("$.form.sections[0].categories[0].products[0].productId").value(pasztet))
+                .andExpect(jsonPath("$.form.sections[0].categories[0].products[0].orderUnit").value("SZT"))
+                .andExpect(jsonPath("$.form.sections[0].categories[0].products[1].productId").value(kabanos))
+                .andExpect(jsonPath("$.form.sections[0].categories[0].products[1].orderUnit").value("KG"));
+
+        send(owner, post(url(storeId, "/categories/" + category + "/products/paste")), "{\"rows\":[]}")
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void formAndProductsStayWithinTheirStore() throws Exception {
         Cookie owner = login();
         String storeA = createStore(owner);
@@ -379,6 +416,10 @@ class DeliOrderFormIntegrationTests {
                     sale_value_gross, first_import_id, last_import_id)
                 values (?::uuid, ?, ?, ?, 0, 0, 0, ?::uuid, ?::uuid) returning id""",
                 String.class, storeId, type, number, date, importId, importId);
+    }
+
+    private String ean(String productId) {
+        return jdbc.queryForObject("select ean from products where id = ?::uuid", String.class, productId);
     }
 
     private String insertProduct(String storeId, String name) {

@@ -12,6 +12,8 @@ type Props = {
   onAdd: (product: ProductSearchResult) => void
   disabled?: boolean
   placeholder?: string
+  /** Wklejony tekst z kilkoma wierszami albo kolumnami (lista z Excela) trafia tu zamiast do pola. */
+  onPasteList?: (text: string) => void
 }
 
 /**
@@ -25,6 +27,7 @@ export function ProductSearchField({
   onAdd,
   disabled,
   placeholder = 'Dodaj produkt: nazwa, marka, EAN lub ITM8',
+  onPasteList,
 }: Props) {
   const [query, setQuery] = useState('')
   const { data: results = [], isFetching } = useProductSearch(source, query)
@@ -47,6 +50,8 @@ export function ProductSearchField({
       itemToStringLabel={(product: ProductSearchResult) => product.name ?? product.ean}
       isItemEqualToValue={(a: ProductSearchResult, b: ProductSearchResult) => a.id === b.id}
       disabled={disabled}
+      // Enter dodaje pierwszy wynik bez sięgania po strzałki; fokus zostaje w polu, więc można wpisywać dalej.
+      autoHighlight
     >
       <div className="relative">
         <SearchIcon
@@ -54,6 +59,13 @@ export function ProductSearchField({
           className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Combobox.Input
+          onPaste={(event) => {
+            const text = event.clipboardData.getData('text')
+            if (onPasteList && /[\t\n]/.test(text.trim())) {
+              event.preventDefault()
+              onPasteList(text)
+            }
+          }}
           aria-label={placeholder}
           placeholder={placeholder}
           className="h-10 w-full rounded-xl border border-input bg-background pr-9 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 disabled:opacity-60"
