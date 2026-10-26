@@ -1,0 +1,4 @@
+# Do obrazu trafia tylko pom.xml i src/main. Sekrety (.env, klucze KSeF) i raporty z dysku zostają poza nim.
+*
+!pom.xml
+!src/main/

@@ -36,6 +36,7 @@ class AuthAndRolesIntegrationTests {
 
     private static final String OWNER = "wlasciciel";
     private static final String OWNER_PASSWORD = "haslo-wlasciciela";
+    private static String defaultStoreId;
 
     @Autowired
     MockMvc mvc;
@@ -51,7 +52,7 @@ class AuthAndRolesIntegrationTests {
     @Test
     void invitedUserActivatesAccountAndMustSetPasswordFirst() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{\"SALES\":\"VIEW\"}");
+        String roleId = createRole(owner, "{\"SALES\":\"VIEW\"}");
         String username = inviteUser(owner, roleId);
 
         // Przed aktywacją konto nie ma hasła - nie da się zalogować.
@@ -89,7 +90,7 @@ class AuthAndRolesIntegrationTests {
     @Test
     void resendingActivationLinkInvalidatesThePreviousOne() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         String username = inviteUser(owner, roleId);
         String firstToken = mailer.lastTokenFor(emailOf(username));
 
@@ -103,14 +104,14 @@ class AuthAndRolesIntegrationTests {
     @Test
     void temporaryPasswordFromOwnerMustBeChanged() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         String username = createUser(owner, roleId);
-        long userId = userId(owner, username);
+        String userId = userId(owner, username);
 
         mvc.perform(put("/api/settings/users/" + userId).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":"
-                                + roleId + ",\"enabled\":true,\"newPassword\":\"tymczasowe-123\"}"))
+                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":\""
+                                + roleId + "\",\"enabled\":true,\"newPassword\":\"tymczasowe-123\"}"))
                 .andExpect(status().isOk());
 
         Cookie employee = login(username, "tymczasowe-123");
@@ -122,13 +123,13 @@ class AuthAndRolesIntegrationTests {
     @Test
     void duplicateEmailIsRejected() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         String username = inviteUser(owner, roleId);
 
         mvc.perform(post("/api/settings/users").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"inny" + username + "\",\"displayName\":\"Jan\","
-                                + "\"email\":\"" + emailOf(username).toUpperCase() + "\",\"roleId\":" + roleId + "}"))
+                                + "\"email\":\"" + emailOf(username).toUpperCase() + "\",\"roleId\":\"" + roleId + "\"}"))
                 .andExpect(status().isConflict());
     }
 
@@ -183,7 +184,7 @@ class AuthAndRolesIntegrationTests {
     @Test
     void dynamicRoleGrantsOnlyAssignedCategories() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{\"SALES\":\"VIEW\",\"INVENTORY\":\"EDIT\"}");
+        String roleId = createRole(owner, "{\"SALES\":\"VIEW\",\"INVENTORY\":\"EDIT\"}");
         String username = createUser(owner, roleId);
 
         Cookie employee = login(username, "haslo-pracownika");
@@ -200,7 +201,7 @@ class AuthAndRolesIntegrationTests {
     @Test
     void roleChangeAppliesToExistingSession() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{\"SALES\":\"VIEW\"}");
+        String roleId = createRole(owner, "{\"SALES\":\"VIEW\"}");
         String username = createUser(owner, roleId);
         Cookie employee = login(username, "haslo-pracownika");
 
@@ -218,15 +219,15 @@ class AuthAndRolesIntegrationTests {
     @Test
     void disablingUserEndsTheirSession() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         String username = createUser(owner, roleId);
-        long userId = userId(owner, username);
+        String userId = userId(owner, username);
         Cookie employee = login(username, "haslo-pracownika");
 
         mvc.perform(put("/api/settings/users/" + userId).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":"
-                                + roleId + ",\"enabled\":false}"))
+                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":\""
+                                + roleId + "\",\"enabled\":false}"))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/auth/me").cookie(employee)).andExpect(status().isUnauthorized());
@@ -237,15 +238,15 @@ class AuthAndRolesIntegrationTests {
     @Test
     void passwordResetByOwnerEndsOldSessions() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         String username = createUser(owner, roleId);
-        long userId = userId(owner, username);
+        String userId = userId(owner, username);
         Cookie employee = login(username, "haslo-pracownika");
 
         mvc.perform(put("/api/settings/users/" + userId).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":"
-                                + roleId + ",\"enabled\":true,\"newPassword\":\"nowe-haslo-123\"}"))
+                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":\""
+                                + roleId + "\",\"enabled\":true,\"newPassword\":\"nowe-haslo-123\"}"))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/auth/me").cookie(employee)).andExpect(status().isUnauthorized());
@@ -255,7 +256,7 @@ class AuthAndRolesIntegrationTests {
     @Test
     void ownChangePasswordKeepsCurrentDevice() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         String username = createUser(owner, roleId);
         Cookie employee = login(username, "haslo-pracownika");
 
@@ -280,9 +281,9 @@ class AuthAndRolesIntegrationTests {
     void ownerRoleIsProtected() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
         MvcResult me = mvc.perform(get("/api/auth/me").cookie(owner)).andReturn();
-        long ownerId = ((Number) JsonPath.read(me.getResponse().getContentAsString(), "$.id")).longValue();
-        long ownerRoleId = userRoleId(owner, OWNER);
-        long otherRoleId = createRole(owner, "{}");
+        String ownerId = ((String) JsonPath.read(me.getResponse().getContentAsString(), "$.id"));
+        String ownerRoleId = userRoleId(owner, OWNER);
+        String otherRoleId = createRole(owner, "{}");
 
         mvc.perform(delete("/api/settings/roles/" + ownerRoleId).cookie(owner).with(csrf()))
                 .andExpect(status().isConflict());
@@ -290,14 +291,14 @@ class AuthAndRolesIntegrationTests {
         // Jedyny właściciel nie może odebrać sobie roli ani się zablokować.
         mvc.perform(put("/api/settings/users/" + ownerId).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"displayName\":\"Właściciel\",\"roleId\":" + otherRoleId + ",\"enabled\":true}"))
+                        .content("{\"displayName\":\"Właściciel\",\"roleId\":\"" + otherRoleId + "\",\"enabled\":true}"))
                 .andExpect(status().isConflict());
     }
 
     @Test
     void roleInUseCannotBeDeleted() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
-        long roleId = createRole(owner, "{}");
+        String roleId = createRole(owner, "{}");
         createUser(owner, roleId);
 
         mvc.perform(delete("/api/settings/roles/" + roleId).cookie(owner).with(csrf()))
@@ -315,6 +316,96 @@ class AuthAndRolesIntegrationTests {
                 .andExpect(jsonPath("$.errors.username").exists())
                 .andExpect(jsonPath("$.errors.email").exists())
                 .andExpect(jsonPath("$.errors.roleId").exists());
+    }
+
+    @Test
+    void employeeWorksOnlyInAssignedStores() throws Exception {
+        Cookie owner = login(OWNER, OWNER_PASSWORD);
+        String assigned = createStore(owner);
+        String other = createStore(owner);
+        String roleId = createRole(owner, "{\"IMPORTS\":\"VIEW\"}");
+        String username = createUser(owner, roleId);
+
+        mvc.perform(put("/api/settings/users/" + userId(owner, username)).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":\""
+                                + roleId + "\",\"enabled\":true,\"storeIds\":[\"" + assigned + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storeIds[0]").value(assigned));
+
+        Cookie employee = login(username, "haslo-pracownika");
+        mvc.perform(get("/api/auth/me").cookie(employee))
+                .andExpect(jsonPath("$.stores.length()").value(1))
+                .andExpect(jsonPath("$.stores[0].id").value(assigned));
+        mvc.perform(get("/api/stores/" + assigned + "/imports/products").cookie(employee)).andExpect(status().isOk());
+        mvc.perform(get("/api/stores/" + other + "/imports/products").cookie(employee)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/settings/stores").cookie(employee)).andExpect(status().isForbidden());
+
+        // Wyłączony sklep znika pracownikowi z wyboru i z dostępu.
+        mvc.perform(put("/api/settings/stores/" + assigned).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"number\":\"" + storeNumber(owner, assigned) + "\",\"name\":\"Zamkniety\",\"active\":false}"))
+                .andExpect(status().isOk());
+        // Bez żadnego aktywnego sklepu sesja się kończy, a ponowne logowanie jest blokowane.
+        mvc.perform(get("/api/auth/me").cookie(employee)).andExpect(status().isUnauthorized());
+        mvc.perform(loginRequest(username, "haslo-pracownika"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("sklepu")));
+    }
+
+    @Test
+    void employeeWithoutStoreCannotActivateUntilStoreIsAssigned() throws Exception {
+        Cookie owner = login(OWNER, OWNER_PASSWORD);
+        String roleId = createRole(owner, "{}");
+        String username = inviteUser(owner, roleId, "[]");
+        String token = mailer.lastTokenFor(emailOf(username));
+
+        mvc.perform(activateRequest(token)).andExpect(status().isForbidden());
+
+        // Odrzucony link nie został zużyty: po przypisaniu sklepu ten sam link działa.
+        mvc.perform(put("/api/settings/users/" + userId(owner, username)).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Jan\",\"email\":\"" + emailOf(username) + "\",\"roleId\":\""
+                                + roleId + "\",\"enabled\":true,\"storeIds\":[\"" + defaultStore(owner) + "\"]}"))
+                .andExpect(status().isOk());
+        mvc.perform(activateRequest(token)).andExpect(status().isOk());
+    }
+
+    @Test
+    void ownerLogsInWithoutAnyStore() throws Exception {
+        mvc.perform(get("/api/auth/me").cookie(login(OWNER, OWNER_PASSWORD))).andExpect(status().isOk());
+    }
+
+    @Test
+    void storeNumbersAreUnique() throws Exception {
+        Cookie owner = login(OWNER, OWNER_PASSWORD);
+        String storeId = createStore(owner);
+        mvc.perform(post("/api/settings/stores").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"number\":\"" + storeNumber(owner, storeId) + "\",\"name\":\"Drugi\",\"active\":true}"))
+                .andExpect(status().isConflict());
+    }
+
+    private String defaultStore(Cookie owner) throws Exception {
+        if (defaultStoreId == null) {
+            defaultStoreId = createStore(owner);
+        }
+        return defaultStoreId;
+    }
+
+    private String createStore(Cookie owner) throws Exception {
+        String number = String.valueOf(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000, 9_999_999_999L));
+        MvcResult result = mvc.perform(post("/api/settings/stores").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"number\":\"" + number + "\",\"name\":\"Sklep " + number + "\",\"active\":true}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return ((String) JsonPath.read(result.getResponse().getContentAsString(), "$.id"));
+    }
+
+    private String storeNumber(Cookie owner, String storeId) throws Exception {
+        String json = mvc.perform(get("/api/settings/stores").cookie(owner)).andReturn().getResponse().getContentAsString();
+        return JsonPath.<java.util.List<String>>read(json, "$[?(@.id == '" + storeId + "')].number").get(0);
     }
 
     private Cookie login(String username, String password) throws Exception {
@@ -337,29 +428,35 @@ class AuthAndRolesIntegrationTests {
         return cookie;
     }
 
-    private long createRole(Cookie owner, String permissionsJson) throws Exception {
+    private String createRole(Cookie owner, String permissionsJson) throws Exception {
         MvcResult result = mvc.perform(post("/api/settings/roles").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissionsJson + "}"))
                 .andExpect(status().isCreated())
                 .andReturn();
-        return ((Number) JsonPath.read(result.getResponse().getContentAsString(), "$.id")).longValue();
+        return ((String) JsonPath.read(result.getResponse().getContentAsString(), "$.id"));
     }
 
     /** Zaprasza pracownika (konto bez hasła, link aktywacyjny na {@link #emailOf}). */
-    private String inviteUser(Cookie owner, long roleId) throws Exception {
+    private String inviteUser(Cookie owner, String roleId) throws Exception {
+        return inviteUser(owner, roleId, "[\"" + defaultStore(owner) + "\"]");
+    }
+
+    /** Pracownik bez sklepu nie może się zalogować, więc zwykle zapraszamy go do wspólnego sklepu testowego. */
+    private String inviteUser(Cookie owner, String roleId, String storeIdsJson) throws Exception {
         String username = "user" + UUID.randomUUID().toString().substring(0, 8);
         mvc.perform(post("/api/settings/users").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"" + username + "\",\"displayName\":\"Jan\","
-                                + "\"email\":\"" + emailOf(username) + "\",\"roleId\":" + roleId + "}"))
+                                + "\"email\":\"" + emailOf(username) + "\",\"roleId\":\"" + roleId
+                                + "\",\"storeIds\":" + storeIdsJson + "}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.pendingActivation").value(true));
         return username;
     }
 
     /** Zaprasza pracownika, aktywuje konto linkiem i ustawia hasło {@code haslo-pracownika}. */
-    private String createUser(Cookie owner, long roleId) throws Exception {
+    private String createUser(Cookie owner, String roleId) throws Exception {
         String username = inviteUser(owner, roleId);
         MvcResult activated = mvc.perform(activateRequest(mailer.lastTokenFor(emailOf(username))))
                 .andExpect(status().isOk())
@@ -385,15 +482,14 @@ class AuthAndRolesIntegrationTests {
                 .content("{\"newPassword\":\"" + password + "\"}");
     }
 
-    private long userId(Cookie owner, String username) throws Exception {
+    private String userId(Cookie owner, String username) throws Exception {
         String json = mvc.perform(get("/api/settings/users").cookie(owner)).andReturn().getResponse().getContentAsString();
-        return ((Number) JsonPath.<java.util.List<Object>>read(json, "$[?(@.username == '" + username + "')].id").get(0))
-                .longValue();
+        return ((String) JsonPath.<java.util.List<Object>>read(json, "$[?(@.username == '" + username + "')].id").get(0));
     }
 
-    private long userRoleId(Cookie owner, String username) throws Exception {
+    private String userRoleId(Cookie owner, String username) throws Exception {
         String json = mvc.perform(get("/api/settings/users").cookie(owner)).andReturn().getResponse().getContentAsString();
-        return ((Number) JsonPath.<java.util.List<Object>>read(json, "$[?(@.username == '" + username + "')].roleId")
-                .get(0)).longValue();
+        return ((String) JsonPath.<java.util.List<Object>>read(json, "$[?(@.username == '" + username + "')].roleId")
+                .get(0));
     }
 }

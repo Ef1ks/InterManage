@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Lokalny certyfikat HTTPS dla lvh.me (npm run certs)
+certs/

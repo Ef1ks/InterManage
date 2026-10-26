@@ -1,5 +1,15 @@
 import { useEffect } from 'react'
-import { KeyRoundIcon, LayoutDashboardIcon, LogOutIcon, MenuIcon, ShieldIcon, UserCogIcon, UserIcon } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  KeyRoundIcon,
+  LayoutDashboardIcon,
+  LogOutIcon,
+  MenuIcon,
+  ShieldIcon,
+  StoreIcon,
+  UserCogIcon,
+  UserIcon,
+} from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
@@ -15,6 +25,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { hasPermission, useCurrentUser, useLogout } from '@/features/auth/api'
+import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
+import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import { cn } from '@/lib/utils'
 import { closeMobileNav, toggleMobileNav } from '@/store/uiSlice'
@@ -54,6 +66,7 @@ export function AppLayout() {
           >
             <MenuIcon />
           </Button>
+          <BackButton />
           <div className="ml-auto">
             <UserMenu />
           </div>
@@ -73,7 +86,10 @@ function Sidebar() {
 
   return (
     <nav className="flex h-full flex-col gap-6 p-3">
-      <BrandMark className="px-1.5 pt-1.5" />
+      <div className="grid gap-5">
+        <BrandMark className="px-2 pt-1.5" />
+        <StoreSwitcher />
+      </div>
 
       <div className="grid gap-1">
         <SidebarLink to="/" icon={LayoutDashboardIcon} label="Pulpit" end />
@@ -88,6 +104,7 @@ function Sidebar() {
               to={TOOL_ROUTES[category.code].path}
               icon={TOOL_ROUTES[category.code].icon}
               label={category.label}
+              badge={category.code === 'DELI_ORDERS' && <DeliNewOrdersBadge />}
             />
           ))}
         </div>
@@ -96,11 +113,37 @@ function Sidebar() {
       {me.owner && (
         <div className="grid gap-1">
           <SectionLabel>Ustawienia</SectionLabel>
+          <SidebarLink to="/ustawienia/sklepy" icon={StoreIcon} label="Sklepy" />
           <SidebarLink to="/ustawienia/role" icon={ShieldIcon} label="Role i uprawnienia" />
           <SidebarLink to="/ustawienia/uzytkownicy" icon={UserCogIcon} label="Użytkownicy" />
         </div>
       )}
     </nav>
+  )
+}
+
+/**
+ * Powrót do poprzedniego ekranu w aplikacji. Bez historii (strona otwarta z linku albo po odświeżeniu na pierwszym
+ * ekranie) przenosi na Pulpit; na samym Pulpicie jest wtedy wyłączony.
+ */
+function BackButton() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  // react-router trzyma w history.state numer wpisu; 0 = pierwszy ekran tej karty.
+  const hasHistory = ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0
+  const disabled = !hasHistory && location.pathname === '/'
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Wróć do poprzedniego ekranu"
+      title="Wróć"
+      disabled={disabled}
+      onClick={() => (hasHistory ? navigate(-1) : navigate('/'))}
+    >
+      <ArrowLeftIcon />
+    </Button>
   )
 }
 
@@ -113,11 +156,14 @@ function SidebarLink({
   icon: Icon,
   label,
   end,
+  badge,
 }: {
   to: string
   icon: React.ComponentType<{ className?: string }>
   label: string
   end?: boolean
+  /** Np. licznik nowych zamówień, wyrównany do prawej. */
+  badge?: React.ReactNode
 }) {
   return (
     <NavLink
@@ -133,7 +179,8 @@ function SidebarLink({
       {({ isActive }) => (
         <>
           <Icon className={cn('size-4 transition-colors duration-150', isActive && 'text-brand')} />
-          {label}
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {badge}
         </>
       )}
     </NavLink>

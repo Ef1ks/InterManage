@@ -1,0 +1,326 @@
+package com.intermanage.backend;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import com.intermanage.backend.security.JwtService;
+
+import jakarta.servlet.http.Cookie;
+
+@SpringBootTest(properties = {
+        "app.bootstrap.owner-username=wlasciciel",
+        "app.bootstrap.owner-password=haslo-wlasciciela"
+})
+@AutoConfigureMockMvc
+@Import({TestcontainersConfiguration.class, RecordingAccountMailer.Config.class})
+class DocumentImportIntegrationTests {
+
+    /** Nagłówek jak w raporcie "Statystyka: Wejścia/Wyjścia" (z francuskimi znakami). */
+    private static final String[] HEADER = {"Code nomenclature", "Libellé nomenclature", "Code fournisseur",
+            "Libellé fournisseur", "Date Document", "Type Document", "Numéro document interne",
+            "Numéro document fournisseur", "N° ligne", "ITM8", "EAN13", "Libellé article", "Marque", "Unité Mesure",
+            "Quantité", "Prix achat FIFO", "Prix Vente actuel", "Prix vente document", "Valeur FIFO",
+            "Valeur Vente TTC", "Valeur Vente HT", "TVA", "Valeur TVA", "Marge en valeur", "Marge en %"};
+    private static final String STORE_NUMBER = String.valueOf(ThreadLocalRandom.current().nextInt(100_000, 999_999));
+    private static String storeId;
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void importStoresAllDocumentTypesAndMergesLaterReports() throws Exception {
+        Cookie owner = login();
+        String a = docNumber();
+        String b = docNumber();
+        String liquidation = "PL" + docNumber();
+        String pressReturn = "ZW" + docNumber();
+
+        upload(owner, report(STORE_NUMBER,
+                line("PZ", a, "", 1, "3", "4.49", "13.47"),
+                line("PZ", a, "", 2, "0", "2.99", "0"),
+                line("PZ", b, "F/016441/26", 1, "12", "1.5", "18"),
+                // Likwidacja: każda linia od innego dostawcy.
+                line("PL", liquidation, "0", 36, "1", "-3.85", "-3.85"),
+                withSupplier(line("PL", liquidation, "0", 37, "2", "-1", "-2"), "108", "RADIX-BIS Sp. z o.o."),
+                // Zwrot prasy: wszystkie linie z numerem 1, różne ITM8.
+                line("ZW", pressReturn, "0", 1, "2", "-3.09", "-6.18"),
+                withItm8(line("ZW", pressReturn, "0", 1, "5", "-3.42", "-17.1"), "0000099007468"),
+                line("XX", "XX0000120261022", "0", 1, "1", "1", "1")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalLines").value(8))
+                .andExpect(jsonPath("$.savedLines").value(7))
+                .andExpect(jsonPath("$.createdCount").value(4))
+                .andExpect(jsonPath("$.skippedLines").value(1))
+                .andExpect(jsonPath("$.skippedTypes").value("XX"))
+                .andExpect(jsonPath("$.periodFrom").value("2026-10-20"));
+
+        mvc.perform(get(url("")).cookie(owner))
+                .andExpect(jsonPath("$.lastReportGeneratedAt").value("2026-10-24T16:10:50"))
+                .andExpect(jsonPath("$.types.length()").value(9))
+                .andExpect(jsonPath("$.types[0].code").value("PZ"))
+                .andExpect(jsonPath("$.types[0].label").value("Przyjęcia towaru"))
+                .andExpect(jsonPath("$.types[0].documentCount").value(2))
+                .andExpect(jsonPath("$.types[?(@.code == 'PL')].documentCount").value(1))
+                .andExpect(jsonPath("$.types[?(@.code == 'RWREP')].documentCount").value(0));
+        mvc.perform(get(url("/pl")).cookie(owner))
+                .andExpect(jsonPath("$.type.label").value("Likwidacje"))
+                .andExpect(jsonPath("$.documents[0].lineCount").value(2))
+                .andExpect(jsonPath("$.documents[0].supplierName").value(org.hamcrest.Matchers.nullValue()));
+        mvc.perform(get(url("/zw")).cookie(owner)).andExpect(jsonPath("$.documents[0].lineCount").value(2));
+        mvc.perform(get(url("/xx")).cookie(owner)).andExpect(status().isNotFound());
+
+        // Wyszukiwanie, sortowanie i sumy w bazie: numer faktury dostawcy znajduje tylko dokument B, "Razem" liczy się z wyników.
+        mvc.perform(get(url("/pz")).param("query", "f/016441").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].number").value(b))
+                .andExpect(jsonPath("$.purchaseTotal").value(18))
+                .andExpect(jsonPath("$.type.documentCount").value(2));
+        mvc.perform(get(url("/pz")).param("sort", "purchase").param("direction", "desc").cookie(owner))
+                .andExpect(jsonPath("$.documents[0].number").value(b))
+                .andExpect(jsonPath("$.hasMore").value(false));
+
+        String docA = "$.documents[?(@.number == '" + a + "')]";
+        mvc.perform(get(url("/pz")).cookie(owner))
+                .andExpect(jsonPath("$.lastReportGeneratedAt").value("2026-10-24T16:10:50"))
+                .andExpect(jsonPath("$.documents.length()").value(2))
+                .andExpect(jsonPath(docA + ".lineCount").value(2))
+                .andExpect(jsonPath(docA + ".purchaseValue").value(13.47))
+                .andExpect(jsonPath(docA + ".supplierName").value("SCAPR POLSKA SP.Z.O.O."))
+                .andExpect(jsonPath(docA + ".supplierDocumentNumber").value(org.hamcrest.Matchers.contains((Object) null)))
+                .andExpect(jsonPath("$.documents[?(@.number == '" + b + "')].supplierDocumentNumber").value("F/016441/26"));
+
+        // Kolejny raport z nakładającego się okresu: zmieniona linia 1, nowa linia 3, brak linii 2 (zostaje w bazie).
+        upload(owner, report(STORE_NUMBER,
+                line("PZ", a, "09516048398", 1, "4", "4.49", "17.96"),
+                line("PZ", a, "09516048398", 3, "1", "10", "10"),
+                line("PZ", b, "F/016441/26", 1, "12", "1.5", "18")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.createdCount").value(0))
+                .andExpect(jsonPath("$.updatedCount").value(1));
+
+        String idA = ((String) com.jayway.jsonpath.JsonPath.<List<Object>>read(
+                mvc.perform(get(url("/pz")).cookie(owner)).andReturn().getResponse().getContentAsString(),
+                docA + ".id").getFirst());
+        mvc.perform(get(url("/pz/" + idA)).cookie(owner))
+                .andExpect(jsonPath("$.lineCount").value(3))
+                .andExpect(jsonPath("$.supplierDocumentNumber").value("09516048398"))
+                .andExpect(jsonPath("$.lines[0].lineNumber").value(1))
+                .andExpect(jsonPath("$.lines[0].quantity").value(4))
+                .andExpect(jsonPath("$.lines[0].marginPercent").value(31.5))
+                .andExpect(jsonPath("$.lines[1].lineNumber").value(2))
+                .andExpect(jsonPath("$.lines[2].lineNumber").value(3))
+                .andExpect(jsonPath("$.purchaseValue").value(27.96));
+
+        mvc.perform(get(importsUrl()).cookie(owner))
+                .andExpect(jsonPath("$[0].updatedCount").value(1))
+                .andExpect(jsonPath("$[0].importedBy").isNotEmpty());
+    }
+
+    @Test
+    void listsDocumentsInPagesOfOneHundred() throws Exception {
+        Cookie owner = login();
+        String[][] lines = new String[101][];
+        for (int i = 0; i < lines.length; i++) {
+            lines[i] = line("WZ", "WZ%04d".formatted(i), "0", 1, "1", "1", "1");
+        }
+        upload(owner, report(STORE_NUMBER, lines)).andExpect(status().isCreated());
+
+        mvc.perform(get(url("/wz")).cookie(owner))
+                .andExpect(jsonPath("$.documents.length()").value(100))
+                .andExpect(jsonPath("$.documents[0].number").value("WZ0000"))
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andExpect(jsonPath("$.matchingCount").value(101))
+                .andExpect(jsonPath("$.purchaseTotal").value(101));
+        mvc.perform(get(url("/wz")).param("page", "1").cookie(owner))
+                .andExpect(jsonPath("$.documents.length()").value(1))
+                .andExpect(jsonPath("$.documents[0].number").value("WZ0100"))
+                .andExpect(jsonPath("$.hasMore").value(false));
+    }
+
+    @Test
+    void rejectsReportOfAnotherStoreBrokenLinesAndIncompleteFile() throws Exception {
+        Cookie owner = login();
+
+        upload(owner, report("10023", line("PZ", docNumber(), "", 1, "1", "1", "1")))
+                .andExpect(status().isConflict());
+
+        upload(owner, report(STORE_NUMBER, line("PZ", docNumber(), "", 1, "1", "1", "1"),
+                withItm8(line("PZ", docNumber(), "", 1, "1", "1", "1"), "ABC")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.rowErrorCount").value(1));
+
+        String number = docNumber();
+        upload(owner, report(STORE_NUMBER, line("PZ", number, "", 1, "1", "1", "1"), line("PZ", number, "", 1, "2", "1", "2")))
+                .andExpect(status().isBadRequest());
+
+        List<String[]> rows = reportRows(STORE_NUMBER, 5, List.<String[]>of(line("PZ", docNumber(), "", 1, "1", "1", "1")));
+        upload(owner, workbook(rows)).andExpect(status().isBadRequest());
+
+        mvc.perform(multipart(importsUrl())
+                        .file(new MockMultipartFile("file", "dokumenty.xlsx", "application/octet-stream", "nie excel".getBytes()))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isBadRequest());
+    }
+
+    private ResultActions upload(Cookie owner, byte[] file) throws Exception {
+        return mvc.perform(multipart(importsUrl())
+                .file(new MockMultipartFile("file", "Zeszyt2.xlsx", "application/octet-stream", file))
+                .cookie(owner).with(csrf()));
+    }
+
+    private String url(String path) {
+        return "/api/stores/" + storeId + "/documents" + path;
+    }
+
+    private String importsUrl() {
+        return "/api/stores/" + storeId + "/imports/documents";
+    }
+
+    @BeforeEach
+    void createStore() throws Exception {
+        if (storeId != null) {
+            return;
+        }
+        String json = mvc.perform(post("/api/settings/stores").cookie(login()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"number\":\"" + STORE_NUMBER + "\",\"name\":\"Sklep dokumentów\",\"active\":true}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        storeId = ((String) com.jayway.jsonpath.JsonPath.read(json, "$.id"));
+    }
+
+    private Cookie login() throws Exception {
+        return mvc.perform(post("/api/auth/login").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"wlasciciel\",\"password\":\"haslo-wlasciciela\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie(JwtService.COOKIE_NAME);
+    }
+
+    private static String docNumber() {
+        return String.valueOf(ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999));
+    }
+
+    /** Linia raportu w układzie z prawdziwego pliku (teksty z dopełnieniem spacjami jak w systemie sklepu). */
+    private static String[] line(String type, String number, String supplierDocument, int lineNumber, String quantity,
+            String price, String value) {
+        return new String[] {"010102", "PIECZYWO LEKKIE               ", "538",
+                "SCAPR POLSKA SP.Z.O.O.                                      ", "21/10/2026 00:00:00", type, number,
+                supplierDocument, String.valueOf(lineNumber), "0000061515426", "5902180810132",
+                "LEKKA KANAPKA CZEKOLADA 30G   ", "SONKO     ", "Sztuka", quantity, price, "4.99", "4.99", value,
+                "4.99", "4.75", "5", "0.24", "8.6", "31,5%"};
+    }
+
+    private static String[] withItm8(String[] line, String itm8) {
+        line[9] = itm8;
+        return line;
+    }
+
+    private static String[] withSupplier(String[] line, String code, String name) {
+        line[2] = code;
+        line[3] = name;
+        return line;
+    }
+
+    private static byte[] report(String storeNumber, String[]... lines) throws IOException {
+        return workbook(reportRows(storeNumber, lines.length, List.of(lines)));
+    }
+
+    private static List<String[]> reportRows(String storeNumber, int declaredLines, List<String[]> lines) {
+        List<String[]> rows = new ArrayList<>();
+        rows.add(new String[] {"sam. 24/10/2026 - 16:10:50                    " + declaredLines + " linie"});
+        rows.add(new String[] {"TRYTOMA  Sp. z o.o. - " + storeNumber});
+        rows.add(new String[] {"Statystyka: Wejścia /Wyjścia : Poziom szczegółu :Non détaillée"});
+        rows.add(new String[] {"Wybór danych : OD 20/10/2026 do 24/10/2026"});
+        rows.add(new String[] {"Kryteria wyboru : Nomenklatura od 00 do 999999"});
+        rows.add(new String[] {});
+        rows.add(HEADER);
+        rows.addAll(lines);
+        rows.add(new String[] {"Razem:  ", "", "", "", "", "", "", "", "", "", "", "", "", "", "103420.32"});
+        return rows;
+    }
+
+    /** Minimalny skoroszyt .xlsx: wszystkie teksty przez tabelę współdzieloną (jak w raporcie), liczby jako liczby. */
+    private static byte[] workbook(List<String[]> rows) throws IOException {
+        List<String> shared = new ArrayList<>();
+        StringBuilder sheet = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+        for (int r = 0; r < rows.size(); r++) {
+            sheet.append("<row r=\"").append(r + 1).append("\">");
+            String[] cells = rows.get(r);
+            for (int c = 0; c < cells.length; c++) {
+                String ref = columnName(c) + (r + 1);
+                String value = cells[c];
+                boolean number = r > 6 && c >= 14 && c != 21 && c != 24 && value.matches("-?\\d+(\\.\\d+)?");
+                if (number) {
+                    sheet.append("<c r=\"").append(ref).append("\"><v>").append(value).append("</v></c>");
+                } else {
+                    sheet.append("<c r=\"").append(ref).append("\" t=\"s\"><v>").append(shared.size()).append("</v></c>");
+                    shared.add(value);
+                }
+            }
+            sheet.append("</row>");
+        }
+        sheet.append("</sheetData></worksheet>");
+
+        StringBuilder strings = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        shared.forEach(s -> strings.append("<si><t xml:space=\"preserve\">").append(escape(s)).append("</t></si>"));
+        strings.append("</sst>");
+
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            put(zip, "xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                    + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+                    + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                    + "<sheets><sheet name=\"Arkusz1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
+            put(zip, "xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                    + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
+                    + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>"
+                    + "</Relationships>");
+            put(zip, "xl/worksheets/sheet1.xml", sheet.toString());
+            put(zip, "xl/sharedStrings.xml", strings.toString());
+        }
+        return bytes.toByteArray();
+    }
+
+    private static String columnName(int index) {
+        return index < 26 ? String.valueOf((char) ('A' + index))
+                : String.valueOf((char) ('A' + index / 26 - 1)) + (char) ('A' + index % 26);
+    }
+
+    private static void put(ZipOutputStream zip, String name, String content) throws IOException {
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
+    private static String escape(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+}

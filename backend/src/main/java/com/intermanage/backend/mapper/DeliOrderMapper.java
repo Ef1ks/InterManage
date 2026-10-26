@@ -1,0 +1,46 @@
+package com.intermanage.backend.mapper;
+
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+
+import com.intermanage.backend.dto.DeliInvitationResponse;
+import com.intermanage.backend.dto.DeliOrderDocumentResponse;
+import com.intermanage.backend.dto.DeliOrderItemResponse;
+import com.intermanage.backend.dto.DeliOrderResponse;
+import com.intermanage.backend.dto.DeliOrderSummaryResponse;
+import com.intermanage.backend.entity.DeliFormInvitation;
+import com.intermanage.backend.entity.DeliOrder;
+import com.intermanage.backend.entity.DeliOrderDocument;
+import com.intermanage.backend.entity.DeliOrderItem;
+
+@Mapper(uses = StoreMapper.class)
+public interface DeliOrderMapper {
+
+    DeliInvitationResponse toResponse(DeliFormInvitation invitation);
+
+    @Mapping(target = "submittedBy", source = "submittedBy.displayName")
+    @Mapping(target = "itemCount", expression = "java(order.getItems().size())")
+    @Mapping(target = "corrected", expression = "java(order.getCorrectedAt() != null)")
+    DeliOrderSummaryResponse toSummary(DeliOrder order);
+
+    @Mapping(target = "submittedBy", source = "submittedBy.displayName")
+    @Mapping(target = "correctedBy", source = "correctedBy.displayName")
+    @Mapping(target = "fulfilledBy", source = "fulfilledBy.displayName")
+    @Mapping(target = "storeDeletedBy", source = "storeDeletedBy.displayName")
+    @Mapping(target = "formStoreDeletedBy", source = "formStoreDeletedBy.displayName")
+    DeliOrderResponse toResponse(DeliOrder order);
+
+    @Mapping(target = "documentId", source = "document.id")
+    @Mapping(target = "number", source = "document.number")
+    @Mapping(target = "documentDate", source = "document.documentDate")
+    @Mapping(target = "lineCount", source = "document.lineCount")
+    @Mapping(target = "linkedBy", source = "linkedBy.displayName")
+    DeliOrderDocumentResponse toResponse(DeliOrderDocument link);
+
+    @Mapping(target = "productId", source = "product.id")
+    @Mapping(target = "itm8", source = "product.itm8")
+    @Mapping(target = "ean", source = "product.ean")
+    @Mapping(target = "name", source = "product.name")
+    @Mapping(target = "brand", source = "product.brand")
+    DeliOrderItemResponse toResponse(DeliOrderItem item);
+}

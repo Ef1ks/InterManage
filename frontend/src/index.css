@@ -137,6 +137,49 @@
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
     }
+  /*
+   * Na dużych monitorach w sklepie (biuro, zaplecze) czyta się z dalszej odległości: większy rem
+   * powiększa cały interfejs proporcjonalnie - tekst, odstępy i pola. Progi stałe, bez płynnej skali.
+   */
+  @media (min-width: 80rem) {
+    html {
+      font-size: 106.25%;
+      }
+    }
+  @media (min-width: 100rem) {
+    html {
+      font-size: 112.5%;
+      }
+    }
+  /*
+   * Wszystko, co da się kliknąć, ma kursor rączki (Tailwind 4 domyślnie zostawia przyciskom strzałkę).
+   * Wyłączone elementy pokazują, że kliknięcie nic nie da.
+   */
+  button,
+  a[href],
+  summary,
+  select,
+  label[for],
+  [role='button'],
+  [role='link'],
+  [role='tab'],
+  [role='menuitem'],
+  [role='menuitemradio'],
+  [role='menuitemcheckbox'],
+  [role='option'],
+  [role='radio'],
+  [role='checkbox'],
+  [role='switch'],
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'] {
+    cursor: pointer;
+  }
+  :disabled,
+  [aria-disabled='true'],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
   ::selection {
     background: color-mix(in oklch, var(--brand) 18%, transparent);
     }

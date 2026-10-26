@@ -1,4 +1,6 @@
+export { DateField } from '@/components/form/date-field'
 export { Form, FormActions, FormAlert, FormNote } from '@/components/form/form'
+export { MultiComboboxField, type ComboboxOption } from '@/components/form/multi-combobox-field'
 export { SegmentedField, type SegmentOption } from '@/components/form/segmented-field'
 export { SelectField, type SelectOption } from '@/components/form/select-field'
 export { SwitchField } from '@/components/form/switch-field'

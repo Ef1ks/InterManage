@@ -5,8 +5,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.user.AppUser;
-import com.intermanage.backend.user.AppUserRepository;
+import com.intermanage.backend.entity.AppUser;
+import com.intermanage.backend.repository.AppUserRepository;
 
 @Service
 public class AppUserDetailsService implements UserDetailsService {

@@ -5,9 +5,6 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +23,9 @@ import org.springframework.stereotype.Component;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 import jakarta.servlet.http.HttpServletResponse;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * Wystawia i weryfikuje JWT (HS256) trzymany w ciasteczku HttpOnly {@value #COOKIE_NAME}.

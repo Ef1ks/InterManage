@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { MailIcon } from 'lucide-react'
-import { Controller, useForm } from 'react-hook-form'
+import { MailIcon, StoreIcon } from 'lucide-react'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
-import { Form, FormActions, FormNote, SelectField, SwitchField, TextField } from '@/components/form'
+import { Form, FormActions, FormNote, MultiComboboxField, SelectField, SwitchField, TextField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useCreateUser, useRoles, useUpdateUser } from '@/features/settings/api'
+import { useCreateUser, useRoles, useStores, useUpdateUser } from '@/features/settings/api'
+import { storeLabel } from '@/features/stores/current-store'
 import { applyServerErrors } from '@/lib/form-errors'
-import type { Role, User } from '@/lib/types'
+import type { Role, Store, User } from '@/lib/types'
 
 type UserForm = {
   username: string
@@ -18,6 +19,7 @@ type UserForm = {
   /** Tylko przy edycji: hasło tymczasowe, puste = bez zmiany. */
   password: string
   enabled: boolean
+  storeIds: string[]
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -31,19 +33,36 @@ type Props = {
 
 export function UserFormDialog({ open, onOpenChange, user }: Props) {
   const { data: roles } = useRoles()
+  const { data: stores } = useStores()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 p-6 sm:max-w-md">
-        {open && roles && (
-          <UserFormBody key={user?.id ?? 'new'} user={user} roles={roles} onDone={() => onOpenChange(false)} />
+        {open && roles && stores && (
+          <UserFormBody
+            key={user?.id ?? 'new'}
+            user={user}
+            roles={roles}
+            stores={stores}
+            onDone={() => onOpenChange(false)}
+          />
         )}
       </DialogContent>
     </Dialog>
   )
 }
 
-function UserFormBody({ user, roles, onDone }: { user?: User; roles: Role[]; onDone: () => void }) {
+function UserFormBody({
+  user,
+  roles,
+  stores,
+  onDone,
+}: {
+  user?: User
+  roles: Role[]
+  stores: Store[]
+  onDone: () => void
+}) {
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
   const [formError, setFormError] = useState<string | null>(null)
@@ -61,11 +80,14 @@ function UserFormBody({ user, roles, onDone }: { user?: User; roles: Role[]; onD
       username: user?.username ?? '',
       displayName: user?.displayName ?? '',
       email: user?.email ?? '',
-      roleId: user ? String(user.roleId) : '',
+      roleId: user?.roleId ?? '',
       password: '',
       enabled: user?.enabled ?? true,
+      storeIds: user?.storeIds ?? [],
     },
   })
+  const selectedRoleId = useWatch({ control, name: 'roleId' })
+  const ownerRoleSelected = roles.some((role) => role.id === selectedRoleId && role.owner)
 
   const onError = (error: unknown) =>
     setFormError(
@@ -76,10 +98,11 @@ function UserFormBody({ user, roles, onDone }: { user?: User; roles: Role[]; onD
 
   const onSubmit = handleSubmit((values) => {
     setFormError(null)
-    const roleId = Number(values.roleId)
+    const roleId = values.roleId
+    const storeIds = values.storeIds
     if (isNew) {
       createUser.mutate(
-        { username: values.username, displayName: values.displayName, email: values.email, roleId },
+        { username: values.username, displayName: values.displayName, email: values.email, roleId, storeIds },
         {
           onSuccess: (created) => {
             toast.success('Zaproszenie wysłane', {
@@ -100,6 +123,7 @@ function UserFormBody({ user, roles, onDone }: { user?: User; roles: Role[]; onD
             roleId,
             enabled: values.enabled,
             newPassword: values.password || undefined,
+            storeIds,
           },
         },
         {
@@ -113,7 +137,12 @@ function UserFormBody({ user, roles, onDone }: { user?: User; roles: Role[]; onD
     }
   })
 
-  const roleOptions = roles.map((role) => ({ value: String(role.id), label: role.name }))
+  const roleOptions = roles.map((role) => ({ value: role.id, label: role.name }))
+  const storeOptions = stores.map((store) => ({
+    value: store.id,
+    label: storeLabel(store),
+    hint: store.active ? undefined : 'Wyłączony - pracownik go nie zobaczy',
+  }))
 
   return (
     <Form onSubmit={onSubmit} error={formError}>
@@ -182,6 +211,38 @@ function UserFormBody({ user, roles, onDone }: { user?: User; roles: Role[]; onD
           />
         )}
       />
+
+      {ownerRoleSelected ? (
+        <FormNote icon={<StoreIcon />}>Właściciel ma dostęp do wszystkich sklepów.</FormNote>
+      ) : storeOptions.length === 0 ? (
+        <FormNote icon={<StoreIcon />}>
+          Nie ma jeszcze żadnego sklepu, a bez sklepu pracownik nie zaloguje się. Dodaj sklep w Ustawieniach → Sklepy.
+        </FormNote>
+      ) : (
+        <Controller
+          control={control}
+          name="storeIds"
+          render={({ field }) => (
+            <MultiComboboxField
+              label="Sklepy"
+              description={
+                field.value.length === 0 ? (
+                  <span className="text-amber-700 dark:text-amber-400">
+                    Bez sklepu pracownik nie zaloguje się do aplikacji.
+                  </span>
+                ) : (
+                  'Pracownik zobaczy dane tylko z wybranych sklepów.'
+                )
+              }
+              options={storeOptions}
+              value={field.value}
+              onChange={field.onChange}
+              placeholder="Wpisz numer albo nazwę sklepu"
+              emptyText="Nie ma sklepu o takim numerze ani nazwie"
+            />
+          )}
+        />
+      )}
 
       {isNew ? (
         <FormNote icon={<MailIcon />}>

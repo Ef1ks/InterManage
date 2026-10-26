@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "certs": "node -e \"require('fs').mkdirSync('certs',{recursive:true})\" && mkcert -install && mkcert -cert-file certs/lvh.me.pem -key-file certs/lvh.me-key.pem lvh.me \"*.lvh.me\""
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

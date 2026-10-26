@@ -1,5 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { BoxesIcon, ChartColumnIcon, FileSpreadsheetIcon, TruckIcon, UsersIcon, type LucideIcon } from 'lucide-react'
+import {
+  BoxesIcon,
+  CalculatorIcon,
+  ChartColumnIcon,
+  ClipboardListIcon,
+  FileSpreadsheetIcon,
+  FileTextIcon,
+  ReceiptTextIcon,
+  TruckIcon,
+  UsersIcon,
+  type LucideIcon,
+} from 'lucide-react'
 
 import { api } from '@/lib/api'
 import type { PermissionCategory, PermissionCategoryInfo } from '@/lib/types'
@@ -14,6 +25,10 @@ export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: Lucid
   ORDERS: { path: '/zamowienia', icon: TruckIcon },
   STAFF: { path: '/pracownicy', icon: UsersIcon },
   IMPORTS: { path: '/import', icon: FileSpreadsheetIcon },
+  DELI_ORDERS: { path: '/zamowienie-garmazu', icon: ClipboardListIcon },
+  DOCUMENTS: { path: '/dokumenty', icon: FileTextIcon },
+  DELI_PRICES: { path: '/kalkulator-garmazu', icon: CalculatorIcon },
+  KSEF_INVOICES: { path: '/faktury-ksef', icon: ReceiptTextIcon },
 }
 
 export function usePermissionCategories() {

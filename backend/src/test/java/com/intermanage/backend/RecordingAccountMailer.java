@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
-import com.intermanage.backend.mail.AccountMailer;
+import com.intermanage.backend.service.AccountMailer;
 
 /** Zapamiętuje ostatni link aktywacyjny wysłany na dany adres, żeby testy mogły go „kliknąć”. */
 public class RecordingAccountMailer implements AccountMailer {

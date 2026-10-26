@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/">
+    <Naglowek>
+        <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+        <WariantFormularza>3</WariantFormularza>
+        <DataWytworzeniaFa>2026-10-19T09:15:00Z</DataWytworzeniaFa>
+        <SystemInfo>Mleczarnia ERP 4.2</SystemInfo>
+    </Naglowek>
+    <Podmiot1>
+        <DaneIdentyfikacyjne>
+            <NIP>1111111111</NIP>
+            <Nazwa>Okręgowa Spółdzielnia Mleczarska „Łąka”</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Mleczna 5</AdresL1>
+            <AdresL2>66-400 Gorzów Wielkopolski</AdresL2>
+        </Adres>
+        <DaneKontaktowe>
+            <Email>faktury@laka.pl</Email>
+            <Telefon>95 720 00 00</Telefon>
+        </DaneKontaktowe>
+    </Podmiot1>
+    <Podmiot2>
+        <DaneIdentyfikacyjne>
+            <NIP>5265877635</NIP>
+            <Nazwa>TRYTOMA Sp. z o.o.</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Szosa Kisielińska 22</AdresL1>
+            <AdresL2>65-001 Zielona Góra</AdresL2>
+        </Adres>
+        <NrKlienta>K-10023</NrKlienta>
+        <JST>2</JST>
+        <GV>2</GV>
+    </Podmiot2>
+    <Podmiot3>
+        <DaneIdentyfikacyjne>
+            <IDWew>5265877635-00001</IDWew>
+            <Nazwa>Intermarché Zielona Góra</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Szosa Kisielińska 22, 65-001 Zielona Góra</AdresL1>
+        </Adres>
+        <Rola>2</Rola>
+    </Podmiot3>
+    <Fa>
+        <KodWaluty>PLN</KodWaluty>
+        <P_1>2026-10-19</P_1>
+        <P_1M>Gorzów Wielkopolski</P_1M>
+        <P_2>FV/2/2026</P_2>
+        <WZ>WZ/881/2026</WZ>
+        <P_6>2026-10-18</P_6>
+        <P_13_1>100.00</P_13_1>
+        <P_14_1>23.00</P_14_1>
+        <P_13_3>200.00</P_13_3>
+        <P_14_3>10.00</P_14_3>
+        <P_15>333.00</P_15>
+        <Adnotacje>
+            <P_16>2</P_16>
+            <P_17>2</P_17>
+            <P_18>2</P_18>
+            <P_18A>1</P_18A>
+            <Zwolnienie>
+                <P_19N>1</P_19N>
+            </Zwolnienie>
+            <NoweSrodkiTransportu>
+                <P_22N>1</P_22N>
+            </NoweSrodkiTransportu>
+            <P_23>2</P_23>
+            <PMarzy>
+                <P_PMarzyN>1</P_PMarzyN>
+            </PMarzy>
+        </Adnotacje>
+        <RodzajFaktury>VAT</RodzajFaktury>
+        <DodatkowyOpis>
+            <Klucz>Kierowca</Klucz>
+            <Wartosc>Jan Kowalski</Wartosc>
+        </DodatkowyOpis>
+        <FaWiersz>
+            <NrWierszaFa>1</NrWierszaFa>
+            <P_7>Mleko 3,2% 1 l karton</P_7>
+            <Indeks>ML-032</Indeks>
+            <GTIN>5900000000012</GTIN>
+            <P_8A>szt.</P_8A>
+            <P_8B>100</P_8B>
+            <P_9A>2.00</P_9A>
+            <P_11>200.00</P_11>
+            <P_12>5</P_12>
+        </FaWiersz>
+        <FaWiersz>
+            <NrWierszaFa>2</NrWierszaFa>
+            <P_7>Skrzynki zwrotne – kaucja</P_7>
+            <P_8A>szt.</P_8A>
+            <P_8B>12.5</P_8B>
+            <P_9A>8.00</P_9A>
+            <P_11>100.00</P_11>
+            <P_12>23</P_12>
+            <GTU>GTU_12</GTU>
+        </FaWiersz>
+        <Platnosc>
+            <TerminPlatnosci>
+                <Termin>2026-11-02</Termin>
+                <TerminOpis>
+                    <Ilosc>14</Ilosc>
+                    <Jednostka>dni</Jednostka>
+                    <ZdarzeniePoczatkowe>od wystawienia</ZdarzeniePoczatkowe>
+                </TerminOpis>
+            </TerminPlatnosci>
+            <FormaPlatnosci>6</FormaPlatnosci>
+            <RachunekBankowy>
+                <NrRB>12345678901234567890123456</NrRB>
+                <NazwaBanku>Bank Przykładowy S.A.</NazwaBanku>
+            </RachunekBankowy>
+        </Platnosc>
+        <WarunkiTransakcji>
+            <Zamowienia>
+                <DataZamowienia>2026-10-15</DataZamowienia>
+                <NrZamowienia>ZAM/10023/77</NrZamowienia>
+            </Zamowienia>
+        </WarunkiTransakcji>
+    </Fa>
+    <Stopka>
+        <Informacje>
+            <StopkaFaktury>Dziękujemy za współpracę. Reklamacje przyjmujemy w ciągu 3 dni.</StopkaFaktury>
+        </Informacje>
+        <Rejestry>
+            <KRS>0000123456</KRS>
+            <REGON>123456789</REGON>
+            <BDO>000012345</BDO>
+        </Rejestry>
+    </Stopka>
+</Faktura>

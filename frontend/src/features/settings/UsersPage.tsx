@@ -10,14 +10,15 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCurrentUser } from '@/features/auth/api'
-import { useResendActivationLink, useUsers } from '@/features/settings/api'
+import { useResendActivationLink, useStores, useUsers } from '@/features/settings/api'
 import { UserFormDialog } from '@/features/settings/UserFormDialog'
 import { ApiError } from '@/lib/api'
-import type { User } from '@/lib/types'
+import type { Store, User } from '@/lib/types'
 
 export function UsersPage() {
   const me = useCurrentUser()
   const { data: users, isPending, isError, refetch } = useUsers()
+  const { data: stores = [] } = useStores()
   const resend = useResendActivationLink()
   const [editor, setEditor] = useState<{ open: boolean; user?: User }>({ open: false })
 
@@ -58,6 +59,7 @@ export function UsersPage() {
                 <TableHead className="pl-4">Pracownik</TableHead>
                 <TableHead>Login</TableHead>
                 <TableHead>Rola</TableHead>
+                <TableHead>Sklepy</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-24 pr-4">
                   <span className="sr-only">Akcje</span>
@@ -66,7 +68,7 @@ export function UsersPage() {
             </TableHeader>
             <TableBody>
               {isPending ? (
-                <TableSkeletonRows columns={5} />
+                <TableSkeletonRows columns={6} />
               ) : (
                 users.map((user) => (
                   <TableRow key={user.id}>
@@ -79,6 +81,9 @@ export function UsersPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{user.username}</TableCell>
                     <TableCell>{user.roleName}</TableCell>
+                    <TableCell>
+                      <UserStores user={user} stores={stores} />
+                    </TableCell>
                     <TableCell>
                       <UserStatus user={user} />
                     </TableCell>
@@ -121,6 +126,25 @@ export function UsersPage() {
         onOpenChange={(open) => setEditor((current) => ({ ...current, open }))}
       />
     </>
+  )
+}
+
+function UserStores({ user, stores }: { user: User; stores: Store[] }) {
+  if (user.owner) {
+    return <span className="text-muted-foreground">Wszystkie</span>
+  }
+  const assigned = stores.filter((store) => user.storeIds.includes(store.id))
+  if (assigned.length === 0) {
+    return (
+      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+        Brak sklepu
+      </Badge>
+    )
+  }
+  return (
+    <span className="tabular-nums" title={assigned.map((store) => `${store.number} ${store.name}`).join('\n')}>
+      {assigned.map((store) => store.number).join(', ')}
+    </span>
   )
 }
 

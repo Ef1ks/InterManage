@@ -6,8 +6,8 @@ alter table users add column password_change_required boolean not null default f
 create unique index users_email_uq on users (lower(email));
 
 create table user_activation_tokens (
-    id         bigserial primary key,
-    user_id    bigint       not null references users (id) on delete cascade,
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid         not null references users (id) on delete cascade,
     -- SHA-256 tokenu (hex); sam token jest tylko w linku.
     token_hash varchar(64)  not null,
     expires_at timestamptz  not null,

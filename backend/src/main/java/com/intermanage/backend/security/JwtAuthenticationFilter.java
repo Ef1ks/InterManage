@@ -2,6 +2,7 @@ package com.intermanage.backend.security;
 
 import java.io.IOException;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -13,7 +14,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.WebUtils;
 
-import com.intermanage.backend.user.AppUserRepository;
+import com.intermanage.backend.repository.AppUserRepository;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -57,11 +58,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private Optional<AppUserPrincipal> authenticate(String token) {
         Jwt jwt;
-        Long userId;
+        UUID userId;
         try {
             jwt = jwtService.decoder().decode(token);
-            userId = Long.valueOf(jwt.getSubject());
-        } catch (JwtException | NumberFormatException e) {
+            userId = UUID.fromString(jwt.getSubject());
+        } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();
         }
         Number tokenVersion = jwt.getClaim(JwtService.SESSION_VERSION_CLAIM);
@@ -70,6 +71,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         return fresh
                 .filter(AppUserPrincipal::isEnabled)
+                // Odebrany ostatni sklep (albo wyłączony sklep) kończy sesję przy następnym żądaniu.
+                .filter(AppUserPrincipal::hasStoreAccess)
                 .filter(principal -> tokenVersion != null && tokenVersion.intValue() == principal.getSessionVersion())
                 .map(principal -> {
                     principal.eraseCredentials();

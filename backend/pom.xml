@@ -28,6 +28,13 @@
     </scm>
     <properties>
         <java.version>25</java.version>
+        <mapstruct.version>1.6.3</mapstruct.version>
+        <!-- VS Code / Eclipse (m2e) uruchamia procesor MapStruct sam. Bez tego IDE kompiluje wygenerowane
+             *MapperImpl bez classpath i nadpisuje w target/classes poprawne klasy z Mavena wadliwymi. -->
+        <m2e.apt.activation>jdt_apt</m2e.apt.activation>
+        <!-- Katalog budowania. Z terminala przy otwartym IDE: -Dbuild.dir=target-cli, żeby Maven i IDE
+             nie nadpisywały sobie nawzajem klas w target/classes. -->
+        <build.dir>target</build.dir>
     </properties>
     <dependencies>
         <dependency>
@@ -57,6 +64,23 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+        <!-- PDF zamówień z kodami kreskowymi (EAN-13 / Code 128). -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+        <!-- Kod QR weryfikacji faktury KSeF na wydruku (OpenPDF nie ma QR). -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -97,7 +121,26 @@
     </dependencies>
 
     <build>
+        <directory>${build.dir}</directory>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <compilerArgs>
+                        <!-- Mappery to beany Springa; niezmapowane pole DTO to błąd kompilacji, nie cichy null. -->
+                        <arg>-Amapstruct.defaultComponentModel=spring</arg>
+                        <arg>-Amapstruct.unmappedTargetPolicy=ERROR</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

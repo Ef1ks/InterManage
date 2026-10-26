@@ -1,5 +1,5 @@
 create table roles (
-    id          bigserial primary key,
+    id          uuid primary key default gen_random_uuid(),
     name        varchar(100) not null,
     description varchar(500),
     owner       boolean      not null default false,
@@ -11,18 +11,18 @@ create unique index roles_name_uq on roles (lower(name));
 create unique index roles_single_owner_uq on roles (owner) where owner;
 
 create table role_permissions (
-    role_id  bigint      not null references roles (id) on delete cascade,
+    role_id  uuid        not null references roles (id) on delete cascade,
     category varchar(50) not null,
     level    varchar(20) not null,
     primary key (role_id, category)
 );
 
 create table users (
-    id              bigserial primary key,
+    id              uuid primary key default gen_random_uuid(),
     username        varchar(50)  not null,
     display_name    varchar(100) not null,
     password_hash   varchar(255) not null,
-    role_id         bigint       not null references roles (id),
+    role_id         uuid         not null references roles (id),
     enabled         boolean      not null default true,
     session_version integer      not null default 0,
     created_at      timestamptz  not null default now(),

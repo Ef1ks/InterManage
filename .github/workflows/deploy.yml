@@ -1,0 +1,110 @@
+# Każdy push na main: testy → obrazy do ghcr.io → wdrożenie na serwer (LXC 192.168.33.113, przez subnet router Tailscale).
+# Sekrety repozytorium: TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET, DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY. Opis: deploy/README.md.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Wdrożenia po kolei; nowszy commit nie przerywa trwającego wdrożenia.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      # Testcontainers korzysta z Dockera dostępnego na runnerze.
+      - run: mvn -B verify
+        working-directory: backend
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build && npm run lint
+        working-directory: frontend
+
+  build:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        app: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.app }}
+          push: true
+          tags: |
+            ghcr.io/ef1ks/intermanage-${{ matrix.app }}:${{ github.sha }}
+            ghcr.io/ef1ks/intermanage-${{ matrix.app }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          # Serwer jest osiągalny przez subnet router na hoście Proxmox (pve, 192.168.33.0/24).
+          args: --accept-routes
+
+      - name: Klucz SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Wdrożenie
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -i ~/.ssh/id_deploy deploy/docker-compose.yml "$TARGET:/opt/intermanage/docker-compose.yml"
+          # GITHUB_TOKEN wygasa po zakończeniu joba, więc logujemy się do GHCR przy każdym wdrożeniu.
+          ssh -i ~/.ssh/id_deploy "$TARGET" "
+            set -e
+            cd /opt/intermanage
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            export IMAGE_TAG=${{ github.sha }}
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker logout ghcr.io
+            docker image prune -f
+          "
