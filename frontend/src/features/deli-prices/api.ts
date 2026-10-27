@@ -104,6 +104,8 @@ export function useRefreshPrices(storeId: string) {
           `${calculationsPath(storeId)}/refresh-prices/preview${calculationId ? `?calculationId=${calculationId}` : ''}`,
           { method: 'POST' },
         ),
+      // Podgląd niczego nie zapisuje.
+      meta: { invalidates: false },
     }),
     apply: useMutation({
       mutationFn: (request: {
@@ -119,5 +121,6 @@ export function useRefreshPrices(storeId: string) {
 export function useExportCalculations(storeId: string) {
   return useMutation({
     mutationFn: () => downloadFile(`${calculationsPath(storeId)}/export/xlsx`, 'ceny-garmazu.xlsx'),
+    meta: { invalidates: false },
   })
 }

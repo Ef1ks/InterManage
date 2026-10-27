@@ -478,7 +478,7 @@ function SalesReportUpload({ store }: { store: StoreSummary }) {
           setRejectedFile(fileName)
         }}
         title="Przeciągnij raport sprzedaży albo kliknij"
-        hint="Zapisana sprzedaż się nie zmienia: z pliku dopisujemy tylko dni, których jeszcze nie ma."
+        hint="Zapisana sprzedaż się nie zmienia: z pliku dopisujemy tylko zakończone dni, których jeszcze nie ma."
       />
 
       <div aria-live="polite">
@@ -502,7 +502,14 @@ function SalesImportResult({ result }: { result: SalesImport }) {
         <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
           <ResultCount label="Dopisane" value={result.createdCount} />
           <ResultCount label="Już były w bazie" value={result.existingCount} />
+          {result.incompleteCount > 0 && <ResultCount label="Dzień niezakończony" value={result.incompleteCount} />}
         </dl>
+        {result.incompleteCount > 0 && result.reportGeneratedAt && (
+          <p className="mt-1">
+            Sprzedaż z {dayFormat.format(parseIsoDate(result.reportGeneratedAt.slice(0, 10)))} nie została zapisana, bo
+            raport wygenerowano tego samego dnia i sprzedaż jeszcze trwała. Dopisze ją raport wgrany jutro.
+          </p>
+        )}
         {result.conflictCount > 0 && (
           <p className="mt-1">
             {numberFormat.format(result.conflictCount)} z nich ma w pliku inne wartości niż zapisane. Zostały wartości z
@@ -720,6 +727,7 @@ function salesSummary(item: SalesImport) {
     `${numberFormat.format(item.createdCount)} dopisanych`,
     `${numberFormat.format(item.existingCount)} już było`,
     ...(item.conflictCount > 0 ? [`${numberFormat.format(item.conflictCount)} niezgodnych z zapisanymi`] : []),
+    ...(item.incompleteCount > 0 ? [`${numberFormat.format(item.incompleteCount)} z dnia niezakończonego`] : []),
   ].join(' · ')
 }
 

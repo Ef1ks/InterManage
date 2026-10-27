@@ -1,8 +1,13 @@
 package com.intermanage.backend.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,17 +20,21 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.dto.CorrectionCandidate;
 import com.intermanage.backend.dto.DocumentPage;
 import com.intermanage.backend.dto.DocumentResponse;
 import com.intermanage.backend.dto.DocumentsOverview;
 import com.intermanage.backend.dto.KsefInvoiceCandidate;
+import com.intermanage.backend.dto.LinkDocumentRequest;
 import com.intermanage.backend.dto.LinkKsefInvoiceRequest;
 import com.intermanage.backend.dto.RegisterGratisRequest;
 import com.intermanage.backend.dto.SupplierDocumentNumberRequest;
 import com.intermanage.backend.security.AppUserPrincipal;
+import com.intermanage.backend.service.DeliveryCorrectionService;
 import com.intermanage.backend.service.DocumentGratisService;
 import com.intermanage.backend.service.DocumentKsefLinkService;
 import com.intermanage.backend.service.DocumentService;
+import com.intermanage.backend.service.InvoiceAmountCheckService;
 
 import jakarta.validation.Valid;
 
@@ -46,10 +55,15 @@ public class DocumentController {
     private final DocumentService documentService;
     private final DocumentGratisService gratisService;
     private final DocumentKsefLinkService ksefLinks;
+    private final DeliveryCorrectionService corrections;
+    private final InvoiceAmountCheckService amountChecks;
 
     public DocumentController(DocumentService documentService, DocumentGratisService gratisService,
-            DocumentKsefLinkService ksefLinks) {
+            DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
+            InvoiceAmountCheckService amountChecks) {
         this.ksefLinks = ksefLinks;
+        this.corrections = corrections;
+        this.amountChecks = amountChecks;
         this.documentService = documentService;
         this.gratisService = gratisService;
     }
@@ -110,6 +124,73 @@ public class DocumentController {
             @AuthenticationPrincipal AppUserPrincipal principal) {
         ksefLinks.linkableDocument(storeId, type, id);
         ksefLinks.unlink(storeId, id, invoiceId, principal.getId());
+        return documentService.document(storeId, type, id);
+    }
+
+    /**
+     * Wydruk bonu dostawy przyjęcia PZ (PDF) z wartościami po przypiętych korektach.
+     */
+    @GetMapping("/{type}/{id}/delivery-note")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> deliveryNote(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        DocumentService.ExportFile file = documentService.deliveryNote(storeId, type, id, principal.getId());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .body(file.content());
+    }
+
+    /**
+     * Do przyjęcia PZ: jego korekty do przypięcia (do roku po nim); do korekty: przyjęcia, których może dotyczyć
+     * (do 120 dni przed nią). Zawsze od tego samego dostawcy, najpierw z największą liczbą wspólnych artykułów.
+     */
+    @GetMapping("/{type}/{id}/corrections/candidates")
+    @PreAuthorize(EDIT)
+    public List<CorrectionCandidate> correctionCandidates(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @RequestParam(required = false) String query) {
+        return corrections.candidates(storeId, type, id, query);
+    }
+
+    /** Przypina korektę do przyjęcia; {@code documentId} to druga strona (korekta albo przyjęcie). */
+    @PostMapping("/{type}/{id}/corrections")
+    @PreAuthorize(EDIT)
+    public DocumentResponse attachCorrection(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @Valid @RequestBody LinkDocumentRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        corrections.attach(storeId, type, id, request.documentId(), principal.getId());
+        return documentService.document(storeId, type, id);
+    }
+
+    /** Odpina korektę od przyjęcia (znacznik); „Przywróć” to ponowne przypięcie. */
+    @DeleteMapping("/{type}/{id}/corrections/{documentId}")
+    @PreAuthorize(EDIT)
+    public DocumentResponse detachCorrection(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @PathVariable UUID documentId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        corrections.detach(storeId, type, id, documentId, principal.getId());
+        return documentService.document(storeId, type, id);
+    }
+
+    /**
+     * Potwierdza, że różnica między wartością zakupu przyjęcia a sumą netto jego faktur KSeF jest w porządku
+     * (dla obecnych kwot - po ich zmianie różnica wraca do sprawdzenia).
+     */
+    @PutMapping("/{type}/{id}/amount-confirmation")
+    @PreAuthorize(EDIT)
+    public DocumentResponse confirmAmount(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        amountChecks.confirm(storeId, type, id, principal.getId());
+        return documentService.document(storeId, type, id);
+    }
+
+    /** Cofa potwierdzenie różnicy kwot (znacznik). */
+    @DeleteMapping("/{type}/{id}/amount-confirmation")
+    @PreAuthorize(EDIT)
+    public DocumentResponse cancelAmountConfirmation(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        amountChecks.cancel(storeId, type, id, principal.getId());
         return documentService.document(storeId, type, id);
     }
 

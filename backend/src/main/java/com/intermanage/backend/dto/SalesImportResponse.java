@@ -20,5 +20,7 @@ public record SalesImportResponse(
         int totalRows,
         int createdCount,
         int existingCount,
-        int conflictCount) {
+        int conflictCount,
+        /** Wiersze z niezakończonego dnia (raport z tego samego dnia); dopisze je raport z kolejnego dnia. */
+        int incompleteCount) {
 }

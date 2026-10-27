@@ -320,8 +320,105 @@ export type DocumentSummary = {
   gratisCandidate: boolean
   /** Rejestracja jako gratis od dostawcy; wartością gratisu jest sprzedaż brutto dokumentu. */
   gratis: DocumentGratis | null
-  /** Faktury KSeF przyjęcia albo korekty od dostawcy: przypięte i dopasowane po numerze. */
+  /**
+   * Faktury KSeF przyjęcia albo korekty od dostawcy: przypięte i dopasowane po numerze; przy przyjęciu także faktury
+   * jego korekt od dostawcy ({@code viaCorrection}).
+   */
   ksefInvoices: LinkedKsefInvoice[]
+  /** Przyjęcie z przypiętymi korektami: ich liczba i wartości po korektach. */
+  correctionTotals: CorrectionTotals | null
+  /** Korekta: przyjęcie, do którego ją przypięto. */
+  correctionOf: LinkedDelivery | null
+  /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
+  invoiceAmountCheck: InvoiceAmountCheck | null
+}
+
+/**
+ * Suma netto faktur przyjęcia (z fakturami jego korekt od dostawcy) i wartość zakupu netto po korektach;
+ * {@code difference} = faktury - przyjęcie. {@code confirmedAt}: różnicę ktoś potwierdził (dla tych kwot).
+ */
+export type InvoiceAmountCheck = {
+  invoiceNet: number
+  documentValue: number
+  difference: number
+  matches: boolean
+  confirmedAt: string | null
+  confirmedBy: string | null
+}
+
+export type CorrectionTotals = {
+  count: number
+  purchaseValue: number
+  saleValueGross: number
+}
+
+export type LinkedDelivery = {
+  id: string
+  number: string
+  documentDate: string
+  supplierName: string | null
+}
+
+/** Korekta (błędu sklepu, od dostawcy) przypięta do przyjęcia. */
+export type DeliveryCorrection = {
+  id: string
+  type: string
+  typeSingular: string
+  number: string
+  documentDate: string
+  lineCount: number
+  purchaseValue: number
+  saleValueGross: number
+  linkedAt: string
+  linkedBy: string | null
+}
+
+/**
+ * Linia przyjęcia po korektach. {@code key}: id linii przyjęcia albo linii korekty (artykuł dopisany korektą);
+ * {@code originalQuantity} / {@code originalPurchaseValue}: z przyjęcia, {@code null} przy artykule dopisanym.
+ */
+export type CorrectedLine = {
+  key: string
+  lineNumber: number
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  unit: string | null
+  nomenclatureCode: string | null
+  quantity: number
+  purchasePrice: number | null
+  salePriceDocument: number | null
+  purchaseValue: number | null
+  saleValueGross: number | null
+  saleValueNet: number | null
+  vatRate: number | null
+  vatValue: number | null
+  marginValue: number | null
+  marginPercent: number | null
+  originalQuantity: number | null
+  originalPurchaseValue: number | null
+  corrected: boolean
+}
+
+export type CorrectedDelivery = {
+  purchaseValue: number
+  saleValueGross: number
+  lines: CorrectedLine[]
+}
+
+/** Dokument do przypięcia: korekta do przyjęcia albo przyjęcie do korekty; {@code commonItems}: wspólne artykuły. */
+export type CorrectionCandidate = {
+  id: string
+  type: string
+  typeSingular: string
+  number: string
+  documentDate: string
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  lineCount: number
+  purchaseValue: number
+  commonItems: number
 }
 
 /**
@@ -338,6 +435,8 @@ export type LinkedKsefInvoice = {
   grossAmount: number | null
   correction: boolean
   matchedByNumber: boolean
+  /** Faktura korekty od dostawcy przypiętej do przyjęcia (numer korekty); odpina się ją w korekcie. */
+  viaCorrection: string | null
 }
 
 /** Faktura do przypięcia; {@code difference}: różnica kwoty netto od wartości dokumentu (bez znaku). */
@@ -427,6 +526,8 @@ export type SalesImport = {
   createdCount: number
   existingCount: number
   conflictCount: number
+  /** Wiersze z dnia, w którym wygenerowano raport: dzień niezakończony, nie został zapisany. */
+  incompleteCount: number
 }
 
 export type SalesImportOverview = {
@@ -560,6 +661,14 @@ export type Document = DocumentSummary & {
   lines: DocumentLine[]
   /** Zamówienia garmażu jadące na tym dokumencie (tylko ruchy międzymagazynowe). */
   deliOrders: LinkedDeliOrder[]
+  /** Do przyjęcia PZ można przypinać korekty; wartości i wydruk bonu liczą się razem z nimi. */
+  correctable: boolean
+  /** Korekty przypięte do przyjęcia, od najstarszej. */
+  corrections: DeliveryCorrection[]
+  /** Przyjęcie po korektach; {@code null}, gdy nie ma korekt. */
+  corrected: CorrectedDelivery | null
+  /** Korektę (błędu sklepu, od dostawcy) można przypiąć do przyjęcia. */
+  attachableToDelivery: boolean
 }
 
 export type LinkedDeliOrder = {

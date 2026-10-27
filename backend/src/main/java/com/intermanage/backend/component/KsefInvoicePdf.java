@@ -362,6 +362,10 @@ public class KsefInvoicePdf {
                 table.addCell(cell);
             }
         }
+        if (lines.stream().anyMatch(Line::grossComputed)) {
+            textRow(table, "Ceny i wartości brutto pozycji wyliczone z netto i stawki VAT - faktura podaje tylko netto.",
+                    font(regular, 6.5f, MUTED));
+        }
         return table;
     }
 

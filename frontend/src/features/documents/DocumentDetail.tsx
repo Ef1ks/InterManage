@@ -1,20 +1,24 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { ArrowLeftIcon, ClipboardListIcon } from 'lucide-react'
+import { ArrowLeftIcon, ClipboardListIcon, PrinterIcon } from 'lucide-react'
 import { Link, useParams } from 'react-router'
+import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { deliPaths } from '@/features/deli-order/paths'
-import { useDocument } from '@/features/documents/api'
+import { useDocument, useDownloadDeliveryNote } from '@/features/documents/api'
+import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
 import { BackToTypes } from '@/features/documents/DocumentsList'
 import { SupplierDocumentNumber } from '@/features/documents/SupplierDocumentNumber'
 import {
+  bonNumber,
   countFormat,
   documentPaths,
   formatDocumentDate,
@@ -26,7 +30,8 @@ import {
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import { useLoadMore } from '@/lib/use-load-more'
-import type { Document, DocumentLine } from '@/lib/types'
+import { ApiError } from '@/lib/api'
+import type { CorrectedLine, Document, DocumentLine } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** Linie dokumentu rysujemy po 100; kolejne dochodzą przy przewijaniu (przyjęcie potrafi mieć 1500 linii). */
@@ -34,7 +39,25 @@ const PAGE_SIZE = 100
 
 type Column = 'line' | 'name' | 'quantity' | 'purchasePrice' | 'purchaseValue' | 'salePrice' | 'vat' | 'margin'
 
-const SORT_BY: SortAccessors<DocumentLine, Column> = {
+/**
+ * Linia w tabeli: z dokumentu albo (przyjęcie po korektach) z wartościami po korektach i tymi z przyjęcia obok.
+ */
+type Row = DocumentLine & {
+  originalQuantity?: number | null
+  originalPurchaseValue?: number | null
+  corrected?: boolean
+}
+
+const fromCorrected = (line: CorrectedLine): Row => ({
+  ...line,
+  id: line.key,
+  supplierCode: null,
+  supplierName: null,
+  nomenclatureName: null,
+  salePriceCurrent: null,
+})
+
+const SORT_BY: SortAccessors<Row, Column> = {
   line: (line) => line.lineNumber,
   name: (line) => line.name,
   quantity: (line) => line.quantity,
@@ -69,13 +92,21 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
   const deferredQuery = useDeferredValue(query)
   const [hideEmpty, setHideEmpty] = useState(false)
   const [limit, setLimit] = useState(PAGE_SIZE)
-  const emptyCount = useMemo(() => document.lines.filter((line) => line.quantity === 0).length, [document.lines])
+  // Przyjęcie z korektami pokazujemy domyślnie po korektach; przełącznik wraca do linii z raportu.
+  const [showCorrected, setShowCorrected] = useState(true)
+  const corrected = document.corrected
+  const lines: Row[] = useMemo(
+    () => (corrected && showCorrected ? corrected.lines.map(fromCorrected) : document.lines),
+    [corrected, showCorrected, document.lines],
+  )
+  const download = useDownloadDeliveryNote(storeId)
+  const emptyCount = useMemo(() => lines.filter((line) => line.quantity === 0).length, [lines])
   // W likwidacjach czy przeniesieniach każda linia ma swojego dostawcę - pokazujemy go przy linii.
   const perLineSupplier = document.supplierName == null
 
   const filtered = useMemo(
     () =>
-      document.lines.filter(
+      lines.filter(
         (line) =>
           (!hideEmpty || line.quantity !== 0) &&
           matchesSearch(
@@ -83,7 +114,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
             deferredQuery,
           ),
       ),
-    [document.lines, hideEmpty, deferredQuery],
+    [lines, hideEmpty, deferredQuery],
   )
   const { sorted, sort, toggle } = useTableSort(filtered, SORT_BY, { key: 'line', direction: 'asc' })
   const visible = sorted.slice(0, limit)
@@ -104,9 +135,30 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
       </Link>
 
       <div className="mb-6">
-        <h2 className="text-xl font-semibold tracking-tight tabular-nums">
-          {document.typeSingular} {document.number}
-        </h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight tabular-nums">
+            {document.typeSingular} {document.number}
+            {document.correctable && (
+              <span className="ml-2 text-base font-normal text-muted-foreground">bon {bonNumber(document.number)}</span>
+            )}
+          </h2>
+          {document.correctable && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={download.isPending}
+              onClick={() =>
+                download.mutate(
+                  { id: document.id, number: bonNumber(document.number) },
+                  { onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się pobrać wydruku') },
+                )
+              }
+            >
+              <PrinterIcon />
+              Wydruk bonu
+            </Button>
+          )}
+        </div>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr_auto_1fr]">
           <dt className="text-muted-foreground">Data</dt>
           <dd className="tabular-nums">{formatDocumentDate(document.documentDate)}</dd>
@@ -125,12 +177,17 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
             {emptyCount > 0 && <span className="text-muted-foreground"> (z ilością 0: {countFormat.format(emptyCount)})</span>}
           </dd>
           <dt className="text-muted-foreground">Zakup</dt>
-          <dd className="font-medium tabular-nums">{formatMoney(document.purchaseValue)} zł</dd>
+          <dd className="font-medium tabular-nums">
+            <CorrectedValue value={document.purchaseValue} corrected={document.correctionTotals?.purchaseValue} />
+          </dd>
           <dt className="text-muted-foreground">Sprzedaż brutto</dt>
-          <dd className="font-medium tabular-nums">{formatMoney(document.saleValueGross)} zł</dd>
+          <dd className="font-medium tabular-nums">
+            <CorrectedValue value={document.saleValueGross} corrected={document.correctionTotals?.saleValueGross} />
+          </dd>
         </dl>
       </div>
 
+      <DeliveryCorrections storeId={storeId} document={document} />
       <DocumentGratisSection storeId={storeId} document={document} />
       <DocumentKsefInvoices storeId={storeId} document={document} />
 
@@ -167,12 +224,20 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
           }}
           placeholder={perLineSupplier ? 'Szukaj: nazwa, marka, EAN, ITM8, dostawca' : 'Szukaj: nazwa, marka, EAN, ITM8'}
         />
-        {emptyCount > 0 && (
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Switch checked={hideEmpty} onCheckedChange={setHideEmpty} />
-            Ukryj linie z ilością 0
-          </label>
-        )}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {corrected && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch checked={showCorrected} onCheckedChange={setShowCorrected} />
+              Po korektach
+            </label>
+          )}
+          {emptyCount > 0 && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch checked={hideEmpty} onCheckedChange={setHideEmpty} />
+              Ukryj linie z ilością 0
+            </label>
+          )}
+        </div>
       </div>
 
       <Card className="py-0">
@@ -217,16 +282,29 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
                 <TableRow key={line.id} className={cn('tabular-nums', line.quantity === 0 && 'text-muted-foreground')}>
                   <TableCell className="pl-4 text-right text-muted-foreground">{line.lineNumber}</TableCell>
                   <TableCell className="max-w-96 py-2.5 whitespace-normal">
-                    <div className="font-medium">{line.name ?? 'Bez nazwy'}</div>
+                    <div className="flex flex-wrap items-center gap-2 font-medium">
+                      {line.name ?? 'Bez nazwy'}
+                      {line.corrected && (
+                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[0.7rem] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                          {line.originalQuantity == null ? 'Dopisane korektą' : 'Po korekcie'}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`, perLineSupplier && line.supplierName]
                         .filter(Boolean)
                         .join(' · ')}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">{formatQuantity(line.quantity)}</TableCell>
+                  <TableCell className="text-right">
+                    {formatQuantity(line.quantity)}
+                    <WasValue line={line} value={line.originalQuantity} current={line.quantity} format={formatQuantity} />
+                  </TableCell>
                   <TableCell className="text-right">{formatPrice(line.purchasePrice)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(line.purchaseValue)}</TableCell>
+                  <TableCell className="text-right">
+                    {formatMoney(line.purchaseValue)}
+                    <WasValue line={line} value={line.originalPurchaseValue} current={line.purchaseValue} format={formatMoney} />
+                  </TableCell>
                   <TableCell className="text-right">{formatPrice(line.salePriceDocument)}</TableCell>
                   <TableCell className="text-right">{line.vatRate != null ? `${line.vatRate}%` : ''}</TableCell>
                   <TableCell className="pr-4 text-right">{formatPercent(line.marginPercent)}</TableCell>
@@ -241,4 +319,33 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
       <div ref={loadMoreRef} className="min-h-8" />
     </>
   )
+}
+
+/** Wartość dokumentu; przy przyjęciu z korektami ta po korektach, a z raportu mniejszym drukiem. */
+function CorrectedValue({ value, corrected }: { value: number; corrected: number | undefined }) {
+  if (corrected == null || corrected === value) return <>{formatMoney(value)} zł</>
+  return (
+    <>
+      {formatMoney(corrected)} zł
+      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+        po korektach, z raportu {formatMoney(value)} zł
+      </span>
+    </>
+  )
+}
+
+/** Wartość z przyjęcia pod wartością po korekcie, gdy korekta ją zmieniła. */
+function WasValue({
+  line,
+  value,
+  current,
+  format,
+}: {
+  line: Row
+  value: number | null | undefined
+  current: number | null
+  format: (value: number) => string
+}) {
+  if (!line.corrected || value == null || value === current) return null
+  return <div className="text-xs text-muted-foreground line-through decoration-muted-foreground/50">{format(value)}</div>
 }

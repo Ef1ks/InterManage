@@ -180,6 +180,14 @@ public class Document {
         gratisCandidate = lines.stream().anyMatch(DocumentLine::isGratisItem);
     }
 
+    /**
+     * Numer bonu przyjęcia: numer wewnętrzny bez dwóch końcowych zer (999300 → 9993). Inne numery bez zmian
+     * (jak {@code bonNumber} we froncie).
+     */
+    public String bonNumber() {
+        return number.matches("\\d{3,}00") ? number.substring(0, number.length() - 2) : number;
+    }
+
     public UUID getId() {
         return id;
     }

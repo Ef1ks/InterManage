@@ -10,9 +10,11 @@ import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type DocumentColumn, useDocuments } from '@/features/documents/api'
+import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
 import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney } from '@/features/documents/format'
+import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import { isReportFresh } from '@/lib/report-freshness'
 import { nextSort, type SortState } from '@/lib/table-sort'
@@ -20,6 +22,19 @@ import type { DocumentSummary } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
+
+/** Wartość z raportu, a przy przyjęciu z korektami ta po korektach, z raportu przekreślona pod spodem. */
+function ListValue({ value, corrected }: { value: number; corrected: number | undefined }) {
+  if (corrected == null || corrected === value) return <>{formatMoney(value)}</>
+  return (
+    <span title="Po korektach">
+      {formatMoney(corrected)}
+      <span className="block text-xs text-muted-foreground line-through decoration-muted-foreground/50">
+        {formatMoney(value)}
+      </span>
+    </span>
+  )
+}
 
 export function BackToTypes() {
   return (
@@ -174,6 +189,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                         <div className="flex items-center gap-2">
                           {document.number}
                           <GratisBadge document={document} />
+                          <CorrectionBadge document={document} />
                         </div>
                       </TableCell>
                       <TableCell>{formatDocumentDate(document.documentDate)}</TableCell>
@@ -201,10 +217,20 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                             }}
                           />
                         )}
+                        <InvoiceAmountCheck
+                          storeId={storeId}
+                          documentId={document.id}
+                          check={document.invoiceAmountCheck}
+                          compact
+                        />
                       </TableCell>
                       <TableCell className="text-right">{countFormat.format(document.lineCount)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(document.purchaseValue)}</TableCell>
-                      <TableCell className="text-right">{formatMoney(document.saleValueGross)}</TableCell>
+                      <TableCell className="text-right">
+                        <ListValue value={document.purchaseValue} corrected={document.correctionTotals?.purchaseValue} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <ListValue value={document.saleValueGross} corrected={document.correctionTotals?.saleValueGross} />
+                      </TableCell>
                       <TableCell className="pr-4 text-right">
                         <ChevronRightIcon aria-hidden className="ml-auto size-4 text-muted-foreground" />
                       </TableCell>

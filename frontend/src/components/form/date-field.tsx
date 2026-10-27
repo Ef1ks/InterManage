@@ -15,6 +15,8 @@ type DateFieldProps = {
   onChange: (value: string) => void
   /** Najwcześniejsza dozwolona data (RRRR-MM-DD). */
   min?: string
+  /** Najpóźniejsza dozwolona data (RRRR-MM-DD). */
+  max?: string
   error?: string
   hint?: ReactNode
   /** Skróty nad kalendarzem, np. Jutro / Pojutrze. Domyślnie dzisiaj, jutro i pojutrze. */
@@ -23,7 +25,7 @@ type DateFieldProps = {
 }
 
 /** Pole daty z pływającą etykietą, spójne z {@link TextField}; kliknięcie otwiera kalendarz marki. */
-export function DateField({ label, value, onChange, min, error, hint, shortcuts, className }: DateFieldProps) {
+export function DateField({ label, value, onChange, min, max, error, hint, shortcuts, className }: DateFieldProps) {
   const id = useId()
   const [open, setOpen] = useState(false)
   const today = todayIso()
@@ -33,7 +35,7 @@ export function DateField({ label, value, onChange, min, error, hint, shortcuts,
       { label: 'Jutro', value: addDays(today, 1) },
       { label: 'Pojutrze', value: addDays(today, 2) },
     ]
-  ).filter((pick) => !min || pick.value >= min)
+  ).filter((pick) => (!min || pick.value >= min) && (!max || pick.value <= max))
 
   const pick = (next: string) => {
     onChange(next)
@@ -76,7 +78,7 @@ export function DateField({ label, value, onChange, min, error, hint, shortcuts,
                   ))}
                 </div>
               )}
-              <Calendar value={value} onChange={pick} min={min} />
+              <Calendar value={value} onChange={pick} min={min} max={max} />
             </Popover.Popup>
           </Popover.Positioner>
         </Popover.Portal>

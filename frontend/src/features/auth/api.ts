@@ -53,6 +53,7 @@ export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api('/auth/logout', { method: 'POST' }),
+    meta: { invalidates: false },
     onSettled: () => {
       queryClient.clear()
       queryClient.setQueryData(meQueryKey, null)

@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { useCan } from '@/features/auth/api'
 import { useDocumentKsefLinks, useKsefInvoiceCandidates } from '@/features/documents/api'
 import { formatMoney } from '@/features/documents/format'
+import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { useDownloadInvoice } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
@@ -18,9 +19,12 @@ import { cn } from '@/lib/utils'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
-/** Przyjęcie PZ ma najwyżej jedną fakturę; korekta od dostawcy może mieć kilka. */
+/**
+ * Przyjęcie PZ ma najwyżej jedną fakturę (faktury jego korekt od dostawcy się nie liczą); korekta od dostawcy może
+ * mieć kilka.
+ */
 const canAddInvoice = (target: { type: string; ksefInvoices: LinkedKsefInvoice[] }) =>
-  target.type !== 'PZ' || target.ksefInvoices.length === 0
+  target.type !== 'PZ' || target.ksefInvoices.every((invoice) => invoice.viaCorrection != null)
 
 /** Dokument, do którego przypinamy fakturę - pełny ze szczegółów albo wiersz listy. */
 type PickerTarget = {
@@ -44,6 +48,7 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
   const { link, unlink } = useDocumentKsefLinks(storeId, document.type, document.id)
   const [picking, setPicking] = useState(false)
   if (!document.ksefLinkable) return null
+  const own = document.ksefInvoices.filter((invoice) => invoice.viaCorrection == null)
 
   const onUnlink = (invoice: LinkedKsefInvoice) =>
     unlink.mutate(invoice.id, {
@@ -68,26 +73,31 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
         )}
       </div>
 
-      {document.ksefInvoices.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+      {own.length === 0 && (
+        <p className={cn('text-sm text-muted-foreground', document.ksefInvoices.length > 0 && 'mb-2')}>
           Brak faktury z KSeF.{' '}
           {document.type === 'PZ'
             ? 'Faktura połączy się sama, gdy numer dokumentu dostawcy będzie taki jak na fakturze - albo przypnij ją ręcznie.'
             : 'Przypnij fakturę korygującą od dostawcy.'}
         </p>
-      ) : (
+      )}
+      {document.ksefInvoices.length > 0 && (
         <Card className="gap-0 divide-y py-0">
           {document.ksefInvoices.map((invoice) => (
             <LinkedInvoiceRow
               key={invoice.id}
               storeId={storeId}
               invoice={invoice}
-              onUnlink={canLink && !invoice.matchedByNumber ? () => onUnlink(invoice) : undefined}
+              onUnlink={
+                canLink && !invoice.matchedByNumber && invoice.viaCorrection == null ? () => onUnlink(invoice) : undefined
+              }
               unlinking={unlink.isPending && unlink.variables === invoice.id}
             />
           ))}
         </Card>
       )}
+
+      <InvoiceAmountCheck storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
 
       <KsefInvoicePickerDialog storeId={storeId} target={document} open={picking} onOpenChange={setPicking} />
     </section>
@@ -161,7 +171,11 @@ function LinkedInvoiceRow({
         <div className="text-xs text-muted-foreground">
           {[invoice.sellerName, invoice.issueDate && formatDate(invoice.issueDate)].filter(Boolean).join(' · ')}
           {' · '}
-          {invoice.matchedByNumber ? 'dopasowana po numerze' : 'przypięta ręcznie'}
+          {invoice.viaCorrection
+            ? `z korekty ${invoice.viaCorrection}`
+            : invoice.matchedByNumber
+              ? 'dopasowana po numerze'
+              : 'przypięta ręcznie'}
         </div>
       </div>
       <div className="text-right text-sm">
@@ -373,7 +387,13 @@ function KsefInvoiceChips({ storeId, invoices }: { storeId: string; invoices: Li
         <span
           key={invoice.id}
           className="inline-flex items-center gap-1 rounded-md bg-sky-50 py-0.5 pr-0.5 pl-1.5 text-[0.7rem] font-medium text-sky-800 ring-1 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-800"
-          title={`Faktura z KSeF ${invoice.ksefNumber}${invoice.matchedByNumber ? ' (dopasowana po numerze)' : ''}`}
+          title={`Faktura z KSeF ${invoice.ksefNumber}${
+            invoice.viaCorrection
+              ? ` (z korekty ${invoice.viaCorrection})`
+              : invoice.matchedByNumber
+                ? ' (dopasowana po numerze)'
+                : ''
+          }`}
         >
           KSeF {invoice.invoiceNumber}
           {canView && (

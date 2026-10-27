@@ -33,8 +33,24 @@ public record DocumentResponse(
         DocumentGratisResponse gratis,
         /** Do dokumentu można przypiąć fakturę z KSeF (przyjęcia i korekty od dostawcy). */
         boolean ksefLinkable,
-        /** Faktury KSeF: przypięte i dopasowane po numerze dokumentu dostawcy. */
+        /**
+         * Faktury KSeF: przypięte i dopasowane po numerze dokumentu dostawcy; przy przyjęciu także faktury jego korekt
+         * od dostawcy ({@code viaCorrection}).
+         */
         List<LinkedKsefInvoice> ksefInvoices,
+        /** Do przyjęcia PZ można przypinać korekty, a jego wartości i wydruk bonu liczą się razem z nimi. */
+        boolean correctable,
+        /** Korekty przypięte do przyjęcia, od najstarszej. */
+        List<DeliveryCorrectionResponse> corrections,
+        /** Przyjęcie po korektach; {@code null}, gdy nie ma przypiętych korekt. */
+        CorrectedDelivery corrected,
+        CorrectionTotals correctionTotals,
+        /** Korektę (błędu sklepu, od dostawcy) można przypiąć do przyjęcia, którego dotyczy. */
+        boolean attachableToDelivery,
+        /** Przyjęcie, do którego przypięto tę korektę. */
+        LinkedDelivery correctionOf,
+        /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
+        InvoiceAmountCheck invoiceAmountCheck,
         /** Ostatnia zmiana nagłówka albo linii przez import. */
         Instant updatedAt,
         List<DocumentLineResponse> lines,

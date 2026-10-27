@@ -81,6 +81,7 @@ export function useDownloadInvoice(storeId: string) {
   return useMutation({
     mutationFn: ({ invoice, format }: { invoice: Pick<KsefInvoice, 'id' | 'ksefNumber'>; format: 'pdf' | 'xml' }) =>
       downloadFile(`${ksefPath(storeId)}/invoices/${invoice.id}/${format}`, `${invoice.ksefNumber}.${format}`),
+    meta: { invalidates: false },
   })
 }
 
@@ -135,6 +136,8 @@ export function useKsefSync(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api<KsefOverview>(`${ksefPath(storeId)}/sync`, { method: 'POST' }),
+    // Pobieranie dopiero ruszyło w tle; listy odświeża useSyncFollow, gdy przybywa faktur.
+    meta: { invalidates: false },
     onSuccess: (overview) => queryClient.setQueryData([...ksefKey(storeId), 'overview'], overview),
   })
 }
@@ -152,6 +155,8 @@ export function useSyncFollow(storeId: string, overview: KsefOverview) {
     const finished = before.running && !overview.syncRunning
     if (finished || overview.syncNewInvoices !== before.newInvoices) {
       queryClient.invalidateQueries({ queryKey: [...ksefKey(storeId), 'invoices'] })
+      // Nowe faktury łączą się z przyjęciami po numerze - dokumenty też się zmieniają.
+      queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'documents'] })
     }
     if (finished && overview.syncMessage) {
       if (!overview.syncOk) toast.error(overview.syncMessage)

@@ -26,7 +26,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.intermanage.backend.component.DeliveryNotePdf;
 import com.intermanage.backend.component.DocumentReportParser;
+import com.intermanage.backend.dto.CorrectedDelivery;
+import com.intermanage.backend.dto.CorrectionTotals;
+import com.intermanage.backend.dto.InvoiceAmountCheck;
 import com.intermanage.backend.dto.DocumentImportResponse;
 import com.intermanage.backend.dto.DocumentLineRow;
 import com.intermanage.backend.dto.DocumentPage;
@@ -37,12 +41,15 @@ import com.intermanage.backend.dto.DocumentsOverview;
 import com.intermanage.backend.dto.LinkedDeliOrder;
 import com.intermanage.backend.dto.ParsedDocumentReport;
 import com.intermanage.backend.entity.AppUser;
+import com.intermanage.backend.entity.DeliveryCorrection;
 import com.intermanage.backend.entity.Document;
 import com.intermanage.backend.entity.DocumentGratis;
 import com.intermanage.backend.entity.DocumentImport;
 import com.intermanage.backend.entity.DocumentLine;
 import com.intermanage.backend.entity.DocumentType;
+import com.intermanage.backend.entity.Nomenclature;
 import com.intermanage.backend.entity.Store;
+import com.intermanage.backend.entity.Supplier;
 import com.intermanage.backend.exception.ApiException;
 import com.intermanage.backend.exception.InvalidReportException;
 import com.intermanage.backend.mapper.DocumentMapper;
@@ -53,7 +60,9 @@ import com.intermanage.backend.repository.DocumentImportRepository;
 import com.intermanage.backend.repository.DocumentRepository;
 import com.intermanage.backend.repository.DocumentSearch;
 import com.intermanage.backend.repository.DocumentTotalsRepository;
+import com.intermanage.backend.repository.NomenclatureRepository;
 import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.repository.SupplierRepository;
 
 /**
  * Dokumenty magazynowe z raportu Wejścia/Wyjścia (typy z {@link DocumentType}). Plik jest najpierw w całości czytany
@@ -83,12 +92,24 @@ public class DocumentService {
     private final DeliOrderDocumentRepository deliOrderDocuments;
     private final DocumentGratisRepository gratis;
     private final DocumentKsefLinkService ksefLinks;
+    private final DeliveryCorrectionService corrections;
+    private final SupplierRepository suppliers;
+    private final NomenclatureRepository nomenclatures;
+    private final DeliveryNotePdf deliveryNotePdf;
+    private final InvoiceAmountCheckService amountCheckService;
 
     public DocumentService(TransactionTemplate transaction, DocumentReportParser reportParser,
             DocumentMapper documentMapper, DocumentImportRepository imports, DocumentRepository documents,
             AppUserRepository users, StoreRepository stores, DeliOrderDocumentRepository deliOrderDocuments,
-            DocumentGratisRepository gratis, DocumentKsefLinkService ksefLinks) {
+            DocumentGratisRepository gratis, DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
+            SupplierRepository suppliers, NomenclatureRepository nomenclatures, DeliveryNotePdf deliveryNotePdf,
+            InvoiceAmountCheckService amountCheckService) {
+        this.amountCheckService = amountCheckService;
         this.ksefLinks = ksefLinks;
+        this.corrections = corrections;
+        this.suppliers = suppliers;
+        this.nomenclatures = nomenclatures;
+        this.deliveryNotePdf = deliveryNotePdf;
         this.transaction = transaction;
         this.reportParser = reportParser;
         this.documentMapper = documentMapper;
@@ -130,11 +151,23 @@ public class DocumentService {
         Map<UUID, DocumentGratis> gratisByDocument = found.isEmpty() ? Map.of()
                 : gratis.findActive(found.getContent().stream().map(Document::getId).toList()).stream()
                         .collect(Collectors.toMap(item -> item.getDocument().getId(), Function.identity()));
-        Map<UUID, List<LinkedKsefInvoice>> ksefInvoices = ksefLinks.invoicesOf(storeId, found.getContent());
+        Map<UUID, List<DeliveryCorrection>> correctionsByDelivery = corrections.correctionsOf(found.getContent());
+        Map<UUID, Document> deliveries = corrections.deliveriesOf(found.getContent());
+        Map<UUID, List<LinkedKsefInvoice>> ksefInvoices =
+                ksefLinks.invoicesWithCorrections(storeId, found.getContent(), correctionsByDelivery);
+        Map<UUID, CorrectionTotals> correctionTotals = new HashMap<>();
+        found.getContent().forEach(document -> correctionTotals.put(document.getId(),
+                corrections.totals(document, correctionsByDelivery.get(document.getId()))));
+        Map<UUID, InvoiceAmountCheck> amountChecks =
+                amountCheckService.checks(found.getContent(), ksefInvoices, correctionTotals);
         return new DocumentPage(summary, imports.findNewestReportGeneratedAt(storeId).orElse(null),
                 found.getContent().stream()
                         .map(document -> documentMapper.toSummary(document, gratisByDocument.get(document.getId()),
-                                ksefInvoices.getOrDefault(document.getId(), List.of())))
+                                ksefInvoices.getOrDefault(document.getId(), List.of()),
+                                correctionTotals.get(document.getId()),
+                                deliveries.containsKey(document.getId())
+                                        ? documentMapper.toLinkedDelivery(deliveries.get(document.getId())) : null,
+                                amountChecks.get(document.getId())))
                         .toList(),
                 found.getNumber(),
                 found.hasNext(), totals.count(), totals.purchaseValue(), totals.saleValueGross());
@@ -142,7 +175,8 @@ public class DocumentService {
 
     /**
      * Dokument z liniami i gratisem, jeśli go zarejestrowano; ruch międzymagazynowy także z zamówieniami garmażu,
-     * które na nim jadą.
+     * które na nim jadą. Przyjęcie z przypiętymi korektami ma też linie i wartości po korektach, a korekta -
+     * przyjęcie, do którego ją przypięto.
      */
     @Transactional(readOnly = true)
     public DocumentResponse document(UUID storeId, String typeCode, UUID id) {
@@ -153,8 +187,54 @@ public class DocumentService {
                         .map(link -> new LinkedDeliOrder(link.getOrder().getId(), link.getOrder().getStore().getNumber(),
                                 link.getOrder().getStore().getName(), link.getOrder().getDeliveryDate()))
                         .toList();
+        Map<UUID, List<DeliveryCorrection>> links = corrections.correctionsOf(List.of(document));
+        List<DeliveryCorrection> ofDelivery = links.getOrDefault(document.getId(), List.of());
+        CorrectedDelivery corrected = ofDelivery.isEmpty() ? null
+                : corrections.corrected(document, corrections.correctionDocuments(storeId, ofDelivery));
+        Document delivery = corrections.deliveriesOf(List.of(document)).get(document.getId());
+        Map<UUID, List<LinkedKsefInvoice>> ksefInvoices =
+                ksefLinks.invoicesWithCorrections(storeId, List.of(document), links);
+        CorrectionTotals totals = corrections.totals(document, ofDelivery);
+        Map<UUID, CorrectionTotals> totalsByDocument = new HashMap<>();
+        totalsByDocument.put(document.getId(), totals);
         return documentMapper.toResponse(document, deliOrders, gratis.findActive(document.getId()).orElse(null),
-                ksefLinks.invoicesOf(storeId, List.of(document)).getOrDefault(document.getId(), List.of()));
+                ksefInvoices.getOrDefault(document.getId(), List.of()),
+                ofDelivery.stream().map(documentMapper::toCorrectionResponse).toList(), corrected, totals,
+                delivery != null ? documentMapper.toLinkedDelivery(delivery) : null,
+                amountCheckService.checks(List.of(document), ksefInvoices, totalsByDocument).get(document.getId()));
+    }
+
+    /**
+     * Wydruk bonu dostawy przyjęcia PZ (PDF jak z systemu sklepu): linie i sumy po przypiętych korektach, więc
+     * zmienia się, gdy dojdzie albo zmieni się korekta.
+     */
+    @Transactional(readOnly = true)
+    public ExportFile deliveryNote(UUID storeId, String typeCode, UUID id, UUID userId) {
+        Document document = documents.findWithLines(storeId, type(typeCode), id)
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono dokumentu"));
+        if (document.getType() != DocumentType.PZ) {
+            throw ApiException.badRequest("Bon dostawy drukuje się dla przyjęcia towaru");
+        }
+        List<Document> correctionDocuments = corrections.correctionDocuments(storeId,
+                corrections.correctionsOf(List.of(document)).getOrDefault(document.getId(), List.of()));
+        CorrectedDelivery corrected = corrections.corrected(document, correctionDocuments);
+        Supplier supplier = document.getSupplierCode() == null ? null
+                : suppliers.findImported(storeId).stream()
+                        .filter(found -> document.getSupplierCode().equals(found.getCode())).findFirst().orElse(null);
+        List<String> regionCodes = corrected.lines().stream().map(CorrectedDelivery.CorrectedLine::nomenclatureCode)
+                .filter(code -> code != null && code.length() >= 2).map(code -> code.substring(0, 2))
+                .distinct().toList();
+        Map<String, String> regions = regionCodes.isEmpty() ? Map.of()
+                : nomenclatures.findByStoreIdAndCodeIn(storeId, regionCodes).stream()
+                        .collect(Collectors.toMap(Nomenclature::getCode, Nomenclature::getName, (a, b) -> a));
+        String printedBy = userId != null ? users.findById(userId).map(AppUser::getDisplayName).orElse(null) : null;
+        byte[] pdf = deliveryNotePdf.pdf(new DeliveryNotePdf.Note(document, document.getStore(), supplier,
+                corrected, correctionDocuments, regions, printedBy));
+        return new ExportFile("bon-dostawy-" + document.bonNumber() + ".pdf",
+                "application/pdf", pdf);
+    }
+
+    public record ExportFile(String fileName, String contentType, byte[] content) {
     }
 
     /**

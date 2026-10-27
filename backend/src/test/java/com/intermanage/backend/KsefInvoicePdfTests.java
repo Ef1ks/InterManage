@@ -44,6 +44,12 @@ class KsefInvoicePdfTests {
         assertThat(invoice.lines()).hasSize(2);
         assertThat(invoice.lines().getFirst().rate()).isEqualTo("5%");
         assertThat(invoice.lines().getFirst().details()).contains("GTIN: 5900000000012");
+        // Faktura od netto: brutto pozycji wyliczone ze stawki.
+        assertThat(invoice.lines().getFirst().unitGross()).isEqualByComparingTo("2.10");
+        assertThat(invoice.lines().getFirst().gross()).isEqualByComparingTo("210.00");
+        assertThat(invoice.lines().get(1).unitGross()).isEqualByComparingTo("9.84");
+        assertThat(invoice.lines().get(1).gross()).isEqualByComparingTo("123.00");
+        assertThat(invoice.lines().getFirst().grossComputed()).isTrue();
         assertThat(invoice.taxes()).extracting(KsefInvoiceReader.TaxRow::rate).containsExactly("23%", "5%");
         assertThat(invoice.annotations()).containsExactly("Mechanizm podzielonej płatności");
         assertThat(invoice.payment()).contains(

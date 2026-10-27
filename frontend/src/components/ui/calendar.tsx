@@ -14,6 +14,8 @@ type CalendarProps = {
   onChange: (value: string) => void
   /** Najwcześniejsza dozwolona data (RRRR-MM-DD). */
   min?: string
+  /** Najpóźniejsza dozwolona data (RRRR-MM-DD). */
+  max?: string
   className?: string
 }
 
@@ -22,15 +24,16 @@ type CalendarProps = {
  * Tydzień od poniedziałku, polskie nazwy. Klawiatura: strzałki (dzień/tydzień), PageUp/PageDown (miesiąc),
  * Home/End (początek/koniec tygodnia), Enter lub spacja wybiera.
  */
-export function Calendar({ value, onChange, min, className }: CalendarProps) {
+export function Calendar({ value, onChange, min, max, className }: CalendarProps) {
   const today = todayIso()
-  const [focused, setFocused] = useState(value || (min && min > today ? min : today))
+  const [focused, setFocused] = useState(value || (min && min > today ? min : max && max < today ? max : today))
   const [month, setMonth] = useState(() => monthStart(focused))
   const gridRef = useRef<HTMLDivElement>(null)
 
   const days = useMemo(() => monthGrid(month), [month])
-  const isDisabled = (day: string) => (min ? day < min : false)
+  const isDisabled = (day: string) => (min ? day < min : false) || (max ? day > max : false)
   const canGoBack = !min || monthStart(min) < month
+  const canGoForward = !max || monthStart(max) > month
 
   const focusDay = (day: string) => {
     setFocused(day)
@@ -48,7 +51,7 @@ export function Calendar({ value, onChange, min, className }: CalendarProps) {
     else if (event.key === 'End') next = addDays(focused, 6 - weekdayIndex(focused))
     if (next) {
       event.preventDefault()
-      focusDay(min && next < min ? min : next)
+      focusDay(min && next < min ? min : max && next > max ? max : next)
     }
   }
 
@@ -62,7 +65,7 @@ export function Calendar({ value, onChange, min, className }: CalendarProps) {
           <MonthButton label="Poprzedni miesiąc" disabled={!canGoBack} onClick={() => setMonth(shiftMonth(month, -1))}>
             <ChevronLeftIcon />
           </MonthButton>
-          <MonthButton label="Następny miesiąc" onClick={() => setMonth(shiftMonth(month, 1))}>
+          <MonthButton label="Następny miesiąc" disabled={!canGoForward} onClick={() => setMonth(shiftMonth(month, 1))}>
             <ChevronRightIcon />
           </MonthButton>
         </div>

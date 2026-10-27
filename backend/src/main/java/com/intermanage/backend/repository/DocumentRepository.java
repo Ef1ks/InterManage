@@ -52,6 +52,21 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
             and upper(d.supplierDocumentNumber) in :numbers order by d.documentDate""")
     List<Document> findDeliveriesBySupplierDocument(UUID storeId, Collection<String> numbers);
 
+    @Query("select distinct d from Document d left join fetch d.lines where d.id in :ids and d.store.id = :storeId")
+    List<Document> findWithLines(UUID storeId, Collection<UUID> ids);
+
+    /**
+     * Dokumenty typów z liniami od dostawcy z podanego okresu: wspólny dostawca dokumentu albo, gdy linie mają
+     * różnych, któraś linia od niego (podpowiedzi przy przypinaniu korekt do przyjęć).
+     */
+    @Query("""
+            select distinct d from Document d left join fetch d.lines
+            where d.store.id = :storeId and d.type in :types and d.documentDate between :from and :to
+              and (d.supplierCode = :supplierCode or (d.supplierCode is null and exists (
+                  select 1 from DocumentLine l where l.document = d and l.supplierCode = :supplierCode)))""")
+    List<Document> findBySupplierWithLines(UUID storeId, Collection<DocumentType> types, String supplierCode,
+            LocalDateTime from, LocalDateTime to);
+
     /**
      * Blokada importu dokumentów sklepu do końca transakcji (dwa równoczesne importy tego samego pliku
      * nie mogą dodać tego samego dokumentu dwa razy). Funkcja zwraca {@code void}, więc owijamy ją w zapytanie.

@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.intermanage.backend.dto.DocumentCandidate;
 import com.intermanage.backend.dto.KsefInvoiceCandidate;
 import com.intermanage.backend.dto.LinkedKsefInvoice;
+import com.intermanage.backend.entity.DeliveryCorrection;
 import com.intermanage.backend.entity.Document;
 import com.intermanage.backend.entity.DocumentKsefInvoice;
 import com.intermanage.backend.entity.DocumentType;
@@ -108,6 +109,36 @@ public class DocumentKsefLinkService {
                 }
             }
         }
+        return result;
+    }
+
+    /**
+     * Jak {@link #invoicesOf}, a przy przyjęciach PZ dodatkowo faktury ich korekt od dostawcy ({@code corrections}:
+     * korekty przyjęć z {@link DeliveryCorrectionService#correctionsOf}). Takie faktury mają {@code viaCorrection}
+     * i nie liczą się do limitu jednej faktury przyjęcia.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<LinkedKsefInvoice>> invoicesWithCorrections(UUID storeId, Collection<Document> page,
+            Map<UUID, List<DeliveryCorrection>> corrections) {
+        Map<UUID, List<LinkedKsefInvoice>> result = new LinkedHashMap<>(invoicesOf(storeId, page));
+        List<Document> correctionDocuments = corrections.values().stream().flatMap(List::stream)
+                .map(DeliveryCorrection::getCorrection).toList();
+        if (correctionDocuments.isEmpty()) {
+            return result;
+        }
+        Map<UUID, List<LinkedKsefInvoice>> ofCorrections = invoicesOf(storeId, correctionDocuments);
+        corrections.forEach((deliveryId, links) -> {
+            for (DeliveryCorrection link : links) {
+                for (LinkedKsefInvoice invoice : ofCorrections.getOrDefault(link.getCorrection().getId(), List.of())) {
+                    List<LinkedKsefInvoice> current = result.computeIfAbsent(deliveryId, id -> new ArrayList<>());
+                    if (current.stream().noneMatch(linked -> linked.id().equals(invoice.id()))) {
+                        current.add(new LinkedKsefInvoice(invoice.id(), invoice.ksefNumber(), invoice.invoiceNumber(),
+                                invoice.issueDate(), invoice.sellerName(), invoice.netAmount(), invoice.grossAmount(),
+                                invoice.correction(), invoice.matchedByNumber(), link.getCorrection().getNumber()));
+                    }
+                }
+            }
+        });
         return result;
     }
 
@@ -292,7 +323,7 @@ public class DocumentKsefLinkService {
     private static LinkedKsefInvoice toLinked(KsefInvoice invoice, boolean matchedByNumber) {
         return new LinkedKsefInvoice(invoice.getId(), invoice.getKsefNumber(), invoice.getInvoiceNumber(),
                 invoice.getIssueDate(), invoice.getSellerName(), invoice.getNetAmount(), invoice.getGrossAmount(),
-                isCorrection(invoice), matchedByNumber);
+                isCorrection(invoice), matchedByNumber, null);
     }
 
     private static boolean isCorrection(KsefInvoice invoice) {

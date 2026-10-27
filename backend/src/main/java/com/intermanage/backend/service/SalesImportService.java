@@ -3,6 +3,8 @@ package com.intermanage.backend.service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -39,6 +41,9 @@ import com.intermanage.backend.repository.StoreRepository;
  * Raz zapisana sprzedaż jest jedynym źródłem prawdy: import tylko dopisuje dni artykułów, których jeszcze nie ma,
  * a już zapisane pomija, nawet gdy plik ma inne wartości (liczy je wtedy jako niezgodne). Dlatego kolejność i wiek
  * raportów nie mają znaczenia - starszy plik może co najwyżej dopisać brakujące dni.
+ * <p>
+ * Dzień, w którym wygenerowano raport, nie jest zapisywany: sklep jeszcze sprzedawał, więc jego sprzedaż jest niepełna.
+ * Takie wiersze liczymy jako niezakończone ({@code incomplete_count}); dzień dopisze raport z kolejnego dnia.
  */
 @Service
 public class SalesImportService {
@@ -49,6 +54,7 @@ public class SalesImportService {
     static final int BATCH_SIZE = 5_000;
     private static final int HISTORY_SIZE = 30;
     private static final String IMPORT_LOCK_PREFIX = "sales-import:";
+    private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
 
     private final TransactionTemplate transaction;
     private final SalesReportParser reportParser;
@@ -119,21 +125,30 @@ public class SalesImportService {
 
         var sink = new SalesReportParser.Sink() {
             SalesImport salesImport;
+            LocalDate firstIncompleteDay;
             long created;
             long conflicting;
+            long incomplete;
 
             @Override
             public void header(SalesReportHeader header) {
                 checkHeader(store, header);
+                firstIncompleteDay = firstIncompleteDay(header);
                 salesImport = imports.saveAndFlush(new SalesImport(store, fileName, header.generatedAt(),
                         header.periodFrom(), header.periodTo(), user));
             }
 
             @Override
             public void batch(SalesReportBatch batch) {
-                SaleRepository.InsertCounts counts = sales.insertNew(storeId, salesImport.getId(), batch.dates(),
-                        batch.itm8s(), batch.eans(), batch.quantities(), batch.costValues(), batch.saleValuesGross(),
-                        batch.vatValues(), batch.marginValues(), batch.marginPercents());
+                SalesReportBatch complete = batch.before(firstIncompleteDay);
+                incomplete += batch.size() - complete.size();
+                if (complete.size() == 0) {
+                    return;
+                }
+                SaleRepository.InsertCounts counts = sales.insertNew(storeId, salesImport.getId(), complete.dates(),
+                        complete.itm8s(), complete.eans(), complete.quantities(), complete.costValues(),
+                        complete.saleValuesGross(), complete.vatValues(), complete.marginValues(),
+                        complete.marginPercents());
                 created += counts.getCreated();
                 conflicting += counts.getConflicting();
             }
@@ -150,8 +165,20 @@ public class SalesImportService {
             log.warn("Nie udało się odczytać pliku importu sprzedaży", e);
             throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
         }
-        sink.salesImport.recordResult(summary.totalRows(), Math.toIntExact(sink.created), Math.toIntExact(sink.conflicting));
+        sink.salesImport.recordResult(summary.totalRows(), Math.toIntExact(sink.created),
+                Math.toIntExact(sink.conflicting), Math.toIntExact(sink.incomplete));
         return salesMapper.toResponse(sink.salesImport);
+    }
+
+    /**
+     * Pierwszy dzień, którego sprzedaż w raporcie jest niepełna: dzień wygenerowania raportu (sklep jeszcze wtedy
+     * sprzedawał), a bez daty w nagłówku - dzisiejszy. Takich dni nie zapisujemy, bo zapisanej sprzedaży nie da się
+     * potem poprawić; dopisze je raport wygenerowany następnego dnia.
+     */
+    static LocalDate firstIncompleteDay(SalesReportHeader header) {
+        LocalDate today = LocalDate.now(STORE_ZONE);
+        LocalDate generated = header.generatedAt() == null ? today : header.generatedAt().toLocalDate();
+        return generated.isBefore(today) ? generated : today;
     }
 
     private void checkHeader(Store store, SalesReportHeader header) {

@@ -1,5 +1,6 @@
 package com.intermanage.backend.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,6 +15,8 @@ public interface NomenclatureRepository extends JpaRepository<Nomenclature, UUID
     /** Cała nomenklatura sklepu w kolejności kodów, czyli rodzic zawsze przed dziećmi. */
     @Query("select n from Nomenclature n where n.store.id = :storeId order by n.code")
     List<Nomenclature> findAllByStore(UUID storeId);
+
+    List<Nomenclature> findByStoreIdAndCodeIn(UUID storeId, Collection<String> codes);
 
     long countByStoreIdAndLevel(UUID storeId, NomenclatureLevel level);
 

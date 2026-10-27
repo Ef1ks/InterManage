@@ -47,6 +47,11 @@ public enum DocumentType {
         return this == PZ || this == WZ;
     }
 
+    /** Korekty błędów sklepu i od dostawcy poprawiają konkretne przyjęcie, więc przypina się je do niego. */
+    public boolean isDeliveryCorrection() {
+        return this == PK || this == WZ;
+    }
+
     public String label() {
         return label;
     }

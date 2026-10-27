@@ -22,5 +22,11 @@ public record DocumentSummary(
         boolean gratisCandidate,
         DocumentGratisResponse gratis,
         /** Faktury KSeF przyjęcia albo korekty od dostawcy: przypięte i dopasowane po numerze. */
-        List<LinkedKsefInvoice> ksefInvoices) {
+        List<LinkedKsefInvoice> ksefInvoices,
+        /** Przyjęcie PZ z przypiętymi korektami: ich liczba i wartości po korektach ({@code null}, gdy bez korekt). */
+        CorrectionTotals correctionTotals,
+        /** Korekta: przyjęcie, do którego ją przypięto. */
+        LinkedDelivery correctionOf,
+        /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
+        InvoiceAmountCheck invoiceAmountCheck) {
 }

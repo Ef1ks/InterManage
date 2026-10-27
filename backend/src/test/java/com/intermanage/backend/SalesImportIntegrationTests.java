@@ -163,6 +163,40 @@ class SalesImportIntegrationTests {
     }
 
     @Test
+    void dayOfReportGenerationIsIncompleteAndAddedByNextDaysReport() throws Exception {
+        Cookie owner = login();
+        String storeNumber = storeNumber();
+        String storeId = createStore(owner, storeNumber);
+
+        // Raport wygenerowany 26.10 w ciągu dnia: sprzedaż z 26.10 jest niepełna, więc nie jest zapisywana.
+        upload(owner, storeId, report(storeNumber, "26/10/2026   Godzina: 15:06:23", "25/10/2026", "26/10/2026",
+                row("0000000000453", "25/10/2026", "1", "5.2", "5.97", "0.28", "0.49", "8.14"),
+                row("0000000000453", "26/10/2026", "1", "5.2", "5.97", "0.28", "0.49", "8.14"),
+                row("0000000000454", "26/10/2026", "2", "5.2", "5.97", "0.28", "0.49", "8.14")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalRows").value(3))
+                .andExpect(jsonPath("$.createdCount").value(1))
+                .andExpect(jsonPath("$.existingCount").value(0))
+                .andExpect(jsonPath("$.incompleteCount").value(2));
+        assertThat(sales.findById(new Sale.Key(UUID.fromString(storeId), LocalDate.of(2026, 10, 26), "0000000000453",
+                EAN))).isEmpty();
+
+        // Raport z 27.10 ma już pełny 26.10: ten dzień się dopisuje.
+        upload(owner, storeId, report(storeNumber, "27/10/2026   Godzina: 07:30:00", "25/10/2026", "26/10/2026",
+                row("0000000000453", "25/10/2026", "1", "5.2", "5.97", "0.28", "0.49", "8.14"),
+                row("0000000000453", "26/10/2026", "4", "20.8", "23.88", "1.12", "1.96", "8.14"),
+                row("0000000000454", "26/10/2026", "3", "5.2", "5.97", "0.28", "0.49", "8.14")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.createdCount").value(2))
+                .andExpect(jsonPath("$.existingCount").value(1))
+                .andExpect(jsonPath("$.incompleteCount").value(0));
+        assertThat(sale(storeId, LocalDate.of(2026, 10, 26), "0000000000453").getQuantity()).isEqualByComparingTo("4");
+        mvc.perform(get(importsUrl(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.rowCount").value(3))
+                .andExpect(jsonPath("$.lastSaleDate").value("2026-10-26"));
+    }
+
+    @Test
     void importsManyBatchesAndRollsBackWholeFileOnError() throws Exception {
         Cookie owner = login();
         String storeNumber = storeNumber();

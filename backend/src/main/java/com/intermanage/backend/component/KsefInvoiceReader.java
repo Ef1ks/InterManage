@@ -3,6 +3,7 @@ package com.intermanage.backend.component;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
@@ -78,10 +79,13 @@ public class KsefInvoiceReader {
     public record Entry(String label, String value) {
     }
 
-    /** Pozycja faktury (albo zamówienia przy zaliczce); {@code beforeCorrection}: wiersz "przed korektą". */
+    /**
+     * Pozycja faktury (albo zamówienia przy zaliczce); {@code beforeCorrection}: wiersz "przed korektą",
+     * {@code grossComputed}: cenę albo wartość brutto wyliczyliśmy ze stawki, bo faktura podaje tylko netto.
+     */
     public record Line(String number, String name, List<String> details, BigDecimal quantity, String unit,
             BigDecimal unitNet, BigDecimal unitGross, BigDecimal discount, String rate, BigDecimal net,
-            BigDecimal vat, BigDecimal gross, boolean beforeCorrection) {
+            BigDecimal vat, BigDecimal gross, boolean beforeCorrection, boolean grossComputed) {
     }
 
     /** Podsumowanie stawki: netto, VAT i VAT w złotych przy fakturze w obcej walucie. */
@@ -333,9 +337,57 @@ public class KsefInvoiceReader {
             details.add("Towar z załącznika 15 (podzielona płatność)");
         }
         String rate = row.text("P_12") != null ? row.text("P_12") : row.text("P_12_XII");
-        return new Line(row.text("NrWierszaFa"), row.text("P_7"), details, row.decimal("P_8B"), row.text("P_8A"),
-                row.decimal("P_9A"), row.decimal("P_9B"), row.decimal("P_10"), rateLabel(rate, row.text("P_12_XII")),
-                row.decimal("P_11"), row.decimal("P_11Vat"), row.decimal("P_11A"), "1".equals(row.text("StanPrzed")));
+        return withGross(new Line(row.text("NrWierszaFa"), row.text("P_7"), details, row.decimal("P_8B"),
+                row.text("P_8A"), row.decimal("P_9A"), row.decimal("P_9B"), row.decimal("P_10"),
+                rateLabel(rate, row.text("P_12_XII")), row.decimal("P_11"), row.decimal("P_11Vat"),
+                row.decimal("P_11A"), "1".equals(row.text("StanPrzed")), false), rate);
+    }
+
+    /**
+     * Faktura liczona od netto nie ma w pozycjach cen ani wartości brutto (P_9B, P_11A), więc wyliczamy je ze stawki:
+     * cena jedn. brutto = netto × (100 + stawka)%, wartość brutto = netto + VAT pozycji (albo netto × stawka).
+     * Stawki bez VAT (zw, np, 0%, odwrotne obciążenie) dają brutto = netto; nieznana stawka zostawia puste pola.
+     */
+    static Line withGross(Line line, String rateCode) {
+        if (line.unitGross() != null && line.gross() != null) {
+            return line;
+        }
+        BigDecimal percent = ratePercent(rateCode);
+        if (percent == null) {
+            return line;
+        }
+        BigDecimal multiplier = BigDecimal.ONE.add(percent.movePointLeft(2));
+        BigDecimal unitGross = line.unitGross();
+        if (unitGross == null && line.unitNet() != null) {
+            unitGross = line.unitNet().multiply(multiplier)
+                    .setScale(Math.max(2, line.unitNet().stripTrailingZeros().scale()), RoundingMode.HALF_UP);
+        }
+        BigDecimal gross = line.gross();
+        BigDecimal vat = line.vat();
+        if (gross == null && line.net() != null) {
+            gross = vat != null ? line.net().add(vat) : line.net().multiply(multiplier).setScale(2, RoundingMode.HALF_UP);
+            if (vat == null) {
+                vat = gross.subtract(line.net());
+            }
+        }
+        boolean computed = unitGross != line.unitGross() || gross != line.gross();
+        return new Line(line.number(), line.name(), line.details(), line.quantity(), line.unit(), line.unitNet(),
+                unitGross, line.discount(), line.rate(), line.net(), vat, gross, line.beforeCorrection(),
+                line.grossComputed() || computed);
+    }
+
+    /** Stawka P_12 jako procent: "23" → 23, stawki bez podatku → 0, inne (np. OSS spoza listy) → {@code null}. */
+    private static BigDecimal ratePercent(String code) {
+        if (code == null) {
+            return null;
+        }
+        if (code.chars().allMatch(Character::isDigit)) {
+            return new BigDecimal(code);
+        }
+        return switch (code) {
+            case "0 KR", "0 WDT", "0 EX", "zw", "oo", "np", "np I", "np II" -> BigDecimal.ZERO;
+            default -> null;
+        };
     }
 
     private static Line orderLine(Xml row) {
@@ -346,9 +398,10 @@ public class KsefInvoiceReader {
         add(details, "CN: ", row.text("CNZ"));
         add(details, "", row.text("GTUZ"));
         String rate = row.text("P_12Z") != null ? row.text("P_12Z") : row.text("P_12Z_XII");
-        return new Line(row.text("NrWierszaZam"), row.text("P_7Z"), details, row.decimal("P_8BZ"),
+        return withGross(new Line(row.text("NrWierszaZam"), row.text("P_7Z"), details, row.decimal("P_8BZ"),
                 row.text("P_8AZ"), row.decimal("P_9AZ"), null, null, rateLabel(rate, row.text("P_12Z_XII")),
-                row.decimal("P_11NettoZ"), row.decimal("P_11VatZ"), null, "1".equals(row.text("StanPrzedZ")));
+                row.decimal("P_11NettoZ"), row.decimal("P_11VatZ"), null, "1".equals(row.text("StanPrzedZ")), false),
+                rate);
     }
 
     /** Stawka z P_12 do wydruku: "23" → "23%", "0 WDT" → "0% WDT", "zw" → "zw.", "oo" → "odwr. obc.". */

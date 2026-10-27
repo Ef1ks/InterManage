@@ -1,6 +1,7 @@
 package com.intermanage.backend;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -186,14 +187,146 @@ class DocumentImportIntegrationTests {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void correctionsAttachedToDeliveryCorrectItsValuesAndDeliveryNote() throws Exception {
+        Cookie owner = login();
+        // Własny sklep: inne testy wgrywają korekty od tego samego dostawcy.
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(100_000, 999_999));
+        String store = createStore(number, "Sklep korekt");
+        String delivery = docNumber() + "00";
+        String otherSupplierDelivery = docNumber() + "00";
+        String storeError = "PK" + docNumber();
+        String supplierCorrection = "WZ" + docNumber();
+        String itemA = "0000099042772";
+        String itemB = "0000099042773";
+        String itemC = "0000099042774";
+
+        upload(owner, store, report(number,
+                withItm8(amounts(line("PZ", delivery, "F/1/26", 1, "960", "1.99", "1910.4")), itemA),
+                withItm8(amounts(line("PZ", delivery, "F/1/26", 2, "1344", "1.99", "2674.56")), itemB),
+                withSupplier(line("PZ", otherSupplierDelivery, "F/2/26", 1, "1", "1", "1"), "108", "RADIX-BIS"),
+                // Korekta błędu sklepu: przyszło mniej B, za to więcej A i artykuł C, którego nie było w przyjęciu.
+                withItm8(amounts(correction(line("PK", storeError, "", 1, "192", "1.99", "382.08"))), itemA),
+                withItm8(amounts(correction(line("PK", storeError, "", 2, "-576", "1.99", "-1146.24"))), itemB),
+                withItm8(amounts(correction(line("PK", storeError, "", 3, "384", "1.99", "764.16"))), itemC),
+                // Korekta od dostawcy: obniżka ceny B, bez zmiany ilości.
+                withItm8(amounts(correction(line("WZ", supplierCorrection, "", 1, "0", "1.5", "-100"))), itemB)))
+                .andExpect(status().isCreated());
+
+        String deliveryId = id(store, "/pz", delivery);
+        String otherId = id(store, "/pz", otherSupplierDelivery);
+        String storeErrorId = id(store, "/pk", storeError);
+        String supplierCorrectionId = id(store, "/wz", supplierCorrection);
+
+        // Podpowiedzi: tylko korekty tego dostawcy, najpierw ta z największą liczbą wspólnych artykułów.
+        mvc.perform(get(url(store, "/pz/" + deliveryId + "/corrections/candidates")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].number").value(storeError))
+                .andExpect(jsonPath("$[0].commonItems").value(2))
+                .andExpect(jsonPath("$[1].number").value(supplierCorrection));
+        mvc.perform(get(url(store, "/wz/" + supplierCorrectionId + "/corrections/candidates")).cookie(owner))
+                .andExpect(jsonPath("$[0].number").value(delivery))
+                .andExpect(jsonPath("$[?(@.number == '" + otherSupplierDelivery + "')]").isEmpty());
+
+        // Przypięcie z obu stron: korekta błędu sklepu z przyjęcia, korekta od dostawcy z korekty.
+        mvc.perform(post(url(store, "/pz/" + deliveryId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + storeErrorId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.corrections.length()").value(1));
+        mvc.perform(post(url(store, "/wz/" + supplierCorrectionId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + deliveryId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correctionOf.number").value(delivery));
+
+        // Korekta poprawia jedno przyjęcie, a przyjęcie innego dostawcy odpada.
+        mvc.perform(post(url(store, "/pz/" + otherId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + storeErrorId + "\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(url(store, "/pk/" + storeErrorId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + otherId + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(get(url(store, "/pz/" + deliveryId)).cookie(owner))
+                .andExpect(jsonPath("$.purchaseValue").value(4584.96))
+                .andExpect(jsonPath("$.correctionTotals.count").value(2))
+                .andExpect(jsonPath("$.correctionTotals.purchaseValue").value(4484.96))
+                .andExpect(jsonPath("$.corrected.purchaseValue").value(4484.96))
+                .andExpect(jsonPath("$.corrected.lines.length()").value(3))
+                .andExpect(jsonPath("$.corrected.lines[0].quantity").value(1152))
+                .andExpect(jsonPath("$.corrected.lines[0].originalQuantity").value(960))
+                .andExpect(jsonPath("$.corrected.lines[1].quantity").value(768))
+                .andExpect(jsonPath("$.corrected.lines[1].purchaseValue").value(1428.32))
+                .andExpect(jsonPath("$.corrected.lines[1].purchasePrice").value(1.8598))
+                .andExpect(jsonPath("$.corrected.lines[1].corrected").value(true))
+                .andExpect(jsonPath("$.corrected.lines[2].itm8").value(itemC))
+                .andExpect(jsonPath("$.corrected.lines[2].lineNumber").value(3))
+                .andExpect(jsonPath("$.corrected.lines[2].originalQuantity").value(org.hamcrest.Matchers.nullValue()));
+        mvc.perform(get(url(store, "/pz")).param("query", delivery).cookie(owner))
+                .andExpect(jsonPath("$.documents[0].correctionTotals.count").value(2))
+                .andExpect(jsonPath("$.documents[0].correctionTotals.purchaseValue").value(4484.96));
+        mvc.perform(get(url(store, "/pk")).param("query", storeError).cookie(owner))
+                .andExpect(jsonPath("$.documents[0].correctionOf.number").value(delivery));
+
+        byte[] pdf = mvc.perform(get(url(store, "/pz/" + deliveryId + "/delivery-note")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentType("application/pdf"))
+                .andReturn().getResponse().getContentAsByteArray();
+        org.assertj.core.api.Assertions.assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+        mvc.perform(get(url(store, "/pk/" + storeErrorId + "/delivery-note")).cookie(owner))
+                .andExpect(status().isBadRequest());
+
+        // Odpięcie to znacznik; ponowne przypięcie przywraca korektę.
+        mvc.perform(delete(url(store, "/pz/" + deliveryId + "/corrections/" + storeErrorId)).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correctionTotals.count").value(1))
+                .andExpect(jsonPath("$.corrected.lines.length()").value(2));
+        mvc.perform(get(url(store, "/pz/" + deliveryId + "/corrections/candidates")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].number").value(storeError));
+    }
+
+    /** Id dokumentu o numerze z listy typu. */
+    private String id(String store, String typePath, String number) throws Exception {
+        String json = mvc.perform(get(url(store, typePath)).param("query", number).cookie(login()))
+                .andReturn().getResponse().getContentAsString();
+        return com.jayway.jsonpath.JsonPath.<List<String>>read(json,
+                "$.documents[?(@.number == '" + number + "')].id").getFirst();
+    }
+
+    /** Korekta z dnia po przyjęciu. */
+    private static String[] correction(String[] line) {
+        line[4] = "22/10/2026 11:31:54";
+        return line;
+    }
+
+    /** Sprzedaż i marża zerowe, żeby sumy zależały tylko od zakupu. */
+    private static String[] amounts(String[] line) {
+        line[19] = "0";
+        line[20] = "0";
+        line[22] = "0";
+        line[23] = "0";
+        line[24] = "0%";
+        return line;
+    }
+
     private ResultActions upload(Cookie owner, byte[] file) throws Exception {
-        return mvc.perform(multipart(importsUrl())
+        return upload(owner, storeId, file);
+    }
+
+    private ResultActions upload(Cookie owner, String store, byte[] file) throws Exception {
+        return mvc.perform(multipart("/api/stores/" + store + "/imports/documents")
                 .file(new MockMultipartFile("file", "Zeszyt2.xlsx", "application/octet-stream", file))
                 .cookie(owner).with(csrf()));
     }
 
     private String url(String path) {
-        return "/api/stores/" + storeId + "/documents" + path;
+        return url(storeId, path);
+    }
+
+    private static String url(String store, String path) {
+        return "/api/stores/" + store + "/documents" + path;
     }
 
     private String importsUrl() {
@@ -205,12 +338,16 @@ class DocumentImportIntegrationTests {
         if (storeId != null) {
             return;
         }
+        storeId = createStore(STORE_NUMBER, "Sklep dokumentów");
+    }
+
+    private String createStore(String number, String name) throws Exception {
         String json = mvc.perform(post("/api/settings/stores").cookie(login()).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"number\":\"" + STORE_NUMBER + "\",\"name\":\"Sklep dokumentów\",\"active\":true}"))
+                        .content("{\"number\":\"" + number + "\",\"name\":\"" + name + "\",\"active\":true}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        storeId = ((String) com.jayway.jsonpath.JsonPath.read(json, "$.id"));
+        return com.jayway.jsonpath.JsonPath.read(json, "$.id");
     }
 
     private Cookie login() throws Exception {

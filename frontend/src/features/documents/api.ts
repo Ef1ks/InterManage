@@ -1,9 +1,16 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ksefKey } from '@/features/ksef/api'
-import { api } from '@/lib/api'
+import { api, downloadFile } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
-import type { Document, DocumentPage, DocumentsOverview, KsefInvoiceCandidate, Supplier } from '@/lib/types'
+import type {
+  CorrectionCandidate,
+  Document,
+  DocumentPage,
+  DocumentsOverview,
+  KsefInvoiceCandidate,
+  Supplier,
+} from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 /** Dokumenty są osobne dla każdego sklepu, więc sklep jest częścią klucza. Raport wgrywa się w Imporcie danych. */
@@ -137,6 +144,67 @@ export function useDocumentKsefLinks(storeId: string, typeCode: string, id: stri
       onSuccess,
     }),
   }
+}
+
+/**
+ * Do przyjęcia: jego korekty do przypięcia; do korekty: przyjęcia, których może dotyczyć. Zawsze od tego samego
+ * dostawcy, najpierw z największą liczbą wspólnych artykułów.
+ */
+export function useCorrectionCandidates(storeId: string, typeCode: string, id: string, query: string, enabled: boolean) {
+  const debounced = useDebouncedValue(query.trim(), 250)
+  return useQuery({
+    queryKey: [...documentsKey(storeId), typeCode, id, 'correction-candidates', { query: debounced }],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (debounced) params.set('query', debounced)
+      return api<CorrectionCandidate[]>(`${documentsPath(storeId)}/${typeCode}/${id}/corrections/candidates?${params}`)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Przypięcie korekty do przyjęcia i odpięcie, z dowolnej strony ({@code otherId}: druga strona). Zmienia oba dokumenty
+ * i listy, a faktury korekt od dostawcy pojawiają się przy przyjęciu, więc odświeżamy cały moduł.
+ */
+export function useDeliveryCorrections(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/corrections`
+  const onSuccess = (document: Document) => {
+    queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+    queryClient.invalidateQueries({ queryKey: documentsKey(storeId) })
+  }
+  return {
+    attach: useMutation({
+      mutationFn: (otherId: string) => api<Document>(path, { method: 'POST', json: { documentId: otherId } }),
+      onSuccess,
+    }),
+    detach: useMutation({
+      mutationFn: (otherId: string) => api<Document>(`${path}/${otherId}`, { method: 'DELETE' }),
+      onSuccess,
+    }),
+  }
+}
+
+/** Potwierdzenie różnicy kwot przyjęcia i faktury oraz jego cofnięcie. */
+export function useAmountConfirmation(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/amount-confirmation`
+  const onSuccess = (document: Document) => queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+  return {
+    confirm: useMutation({ mutationFn: () => api<Document>(path, { method: 'PUT' }), onSuccess }),
+    cancel: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
+  }
+}
+
+/** Wydruk bonu dostawy przyjęcia (PDF z wartościami po korektach). */
+export function useDownloadDeliveryNote(storeId: string) {
+  return useMutation({
+    mutationFn: (document: Pick<Document, 'id' | 'number'>) =>
+      downloadFile(`${documentsPath(storeId)}/pz/${document.id}/delivery-note`, `bon-dostawy-${document.number}.pdf`),
+    meta: { invalidates: false },
+  })
 }
 
 /** Dostawcy sklepu (z listy z systemu sklepu i dodani ręcznie). Jest ich kilkuset, więc filtruje przeglądarka. */

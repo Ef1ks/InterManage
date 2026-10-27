@@ -60,6 +60,10 @@ public class SalesImport {
     @Column(name = "conflict_count", nullable = false)
     private int conflictCount;
 
+    /** Wiersze z dnia, w którym wygenerowano raport (albo późniejszych): dzień niezakończony, niezapisany. */
+    @Column(name = "incomplete_count", nullable = false)
+    private int incompleteCount;
+
     protected SalesImport() {
     }
 
@@ -79,10 +83,11 @@ public class SalesImport {
     }
 
     /** Plik jest czytany strumieniowo, więc liczbę wierszy znamy dopiero na końcu. */
-    public void recordResult(int totalRows, int created, int conflicting) {
+    public void recordResult(int totalRows, int created, int conflicting, int incomplete) {
         this.totalRows = totalRows;
         this.createdCount = created;
-        this.existingCount = totalRows - created;
+        this.incompleteCount = incomplete;
+        this.existingCount = totalRows - created - incomplete;
         this.conflictCount = conflicting;
     }
 
@@ -128,5 +133,9 @@ public class SalesImport {
 
     public int getConflictCount() {
         return conflictCount;
+    }
+
+    public int getIncompleteCount() {
+        return incompleteCount;
     }
 }

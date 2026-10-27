@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.oneOf;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
@@ -415,6 +416,30 @@ class KsefIntegrationTests {
                 .andExpect(status().isConflict());
         send(owner, post(url(storeId, "/invoices/" + fv41 + "/documents")), "{\"documentId\":\"" + withoutNumber + "\"}")
                 .andExpect(status().isOk());
+
+        // Kwoty netto: przyjęcie zgodne z fakturą i niezgodne, którego różnicę można potwierdzić i cofnąć.
+        String pz = "/api/stores/" + storeId + "/documents/pz/";
+        mvc.perform(get(pz + delivery).cookie(owner))
+                .andExpect(jsonPath("$.invoiceAmountCheck.matches").value(true));
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pz").param("query", "PZ301").cookie(owner))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.invoiceNet").value(105.0))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.documentValue").value(104.0))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.difference").value(1.0))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.matches").value(false))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.confirmedAt").value(nullValue()));
+        send(owner, put(pz + withoutNumber + "/amount-confirmation"), "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.invoiceAmountCheck.confirmedAt").isNotEmpty())
+                .andExpect(jsonPath("$.invoiceAmountCheck.confirmedBy").isNotEmpty());
+        send(owner, put(pz + delivery + "/amount-confirmation"), "").andExpect(status().isBadRequest());
+        mvc.perform(delete(pz + withoutNumber + "/amount-confirmation").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.invoiceAmountCheck.confirmedAt").value(nullValue()));
+        send(owner, put(pz + withoutNumber + "/amount-confirmation"), "").andExpect(status().isOk());
+        // Zmiana kwoty przyjęcia unieważnia potwierdzenie.
+        jdbc.update("update documents set purchase_value = 103 where id = ?::uuid", withoutNumber);
+        mvc.perform(get(pz + withoutNumber).cookie(owner))
+                .andExpect(jsonPath("$.invoiceAmountCheck.difference").value(2.0))
+                .andExpect(jsonPath("$.invoiceAmountCheck.confirmedAt").value(nullValue()));
 
         mvc.perform(delete(url(storeId, "/invoices/" + fv41 + "/documents/" + withoutNumber)).cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$.entered").value(false));

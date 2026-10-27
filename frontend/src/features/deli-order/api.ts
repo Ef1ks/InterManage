@@ -114,16 +114,32 @@ function sendFormChange(storeId: string, change: FormChange): Promise<OrderForm>
  */
 const formScope = (storeId: string) => ({ id: `deli-form-${storeId}` })
 
-/** Każda zmiana formularza zwraca cały aktualny formularz, który od razu podmieniamy w cache. */
+/**
+ * Formularz tego sklepu oglądany przez sklepy, które z niego zamawiają (właściciel przełącza sklepy w tej samej
+ * karcie): oznaczamy jako nieaktualny, pobierze się przy wejściu.
+ */
+function invalidateSupplierForms(queryClient: QueryClient, formStoreId: string) {
+  queryClient.invalidateQueries({
+    predicate: ({ queryKey }) =>
+      queryKey[2] === 'deli-order' && queryKey[3] === 'suppliers' && queryKey[4] === formStoreId,
+  })
+}
+
+/**
+ * Każda zmiana formularza zwraca cały aktualny formularz, który od razu podmieniamy w cache. Zmiany idą szybko jedna
+ * po drugiej, więc bez globalnego odświeżania wszystkiego po każdej z nich.
+ */
 export function useChangeOrderForm(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     scope: formScope(storeId),
+    meta: { invalidates: false },
     mutationFn: (change: FormChange) => sendFormChange(storeId, change),
     onSuccess: (form) => {
       queryClient.setQueryData(formKey(storeId), form)
       // Pierwszy dział sprawia, że sklep może zamawiać ze swojego formularza.
       queryClient.invalidateQueries({ queryKey: overviewKey(storeId) })
+      invalidateSupplierForms(queryClient, storeId)
     },
   })
 }
@@ -141,7 +157,11 @@ export function usePasteOrderProducts(storeId: string) {
         method: 'POST',
         json: { rows },
       }),
-    onSuccess: (result) => queryClient.setQueryData(formKey(storeId), result.form),
+    meta: { invalidates: false },
+    onSuccess: (result) => {
+      queryClient.setQueryData(formKey(storeId), result.form)
+      invalidateSupplierForms(queryClient, storeId)
+    },
   })
 }
 

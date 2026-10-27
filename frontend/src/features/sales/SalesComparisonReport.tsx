@@ -64,8 +64,11 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
   const [params, setParams] = useSearchParams()
   const [basis, setBasis] = useState<SaleBasis>('gross')
 
-  const lastSaleDate = overview.data?.lastSaleDate ?? null
-  const fallbackDay = lastSaleDate ?? addDays(todayIso(), -1)
+  // Raport najwyżej za wczoraj: dzisiejsza sprzedaż jeszcze trwa (import i tak nie zapisuje dnia niezakończonego).
+  const yesterday = addDays(todayIso(), -1)
+  const savedUntil = overview.data?.lastSaleDate ?? null
+  const lastSaleDate = savedUntil && savedUntil < yesterday ? savedUntil : yesterday
+  const fallbackDay = lastSaleDate
   const mode = (Object.keys(MODE_PARAMS) as PeriodMode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'day'
   const anchor = resolveAnchor(mode, params.get('data') ?? fallbackDay, lastSaleDate)
   const custom: DateRange = { from: params.get('od') ?? addDays(fallbackDay, -6), to: params.get('do') ?? fallbackDay }
@@ -133,6 +136,7 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                 label="Od"
                 value={custom.from}
                 onChange={(from) => update({ od: from, do: custom.to })}
+                max={lastSaleDate}
                 shortcuts={[]}
                 className="w-full sm:w-64"
               />
@@ -140,6 +144,7 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                 label="Do"
                 value={custom.to}
                 onChange={(to) => update({ od: custom.from, do: to })}
+                max={lastSaleDate}
                 shortcuts={lastSaleDate ? [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }] : []}
                 error={customError ?? undefined}
                 className="w-full sm:w-64"
@@ -160,6 +165,7 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                 label={ANCHOR_LABELS[mode]}
                 value={anchor}
                 onChange={(data) => update({ data })}
+                max={lastSaleDate}
                 shortcuts={
                   !lastSaleDate
                     ? []

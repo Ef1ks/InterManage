@@ -52,11 +52,12 @@ export function lastCompleteWeekEnd(lastSaleDate: string): string {
 }
 
 /**
- * Data, od której liczy się okres. Tydzień porównujemy tylko zakończony: dzień z tygodnia w toku (albo bez
+ * Data, od której liczy się okres: najpóźniej ostatni dzień ze sprzedażą. Tydzień porównujemy tylko zakończony: dzień z tygodnia w toku (albo bez
  * wgranej sprzedaży) przesuwa się na ostatni pełny tydzień, pon.-niedz.
  */
 export function resolveAnchor(mode: PeriodMode, anchor: string, lastSaleDate: string | null): string {
-  if (mode !== 'week' || !lastSaleDate) return anchor
+  if (!lastSaleDate) return anchor
+  if (mode !== 'week') return anchor > lastSaleDate ? lastSaleDate : anchor
   const lastSunday = lastCompleteWeekEnd(lastSaleDate)
   return addDays(weekStart(anchor), 6) > lastSunday ? lastSunday : anchor
 }
