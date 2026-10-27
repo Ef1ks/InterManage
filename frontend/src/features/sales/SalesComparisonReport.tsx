@@ -21,15 +21,18 @@ import { formatMoney, formatQuantity } from '@/features/documents/format'
 import { salesComparisonKey, useSalesComparison, useSalesReportsOverview } from '@/features/sales/api'
 import { salesPaths } from '@/features/sales/paths'
 import {
+  canShiftForward,
   comparePeriods,
   type DateRange,
   dayCount,
   daysLabel,
   formatRange,
+  lastCompleteWeekEnd,
   MAX_PERIOD_DAYS,
   PERIOD_MODES,
   type PeriodMode,
   type Periods,
+  resolveAnchor,
   shiftAnchor,
 } from '@/features/sales/periods'
 import { addDays, todayIso } from '@/lib/dates'
@@ -64,7 +67,7 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
   const lastSaleDate = overview.data?.lastSaleDate ?? null
   const fallbackDay = lastSaleDate ?? addDays(todayIso(), -1)
   const mode = (Object.keys(MODE_PARAMS) as PeriodMode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'day'
-  const anchor = params.get('data') ?? fallbackDay
+  const anchor = resolveAnchor(mode, params.get('data') ?? fallbackDay, lastSaleDate)
   const custom: DateRange = { from: params.get('od') ?? addDays(fallbackDay, -6), to: params.get('do') ?? fallbackDay }
 
   const update = (changes: Record<string, string>) =>
@@ -157,7 +160,13 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                 label={ANCHOR_LABELS[mode]}
                 value={anchor}
                 onChange={(data) => update({ data })}
-                shortcuts={lastSaleDate ? [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }] : []}
+                shortcuts={
+                  !lastSaleDate
+                    ? []
+                    : mode === 'week'
+                      ? [{ label: 'Ostatni pełny tydzień', value: lastCompleteWeekEnd(lastSaleDate) }]
+                      : [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }]
+                }
                 className="min-w-0 flex-1 sm:w-72 sm:flex-none"
               />
               <Button
@@ -165,7 +174,7 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                 size="icon-lg"
                 aria-label={STEP_LABELS[mode][1]}
                 title={STEP_LABELS[mode][1]}
-                disabled={lastSaleDate != null && shiftAnchor(mode, anchor, 1) > lastSaleDate}
+                disabled={!canShiftForward(mode, anchor, lastSaleDate)}
                 onClick={() => update({ data: shiftAnchor(mode, anchor, 1) })}
               >
                 <ChevronRightIcon />

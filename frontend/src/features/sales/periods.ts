@@ -34,14 +34,38 @@ export const YEAR_AGO_DAYS = 364
 function currentPeriod(mode: PeriodMode, anchor: string, custom: DateRange, lastSaleDate: string | null): DateRange {
   if (mode === 'day') return { from: anchor, to: anchor }
   if (mode === 'week') {
+    // Zawsze pełny tydzień od poniedziałku do niedzieli; który, pilnuje resolveAnchor.
     const from = weekStart(anchor)
-    return { from, to: clampToData(from, addDays(from, 6), lastSaleDate) }
+    return { from, to: addDays(from, 6) }
   }
   if (mode === 'month') {
     const from = monthStart(anchor)
     return { from, to: clampToData(from, monthEnd(from), lastSaleDate) }
   }
   return custom
+}
+
+/** Niedziela ostatniego tygodnia, który ma sprzedaż ze wszystkich siedmiu dni. */
+export function lastCompleteWeekEnd(lastSaleDate: string): string {
+  const monday = weekStart(lastSaleDate)
+  return addDays(monday, 6) === lastSaleDate ? lastSaleDate : addDays(monday, -1)
+}
+
+/**
+ * Data, od której liczy się okres. Tydzień porównujemy tylko zakończony: dzień z tygodnia w toku (albo bez
+ * wgranej sprzedaży) przesuwa się na ostatni pełny tydzień, pon.-niedz.
+ */
+export function resolveAnchor(mode: PeriodMode, anchor: string, lastSaleDate: string | null): string {
+  if (mode !== 'week' || !lastSaleDate) return anchor
+  const lastSunday = lastCompleteWeekEnd(lastSaleDate)
+  return addDays(weekStart(anchor), 6) > lastSunday ? lastSunday : anchor
+}
+
+/** Czy strzałka „następny” ma dokąd przejść: do dnia albo miesiąca ze sprzedażą, do tygodnia tylko pełnego. */
+export function canShiftForward(mode: Exclude<PeriodMode, 'custom'>, anchor: string, lastSaleDate: string | null) {
+  if (!lastSaleDate) return true
+  const next = shiftAnchor(mode, anchor, 1)
+  return mode === 'week' ? addDays(next, 6) <= lastCompleteWeekEnd(lastSaleDate) : next <= lastSaleDate
 }
 
 /** Data, od której liczy się sąsiedni okres (strzałki obok wyboru daty). */

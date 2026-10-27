@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793077513.0267398,
-    "seen": 1793077528.2710998,
-    "ast_hash": "3b3b7c81bea5819f5b467a71f54ae963",
+    "mtime": 1793077715.2831044,
+    "seen": 1793077729.536836,
+    "ast_hash": "6bb5be024b9f218c01deaf31b1e9992b",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -3186,9 +3186,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesComparisonReport.tsx": {
-    "mtime": 1793077485.9141026,
-    "seen": 1793077528.2512105,
-    "ast_hash": "f3094506e643e4381da8d9ba1c37b696",
+    "mtime": 1793077698.5158541,
+    "seen": 1793077729.5188048,
+    "ast_hash": "ce5c1e696189e69059495c533cba8083",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesPage.tsx": {
@@ -3210,9 +3210,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/periods.ts": {
-    "mtime": 1793075219.7968478,
-    "seen": 1793075266.4142108,
-    "ast_hash": "f610ec79bbb287bb1f4796c0a31a0959",
+    "mtime": 1793077676.5200174,
+    "seen": 1793077729.519805,
+    "ast_hash": "95ba68f70d819ac294facffd6861da92",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/component/NomenclatureReportParser.java": {
