@@ -331,6 +331,19 @@ export type DocumentSummary = {
   correctionOf: LinkedDelivery | null
   /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
   invoiceAmountCheck: InvoiceAmountCheck | null
+  /** Faktury spoza KSeF wpisane ręcznie (przyjęcia i ich korekty). */
+  manualInvoices: ManualInvoice[]
+}
+
+/** Faktura spoza KSeF: dostawca z listy dostawców sklepu i numer wpisany ręcznie. */
+export type ManualInvoice = {
+  id: string
+  invoiceNumber: string
+  issueDate: string | null
+  supplierId: string
+  supplierName: string
+  createdAt: string
+  createdBy: string | null
 }
 
 /**
@@ -359,6 +372,12 @@ export type InvoiceComparisonRow = {
   invoicePrice: number | null
   invoiceValue: number | null
   difference: number | null
+  /** Artykuły przyjęcia w wierszu (kilka, gdy połączone). */
+  itm8s: string[]
+  /** Pozycje faktury w wierszu: "ean:…" albo "name:…" (bez kodu). */
+  invoiceKeys: string[]
+  /** Ręczne połączenia, które złożyły wiersz (puste, gdy połączył go EAN). */
+  matchIds: string[]
 }
 
 /** Przyjęcie porównane z XML faktur KSeF pozycja po pozycji; {@code unavailable}: faktury, których nie dało się pobrać. */
@@ -710,6 +729,8 @@ export type Document = DocumentSummary & {
   gratisAllowed: boolean
   /** Do dokumentu można przypiąć fakturę z KSeF (przyjęcia i korekty od dostawcy). */
   ksefLinkable: boolean
+  /** Do dokumentu można wpisać fakturę spoza KSeF (przyjęcia i ich korekty). */
+  manualInvoiceAllowed: boolean
   /** Numer dokumentu dostawcy z raportu; inny niż obowiązujący, gdy ktoś go poprawił. */
   reportSupplierDocumentNumber: string | null
   /** Ręczna poprawka numeru dokumentu dostawcy ({@code null} = numer z raportu). */

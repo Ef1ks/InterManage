@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ksefKey } from '@/features/ksef/api'
@@ -162,6 +163,31 @@ export function useDocumentKsefLinks(storeId: string, typeCode: string, id: stri
   }
 }
 
+/** Faktury spoza KSeF dokumentu: dopisanie, usunięcie (znacznik) i przywrócenie. Każda zmiana zwraca dokument. */
+export function useManualInvoices(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/manual-invoices`
+  const onSuccess = (document: Document) => {
+    queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+    queryClient.invalidateQueries({ queryKey: [...documentsKey(storeId), typeCode, 'list'] })
+  }
+  return {
+    add: useMutation({
+      mutationFn: (request: { supplierId: string; invoiceNumber: string; issueDate: string | null }) =>
+        api<Document>(path, { method: 'POST', json: request }),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: (invoiceId: string) => api<Document>(`${path}/${invoiceId}`, { method: 'DELETE' }),
+      onSuccess,
+    }),
+    restore: useMutation({
+      mutationFn: (invoiceId: string) => api<Document>(`${path}/${invoiceId}/restore`, { method: 'POST' }),
+      onSuccess,
+    }),
+  }
+}
+
 /**
  * Do przyjęcia: jego korekty do przypięcia; do korekty: przyjęcia, których może dotyczyć. Zawsze od tego samego
  * dostawcy, najpierw z największą liczbą wspólnych artykułów.
@@ -215,6 +241,28 @@ export function useInvoiceComparison(storeId: string, id: string, enabled: boole
     retry: false,
     staleTime: 5 * 60_000,
   })
+}
+
+/**
+ * Ręczne łączenie pozycji faktury z artykułami przyjęcia w porównaniu (inny kod u dostawcy, pozycja rozbita na kilka)
+ * oraz rozłączanie i przywracanie (po kilka połączeń naraz, bo wiersz może składać się z kilku).
+ */
+export function useInvoiceComparisonMatches(storeId: string, id: string) {
+  const path = `${documentsPath(storeId)}/pz/${id}/invoice-comparison/matches`
+  return {
+    match: useMutation({
+      mutationFn: (request: { invoiceKeys: string[]; itm8s: string[] }) =>
+        api<{ id: string }>(path, { method: 'POST', json: request }),
+    }),
+    unmatch: useMutation({
+      mutationFn: (matchIds: string[]) =>
+        Promise.all(matchIds.map((matchId) => api<void>(`${path}/${matchId}`, { method: 'DELETE' }))),
+    }),
+    restore: useMutation({
+      mutationFn: (matchIds: string[]) =>
+        Promise.all(matchIds.map((matchId) => api<void>(`${path}/${matchId}/restore`, { method: 'POST' }))),
+    }),
+  }
 }
 
 /** Potwierdzenie różnicy kwot przyjęcia i faktury oraz jego cofnięcie. */
@@ -337,6 +385,15 @@ export function useSuppliers(storeId: string) {
     queryKey: suppliersKey(storeId),
     queryFn: () => api<Supplier[]>(`/stores/${storeId}/suppliers`),
   })
+}
+
+/** Podpowiadany dostawca z listy sklepu po kodzie (np. dostawca linii dokumentu). */
+export function useSuggestedSupplier(storeId: string, code: string | null) {
+  const { data: suppliers } = useSuppliers(storeId)
+  return useMemo(
+    () => (code ? (suppliers?.find((supplier) => supplier.code === code) ?? null) : null),
+    [suppliers, code],
+  )
 }
 
 /** Dostawca spoza systemu sklepu - jest tylko w aplikacji. */

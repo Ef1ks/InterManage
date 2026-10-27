@@ -38,6 +38,7 @@ import com.intermanage.backend.document.dto.CorrectedDelivery;
 import com.intermanage.backend.document.dto.DeliveryReportClosingResponse;
 import com.intermanage.backend.document.dto.DeliveryReportClosingsOverview;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.dto.ManualInvoice;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.DeliveryReportClosing;
 import com.intermanage.backend.document.entity.DeliveryReportClosingDelivery;
@@ -106,12 +107,14 @@ public class DeliveryReportService {
     private final AppUserRepository users;
     private final DeliveryReportMapper mapper;
     private final XlsxWriter xlsxWriter;
+    private final DocumentManualInvoiceService manualInvoices;
 
     public DeliveryReportService(DocumentRepository documents, DeliveryCorrectionService corrections,
             DocumentKsefLinkService ksefLinks, NomenclatureRepository nomenclatures,
             DeliveryReportClosingRepository closings, DeliveryReportClosingDeliveryRepository closingDeliveries,
             DeliveryReportExcludedSupplierRepository excludedSuppliers, SupplierRepository suppliers,
-            StoreRepository stores, AppUserRepository users, DeliveryReportMapper mapper, XlsxWriter xlsxWriter) {
+            StoreRepository stores, AppUserRepository users, DeliveryReportMapper mapper, XlsxWriter xlsxWriter,
+            DocumentManualInvoiceService manualInvoices) {
         this.documents = documents;
         this.corrections = corrections;
         this.ksefLinks = ksefLinks;
@@ -124,6 +127,7 @@ public class DeliveryReportService {
         this.users = users;
         this.mapper = mapper;
         this.xlsxWriter = xlsxWriter;
+        this.manualInvoices = manualInvoices;
     }
 
     /**
@@ -255,7 +259,7 @@ public class DeliveryReportService {
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono zamkniętego raportu"));
         List<DeliveryReportClosingDelivery> rows = closingDeliveries.findByClosing(closing.getId());
         List<Document> deliveries = rows.stream().map(DeliveryReportClosingDelivery::getDelivery).distinct().toList();
-        Map<UUID, List<LinkedKsefInvoice>> invoices = ksefLinks.invoicesOf(storeId, deliveries);
+        Map<UUID, List<InvoiceRef>> invoices = invoiceRefs(storeId, deliveries);
 
         // Do zmian: co zamknięcia wiedziały o przyjęciu tuż przed tym raportem (nowe i odpięte korekty).
         List<DeliveryReportClosingDelivery> carried = rows.stream().filter(row -> row.getOriginClosing() != null).toList();
@@ -346,7 +350,7 @@ public class DeliveryReportService {
 
     /** Przyjęcie w obecnym stanie: korekty, zakup netto po korektach według rejonów i faktury. */
     private record Current(Document document, List<Document> corrections, Map<String, BigDecimal> regions,
-            List<LinkedKsefInvoice> invoices) {
+            List<InvoiceRef> invoices) {
 
         BigDecimal correctionValue() {
             return corrections.stream().map(Document::getPurchaseValue).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -384,7 +388,7 @@ public class DeliveryReportService {
                         links.values().stream().flatMap(List::stream).toList())
                 .stream().filter(Objects::nonNull)
                 .collect(Collectors.toMap(Document::getId, Function.identity()));
-        Map<UUID, List<LinkedKsefInvoice>> invoices = ksefLinks.invoicesOf(storeId, deliveries);
+        Map<UUID, List<InvoiceRef>> invoices = invoiceRefs(storeId, deliveries);
         return deliveries.stream().map(delivery -> {
             List<Document> ofDelivery = links.getOrDefault(delivery.getId(), List.of()).stream()
                     .map(link -> correctionDocuments.get(link.getCorrection().getId()))
@@ -609,10 +613,40 @@ public class DeliveryReportService {
         return name != null ? code + " " + name : code;
     }
 
-    /** Faktury przyjęcia (przypięte albo dopasowane po numerze), a bez nich numer dokumentu dostawcy z raportu. */
-    private static String invoiceNumber(Document delivery, List<LinkedKsefInvoice> invoices) {
+    /** Faktura dokumentu w raporcie: numer i data wystawienia ({@code null}, gdy nieznana). */
+    private record InvoiceRef(String number, LocalDate issueDate) {
+
+        String label() {
+            return number + (issueDate != null ? " z " + issueDate.format(DATE) : "");
+        }
+    }
+
+    /**
+     * Faktury dokumentów: z KSeF (przypięte, przy przyjęciu też dopasowane po numerze), a bez nich wpisane ręcznie
+     * spoza KSeF.
+     */
+    private Map<UUID, List<InvoiceRef>> invoiceRefs(UUID storeId, Collection<Document> page) {
+        Map<UUID, List<LinkedKsefInvoice>> ksef = ksefLinks.invoicesOf(storeId, page);
+        Map<UUID, List<ManualInvoice>> manual = manualInvoices.invoicesOf(page);
+        Map<UUID, List<InvoiceRef>> result = new HashMap<>();
+        for (Document document : page) {
+            List<LinkedKsefInvoice> fromKsef = ksef.getOrDefault(document.getId(), List.of());
+            List<InvoiceRef> refs = !fromKsef.isEmpty()
+                    ? fromKsef.stream().map(invoice -> new InvoiceRef(invoice.invoiceNumber(), invoice.issueDate()))
+                            .toList()
+                    : manual.getOrDefault(document.getId(), List.of()).stream()
+                            .map(invoice -> new InvoiceRef(invoice.invoiceNumber(), invoice.issueDate())).toList();
+            if (!refs.isEmpty()) {
+                result.put(document.getId(), refs);
+            }
+        }
+        return result;
+    }
+
+    /** Faktury przyjęcia (z KSeF albo spoza), a bez nich numer dokumentu dostawcy z raportu. */
+    private static String invoiceNumber(Document delivery, List<InvoiceRef> invoices) {
         if (!invoices.isEmpty()) {
-            return invoices.stream().map(LinkedKsefInvoice::invoiceNumber).distinct().collect(Collectors.joining(", "));
+            return invoices.stream().map(InvoiceRef::number).distinct().collect(Collectors.joining(", "));
         }
         return delivery.getSupplierDocumentNumber();
     }
@@ -657,8 +691,8 @@ public class DeliveryReportService {
 
     /**
      * Opisy korekt po id: numer faktury korygującej, bo z nim pracuje księgowość. Najpierw przypięte faktury KSeF
-     * (z datą wystawienia), potem numer dokumentu dostawcy z raportu; bez obu (zwykle korekta błędu sklepu) numer
-     * wewnętrzny z dopiskiem, że faktury nie ma.
+     * (z datą wystawienia), potem wpisane ręcznie spoza KSeF, potem numer dokumentu dostawcy z raportu; bez nich
+     * (zwykle korekta błędu sklepu) numer wewnętrzny z dopiskiem, że faktury nie ma.
      */
     private Map<UUID, String> correctionLabels(UUID storeId, Collection<Document> corrections) {
         if (corrections.isEmpty()) {
@@ -666,17 +700,14 @@ public class DeliveryReportService {
         }
         Map<UUID, Document> byId = corrections.stream()
                 .collect(Collectors.toMap(Document::getId, Function.identity(), (a, b) -> a));
-        Map<UUID, List<LinkedKsefInvoice>> invoices = ksefLinks.invoicesOf(storeId, byId.values());
+        Map<UUID, List<InvoiceRef>> invoices = invoiceRefs(storeId, byId.values());
         return byId.values().stream().collect(Collectors.toMap(Document::getId,
                 correction -> correctionLabel(correction, invoices.getOrDefault(correction.getId(), List.of()))));
     }
 
-    private static String correctionLabel(Document correction, List<LinkedKsefInvoice> invoices) {
+    private static String correctionLabel(Document correction, List<InvoiceRef> invoices) {
         if (!invoices.isEmpty()) {
-            return invoices.stream()
-                    .map(invoice -> invoice.invoiceNumber()
-                            + (invoice.issueDate() != null ? " z " + invoice.issueDate().format(DATE) : ""))
-                    .distinct().collect(Collectors.joining(", "));
+            return invoices.stream().map(InvoiceRef::label).distinct().collect(Collectors.joining(", "));
         }
         if (correction.getSupplierDocumentNumber() != null) {
             return correction.getSupplierDocumentNumber();

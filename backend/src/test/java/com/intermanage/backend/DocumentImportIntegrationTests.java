@@ -407,6 +407,47 @@ class DocumentImportIntegrationTests {
                 .andExpect(status().isOk());
         mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
                 .andExpect(jsonPath("$.pendingChanges").value(0));
+
+        // Faktura spoza KSeF: dostawca z listy i numer wpisany ręcznie; raport opisuje nią korektę.
+        String supplier = com.jayway.jsonpath.JsonPath.read(mvc.perform(post("/api/stores/" + store + "/suppliers")
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Piekarnia bez KSeF\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        String manualInvoice = com.jayway.jsonpath.JsonPath.read(mvc.perform(
+                        post(url(store, "/pk/" + storeErrorId + "/manual-invoices")).cookie(owner).with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON).content("{\"supplierId\":\"" + supplier
+                                        + "\",\"invoiceNumber\":\" KP/5/26 \",\"issueDate\":\"2026-10-23\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.manualInvoiceAllowed").value(true))
+                .andExpect(jsonPath("$.manualInvoices[0].invoiceNumber").value("KP/5/26"))
+                .andExpect(jsonPath("$.manualInvoices[0].supplierName").value("Piekarnia bez KSeF"))
+                .andReturn().getResponse().getContentAsString(), "$.manualInvoices[0].id");
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/report-closings/" + next + "/xlsx")).cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains("odpięte: KP/5/26 z 23.10.2026");
+        // Przyjęcie ma jedną fakturę; z ręczną liczy się jako przyjęcie z fakturą.
+        String invoiceJson = "{\"supplierId\":\"" + supplier + "\",\"invoiceNumber\":\"F/9/26\"}";
+        mvc.perform(post(url(store, "/pz/" + otherId + "/manual-invoices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(invoiceJson))
+                .andExpect(status().isOk());
+        mvc.perform(post(url(store, "/pz/" + otherId + "/manual-invoices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"supplierId\":\"" + supplier + "\",\"invoiceNumber\":\"F/10/26\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(get(url(store, "/pz")).param("invoice", "with").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].manualInvoices[0].invoiceNumber").value("F/9/26"));
+        // Do innych dokumentów niż przyjęcia i ich korekty faktury się nie wpisuje; usunięcie to znacznik.
+        mvc.perform(post(url(store, "/ppp/" + otherId + "/manual-invoices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(invoiceJson))
+                .andExpect(status().isBadRequest());
+        mvc.perform(delete(url(store, "/pk/" + storeErrorId + "/manual-invoices/" + manualInvoice)).cookie(owner)
+                        .with(csrf()))
+                .andExpect(jsonPath("$.manualInvoices.length()").value(0));
+        mvc.perform(post(url(store, "/pk/" + storeErrorId + "/manual-invoices/" + manualInvoice + "/restore"))
+                        .cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.manualInvoices.length()").value(1));
     }
 
     /** Arkusz z pliku .xlsx (XML pierwszego arkusza). */

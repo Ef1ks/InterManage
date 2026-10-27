@@ -16,6 +16,7 @@ import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 
@@ -121,7 +122,8 @@ public final class DocumentSearch {
 
     /**
      * Przyjęcia i korekty od dostawcy z fakturą KSeF albo bez: przypiętą (nieodpiętą) albo, gdy sklep jest połączony
-     * z KSeF ({@code nip}), z faktury firmy o numerze równym numerowi dokumentu dostawcy.
+     * z KSeF ({@code nip}), z faktury firmy o numerze równym numerowi dokumentu dostawcy. Faktura spoza KSeF wpisana
+     * ręcznie też się liczy.
      */
     public static Specification<Document> withInvoice(Presence presence, String nip) {
         return (root, query, cb) -> {
@@ -131,7 +133,11 @@ public final class DocumentSearch {
             Subquery<Integer> linked = query.subquery(Integer.class);
             Root<DocumentKsefInvoice> link = linked.from(DocumentKsefInvoice.class);
             linked.select(cb.literal(1)).where(cb.equal(link.get("document"), root), cb.isNull(link.get("unlinkedAt")));
-            Predicate has = cb.exists(linked);
+            Subquery<Integer> manual = query.subquery(Integer.class);
+            Root<DocumentManualInvoice> manualInvoice = manual.from(DocumentManualInvoice.class);
+            manual.select(cb.literal(1)).where(cb.equal(manualInvoice.get("document"), root),
+                    cb.isNull(manualInvoice.get("removedAt")));
+            Predicate has = cb.or(cb.exists(linked), cb.exists(manual));
             if (nip != null) {
                 Subquery<Integer> byNumber = query.subquery(Integer.class);
                 Root<KsefInvoice> invoice = byNumber.from(KsefInvoice.class);

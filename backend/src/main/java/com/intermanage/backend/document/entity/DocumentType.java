@@ -47,6 +47,14 @@ public enum DocumentType {
         return this == PZ || this == WZ;
     }
 
+    /**
+     * Przyjęcia i ich korekty mogą mieć fakturę spoza KSeF wpisaną ręcznie (dostawca bez KSeF, faktura korygująca
+     * do korekty błędu sklepu).
+     */
+    public boolean canHaveManualInvoice() {
+        return this == PZ || isDeliveryCorrection();
+    }
+
     /** Korekty błędów sklepu i od dostawcy poprawiają konkretne przyjęcie, więc przypina się je do niego. */
     public boolean isDeliveryCorrection() {
         return this == PK || this == WZ;

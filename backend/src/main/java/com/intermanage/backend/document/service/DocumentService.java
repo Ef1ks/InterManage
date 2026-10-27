@@ -44,6 +44,7 @@ import com.intermanage.backend.document.dto.DocumentsOverview;
 import com.intermanage.backend.document.dto.InvoiceAmountCheck;
 import com.intermanage.backend.document.dto.LinkedDeliOrder;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.dto.ManualInvoice;
 import com.intermanage.backend.document.dto.ParsedDocumentReport;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
@@ -97,14 +98,16 @@ public class DocumentService {
     private final NomenclatureRepository nomenclatures;
     private final DeliveryNotePdf deliveryNotePdf;
     private final InvoiceAmountCheckService amountCheckService;
+    private final DocumentManualInvoiceService manualInvoices;
 
     public DocumentService(TransactionTemplate transaction, DocumentReportParser reportParser,
             DocumentMapper documentMapper, DocumentImportRepository imports, DocumentRepository documents,
             AppUserRepository users, StoreRepository stores, DeliOrderDocumentRepository deliOrderDocuments,
             DocumentGratisRepository gratis, DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
             SupplierRepository suppliers, NomenclatureRepository nomenclatures, DeliveryNotePdf deliveryNotePdf,
-            InvoiceAmountCheckService amountCheckService) {
+            InvoiceAmountCheckService amountCheckService, DocumentManualInvoiceService manualInvoices) {
         this.amountCheckService = amountCheckService;
+        this.manualInvoices = manualInvoices;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
         this.suppliers = suppliers;
@@ -172,6 +175,7 @@ public class DocumentService {
                 corrections.totals(document, correctionsByDelivery.get(document.getId()))));
         Map<UUID, InvoiceAmountCheck> amountChecks =
                 amountCheckService.checks(found.getContent(), ksefInvoices, correctionTotals);
+        Map<UUID, List<ManualInvoice>> manual = manualInvoices.invoicesOf(found.getContent());
         return new DocumentPage(summary, imports.findNewestReportGeneratedAt(storeId).orElse(null),
                 found.getContent().stream()
                         .map(document -> documentMapper.toSummary(document, gratisByDocument.get(document.getId()),
@@ -179,7 +183,8 @@ public class DocumentService {
                                 correctionTotals.get(document.getId()),
                                 deliveries.containsKey(document.getId())
                                         ? documentMapper.toLinkedDelivery(deliveries.get(document.getId())) : null,
-                                amountChecks.get(document.getId())))
+                                amountChecks.get(document.getId()),
+                                manual.getOrDefault(document.getId(), List.of())))
                         .toList(),
                 found.getNumber(),
                 found.hasNext(), totals.count(), totals.purchaseValue(), totals.saleValueGross());
@@ -213,7 +218,8 @@ public class DocumentService {
                 ksefInvoices.getOrDefault(document.getId(), List.of()),
                 ofDelivery.stream().map(documentMapper::toCorrectionResponse).toList(), corrected, totals,
                 delivery != null ? documentMapper.toLinkedDelivery(delivery) : null,
-                amountCheckService.checks(List.of(document), ksefInvoices, totalsByDocument).get(document.getId()));
+                amountCheckService.checks(List.of(document), ksefInvoices, totalsByDocument).get(document.getId()),
+                manualInvoices.invoicesOf(List.of(document)).getOrDefault(document.getId(), List.of()));
     }
 
     /**

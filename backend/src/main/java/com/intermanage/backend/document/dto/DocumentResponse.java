@@ -51,6 +51,10 @@ public record DocumentResponse(
         LinkedDelivery correctionOf,
         /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
         InvoiceAmountCheck invoiceAmountCheck,
+        /** Do dokumentu można wpisać fakturę spoza KSeF (przyjęcia i ich korekty). */
+        boolean manualInvoiceAllowed,
+        /** Faktury spoza KSeF wpisane ręcznie. */
+        List<ManualInvoice> manualInvoices,
         /** Ostatnia zmiana nagłówka albo linii przez import. */
         Instant updatedAt,
         List<DocumentLineResponse> lines,

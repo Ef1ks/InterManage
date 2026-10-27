@@ -19,11 +19,13 @@ import com.intermanage.backend.document.dto.InvoiceAmountCheck;
 import com.intermanage.backend.document.dto.LinkedDeliOrder;
 import com.intermanage.backend.document.dto.LinkedDelivery;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.dto.ManualInvoice;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentGratis;
 import com.intermanage.backend.document.entity.DocumentImport;
 import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
 
 @Mapper
@@ -45,8 +47,10 @@ public interface DocumentMapper {
     @Mapping(target = "purchaseValue", source = "document.purchaseValue")
     @Mapping(target = "saleValueGross", source = "document.saleValueGross")
     @Mapping(target = "invoiceAmountCheck", source = "invoiceAmountCheck")
+    @Mapping(target = "manualInvoices", source = "manualInvoices")
     DocumentSummary toSummary(Document document, DocumentGratis gratis, List<LinkedKsefInvoice> ksefInvoices,
-            CorrectionTotals correctionTotals, LinkedDelivery correctionOf, InvoiceAmountCheck invoiceAmountCheck);
+            CorrectionTotals correctionTotals, LinkedDelivery correctionOf, InvoiceAmountCheck invoiceAmountCheck,
+            List<ManualInvoice> manualInvoices);
 
     @Mapping(target = "id", source = "document.id")
     @Mapping(target = "gratis", source = "gratis")
@@ -72,10 +76,17 @@ public interface DocumentMapper {
     @Mapping(target = "saleValueGross", source = "document.saleValueGross")
     @Mapping(target = "lines", source = "document.lines")
     @Mapping(target = "invoiceAmountCheck", source = "invoiceAmountCheck")
+    @Mapping(target = "manualInvoiceAllowed", expression = "java(document.getType().canHaveManualInvoice())")
+    @Mapping(target = "manualInvoices", source = "manualInvoices")
     DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis,
             List<LinkedKsefInvoice> ksefInvoices, List<DeliveryCorrectionResponse> corrections,
             CorrectedDelivery corrected, CorrectionTotals correctionTotals, LinkedDelivery correctionOf,
-            InvoiceAmountCheck invoiceAmountCheck);
+            InvoiceAmountCheck invoiceAmountCheck, List<ManualInvoice> manualInvoices);
+
+    @Mapping(target = "supplierId", source = "supplier.id")
+    @Mapping(target = "supplierName", source = "supplier.name")
+    @Mapping(target = "createdBy", source = "createdBy.displayName")
+    ManualInvoice toManualInvoice(DocumentManualInvoice invoice);
 
     /** Korekta przypięta do przyjęcia: dane dokumentu korekty i kto ją przypiął. */
     @Mapping(target = "id", source = "correction.id")

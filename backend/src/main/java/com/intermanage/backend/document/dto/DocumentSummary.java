@@ -28,5 +28,7 @@ public record DocumentSummary(
         /** Korekta: przyjęcie, do którego ją przypięto. */
         LinkedDelivery correctionOf,
         /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
-        InvoiceAmountCheck invoiceAmountCheck) {
+        InvoiceAmountCheck invoiceAmountCheck,
+        /** Faktury spoza KSeF wpisane ręcznie (przyjęcia i ich korekty). */
+        List<ManualInvoice> manualInvoices) {
 }

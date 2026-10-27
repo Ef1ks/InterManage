@@ -2,11 +2,13 @@ package com.intermanage.backend.document.dto;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Przyjęcie PZ (po korektach) porównane pozycja po pozycji z fakturami KSeF: pozycje faktur łączą się z artykułami
- * przyjęcia po kodzie EAN (GTIN z faktury, także dawne EAN-y artykułu z kartoteki). {@code rows}: najpierw różnice,
- * od największej. {@code unavailable}: faktury, których XML nie udało się teraz pobrać (np. limit KSeF).
+ * przyjęcia po kodzie EAN (GTIN z faktury, także dawne EAN-y artykułu z kartoteki) albo ręcznie połączone
+ * ({@link com.intermanage.backend.document.entity.InvoiceComparisonMatch}). {@code rows}: najpierw różnice, od
+ * największej. {@code unavailable}: faktury, których XML nie udało się teraz pobrać (np. limit KSeF).
  */
 public record InvoiceComparison(
         List<String> invoices,
@@ -19,8 +21,10 @@ public record InvoiceComparison(
     }
 
     /**
-     * Artykuł: wartości z przyjęcia i z faktur ({@code null}, gdy go tam nie ma), {@code difference} = faktura -
-     * przyjęcie. {@code name}: z przyjęcia, a gdy go tam nie ma - z faktury.
+     * Artykuł (albo kilka połączonych): wartości z przyjęcia i z faktur ({@code null}, gdy go tam nie ma),
+     * {@code difference} = faktura - przyjęcie. {@code name}: z przyjęcia, a gdy go tam nie ma - z faktury. Do
+     * łączenia: {@code itm8s} - artykuły przyjęcia w wierszu, {@code invoiceKeys} - pozycje faktury ("ean:…" albo
+     * "name:…"), {@code matchIds} - ręczne połączenia, które złożyły ten wiersz (puste, gdy połączył go EAN).
      */
     public record Row(
             Status status,
@@ -34,7 +38,10 @@ public record InvoiceComparison(
             BigDecimal invoiceQuantity,
             BigDecimal invoicePrice,
             BigDecimal invoiceValue,
-            BigDecimal difference) {
+            BigDecimal difference,
+            List<String> itm8s,
+            List<String> invoiceKeys,
+            List<UUID> matchIds) {
     }
 
     /**

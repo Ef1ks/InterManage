@@ -1,31 +1,42 @@
 import { useState } from 'react'
-import { DownloadIcon, LinkIcon, UnlinkIcon } from 'lucide-react'
+import { DownloadIcon, LinkIcon, PlusIcon, Trash2Icon, UnlinkIcon } from 'lucide-react'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
+import { DateField, Form, FormActions, TextField } from '@/components/form'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { useCan } from '@/features/auth/api'
-import { useDocumentKsefLinks, useKsefInvoiceCandidates } from '@/features/documents/api'
+import {
+  useDocumentKsefLinks,
+  useKsefInvoiceCandidates,
+  useManualInvoices,
+  useSuggestedSupplier,
+} from '@/features/documents/api'
 import { formatMoney } from '@/features/documents/format'
 import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { InvoiceComparisonPanel } from '@/features/documents/InvoiceComparisonPanel'
+import { AddSupplierForm, SupplierPicker } from '@/features/documents/SupplierPicker'
 import { useDownloadInvoice } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
-import type { Document, KsefInvoiceCandidate, LinkedKsefInvoice } from '@/lib/types'
+import { todayIso } from '@/lib/dates'
+import { applyServerErrors } from '@/lib/form-errors'
+import type { Document, KsefInvoiceCandidate, LinkedKsefInvoice, ManualInvoice } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
 /**
- * Przyjęcie PZ ma najwyżej jedną fakturę (faktury jego korekt od dostawcy się nie liczą); korekta od dostawcy może
- * mieć kilka.
+ * Przyjęcie PZ ma najwyżej jedną fakturę - z KSeF albo spoza (faktury jego korekt od dostawcy się nie liczą);
+ * korekta może mieć kilka.
  */
-const canAddInvoice = (target: { type: string; ksefInvoices: LinkedKsefInvoice[] }) =>
-  target.type !== 'PZ' || target.ksefInvoices.every((invoice) => invoice.viaCorrection != null)
+const canAddInvoice = (target: { type: string; ksefInvoices: LinkedKsefInvoice[]; manualInvoices: ManualInvoice[] }) =>
+  target.type !== 'PZ' ||
+  (target.manualInvoices.length === 0 && target.ksefInvoices.every((invoice) => invoice.viaCorrection != null))
 
 /** Dokument, do którego przypinamy fakturę - pełny ze szczegółów albo wiersz listy. */
 type PickerTarget = {
@@ -34,22 +45,41 @@ type PickerTarget = {
   number: string
   typeSingular: string
   purchaseValue: number
+  supplierCode: string | null
   supplierName: string | null
   ksefInvoices: LinkedKsefInvoice[]
+  manualInvoices: ManualInvoice[]
 }
 
 /**
- * Faktura z KSeF przyjęcia albo korekty od dostawcy: dopasowana po numerze dokumentu dostawcy albo przypięta ręcznie.
- * Przypięcie oznacza fakturę jako wprowadzoną, a PDF faktury jest od razu pod ręką.
+ * Faktury przyjęcia albo korekty: z KSeF (dopasowana po numerze dokumentu dostawcy albo przypięta ręcznie; przypięcie
+ * oznacza ją jako wprowadzoną, PDF jest od razu pod ręką) i spoza KSeF, wpisane ręcznie (dostawca z listy i numer).
  */
 export function DocumentKsefInvoices({ storeId, document }: { storeId: string; document: Document }) {
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
   const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
   const canLink = canEditDocuments && canViewKsef
   const { link, unlink } = useDocumentKsefLinks(storeId, document.type, document.id)
+  const manual = useManualInvoices(storeId, document.type.toLowerCase(), document.id)
   const [picking, setPicking] = useState(false)
-  if (!document.ksefLinkable) return null
+  if (!document.ksefLinkable && !document.manualInvoiceAllowed) return null
   const own = document.ksefInvoices.filter((invoice) => invoice.viaCorrection == null)
+  const count = document.ksefInvoices.length + document.manualInvoices.length
+  // Bez KSeF (korekta błędu sklepu albo brak dostępu do faktur KSeF) okno od razu wpisuje fakturę spoza KSeF.
+  const ksefPicker = document.ksefLinkable && canViewKsef
+
+  const restoreManual = (invoice: ManualInvoice) =>
+    manual.restore.mutate(invoice.id, {
+      onError: (error) => toast.error(errorMessage(error, 'Nie udało się przywrócić faktury')),
+    })
+  const onRemoveManual = (invoice: ManualInvoice) =>
+    manual.remove.mutate(invoice.id, {
+      onSuccess: () =>
+        toast.success(`Usunięto fakturę ${invoice.invoiceNumber}`, {
+          action: { label: 'Przywróć', onClick: () => restoreManual(invoice) },
+        }),
+      onError: (error) => toast.error(errorMessage(error, 'Nie udało się usunąć faktury')),
+    })
 
   const onUnlink = (invoice: LinkedKsefInvoice) =>
     unlink.mutate(invoice.id, {
@@ -64,25 +94,27 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
     <section aria-labelledby="ksef-invoices" className="mb-6">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 id="ksef-invoices" className="text-sm font-semibold">
-          {document.ksefInvoices.length > 1 ? 'Faktury z KSeF' : 'Faktura z KSeF'}
+          {count > 1 ? 'Faktury' : 'Faktura'}
         </h3>
-        {canLink && canAddInvoice(document) && (
+        {canEditDocuments && canAddInvoice(document) && (
           <Button variant="outline" size="sm" onClick={() => setPicking(true)}>
-            <LinkIcon />
-            Przypnij fakturę
+            {ksefPicker ? <LinkIcon /> : <PlusIcon />}
+            {ksefPicker ? 'Przypnij fakturę' : 'Dodaj fakturę spoza KSeF'}
           </Button>
         )}
       </div>
 
-      {own.length === 0 && (
-        <p className={cn('text-sm text-muted-foreground', document.ksefInvoices.length > 0 && 'mb-2')}>
-          Brak faktury z KSeF.{' '}
+      {own.length === 0 && document.manualInvoices.length === 0 && (
+        <p className={cn('text-sm text-muted-foreground', count > 0 && 'mb-2')}>
+          Brak faktury.{' '}
           {document.type === 'PZ'
-            ? 'Faktura połączy się sama, gdy numer dokumentu dostawcy będzie taki jak na fakturze - albo przypnij ją ręcznie.'
-            : 'Przypnij fakturę korygującą od dostawcy.'}
+            ? 'Faktura z KSeF połączy się sama, gdy numer dokumentu dostawcy będzie taki jak na fakturze. Możesz ją też przypiąć ręcznie albo wpisać fakturę spoza KSeF.'
+            : document.ksefLinkable
+              ? 'Przypnij fakturę korygującą z KSeF albo wpisz fakturę spoza KSeF.'
+              : 'Jeśli dostawca wystawił fakturę korygującą, wpisz jej numer - trafi do raportu przyjęć.'}
         </p>
       )}
-      {document.ksefInvoices.length > 0 && (
+      {count > 0 && (
         <Card className="gap-0 divide-y py-0">
           {document.ksefInvoices.map((invoice) => (
             <LinkedInvoiceRow
@@ -95,37 +127,112 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
               unlinking={unlink.isPending && unlink.variables === invoice.id}
             />
           ))}
+          {document.manualInvoices.map((invoice) => (
+            <ManualInvoiceRow
+              key={invoice.id}
+              invoice={invoice}
+              onRemove={canEditDocuments ? () => onRemoveManual(invoice) : undefined}
+              removing={manual.remove.isPending && manual.remove.variables === invoice.id}
+            />
+          ))}
         </Card>
       )}
 
       <InvoiceAmountCheck storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
       <InvoiceComparisonPanel storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
 
-      <KsefInvoicePickerDialog storeId={storeId} target={document} open={picking} onOpenChange={setPicking} />
+      <KsefInvoicePickerDialog
+        storeId={storeId}
+        target={document}
+        ksef={ksefPicker}
+        allowManual={document.manualInvoiceAllowed}
+        open={picking}
+        onOpenChange={setPicking}
+      />
     </section>
   )
 }
 
-/** Okno wyboru faktury z przypięciem i toastem „Cofnij” - ze szczegółów dokumentu i prosto z listy. */
+function ManualInvoiceRow({
+  invoice,
+  onRemove,
+  removing,
+}: {
+  invoice: ManualInvoice
+  onRemove?: () => void
+  removing: boolean
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 tabular-nums">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 font-medium">
+          {invoice.invoiceNumber}
+          <Tag>Spoza KSeF</Tag>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {[invoice.supplierName, invoice.issueDate && formatDate(invoice.issueDate)].filter(Boolean).join(' · ')}
+          {' · wpisana ręcznie'}
+          {invoice.createdBy && `, ${invoice.createdBy}`}
+        </div>
+      </div>
+      {onRemove && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Usuń fakturę ${invoice.invoiceNumber}`}
+          title="Usuń"
+          loading={removing}
+          onClick={onRemove}
+        >
+          <Trash2Icon />
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Okno wyboru faktury z przypięciem i toastem „Cofnij” - ze szczegółów dokumentu i prosto z listy. Pod listą faktur
+ * z KSeF jest wpisanie faktury spoza KSeF; bez KSeF ({@code ksef} false) okno od razu je pokazuje.
+ */
 function KsefInvoicePickerDialog({
   storeId,
   target,
+  ksef,
+  allowManual,
   open,
   onOpenChange,
 }: {
   storeId: string
   target: PickerTarget
+  ksef: boolean
+  allowManual: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const { link, unlink } = useDocumentKsefLinks(storeId, target.type, target.id)
+  const [manual, setManual] = useState(false)
+  const changeOpen = (next: boolean) => {
+    onOpenChange(next)
+    if (!next) setManual(false)
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent className="gap-4 p-6 sm:max-w-2xl">
-        {open && (
+        {open && (manual || !ksef) && (
+          <ManualInvoiceForm
+            storeId={storeId}
+            target={target}
+            onBack={ksef ? () => setManual(false) : undefined}
+            onCancel={() => changeOpen(false)}
+            onSaved={() => changeOpen(false)}
+          />
+        )}
+        {open && ksef && !manual && (
           <KsefInvoicePicker
             storeId={storeId}
             document={target}
+            onManual={allowManual ? () => setManual(true) : undefined}
             linking={link.isPending}
             onPick={(candidate) =>
               link.mutate(candidate.id, {
@@ -224,11 +331,13 @@ function KsefInvoicePicker({
   document,
   linking,
   onPick,
+  onManual,
 }: {
   storeId: string
   document: PickerTarget
   linking: boolean
   onPick: (candidate: KsefInvoiceCandidate) => void
+  onManual?: () => void
 }) {
   const [query, setQuery] = useState('')
   const [amountRange, setAmountRange] = useState(true)
@@ -323,7 +432,137 @@ function KsefInvoicePicker({
           </ul>
         )}
       </div>
+      {onManual && (
+        <Button variant="ghost" className="justify-self-start" onClick={onManual}>
+          <PlusIcon />
+          Faktury nie ma w KSeF? Wpisz ją ręcznie
+        </Button>
+      )}
     </>
+  )
+}
+
+type ManualInvoiceValues = { invoiceNumber: string; issueDate: string }
+
+/**
+ * Faktura spoza KSeF (dostawca bez KSeF, faktura papierowa): dostawca z listy dostawców sklepu (podpowiedź: dostawca
+ * dokumentu) albo dodany ręcznie, numer faktury i data wystawienia. Numer idzie do raportu przyjęć.
+ */
+function ManualInvoiceForm({
+  storeId,
+  target,
+  onBack,
+  onCancel,
+  onSaved,
+}: {
+  storeId: string
+  target: PickerTarget
+  onBack?: () => void
+  onCancel: () => void
+  onSaved: () => void
+}) {
+  const { add, remove } = useManualInvoices(storeId, target.type.toLowerCase(), target.id)
+  const suggested = useSuggestedSupplier(storeId, target.supplierCode)
+  const [picked, setPicked] = useState<string | null>(null)
+  const [adding, setAdding] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const selectedId = picked ?? suggested?.id ?? null
+  const {
+    register,
+    handleSubmit,
+    setError,
+    control,
+    formState: { errors },
+  } = useForm<ManualInvoiceValues>({ defaultValues: { invoiceNumber: '', issueDate: '' } })
+
+  if (adding != null) {
+    return (
+      <AddSupplierForm
+        storeId={storeId}
+        initialName={adding}
+        onAdded={(supplier) => {
+          setPicked(supplier.id)
+          setAdding(null)
+        }}
+        onBack={() => setAdding(null)}
+      />
+    )
+  }
+
+  const onSubmit = handleSubmit((values) => {
+    if (!selectedId) return
+    setFormError(null)
+    const number = values.invoiceNumber.trim()
+    add.mutate(
+      { supplierId: selectedId, invoiceNumber: number, issueDate: values.issueDate || null },
+      {
+        onSuccess: (saved) => {
+          onSaved()
+          const created = saved.manualInvoices.find((invoice) => invoice.invoiceNumber === number)
+          toast.success(`Zapisano fakturę ${number}`, {
+            description: `${target.typeSingular} ${target.number} · faktura spoza KSeF.`,
+            action: created ? { label: 'Cofnij', onClick: () => remove.mutate(created.id) } : undefined,
+          })
+        },
+        onError: (error) => setFormError(applyServerErrors(error, setError, ['invoiceNumber', 'issueDate'])),
+      },
+    )
+  })
+
+  return (
+    <Form onSubmit={onSubmit} error={formError}>
+      <DialogHeader>
+        <DialogTitle className="text-lg">
+          Faktura spoza KSeF: {target.typeSingular.toLowerCase()} {target.number}
+        </DialogTitle>
+        <DialogDescription>
+          Dla dostawcy, który nie wystawia faktur w KSeF. Wybierz dostawcę i wpisz numer z faktury - trafi do raportu
+          przyjęć.
+        </DialogDescription>
+      </DialogHeader>
+
+      <SupplierPicker
+        storeId={storeId}
+        selectedId={selectedId}
+        onSelect={setPicked}
+        suggested={suggested}
+        onAdd={setAdding}
+      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TextField
+          label="Numer faktury"
+          autoComplete="off"
+          error={errors.invoiceNumber?.message}
+          {...register('invoiceNumber', {
+            validate: (value) => value.trim() !== '' || 'Podaj numer faktury',
+            maxLength: { value: 60, message: 'Maksymalnie 60 znaków' },
+          })}
+        />
+        <Controller
+          name="issueDate"
+          control={control}
+          render={({ field }) => (
+            <DateField
+              label="Data wystawienia (opcjonalnie)"
+              value={field.value}
+              max={todayIso()}
+              shortcuts={[{ label: 'Dziś', value: todayIso() }]}
+              error={errors.issueDate?.message}
+              onChange={field.onChange}
+            />
+          )}
+        />
+      </div>
+
+      <FormActions>
+        <Button type="button" variant="outline" size="lg" onClick={onBack ?? onCancel}>
+          {onBack ? 'Wróć do faktur z KSeF' : 'Anuluj'}
+        </Button>
+        <Button type="submit" size="lg" loading={add.isPending} disabled={!selectedId}>
+          Zapisz fakturę
+        </Button>
+      </FormActions>
+    </Form>
   )
 }
 
@@ -350,7 +589,7 @@ export function DocumentRowKsef({ storeId, target }: { storeId: string; target: 
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
   const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
   const [picking, setPicking] = useState(false)
-  const empty = target.ksefInvoices.length === 0
+  const empty = target.ksefInvoices.length === 0 && target.manualInvoices.length === 0
   return (
     <div
       className="mt-1 flex flex-wrap items-center gap-1"
@@ -358,20 +597,36 @@ export function DocumentRowKsef({ storeId, target }: { storeId: string; target: 
       onKeyDown={(event) => event.stopPropagation()}
     >
       <KsefInvoiceChips storeId={storeId} invoices={target.ksefInvoices} />
-      {canEditDocuments && canViewKsef && canAddInvoice(target) && (
+      {target.manualInvoices.map((invoice) => (
+        <span
+          key={invoice.id}
+          className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground"
+          title={`Faktura spoza KSeF od ${invoice.supplierName}`}
+        >
+          {invoice.invoiceNumber}
+        </span>
+      ))}
+      {canEditDocuments && canAddInvoice(target) && (
         <>
           <Button
             variant="ghost"
             size={empty ? 'xs' : 'icon-xs'}
             className="text-muted-foreground"
-            aria-label={`Przypnij fakturę z KSeF: ${target.typeSingular.toLowerCase()} ${target.number}`}
-            title="Przypnij fakturę z KSeF"
+            aria-label={`Przypnij fakturę: ${target.typeSingular.toLowerCase()} ${target.number}`}
+            title={canViewKsef ? 'Przypnij fakturę z KSeF albo wpisz spoza KSeF' : 'Wpisz fakturę spoza KSeF'}
             onClick={() => setPicking(true)}
           >
             <LinkIcon />
             {empty && 'Przypnij fakturę'}
           </Button>
-          <KsefInvoicePickerDialog storeId={storeId} target={target} open={picking} onOpenChange={setPicking} />
+          <KsefInvoicePickerDialog
+            storeId={storeId}
+            target={target}
+            ksef={canViewKsef}
+            allowManual
+            open={picking}
+            onOpenChange={setPicking}
+          />
         </>
       )}
     </div>

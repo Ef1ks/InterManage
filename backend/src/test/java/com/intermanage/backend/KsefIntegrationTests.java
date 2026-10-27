@@ -480,8 +480,38 @@ class KsefIntegrationTests {
                 .andExpect(jsonPath("$.rows[?(@.status == 'MISSING_ON_INVOICE')].difference").value(contains(-100.0)))
                 .andExpect(jsonPath("$.rows[?(@.status == 'NO_CODE')].invoiceValue").value(contains(100.0)));
         // XML jest już w bazie - drugie porównanie nie pyta KSeF.
-        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner)).andExpect(status().isOk());
+        String comparison = mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         verify(ksef, times(1)).invoiceXml(anyString(), anyString());
+
+        // Ręczne połączenie: pozycja faktury bez kodu to jogurt z przyjęcia - porównują się razem.
+        String noCode = JsonPath.<List<String>>read(comparison,
+                "$.rows[?(@.status == 'NO_CODE')].invoiceKeys[0]").getFirst();
+        String matchUrl = pz + delivery + "/invoice-comparison/matches";
+        send(owner, post(matchUrl), "{\"invoiceKeys\":" + JsonPath.parse(List.of(noCode)).jsonString()
+                + ",\"itm8s\":[\"0000000009999\"]}")
+                .andExpect(status().isBadRequest());
+        String match = JsonPath.read(send(owner, post(matchUrl), "{\"invoiceKeys\":"
+                        + JsonPath.parse(List.of(noCode)).jsonString() + ",\"itm8s\":[\"0000000000002\"]}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
+                .andExpect(jsonPath("$.rows.length()").value(2))
+                .andExpect(jsonPath("$.rows[?(@.itm8 == '0000000000002')].status").value(contains("MATCH")))
+                .andExpect(jsonPath("$.rows[?(@.itm8 == '0000000000002')].matchIds[0]").value(contains(match)));
+        mvc.perform(delete(matchUrl + "/" + match).cookie(owner).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
+                .andExpect(jsonPath("$.rows.length()").value(3));
+        mvc.perform(post(matchUrl + "/" + match + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
+                .andExpect(jsonPath("$.rows.length()").value(2));
+
+        // Przyjęcie z fakturą z KSeF nie dostaje drugiej spoza KSeF.
+        String supplier = JsonPath.read(send(owner, post("/api/stores/" + storeId + "/suppliers"),
+                "{\"name\":\"Dostawca bez KSeF\"}").andReturn().getResponse().getContentAsString(), "$.id");
+        send(owner, post(pz + delivery + "/manual-invoices"),
+                "{\"supplierId\":\"" + supplier + "\",\"invoiceNumber\":\"R/1/26\"}")
+                .andExpect(status().isConflict());
 
         mvc.perform(delete(url(storeId, "/invoices/" + fv41 + "/documents/" + withoutNumber)).cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$.entered").value(false));

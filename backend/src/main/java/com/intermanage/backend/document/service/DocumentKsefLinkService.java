@@ -27,8 +27,10 @@ import com.intermanage.backend.document.dto.LinkedKsefInvoice;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
+import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentKsefInvoiceRepository;
+import com.intermanage.backend.document.repository.DocumentManualInvoiceRepository;
 import com.intermanage.backend.document.repository.DocumentRepository;
 import com.intermanage.backend.document.repository.DocumentSearch;
 import com.intermanage.backend.ksef.entity.KsefConnection;
@@ -56,6 +58,7 @@ public class DocumentKsefLinkService {
     private static final int CANDIDATES = 30;
 
     private final DocumentKsefInvoiceRepository links;
+    private final DocumentManualInvoiceRepository manualInvoices;
     private final DocumentRepository documents;
     private final KsefInvoiceRepository invoices;
     private final KsefConnectionRepository connections;
@@ -65,8 +68,10 @@ public class DocumentKsefLinkService {
 
     public DocumentKsefLinkService(DocumentKsefInvoiceRepository links, DocumentRepository documents,
             KsefInvoiceRepository invoices, KsefConnectionRepository connections,
-            KsefInternalIdRepository internalIds, SupplierRepository suppliers, AppUserRepository users) {
+            KsefInternalIdRepository internalIds, SupplierRepository suppliers, AppUserRepository users,
+            DocumentManualInvoiceRepository manualInvoices) {
         this.links = links;
+        this.manualInvoices = manualInvoices;
         this.documents = documents;
         this.invoices = invoices;
         this.connections = connections;
@@ -240,9 +245,12 @@ public class DocumentKsefLinkService {
             if (current.stream().anyMatch(linked -> linked.id().equals(invoice.getId()))) {
                 return;
             }
-            if (!current.isEmpty()) {
+            String existing = !current.isEmpty() ? current.getFirst().invoiceNumber()
+                    : manualInvoices.findActiveByDocumentIds(List.of(document.getId())).stream()
+                            .map(DocumentManualInvoice::getInvoiceNumber).findFirst().orElse(null);
+            if (existing != null) {
                 throw ApiException.conflict("Przyjęcie " + document.getNumber() + " ma już fakturę "
-                        + current.getFirst().invoiceNumber() + ". Do przyjęcia przypina się jedną fakturę.");
+                        + existing + ". Do przyjęcia przypina się jedną fakturę.");
             }
         }
         if (links.findActive(document.getId(), invoice.getId()).isEmpty()) {

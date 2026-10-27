@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
@@ -26,6 +28,8 @@ import com.intermanage.backend.document.dto.DocumentPage;
 import com.intermanage.backend.document.dto.DocumentResponse;
 import com.intermanage.backend.document.dto.DocumentsOverview;
 import com.intermanage.backend.document.dto.InvoiceComparison;
+import com.intermanage.backend.document.dto.InvoiceComparisonMatchRequest;
+import com.intermanage.backend.document.dto.InvoiceComparisonMatchResponse;
 import com.intermanage.backend.document.dto.KsefInvoiceCandidate;
 import com.intermanage.backend.document.dto.LinkDocumentRequest;
 import com.intermanage.backend.document.dto.LinkKsefInvoiceRequest;
@@ -204,6 +208,37 @@ public class DocumentController {
     public InvoiceComparison invoiceComparison(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id) {
         return invoiceComparison.compare(storeId, type, id);
+    }
+
+    /**
+     * Ręcznie łączy pozycje faktury z artykułami przyjęcia (np. jedna pozycja rozbita na fakturze na dwie, zły kod od
+     * dostawcy) - porównują się razem.
+     */
+    @PostMapping("/{type}/{id}/invoice-comparison/matches")
+    @PreAuthorize(EDIT)
+    @ResponseStatus(HttpStatus.CREATED)
+    public InvoiceComparisonMatchResponse matchInvoiceItems(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @Valid @RequestBody InvoiceComparisonMatchRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return new InvoiceComparisonMatchResponse(invoiceComparison.match(storeId, type, id, request.invoiceKeys(),
+                request.itm8s(), principal.getId()));
+    }
+
+    /** Rozłącza (znacznik); „Przywróć” to {@code POST …/restore}. */
+    @DeleteMapping("/{type}/{id}/invoice-comparison/matches/{matchId}")
+    @PreAuthorize(EDIT)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unmatchInvoiceItems(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id,
+            @PathVariable UUID matchId, @AuthenticationPrincipal AppUserPrincipal principal) {
+        invoiceComparison.unmatch(storeId, type, id, matchId, principal.getId());
+    }
+
+    @PostMapping("/{type}/{id}/invoice-comparison/matches/{matchId}/restore")
+    @PreAuthorize(EDIT)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void restoreInvoiceItemsMatch(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id,
+            @PathVariable UUID matchId) {
+        invoiceComparison.restoreMatch(storeId, type, id, matchId);
     }
 
     /** Cofa potwierdzenie różnicy kwot (znacznik). */
