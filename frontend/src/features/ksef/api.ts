@@ -4,7 +4,14 @@ import { toast } from 'sonner'
 
 import { api, downloadFile } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
-import type { DocumentCandidate, KsefInvoice, KsefInvoicePage, KsefOverview, KsefSettings } from '@/lib/types'
+import type {
+  DocumentCandidate,
+  KsefInvoice,
+  KsefInvoiceDocument,
+  KsefInvoicePage,
+  KsefOverview,
+  KsefSettings,
+} from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 /** Faktury i połączenie z KSeF są osobne dla każdego sklepu, więc sklep jest częścią klucza. */
@@ -81,6 +88,18 @@ export function useDownloadInvoice(storeId: string) {
   return useMutation({
     mutationFn: ({ invoice, format }: { invoice: Pick<KsefInvoice, 'id' | 'ksefNumber'>; format: 'pdf' | 'xml' }) =>
       downloadFile(`${ksefPath(storeId)}/invoices/${invoice.id}/${format}`, `${invoice.ksefNumber}.${format}`),
+    meta: { invalidates: false },
+  })
+}
+
+/** Bon dostawy przyjęcia z tą fakturą - także z innego sklepu tej samej firmy. */
+export function useDownloadCompanyDeliveryNote(storeId: string) {
+  return useMutation({
+    mutationFn: ({ invoiceId, document }: { invoiceId: string; document: Pick<KsefInvoiceDocument, 'id' | 'number'> }) =>
+      downloadFile(
+        `${ksefPath(storeId)}/invoices/${invoiceId}/documents/${document.id}/delivery-note`,
+        `bon-dostawy-${document.number}.pdf`,
+      ),
     meta: { invalidates: false },
   })
 }

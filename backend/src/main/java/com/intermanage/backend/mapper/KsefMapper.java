@@ -28,17 +28,20 @@ public interface KsefMapper {
     KsefSkippedSupplierResponse toResponse(KsefSkippedSupplier supplier);
 
     /**
-     * {@code deliveries}: przyjęcia PZ sklepu z numerem faktury i dokumenty przypięte ręcznie, {@code entry}: ręczne
-     * oznaczenie w sklepie albo {@code null}; razem dają "wprowadzona".
+     * {@code deliveries}: przyjęcia PZ sklepów firmy z numerem faktury i dokumenty przypięte ręcznie, {@code entry}:
+     * ręczne oznaczenie w sklepie firmy (najpierw w bieżącym) albo {@code null}; razem dają "wprowadzona".
+     * {@code enteredStore}: sklep, w którym oznaczono ręcznie ("10023 · Kisielińska").
      */
     @Mapping(target = "id", source = "invoice.id")
     @Mapping(target = "internalIds", expression = "java(internalIds(invoice))")
     @Mapping(target = "entered", expression = "java(entry != null || !deliveries.isEmpty())")
     @Mapping(target = "enteredBy", source = "entry.enteredBy.displayName")
     @Mapping(target = "enteredAt", source = "entry.enteredAt")
+    @Mapping(target = "enteredStoreId", source = "entry.id.storeId")
+    @Mapping(target = "enteredStore", source = "enteredStore")
     @Mapping(target = "deliveries", source = "deliveries")
     KsefInvoiceSummary toSummary(KsefInvoice invoice, KsefInvoiceEntry entry,
-            List<KsefInvoiceSummary.Delivery> deliveries, boolean supplierSkipped);
+            List<KsefInvoiceSummary.Delivery> deliveries, boolean supplierSkipped, String enteredStore);
 
     default List<String> internalIds(KsefInvoice invoice) {
         return invoice.getInternalIds().stream().map(KsefInvoice.InternalIdRef::internalId).sorted().toList();

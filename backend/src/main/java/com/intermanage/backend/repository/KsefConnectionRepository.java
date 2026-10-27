@@ -16,4 +16,8 @@ public interface KsefConnectionRepository extends JpaRepository<KsefConnection, 
             select c from KsefConnection c where c.nip = :nip
             order by case when c.testOk = true then 0 else 1 end, c.updatedAt desc""")
     List<KsefConnection> findByNip(String nip);
+
+    /** Sklepy firmy: z połączeniem z tym NIP-em. */
+    @Query("select c.storeId from KsefConnection c where c.nip = :nip")
+    List<UUID> findStoreIdsByNip(String nip);
 }

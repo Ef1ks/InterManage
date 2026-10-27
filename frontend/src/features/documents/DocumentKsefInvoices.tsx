@@ -11,6 +11,7 @@ import { useCan } from '@/features/auth/api'
 import { useDocumentKsefLinks, useKsefInvoiceCandidates } from '@/features/documents/api'
 import { formatMoney } from '@/features/documents/format'
 import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
+import { InvoiceComparisonPanel } from '@/features/documents/InvoiceComparisonPanel'
 import { useDownloadInvoice } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
@@ -98,6 +99,7 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
       )}
 
       <InvoiceAmountCheck storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
+      <InvoiceComparisonPanel storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
 
       <KsefInvoicePickerDialog storeId={storeId} target={document} open={picking} onOpenChange={setPicking} />
     </section>

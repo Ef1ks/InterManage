@@ -12,12 +12,18 @@ import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import com.intermanage.backend.entity.DeliveryCorrection;
 import com.intermanage.backend.entity.Document;
+import com.intermanage.backend.entity.DocumentKsefInvoice;
+import com.intermanage.backend.entity.DocumentLine;
 import com.intermanage.backend.entity.DocumentType;
+import com.intermanage.backend.entity.KsefInvoice;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 
 /**
  * Wyszukiwanie i sortowanie listy dokumentów jednego typu po stronie bazy (dokumentów są tysiące, przeglądarka
@@ -75,6 +81,78 @@ public final class DocumentSearch {
                         cb.like(plain(cb, root.get("supplierDocumentNumber")), contains)));
             }
             return cb.and(all.toArray(Predicate[]::new));
+        };
+    }
+
+    /** Filtr „ma / nie ma” (np. faktury, korekt) z parametru API: {@code with}, {@code without}, inaczej wszystkie. */
+    public enum Presence {
+        ALL, WITH, WITHOUT;
+
+        public static Presence of(String value) {
+            return "with".equalsIgnoreCase(value) ? WITH : "without".equalsIgnoreCase(value) ? WITHOUT : ALL;
+        }
+    }
+
+    /**
+     * Dokumenty z linią, w której każde słowo jest fragmentem nazwy, marki, EAN-u albo ITM8 artykułu (wszystkie słowa
+     * w tej samej linii, bez względu na wielkość liter i polskie znaki).
+     */
+    public static Specification<Document> withProduct(List<String> words) {
+        return (root, query, cb) -> {
+            if (words.isEmpty()) {
+                return cb.conjunction();
+            }
+            Subquery<Integer> subquery = query.subquery(Integer.class);
+            Root<DocumentLine> line = subquery.from(DocumentLine.class);
+            List<Predicate> all = new ArrayList<>();
+            all.add(cb.equal(line.get("document"), root));
+            for (String word : words) {
+                String contains = "%" + word + "%";
+                all.add(cb.or(
+                        cb.like(plain(cb, line.get("name")), contains),
+                        cb.like(plain(cb, line.get("brand")), contains),
+                        cb.like(line.get("ean"), contains),
+                        cb.like(line.get("itm8"), contains)));
+            }
+            subquery.select(cb.literal(1)).where(all.toArray(Predicate[]::new));
+            return cb.exists(subquery);
+        };
+    }
+
+    /**
+     * Przyjęcia i korekty od dostawcy z fakturą KSeF albo bez: przypiętą (nieodpiętą) albo, gdy sklep jest połączony
+     * z KSeF ({@code nip}), z faktury firmy o numerze równym numerowi dokumentu dostawcy.
+     */
+    public static Specification<Document> withInvoice(Presence presence, String nip) {
+        return (root, query, cb) -> {
+            if (presence == Presence.ALL) {
+                return cb.conjunction();
+            }
+            Subquery<Integer> linked = query.subquery(Integer.class);
+            Root<DocumentKsefInvoice> link = linked.from(DocumentKsefInvoice.class);
+            linked.select(cb.literal(1)).where(cb.equal(link.get("document"), root), cb.isNull(link.get("unlinkedAt")));
+            Predicate has = cb.exists(linked);
+            if (nip != null) {
+                Subquery<Integer> byNumber = query.subquery(Integer.class);
+                Root<KsefInvoice> invoice = byNumber.from(KsefInvoice.class);
+                byNumber.select(cb.literal(1)).where(cb.equal(invoice.get("nip"), nip),
+                        cb.equal(cb.upper(invoice.get("invoiceNumber")), cb.upper(root.get("supplierDocumentNumber"))));
+                has = cb.or(has, cb.and(cb.equal(root.get("type"), DocumentType.PZ), cb.exists(byNumber)));
+            }
+            return presence == Presence.WITH ? has : cb.not(has);
+        };
+    }
+
+    /** Przyjęcia z przypiętymi (nieodpiętymi) korektami albo bez. */
+    public static Specification<Document> withCorrections(Presence presence) {
+        return (root, query, cb) -> {
+            if (presence == Presence.ALL) {
+                return cb.conjunction();
+            }
+            Subquery<Integer> subquery = query.subquery(Integer.class);
+            Root<DeliveryCorrection> link = subquery.from(DeliveryCorrection.class);
+            subquery.select(cb.literal(1)).where(cb.equal(link.get("delivery"), root), cb.isNull(link.get("unlinkedAt")));
+            return presence == Presence.WITH ? cb.exists(subquery) : cb.not(cb.exists(subquery));
         };
     }
 

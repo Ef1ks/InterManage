@@ -2,6 +2,8 @@ package com.intermanage.backend.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -32,6 +34,7 @@ import com.intermanage.backend.entity.KsefInternalId;
 import com.intermanage.backend.entity.KsefInvoice;
 import com.intermanage.backend.entity.KsefInvoiceEntry;
 import com.intermanage.backend.entity.KsefInvoiceXml;
+import com.intermanage.backend.entity.Store;
 import com.intermanage.backend.entity.KsefSkippedSupplier;
 import com.intermanage.backend.entity.KsefSyncState;
 import com.intermanage.backend.exception.ApiException;
@@ -39,6 +42,7 @@ import com.intermanage.backend.mapper.KsefMapper;
 import com.intermanage.backend.repository.AppUserRepository;
 import com.intermanage.backend.repository.DocumentKsefInvoiceRepository;
 import com.intermanage.backend.repository.DocumentRepository;
+import com.intermanage.backend.repository.StoreRepository;
 import com.intermanage.backend.repository.KsefConnectionRepository;
 import com.intermanage.backend.repository.KsefInternalIdRepository;
 import com.intermanage.backend.repository.KsefInvoiceEntryRepository;
@@ -74,14 +78,16 @@ public class KsefInvoiceService {
     private final KsefSyncStateRepository syncStates;
     private final KsefInvoiceEntryRepository entries;
     private final DocumentKsefInvoiceRepository documentLinks;
+    private final StoreRepository stores;
 
     public KsefInvoiceService(KsefInvoiceRepository invoices, KsefConnectionRepository connections,
             KsefInternalIdRepository internalIds, KsefSkippedSupplierRepository skippedSuppliers,
             DocumentRepository documents, AppUserRepository users, KsefSessionService sessions, KsefClient client,
             KsefMapper mapper, KsefInvoicePdf invoicePdf, KsefInvoiceXmlRepository xmlFiles,
             KsefRateLimiter limiter, KsefSyncService syncService, KsefSyncStateRepository syncStates,
-            KsefInvoiceEntryRepository entries, DocumentKsefInvoiceRepository documentLinks) {
+            KsefInvoiceEntryRepository entries, DocumentKsefInvoiceRepository documentLinks, StoreRepository stores) {
         this.documentLinks = documentLinks;
+        this.stores = stores;
         this.invoices = invoices;
         this.connections = connections;
         this.internalIds = internalIds;
@@ -219,28 +225,54 @@ public class KsefInvoiceService {
         if (page.isEmpty()) {
             return List.of();
         }
-        Map<String, List<Document>> deliveries = documents.findDeliveriesBySupplierDocument(storeId,
+        // Faktury są wspólne dla firmy: dokumenty i oznaczenia z każdego jej sklepu (najpierw z bieżącego).
+        List<UUID> companyStores = companyStores(storeId);
+        List<UUID> ids = page.stream().map(KsefInvoice::getId).toList();
+        Map<String, List<Document>> deliveries = documents.findCompanyDeliveriesBySupplierDocument(companyStores,
                         page.stream().map(invoice -> normalized(invoice.getInvoiceNumber())).distinct().toList())
                 .stream().collect(Collectors.groupingBy(document -> normalized(document.getSupplierDocumentNumber())));
         Set<String> skipped = skippedSuppliers.findActive(storeId).stream().map(KsefSkippedSupplier::getNip)
                 .collect(Collectors.toSet());
-        Map<UUID, KsefInvoiceEntry> marked = entries.findInStore(storeId,
-                        page.stream().map(KsefInvoice::getId).toList())
-                .stream().collect(Collectors.toMap(entry -> entry.getId().invoiceId(), Function.identity()));
-        Map<UUID, List<Document>> linked = documentLinks.findActiveByInvoiceIds(storeId,
-                        page.stream().map(KsefInvoice::getId).toList())
+        Map<UUID, KsefInvoiceEntry> marked = new HashMap<>();
+        for (KsefInvoiceEntry entry : entries.findInStores(companyStores, ids)) {
+            marked.merge(entry.getId().invoiceId(), entry,
+                    (first, second) -> second.getId().storeId().equals(storeId) ? second : first);
+        }
+        Map<UUID, List<Document>> linked = documentLinks.findActiveByInvoiceIdsInStores(companyStores, ids)
                 .stream().collect(Collectors.groupingBy(link -> link.getInvoice().getId(),
                         Collectors.mapping(DocumentKsefInvoice::getDocument, Collectors.toList())));
+        Map<UUID, String> storeNames = new HashMap<>();
+        stores.findAllById(companyStores).forEach(store -> storeNames.put(store.getId(), storeLabel(store)));
         return page.stream()
-                .map(invoice -> mapper.toSummary(invoice, marked.get(invoice.getId()),
-                        documentsOf(deliveries.getOrDefault(normalized(invoice.getInvoiceNumber()), List.of()),
-                                linked.getOrDefault(invoice.getId(), List.of())),
-                        skipped.contains(invoice.getSellerNip())))
+                .map(invoice -> {
+                    KsefInvoiceEntry entry = marked.get(invoice.getId());
+                    return mapper.toSummary(invoice, entry,
+                            documentsOf(storeId, deliveries.getOrDefault(normalized(invoice.getInvoiceNumber()),
+                                    List.of()), linked.getOrDefault(invoice.getId(), List.of())),
+                            skipped.contains(invoice.getSellerNip()),
+                            entry != null ? storeNames.get(entry.getId().storeId()) : null);
+                })
                 .toList();
     }
 
-    /** Przyjęcia z numerem faktury, potem dokumenty przypięte ręcznie (bez powtórzeń). */
-    private static List<KsefInvoiceSummary.Delivery> documentsOf(List<Document> byNumber, List<Document> linked) {
+    /** Sklepy firmy (z połączeniem z tym samym NIP-em), zawsze z bieżącym. */
+    private List<UUID> companyStores(UUID storeId) {
+        List<UUID> result = new ArrayList<>(List.of(storeId));
+        connections.findById(storeId).ifPresent(connection -> connections.findStoreIdsByNip(connection.getNip())
+                .stream().filter(id -> !id.equals(storeId)).forEach(result::add));
+        return result;
+    }
+
+    private static String storeLabel(Store store) {
+        return store.getNumber() + " · " + store.getName();
+    }
+
+    /**
+     * Przyjęcia z numerem faktury, potem dokumenty przypięte ręcznie (bez powtórzeń); dokumenty bieżącego sklepu przed
+     * dokumentami innych sklepów firmy.
+     */
+    private static List<KsefInvoiceSummary.Delivery> documentsOf(UUID storeId, List<Document> byNumber,
+            List<Document> linked) {
         List<KsefInvoiceSummary.Delivery> result = new ArrayList<>();
         for (Document document : byNumber) {
             result.add(delivery(document, false));
@@ -250,12 +282,28 @@ public class KsefInvoiceService {
                 result.add(delivery(document, true));
             }
         }
+        result.sort(Comparator.comparing(delivery -> !delivery.storeId().equals(storeId)));
         return result;
     }
 
     private static KsefInvoiceSummary.Delivery delivery(Document document, boolean linked) {
         return new KsefInvoiceSummary.Delivery(document.getId(), document.getType().name(),
-                document.getType().singular(), document.getNumber(), linked);
+                document.getType().singular(), document.getNumber(), linked, document.getStore().getId(),
+                storeLabel(document.getStore()));
+    }
+
+    /**
+     * Przyjęcie PZ sklepu firmy z tą fakturą (z jej numerem albo przypięte) - do pobrania bonu dostawy z innego sklepu
+     * tej samej firmy. Zwraca id sklepu przyjęcia.
+     */
+    @Transactional(readOnly = true)
+    public UUID companyDeliveryStore(UUID storeId, UUID invoiceId, UUID documentId) {
+        KsefInvoice invoice = visible(storeId, invoiceId);
+        return summaries(storeId, List.of(invoice)).getFirst().deliveries().stream()
+                .filter(delivery -> delivery.id().equals(documentId) && delivery.type().equals("PZ"))
+                .map(KsefInvoiceSummary.Delivery::storeId)
+                .findFirst()
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono przyjęcia tej faktury"));
     }
 
     /** Jedna faktura po zmianie (np. przypięciu dokumentu) - w formie wiersza listy. */

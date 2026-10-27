@@ -15,4 +15,10 @@ public interface KsefInvoiceEntryRepository extends JpaRepository<KsefInvoiceEnt
             select e from KsefInvoiceEntry e left join fetch e.enteredBy
             where e.id.storeId = :storeId and e.id.invoiceId in :invoiceIds""")
     List<KsefInvoiceEntry> findInStore(UUID storeId, Collection<UUID> invoiceIds);
+
+    /** Ręczne oznaczenia faktur w podanych sklepach (sklepach firmy). */
+    @Query("""
+            select e from KsefInvoiceEntry e left join fetch e.enteredBy
+            where e.id.storeId in :storeIds and e.id.invoiceId in :invoiceIds""")
+    List<KsefInvoiceEntry> findInStores(Collection<UUID> storeIds, Collection<UUID> invoiceIds);
 }

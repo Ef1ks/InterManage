@@ -312,7 +312,9 @@ public class DocumentKsefLinkService {
                 .collect(Collectors.toMap(Supplier::getCode, Supplier::getNip, (first, second) -> first));
     }
 
-    private String nip(UUID storeId) {
+    /** NIP firmy z połączenia KSeF sklepu; {@code null}, gdy sklep nie jest połączony. */
+    @Transactional(readOnly = true)
+    public String nip(UUID storeId) {
         return connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
     }
 

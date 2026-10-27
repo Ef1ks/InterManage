@@ -82,10 +82,11 @@ public class KsefInvoiceReader {
     /**
      * Pozycja faktury (albo zamówienia przy zaliczce); {@code beforeCorrection}: wiersz "przed korektą",
      * {@code grossComputed}: cenę albo wartość brutto wyliczyliśmy ze stawki, bo faktura podaje tylko netto.
+     * {@code gtin}: kod towaru (EAN) z pozycji, gdy faktura go podaje.
      */
     public record Line(String number, String name, List<String> details, BigDecimal quantity, String unit,
             BigDecimal unitNet, BigDecimal unitGross, BigDecimal discount, String rate, BigDecimal net,
-            BigDecimal vat, BigDecimal gross, boolean beforeCorrection, boolean grossComputed) {
+            BigDecimal vat, BigDecimal gross, boolean beforeCorrection, boolean grossComputed, String gtin) {
     }
 
     /** Podsumowanie stawki: netto, VAT i VAT w złotych przy fakturze w obcej walucie. */
@@ -340,7 +341,7 @@ public class KsefInvoiceReader {
         return withGross(new Line(row.text("NrWierszaFa"), row.text("P_7"), details, row.decimal("P_8B"),
                 row.text("P_8A"), row.decimal("P_9A"), row.decimal("P_9B"), row.decimal("P_10"),
                 rateLabel(rate, row.text("P_12_XII")), row.decimal("P_11"), row.decimal("P_11Vat"),
-                row.decimal("P_11A"), "1".equals(row.text("StanPrzed")), false), rate);
+                row.decimal("P_11A"), "1".equals(row.text("StanPrzed")), false, row.text("GTIN")), rate);
     }
 
     /**
@@ -373,7 +374,7 @@ public class KsefInvoiceReader {
         boolean computed = unitGross != line.unitGross() || gross != line.gross();
         return new Line(line.number(), line.name(), line.details(), line.quantity(), line.unit(), line.unitNet(),
                 unitGross, line.discount(), line.rate(), line.net(), vat, gross, line.beforeCorrection(),
-                line.grossComputed() || computed);
+                line.grossComputed() || computed, line.gtin());
     }
 
     /** Stawka P_12 jako procent: "23" → 23, stawki bez podatku → 0, inne (np. OSS spoza listy) → {@code null}. */
@@ -400,7 +401,8 @@ public class KsefInvoiceReader {
         String rate = row.text("P_12Z") != null ? row.text("P_12Z") : row.text("P_12Z_XII");
         return withGross(new Line(row.text("NrWierszaZam"), row.text("P_7Z"), details, row.decimal("P_8BZ"),
                 row.text("P_8AZ"), row.decimal("P_9AZ"), null, null, rateLabel(rate, row.text("P_12Z_XII")),
-                row.decimal("P_11NettoZ"), row.decimal("P_11VatZ"), null, "1".equals(row.text("StanPrzedZ")), false),
+                row.decimal("P_11NettoZ"), row.decimal("P_11VatZ"), null, "1".equals(row.text("StanPrzedZ")), false,
+                row.text("GTINZ")),
                 rate);
     }
 

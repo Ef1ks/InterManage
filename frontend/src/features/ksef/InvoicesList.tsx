@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import {
   CircleAlertIcon,
   CircleCheckIcon,
+  DownloadIcon,
   EllipsisIcon,
   EyeOffIcon,
   FileCodeIcon,
@@ -38,6 +39,7 @@ import {
   type KindFilter,
   type KsefColumn,
   type KsefFilters,
+  useDownloadCompanyDeliveryNote,
   useDownloadInvoice,
   useInvoiceDocumentLinks,
   useKsefInvoices,
@@ -376,7 +378,8 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
     )
   const settings = useKsefSettingsMutations(storeId)
   const foreign = invoice.currency !== 'PLN'
-  const manual = invoice.enteredAt !== null
+  // Ręczne oznaczenie cofa sklep, który je zrobił; z innego sklepu firmy widać je tylko jako status.
+  const manual = invoice.enteredAt !== null && invoice.enteredStoreId === storeId
   const canViewDocuments = useCan('DOCUMENTS', 'VIEW')
   const documentLinks = useInvoiceDocumentLinks(storeId)
   const [picking, setPicking] = useState(false)
@@ -428,7 +431,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
     <TableRow className={cn('tabular-nums', invoice.supplierSkipped && 'text-muted-foreground')}>
       {/* Szerokości kolumn trzymają tabelę w karcie bez przewijania w bok; długie teksty są skracane z podpowiedzią. */}
       <TableCell className="pr-0 pl-4">
-        <EnteredStatus invoice={invoice} />
+        <EnteredStatus storeId={storeId} invoice={invoice} />
       </TableCell>
       <TableCell className="max-w-56 py-3">
         <div className="flex min-w-0 items-center gap-2 font-medium">
@@ -480,7 +483,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
         {foreign && <span className="ml-1 text-xs font-normal text-muted-foreground">{invoice.currency}</span>}
       </TableCell>
       <TableCell className="max-w-28">
-        <InvoiceDocuments invoice={invoice} />
+        <InvoiceDocuments storeId={storeId} invoice={invoice} />
       </TableCell>
       <TableCell className="pr-4 text-right">
         {canEdit && canViewDocuments && (
@@ -525,7 +528,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
             )}
             {canEdit &&
               invoice.deliveries
-                .filter((delivery) => delivery.linked)
+                .filter((delivery) => delivery.linked && delivery.storeId === storeId)
                 .map((delivery) => (
                   <DropdownMenuItem key={delivery.id} onClick={() => unlinkDocument(delivery)}>
                     <UnlinkIcon />
@@ -557,28 +560,57 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
 }
 
 /**
- * Dokumenty sklepu faktury: przyjęcie z jej numerem albo przypięte przyjęcie lub korekta od dostawcy, z numerem bonu
- * (pełny numer w podpowiedzi) i linkiem do dokumentu.
+ * Dokumenty sklepów firmy z fakturą: przyjęcie z jej numerem albo przypięte przyjęcie lub korekta od dostawcy,
+ * z numerem bonu (pełny numer w podpowiedzi). Dokument bieżącego sklepu to link, dokument innego sklepu firmy -
+ * nazwa sklepu i pobranie bonu dostawy.
  */
-function InvoiceDocuments({ invoice }: { invoice: KsefInvoice }) {
+function InvoiceDocuments({ storeId, invoice }: { storeId: string; invoice: KsefInvoice }) {
+  const download = useDownloadCompanyDeliveryNote(storeId)
   if (invoice.deliveries.length === 0) {
     return <span className="text-sm text-muted-foreground">-</span>
   }
   return (
     <div className="grid gap-1">
-      {invoice.deliveries.map((delivery) => (
-        <Link
-          key={delivery.id}
-          to={documentPaths.document(delivery.type, delivery.id)}
-          className="group/doc grid leading-tight"
-          title={`${delivery.typeSingular} ${delivery.number}${delivery.linked ? ' · przypięty ręcznie' : ' · numer faktury w przyjęciu'}`}
-        >
-          <span className="truncate text-xs text-muted-foreground">{delivery.typeSingular}</span>
-          <span className="truncate text-sm font-medium underline-offset-2 group-hover/doc:underline">
-            {delivery.type === 'PZ' ? `bon ${bonNumber(delivery.number)}` : delivery.number}
-          </span>
-        </Link>
-      ))}
+      {invoice.deliveries.map((delivery) =>
+        delivery.storeId !== storeId ? (
+          <div key={delivery.id} className="grid leading-tight" title={`${delivery.typeSingular} ${delivery.number}`}>
+            <span className="truncate text-xs text-muted-foreground">Sklep {delivery.store}</span>
+            <span className="flex items-center gap-1 text-sm font-medium">
+              <span className="truncate">
+                {delivery.type === 'PZ' ? `bon ${bonNumber(delivery.number)}` : delivery.number}
+              </span>
+              {delivery.type === 'PZ' && (
+                <button
+                  type="button"
+                  aria-label={`Pobierz bon ${bonNumber(delivery.number)} (PDF)`}
+                  title="Pobierz bon dostawy (PDF)"
+                  className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={() =>
+                    download.mutate(
+                      { invoiceId: invoice.id, document: { id: delivery.id, number: bonNumber(delivery.number) } },
+                      { onError: (error) => toast.error(errorMessage(error, 'Nie udało się pobrać bonu')) },
+                    )
+                  }
+                >
+                  <DownloadIcon className="size-3.5" />
+                </button>
+              )}
+            </span>
+          </div>
+        ) : (
+          <Link
+            key={delivery.id}
+            to={documentPaths.document(delivery.type, delivery.id)}
+            className="group/doc grid leading-tight"
+            title={`${delivery.typeSingular} ${delivery.number}${delivery.linked ? ' · przypięty ręcznie' : ' · numer faktury w przyjęciu'}`}
+          >
+            <span className="truncate text-xs text-muted-foreground">{delivery.typeSingular}</span>
+            <span className="truncate text-sm font-medium underline-offset-2 group-hover/doc:underline">
+              {delivery.type === 'PZ' ? `bon ${bonNumber(delivery.number)}` : delivery.number}
+            </span>
+          </Link>
+        ),
+      )}
     </div>
   )
 }
@@ -613,17 +645,25 @@ function StatusLegend() {
   )
 }
 
-/** Kropka statusu; szczegóły (skąd wprowadzona, kto oznaczył) w podpowiedzi. */
-function EnteredStatus({ invoice }: { invoice: KsefInvoice }) {
+/** Kropka statusu; szczegóły (skąd wprowadzona, kto i w którym sklepie firmy) w podpowiedzi. */
+function EnteredStatus({ storeId, invoice }: { storeId: string; invoice: KsefInvoice }) {
   const state = enteredState(invoice)
-  const detail =
+  const otherStore =
+    state === 'DOCUMENT'
+      ? invoice.deliveries.every((delivery) => delivery.storeId !== storeId) && invoice.deliveries[0]?.store
+      : state === 'MANUAL' && invoice.enteredStoreId !== storeId && invoice.enteredStore
+  const detail = [
     state === 'DOCUMENT'
       ? invoice.deliveries.some((delivery) => delivery.linked)
         ? 'przypięty dokument'
         : 'numer w przyjęciu'
-      : state === 'MANUAL' && invoice.enteredBy
+      : state === 'MANUAL'
         ? invoice.enteredBy
-        : null
+        : null,
+    otherStore && `w sklepie ${otherStore}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
   const label = detail ? `${ENTERED_STATES[state].label} · ${detail}` : ENTERED_STATES[state].label
   return (
     <span title={label} className="flex size-5 items-center justify-center">

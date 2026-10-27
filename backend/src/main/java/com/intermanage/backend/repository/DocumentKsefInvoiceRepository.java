@@ -25,6 +25,13 @@ public interface DocumentKsefInvoiceRepository extends JpaRepository<DocumentKse
             order by d.documentDate""")
     List<DocumentKsefInvoice> findActiveByInvoiceIds(UUID storeId, Collection<UUID> invoiceIds);
 
+    /** Dokumenty podanych sklepów (sklepów firmy) przypięte do faktur, razem ze sklepem. */
+    @Query("""
+            select l from DocumentKsefInvoice l join fetch l.document d join fetch d.store
+            where d.store.id in :storeIds and l.invoice.id in :invoiceIds and l.unlinkedAt is null
+            order by d.documentDate""")
+    List<DocumentKsefInvoice> findActiveByInvoiceIdsInStores(Collection<UUID> storeIds, Collection<UUID> invoiceIds);
+
     @Query("""
             select l from DocumentKsefInvoice l
             where l.document.id = :documentId and l.invoice.id = :invoiceId and l.unlinkedAt is null""")

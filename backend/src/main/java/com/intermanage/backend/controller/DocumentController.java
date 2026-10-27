@@ -1,9 +1,11 @@
 package com.intermanage.backend.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -24,17 +26,21 @@ import com.intermanage.backend.dto.CorrectionCandidate;
 import com.intermanage.backend.dto.DocumentPage;
 import com.intermanage.backend.dto.DocumentResponse;
 import com.intermanage.backend.dto.DocumentsOverview;
+import com.intermanage.backend.dto.InvoiceComparison;
 import com.intermanage.backend.dto.KsefInvoiceCandidate;
 import com.intermanage.backend.dto.LinkDocumentRequest;
 import com.intermanage.backend.dto.LinkKsefInvoiceRequest;
 import com.intermanage.backend.dto.RegisterGratisRequest;
 import com.intermanage.backend.dto.SupplierDocumentNumberRequest;
+import com.intermanage.backend.repository.DocumentSearch;
 import com.intermanage.backend.security.AppUserPrincipal;
 import com.intermanage.backend.service.DeliveryCorrectionService;
+import com.intermanage.backend.service.DeliveryReportService;
 import com.intermanage.backend.service.DocumentGratisService;
 import com.intermanage.backend.service.DocumentKsefLinkService;
 import com.intermanage.backend.service.DocumentService;
 import com.intermanage.backend.service.InvoiceAmountCheckService;
+import com.intermanage.backend.service.InvoiceComparisonService;
 
 import jakarta.validation.Valid;
 
@@ -57,10 +63,15 @@ public class DocumentController {
     private final DocumentKsefLinkService ksefLinks;
     private final DeliveryCorrectionService corrections;
     private final InvoiceAmountCheckService amountChecks;
+    private final InvoiceComparisonService invoiceComparison;
+    private final DeliveryReportService deliveryReport;
 
     public DocumentController(DocumentService documentService, DocumentGratisService gratisService,
             DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
-            InvoiceAmountCheckService amountChecks) {
+            InvoiceAmountCheckService amountChecks, InvoiceComparisonService invoiceComparison,
+            DeliveryReportService deliveryReport) {
+        this.invoiceComparison = invoiceComparison;
+        this.deliveryReport = deliveryReport;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
         this.amountChecks = amountChecks;
@@ -77,14 +88,36 @@ public class DocumentController {
 
     /**
      * Strona listy dokumentów typu (po 100). {@code sort}: number, date, supplier, supplierDocument, lines, purchase,
-     * sale; {@code direction}: asc / desc; {@code query}: słowa do wyszukania w numerze, dostawcy, nr dok. dostawcy.
+     * sale; {@code direction}: asc / desc; {@code query}: słowa do wyszukania w numerze, dostawcy, nr dok. dostawcy;
+     * {@code product}: słowa z nazwy, marki, EAN-u albo ITM8 artykułu w liniach. {@code invoice} (przyjęcia i korekty
+     * od dostawcy) i {@code corrections} (przyjęcia): {@code with} / {@code without}.
      */
     @GetMapping("/{type}")
     @PreAuthorize(VIEW)
     public DocumentPage list(@PathVariable UUID storeId, @PathVariable String type,
             @RequestParam(defaultValue = "0") int page, @RequestParam(required = false) String query,
+            @RequestParam(required = false) String product, @RequestParam(required = false) String invoice,
+            @RequestParam(required = false) String corrections,
             @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "asc") String direction) {
-        return documentService.list(storeId, type, page, query, sort, direction);
+        return documentService.list(storeId, type, page, query, product, DocumentSearch.Presence.of(invoice),
+                DocumentSearch.Presence.of(corrections), sort, direction);
+    }
+
+    /**
+     * Raport przyjęć PZ z okresu (dni wg daty bonu, najwyżej rok) w Excelu: przyjęcie z numerem bonu, fakturą,
+     * dostawcą i korektami, pod nim zakup netto po korektach według rejonów nomenklatury.
+     */
+    @GetMapping("/pz/period-report")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> deliveryPeriodReport(@PathVariable UUID storeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        DocumentService.ExportFile file = deliveryReport.xlsx(storeId, from, to);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .body(file.content());
     }
 
     @GetMapping("/{type}/{id}")
@@ -183,6 +216,17 @@ public class DocumentController {
             @AuthenticationPrincipal AppUserPrincipal principal) {
         amountChecks.confirm(storeId, type, id, principal.getId());
         return documentService.document(storeId, type, id);
+    }
+
+    /**
+     * Przyjęcie porównane z XML jego faktur KSeF pozycja po pozycji (po EAN): w którym artykule jest różnica. XML
+     * pobiera się z KSeF tylko raz na fakturę.
+     */
+    @GetMapping("/{type}/{id}/invoice-comparison")
+    @PreAuthorize(VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    public InvoiceComparison invoiceComparison(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id) {
+        return invoiceComparison.compare(storeId, type, id);
     }
 
     /** Cofa potwierdzenie różnicy kwot (znacznik). */

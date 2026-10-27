@@ -136,11 +136,23 @@ public class DocumentService {
         return new DocumentsOverview(imports.findNewestReportGeneratedAt(storeId).orElse(null), types);
     }
 
-    /** Strona listy dokumentów typu; wyszukiwanie i sortowanie w bazie ({@link DocumentSearch}). */
+    /**
+     * Strona listy dokumentów typu; wyszukiwanie, filtry i sortowanie w bazie ({@link DocumentSearch}). {@code product}
+     * szuka artykułu w liniach, {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
+     * w przyjęciach.
+     */
     @Transactional(readOnly = true)
-    public DocumentPage list(UUID storeId, String typeCode, int page, String query, String sort, String direction) {
+    public DocumentPage list(UUID storeId, String typeCode, int page, String query, String product,
+            DocumentSearch.Presence invoice, DocumentSearch.Presence withCorrections, String sort, String direction) {
         DocumentType type = type(typeCode);
-        Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query));
+        Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query))
+                .and(DocumentSearch.withProduct(DocumentSearch.words(product)));
+        if (type.canLinkKsefInvoice() && invoice != DocumentSearch.Presence.ALL) {
+            matching = matching.and(DocumentSearch.withInvoice(invoice, ksefLinks.nip(storeId)));
+        }
+        if (type == DocumentType.PZ) {
+            matching = matching.and(DocumentSearch.withCorrections(withCorrections));
+        }
         Page<Document> found = documents.findAll(matching,
                 PageRequest.of(Math.max(page, 0), PAGE_SIZE, DocumentSearch.sort(sort, direction)));
         DocumentTotalsRepository.Totals totals = documents.totals(matching);

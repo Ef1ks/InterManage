@@ -337,6 +337,39 @@ export type DocumentSummary = {
  * Suma netto faktur przyjęcia (z fakturami jego korekt od dostawcy) i wartość zakupu netto po korektach;
  * {@code difference} = faktury - przyjęcie. {@code confirmedAt}: różnicę ktoś potwierdził (dla tych kwot).
  */
+export type InvoiceComparisonStatus =
+  | 'MATCH'
+  | 'PRICE'
+  | 'QUANTITY'
+  | 'MISSING_ON_INVOICE'
+  | 'MISSING_IN_DELIVERY'
+  | 'NO_CODE'
+
+/** Artykuł przyjęcia i pozycje faktur z tym samym EAN; {@code difference} = faktura - przyjęcie. */
+export type InvoiceComparisonRow = {
+  status: InvoiceComparisonStatus
+  ean: string | null
+  itm8: string | null
+  name: string | null
+  invoiceName: string | null
+  deliveryQuantity: number | null
+  deliveryPrice: number | null
+  deliveryValue: number | null
+  invoiceQuantity: number | null
+  invoicePrice: number | null
+  invoiceValue: number | null
+  difference: number | null
+}
+
+/** Przyjęcie porównane z XML faktur KSeF pozycja po pozycji; {@code unavailable}: faktury, których nie dało się pobrać. */
+export type InvoiceComparison = {
+  invoices: string[]
+  unavailable: { invoiceNumber: string; message: string }[]
+  invoiceNet: number
+  deliveryValue: number
+  rows: InvoiceComparisonRow[]
+}
+
 export type InvoiceAmountCheck = {
   invoiceNet: number
   documentValue: number
@@ -888,17 +921,25 @@ export type KsefInvoice = {
   entered: boolean
   enteredBy: string | null
   enteredAt: string | null
+  /** Sklep firmy, w którym oznaczono ją ręcznie (faktura wprowadzona w jednym sklepie jest wprowadzona we wszystkich). */
+  enteredStoreId: string | null
+  enteredStore: string | null
   deliveries: KsefInvoiceDocument[]
   supplierSkipped: boolean
 }
 
-/** Dokument sklepu faktury; {@code linked} = przypięty ręcznie (da się odpiąć), inaczej przyjęcie z jej numerem. */
+/**
+ * Dokument sklepu firmy z fakturą; {@code linked} = przypięty ręcznie (da się odpiąć), inaczej przyjęcie z jej
+ * numerem. {@code storeId}/{@code store}: sklep dokumentu - może to być inny sklep tej samej firmy.
+ */
 export type KsefInvoiceDocument = {
   id: string
   type: string
   typeSingular: string
   number: string
   linked: boolean
+  storeId: string
+  store: string
 }
 
 export type KsefInvoicePage = {

@@ -39,6 +39,7 @@ import com.intermanage.backend.dto.LinkDocumentRequest;
 import com.intermanage.backend.repository.KsefInvoiceSearch;
 import com.intermanage.backend.security.AppUserPrincipal;
 import com.intermanage.backend.service.DocumentKsefLinkService;
+import com.intermanage.backend.service.DocumentService;
 import com.intermanage.backend.service.KsefConnectionService;
 import com.intermanage.backend.service.KsefInvoiceService;
 import com.intermanage.backend.service.KsefSyncService;
@@ -62,9 +63,11 @@ public class KsefController {
     private final KsefConnectionService connectionService;
     private final KsefSyncService syncService;
     private final DocumentKsefLinkService documentLinks;
+    private final DocumentService documentService;
 
     public KsefController(KsefInvoiceService invoiceService, KsefConnectionService connectionService,
-            KsefSyncService syncService, DocumentKsefLinkService documentLinks) {
+            KsefSyncService syncService, DocumentKsefLinkService documentLinks, DocumentService documentService) {
+        this.documentService = documentService;
         this.invoiceService = invoiceService;
         this.connectionService = connectionService;
         this.syncService = syncService;
@@ -145,6 +148,20 @@ public class KsefController {
     @PreAuthorize(VIEW)
     public ResponseEntity<byte[]> xml(@PathVariable UUID storeId, @PathVariable UUID id) {
         return download(invoiceService.xml(storeId, id));
+    }
+
+    /**
+     * Bon dostawy przyjęcia PZ z tą fakturą - także z innego sklepu tej samej firmy (wspólne połączenie KSeF), np.
+     * gdy faktura została wprowadzona w drugim sklepie.
+     */
+    @GetMapping("/invoices/{id}/documents/{documentId}/delivery-note")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> deliveryNote(@PathVariable UUID storeId, @PathVariable UUID id,
+            @PathVariable UUID documentId, @AuthenticationPrincipal AppUserPrincipal principal) {
+        UUID deliveryStore = invoiceService.companyDeliveryStore(storeId, id, documentId);
+        DocumentService.ExportFile file = documentService.deliveryNote(deliveryStore, "pz", documentId,
+                principal.getId());
+        return download(new KsefInvoiceService.ExportFile(file.fileName(), file.contentType(), file.content()));
     }
 
     /** Faktura jako PDF do czytania i wydruku, zrobiona z XML z KSeF. */

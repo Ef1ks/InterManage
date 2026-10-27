@@ -267,13 +267,32 @@ class KsefIntegrationTests {
         list(owner, first, "").andExpect(jsonPath("$.invoices[*].invoiceNumber")
                 .value(containsInAnyOrder("FV/10/2026", "FV/11/2026")));
 
-        // "Wprowadzona" jest decyzją sklepu.
+        // "Wprowadzona" w jednym sklepie firmy jest wprowadzona we wszystkich, z informacją, gdzie.
         String shared = jdbc.queryForObject(
                 "select id from ksef_invoices where invoice_number = 'FV/10/2026' and nip = ?", String.class, nip);
         send(owner, put(url(second, "/invoices/" + shared + "/entered")), "")
                 .andExpect(jsonPath("$.entered").value(true));
         list(owner, second, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(1));
-        list(owner, first, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(0));
+        list(owner, first, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.invoices[0].enteredStoreId").value(second));
+        // Cofnąć oznaczenie może tylko sklep, który je zrobił.
+        send(owner, delete(url(first, "/invoices/" + shared + "/entered")), "")
+                .andExpect(jsonPath("$.entered").value(true));
+        send(owner, delete(url(second, "/invoices/" + shared + "/entered")), "")
+                .andExpect(jsonPath("$.entered").value(false));
+
+        // Przyjęcie z numerem faktury w drugim sklepie: w pierwszym faktura jest wprowadzona, a bon da się pobrać.
+        String delivery = insertDocument(second, "PZ", "1234500", "FV/10/2026", "100.00");
+        list(owner, first, "&entered=ENTERED")
+                .andExpect(jsonPath("$.invoices[0].deliveries[0].id").value(delivery))
+                .andExpect(jsonPath("$.invoices[0].deliveries[0].storeId").value(second));
+        mvc.perform(get(url(first, "/invoices/" + shared + "/documents/" + delivery + "/delivery-note")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("bon-dostawy-12345.pdf")));
+        // Dokumentu, który nie jest przyjęciem tej faktury, nie da się tak pobrać.
+        String foreign = insertDocument(second, "PZ", "999900", null, "1.00");
+        mvc.perform(get(url(first, "/invoices/" + shared + "/documents/" + foreign + "/delivery-note")).cookie(owner))
+                .andExpect(status().isNotFound());
 
         // Firmy bez połączenia w innym sklepie nie da się podłączyć.
         String unconnectedNip = randomNip();
@@ -421,10 +440,15 @@ class KsefIntegrationTests {
         String pz = "/api/stores/" + storeId + "/documents/pz/";
         mvc.perform(get(pz + delivery).cookie(owner))
                 .andExpect(jsonPath("$.invoiceAmountCheck.matches").value(true));
+        // Różnica do 1 zł w obie strony to zgodność.
+        mvc.perform(get(pz + withoutNumber).cookie(owner))
+                .andExpect(jsonPath("$.invoiceAmountCheck.difference").value(1.0))
+                .andExpect(jsonPath("$.invoiceAmountCheck.matches").value(true));
+        jdbc.update("update documents set purchase_value = 102.50 where id = ?::uuid", withoutNumber);
         mvc.perform(get("/api/stores/" + storeId + "/documents/pz").param("query", "PZ301").cookie(owner))
                 .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.invoiceNet").value(105.0))
-                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.documentValue").value(104.0))
-                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.difference").value(1.0))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.documentValue").value(102.5))
+                .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.difference").value(2.5))
                 .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.matches").value(false))
                 .andExpect(jsonPath("$.documents[0].invoiceAmountCheck.confirmedAt").value(nullValue()));
         send(owner, put(pz + withoutNumber + "/amount-confirmation"), "")
@@ -436,10 +460,28 @@ class KsefIntegrationTests {
                 .andExpect(jsonPath("$.invoiceAmountCheck.confirmedAt").value(nullValue()));
         send(owner, put(pz + withoutNumber + "/amount-confirmation"), "").andExpect(status().isOk());
         // Zmiana kwoty przyjęcia unieważnia potwierdzenie.
-        jdbc.update("update documents set purchase_value = 103 where id = ?::uuid", withoutNumber);
+        jdbc.update("update documents set purchase_value = 101 where id = ?::uuid", withoutNumber);
         mvc.perform(get(pz + withoutNumber).cookie(owner))
-                .andExpect(jsonPath("$.invoiceAmountCheck.difference").value(2.0))
+                .andExpect(jsonPath("$.invoiceAmountCheck.difference").value(4.0))
                 .andExpect(jsonPath("$.invoiceAmountCheck.confirmedAt").value(nullValue()));
+
+        // Porównanie z XML faktury po EAN: zgodny artykuł, artykuł spoza faktury i pozycja faktury bez kodu.
+        insertLine(delivery, 1, "0000000000001", "5900000000012", "MLEKO 3,2% 1L", "100", "200");
+        insertLine(delivery, 2, "0000000000002", "5900000000999", "JOGURT", "10", "100");
+        when(ksef.invoiceXml(anyString(), anyString())).thenReturn(new ClassPathResource("ksef/faktura-fa3.xml")
+                .getContentAsByteArray());
+        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.invoices[0]").value("FV/42/2026"))
+                .andExpect(jsonPath("$.unavailable.length()").value(0))
+                .andExpect(jsonPath("$.invoiceNet").value(300.0))
+                .andExpect(jsonPath("$.rows.length()").value(3))
+                .andExpect(jsonPath("$.rows[?(@.status == 'MATCH')].itm8").value(contains("0000000000001")))
+                .andExpect(jsonPath("$.rows[?(@.status == 'MISSING_ON_INVOICE')].difference").value(contains(-100.0)))
+                .andExpect(jsonPath("$.rows[?(@.status == 'NO_CODE')].invoiceValue").value(contains(100.0)));
+        // XML jest już w bazie - drugie porównanie nie pyta KSeF.
+        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner)).andExpect(status().isOk());
+        verify(ksef, times(1)).invoiceXml(anyString(), anyString());
 
         mvc.perform(delete(url(storeId, "/invoices/" + fv41 + "/documents/" + withoutNumber)).cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$.entered").value(false));
@@ -608,6 +650,14 @@ class KsefIntegrationTests {
                 values (?::uuid, ?, ?, ?, 'MLECZARNIA', ?, ?, 1, ?::numeric, 0, ?::uuid, ?::uuid) returning id""",
                 String.class, storeId, type, number, LocalDateTime.of(2026, 10, 20, 0, 0), supplierDocumentNumber,
                 supplierDocumentNumber, purchaseValue, importId, importId);
+    }
+
+    private void insertLine(String documentId, int lineNumber, String itm8, String ean, String name, String quantity,
+            String purchaseValue) {
+        jdbc.update("""
+                insert into document_lines (id, document_id, line_number, itm8, ean, name, quantity, purchase_value)
+                values (gen_random_uuid(), ?::uuid, ?, ?, ?, ?, ?::numeric, ?::numeric)""",
+                documentId, lineNumber, itm8, ean, name, quantity, purchaseValue);
     }
 
     private void insertDelivery(String storeId, String number, String supplierDocumentNumber) {

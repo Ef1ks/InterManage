@@ -20,7 +20,8 @@ const confirmedTitle = (check: Check) =>
   }${check.confirmedAt ? `, ${new Date(check.confirmedAt).toLocaleString('pl-PL')}` : ''}.`
 
 /**
- * Zgodność kwoty netto przyjęcia (po korektach) z jego fakturami KSeF. Niezgodną różnicę osoba z Edycją potwierdza
+ * Zgodność kwoty netto przyjęcia (po korektach) z jego fakturami KSeF; różnica do 1 zł w obie strony to zgodność.
+ * Większą różnicę osoba z Edycją potwierdza
  * (toast „Cofnij”); po zmianie faktur albo przyjęcia różnica wraca do sprawdzenia. W wierszu listy {@code compact}:
  * zgodna kwota nic nie pokazuje, kliknięcia nie otwierają wiersza.
  */
@@ -44,7 +45,8 @@ export function InvoiceAmountCheck({
     return (
       <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
         <CheckIcon aria-hidden className="size-4 text-emerald-600 dark:text-emerald-400" />
-        Kwota netto zgodna z fakturą ({formatMoney(check.invoiceNet)} zł)
+        Kwota netto zgodna z fakturą ({formatMoney(check.invoiceNet)} zł
+        {check.difference !== 0 && `, różnica ${signed(check.difference)} zł w granicy 1 zł`})
       </p>
     )
   }

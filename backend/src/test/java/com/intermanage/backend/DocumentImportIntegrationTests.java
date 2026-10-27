@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -275,6 +276,52 @@ class DocumentImportIntegrationTests {
                 .andReturn().getResponse().getContentAsByteArray();
         org.assertj.core.api.Assertions.assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
         mvc.perform(get(url(store, "/pk/" + storeErrorId + "/delivery-note")).cookie(owner))
+                .andExpect(status().isBadRequest());
+
+        // Filtry listy: przypięte korekty, faktura (sklep bez KSeF i bez przypiętych), artykuł w liniach.
+        mvc.perform(get(url(store, "/pz")).param("corrections", "with").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].number").value(delivery));
+        mvc.perform(get(url(store, "/pz")).param("corrections", "without").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].number").value(otherSupplierDelivery));
+        mvc.perform(get(url(store, "/pz")).param("invoice", "with").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(0));
+        mvc.perform(get(url(store, "/pz")).param("invoice", "without").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(2));
+        mvc.perform(get(url(store, "/pz")).param("product", "kanapka sonko").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(2));
+        mvc.perform(get(url(store, "/pz")).param("product", itemB).cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].number").value(delivery));
+        mvc.perform(get(url(store, "/pz")).param("product", "kanapka rogal").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(0));
+
+        // Raport przyjęć za okres: wiersz przyjęcia z korektami, pod nim zakup po korektach według rejonów.
+        byte[] report = mvc.perform(get(url(store, "/pz/period-report")).param("from", "2026-10-21")
+                        .param("to", "2026-10-21").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("przyjecia-2026-10-21-2026-10-21.xlsx")))
+                .andReturn().getResponse().getContentAsByteArray();
+        String sheet = null;
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(report))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.getName().equals("xl/worksheets/sheet1.xml")) {
+                    sheet = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            }
+        }
+        org.assertj.core.api.Assertions.assertThat(sheet).contains(
+                ">21.10.2026<", ">" + delivery.substring(0, delivery.length() - 2) + "<", ">F/1/26<", ">F/2/26<",
+                "Korekta błędu sklepu " + storeError, "Korekta od dostawcy " + supplierCorrection,
+                "<v>4584.96</v>", "<v>4484.96</v>", "<v>-100</v>", "outlineLevel=\"1\"", ">01<", ">2 przyjęcia<");
+        mvc.perform(get(url(store, "/pz/period-report")).param("from", "2026-10-21").param("to", "2026-10-20")
+                        .cookie(owner))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(url(store, "/pz/period-report")).param("from", "2025-01-01").param("to", "2026-10-21")
+                        .cookie(owner))
                 .andExpect(status().isBadRequest());
 
         // Odpięcie to znacznik; ponowne przypięcie przywraca korektę.

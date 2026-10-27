@@ -8,6 +8,7 @@ import type {
   Document,
   DocumentPage,
   DocumentsOverview,
+  InvoiceComparison,
   KsefInvoiceCandidate,
   Supplier,
 } from '@/lib/types'
@@ -27,16 +28,29 @@ export function useDocumentsOverview(storeId: string) {
 
 export type DocumentColumn = 'number' | 'date' | 'supplier' | 'supplierDocument' | 'lines' | 'purchase' | 'sale'
 
+/** Ma / nie ma (faktury, korekt); `all` = bez filtra. */
+export type Presence = 'all' | 'with' | 'without'
+
 /**
- * Lista dokumentów typu stronami po 100 (wyszukiwanie i sortowanie w bazie); kolejne strony dociąga
+ * Wyszukiwanie i filtry listy: {@code query} w numerze, dostawcy i nr dok. dostawcy, {@code product} w liniach
+ * (nazwa, marka, EAN, ITM8). {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
+ * w przyjęciach.
+ */
+export type DocumentFilters = { query: string; product: string; invoice: Presence; corrections: Presence }
+
+/**
+ * Lista dokumentów typu stronami po 100 (wyszukiwanie, filtry i sortowanie w bazie); kolejne strony dociąga
  * {@code fetchNextPage} przy przewijaniu. {@code typeCode} jak w ścieżce strony ("pz", "pl"...).
  */
-export function useDocuments(storeId: string, typeCode: string, query: string, sort: SortState<DocumentColumn>) {
+export function useDocuments(storeId: string, typeCode: string, filters: DocumentFilters, sort: SortState<DocumentColumn>) {
   return useInfiniteQuery({
-    queryKey: [...documentsKey(storeId), typeCode, 'list', { query, ...sort }],
+    queryKey: [...documentsKey(storeId), typeCode, 'list', { ...filters, ...sort }],
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ page: String(pageParam), sort: sort.key, direction: sort.direction })
-      if (query) params.set('query', query)
+      if (filters.query) params.set('query', filters.query)
+      if (filters.product) params.set('product', filters.product)
+      if (filters.invoice !== 'all') params.set('invoice', filters.invoice)
+      if (filters.corrections !== 'all') params.set('corrections', filters.corrections)
       return api<DocumentPage>(`${documentsPath(storeId)}/${typeCode}?${params}`)
     },
     initialPageParam: 0,
@@ -187,6 +201,20 @@ export function useDeliveryCorrections(storeId: string, typeCode: string, id: st
   }
 }
 
+/**
+ * Przyjęcie porównane z XML faktur pozycja po pozycji (po EAN). XML pobiera się z KSeF tylko za pierwszym razem
+ * (limit pobrań), więc przy błędzie nie ponawiamy.
+ */
+export function useInvoiceComparison(storeId: string, id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...documentsKey(storeId), 'pz', id, 'invoice-comparison'],
+    queryFn: () => api<InvoiceComparison>(`${documentsPath(storeId)}/pz/${id}/invoice-comparison`),
+    enabled,
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+}
+
 /** Potwierdzenie różnicy kwot przyjęcia i faktury oraz jego cofnięcie. */
 export function useAmountConfirmation(storeId: string, typeCode: string, id: string) {
   const queryClient = useQueryClient()
@@ -203,6 +231,21 @@ export function useDownloadDeliveryNote(storeId: string) {
   return useMutation({
     mutationFn: (document: Pick<Document, 'id' | 'number'>) =>
       downloadFile(`${documentsPath(storeId)}/pz/${document.id}/delivery-note`, `bon-dostawy-${document.number}.pdf`),
+    meta: { invalidates: false },
+  })
+}
+
+/**
+ * Raport przyjęć za okres (Excel): przyjęcie z bonem, fakturą, dostawcą i korektami, pod nim zakup netto po korektach
+ * według rejonów nomenklatury. Daty RRRR-MM-DD, oba dni włącznie.
+ */
+export function useDownloadDeliveryReport(storeId: string) {
+  return useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string }) =>
+      downloadFile(
+        `${documentsPath(storeId)}/pz/period-report?${new URLSearchParams({ from, to })}`,
+        `przyjecia-${from}-${to}.xlsx`,
+      ),
     meta: { invalidates: false },
   })
 }

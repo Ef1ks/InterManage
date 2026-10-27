@@ -28,12 +28,16 @@ import com.intermanage.backend.repository.DocumentRepository;
 
 /**
  * Zgodność kwot przyjęć PZ z fakturami KSeF: suma netto faktur przyjęcia (przypiętych, dopasowanych po numerze
- * i faktur jego korekt od dostawcy) i wartość zakupu netto przyjęcia po korektach, porównane co do grosza. Różnicę
- * można potwierdzić; potwierdzenie obowiązuje dla zapisanych kwot, więc po zmianie faktur albo przyjęcia różnica
- * wraca do sprawdzenia.
+ * i faktur jego korekt od dostawcy) i wartość zakupu netto przyjęcia po korektach. Różnica do
+ * {@link #TOLERANCE} zł w obie strony to zgodność (zaokrąglenia po stronie dostawcy). Większą różnicę można
+ * potwierdzić; potwierdzenie obowiązuje dla zapisanych kwot, więc po zmianie faktur albo przyjęcia różnica wraca do
+ * sprawdzenia.
  */
 @Service
 public class InvoiceAmountCheckService {
+
+    /** Akceptowana różnica kwot netto faktury i przyjęcia, w złotych, w górę lub w dół. */
+    public static final BigDecimal TOLERANCE = BigDecimal.ONE;
 
     private final DocumentAmountConfirmationRepository confirmations;
     private final DocumentRepository documents;
@@ -76,7 +80,7 @@ public class InvoiceAmountCheckService {
             DocumentAmountConfirmation confirmation = confirmed.get(delivery.getId());
             boolean valid = confirmation != null && confirmation.covers(invoiceNet, documentValue);
             result.put(delivery.getId(), new InvoiceAmountCheck(invoiceNet, documentValue, difference,
-                    difference.signum() == 0, valid ? confirmation.getConfirmedAt() : null,
+                    difference.abs().compareTo(TOLERANCE) <= 0, valid ? confirmation.getConfirmedAt() : null,
                     valid && confirmation.getConfirmedBy() != null ? confirmation.getConfirmedBy().getDisplayName()
                             : null));
         }

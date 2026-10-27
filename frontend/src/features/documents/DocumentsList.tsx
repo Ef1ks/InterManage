@@ -5,12 +5,15 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
+import { SegmentedField } from '@/components/form'
 import { SortableHead } from '@/components/SortableHead'
 import { TableSkeletonRows } from '@/components/TableSkeleton'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { type DocumentColumn, useDocuments } from '@/features/documents/api'
+import { type DocumentColumn, type Presence, useDocuments } from '@/features/documents/api'
 import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
+import { DeliveryPeriodReport } from '@/features/documents/DeliveryPeriodReport'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
 import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney } from '@/features/documents/format'
@@ -48,21 +51,51 @@ export function BackToTypes() {
   )
 }
 
-/**
- * Dokumenty jednego typu (z adresu strony). Dokumentów są tysiące, więc serwer oddaje je po 100, a kolejne strony
- * dochodzą przy przewijaniu; wyszukiwanie, sortowanie po nagłówkach i suma "Razem" liczą się w bazie.
- */
 /** Przyjęcia i korekty od dostawcy - do nich przypina się faktury z KSeF (jak `DocumentType.canLinkKsefInvoice`). */
 const KSEF_LINKABLE_TYPES = new Set(['PZ', 'WZ'])
 
+const INVOICE_OPTIONS: { value: Presence; label: string }[] = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'with', label: 'Z fakturą' },
+  { value: 'without', label: 'Bez faktury' },
+]
+
+const CORRECTION_OPTIONS: { value: Presence; label: string }[] = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'with', label: 'Z korektami' },
+  { value: 'without', label: 'Bez korekt' },
+]
+
+/**
+ * Dokumenty jednego typu (z adresu strony). Dokumentów są tysiące, więc serwer oddaje je po 100, a kolejne strony
+ * dochodzą przy przewijaniu; wyszukiwanie (też po artykułach w liniach), filtry przypiętych faktur i korekt,
+ * sortowanie po nagłówkach i suma "Razem" liczą się w bazie.
+ */
 export function DocumentsList({ storeId }: { storeId: string }) {
   const typeCode = useParams().type ?? ''
+  const upperType = typeCode.toUpperCase()
   const [query, setQuery] = useState('')
+  const [product, setProduct] = useState('')
+  const [invoice, setInvoice] = useState<Presence>('all')
+  const [corrections, setCorrections] = useState<Presence>('all')
   const debouncedQuery = useDebouncedValue(query.trim(), 300)
+  const debouncedProduct = useDebouncedValue(product.trim(), 300)
   // Domyślnie po numerze dokumentu, od góry do dołu.
   const [sort, setSort] = useState<SortState<DocumentColumn>>({ key: 'number', direction: 'asc' })
+  const invoiceFilter = KSEF_LINKABLE_TYPES.has(upperType)
+  const correctionFilter = upperType === 'PZ'
   const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage, isPlaceholderData } =
-    useDocuments(storeId, typeCode, debouncedQuery, sort)
+    useDocuments(
+      storeId,
+      typeCode,
+      {
+        query: debouncedQuery,
+        product: debouncedProduct,
+        invoice: invoiceFilter ? invoice : 'all',
+        corrections: correctionFilter ? corrections : 'all',
+      },
+      sort,
+    )
   const navigate = useNavigate()
   const loadMoreRef = useLoadMore<HTMLDivElement>(
     () => fetchNextPage(),
@@ -87,7 +120,17 @@ export function DocumentsList({ storeId }: { storeId: string }) {
   const first = data?.pages[0]
   const documents = data?.pages.flatMap((page) => page.documents) ?? []
   const totalCount = first?.type.documentCount ?? 0
-  const searching = debouncedQuery !== ''
+  const searching =
+    debouncedQuery !== '' ||
+    debouncedProduct !== '' ||
+    (invoiceFilter && invoice !== 'all') ||
+    (correctionFilter && corrections !== 'all')
+  const clearFilters = () => {
+    setQuery('')
+    setProduct('')
+    setInvoice('all')
+    setCorrections('all')
+  }
   const open = (document: DocumentSummary) => navigate(documentPaths.document(typeCode, document.id))
 
   return (
@@ -117,15 +160,43 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                     : `${countFormat.format(totalCount)} ${documentsWord(totalCount)} · kliknij nagłówek kolumny, żeby posortować`}
             </p>
           </div>
-          {totalCount > 0 && (
-            <SearchInput
-              className="w-full sm:w-96"
-              value={query}
-              onChange={setQuery}
-              placeholder="Szukaj: numer, dostawca, nr dok. dostawcy"
-            />
-          )}
+          {upperType === 'PZ' && totalCount > 0 && <DeliveryPeriodReport storeId={storeId} />}
         </div>
+
+        {totalCount > 0 && (
+          <Card className="mb-4 gap-3 p-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: numer, dostawca, nr dok. dostawcy" />
+              <SearchInput value={product} onChange={setProduct} placeholder="Szukaj produktu: nazwa, marka, EAN, ITM8" />
+            </div>
+            {(invoiceFilter || correctionFilter || searching) && (
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                {invoiceFilter && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Faktura</span>
+                    <SegmentedField label="Faktura KSeF" options={INVOICE_OPTIONS} value={invoice} onChange={setInvoice} />
+                  </div>
+                )}
+                {correctionFilter && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Korekty</span>
+                    <SegmentedField
+                      label="Przypięte korekty"
+                      options={CORRECTION_OPTIONS}
+                      value={corrections}
+                      onChange={setCorrections}
+                    />
+                  </div>
+                )}
+                {searching && (
+                  <Button variant="link" className="h-auto p-0 text-sm" onClick={clearFilters}>
+                    Wyczyść filtry
+                  </Button>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
 
         {first && totalCount === 0 ? (
           <Card className="items-center px-6 py-10 text-center">
@@ -171,7 +242,9 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 ) : documents.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
-                      Żaden dokument nie pasuje do „{debouncedQuery}”.
+                      {debouncedQuery && !debouncedProduct
+                        ? `Żaden dokument nie pasuje do „${debouncedQuery}”.`
+                        : 'Żaden dokument nie pasuje do wyszukiwania i filtrów.'}
                     </TableCell>
                   </TableRow>
                 ) : (
