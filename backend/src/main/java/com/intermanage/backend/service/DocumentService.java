@@ -31,6 +31,7 @@ import com.intermanage.backend.dto.DocumentImportResponse;
 import com.intermanage.backend.dto.DocumentLineRow;
 import com.intermanage.backend.dto.DocumentPage;
 import com.intermanage.backend.dto.DocumentResponse;
+import com.intermanage.backend.dto.LinkedKsefInvoice;
 import com.intermanage.backend.dto.DocumentTypeSummary;
 import com.intermanage.backend.dto.DocumentsOverview;
 import com.intermanage.backend.dto.LinkedDeliOrder;
@@ -81,11 +82,13 @@ public class DocumentService {
     private final StoreRepository stores;
     private final DeliOrderDocumentRepository deliOrderDocuments;
     private final DocumentGratisRepository gratis;
+    private final DocumentKsefLinkService ksefLinks;
 
     public DocumentService(TransactionTemplate transaction, DocumentReportParser reportParser,
             DocumentMapper documentMapper, DocumentImportRepository imports, DocumentRepository documents,
             AppUserRepository users, StoreRepository stores, DeliOrderDocumentRepository deliOrderDocuments,
-            DocumentGratisRepository gratis) {
+            DocumentGratisRepository gratis, DocumentKsefLinkService ksefLinks) {
+        this.ksefLinks = ksefLinks;
         this.transaction = transaction;
         this.reportParser = reportParser;
         this.documentMapper = documentMapper;
@@ -127,9 +130,11 @@ public class DocumentService {
         Map<UUID, DocumentGratis> gratisByDocument = found.isEmpty() ? Map.of()
                 : gratis.findActive(found.getContent().stream().map(Document::getId).toList()).stream()
                         .collect(Collectors.toMap(item -> item.getDocument().getId(), Function.identity()));
+        Map<UUID, List<LinkedKsefInvoice>> ksefInvoices = ksefLinks.invoicesOf(storeId, found.getContent());
         return new DocumentPage(summary, imports.findNewestReportGeneratedAt(storeId).orElse(null),
                 found.getContent().stream()
-                        .map(document -> documentMapper.toSummary(document, gratisByDocument.get(document.getId())))
+                        .map(document -> documentMapper.toSummary(document, gratisByDocument.get(document.getId()),
+                                ksefInvoices.getOrDefault(document.getId(), List.of())))
                         .toList(),
                 found.getNumber(),
                 found.hasNext(), totals.count(), totals.purchaseValue(), totals.saleValueGross());
@@ -148,7 +153,8 @@ public class DocumentService {
                         .map(link -> new LinkedDeliOrder(link.getOrder().getId(), link.getOrder().getStore().getNumber(),
                                 link.getOrder().getStore().getName(), link.getOrder().getDeliveryDate()))
                         .toList();
-        return documentMapper.toResponse(document, deliOrders, gratis.findActive(document.getId()).orElse(null));
+        return documentMapper.toResponse(document, deliOrders, gratis.findActive(document.getId()).orElse(null),
+                ksefLinks.invoicesOf(storeId, List.of(document)).getOrDefault(document.getId(), List.of()));
     }
 
     /**

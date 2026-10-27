@@ -4,7 +4,8 @@ import { toast } from 'sonner'
 
 import { api, downloadFile } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
-import type { KsefInvoice, KsefInvoicePage, KsefOverview, KsefSettings } from '@/lib/types'
+import type { DocumentCandidate, KsefInvoice, KsefInvoicePage, KsefOverview, KsefSettings } from '@/lib/types'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 /** Faktury i połączenie z KSeF są osobne dla każdego sklepu, więc sklep jest częścią klucza. */
 export const ksefKey = (storeId: string) => ['stores', storeId, 'ksef'] as const
@@ -78,9 +79,52 @@ export function useMarkEntered(storeId: string) {
  */
 export function useDownloadInvoice(storeId: string) {
   return useMutation({
-    mutationFn: ({ invoice, format }: { invoice: KsefInvoice; format: 'pdf' | 'xml' }) =>
+    mutationFn: ({ invoice, format }: { invoice: Pick<KsefInvoice, 'id' | 'ksefNumber'>; format: 'pdf' | 'xml' }) =>
       downloadFile(`${ksefPath(storeId)}/invoices/${invoice.id}/${format}`, `${invoice.ksefNumber}.${format}`),
   })
+}
+
+/** Przyjęcia i korekty od dostawcy do przypięcia faktury: domyślnie wartość ±10% kwoty netto, od najbliższej. */
+export function useDocumentCandidates(
+  storeId: string,
+  invoiceId: string,
+  query: string,
+  amountRange: boolean,
+  enabled: boolean,
+) {
+  const debounced = useDebouncedValue(query.trim(), 250)
+  return useQuery({
+    queryKey: [...ksefKey(storeId), 'document-candidates', invoiceId, { query: debounced, amountRange }],
+    queryFn: () => {
+      const params = new URLSearchParams({ amountRange: String(amountRange) })
+      if (debounced) params.set('query', debounced)
+      return api<DocumentCandidate[]>(`${ksefPath(storeId)}/invoices/${invoiceId}/documents/candidates?${params}`)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Przypięcie dokumentu sklepu do faktury i odpięcie; odświeżamy faktury i dokumenty (obie strony pokazują powiązanie). */
+export function useInvoiceDocumentLinks(storeId: string) {
+  const queryClient = useQueryClient()
+  const onSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: [...ksefKey(storeId), 'invoices'] })
+    queryClient.invalidateQueries({ queryKey: [...ksefKey(storeId), 'document-candidates'] })
+    queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'documents'] })
+  }
+  return {
+    link: useMutation({
+      mutationFn: ({ invoiceId, documentId }: { invoiceId: string; documentId: string }) =>
+        api<KsefInvoice>(`${ksefPath(storeId)}/invoices/${invoiceId}/documents`, { method: 'POST', json: { documentId } }),
+      onSuccess,
+    }),
+    unlink: useMutation({
+      mutationFn: ({ invoiceId, documentId }: { invoiceId: string; documentId: string }) =>
+        api<KsefInvoice>(`${ksefPath(storeId)}/invoices/${invoiceId}/documents/${documentId}`, { method: 'DELETE' }),
+      onSuccess,
+    }),
+  }
 }
 
 /**

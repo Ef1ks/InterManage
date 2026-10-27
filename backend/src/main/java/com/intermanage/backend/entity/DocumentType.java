@@ -42,6 +42,11 @@ public enum DocumentType {
         return this == PPP;
     }
 
+    /** Przyjęcia i korekty od dostawcy mają fakturę w KSeF (korekty - fakturę korygującą), więc można ją przypiąć. */
+    public boolean canLinkKsefInvoice() {
+        return this == PZ || this == WZ;
+    }
+
     public String label() {
         return label;
     }

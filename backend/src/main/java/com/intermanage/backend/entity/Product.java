@@ -47,6 +47,17 @@ public class Product {
     private String supplier;
     private String nomenclature;
 
+    // Kody nomenklatury na trzech poziomach (rejon, rodzina, podrodzina), liczone przez bazę z nomenclature;
+    // do łączenia z Nomenclature w zapytaniach. Po zapisie w tej samej sesji nieaktualne.
+    @Column(name = "region_code", length = 2, insertable = false, updatable = false)
+    private String regionCode;
+
+    @Column(name = "family_code", length = 4, insertable = false, updatable = false)
+    private String familyCode;
+
+    @Column(name = "subfamily_code", length = 6, insertable = false, updatable = false)
+    private String subfamilyCode;
+
     @Column(name = "sale_price", precision = 12, scale = 2)
     private BigDecimal salePrice;
 
@@ -314,5 +325,17 @@ public class Product {
     /** NOM, np. "36 60 02": dwie pierwsze cyfry to dział (24, 36, 46 to wyroby garmażeryjne). */
     public String getNomenclature() {
         return nomenclature;
+    }
+
+    public String getRegionCode() {
+        return regionCode;
+    }
+
+    public String getFamilyCode() {
+        return familyCode;
+    }
+
+    public String getSubfamilyCode() {
+        return subfamilyCode;
     }
 }

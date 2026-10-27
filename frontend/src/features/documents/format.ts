@@ -9,6 +9,14 @@ export const documentPaths = {
   document: (typeCode: string, id: string) => `${base}/${typeCode.toLowerCase()}/${id}`,
 }
 
+/**
+ * Numer bonu przyjęcia: numer wewnętrzny z systemu sklepu bez dwóch końcowych zer (999300 → 9993, 1050700 → 10507).
+ * Inne numery (np. korekty WZ0000120261020) zostają bez zmian.
+ */
+export function bonNumber(number: string) {
+  return /^\d{3,}00$/.test(number) ? number.slice(0, -2) : number
+}
+
 const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const price = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 const quantity = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 3 })

@@ -49,8 +49,8 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
           </>,
           <>
             Wgraj oba pliki, wpisz hasło do klucza i NIP firmy. Po zapisie od razu sprawdzimy logowanie. Faktury są
-            wspólne dla firmy: gdy jest już połączona w innym sklepie, właściciel podłączy ten sklep jednym
-            kliknięciem i faktury będą widoczne od razu.
+            wspólne dla firmy: inne sklepy z tym samym NIP-em (Ustawienia → Sklepy) podłączysz potem jednym
+            kliknięciem, bez ponownego wgrywania certyfikatu.
           </>,
           <>
             Dodaj <strong className="font-semibold text-foreground">IDWew sklepu</strong>: sklep zobaczy faktury z
@@ -59,9 +59,14 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
         ]}
       />
       {!settings.connection && <CompanyLinkCard storeId={storeId} companies={settings.companies} />}
-      <ConnectionCard storeId={storeId} connection={settings.connection} />
+      <ConnectionCard storeId={storeId} connection={settings.connection} storeNip={settings.storeNip} />
       {settings.connection && (
-        <CompanyStoresCard storeId={storeId} nip={settings.connection.nip} stores={settings.otherStores} />
+        <CompanyStoresCard
+          storeId={storeId}
+          nip={settings.connection.nip}
+          stores={settings.otherStores}
+          withoutNip={settings.otherStoresWithoutNip}
+        />
       )}
       <InternalIdsCard storeId={storeId} settings={settings} />
       <SkippedSuppliersCard storeId={storeId} settings={settings} />
@@ -80,7 +85,7 @@ function CompanyLinkCard({ storeId, companies }: { storeId: string; companies: K
   return (
     <Card className="gap-3 p-5">
       <div>
-        <h2 className="text-base font-semibold">Firma połączona w Twoim innym sklepie</h2>
+        <h2 className="text-base font-semibold">Firma tego sklepu jest już połączona</h2>
         <p className="text-sm text-muted-foreground">
           Podłącz ten sklep do firmy bez wgrywania certyfikatu - zobaczy jej faktury od razu, bez czekania na pobranie.
         </p>
@@ -122,13 +127,22 @@ function CompanyLinkCard({ storeId, companies }: { storeId: string; companies: K
  * Pozostałe sklepy tej samej firmy: połączenie (certyfikat, klucz, hasło) kopiuje się do wybranych sklepów naraz,
  * więc przy kilku sklepach jednej firmy certyfikat wgrywa się tylko raz. Sklepów innej firmy się nie przełącza.
  */
-function CompanyStoresCard({ storeId, nip, stores }: { storeId: string; nip: string; stores: KsefCompanyStore[] }) {
+function CompanyStoresCard({
+  storeId,
+  nip,
+  stores,
+  withoutNip,
+}: {
+  storeId: string
+  nip: string
+  stores: KsefCompanyStore[]
+  withoutNip: number
+}) {
   const { shareConnection } = useKsefSettingsMutations(storeId)
   const [selected, setSelected] = useState<string[]>([])
-  const connected = stores.filter((store) => store.nip === nip)
-  const available = stores.filter((store) => store.nip === null)
-  const otherCompany = stores.filter((store) => store.nip !== null && store.nip !== nip)
-  if (stores.length === 0) return null
+  const connected = stores.filter((store) => store.connected)
+  const available = stores.filter((store) => !store.connected)
+  if (stores.length === 0 && withoutNip === 0) return null
 
   const label = (store: KsefCompanyStore) => `${store.number} · ${store.name}`
   const onShare = () =>
@@ -167,7 +181,9 @@ function CompanyStoresCard({ storeId, nip, stores }: { storeId: string; nip: str
         </ul>
       )}
 
-      {available.length > 0 ? (
+      {stores.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Żaden inny Twój sklep nie ma jeszcze NIP-u tej firmy.</p>
+      ) : available.length > 0 ? (
         <div className="flex flex-wrap items-end gap-3">
           <MultiComboboxField
             label="Podłącz sklepy"
@@ -188,12 +204,12 @@ function CompanyStoresCard({ storeId, nip, stores }: { storeId: string; nip: str
           </Button>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">Wszystkie Twoje sklepy bez połączenia są już podłączone.</p>
+        <p className="text-sm text-muted-foreground">Wszystkie Twoje sklepy tej firmy są już podłączone.</p>
       )}
 
-      {otherCompany.length > 0 && (
+      {withoutNip > 0 && (
         <p className="text-xs text-muted-foreground">
-          Połączone z inną firmą: {otherCompany.map(label).join(', ')}. Tych sklepów nie przełączamy.
+          Sklepy bez NIP-u firmy: {withoutNip}. Właściciel wpisuje NIP w Ustawieniach → Sklepy, wtedy pojawią się tutaj.
         </p>
       )}
     </Card>
@@ -202,7 +218,16 @@ function CompanyStoresCard({ storeId, nip, stores }: { storeId: string; nip: str
 
 type ConnectionForm = { nip: string; password: string }
 
-function ConnectionCard({ storeId, connection }: { storeId: string; connection: KsefConnection | null }) {
+function ConnectionCard({
+  storeId,
+  connection,
+  storeNip,
+}: {
+  storeId: string
+  connection: KsefConnection | null
+  /** NIP firmy z ustawień sklepu - podpowiedź dla nowego połączenia. */
+  storeNip: string | null
+}) {
   const { saveConnection, test } = useKsefSettingsMutations(storeId)
   const [certificate, setCertificate] = useState<File | undefined>()
   const [privateKey, setPrivateKey] = useState<File | undefined>()
@@ -214,7 +239,7 @@ function ConnectionCard({ storeId, connection }: { storeId: string; connection: 
     setError,
     resetField,
     formState: { errors },
-  } = useForm<ConnectionForm>({ defaultValues: { nip: connection?.nip ?? '', password: '' } })
+  } = useForm<ConnectionForm>({ defaultValues: { nip: connection?.nip ?? storeNip ?? '', password: '' } })
 
   const onSubmit = handleSubmit(({ nip, password }) => {
     setFormError(null)

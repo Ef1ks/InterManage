@@ -1,5 +1,6 @@
 package com.intermanage.backend.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,10 +18,13 @@ import org.springframework.web.bind.annotation.RestController;
 import com.intermanage.backend.dto.DocumentPage;
 import com.intermanage.backend.dto.DocumentResponse;
 import com.intermanage.backend.dto.DocumentsOverview;
+import com.intermanage.backend.dto.KsefInvoiceCandidate;
+import com.intermanage.backend.dto.LinkKsefInvoiceRequest;
 import com.intermanage.backend.dto.RegisterGratisRequest;
 import com.intermanage.backend.dto.SupplierDocumentNumberRequest;
 import com.intermanage.backend.security.AppUserPrincipal;
 import com.intermanage.backend.service.DocumentGratisService;
+import com.intermanage.backend.service.DocumentKsefLinkService;
 import com.intermanage.backend.service.DocumentService;
 
 import jakarta.validation.Valid;
@@ -41,8 +45,11 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final DocumentGratisService gratisService;
+    private final DocumentKsefLinkService ksefLinks;
 
-    public DocumentController(DocumentService documentService, DocumentGratisService gratisService) {
+    public DocumentController(DocumentService documentService, DocumentGratisService gratisService,
+            DocumentKsefLinkService ksefLinks) {
+        this.ksefLinks = ksefLinks;
         this.documentService = documentService;
         this.gratisService = gratisService;
     }
@@ -69,6 +76,40 @@ public class DocumentController {
     @GetMapping("/{type}/{id}")
     @PreAuthorize(VIEW)
     public DocumentResponse document(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id) {
+        return documentService.document(storeId, type, id);
+    }
+
+    /**
+     * Faktury KSeF do przypięcia przyjęcia albo korekty od dostawcy: domyślnie kwota netto ±10% wartości zakupu,
+     * najpierw ten sam dostawca i najbliższa kwota; {@code query} szuka po numerze faktury, dostawcy, NIP-ie.
+     */
+    @GetMapping("/{type}/{id}/ksef-invoices/candidates")
+    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    public List<KsefInvoiceCandidate> ksefInvoiceCandidates(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "true") boolean amountRange) {
+        return ksefLinks.invoiceCandidates(storeId, type, id, query, amountRange);
+    }
+
+    /** Przypina fakturę KSeF do dokumentu - faktura staje się wprowadzona. */
+    @PostMapping("/{type}/{id}/ksef-invoices")
+    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    public DocumentResponse linkKsefInvoice(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @Valid @RequestBody LinkKsefInvoiceRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        ksefLinks.linkableDocument(storeId, type, id);
+        ksefLinks.link(storeId, id, request.invoiceId(), principal.getId());
+        return documentService.document(storeId, type, id);
+    }
+
+    /** Odpina fakturę (znacznik); „Przywróć” to ponowne przypięcie. */
+    @DeleteMapping("/{type}/{id}/ksef-invoices/{invoiceId}")
+    @PreAuthorize(EDIT)
+    public DocumentResponse unlinkKsefInvoice(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @PathVariable UUID invoiceId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        ksefLinks.linkableDocument(storeId, type, id);
+        ksefLinks.unlink(storeId, id, invoiceId, principal.getId());
         return documentService.document(storeId, type, id);
     }
 

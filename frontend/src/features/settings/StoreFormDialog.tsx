@@ -9,10 +9,22 @@ import { useSaveStore } from '@/features/settings/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { Store } from '@/lib/types'
 
+const NIP_WEIGHTS = [6, 5, 7, 2, 3, 4, 5, 6, 7]
+
+/** Pusty albo 10 cyfr z poprawną sumą kontrolną (myślniki i spacje pomijamy) - tak samo sprawdza serwer. */
+function isValidNip(value: string) {
+  const digits = value.replace(/[\s-]/g, '')
+  if (digits === '') return true
+  if (!/^\d{10}$/.test(digits)) return false
+  const sum = NIP_WEIGHTS.reduce((total, weight, index) => total + weight * Number(digits[index]), 0)
+  return sum % 11 === Number(digits[9])
+}
+
 type StoreForm = {
   number: string
   name: string
   address: string
+  nip: string
   active: boolean
 }
 
@@ -49,6 +61,7 @@ function StoreFormBody({ store, onDone }: { store?: Store; onDone: () => void })
       number: store?.number ?? '',
       name: store?.name ?? '',
       address: store?.address ?? '',
+      nip: store?.nip ?? '',
       active: store?.active ?? true,
     },
   })
@@ -56,13 +69,13 @@ function StoreFormBody({ store, onDone }: { store?: Store; onDone: () => void })
   const onSubmit = handleSubmit((values) => {
     setFormError(null)
     saveStore.mutate(
-      { id: store?.id, request: { ...values, number: values.number.trim() } },
+      { id: store?.id, request: { ...values, number: values.number.trim(), nip: values.nip.trim() } },
       {
         onSuccess: (saved) => {
           toast.success(isNew ? `Dodano sklep ${saved.number}` : 'Zapisano zmiany')
           onDone()
         },
-        onError: (error) => setFormError(applyServerErrors(error, setError, ['number', 'name', 'address'])),
+        onError: (error) => setFormError(applyServerErrors(error, setError, ['number', 'name', 'address', 'nip'])),
       },
     )
   })
@@ -105,6 +118,17 @@ function StoreFormBody({ store, onDone }: { store?: Store; onDone: () => void })
         autoComplete="off"
         error={errors.address?.message}
         {...register('address', { maxLength: { value: 255, message: 'Maksymalnie 255 znaków' } })}
+      />
+
+      <TextField
+        label="NIP firmy (opcjonalnie)"
+        inputMode="numeric"
+        autoComplete="off"
+        hint="Sklepy z tym samym NIP-em dzielą połączenie z KSeF - certyfikat wgrywa się raz dla całej firmy."
+        error={errors.nip?.message}
+        {...register('nip', {
+          validate: (value) => isValidNip(value) || 'Nieprawidłowy NIP',
+        })}
       />
 
       {!isNew && (

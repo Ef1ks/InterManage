@@ -13,6 +13,7 @@ import com.intermanage.backend.dto.DocumentResponse.DocumentLineResponse;
 import com.intermanage.backend.dto.DocumentSummary;
 import com.intermanage.backend.dto.DocumentTypeSummary;
 import com.intermanage.backend.dto.LinkedDeliOrder;
+import com.intermanage.backend.dto.LinkedKsefInvoice;
 import com.intermanage.backend.entity.Document;
 import com.intermanage.backend.entity.DocumentGratis;
 import com.intermanage.backend.entity.DocumentImport;
@@ -29,7 +30,8 @@ public interface DocumentMapper {
     /** {@code gratis} pusty, gdy dokumentu nie zarejestrowano jako gratis. */
     @Mapping(target = "id", source = "document.id")
     @Mapping(target = "gratis", source = "gratis")
-    DocumentSummary toSummary(Document document, DocumentGratis gratis);
+    @Mapping(target = "ksefInvoices", source = "ksefInvoices")
+    DocumentSummary toSummary(Document document, DocumentGratis gratis, List<LinkedKsefInvoice> ksefInvoices);
 
     @Mapping(target = "id", source = "document.id")
     @Mapping(target = "gratis", source = "gratis")
@@ -37,9 +39,12 @@ public interface DocumentMapper {
     @Mapping(target = "typeSingular", expression = "java(document.getType().singular())")
     @Mapping(target = "gratisAllowed", expression = "java(document.getType().canBeGratis())")
     @Mapping(target = "supplierDocumentNumberEditedBy", source = "document.supplierDocumentNumberEditedBy.displayName")
+    @Mapping(target = "ksefLinkable", expression = "java(document.getType().canLinkKsefInvoice())")
+    @Mapping(target = "ksefInvoices", source = "ksefInvoices")
     @Mapping(target = "supplierDocumentNumberEditable",
             expression = "java(document.getType() == com.intermanage.backend.entity.DocumentType.PZ)")
-    DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis);
+    DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis,
+            List<LinkedKsefInvoice> ksefInvoices);
 
     @Mapping(target = "supplierId", source = "supplier.id")
     @Mapping(target = "supplierCode", source = "supplier.code")

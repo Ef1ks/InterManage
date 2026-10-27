@@ -9,6 +9,7 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
 import { DeliOrderPage } from '@/features/deli-order/DeliOrderPage'
 import { PriceCalculatorPage } from '@/features/deli-prices/PriceCalculatorPage'
+import { SalesPage } from '@/features/sales/SalesPage'
 import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { ImportPage } from '@/features/imports/ImportPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
@@ -22,6 +23,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 
 /** Gotowe moduły; reszta kategorii pokazuje stronę "w przygotowaniu". */
 const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
+  SALES: <SalesPage />,
   IMPORTS: <ImportPage />,
   DELI_ORDERS: <DeliOrderPage />,
   DOCUMENTS: <DocumentsPage />,

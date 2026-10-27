@@ -13,9 +13,11 @@ import com.intermanage.backend.dto.StoreRequest;
 import com.intermanage.backend.dto.StoreResponse;
 import com.intermanage.backend.dto.StoreSummary;
 import com.intermanage.backend.entity.AppUser;
+import com.intermanage.backend.entity.KsefConnection;
 import com.intermanage.backend.entity.Store;
 import com.intermanage.backend.exception.ApiException;
 import com.intermanage.backend.mapper.StoreMapper;
+import com.intermanage.backend.repository.KsefConnectionRepository;
 import com.intermanage.backend.repository.StoreRepository;
 
 @Service
@@ -23,10 +25,12 @@ public class StoreService {
 
     private final StoreRepository stores;
     private final StoreMapper storeMapper;
+    private final KsefConnectionRepository ksefConnections;
 
-    public StoreService(StoreRepository stores, StoreMapper storeMapper) {
+    public StoreService(StoreRepository stores, StoreMapper storeMapper, KsefConnectionRepository ksefConnections) {
         this.stores = stores;
         this.storeMapper = storeMapper;
+        this.ksefConnections = ksefConnections;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +48,7 @@ public class StoreService {
             throw ApiException.conflict("Sklep o numerze " + number + " już istnieje");
         }
         Store store = new Store(number, request.name().trim(), blankToNull(request.address()));
+        store.setNip(nip(request.nip()));
         store.setActive(request.active());
         return storeMapper.toResponse(stores.save(store), 0);
     }
@@ -58,6 +63,14 @@ public class StoreService {
         store.setNumber(number);
         store.setName(request.name().trim());
         store.setAddress(blankToNull(request.address()));
+        String nip = nip(request.nip());
+        String connectedNip = ksefConnections.findById(id).map(KsefConnection::getNip).orElse(null);
+        if (connectedNip != null && !connectedNip.equals(nip)) {
+            throw ApiException.conflict("Sklep jest połączony z KSeF firmy o NIP " + connectedNip
+                    + " - najpierw zmień połączenie w ustawieniach faktur KSeF").withProperty("errors",
+                    Map.of("nip", "Sklep jest połączony z KSeF firmy o NIP " + connectedNip));
+        }
+        store.setNip(nip);
         store.setActive(request.active());
         return storeMapper.toResponse(store, userCounts().getOrDefault(id, 0L));
     }
@@ -93,6 +106,11 @@ public class StoreService {
             counts.put((UUID) row[0], (Long) row[1]);
         }
         return counts;
+    }
+
+    /** NIP z formularza: pusty = brak, inaczej 10 cyfr z poprawną sumą kontrolną (myślniki i spacje pomijamy). */
+    private static String nip(String value) {
+        return value == null || value.isBlank() ? null : KsefConnectionService.nip(value, "nip");
     }
 
     private static String blankToNull(String value) {

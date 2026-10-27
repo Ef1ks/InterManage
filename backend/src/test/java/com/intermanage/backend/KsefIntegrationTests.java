@@ -1,7 +1,12 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.oneOf;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -225,7 +230,7 @@ class KsefIntegrationTests {
     void companyInvoicesAreSharedBetweenStores() throws Exception {
         Cookie owner = login();
         String first = createStore(owner);
-        String second = createStore(owner);
+        String second = createStore(owner, nip);
         when(ksef.authenticate(eq(nip), any(), any()))
                 .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
         connection(owner, first, nip, "haslo-testowe").andExpect(status().isOk());
@@ -270,7 +275,9 @@ class KsefIntegrationTests {
         list(owner, first, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(0));
 
         // Firmy bez połączenia w innym sklepie nie da się podłączyć.
-        send(owner, post(url(createStore(owner), "/settings/connection/link")), "{\"nip\":\"" + randomNip() + "\"}")
+        String unconnectedNip = randomNip();
+        send(owner, post(url(createStore(owner, unconnectedNip), "/settings/connection/link")),
+                "{\"nip\":\"" + unconnectedNip + "\"}")
                 .andExpect(status().isNotFound());
     }
 
@@ -278,24 +285,33 @@ class KsefIntegrationTests {
     void connectedStoreSharesConnectionWithOtherStoresOfCompany() throws Exception {
         Cookie owner = login();
         String main = createStore(owner);
-        String second = createStore(owner);
-        String third = createStore(owner);
+        String second = createStore(owner, nip);
+        String third = createStore(owner, nip);
+        String withoutNip = createStore(owner);
         String otherCompany = createStore(owner);
         String otherNip = randomNip();
         when(ksef.authenticate(anyString(), any(), any()))
                 .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
         connection(owner, main, nip, "haslo-testowe").andExpect(status().isOk());
         connection(owner, otherCompany, otherNip, "haslo-testowe").andExpect(status().isOk());
+        // NIP sklepu ma sumę kontrolną; myślniki i spacje są pomijane.
+        send(owner, post("/api/settings/stores"), "{\"number\":\"" + ThreadLocalRandom.current().nextLong(1_000_000,
+                9_999_999_999L) + "\",\"name\":\"Zły NIP\",\"nip\":\"1234567890\",\"active\":true}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.nip").exists());
+        // Do podłączenia tylko sklepy z NIP-em tej firmy; sklep innej firmy i sklep bez NIP-u się nie pojawiają.
         mvc.perform(get(url(main, "/settings")).cookie(owner))
-                .andExpect(jsonPath("$.otherStores[?(@.id == '" + second + "')]").exists())
-                .andExpect(jsonPath("$.otherStores[?(@.id == '" + otherCompany + "')].nip").value(otherNip));
+                .andExpect(jsonPath("$.storeNip").value(nip))
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + second + "')].connected").value(false))
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + otherCompany + "')]").isEmpty())
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + withoutNip + "')]").isEmpty());
 
         // Dwa sklepy naraz, bez certyfikatu i bez osobnego logowania do KSeF.
         send(owner, post(url(main, "/settings/connection/share")),
                 "{\"storeIds\":[\"" + second + "\",\"" + third + "\",\"" + main + "\"]}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.otherStores[?(@.id == '" + second + "')].nip").value(nip))
-                .andExpect(jsonPath("$.otherStores[?(@.id == '" + third + "')].nip").value(nip));
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + second + "')].connected").value(true))
+                .andExpect(jsonPath("$.otherStores[?(@.id == '" + third + "')].connected").value(true));
         mvc.perform(get(url(third, "/settings")).cookie(owner))
                 .andExpect(jsonPath("$.connection.nip").value(nip))
                 .andExpect(jsonPath("$.connection.testOk").value(true));
@@ -303,6 +319,20 @@ class KsefIntegrationTests {
         send(owner, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + second + "\"]}")
                 .andExpect(status().isOk());
         send(owner, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + otherCompany + "\"]}")
+                .andExpect(status().isConflict());
+        send(owner, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + withoutNip + "\"]}")
+                .andExpect(status().isConflict());
+        // Sklep bez NIP-u nie dostaje podpowiedzi firmy i nie podłączy się sam.
+        mvc.perform(get(url(withoutNip, "/settings")).cookie(owner)).andExpect(jsonPath("$.companies.length()").value(0));
+        send(owner, post(url(withoutNip, "/settings/connection/link")), "{\"nip\":\"" + nip + "\"}")
+                .andExpect(status().isBadRequest());
+        // Nowe połączenie musi być z firmą z ustawień sklepu, a NIP-u połączonego sklepu nie zmienia się w ustawieniach.
+        String fourth = createStore(owner, nip);
+        connection(owner, fourth, otherNip, "haslo-testowe").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.nip").exists());
+        send(owner, put("/api/settings/stores/" + third),
+                "{\"number\":\"" + ThreadLocalRandom.current().nextLong(1_000_000, 9_999_999_999L)
+                        + "\",\"name\":\"Sklep\",\"nip\":\"" + otherNip + "\",\"active\":true}")
                 .andExpect(status().isConflict());
 
         // Pracownik nie podłączy sklepu, do którego nie ma dostępu.
@@ -312,6 +342,92 @@ class KsefIntegrationTests {
         send(employee, post(url(main, "/settings/connection/share")), "{\"storeIds\":[\"" + foreign + "\"]}")
                 .andExpect(status().isNotFound());
         mvc.perform(get(url(foreign, "/settings")).cookie(owner)).andExpect(jsonPath("$.connection").doesNotExist());
+    }
+
+    @Test
+    void documentsAndInvoicesArePinnedFromBothSides() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, storeId, nip, "haslo-testowe").andExpect(status().isOk());
+        OffsetDateTime stored = OffsetDateTime.of(2026, 10, 20, 8, 0, 0, 0, ZoneOffset.UTC);
+        when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
+                false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
+                        invoice("KOR/1/2026", "1111111111", "MLECZARNIA", stored, "Kor", null, new BigDecimal("-50.00")),
+                        invoice("FV/40/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(1), "Vat", null,
+                                new BigDecimal("98.00")),
+                        invoice("FV/41/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(2), "Vat", null,
+                                new BigDecimal("105.00")),
+                        invoice("FV/42/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(3), "Vat", null,
+                                new BigDecimal("300.00")))));
+        syncAndWait(owner, storeId).andExpect(jsonPath("$.syncMessage").value("Pobrano 4 faktury"));
+
+        // Korekta od dostawcy na -100 zł: domyślnie faktury z kwotą ±10%, od najbliższej; wyszukiwarka bez zakresu.
+        String correction = insertDocument(storeId, "WZ", "WZ1", null, "-100.00");
+        String documents = "/api/stores/" + storeId + "/documents/wz/" + correction + "/ksef-invoices";
+        mvc.perform(get(documents + "/candidates").cookie(owner))
+                .andExpect(jsonPath("$[*].invoiceNumber").value(contains("FV/40/2026", "FV/41/2026")))
+                .andExpect(jsonPath("$[0].difference").value(2.0));
+        String korekta = JsonPath.read(mvc.perform(get(documents + "/candidates").param("amountRange", "false")
+                        .param("query", "kor").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+
+        // Przypięcie z dokumentu: faktura jest wprowadzona, a przy fakturze widać korektę.
+        send(owner, post(documents), "{\"invoiceId\":\"" + korekta + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ksefLinkable").value(true))
+                .andExpect(jsonPath("$.ksefInvoices[0].invoiceNumber").value("KOR/1/2026"))
+                .andExpect(jsonPath("$.ksefInvoices[0].matchedByNumber").value(false));
+        list(owner, storeId, "&entered=ENTERED").andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.invoices[0].deliveries[0].type").value("WZ"))
+                .andExpect(jsonPath("$.invoices[0].deliveries[0].linked").value(true));
+        mvc.perform(get("/api/stores/" + storeId + "/documents/wz").cookie(owner))
+                .andExpect(jsonPath("$.documents[0].ksefInvoices[0].invoiceNumber").value("KOR/1/2026"));
+
+        // Przyjęcie z numerem faktury łączy się samo.
+        String delivery = insertDocument(storeId, "PZ", "PZ300", "fv/42/2026", "300.00");
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pz/" + delivery).cookie(owner))
+                .andExpect(jsonPath("$.ksefInvoices[0].invoiceNumber").value("FV/42/2026"))
+                .andExpect(jsonPath("$.ksefInvoices[0].matchedByNumber").value(true));
+
+        // Z listy faktur: przyjęcie bez numeru z najbliższą kwotą, przypięcie i odpięcie.
+        String fv41 = jdbc.queryForObject("select id from ksef_invoices where invoice_number = 'FV/41/2026' and nip = ?",
+                String.class, nip);
+        String withoutNumber = insertDocument(storeId, "PZ", "PZ301", null, "104.00");
+        mvc.perform(get(url(storeId, "/invoices/" + fv41 + "/documents/candidates")).cookie(owner))
+                .andExpect(jsonPath("$[0].number").value("PZ301"))
+                .andExpect(jsonPath("$[0].typeSingular").value("Przyjęcie towaru"));
+        send(owner, post(url(storeId, "/invoices/" + fv41 + "/documents")), "{\"documentId\":\"" + withoutNumber + "\"}")
+                .andExpect(jsonPath("$.entered").value(true))
+                .andExpect(jsonPath("$.deliveries[0].number").value("PZ301"));
+
+        // Przyjęcie ma najwyżej jedną fakturę: przypiętą albo dopasowaną po numerze.
+        String fv40 = jdbc.queryForObject("select id from ksef_invoices where invoice_number = 'FV/40/2026' and nip = ?",
+                String.class, nip);
+        mvc.perform(get(url(storeId, "/invoices/" + fv40 + "/documents/candidates")).param("amountRange", "false")
+                        .cookie(owner))
+                .andExpect(jsonPath("$[*].number").value(everyItem(not(oneOf("PZ300", "PZ301")))));
+        send(owner, post("/api/stores/" + storeId + "/documents/pz/" + withoutNumber + "/ksef-invoices"),
+                "{\"invoiceId\":\"" + fv40 + "\"}").andExpect(status().isConflict());
+        send(owner, post(url(storeId, "/invoices/" + fv40 + "/documents")), "{\"documentId\":\"" + delivery + "\"}")
+                .andExpect(status().isConflict());
+        send(owner, post(url(storeId, "/invoices/" + fv41 + "/documents")), "{\"documentId\":\"" + withoutNumber + "\"}")
+                .andExpect(status().isOk());
+
+        mvc.perform(delete(url(storeId, "/invoices/" + fv41 + "/documents/" + withoutNumber)).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.entered").value(false));
+
+        // Odpięcie z dokumentu zostawia wpis ze znacznikiem.
+        mvc.perform(delete(documents + "/" + korekta).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.ksefInvoices.length()").value(0));
+        assertThat(jdbc.queryForObject("select count(*) from document_ksef_invoices where document_id = ?::uuid "
+                + "and unlinked_at is not null", Integer.class, correction)).isEqualTo(1);
+        // Fakturę przypina się tylko do przyjęć i korekt od dostawcy.
+        String liquidation = insertDocument(storeId, "PL", "PL1", null, "100.00");
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pl/" + liquidation + "/ksef-invoices/candidates")
+                .cookie(owner)).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -357,8 +473,8 @@ class KsefIntegrationTests {
     void employeeSeesAndLinksOnlyCompaniesFromOwnStores() throws Exception {
         Cookie owner = login();
         String connected = createStore(owner);
-        String foreign = createStore(owner);
-        String shared = createStore(owner);
+        String foreign = createStore(owner, nip);
+        String shared = createStore(owner, nip);
         when(ksef.authenticate(eq(nip), any(), any()))
                 .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
         connection(owner, connected, nip, "haslo-testowe").andExpect(status().isOk());
@@ -398,6 +514,11 @@ class KsefIntegrationTests {
 
     private KsefInvoiceMetadata invoice(String number, String sellerNip, String sellerName,
             OffsetDateTime storedAt, String type, String internalId) {
+        return invoice(number, sellerNip, sellerName, storedAt, type, internalId, new BigDecimal("100.00"));
+    }
+
+    private KsefInvoiceMetadata invoice(String number, String sellerNip, String sellerName,
+            OffsetDateTime storedAt, String type, String internalId, BigDecimal net) {
         List<KsefInvoiceMetadata.ThirdSubject> third = internalId == null ? List.of()
                 : List.of(new KsefInvoiceMetadata.ThirdSubject(
                         new KsefInvoiceMetadata.Identifier("InternalId", internalId), "Sklep " + internalId, 2));
@@ -405,7 +526,8 @@ class KsefIntegrationTests {
                 + "-AB", number, LocalDate.of(2026, 10, 19), storedAt.minusMinutes(1), storedAt,
                 new KsefInvoiceMetadata.Seller(sellerNip, sellerName),
                 new KsefInvoiceMetadata.Buyer(new KsefInvoiceMetadata.Identifier("Nip", nip), "TRYTOMA"),
-                new BigDecimal("100.00"), new BigDecimal("123.00"), new BigDecimal("23.00"), "PLN", type, false, third);
+                net, net.multiply(new BigDecimal("1.23")), net.multiply(new BigDecimal("0.23")), "PLN", type, false,
+                third);
     }
 
     private ResultActions connection(Cookie owner, String storeId, String nip, String password) throws Exception {
@@ -447,6 +569,22 @@ class KsefIntegrationTests {
         return "/api/stores/" + storeId + "/ksef" + path;
     }
 
+    /** Dokument sklepu z wartością zakupu; zwraca id. */
+    private String insertDocument(String storeId, String type, String number, String supplierDocumentNumber,
+            String purchaseValue) {
+        String importId = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
+                    updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', 1, 1, 1, 0, 0) returning id""", String.class, storeId);
+        return jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, supplier_name, supplier_document_number,
+                    report_supplier_document_number, line_count, purchase_value, sale_value_gross, first_import_id,
+                    last_import_id)
+                values (?::uuid, ?, ?, ?, 'MLECZARNIA', ?, ?, 1, ?::numeric, 0, ?::uuid, ?::uuid) returning id""",
+                String.class, storeId, type, number, LocalDateTime.of(2026, 10, 20, 0, 0), supplierDocumentNumber,
+                supplierDocumentNumber, purchaseValue, importId, importId);
+    }
+
     private void insertDelivery(String storeId, String number, String supplierDocumentNumber) {
         String importId = jdbc.queryForObject("""
                 insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
@@ -462,9 +600,15 @@ class KsefIntegrationTests {
     }
 
     private String createStore(Cookie owner) throws Exception {
+        return createStore(owner, null);
+    }
+
+    /** Sklep z NIP-em firmy w ustawieniach ({@code null} = bez NIP-u). */
+    private String createStore(Cookie owner, String storeNip) throws Exception {
         String number = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000, 9_999_999_999L));
         String json = send(owner, post("/api/settings/stores"),
-                "{\"number\":\"" + number + "\",\"name\":\"Sklep " + number + "\",\"active\":true}")
+                "{\"number\":\"" + number + "\",\"name\":\"Sklep " + number + "\",\"active\":true"
+                        + (storeNip != null ? ",\"nip\":\"" + storeNip + "\"" : "") + "}")
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(json, "$.id");

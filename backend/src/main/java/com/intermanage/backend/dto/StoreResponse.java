@@ -8,6 +8,7 @@ public record StoreResponse(
         String number,
         String name,
         String address,
+        String nip,
         boolean active,
         /** Ilu pracowników ma przypisany sklep (właściciele widzą wszystkie sklepy i nie są liczeni). */
         long userCount,

@@ -29,6 +29,10 @@ public class Store {
     @Column(length = 255)
     private String address;
 
+    /** NIP firmy, do której należy sklep; po nim łączą się sklepy jednej firmy w KSeF. */
+    @Column(length = 10)
+    private String nip;
+
     /** Wyłączony sklep znika z wyboru u pracowników, ale zachowuje dane i historię importów. */
     @Column(nullable = false)
     private boolean active = true;
@@ -76,6 +80,14 @@ public class Store {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    public String getNip() {
+        return nip;
+    }
+
+    public void setNip(String nip) {
+        this.nip = nip;
     }
 
     public boolean isActive() {

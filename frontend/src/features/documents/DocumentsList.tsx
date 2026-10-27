@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type DocumentColumn, useDocuments } from '@/features/documents/api'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
+import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
 import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import { isReportFresh } from '@/lib/report-freshness'
@@ -36,6 +37,9 @@ export function BackToTypes() {
  * Dokumenty jednego typu (z adresu strony). Dokumentów są tysiące, więc serwer oddaje je po 100, a kolejne strony
  * dochodzą przy przewijaniu; wyszukiwanie, sortowanie po nagłówkach i suma "Razem" liczą się w bazie.
  */
+/** Przyjęcia i korekty od dostawcy - do nich przypina się faktury z KSeF (jak `DocumentType.canLinkKsefInvoice`). */
+const KSEF_LINKABLE_TYPES = new Set(['PZ', 'WZ'])
+
 export function DocumentsList({ storeId }: { storeId: string }) {
   const typeCode = useParams().type ?? ''
   const [query, setQuery] = useState('')
@@ -185,7 +189,19 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                           <span className="text-muted-foreground">różni dostawcy</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{document.supplierDocumentNumber}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {document.supplierDocumentNumber}
+                        {KSEF_LINKABLE_TYPES.has(typeCode.toUpperCase()) && (
+                          <DocumentRowKsef
+                            storeId={storeId}
+                            target={{
+                              ...document,
+                              type: typeCode.toUpperCase(),
+                              typeSingular: first?.type.singular ?? 'Dokument',
+                            }}
+                          />
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">{countFormat.format(document.lineCount)}</TableCell>
                       <TableCell className="text-right">{formatMoney(document.purchaseValue)}</TableCell>
                       <TableCell className="text-right">{formatMoney(document.saleValueGross)}</TableCell>

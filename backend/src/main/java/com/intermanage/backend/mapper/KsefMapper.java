@@ -9,7 +9,6 @@ import com.intermanage.backend.dto.KsefConnectionResponse;
 import com.intermanage.backend.dto.KsefInternalIdResponse;
 import com.intermanage.backend.dto.KsefInvoiceSummary;
 import com.intermanage.backend.dto.KsefSkippedSupplierResponse;
-import com.intermanage.backend.entity.Document;
 import com.intermanage.backend.entity.KsefConnection;
 import com.intermanage.backend.entity.KsefInternalId;
 import com.intermanage.backend.entity.KsefInvoice;
@@ -29,8 +28,8 @@ public interface KsefMapper {
     KsefSkippedSupplierResponse toResponse(KsefSkippedSupplier supplier);
 
     /**
-     * {@code deliveries}: przyjęcia PZ sklepu z numerem faktury, {@code entry}: ręczne oznaczenie w sklepie albo
-     * {@code null}; razem dają "wprowadzona".
+     * {@code deliveries}: przyjęcia PZ sklepu z numerem faktury i dokumenty przypięte ręcznie, {@code entry}: ręczne
+     * oznaczenie w sklepie albo {@code null}; razem dają "wprowadzona".
      */
     @Mapping(target = "id", source = "invoice.id")
     @Mapping(target = "internalIds", expression = "java(internalIds(invoice))")
@@ -38,10 +37,8 @@ public interface KsefMapper {
     @Mapping(target = "enteredBy", source = "entry.enteredBy.displayName")
     @Mapping(target = "enteredAt", source = "entry.enteredAt")
     @Mapping(target = "deliveries", source = "deliveries")
-    KsefInvoiceSummary toSummary(KsefInvoice invoice, KsefInvoiceEntry entry, List<Document> deliveries,
-            boolean supplierSkipped);
-
-    KsefInvoiceSummary.Delivery toDelivery(Document document);
+    KsefInvoiceSummary toSummary(KsefInvoice invoice, KsefInvoiceEntry entry,
+            List<KsefInvoiceSummary.Delivery> deliveries, boolean supplierSkipped);
 
     default List<String> internalIds(KsefInvoice invoice) {
         return invoice.getInternalIds().stream().map(KsefInvoice.InternalIdRef::internalId).sorted().toList();

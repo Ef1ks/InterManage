@@ -31,6 +31,10 @@ public record DocumentResponse(
         boolean gratisAllowed,
         boolean gratisCandidate,
         DocumentGratisResponse gratis,
+        /** Do dokumentu można przypiąć fakturę z KSeF (przyjęcia i korekty od dostawcy). */
+        boolean ksefLinkable,
+        /** Faktury KSeF: przypięte i dopasowane po numerze dokumentu dostawcy. */
+        List<LinkedKsefInvoice> ksefInvoices,
         /** Ostatnia zmiana nagłówka albo linii przez import. */
         Instant updatedAt,
         List<DocumentLineResponse> lines,

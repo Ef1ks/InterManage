@@ -68,7 +68,11 @@ export function StoresPage() {
                   <TableRow key={store.id}>
                     <TableCell className="py-3 pl-4">
                       <div className="font-medium">{store.name}</div>
-                      {store.address && <div className="text-xs text-muted-foreground">{store.address}</div>}
+                      {(store.address || store.nip) && (
+                        <div className="text-xs text-muted-foreground">
+                          {[store.address, store.nip && `NIP ${store.nip}`].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="tabular-nums">{store.number}</TableCell>
                     <TableCell className="text-right tabular-nums">{store.userCount}</TableCell>

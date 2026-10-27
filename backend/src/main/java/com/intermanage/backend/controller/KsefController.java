@@ -2,6 +2,7 @@ package com.intermanage.backend.controller;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
@@ -25,16 +26,19 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.intermanage.backend.dto.DocumentCandidate;
 import com.intermanage.backend.dto.KsefInternalIdRequest;
 import com.intermanage.backend.dto.KsefInvoicePage;
 import com.intermanage.backend.dto.KsefInvoiceSummary;
 import com.intermanage.backend.dto.KsefLinkConnectionRequest;
-import com.intermanage.backend.dto.KsefShareConnectionRequest;
 import com.intermanage.backend.dto.KsefOverview;
 import com.intermanage.backend.dto.KsefSettingsResponse;
+import com.intermanage.backend.dto.KsefShareConnectionRequest;
 import com.intermanage.backend.dto.KsefSkippedSupplierRequest;
+import com.intermanage.backend.dto.LinkDocumentRequest;
 import com.intermanage.backend.repository.KsefInvoiceSearch;
 import com.intermanage.backend.security.AppUserPrincipal;
+import com.intermanage.backend.service.DocumentKsefLinkService;
 import com.intermanage.backend.service.KsefConnectionService;
 import com.intermanage.backend.service.KsefInvoiceService;
 import com.intermanage.backend.service.KsefSyncService;
@@ -57,12 +61,14 @@ public class KsefController {
     private final KsefInvoiceService invoiceService;
     private final KsefConnectionService connectionService;
     private final KsefSyncService syncService;
+    private final DocumentKsefLinkService documentLinks;
 
     public KsefController(KsefInvoiceService invoiceService, KsefConnectionService connectionService,
-            KsefSyncService syncService) {
+            KsefSyncService syncService, DocumentKsefLinkService documentLinks) {
         this.invoiceService = invoiceService;
         this.connectionService = connectionService;
         this.syncService = syncService;
+        this.documentLinks = documentLinks;
     }
 
     @GetMapping
@@ -104,6 +110,35 @@ public class KsefController {
     public KsefInvoiceSummary unmarkEntered(@PathVariable UUID storeId, @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return invoiceService.setEntered(storeId, id, false, principal.getId());
+    }
+
+    /**
+     * Przyjęcia i korekty od dostawcy do przypięcia faktury: domyślnie wartość zakupu ±10% kwoty netto faktury,
+     * najpierw ten sam dostawca i najbliższa kwota; {@code query} szuka po numerze, dostawcy, nr dok. dostawcy.
+     */
+    @GetMapping("/invoices/{id}/documents/candidates")
+    @PreAuthorize(EDIT + " and hasAuthority('DOCUMENTS:VIEW')")
+    public List<DocumentCandidate> documentCandidates(@PathVariable UUID storeId, @PathVariable UUID id,
+            @RequestParam(required = false) String query, @RequestParam(defaultValue = "true") boolean amountRange) {
+        return documentLinks.documentCandidates(storeId, id, query, amountRange);
+    }
+
+    /** Przypina dokument sklepu do faktury - faktura staje się wprowadzona. */
+    @PostMapping("/invoices/{id}/documents")
+    @PreAuthorize(EDIT + " and hasAuthority('DOCUMENTS:VIEW')")
+    public KsefInvoiceSummary linkDocument(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody LinkDocumentRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        documentLinks.link(storeId, request.documentId(), id, principal.getId());
+        return invoiceService.summary(storeId, id);
+    }
+
+    /** Odpina dokument (znacznik); „Przywróć” to ponowne przypięcie. */
+    @DeleteMapping("/invoices/{id}/documents/{documentId}")
+    @PreAuthorize(EDIT)
+    public KsefInvoiceSummary unlinkDocument(@PathVariable UUID storeId, @PathVariable UUID id,
+            @PathVariable UUID documentId, @AuthenticationPrincipal AppUserPrincipal principal) {
+        documentLinks.unlink(storeId, documentId, id, principal.getId());
+        return invoiceService.summary(storeId, id);
     }
 
     @GetMapping("/invoices/{id}/xml")

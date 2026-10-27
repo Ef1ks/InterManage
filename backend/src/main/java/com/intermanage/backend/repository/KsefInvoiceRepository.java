@@ -35,5 +35,11 @@ public interface KsefInvoiceRepository extends JpaRepository<KsefInvoice, UUID>,
 
     Optional<KsefInvoice> findByIdAndNip(UUID id, String nip);
 
+    /** Faktury firmy o numerach spośród podanych (wielkimi literami) - do dopasowania przyjęć po numerze. */
+    @Query("""
+            select distinct i from KsefInvoice i left join fetch i.internalIds
+            where i.nip = :nip and upper(i.invoiceNumber) in :numbers""")
+    List<KsefInvoice> findByInvoiceNumbers(String nip, Collection<String> numbers);
+
     long countByNip(String nip);
 }

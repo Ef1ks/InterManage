@@ -2,6 +2,7 @@ package com.intermanage.backend.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -19,5 +20,7 @@ public record DocumentSummary(
         BigDecimal purchaseValue,
         BigDecimal saleValueGross,
         boolean gratisCandidate,
-        DocumentGratisResponse gratis) {
+        DocumentGratisResponse gratis,
+        /** Faktury KSeF przyjęcia albo korekty od dostawcy: przypięte i dopasowane po numerze. */
+        List<LinkedKsefInvoice> ksefInvoices) {
 }

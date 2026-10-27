@@ -6,9 +6,11 @@ import {
   EyeOffIcon,
   FileCodeIcon,
   FileTextIcon,
+  LinkIcon,
   LoaderCircleIcon,
   RefreshCwIcon,
   UndoIcon,
+  UnlinkIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
@@ -29,13 +31,15 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
-import { countFormat, formatMoney } from '@/features/documents/format'
+import { bonNumber, countFormat, documentPaths, formatMoney } from '@/features/documents/format'
+import { DocumentPicker } from '@/features/ksef/DocumentPicker'
 import {
   type EnteredFilter,
   type KindFilter,
   type KsefColumn,
   type KsefFilters,
   useDownloadInvoice,
+  useInvoiceDocumentLinks,
   useKsefInvoices,
   useKsefOverview,
   useKsefSettingsMutations,
@@ -47,7 +51,7 @@ import { formatDate, formatDateTime, formatNip, invoicesWord, invoiceTypeLabel, 
 import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
 import { nextSort, type SortState } from '@/lib/table-sort'
-import type { KsefInvoice, KsefOverview } from '@/lib/types'
+import type { KsefInvoice, KsefInvoiceDocument, KsefOverview } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
@@ -216,9 +220,10 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
           </Button>
         </Card>
       ) : (
-        <Card className="py-0">
+        <Card className="gap-0 py-0">
+          <StatusLegend />
           {/*
-            Stałe szerokości dla dat, kwot, statusu i akcji; numer i dostawca dzielą resztę i zawijają się albo
+            Stałe szerokości dla statusu, dat, kwot i akcji; numer i dostawca dzielą resztę i zawijają się albo
             przycinają, więc tabela mieści się w karcie. Przewija się dopiero na wąskim ekranie (poniżej 48rem).
           */}
           <Table
@@ -228,20 +233,24 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
             )}
           >
             <colgroup>
+              <col className="w-9" />
               <col />
               <col className="w-24" />
               <col />
               <col className="w-28" />
               <col className="w-28" />
               <col className="w-36" />
-              <col className="w-12" />
+              <col className="w-14" />
             </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <SortableHead column="number" sort={sort} onSort={toggleSort} className="pl-4">
+                <TableHead className="pr-0 pl-4">
+                  <span className="sr-only">Status</span>
+                </TableHead>
+                <SortableHead column="number" sort={sort} onSort={toggleSort}>
                   Nr faktury
                 </SortableHead>
-                <SortableHead column="issueDate" sort={sort} onSort={toggleSort}>
+                <SortableHead column="issueDate" sort={sort} onSort={toggleSort} className="pr-4">
                   Wystawiona
                 </SortableHead>
                 <SortableHead column="seller" sort={sort} onSort={toggleSort}>
@@ -253,18 +262,18 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
                 <SortableHead column="gross" sort={sort} onSort={toggleSort} align="right">
                   Brutto
                 </SortableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-10 pr-4">
+                <TableHead>Dokument</TableHead>
+                <TableHead className="pr-4">
                   <span className="sr-only">Akcje</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isPending ? (
-                <TableSkeletonRows columns={7} />
+                <TableSkeletonRows columns={8} />
               ) : invoices.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     {overview.invoiceCount === 0
                       ? 'Nie ma jeszcze pobranych faktur. Pobieranie rusza samo co pół godziny.'
                       : 'Żadna faktura nie pasuje do filtrów.'}
@@ -279,7 +288,7 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
             {first && first.matchingCount > 0 && (
               <TableFooter>
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={3} className="pl-4 font-medium">
+                  <TableCell colSpan={4} className="pl-4 font-medium">
                     Razem{' '}
                     <span className="font-normal text-muted-foreground tabular-nums">
                       ({countFormat.format(first.matchingCount)} {invoicesWord(first.matchingCount)})
@@ -368,6 +377,23 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
   const settings = useKsefSettingsMutations(storeId)
   const foreign = invoice.currency !== 'PLN'
   const manual = invoice.enteredAt !== null
+  const canViewDocuments = useCan('DOCUMENTS', 'VIEW')
+  const documentLinks = useInvoiceDocumentLinks(storeId)
+  const [picking, setPicking] = useState(false)
+  const unlinkDocument = (delivery: KsefInvoiceDocument) =>
+    documentLinks.unlink.mutate(
+      { invoiceId: invoice.id, documentId: delivery.id },
+      {
+        onSuccess: () =>
+          toast.success(`Odpięto: ${delivery.typeSingular.toLowerCase()} ${delivery.number}`, {
+            action: {
+              label: 'Przywróć',
+              onClick: () => documentLinks.link.mutate({ invoiceId: invoice.id, documentId: delivery.id }),
+            },
+          }),
+        onError: (error) => toast.error(errorMessage(error, 'Nie udało się odpiąć dokumentu')),
+      },
+    )
 
   const setEntered = (entered: boolean) =>
     markEntered.mutate(
@@ -400,9 +426,15 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
 
   return (
     <TableRow className={cn('tabular-nums', invoice.supplierSkipped && 'text-muted-foreground')}>
-      <TableCell className="py-3 pl-4">
-        <div className="flex items-center gap-2 font-medium">
-          {invoice.invoiceNumber}
+      {/* Szerokości kolumn trzymają tabelę w karcie bez przewijania w bok; długie teksty są skracane z podpowiedzią. */}
+      <TableCell className="pr-0 pl-4">
+        <EnteredStatus invoice={invoice} />
+      </TableCell>
+      <TableCell className="max-w-56 py-3">
+        <div className="flex min-w-0 items-center gap-2 font-medium">
+          <span className="truncate" title={invoice.invoiceNumber}>
+            {invoice.invoiceNumber}
+          </span>
           {invoice.invoiceType !== 'Vat' && (
             <span className="rounded-md bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground">
               {invoiceTypeLabel(invoice.invoiceType)}
@@ -412,7 +444,10 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
         {/* Numer KSeF i IDWew to dane techniczne: mniejszy krój o stałej szerokości i plakietka, żeby nie zlewały się
             z dostawcą i kwotami w sąsiednich kolumnach. */}
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[0.68rem] tracking-tight text-muted-foreground/75" title="Numer KSeF">
+          <span
+            className="max-w-full truncate font-mono text-[0.68rem] tracking-tight text-muted-foreground/75"
+            title={`Numer KSeF: ${invoice.ksefNumber}`}
+          >
             {invoice.ksefNumber}
           </span>
           {invoice.internalIds.map((internalId) => (
@@ -426,8 +461,8 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
           ))}
         </div>
       </TableCell>
-      <TableCell>{formatDate(invoice.issueDate)}</TableCell>
-      <TableCell className="max-w-72">
+      <TableCell className="pr-4">{formatDate(invoice.issueDate)}</TableCell>
+      <TableCell className="max-w-56">
         <div className="truncate" title={invoice.sellerName ?? undefined}>
           {invoice.sellerName ?? 'Bez nazwy'}
         </div>
@@ -444,10 +479,13 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
         {formatMoney(invoice.grossAmount)}
         {foreign && <span className="ml-1 text-xs font-normal text-muted-foreground">{invoice.currency}</span>}
       </TableCell>
-      <TableCell>
-        <EnteredStatus invoice={invoice} />
+      <TableCell className="max-w-28">
+        <InvoiceDocuments invoice={invoice} />
       </TableCell>
       <TableCell className="pr-4 text-right">
+        {canEdit && canViewDocuments && (
+          <DocumentPicker storeId={storeId} invoice={invoice} open={picking} onOpenChange={setPicking} />
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -455,7 +493,12 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`Akcje faktury ${invoice.invoiceNumber}`}
-                loading={markEntered.isPending || download.isPending || settings.addSkippedSupplier.isPending}
+                loading={
+                  markEntered.isPending ||
+                  download.isPending ||
+                  settings.addSkippedSupplier.isPending ||
+                  documentLinks.unlink.isPending
+                }
               />
             }
           >
@@ -474,6 +517,21 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
                 Cofnij ręczne oznaczenie
               </DropdownMenuItem>
             )}
+            {canEdit && canViewDocuments && (
+              <DropdownMenuItem onClick={() => setPicking(true)}>
+                <LinkIcon />
+                Przypnij przyjęcie albo korektę
+              </DropdownMenuItem>
+            )}
+            {canEdit &&
+              invoice.deliveries
+                .filter((delivery) => delivery.linked)
+                .map((delivery) => (
+                  <DropdownMenuItem key={delivery.id} onClick={() => unlinkDocument(delivery)}>
+                    <UnlinkIcon />
+                    Odepnij {delivery.typeSingular.toLowerCase()} {delivery.number}
+                  </DropdownMenuItem>
+                ))}
             <DropdownMenuItem onClick={() => downloadAs('pdf')}>
               <FileTextIcon />
               Pobierz fakturę (PDF)
@@ -498,29 +556,79 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
   )
 }
 
-/** Wprowadzona (z numerem PZ albo kto oznaczył ręcznie) albo do wprowadzenia. */
-function EnteredStatus({ invoice }: { invoice: KsefInvoice }) {
-  if (!invoice.entered) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400">
-        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-        Do wprowadzenia
-      </span>
-    )
+/**
+ * Dokumenty sklepu faktury: przyjęcie z jej numerem albo przypięte przyjęcie lub korekta od dostawcy, z numerem bonu
+ * (pełny numer w podpowiedzi) i linkiem do dokumentu.
+ */
+function InvoiceDocuments({ invoice }: { invoice: KsefInvoice }) {
+  if (invoice.deliveries.length === 0) {
+    return <span className="text-sm text-muted-foreground">-</span>
   }
-  const detail =
-    invoice.deliveries.length > 0
-      ? `Przyjęcie ${invoice.deliveries.map((delivery) => delivery.number).join(', ')}`
-      : `Ręcznie${invoice.enteredBy ? ` · ${invoice.enteredBy}` : ''}`
   return (
-    <div className="grid">
-      <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
-        <CircleCheckIcon aria-hidden className="size-3.5" />
-        Wprowadzona
-      </span>
-      <span className="max-w-48 truncate text-xs text-muted-foreground" title={detail}>
-        {detail}
-      </span>
+    <div className="grid gap-1">
+      {invoice.deliveries.map((delivery) => (
+        <Link
+          key={delivery.id}
+          to={documentPaths.document(delivery.type, delivery.id)}
+          className="group/doc grid leading-tight"
+          title={`${delivery.typeSingular} ${delivery.number}${delivery.linked ? ' · przypięty ręcznie' : ' · numer faktury w przyjęciu'}`}
+        >
+          <span className="truncate text-xs text-muted-foreground">{delivery.typeSingular}</span>
+          <span className="truncate text-sm font-medium underline-offset-2 group-hover/doc:underline">
+            {delivery.type === 'PZ' ? `bon ${bonNumber(delivery.number)}` : delivery.number}
+          </span>
+        </Link>
+      ))}
     </div>
+  )
+}
+
+type EnteredState = 'NOT_ENTERED' | 'DOCUMENT' | 'MANUAL'
+
+/** Kropki statusu: pełna = wprowadzona dokumentem sklepu, pusta = oznaczona ręcznie. */
+const ENTERED_STATES: Record<EnteredState, { label: string; dot: string }> = {
+  NOT_ENTERED: { label: 'Do wprowadzenia', dot: 'bg-amber-500' },
+  DOCUMENT: { label: 'Wprowadzona dokumentem', dot: 'bg-emerald-500' },
+  MANUAL: { label: 'Wprowadzona ręcznie', dot: 'ring-[1.5px] ring-inset ring-emerald-500' },
+}
+
+const enteredState = (invoice: KsefInvoice): EnteredState =>
+  !invoice.entered ? 'NOT_ENTERED' : invoice.deliveries.length > 0 ? 'DOCUMENT' : 'MANUAL'
+
+function StatusDot({ state }: { state: EnteredState }) {
+  return <span aria-hidden className={cn('block size-2.5 shrink-0 rounded-full', ENTERED_STATES[state].dot)} />
+}
+
+/** Legenda kropek statusu nad tabelą. */
+function StatusLegend() {
+  return (
+    <ul className="flex flex-wrap gap-x-5 gap-y-1 border-b px-4 py-2.5 text-xs text-muted-foreground">
+      {(Object.keys(ENTERED_STATES) as EnteredState[]).map((state) => (
+        <li key={state} className="inline-flex items-center gap-2">
+          <StatusDot state={state} />
+          {ENTERED_STATES[state].label}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Kropka statusu; szczegóły (skąd wprowadzona, kto oznaczył) w podpowiedzi. */
+function EnteredStatus({ invoice }: { invoice: KsefInvoice }) {
+  const state = enteredState(invoice)
+  const detail =
+    state === 'DOCUMENT'
+      ? invoice.deliveries.some((delivery) => delivery.linked)
+        ? 'przypięty dokument'
+        : 'numer w przyjęciu'
+      : state === 'MANUAL' && invoice.enteredBy
+        ? invoice.enteredBy
+        : null
+  const label = detail ? `${ENTERED_STATES[state].label} · ${detail}` : ENTERED_STATES[state].label
+  return (
+    <span title={label} className="flex size-5 items-center justify-center">
+      <StatusDot state={state} />
+      <span className="sr-only">{label}</span>
+    </span>
   )
 }

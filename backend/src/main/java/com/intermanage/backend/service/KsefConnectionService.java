@@ -94,7 +94,12 @@ public class KsefConnectionService {
         Set<String> assigned = internalIds.findActive(storeId).stream().map(KsefInternalId::getInternalId)
                 .collect(Collectors.toSet());
         KsefConnection connection = connections.findById(storeId).orElse(null);
+        Store store = store(storeId);
+        List<Store> otherStores = connection == null ? List.of() : stores.findActiveOrdered().stream()
+                .filter(other -> !other.getId().equals(storeId) && canAccess(other.getId()))
+                .toList();
         return new KsefSettingsResponse(
+                store.getNip(),
                 connection != null ? mapper.toResponse(connection) : null,
                 internalIds.findActive(storeId).stream().map(mapper::toResponse).toList(),
                 connection == null ? List.of() : invoices.findSeenInternalIds(connection.getNip()).stream()
@@ -102,30 +107,35 @@ public class KsefConnectionService {
                                 seen.getInvoiceCount(), assigned.contains(seen.getInternalId())))
                         .toList(),
                 skippedSuppliers.findActive(storeId).stream().map(mapper::toResponse).toList(),
-                companies(storeId),
-                connection == null ? List.of() : otherStores(storeId));
+                companies(store),
+                connection == null ? List.of() : companyStores(otherStores, connection.getNip()),
+                (int) otherStores.stream().filter(other -> other.getNip() == null).count());
     }
 
-    /** Inne aktywne sklepy zalogowanego użytkownika z firmą, z którą są połączone (albo bez połączenia). */
-    private List<KsefCompanyStore> otherStores(UUID storeId) {
-        List<Store> candidates = stores.findActiveOrdered().stream()
-                .filter(store -> !store.getId().equals(storeId) && canAccess(store.getId()))
-                .toList();
-        Map<UUID, String> nips = connections.findAllById(candidates.stream().map(Store::getId).toList()).stream()
-                .collect(Collectors.toMap(KsefConnection::getStoreId, KsefConnection::getNip));
-        return candidates.stream()
+    /** Inne sklepy użytkownika z NIP-em firmy połączenia: już połączone i te, które można podłączyć. */
+    private List<KsefCompanyStore> companyStores(List<Store> candidates, String nip) {
+        List<Store> sameCompany = candidates.stream().filter(store -> nip.equals(store.getNip())).toList();
+        Set<UUID> connected = connections.findAllById(sameCompany.stream().map(Store::getId).toList()).stream()
+                .filter(connection -> connection.getNip().equals(nip))
+                .map(KsefConnection::getStoreId)
+                .collect(Collectors.toSet());
+        return sameCompany.stream()
                 .map(store -> new KsefCompanyStore(store.getId(), store.getNumber(), store.getName(),
-                        nips.get(store.getId())))
+                        connected.contains(store.getId())))
                 .toList();
     }
 
     /**
-     * Firmy połączone z KSeF w innych sklepach zalogowanego użytkownika (z ich nazwami) - do podłączenia sklepu bez
-     * certyfikatu. Sklepy, do których użytkownik nie ma dostępu, i ich firmy są niewidoczne.
+     * Firma sklepu (po NIP-ie z ustawień sklepu), jeśli jest połączona z KSeF w innym sklepie zalogowanego
+     * użytkownika - do podłączenia sklepu bez certyfikatu. Sklep bez NIP-u niczego nie dostaje, bo nie wiadomo,
+     * do której firmy należy.
      */
-    private List<KsefCompanyResponse> companies(UUID storeId) {
-        List<KsefConnection> others = connections.findAll().stream()
-                .filter(connection -> !connection.getStoreId().equals(storeId))
+    private List<KsefCompanyResponse> companies(Store store) {
+        if (store.getNip() == null) {
+            return List.of();
+        }
+        List<KsefConnection> others = connections.findByNip(store.getNip()).stream()
+                .filter(connection -> !connection.getStoreId().equals(store.getId()))
                 .filter(connection -> canAccess(connection.getStoreId()))
                 .toList();
         Map<UUID, String> names = stores.findAllById(others.stream().map(KsefConnection::getStoreId).toList())
@@ -150,6 +160,9 @@ public class KsefConnectionService {
         transaction.executeWithoutResult(status -> {
             Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
             KsefConnection connection = connections.findById(storeId).orElse(null);
+            if (connection == null) {
+                ensureStoreCompany(store, cleanNip);
+            }
             if (connection == null && (empty(certificateFile) || empty(keyFile))) {
                 throw ApiException.badRequest("Wgraj certyfikat KSeF (.crt) i jego klucz (.key)").withProperty("errors",
                         Map.of(empty(certificateFile) ? "certificate" : "privateKey", "Wgraj plik"));
@@ -172,6 +185,9 @@ public class KsefConnectionService {
             connection.setCredentials(cleanNip, certificatePem, keyPem, cipher.encrypt(plainPassword),
                     subjectName(certificate), certificate.getNotAfter().toInstant(), user(userId));
             connections.save(connection);
+            // Certyfikat firmy potwierdza, do której firmy należy sklep: uzupełnia brakujący NIP, a przy wymianie
+            // połączenia na inną firmę go zmienia (w ustawieniach sklepu zmiany NIP-u połączonego sklepu nie ma).
+            store.setNip(cleanNip);
         });
         // Token jest wspólny dla firmy - nowe dane logowania (albo inny NIP) go unieważniają.
         sessions.forget(cleanNip);
@@ -191,6 +207,11 @@ public class KsefConnectionService {
         String previousNip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
         transaction.executeWithoutResult(status -> {
             Store store = store(storeId);
+            if (store.getNip() == null) {
+                throw ApiException.badRequest("Sklep nie ma NIP-u firmy - właściciel wpisuje go w Ustawieniach, "
+                        + "w zakładce Sklepy");
+            }
+            ensureStoreCompany(store, cleanNip);
             KsefConnection source = connections.findByNip(cleanNip).stream()
                     .filter(connection -> !connection.getStoreId().equals(storeId))
                     .filter(connection -> canAccess(connection.getStoreId()))
@@ -205,6 +226,14 @@ public class KsefConnectionService {
             sessions.forget(previousNip);
         }
         return test(storeId);
+    }
+
+    /** Połączenie sklepu musi być z firmą z jego ustawień (gdy NIP jest wpisany). */
+    private static void ensureStoreCompany(Store store, String nip) {
+        if (store.getNip() != null && !store.getNip().equals(nip)) {
+            String message = "Sklep należy do firmy o NIP " + store.getNip() + " (Ustawienia, zakładka Sklepy)";
+            throw ApiException.badRequest(message).withProperty("errors", Map.of("nip", message));
+        }
     }
 
     /** Czy zalogowany użytkownik ma dostęp do sklepu (właściciel: każdy, pracownik: przypisane aktywne). */
@@ -226,6 +255,11 @@ public class KsefConnectionService {
             for (UUID targetId : storeIds.stream().distinct().filter(id -> !id.equals(storeId)).toList()) {
                 Store target = stores.findById(targetId).filter(store -> canAccess(store.getId()))
                         .orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
+                if (!source.getNip().equals(target.getNip())) {
+                    throw ApiException.conflict(target.getNip() == null
+                            ? "Sklep " + target.getName() + " nie ma NIP-u firmy w ustawieniach sklepu"
+                            : "Sklep " + target.getName() + " należy do innej firmy (NIP " + target.getNip() + ")");
+                }
                 KsefConnection existing = connections.findById(targetId).orElse(null);
                 if (existing != null && existing.getNip().equals(source.getNip())) {
                     continue;

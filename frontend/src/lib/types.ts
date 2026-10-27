@@ -39,6 +39,8 @@ export type StoreSummary = {
 
 export type Store = StoreSummary & {
   address: string | null
+  /** NIP firmy, do której należy sklep; po nim KSeF łączy sklepy jednej firmy. */
+  nip: string | null
   /** Pracownicy z przypisanym sklepem (bez właścicieli, którzy widzą wszystkie). */
   userCount: number
   createdAt: string
@@ -48,6 +50,7 @@ export type StoreRequest = {
   number: string
   name: string
   address: string
+  nip: string
   active: boolean
 }
 
@@ -317,6 +320,55 @@ export type DocumentSummary = {
   gratisCandidate: boolean
   /** Rejestracja jako gratis od dostawcy; wartością gratisu jest sprzedaż brutto dokumentu. */
   gratis: DocumentGratis | null
+  /** Faktury KSeF przyjęcia albo korekty od dostawcy: przypięte i dopasowane po numerze. */
+  ksefInvoices: LinkedKsefInvoice[]
+}
+
+/**
+ * Faktura KSeF dokumentu; {@code matchedByNumber}: dopasowana sama po numerze dokumentu dostawcy w przyjęciu (nie da
+ * się jej odpiąć - zmienia się ją poprawką numeru).
+ */
+export type LinkedKsefInvoice = {
+  id: string
+  ksefNumber: string
+  invoiceNumber: string
+  issueDate: string | null
+  sellerName: string | null
+  netAmount: number | null
+  grossAmount: number | null
+  correction: boolean
+  matchedByNumber: boolean
+}
+
+/** Faktura do przypięcia; {@code difference}: różnica kwoty netto od wartości dokumentu (bez znaku). */
+export type KsefInvoiceCandidate = {
+  id: string
+  ksefNumber: string
+  invoiceNumber: string
+  issueDate: string | null
+  sellerName: string | null
+  sellerNip: string
+  netAmount: number | null
+  grossAmount: number | null
+  correction: boolean
+  sameSupplier: boolean
+  difference: number
+  /** Numery dokumentów sklepu, do których faktura jest już przypięta. */
+  documents: string[]
+}
+
+/** Przyjęcie albo korekta od dostawcy do przypięcia faktury. */
+export type DocumentCandidate = {
+  id: string
+  type: string
+  typeSingular: string
+  number: string
+  documentDate: string
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  purchaseValue: number
+  sameSupplier: boolean
+  difference: number
 }
 
 export type DocumentGratis = {
@@ -356,6 +408,97 @@ export type SupplierImportOverview = {
   supplierCount: number
   manualCount: number
   imports: SupplierImport[]
+}
+
+/**
+ * Wgranie raportu sprzedaży wg artykułu i dnia. Zapisana sprzedaż się nie zmienia: dni, które już były w bazie,
+ * są pomijane, a {@code conflictCount} mówi, ile z nich ma w pliku inne wartości niż zapisane.
+ */
+export type SalesImport = {
+  id: string
+  fileName: string
+  reportGeneratedAt: string | null
+  /** RRRR-MM-DD */
+  periodFrom: string
+  periodTo: string
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  createdCount: number
+  existingCount: number
+  conflictCount: number
+}
+
+export type SalesImportOverview = {
+  rowCount: number
+  /** RRRR-MM-DD, puste, gdy sklep nie ma jeszcze sprzedaży. */
+  firstSaleDate: string | null
+  lastSaleDate: string | null
+  imports: SalesImport[]
+}
+
+export type NomenclatureImport = {
+  id: string
+  fileName: string
+  reportGeneratedAt: string | null
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  createdCount: number
+  updatedCount: number
+  /** Znane pozycje, których zabrakło w pliku; zostają w bazie. */
+  missingCount: number
+}
+
+export type NomenclatureImportOverview = {
+  regionCount: number
+  familyCount: number
+  subfamilyCount: number
+  imports: NomenclatureImport[]
+}
+
+/** Kafelki raportów sprzedaży: za jakie dni jest sprzedaż i z kiedy jest najnowszy raport. */
+export type SalesReportsOverview = {
+  /** RRRR-MM-DD, puste, gdy sklep nie ma jeszcze sprzedaży. */
+  firstSaleDate: string | null
+  lastSaleDate: string | null
+  lastReportGeneratedAt: string | null
+}
+
+/** Sprzedaż za okres; % marży i zmiany liczy front z sum. */
+export type SalesFigures = {
+  quantity: number
+  /** Koszt zakupu FIFO netto. */
+  costValue: number
+  saleValueGross: number
+  saleValueNet: number
+  marginValue: number
+}
+
+export type SalesComparisonLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'PRODUCT'
+
+export type SalesComparisonRow = {
+  /** Kod nomenklatury bez spacji ("01", "0101", "010101") albo ITM8; pusty = sprzedaż bez nomenklatury. */
+  code: string
+  /** Pusta, gdy kodu nie ma w nomenklaturze sklepu albo artykułu w kartotece. */
+  name: string | null
+  ean: string | null
+  brand: string | null
+  previous: SalesFigures
+  current: SalesFigures
+}
+
+export type SalesComparison = {
+  previousFrom: string
+  previousTo: string
+  currentFrom: string
+  currentTo: string
+  /** Rozwinięta pozycja; pusty tekst = cały sklep, null = sprzedaż bez nomenklatury. */
+  parent: string | null
+  level: SalesComparisonLevel
+  rows: SalesComparisonRow[]
+  previousTotal: SalesFigures
+  currentTotal: SalesFigures
 }
 
 /**
@@ -404,6 +547,8 @@ export type Document = DocumentSummary & {
   typeSingular: string
   /** Typ można rejestrować jako gratis (przeniesienia stanów). */
   gratisAllowed: boolean
+  /** Do dokumentu można przypiąć fakturę z KSeF (przyjęcia i korekty od dostawcy). */
+  ksefLinkable: boolean
   /** Numer dokumentu dostawcy z raportu; inny niż obowiązujący, gdy ktoś go poprawił. */
   reportSupplierDocumentNumber: string | null
   /** Ręczna poprawka numeru dokumentu dostawcy ({@code null} = numer z raportu). */
@@ -576,21 +721,25 @@ export type KsefSeenInternalId = {
 }
 
 export type KsefSettings = {
+  /** NIP firmy z ustawień sklepu ({@code null} = nie wpisany). */
+  storeNip: string | null
   connection: KsefConnection | null
   internalIds: KsefInternalId[]
   seenInternalIds: KsefSeenInternalId[]
   skippedSuppliers: KsefSkippedSupplier[]
   companies: KsefCompany[]
-  /** Inne aktywne sklepy użytkownika (przy połączonym sklepie) - do podłączenia ich do tej firmy. */
+  /** Inne aktywne sklepy użytkownika z NIP-em tej firmy (przy połączonym sklepie). */
   otherStores: KsefCompanyStore[]
+  /** Ile innych sklepów użytkownika nie ma NIP-u - nie wiadomo, czy należą do tej firmy. */
+  otherStoresWithoutNip: number
 }
 
-/** Inny sklep użytkownika; {@code nip}: firma, z którą jest połączony, {@code null} = bez połączenia. */
+/** Inny sklep użytkownika z NIP-em tej samej firmy; {@code connected} = ma już jej połączenie z KSeF. */
 export type KsefCompanyStore = {
   id: string
   number: string
   name: string
-  nip: string | null
+  connected: boolean
 }
 
 export type KsefOverview = {
@@ -607,7 +756,10 @@ export type KsefOverview = {
   internalIds: KsefInternalId[]
 }
 
-/** Wiersz faktury; {@code entered}: numer jest w przyjęciu PZ ({@code deliveries}) albo oznaczono ręcznie. */
+/**
+ * Wiersz faktury; {@code entered}: faktura ma dokument sklepu ({@code deliveries}: przyjęcie z jej numerem albo
+ * przypięty dokument) albo oznaczono ją ręcznie.
+ */
 export type KsefInvoice = {
   id: string
   ksefNumber: string
@@ -627,8 +779,17 @@ export type KsefInvoice = {
   entered: boolean
   enteredBy: string | null
   enteredAt: string | null
-  deliveries: { id: string; number: string }[]
+  deliveries: KsefInvoiceDocument[]
   supplierSkipped: boolean
+}
+
+/** Dokument sklepu faktury; {@code linked} = przypięty ręcznie (da się odpiąć), inaczej przyjęcie z jej numerem. */
+export type KsefInvoiceDocument = {
+  id: string
+  type: string
+  typeSingular: string
+  number: string
+  linked: boolean
 }
 
 export type KsefInvoicePage = {

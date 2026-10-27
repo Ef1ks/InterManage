@@ -11,6 +11,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.intermanage.backend.entity.Document;
+import com.intermanage.backend.entity.DocumentKsefInvoice;
 import com.intermanage.backend.entity.DocumentType;
 import com.intermanage.backend.entity.KsefInvoice;
 import com.intermanage.backend.entity.KsefInvoiceEntry;
@@ -27,8 +28,9 @@ import jakarta.persistence.criteria.Subquery;
 /**
  * Filtry listy faktur KSeF po stronie bazy. Faktury są wspólne dla firmy (NIP połączenia sklepu). Sklep bez IDWew
  * widzi wszystkie faktury firmy, sklep z IDWew - te ze swoimi IDWew i wszystkie bez IDWew (albo, na żądanie, tylko
- * ze swoimi). Faktury pominiętych dostawców tylko na żądanie. "Wprowadzona" = numer faktury
- * jest numerem dokumentu dostawcy w przyjęciu PZ sklepu (bez względu na wielkość liter) albo sklep ją oznaczył ręcznie.
+ * ze swoimi). Faktury pominiętych dostawców tylko na żądanie. "Wprowadzona" = numer faktury jest numerem dokumentu
+ * dostawcy w przyjęciu PZ sklepu (bez względu na wielkość liter), sklep przypiął do niej dokument albo oznaczył ją
+ * ręcznie.
  */
 public final class KsefInvoiceSearch {
 
@@ -94,7 +96,8 @@ public final class KsefInvoiceSearch {
             }
             if (filter.entered() != Entered.ALL) {
                 Predicate entered = cb.or(cb.exists(manualEntry(root, query, cb, storeId)),
-                        cb.exists(delivery(root, query, cb, storeId)));
+                        cb.exists(delivery(root, query, cb, storeId)),
+                        cb.exists(linkedDocument(root, query, cb, storeId)));
                 all.add(filter.entered() == Entered.ENTERED ? entered : cb.not(entered));
             }
             for (String word : DocumentSearch.words(filter.query())) {
@@ -179,6 +182,18 @@ public final class KsefInvoiceSearch {
                 cb.equal(document.get("store").get("id"), storeId),
                 cb.equal(document.get("type"), DocumentType.PZ),
                 cb.equal(cb.upper(document.get("supplierDocumentNumber")), cb.upper(root.get("invoiceNumber"))));
+        return subquery;
+    }
+
+    /** Dokument sklepu (przyjęcie, korekta od dostawcy) przypięty do faktury ręcznie i nieodpięty. */
+    private static Subquery<Integer> linkedDocument(Root<KsefInvoice> root, CriteriaQuery<?> query,
+            CriteriaBuilder cb, UUID storeId) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<DocumentKsefInvoice> link = subquery.from(DocumentKsefInvoice.class);
+        subquery.select(cb.literal(1)).where(
+                cb.equal(link.get("invoice"), root),
+                cb.equal(link.get("document").get("store").get("id"), storeId),
+                cb.isNull(link.get("unlinkedAt")));
         return subquery;
     }
 

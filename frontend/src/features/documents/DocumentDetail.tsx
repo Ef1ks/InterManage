@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { deliPaths } from '@/features/deli-order/paths'
 import { useDocument } from '@/features/documents/api'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
+import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
 import { BackToTypes } from '@/features/documents/DocumentsList'
 import { SupplierDocumentNumber } from '@/features/documents/SupplierDocumentNumber'
 import {
@@ -131,6 +132,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
       </div>
 
       <DocumentGratisSection storeId={storeId} document={document} />
+      <DocumentKsefInvoices storeId={storeId} document={document} />
 
       {document.deliOrders.length > 0 && (
         <section aria-labelledby="deli-orders" className="mb-6">

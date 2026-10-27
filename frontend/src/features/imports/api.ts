@@ -1,12 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { documentsKey, suppliersKey } from '@/features/documents/api'
+import { reportsKey } from '@/features/sales/api'
 import { api } from '@/lib/api'
 import type {
   DocumentImport,
   EanChange,
+  NomenclatureImport,
+  NomenclatureImportOverview,
   ProductImport,
   ProductImportOverview,
+  SalesImport,
+  SalesImportOverview,
   SupplierImport,
   SupplierImportOverview,
 } from '@/lib/types'
@@ -93,6 +98,60 @@ export function useImportSuppliers(storeId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: supplierImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: suppliersKey(storeId) })
+    },
+  })
+}
+
+const salesImportsKey = (storeId: string) => ['stores', storeId, 'imports', 'sales'] as const
+const salesImportsPath = (storeId: string) => `/stores/${storeId}/imports/sales`
+
+/** Ile sprzedaży ma sklep, za jakie dni, i historia wgrań raportu sprzedaży. */
+export function useSalesImports(storeId: string) {
+  return useQuery({
+    queryKey: salesImportsKey(storeId),
+    queryFn: () => api<SalesImportOverview>(salesImportsPath(storeId)),
+  })
+}
+
+/** Wgranie raportu sprzedaży (dopisuje tylko nowe dni); plik za pół roku (ok. 500 tys. wierszy) to ok. 20 s. */
+export function useImportSales(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<SalesImport>(salesImportsPath(storeId), { method: 'POST', formData })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: salesImportsKey(storeId) })
+      queryClient.invalidateQueries({ queryKey: reportsKey(storeId) })
+    },
+  })
+}
+
+const nomenclatureImportsKey = (storeId: string) => ['stores', storeId, 'imports', 'nomenclatures'] as const
+const nomenclatureImportsPath = (storeId: string) => `/stores/${storeId}/imports/nomenclatures`
+
+/** Ile rejonów, rodzin i podrodzin ma sklep i historia wgrań listy nomenklatur. */
+export function useNomenclatureImports(storeId: string) {
+  return useQuery({
+    queryKey: nomenclatureImportsKey(storeId),
+    queryFn: () => api<NomenclatureImportOverview>(nomenclatureImportsPath(storeId)),
+  })
+}
+
+/** Wgranie listy nomenklatur (PDF); raporty sprzedaży biorą z niej nazwy, więc też je odświeżamy. */
+export function useImportNomenclatures(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<NomenclatureImport>(nomenclatureImportsPath(storeId), { method: 'POST', formData })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: nomenclatureImportsKey(storeId) })
+      queryClient.invalidateQueries({ queryKey: reportsKey(storeId) })
     },
   })
 }

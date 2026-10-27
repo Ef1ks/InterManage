@@ -3,7 +3,8 @@ import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClie
 import { ksefKey } from '@/features/ksef/api'
 import { api } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
-import type { Document, DocumentPage, DocumentsOverview, Supplier } from '@/lib/types'
+import type { Document, DocumentPage, DocumentsOverview, KsefInvoiceCandidate, Supplier } from '@/lib/types'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 /** Dokumenty są osobne dla każdego sklepu, więc sklep jest częścią klucza. Raport wgrywa się w Imporcie danych. */
 export const documentsKey = (storeId: string) => ['stores', storeId, 'documents'] as const
@@ -85,6 +86,56 @@ export function useSupplierDocumentNumber(storeId: string, typeCode: string, id:
       onSuccess,
     }),
     restore: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
+  }
+}
+
+/**
+ * Faktury KSeF do przypięcia dokumentu: domyślnie z kwotą netto ±10% wartości dokumentu, od najbliższej;
+ * {@code query} szuka po numerze faktury, dostawcy i NIP-ie.
+ */
+export function useKsefInvoiceCandidates(
+  storeId: string,
+  typeCode: string,
+  id: string,
+  query: string,
+  amountRange: boolean,
+  enabled: boolean,
+) {
+  const debounced = useDebouncedValue(query.trim(), 250)
+  return useQuery({
+    queryKey: [...documentsKey(storeId), typeCode, id, 'ksef-candidates', { query: debounced, amountRange }],
+    queryFn: () => {
+      const params = new URLSearchParams({ amountRange: String(amountRange) })
+      if (debounced) params.set('query', debounced)
+      return api<KsefInvoiceCandidate[]>(`${documentsPath(storeId)}/${typeCode}/${id}/ksef-invoices/candidates?${params}`)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Przypięcie faktury KSeF do dokumentu i odpięcie. Zmienia status faktury („wprowadzona”), więc odświeżamy też listę
+ * faktur.
+ */
+export function useDocumentKsefLinks(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/ksef-invoices`
+  const onSuccess = (document: Document) => {
+    queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+    queryClient.invalidateQueries({ queryKey: [...documentsKey(storeId), typeCode, 'list'] })
+    queryClient.invalidateQueries({ queryKey: [...documentsKey(storeId), typeCode, id, 'ksef-candidates'] })
+    queryClient.invalidateQueries({ queryKey: ksefKey(storeId) })
+  }
+  return {
+    link: useMutation({
+      mutationFn: (invoiceId: string) => api<Document>(path, { method: 'POST', json: { invoiceId } }),
+      onSuccess,
+    }),
+    unlink: useMutation({
+      mutationFn: (invoiceId: string) => api<Document>(`${path}/${invoiceId}`, { method: 'DELETE' }),
+      onSuccess,
+    }),
   }
 }
 

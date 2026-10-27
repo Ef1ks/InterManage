@@ -17,21 +17,42 @@ import {
   useDocumentImports,
   useEanChanges,
   useImportDocuments,
+  useImportNomenclatures,
   useImportProducts,
+  useImportSales,
   useImportSuppliers,
+  useNomenclatureImports,
   useProductImports,
+  useSalesImports,
   useSupplierImports,
 } from '@/features/imports/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES } from '@/features/tools/categories'
+import { parseIsoDate } from '@/lib/dates'
 import { formatReportDate } from '@/lib/report-freshness'
-import type { DocumentImport, EanChange, ProductImport, StoreSummary, SupplierImport } from '@/lib/types'
+import type {
+  DocumentImport,
+  EanChange,
+  NomenclatureImport,
+  ProductImport,
+  SalesImport,
+  StoreSummary,
+  SupplierImport,
+} from '@/lib/types'
 
 const ACCEPTED_EXTENSIONS = ['.xlsx', '.xlsm']
+/** Lista nomenklatur jest drukowana z systemu sklepu tylko do PDF. */
+const PDF_EXTENSIONS = ['.pdf']
 
 const numberFormat = new Intl.NumberFormat('pl-PL')
 const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
 const timeFormat = new Intl.DateTimeFormat('pl-PL', { timeStyle: 'short' })
+const dayFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
+
+/** Okres raportu albo zakres dni w bazie: "31.12.2025 – 30.06.2026". */
+function formatPeriod(from: string, to: string) {
+  return `${dayFormat.format(parseIsoDate(from))} – ${dayFormat.format(parseIsoDate(to))}`
+}
 
 export function ImportPage() {
   const store = useCurrentStore()
@@ -67,6 +88,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const products = useProductImports(store.id)
   const documents = useDocumentImports(store.id)
   const suppliers = useSupplierImports(store.id)
+  const sales = useSalesImports(store.id)
+  const nomenclatures = useNomenclatureImports(store.id)
   const [eanChangesOf, setEanChangesOf] = useState<ProductImport | null>(null)
   const lastProductImport = products.data?.imports[0]
 
@@ -131,13 +154,50 @@ function StoreImports({ store }: { store: StoreSummary }) {
         >
           {canImport ? <SupplierReportUpload store={store} /> : <ReadOnlyNote />}
         </ReportCard>
+
+        <ReportCard
+          id="sales-report"
+          title="Raport sprzedaży"
+          description="Sprzedaż po rabacie wg artykułu i dnia, z wartością FIFO, VAT i marżą."
+          generatedAt={sales.isPending ? undefined : (newestReport(sales.data?.imports) ?? null)}
+          meta={
+            sales.data && (
+              <>
+                W bazie {numberFormat.format(sales.data.rowCount)} wierszy
+                {sales.data.firstSaleDate && sales.data.lastSaleDate && (
+                  <> · {formatPeriod(sales.data.firstSaleDate, sales.data.lastSaleDate)}</>
+                )}
+              </>
+            )
+          }
+        >
+          {canImport ? <SalesReportUpload store={store} /> : <ReadOnlyNote />}
+        </ReportCard>
+
+        <ReportCard
+          id="nomenclature-report"
+          title="Lista nomenklatur"
+          description="Rejony, rodziny i podrodziny z nazwami do raportów sprzedaży (PDF, np. nomenklatury.pdf)."
+          generatedAt={nomenclatures.isPending ? undefined : (newestReport(nomenclatures.data?.imports) ?? null)}
+          meta={
+            nomenclatures.data && (
+              <>
+                W bazie {numberFormat.format(nomenclatures.data.regionCount)} rejonów,{' '}
+                {numberFormat.format(nomenclatures.data.familyCount)} rodzin,{' '}
+                {numberFormat.format(nomenclatures.data.subfamilyCount)} podrodzin
+              </>
+            )
+          }
+        >
+          {canImport ? <NomenclatureReportUpload store={store} /> : <ReadOnlyNote />}
+        </ReportCard>
       </div>
 
       <section aria-labelledby="import-history">
         <h2 id="import-history" className="mb-3 text-base font-semibold">
           Historia importów
         </h2>
-        {products.isError && documents.isError && suppliers.isError ? (
+        {products.isError && documents.isError && suppliers.isError && sales.isError && nomenclatures.isError ? (
           <FullPageMessage
             title="Nie udało się wczytać historii importów"
             action={{
@@ -146,6 +206,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
                 products.refetch()
                 documents.refetch()
                 suppliers.refetch()
+                sales.refetch()
+                nomenclatures.refetch()
               },
             }}
             inline
@@ -155,7 +217,11 @@ function StoreImports({ store }: { store: StoreSummary }) {
             products={products.data?.imports}
             documents={documents.data}
             suppliers={suppliers.data?.imports}
-            loading={products.isPending || documents.isPending || suppliers.isPending}
+            sales={sales.data?.imports}
+            nomenclatures={nomenclatures.data?.imports}
+            loading={
+              products.isPending || documents.isPending || suppliers.isPending || sales.isPending || nomenclatures.isPending
+            }
             onShowEanChanges={setEanChangesOf}
           />
         )}
@@ -213,13 +279,15 @@ function ReadOnlyNote() {
 
 type ShowEanChanges = (productImport: ProductImport) => void
 
-function RejectedFile({ fileName }: { fileName: string }) {
+function RejectedFile({ fileName, pdf }: { fileName: string; pdf?: boolean }) {
   return (
     <Alert variant="destructive" className="animate-in fade-in-0 duration-200 motion-reduce:animate-none">
       <CircleAlertIcon />
       <AlertTitle>Tego pliku nie zaimportujemy</AlertTitle>
       <AlertDescription>
-        {fileName} nie jest plikiem .xlsx ani .xlsm. Plik .xls otwórz w Excelu i zapisz jako .xlsx.
+        {pdf
+          ? `${fileName} nie jest plikiem PDF. Wydrukuj listę nomenklatur z systemu sklepu do PDF.`
+          : `${fileName} nie jest plikiem .xlsx ani .xlsm. Plik .xls otwórz w Excelu i zapisz jako .xlsx.`}
       </AlertDescription>
     </Alert>
   )
@@ -391,6 +459,111 @@ function SupplierImportResult({ result }: { result: SupplierImport }) {
   )
 }
 
+function SalesReportUpload({ store }: { store: StoreSummary }) {
+  const upload = useImportSales(store.id)
+  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
+
+  return (
+    <div className="grid gap-3">
+      <FileDropZone
+        className="min-h-32 py-6"
+        accept={ACCEPTED_EXTENSIONS}
+        pendingFile={upload.isPending ? upload.variables : undefined}
+        onFile={(file) => {
+          setRejectedFile(null)
+          upload.mutate(file)
+        }}
+        onReject={(fileName) => {
+          upload.reset()
+          setRejectedFile(fileName)
+        }}
+        title="Przeciągnij raport sprzedaży albo kliknij"
+        hint="Zapisana sprzedaż się nie zmienia: z pliku dopisujemy tylko dni, których jeszcze nie ma."
+      />
+
+      <div aria-live="polite">
+        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
+        {upload.isError && <ImportError error={upload.error} />}
+        {upload.isSuccess && <SalesImportResult result={upload.data} />}
+      </div>
+    </div>
+  )
+}
+
+function SalesImportResult({ result }: { result: SalesImport }) {
+  return (
+    <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <CircleCheckIcon className="text-emerald-600 dark:text-emerald-400" />
+      <AlertTitle>
+        Zaimportowano {numberFormat.format(result.totalRows)} wierszy sprzedaży z dni{' '}
+        {formatPeriod(result.periodFrom, result.periodTo)}
+      </AlertTitle>
+      <AlertDescription>
+        <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
+          <ResultCount label="Dopisane" value={result.createdCount} />
+          <ResultCount label="Już były w bazie" value={result.existingCount} />
+        </dl>
+        {result.conflictCount > 0 && (
+          <p className="mt-1">
+            {numberFormat.format(result.conflictCount)} z nich ma w pliku inne wartości niż zapisane. Zostały wartości z
+            pierwszego importu.
+          </p>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function NomenclatureReportUpload({ store }: { store: StoreSummary }) {
+  const upload = useImportNomenclatures(store.id)
+  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
+
+  return (
+    <div className="grid gap-3">
+      <FileDropZone
+        className="min-h-32 py-6"
+        accept={PDF_EXTENSIONS}
+        pendingFile={upload.isPending ? upload.variables : undefined}
+        onFile={(file) => {
+          setRejectedFile(null)
+          upload.mutate(file)
+        }}
+        onReject={(fileName) => {
+          upload.reset()
+          setRejectedFile(fileName)
+        }}
+        title="Przeciągnij listę nomenklatur (PDF) albo kliknij"
+        hint="Pozycje, których zabraknie w nowym pliku, zostają w bazie."
+      />
+
+      <div aria-live="polite">
+        {rejectedFile && <RejectedFile fileName={rejectedFile} pdf />}
+        {upload.isError && <ImportError error={upload.error} />}
+        {upload.isSuccess && <NomenclatureImportResult result={upload.data} />}
+      </div>
+    </div>
+  )
+}
+
+function NomenclatureImportResult({ result }: { result: NomenclatureImport }) {
+  return (
+    <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <CircleCheckIcon className="text-emerald-600 dark:text-emerald-400" />
+      <AlertTitle>
+        Zaimportowano {numberFormat.format(result.totalRows)} pozycji nomenklatury
+        {result.reportGeneratedAt && <> z raportu {formatReportDate(result.reportGeneratedAt)}</>}
+      </AlertTitle>
+      <AlertDescription>
+        <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
+          <ResultCount label="Nowe" value={result.createdCount} />
+          <ResultCount label="Zmienione" value={result.updatedCount} />
+          <ResultCount label="Brak w pliku" value={result.missingCount} />
+        </dl>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function ResultCount({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex gap-1.5">
@@ -404,11 +577,15 @@ type HistoryRow =
   | { kind: 'products'; importedAt: string; item: ProductImport }
   | { kind: 'documents'; importedAt: string; item: DocumentImport }
   | { kind: 'suppliers'; importedAt: string; item: SupplierImport }
+  | { kind: 'sales'; importedAt: string; item: SalesImport }
+  | { kind: 'nomenclatures'; importedAt: string; item: NomenclatureImport }
 
 const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   products: 'Produkty',
   documents: 'Wejścia/Wyjścia',
   suppliers: 'Lista dostawców',
+  sales: 'Sprzedaż',
+  nomenclatures: 'Lista nomenklatur',
 }
 
 /** Wszystkie wgrania raportów razem, od najnowszego. */
@@ -416,12 +593,16 @@ function ImportHistory({
   products,
   documents,
   suppliers,
+  sales,
+  nomenclatures,
   loading,
   onShowEanChanges,
 }: {
   products?: ProductImport[]
   documents?: DocumentImport[]
   suppliers?: SupplierImport[]
+  sales?: SalesImport[]
+  nomenclatures?: NomenclatureImport[]
   loading: boolean
   onShowEanChanges: ShowEanChanges
 }) {
@@ -429,6 +610,8 @@ function ImportHistory({
     ...(products ?? []).map((item) => ({ kind: 'products' as const, importedAt: item.importedAt, item })),
     ...(documents ?? []).map((item) => ({ kind: 'documents' as const, importedAt: item.importedAt, item })),
     ...(suppliers ?? []).map((item) => ({ kind: 'suppliers' as const, importedAt: item.importedAt, item })),
+    ...(sales ?? []).map((item) => ({ kind: 'sales' as const, importedAt: item.importedAt, item })),
+    ...(nomenclatures ?? []).map((item) => ({ kind: 'nomenclatures' as const, importedAt: item.importedAt, item })),
   ].sort((a, b) => b.importedAt.localeCompare(a.importedAt))
 
   if (!loading && rows.length === 0) {
@@ -473,7 +656,11 @@ function ImportHistory({
                     ? productSummary(row.item)
                     : row.kind === 'documents'
                       ? documentSummary(row.item)
-                      : supplierSummary(row.item)}
+                      : row.kind === 'suppliers'
+                        ? supplierSummary(row.item)
+                        : row.kind === 'nomenclatures'
+                          ? nomenclatureSummary(row.item)
+                          : salesSummary(row.item)}
                 </TableCell>
                 <TableCell className="pr-4 text-right">
                   {row.kind === 'products' ? (
@@ -515,6 +702,24 @@ function supplierSummary(item: SupplierImport) {
     `${numberFormat.format(item.createdCount)} nowych`,
     `${numberFormat.format(item.updatedCount)} zmienionych`,
     `${numberFormat.format(item.missingCount)} brak w pliku`,
+  ].join(' · ')
+}
+
+function nomenclatureSummary(item: NomenclatureImport) {
+  return [
+    `${numberFormat.format(item.totalRows)} pozycji`,
+    `${numberFormat.format(item.createdCount)} nowych`,
+    `${numberFormat.format(item.updatedCount)} zmienionych`,
+    `${numberFormat.format(item.missingCount)} brak w pliku`,
+  ].join(' · ')
+}
+
+function salesSummary(item: SalesImport) {
+  return [
+    `${numberFormat.format(item.totalRows)} wierszy z dni ${formatPeriod(item.periodFrom, item.periodTo)}`,
+    `${numberFormat.format(item.createdCount)} dopisanych`,
+    `${numberFormat.format(item.existingCount)} już było`,
+    ...(item.conflictCount > 0 ? [`${numberFormat.format(item.conflictCount)} niezgodnych z zapisanymi`] : []),
   ].join(' · ')
 }
 

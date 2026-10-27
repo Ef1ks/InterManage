@@ -1,6 +1,7 @@
 package com.intermanage.backend.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,6 +26,7 @@ import com.intermanage.backend.dto.KsefInvoiceSummary;
 import com.intermanage.backend.dto.KsefOverview;
 import com.intermanage.backend.entity.AppUser;
 import com.intermanage.backend.entity.Document;
+import com.intermanage.backend.entity.DocumentKsefInvoice;
 import com.intermanage.backend.entity.KsefConnection;
 import com.intermanage.backend.entity.KsefInternalId;
 import com.intermanage.backend.entity.KsefInvoice;
@@ -35,6 +37,7 @@ import com.intermanage.backend.entity.KsefSyncState;
 import com.intermanage.backend.exception.ApiException;
 import com.intermanage.backend.mapper.KsefMapper;
 import com.intermanage.backend.repository.AppUserRepository;
+import com.intermanage.backend.repository.DocumentKsefInvoiceRepository;
 import com.intermanage.backend.repository.DocumentRepository;
 import com.intermanage.backend.repository.KsefConnectionRepository;
 import com.intermanage.backend.repository.KsefInternalIdRepository;
@@ -70,13 +73,15 @@ public class KsefInvoiceService {
     private final KsefSyncService syncService;
     private final KsefSyncStateRepository syncStates;
     private final KsefInvoiceEntryRepository entries;
+    private final DocumentKsefInvoiceRepository documentLinks;
 
     public KsefInvoiceService(KsefInvoiceRepository invoices, KsefConnectionRepository connections,
             KsefInternalIdRepository internalIds, KsefSkippedSupplierRepository skippedSuppliers,
             DocumentRepository documents, AppUserRepository users, KsefSessionService sessions, KsefClient client,
             KsefMapper mapper, KsefInvoicePdf invoicePdf, KsefInvoiceXmlRepository xmlFiles,
             KsefRateLimiter limiter, KsefSyncService syncService, KsefSyncStateRepository syncStates,
-            KsefInvoiceEntryRepository entries) {
+            KsefInvoiceEntryRepository entries, DocumentKsefInvoiceRepository documentLinks) {
+        this.documentLinks = documentLinks;
         this.invoices = invoices;
         this.connections = connections;
         this.internalIds = internalIds;
@@ -222,11 +227,41 @@ public class KsefInvoiceService {
         Map<UUID, KsefInvoiceEntry> marked = entries.findInStore(storeId,
                         page.stream().map(KsefInvoice::getId).toList())
                 .stream().collect(Collectors.toMap(entry -> entry.getId().invoiceId(), Function.identity()));
+        Map<UUID, List<Document>> linked = documentLinks.findActiveByInvoiceIds(storeId,
+                        page.stream().map(KsefInvoice::getId).toList())
+                .stream().collect(Collectors.groupingBy(link -> link.getInvoice().getId(),
+                        Collectors.mapping(DocumentKsefInvoice::getDocument, Collectors.toList())));
         return page.stream()
                 .map(invoice -> mapper.toSummary(invoice, marked.get(invoice.getId()),
-                        deliveries.getOrDefault(normalized(invoice.getInvoiceNumber()), List.of()),
+                        documentsOf(deliveries.getOrDefault(normalized(invoice.getInvoiceNumber()), List.of()),
+                                linked.getOrDefault(invoice.getId(), List.of())),
                         skipped.contains(invoice.getSellerNip())))
                 .toList();
+    }
+
+    /** Przyjęcia z numerem faktury, potem dokumenty przypięte ręcznie (bez powtórzeń). */
+    private static List<KsefInvoiceSummary.Delivery> documentsOf(List<Document> byNumber, List<Document> linked) {
+        List<KsefInvoiceSummary.Delivery> result = new ArrayList<>();
+        for (Document document : byNumber) {
+            result.add(delivery(document, false));
+        }
+        for (Document document : linked) {
+            if (result.stream().noneMatch(delivery -> delivery.id().equals(document.getId()))) {
+                result.add(delivery(document, true));
+            }
+        }
+        return result;
+    }
+
+    private static KsefInvoiceSummary.Delivery delivery(Document document, boolean linked) {
+        return new KsefInvoiceSummary.Delivery(document.getId(), document.getType().name(),
+                document.getType().singular(), document.getNumber(), linked);
+    }
+
+    /** Jedna faktura po zmianie (np. przypięciu dokumentu) - w formie wiersza listy. */
+    @Transactional(readOnly = true)
+    public KsefInvoiceSummary summary(UUID storeId, UUID id) {
+        return summaries(storeId, List.of(visible(storeId, id))).getFirst();
     }
 
     private Set<String> ownInternalIds(UUID storeId) {

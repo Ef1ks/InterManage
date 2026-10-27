@@ -71,7 +71,8 @@ export function AppLayout() {
             <UserMenu />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6">
+        {/* Szerokie raporty (data-wide-page) zajmują całą szerokość obok menu. */}
+        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none">
           <Outlet />
         </main>
       </div>

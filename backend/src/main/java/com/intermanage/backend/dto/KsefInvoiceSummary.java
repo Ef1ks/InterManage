@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Wiersz listy faktur KSeF. {@code entered}: numer faktury jest w przyjęciu PZ ({@code deliveries}) albo ktoś ją
- * oznaczył ręcznie ({@code enteredBy}, {@code enteredAt}). {@code internalIds} to IDWew z Podmiotu 3.
+ * Wiersz listy faktur KSeF. {@code entered}: faktura ma dokument sklepu ({@code deliveries}: przyjęcie PZ z jej
+ * numerem albo dokument przypięty ręcznie) albo ktoś ją oznaczył ręcznie ({@code enteredBy}, {@code enteredAt}). {@code internalIds} to IDWew z Podmiotu 3.
  */
 public record KsefInvoiceSummary(
         UUID id,
@@ -32,7 +32,10 @@ public record KsefInvoiceSummary(
         List<Delivery> deliveries,
         boolean supplierSkipped) {
 
-    /** Przyjęcie PZ z numerem tej faktury. */
-    public record Delivery(UUID id, String number) {
+    /**
+     * Dokument sklepu tej faktury: przyjęcie PZ z jej numerem ({@code linked} = false) albo przyjęcie lub korekta od
+     * dostawcy przypięte ręcznie.
+     */
+    public record Delivery(UUID id, String type, String typeSingular, String number, boolean linked) {
     }
 }

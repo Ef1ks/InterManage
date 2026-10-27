@@ -40,6 +40,12 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     @Query("select d from Document d left join fetch d.lines where d.id = :id and d.store.id = :storeId and d.type = :type")
     Optional<Document> findWithLines(UUID storeId, DocumentType type, UUID id);
 
+    @Query("select d from Document d where d.id = :id and d.store.id = :storeId and d.type = :type")
+    Optional<Document> findHeader(UUID storeId, DocumentType type, UUID id);
+
+    @Query("select d from Document d where d.id = :id and d.store.id = :storeId")
+    Optional<Document> findHeader(UUID storeId, UUID id);
+
     /** Przyjęcia PZ z numerem dokumentu dostawcy spośród podanych (wielkimi literami) - faktury KSeF już wprowadzone. */
     @Query("""
             select d from Document d where d.store.id = :storeId and d.type = com.intermanage.backend.entity.DocumentType.PZ
