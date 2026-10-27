@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.document.component;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
@@ -22,12 +22,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.dto.CorrectedDelivery;
-import com.intermanage.backend.dto.CorrectedDelivery.CorrectedLine;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.entity.Supplier;
-
+import com.intermanage.backend.common.component.PdfFonts;
+import com.intermanage.backend.document.dto.CorrectedDelivery.CorrectedLine;
+import com.intermanage.backend.document.dto.CorrectedDelivery;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.supplier.entity.Supplier;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;

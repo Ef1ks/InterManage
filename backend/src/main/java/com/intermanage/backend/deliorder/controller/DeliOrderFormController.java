@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.deliorder.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,14 +14,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.AddOrderProductRequest;
-import com.intermanage.backend.dto.OrderFormResponse;
-import com.intermanage.backend.dto.OrderNameRequest;
-import com.intermanage.backend.dto.PasteOrderProductsRequest;
-import com.intermanage.backend.dto.PasteOrderProductsResponse;
-import com.intermanage.backend.dto.ProductSearchResponse;
-import com.intermanage.backend.dto.UpdateOrderUnitRequest;
-import com.intermanage.backend.service.DeliOrderFormService;
+import com.intermanage.backend.deliorder.dto.AddOrderProductRequest;
+import com.intermanage.backend.deliorder.dto.OrderFormResponse;
+import com.intermanage.backend.deliorder.dto.OrderNameRequest;
+import com.intermanage.backend.deliorder.dto.PasteOrderProductsRequest;
+import com.intermanage.backend.deliorder.dto.PasteOrderProductsResponse;
+import com.intermanage.backend.deliorder.dto.UpdateOrderUnitRequest;
+import com.intermanage.backend.deliorder.service.DeliOrderFormService;
+import com.intermanage.backend.product.dto.ProductSearchResponse;
 
 import jakarta.validation.Valid;
 

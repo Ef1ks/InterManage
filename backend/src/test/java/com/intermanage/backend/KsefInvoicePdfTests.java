@@ -13,9 +13,9 @@ import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
-import com.intermanage.backend.component.KsefInvoicePdf;
-import com.intermanage.backend.component.KsefInvoiceReader;
-import com.intermanage.backend.component.PdfFonts;
+import com.intermanage.backend.common.component.PdfFonts;
+import com.intermanage.backend.ksef.component.KsefInvoicePdf;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.PdfTextExtractor;
 

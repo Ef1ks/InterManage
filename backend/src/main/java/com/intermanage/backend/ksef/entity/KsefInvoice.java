@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.ksef.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 import org.hibernate.annotations.UuidGenerator;
 
-import com.intermanage.backend.dto.KsefInvoiceMetadata;
+import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;

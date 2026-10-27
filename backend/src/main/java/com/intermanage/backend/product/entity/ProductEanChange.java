@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.product.entity;
 
 import java.util.UUID;
 

@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.document.dto;
 
 import java.util.UUID;
 

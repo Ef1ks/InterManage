@@ -1,11 +1,12 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.auth.dto;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.PermissionCategory;
-import com.intermanage.backend.entity.PermissionLevel;
+import com.intermanage.backend.auth.entity.PermissionCategory;
+import com.intermanage.backend.auth.entity.PermissionLevel;
+import com.intermanage.backend.store.dto.StoreSummary;
 
 public record MeResponse(
         UUID id,

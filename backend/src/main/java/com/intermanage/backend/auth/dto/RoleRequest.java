@@ -1,9 +1,9 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.auth.dto;
 
 import java.util.Map;
 
-import com.intermanage.backend.entity.PermissionCategory;
-import com.intermanage.backend.entity.PermissionLevel;
+import com.intermanage.backend.auth.entity.PermissionCategory;
+import com.intermanage.backend.auth.entity.PermissionLevel;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.product.entity;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -8,7 +8,9 @@ import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
 
-import com.intermanage.backend.dto.ProductReportRow;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.product.dto.ProductReportRow;
+import com.intermanage.backend.store.entity.Store;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

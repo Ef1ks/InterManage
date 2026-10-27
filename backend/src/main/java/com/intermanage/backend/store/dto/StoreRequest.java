@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.store.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.auth.controller;
 
 import java.util.Arrays;
 import java.util.List;
@@ -7,9 +7,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.PermissionCategoryResponse;
-import com.intermanage.backend.entity.PermissionCategory;
-import com.intermanage.backend.mapper.PermissionCategoryMapper;
+import com.intermanage.backend.auth.dto.PermissionCategoryResponse;
+import com.intermanage.backend.auth.entity.PermissionCategory;
+import com.intermanage.backend.auth.mapper.PermissionCategoryMapper;
 
 @RestController
 @RequestMapping("/api/permission-categories")

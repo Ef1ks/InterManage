@@ -1,10 +1,10 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.nomenclature.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.NomenclatureImportResponse;
-import com.intermanage.backend.entity.NomenclatureImport;
+import com.intermanage.backend.nomenclature.dto.NomenclatureImportResponse;
+import com.intermanage.backend.nomenclature.entity.NomenclatureImport;
 
 @Mapper
 public interface NomenclatureMapper {

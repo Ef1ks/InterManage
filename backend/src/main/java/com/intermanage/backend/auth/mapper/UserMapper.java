@@ -1,4 +1,4 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.auth.mapper;
 
 import java.util.Collection;
 import java.util.List;
@@ -7,11 +7,11 @@ import java.util.UUID;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.MeResponse;
-import com.intermanage.backend.dto.StoreSummary;
-import com.intermanage.backend.dto.UserResponse;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Store;
+import com.intermanage.backend.auth.dto.MeResponse;
+import com.intermanage.backend.auth.dto.UserResponse;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.store.dto.StoreSummary;
+import com.intermanage.backend.store.entity.Store;
 
 @Mapper
 public interface UserMapper {

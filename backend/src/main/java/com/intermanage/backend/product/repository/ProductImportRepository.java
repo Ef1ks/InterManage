@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.product.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.ProductImport;
+import com.intermanage.backend.product.entity.ProductImport;
 
 public interface ProductImportRepository extends JpaRepository<ProductImport, UUID> {
 

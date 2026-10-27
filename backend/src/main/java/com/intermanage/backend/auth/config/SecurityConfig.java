@@ -1,4 +1,4 @@
-package com.intermanage.backend.config;
+package com.intermanage.backend.auth.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,11 +22,11 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.security.AppUserDetailsService;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.security.JwtAuthenticationFilter;
-import com.intermanage.backend.security.JwtService;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.auth.security.AppUserDetailsService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.JwtAuthenticationFilter;
+import com.intermanage.backend.auth.security.JwtService;
 
 /**
  * Bezstanowe uwierzytelnianie JWT: token w ciasteczku HttpOnly {@value JwtService#COOKIE_NAME} + CSRF w trybie SPA

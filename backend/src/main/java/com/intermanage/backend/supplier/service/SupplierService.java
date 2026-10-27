@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.supplier.service;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,24 +19,24 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.component.SupplierReportParser;
-import com.intermanage.backend.dto.CreateSupplierRequest;
-import com.intermanage.backend.dto.ParsedSupplierReport;
-import com.intermanage.backend.dto.SupplierImportOverview;
-import com.intermanage.backend.dto.SupplierImportResponse;
-import com.intermanage.backend.dto.SupplierReportRow;
-import com.intermanage.backend.dto.SupplierResponse;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.entity.Supplier;
-import com.intermanage.backend.entity.SupplierImport;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.mapper.SupplierMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.StoreRepository;
-import com.intermanage.backend.repository.SupplierImportRepository;
-import com.intermanage.backend.repository.SupplierRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
+import com.intermanage.backend.supplier.component.SupplierReportParser;
+import com.intermanage.backend.supplier.dto.CreateSupplierRequest;
+import com.intermanage.backend.supplier.dto.ParsedSupplierReport;
+import com.intermanage.backend.supplier.dto.SupplierImportOverview;
+import com.intermanage.backend.supplier.dto.SupplierImportResponse;
+import com.intermanage.backend.supplier.dto.SupplierReportRow;
+import com.intermanage.backend.supplier.dto.SupplierResponse;
+import com.intermanage.backend.supplier.entity.Supplier;
+import com.intermanage.backend.supplier.entity.SupplierImport;
+import com.intermanage.backend.supplier.mapper.SupplierMapper;
+import com.intermanage.backend.supplier.repository.SupplierImportRepository;
+import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
  * Dostawcy sklepu. Raport "Lista dostawców" jest scalany po kodzie dostawcy: nowi są dodawani, znani aktualizowani,

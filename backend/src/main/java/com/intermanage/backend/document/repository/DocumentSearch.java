@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.document.repository;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
@@ -12,12 +12,12 @@ import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
-import com.intermanage.backend.entity.DeliveryCorrection;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentKsefInvoice;
-import com.intermanage.backend.entity.DocumentLine;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.entity.KsefInvoice;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentKsefInvoice;
+import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.ksef.entity.KsefInvoice;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;

@@ -1,11 +1,11 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.OrderUnit;
+import com.intermanage.backend.deliorder.entity.OrderUnit;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;

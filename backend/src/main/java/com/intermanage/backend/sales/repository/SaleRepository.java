@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.sales.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -8,7 +8,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.Sale;
+import com.intermanage.backend.sales.entity.Sale;
 
 public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
 

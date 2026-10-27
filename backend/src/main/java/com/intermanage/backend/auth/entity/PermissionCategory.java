@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.auth.entity;
 
 /**
  * Kategorie narzędzi, do których właściciel nadaje dostęp w rolach.

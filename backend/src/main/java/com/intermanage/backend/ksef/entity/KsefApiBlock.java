@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.ksef.entity;
 
 import java.time.Instant;
 

@@ -32,9 +32,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.intermanage.backend.entity.Sale;
-import com.intermanage.backend.repository.SaleRepository;
-import com.intermanage.backend.security.JwtService;
+import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.sales.entity.Sale;
+import com.intermanage.backend.sales.repository.SaleRepository;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.persistence.EntityManager;

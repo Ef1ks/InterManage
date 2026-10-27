@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.document.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -16,9 +16,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.dto.DocumentImportResponse;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.DocumentService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.document.dto.DocumentImportResponse;
+import com.intermanage.backend.document.service.DocumentService;
 
 /** Raport Wejścia/Wyjścia (dokumenty magazynowe) wgrywany w narzędziu Import danych, obok raportu produktów. */
 @RestController

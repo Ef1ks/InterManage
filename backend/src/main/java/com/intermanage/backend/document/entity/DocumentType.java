@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.document.entity;
 
 import java.util.Arrays;
 import java.util.Locale;

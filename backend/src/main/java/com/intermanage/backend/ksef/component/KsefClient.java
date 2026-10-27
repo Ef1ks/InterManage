@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.ksef.component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
-import com.intermanage.backend.dto.KsefInvoiceMetadata;
+import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;

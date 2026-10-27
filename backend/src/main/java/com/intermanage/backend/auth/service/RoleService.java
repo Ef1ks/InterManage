@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.auth.service;
 
 import java.util.HashMap;
 import java.util.List;
@@ -8,15 +8,15 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.RoleRequest;
-import com.intermanage.backend.dto.RoleResponse;
-import com.intermanage.backend.entity.PermissionCategory;
-import com.intermanage.backend.entity.PermissionLevel;
-import com.intermanage.backend.entity.Role;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.RoleMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.RoleRepository;
+import com.intermanage.backend.auth.dto.RoleRequest;
+import com.intermanage.backend.auth.dto.RoleResponse;
+import com.intermanage.backend.auth.entity.PermissionCategory;
+import com.intermanage.backend.auth.entity.PermissionLevel;
+import com.intermanage.backend.auth.entity.Role;
+import com.intermanage.backend.auth.mapper.RoleMapper;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.auth.repository.RoleRepository;
+import com.intermanage.backend.common.exception.ApiException;
 
 @Service
 public class RoleService {

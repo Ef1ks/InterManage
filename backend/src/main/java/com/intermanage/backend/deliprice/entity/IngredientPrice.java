@@ -1,6 +1,8 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliprice.entity;
 
 import java.math.BigDecimal;
+
+import com.intermanage.backend.document.entity.Document;
 
 /**
  * Cena jednostki składnika (kg, L, szt.) i jej źródło. {@code document} to przyjęcie PZ, gdy cena jest z dostawy.

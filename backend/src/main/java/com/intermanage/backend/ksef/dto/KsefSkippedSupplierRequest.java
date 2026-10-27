@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.ksef.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

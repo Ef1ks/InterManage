@@ -1,9 +1,10 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.time.Instant;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.InvitationStatus;
+import com.intermanage.backend.deliorder.entity.InvitationStatus;
+import com.intermanage.backend.store.dto.StoreSummary;
 
 /** Zaproszenie do formularza: {@code formStore} zaprasza, {@code store} jest zaproszony. */
 public record DeliInvitationResponse(

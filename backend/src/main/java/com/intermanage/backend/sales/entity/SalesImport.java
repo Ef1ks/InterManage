@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.sales.entity;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -6,6 +6,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
+
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.store.entity.Store;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

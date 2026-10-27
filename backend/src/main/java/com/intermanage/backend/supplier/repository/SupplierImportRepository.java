@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.supplier.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,7 +9,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.SupplierImport;
+import com.intermanage.backend.supplier.entity.SupplierImport;
 
 public interface SupplierImportRepository extends JpaRepository<SupplierImport, UUID> {
 

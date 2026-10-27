@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.ksef.component;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

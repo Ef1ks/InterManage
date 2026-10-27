@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.document.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -20,19 +20,19 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.CorrectedDelivery;
-import com.intermanage.backend.dto.CorrectedDelivery.CorrectedLine;
-import com.intermanage.backend.dto.CorrectionCandidate;
-import com.intermanage.backend.dto.CorrectionTotals;
-import com.intermanage.backend.entity.DeliveryCorrection;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentLine;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.DeliveryCorrectionRepository;
-import com.intermanage.backend.repository.DocumentRepository;
-import com.intermanage.backend.repository.DocumentSearch;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.dto.CorrectedDelivery.CorrectedLine;
+import com.intermanage.backend.document.dto.CorrectedDelivery;
+import com.intermanage.backend.document.dto.CorrectionCandidate;
+import com.intermanage.backend.document.dto.CorrectionTotals;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DeliveryCorrectionRepository;
+import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.document.repository.DocumentSearch;
 
 /**
  * Korekty błędów sklepu (PK) i od dostawcy (WZ) przypięte do przyjęć PZ, których dotyczą. Raport nie mówi, którą
@@ -226,7 +226,6 @@ public class DeliveryCorrectionService {
                         .reduce(BigDecimal.ZERO, BigDecimal::add),
                 lines);
     }
-
 
     /** {@code base} z linii przyjęcia (albo pierwszej linii korekty przy artykule dopisanym), plus {@code extra}. */
     private static CorrectedLine merge(String key, int lineNumber, DocumentLine base, List<DocumentLine> extra,

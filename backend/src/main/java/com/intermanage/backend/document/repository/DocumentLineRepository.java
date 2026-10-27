@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.document.repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -7,8 +7,8 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.DocumentLine;
-import com.intermanage.backend.entity.DocumentType;
+import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentType;
 
 public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID> {
 

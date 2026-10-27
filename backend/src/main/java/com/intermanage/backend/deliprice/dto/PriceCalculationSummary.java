@@ -1,10 +1,10 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliprice.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.CalculationMode;
+import com.intermanage.backend.deliprice.entity.CalculationMode;
 
 /**
  * Kalkulacja na liście: wyrób, koszt 1 kg z zapamiętanych cen składników i wyliczona cena sprzedaży (narzut + VAT,

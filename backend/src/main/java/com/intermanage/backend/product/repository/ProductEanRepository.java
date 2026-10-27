@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.product.repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -7,8 +7,8 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.ProductEan;
-import com.intermanage.backend.entity.Store;
+import com.intermanage.backend.product.entity.ProductEan;
+import com.intermanage.backend.store.entity.Store;
 
 public interface ProductEanRepository extends JpaRepository<ProductEan, UUID> {
 

@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.document.repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -8,7 +8,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
 
 /** Korekty przypięte do przyjęć PZ; liczą się tylko nieodpięte ({@code unlinkedAt is null}). */
 public interface DeliveryCorrectionRepository extends JpaRepository<DeliveryCorrection, UUID> {

@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.nomenclature.controller;
 
 import java.util.UUID;
 
@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.dto.NomenclatureImportOverview;
-import com.intermanage.backend.dto.NomenclatureImportResponse;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.NomenclatureService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.nomenclature.dto.NomenclatureImportOverview;
+import com.intermanage.backend.nomenclature.dto.NomenclatureImportResponse;
+import com.intermanage.backend.nomenclature.service.NomenclatureService;
 
 /** Raport "Lista nomenklatur" (PDF) wgrywany w narzędziu Import danych. */
 @RestController

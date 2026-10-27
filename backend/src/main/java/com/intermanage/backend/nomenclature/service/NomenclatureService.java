@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.nomenclature.service;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,23 +18,23 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.component.NomenclatureReportParser;
-import com.intermanage.backend.dto.NomenclatureImportOverview;
-import com.intermanage.backend.dto.NomenclatureImportResponse;
-import com.intermanage.backend.dto.NomenclatureReportRow;
-import com.intermanage.backend.dto.ParsedNomenclatureReport;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Nomenclature;
-import com.intermanage.backend.entity.NomenclatureImport;
-import com.intermanage.backend.entity.NomenclatureLevel;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.mapper.NomenclatureMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.NomenclatureImportRepository;
-import com.intermanage.backend.repository.NomenclatureRepository;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.nomenclature.component.NomenclatureReportParser;
+import com.intermanage.backend.nomenclature.dto.NomenclatureImportOverview;
+import com.intermanage.backend.nomenclature.dto.NomenclatureImportResponse;
+import com.intermanage.backend.nomenclature.dto.NomenclatureReportRow;
+import com.intermanage.backend.nomenclature.dto.ParsedNomenclatureReport;
+import com.intermanage.backend.nomenclature.entity.Nomenclature;
+import com.intermanage.backend.nomenclature.entity.NomenclatureImport;
+import com.intermanage.backend.nomenclature.entity.NomenclatureLevel;
+import com.intermanage.backend.nomenclature.mapper.NomenclatureMapper;
+import com.intermanage.backend.nomenclature.repository.NomenclatureImportRepository;
+import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Nomenklatura sklepu z raportu "Lista nomenklatur" (PDF). Scalanie po kodzie: nowe pozycje są dodawane, znane

@@ -1,12 +1,12 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.product.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.EanChangeResponse;
-import com.intermanage.backend.dto.ProductImportResponse;
-import com.intermanage.backend.entity.ProductEanChange;
-import com.intermanage.backend.entity.ProductImport;
+import com.intermanage.backend.product.dto.EanChangeResponse;
+import com.intermanage.backend.product.dto.ProductImportResponse;
+import com.intermanage.backend.product.entity.ProductEanChange;
+import com.intermanage.backend.product.entity.ProductImport;
 
 @Mapper
 public interface ProductImportMapper {

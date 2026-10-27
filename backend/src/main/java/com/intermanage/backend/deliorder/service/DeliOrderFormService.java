@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.deliorder.service;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,21 +10,21 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.OrderFormResponse;
-import com.intermanage.backend.dto.PasteOrderProductsRequest;
-import com.intermanage.backend.dto.PasteOrderProductsResponse;
-import com.intermanage.backend.dto.ProductSearchResponse;
-import com.intermanage.backend.entity.OrderCategory;
-import com.intermanage.backend.entity.OrderSection;
-import com.intermanage.backend.entity.OrderUnit;
-import com.intermanage.backend.entity.Product;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.OrderFormMapper;
-import com.intermanage.backend.repository.OrderCategoryRepository;
-import com.intermanage.backend.repository.OrderSectionRepository;
-import com.intermanage.backend.repository.ProductRepository;
-import com.intermanage.backend.repository.ProductSearch;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.deliorder.dto.OrderFormResponse;
+import com.intermanage.backend.deliorder.dto.PasteOrderProductsRequest;
+import com.intermanage.backend.deliorder.dto.PasteOrderProductsResponse;
+import com.intermanage.backend.deliorder.entity.OrderCategory;
+import com.intermanage.backend.deliorder.entity.OrderSection;
+import com.intermanage.backend.deliorder.entity.OrderUnit;
+import com.intermanage.backend.deliorder.mapper.OrderFormMapper;
+import com.intermanage.backend.deliorder.repository.OrderCategoryRepository;
+import com.intermanage.backend.deliorder.repository.OrderSectionRepository;
+import com.intermanage.backend.product.dto.ProductSearchResponse;
+import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.repository.ProductRepository;
+import com.intermanage.backend.product.repository.ProductSearch;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Układanie formularza zamówienia garmażu sklepu: działy (zakładki), kategorie w działach i produkty z kartoteki

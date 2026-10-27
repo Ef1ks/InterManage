@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.auth.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -14,11 +14,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.entity.ActivationToken;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.ActivationTokenRepository;
-import com.intermanage.backend.security.AppUserPrincipal;
+import com.intermanage.backend.auth.entity.ActivationToken;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.ActivationTokenRepository;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.exception.ApiException;
 
 /** Linki aktywacyjne dla zaproszonych pracowników: jednorazowe, ważne {@code app.auth.activation-ttl}. */
 @Service

@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.sales.controller;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.SalesComparisonResponse;
-import com.intermanage.backend.dto.SalesReportsOverview;
-import com.intermanage.backend.service.SalesReportService;
+import com.intermanage.backend.sales.dto.SalesComparisonResponse;
+import com.intermanage.backend.sales.dto.SalesReportsOverview;
+import com.intermanage.backend.sales.service.SalesReportService;
 
 /** Raporty sprzedaży sklepu (kafelki w narzędziu Sprzedaż i raporty). */
 @RestController

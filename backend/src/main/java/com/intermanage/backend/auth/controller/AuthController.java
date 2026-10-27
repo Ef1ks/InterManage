@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.auth.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -14,22 +14,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.ActivateRequest;
-import com.intermanage.backend.dto.ChangePasswordRequest;
-import com.intermanage.backend.dto.LoginRequest;
-import com.intermanage.backend.dto.MeResponse;
-import com.intermanage.backend.dto.SetUpPasswordRequest;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.security.JwtService;
-import com.intermanage.backend.service.AuthService;
+import com.intermanage.backend.auth.dto.ActivateRequest;
+import com.intermanage.backend.auth.dto.ChangePasswordRequest;
+import com.intermanage.backend.auth.dto.LoginRequest;
+import com.intermanage.backend.auth.dto.MeResponse;
+import com.intermanage.backend.auth.dto.SetUpPasswordRequest;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.auth.service.AuthService;
+import com.intermanage.backend.common.exception.ApiException;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 /**
  * Logowanie ustawia ciasteczko HttpOnly z JWT. Wylogowanie ({@code POST /api/auth/logout}, czyści ciasteczko)
- * obsługuje Spring Security, patrz {@link com.intermanage.backend.config.SecurityConfig}.
+ * obsługuje Spring Security, patrz {@link com.intermanage.backend.auth.config.SecurityConfig}.
  */
 @RestController
 @RequestMapping("/api/auth")

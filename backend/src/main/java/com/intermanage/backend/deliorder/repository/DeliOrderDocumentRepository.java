@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.deliorder.repository;
 
 import java.util.List;
 import java.util.UUID;
@@ -6,7 +6,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.DeliOrderDocument;
+import com.intermanage.backend.deliorder.entity.DeliOrderDocument;
 
 public interface DeliOrderDocumentRepository extends JpaRepository<DeliOrderDocument, UUID> {
 

@@ -1,4 +1,4 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.deliprice.mapper;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -6,15 +6,15 @@ import java.util.UUID;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.FinishedProductResponse;
-import com.intermanage.backend.dto.PriceCalculationResponse;
-import com.intermanage.backend.dto.PriceCalculationSummary;
-import com.intermanage.backend.dto.PriceChangeResponse;
-import com.intermanage.backend.dto.PriceProductResponse;
-import com.intermanage.backend.entity.IngredientPrice;
-import com.intermanage.backend.entity.PriceCalculation;
-import com.intermanage.backend.entity.PriceCalculationItem;
-import com.intermanage.backend.entity.Product;
+import com.intermanage.backend.deliprice.dto.FinishedProductResponse;
+import com.intermanage.backend.deliprice.dto.PriceCalculationResponse;
+import com.intermanage.backend.deliprice.dto.PriceCalculationSummary;
+import com.intermanage.backend.deliprice.dto.PriceChangeResponse;
+import com.intermanage.backend.deliprice.dto.PriceProductResponse;
+import com.intermanage.backend.deliprice.entity.IngredientPrice;
+import com.intermanage.backend.deliprice.entity.PriceCalculation;
+import com.intermanage.backend.deliprice.entity.PriceCalculationItem;
+import com.intermanage.backend.product.entity.Product;
 
 @Mapper
 public interface PriceCalculationMapper {

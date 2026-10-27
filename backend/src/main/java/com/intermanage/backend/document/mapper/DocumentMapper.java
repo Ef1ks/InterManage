@@ -1,4 +1,4 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.document.mapper;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -6,25 +6,25 @@ import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.CorrectedDelivery;
-import com.intermanage.backend.dto.CorrectionTotals;
-import com.intermanage.backend.dto.DeliveryCorrectionResponse;
-import com.intermanage.backend.dto.DocumentGratisResponse;
-import com.intermanage.backend.dto.DocumentImportResponse;
-import com.intermanage.backend.dto.DocumentResponse;
-import com.intermanage.backend.dto.DocumentResponse.DocumentLineResponse;
-import com.intermanage.backend.dto.DocumentSummary;
-import com.intermanage.backend.dto.DocumentTypeSummary;
-import com.intermanage.backend.dto.InvoiceAmountCheck;
-import com.intermanage.backend.dto.LinkedDeliOrder;
-import com.intermanage.backend.dto.LinkedDelivery;
-import com.intermanage.backend.dto.LinkedKsefInvoice;
-import com.intermanage.backend.entity.DeliveryCorrection;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentGratis;
-import com.intermanage.backend.entity.DocumentImport;
-import com.intermanage.backend.entity.DocumentLine;
-import com.intermanage.backend.entity.DocumentType;
+import com.intermanage.backend.document.dto.CorrectedDelivery;
+import com.intermanage.backend.document.dto.CorrectionTotals;
+import com.intermanage.backend.document.dto.DeliveryCorrectionResponse;
+import com.intermanage.backend.document.dto.DocumentGratisResponse;
+import com.intermanage.backend.document.dto.DocumentImportResponse;
+import com.intermanage.backend.document.dto.DocumentResponse.DocumentLineResponse;
+import com.intermanage.backend.document.dto.DocumentResponse;
+import com.intermanage.backend.document.dto.DocumentSummary;
+import com.intermanage.backend.document.dto.DocumentTypeSummary;
+import com.intermanage.backend.document.dto.InvoiceAmountCheck;
+import com.intermanage.backend.document.dto.LinkedDeliOrder;
+import com.intermanage.backend.document.dto.LinkedDelivery;
+import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentGratis;
+import com.intermanage.backend.document.entity.DocumentImport;
+import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentType;
 
 @Mapper
 public interface DocumentMapper {
@@ -57,9 +57,9 @@ public interface DocumentMapper {
     @Mapping(target = "ksefLinkable", expression = "java(document.getType().canLinkKsefInvoice())")
     @Mapping(target = "ksefInvoices", source = "ksefInvoices")
     @Mapping(target = "supplierDocumentNumberEditable",
-            expression = "java(document.getType() == com.intermanage.backend.entity.DocumentType.PZ)")
+            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.PZ)")
     @Mapping(target = "correctable",
-            expression = "java(document.getType() == com.intermanage.backend.entity.DocumentType.PZ)")
+            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.PZ)")
     @Mapping(target = "attachableToDelivery", expression = "java(document.getType().isDeliveryCorrection())")
     @Mapping(target = "corrections", source = "corrections")
     @Mapping(target = "corrected", source = "corrected")

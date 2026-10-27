@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.ksef.component;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -26,7 +26,7 @@ import javax.crypto.spec.PBEKeySpec;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.exception.ApiException;
+import com.intermanage.backend.common.exception.ApiException;
 
 /**
  * Certyfikat KSeF (.crt, PEM albo DER) i jego klucz prywatny (.key, PKCS#8 PEM zaszyfrowany hasłem - tak go wydaje

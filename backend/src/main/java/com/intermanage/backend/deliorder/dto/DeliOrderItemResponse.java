@@ -1,9 +1,9 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.OrderUnit;
+import com.intermanage.backend.deliorder.entity.OrderUnit;
 
 /** Pozycja zamówienia; {@code quantity} różni się od {@code orderedQuantity}, gdy dostawca ją poprawił. */
 public record DeliOrderItemResponse(

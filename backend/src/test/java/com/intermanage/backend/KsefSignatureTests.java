@@ -19,9 +19,9 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
-import com.intermanage.backend.component.KsefCredentials;
-import com.intermanage.backend.component.KsefXadesSigner;
-import com.intermanage.backend.exception.ApiException;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.ksef.component.KsefCredentials;
+import com.intermanage.backend.ksef.component.KsefXadesSigner;
 
 /** Certyfikat testowy (EC P-256, klucz PBES2/AES-256 jak z KSeF) i podpis XAdES żądania logowania. */
 class KsefSignatureTests {

@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.sales.dto;
 
 /**
  * Wiersz porównania sprzedaży: pozycja nomenklatury (rejon, rodzina, podrodzina) albo artykuł. {@code code} to kod

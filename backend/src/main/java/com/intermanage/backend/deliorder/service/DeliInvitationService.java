@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.deliorder.service;
 
 import java.util.List;
 import java.util.UUID;
@@ -6,18 +6,18 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.DeliInvitationResponse;
-import com.intermanage.backend.dto.StoreSummary;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.DeliFormInvitation;
-import com.intermanage.backend.entity.InvitationStatus;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.DeliOrderMapper;
-import com.intermanage.backend.mapper.StoreMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.DeliFormInvitationRepository;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.deliorder.dto.DeliInvitationResponse;
+import com.intermanage.backend.deliorder.entity.DeliFormInvitation;
+import com.intermanage.backend.deliorder.entity.InvitationStatus;
+import com.intermanage.backend.deliorder.mapper.DeliOrderMapper;
+import com.intermanage.backend.deliorder.repository.DeliFormInvitationRepository;
+import com.intermanage.backend.store.dto.StoreSummary;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.mapper.StoreMapper;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Zaproszenia do formularza zamówień garmażu. Sklep-dostawca zaprasza inne sklepy, zaproszony sklep akceptuje

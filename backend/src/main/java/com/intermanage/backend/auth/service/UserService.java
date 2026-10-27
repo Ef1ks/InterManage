@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.auth.service;
 
 import java.util.List;
 import java.util.Set;
@@ -8,15 +8,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.CreateUserRequest;
-import com.intermanage.backend.dto.UpdateUserRequest;
-import com.intermanage.backend.dto.UserResponse;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Role;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.UserMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.RoleRepository;
+import com.intermanage.backend.auth.dto.CreateUserRequest;
+import com.intermanage.backend.auth.dto.UpdateUserRequest;
+import com.intermanage.backend.auth.dto.UserResponse;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.entity.Role;
+import com.intermanage.backend.auth.mapper.UserMapper;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.auth.repository.RoleRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.store.service.StoreService;
 
 @Service
 public class UserService {

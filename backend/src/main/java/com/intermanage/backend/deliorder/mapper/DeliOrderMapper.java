@@ -1,17 +1,18 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.deliorder.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.DeliInvitationResponse;
-import com.intermanage.backend.dto.DeliOrderDocumentResponse;
-import com.intermanage.backend.dto.DeliOrderItemResponse;
-import com.intermanage.backend.dto.DeliOrderResponse;
-import com.intermanage.backend.dto.DeliOrderSummaryResponse;
-import com.intermanage.backend.entity.DeliFormInvitation;
-import com.intermanage.backend.entity.DeliOrder;
-import com.intermanage.backend.entity.DeliOrderDocument;
-import com.intermanage.backend.entity.DeliOrderItem;
+import com.intermanage.backend.deliorder.dto.DeliInvitationResponse;
+import com.intermanage.backend.deliorder.dto.DeliOrderDocumentResponse;
+import com.intermanage.backend.deliorder.dto.DeliOrderItemResponse;
+import com.intermanage.backend.deliorder.dto.DeliOrderResponse;
+import com.intermanage.backend.deliorder.dto.DeliOrderSummaryResponse;
+import com.intermanage.backend.deliorder.entity.DeliFormInvitation;
+import com.intermanage.backend.deliorder.entity.DeliOrder;
+import com.intermanage.backend.deliorder.entity.DeliOrderDocument;
+import com.intermanage.backend.deliorder.entity.DeliOrderItem;
+import com.intermanage.backend.store.mapper.StoreMapper;
 
 @Mapper(uses = StoreMapper.class)
 public interface DeliOrderMapper {

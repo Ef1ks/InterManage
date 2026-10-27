@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.supplier.repository;
 
 import java.util.List;
 import java.util.Optional;
@@ -7,7 +7,8 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.Supplier;
+import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.supplier.entity.Supplier;
 
 public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
 

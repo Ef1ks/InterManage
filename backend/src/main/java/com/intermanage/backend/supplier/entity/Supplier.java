@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.supplier.entity;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -6,7 +6,9 @@ import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
 
-import com.intermanage.backend.dto.SupplierReportRow;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.supplier.dto.SupplierReportRow;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

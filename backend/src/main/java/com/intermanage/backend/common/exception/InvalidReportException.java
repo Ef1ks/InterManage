@@ -1,8 +1,8 @@
-package com.intermanage.backend.exception;
+package com.intermanage.backend.common.exception;
 
 import java.util.List;
 
-/** Plik nie pasuje do formatu raportu; {@code errors} to komunikaty dla użytkownika (najwyżej {@value com.intermanage.backend.component.ProductReportParser#MAX_REPORTED_ERRORS}). */
+/** Plik nie pasuje do formatu raportu; {@code errors} to komunikaty dla użytkownika (najwyżej {@value com.intermanage.backend.product.component.ProductReportParser#MAX_REPORTED_ERRORS}). */
 public class InvalidReportException extends Exception {
 
     private final List<String> errors;

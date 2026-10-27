@@ -1,12 +1,12 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.supplier.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.SupplierImportResponse;
-import com.intermanage.backend.dto.SupplierResponse;
-import com.intermanage.backend.entity.Supplier;
-import com.intermanage.backend.entity.SupplierImport;
+import com.intermanage.backend.supplier.dto.SupplierImportResponse;
+import com.intermanage.backend.supplier.dto.SupplierResponse;
+import com.intermanage.backend.supplier.entity.Supplier;
+import com.intermanage.backend.supplier.entity.SupplierImport;
 
 @Mapper
 public interface SupplierMapper {

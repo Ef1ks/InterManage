@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.auth.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,9 +14,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.RoleRequest;
-import com.intermanage.backend.dto.RoleResponse;
-import com.intermanage.backend.service.RoleService;
+import com.intermanage.backend.auth.dto.RoleRequest;
+import com.intermanage.backend.auth.dto.RoleResponse;
+import com.intermanage.backend.auth.service.RoleService;
 
 import jakarta.validation.Valid;
 

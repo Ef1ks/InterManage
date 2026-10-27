@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.supplier.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -14,10 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.CreateSupplierRequest;
-import com.intermanage.backend.dto.SupplierResponse;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.SupplierService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.supplier.dto.CreateSupplierRequest;
+import com.intermanage.backend.supplier.dto.SupplierResponse;
+import com.intermanage.backend.supplier.service.SupplierService;
 
 import jakarta.validation.Valid;
 

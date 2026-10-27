@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.common.component;
 
 import java.io.IOException;
 import java.io.InputStream;

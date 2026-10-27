@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.ksef.repository;
 
 import java.time.Instant;
 import java.util.List;
@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.entity.KsefApiCall;
+import com.intermanage.backend.ksef.entity.KsefApiCall;
 
 public interface KsefApiCallRepository extends JpaRepository<KsefApiCall, UUID> {
 

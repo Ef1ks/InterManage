@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.supplier.component;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -19,10 +19,13 @@ import java.util.stream.Stream;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.dto.ParsedSupplierReport;
-import com.intermanage.backend.dto.SupplierReportRow;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.exception.InvalidWorkbookException;
+import com.intermanage.backend.common.component.ReportText;
+import com.intermanage.backend.common.component.XlsxReader;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.common.exception.InvalidWorkbookException;
+import com.intermanage.backend.product.component.ProductReportParser;
+import com.intermanage.backend.supplier.dto.ParsedSupplierReport;
+import com.intermanage.backend.supplier.dto.SupplierReportRow;
 
 /**
  * Czyta raport "Lista dostawców" z systemu sklepu. Układ pliku: "TRYTOMA Sp. z o.o. - Numer punktu sprzedaży 10023",
@@ -84,7 +87,7 @@ public class SupplierReportParser {
             if (declaredRows != null || isBlank(cells)) {
                 return;
             }
-            Matcher footer = DECLARED_ROWS.matcher(DocumentReportParser.normalize(firstNonBlank(cells)));
+            Matcher footer = DECLARED_ROWS.matcher(ReportText.normalize(firstNonBlank(cells)));
             if (footer.find()) {
                 declaredRows = Integer.parseInt(footer.group(1));
                 return;
@@ -109,7 +112,7 @@ public class SupplierReportParser {
             for (int i = 0; i < cells.size(); i++) {
                 String value = cells.get(i);
                 if (value != null && !value.isBlank()) {
-                    header.putIfAbsent(DocumentReportParser.normalize(value), i);
+                    header.putIfAbsent(ReportText.normalize(value), i);
                 }
             }
             if (header.containsKey(CODE) && header.containsKey(NAME)) {
@@ -120,7 +123,7 @@ public class SupplierReportParser {
                 if (value == null || value.isBlank()) {
                     continue;
                 }
-                Matcher store = STORE_NUMBER.matcher(DocumentReportParser.normalize(value));
+                Matcher store = STORE_NUMBER.matcher(ReportText.normalize(value));
                 if (storeNumber == null && store.find()) {
                     storeNumber = store.group(1);
                     continue;

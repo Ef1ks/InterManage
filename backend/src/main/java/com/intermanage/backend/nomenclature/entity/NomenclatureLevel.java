@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.nomenclature.entity;
 
 /** Poziom nomenklatury. Nazwa stałej trafia do bazy ({@code nomenclatures.level}). */
 public enum NomenclatureLevel {

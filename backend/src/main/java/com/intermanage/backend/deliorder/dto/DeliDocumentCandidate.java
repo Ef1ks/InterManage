@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.time.LocalDateTime;
 import java.util.UUID;

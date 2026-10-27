@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.store.service;
 
 import java.util.Comparator;
 import java.util.HashMap;
@@ -9,16 +9,18 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.StoreRequest;
-import com.intermanage.backend.dto.StoreResponse;
-import com.intermanage.backend.dto.StoreSummary;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.KsefConnection;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.StoreMapper;
-import com.intermanage.backend.repository.KsefConnectionRepository;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.common.component.Nip;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.ksef.entity.KsefConnection;
+import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
+import com.intermanage.backend.store.dto.StoreRequest;
+import com.intermanage.backend.store.dto.StoreResponse;
+import com.intermanage.backend.store.dto.StoreSummary;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.mapper.StoreMapper;
+import com.intermanage.backend.store.repository.StoreRepository;
+
 
 @Service
 public class StoreService {
@@ -110,7 +112,7 @@ public class StoreService {
 
     /** NIP z formularza: pusty = brak, inaczej 10 cyfr z poprawną sumą kontrolną (myślniki i spacje pomijamy). */
     private static String nip(String value) {
-        return value == null || value.isBlank() ? null : KsefConnectionService.nip(value, "nip");
+        return value == null || value.isBlank() ? null : Nip.parse(value, "nip");
     }
 
     private static String blankToNull(String value) {

@@ -29,7 +29,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-import com.intermanage.backend.security.JwtService;
+import com.intermanage.backend.auth.security.JwtService;
 
 import jakarta.servlet.http.Cookie;
 
@@ -211,7 +211,7 @@ class DocumentImportIntegrationTests {
                 withItm8(amounts(correction(line("PK", storeError, "", 2, "-576", "1.99", "-1146.24"))), itemB),
                 withItm8(amounts(correction(line("PK", storeError, "", 3, "384", "1.99", "764.16"))), itemC),
                 // Korekta od dostawcy: obniżka ceny B, bez zmiany ilości.
-                withItm8(amounts(correction(line("WZ", supplierCorrection, "", 1, "0", "1.5", "-100"))), itemB)))
+                withItm8(amounts(correction(line("WZ", supplierCorrection, "FK/7/26", 1, "0", "1.5", "-100"))), itemB)))
                 .andExpect(status().isCreated());
 
         String deliveryId = id(store, "/pz", delivery);
@@ -297,26 +297,59 @@ class DocumentImportIntegrationTests {
         mvc.perform(get(url(store, "/pz")).param("product", "kanapka rogal").cookie(owner))
                 .andExpect(jsonPath("$.matchingCount").value(0));
 
-        // Raport przyjęć za okres: wiersz przyjęcia z korektami, pod nim zakup po korektach według rejonów.
+        // Raport przyjęć za okres: wiersz przyjęcia z korektami (opisanymi numerem faktury korygującej), pod nim zakup
+        // po korektach według rejonów.
         byte[] report = mvc.perform(get(url(store, "/pz/period-report")).param("from", "2026-10-21")
                         .param("to", "2026-10-21").cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         org.hamcrest.Matchers.containsString("przyjecia-2026-10-21-2026-10-21.xlsx")))
                 .andReturn().getResponse().getContentAsByteArray();
-        String sheet = null;
-        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(report))) {
-            java.util.zip.ZipEntry entry;
-            while ((entry = zip.getNextEntry()) != null) {
-                if (entry.getName().equals("xl/worksheets/sheet1.xml")) {
-                    sheet = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
-                }
-            }
-        }
-        org.assertj.core.api.Assertions.assertThat(sheet).contains(
+        // Grupy rejonów otwierają się zwinięte.
+        org.assertj.core.api.Assertions.assertThat(sheet(report)).contains(
                 ">21.10.2026<", ">" + delivery.substring(0, delivery.length() - 2) + "<", ">F/1/26<", ">F/2/26<",
-                "Korekta błędu sklepu " + storeError, "Korekta od dostawcy " + supplierCorrection,
-                "<v>4584.96</v>", "<v>4484.96</v>", "<v>-100</v>", "outlineLevel=\"1\"", ">01<", ">2 przyjęcia<");
+                "brak nr faktury (Korekta błędu sklepu " + storeError, "; FK/7/26<",
+                "<v>4584.96</v>", "<v>4484.96</v>", "<v>-100</v>", "outlineLevel=\"1\" hidden=\"1\"",
+                "collapsed=\"1\"", ">01<", ">2 przyjęcia<", "Podgląd wygenerowany")
+                .doesNotContain("Korekta od dostawcy " + supplierCorrection, "Pominięci dostawcy");
+
+        // Pomijani dostawcy: ich przyjęć nie ma w raporcie, a lista trafia do stopki i do zamknięcia.
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(url(store, "/pz/report-excluded-suppliers")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[\"999\"]}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(url(store, "/pz/report-excluded-suppliers")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[\"108\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.excludedSuppliers.length()").value(1))
+                .andExpect(jsonPath("$.excludedSuppliers[0].code").value("108"))
+                .andExpect(jsonPath("$.excludedSuppliers[0].name").value("RADIX-BIS"));
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(get(url(store, "/pz/period-report"))
+                        .param("from", "2026-10-21").param("to", "2026-10-21").cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains(">1 przyjęcie<", "Pominięci dostawcy: 108 RADIX-BIS").doesNotContain(">F/2/26<");
+
+        // Zamknięcie okresu: nie może nachodzić na inne ani sięgać w przyszłość.
+        String closing = com.jayway.jsonpath.JsonPath.read(mvc.perform(post(url(store, "/pz/report-closings"))
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\":\"2026-10-21\",\"to\":\"2026-10-21\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        mvc.perform(post(url(store, "/pz/report-closings")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"from\":\"2026-10-01\",\"to\":\"2026-10-21\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post(url(store, "/pz/report-closings")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"from\":\"2099-01-01\",\"to\":\"2099-01-02\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.closings.length()").value(1))
+                .andExpect(jsonPath("$.closings[0].cancellable").value(true))
+                .andExpect(jsonPath("$.pendingChanges").value(0));
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/report-closings/" + closing + "/xlsx")).cookie(owner))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray()))
+                .contains("<v>4484.96</v>", "Korekta błędu sklepu " + storeError, "Raport zamknięty",
+                        "Pominięci dostawcy: 108 RADIX-BIS")
+                .doesNotContain(">F/2/26<");
         mvc.perform(get(url(store, "/pz/period-report")).param("from", "2026-10-21").param("to", "2026-10-20")
                         .cookie(owner))
                 .andExpect(status().isBadRequest());
@@ -332,6 +365,61 @@ class DocumentImportIntegrationTests {
         mvc.perform(get(url(store, "/pz/" + deliveryId + "/corrections/candidates")).cookie(owner))
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].number").value(storeError));
+
+        // Odpięcie korekty po zamknięciu nie zmienia zamkniętego raportu, tylko czeka na następny.
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.pendingChanges").value(1))
+                .andExpect(jsonPath("$.closings[0].pendingChanges").value(1));
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/report-closings/" + closing + "/xlsx")).cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains("Korekta błędu sklepu " + storeError).doesNotContain("Zmiany w zamkniętych okresach");
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/period-report/changes")).cookie(owner))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray()))
+                .contains("Zmiany w zamkniętych okresach", "odpięte: brak nr faktury (Korekta błędu sklepu " + storeError,
+                        "Okres 21.10.2026 - 21.10.2026");
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(get(url(store, "/pz/period-report"))
+                        .param("from", "2026-10-22").param("to", "2026-10-22").cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains("Brak przyjęć towaru w okresie 22.10.2026", "Zmiany w zamkniętych okresach");
+
+        // Następne zamknięcie przejmuje zmianę; cofnąć można tylko ostatnie, a przywrócić - gdy nic po nim nie zamknięto.
+        String next = com.jayway.jsonpath.JsonPath.read(mvc.perform(post(url(store, "/pz/report-closings"))
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\":\"2026-10-22\",\"to\":\"2026-10-22\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.pendingChanges").value(0));
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/report-closings/" + next + "/xlsx")).cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains("Zmiany w zamkniętych okresach", "odpięte: brak nr faktury (Korekta błędu sklepu " + storeError);
+        mvc.perform(delete(url(store, "/pz/report-closings/" + closing)).cookie(owner).with(csrf()))
+                .andExpect(status().isConflict());
+        mvc.perform(delete(url(store, "/pz/report-closings/" + next)).cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.closings.length()").value(1))
+                .andExpect(jsonPath("$.pendingChanges").value(1));
+        mvc.perform(post(url(store, "/pz/report-closings/" + next + "/restore")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.pendingChanges").value(0));
+    }
+
+    /** Arkusz z pliku .xlsx (XML pierwszego arkusza). */
+    private static String sheet(byte[] xlsx) throws java.io.IOException {
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(xlsx))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.getName().equals("xl/worksheets/sheet1.xml")) {
+                    return new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            }
+        }
+        return null;
     }
 
     /** Id dokumentu o numerze z listy typu. */

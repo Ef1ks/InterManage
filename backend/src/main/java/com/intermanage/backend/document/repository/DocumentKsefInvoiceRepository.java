@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.document.repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -8,7 +8,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.DocumentKsefInvoice;
+import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 
 /** Przypięcia dokumentów do faktur KSeF; liczą się tylko nieodpięte ({@code unlinkedAt is null}). */
 public interface DocumentKsefInvoiceRepository extends JpaRepository<DocumentKsefInvoice, UUID> {

@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.sales.service;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -9,14 +9,14 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.SalesComparisonResponse;
-import com.intermanage.backend.dto.SalesComparisonResponse.Level;
-import com.intermanage.backend.dto.SalesComparisonRow;
-import com.intermanage.backend.dto.SalesFigures;
-import com.intermanage.backend.dto.SalesReportsOverview;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.SaleRepository;
-import com.intermanage.backend.repository.SalesImportRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.sales.dto.SalesComparisonResponse.Level;
+import com.intermanage.backend.sales.dto.SalesComparisonResponse;
+import com.intermanage.backend.sales.dto.SalesComparisonRow;
+import com.intermanage.backend.sales.dto.SalesFigures;
+import com.intermanage.backend.sales.dto.SalesReportsOverview;
+import com.intermanage.backend.sales.repository.SaleRepository;
+import com.intermanage.backend.sales.repository.SalesImportRepository;
 
 /**
  * Raporty z zapisanej sprzedaży. Porównanie sprzedaży zestawia dwa okresy (poprzedni i aktualny) jako całość, bez

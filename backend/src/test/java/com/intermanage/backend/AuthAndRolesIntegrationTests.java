@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import com.intermanage.backend.security.JwtService;
+import com.intermanage.backend.auth.security.JwtService;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;

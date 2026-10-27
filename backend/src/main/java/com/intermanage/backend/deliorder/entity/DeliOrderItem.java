@@ -1,9 +1,11 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliorder.entity;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
+
+import com.intermanage.backend.product.entity.Product;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,16 +1,16 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.deliorder.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.OrderCategoryResponse;
-import com.intermanage.backend.dto.OrderProductResponse;
-import com.intermanage.backend.dto.OrderSectionResponse;
-import com.intermanage.backend.dto.ProductSearchResponse;
-import com.intermanage.backend.entity.OrderCategory;
-import com.intermanage.backend.entity.OrderCategoryProduct;
-import com.intermanage.backend.entity.OrderSection;
-import com.intermanage.backend.entity.Product;
+import com.intermanage.backend.deliorder.dto.OrderCategoryResponse;
+import com.intermanage.backend.deliorder.dto.OrderProductResponse;
+import com.intermanage.backend.deliorder.dto.OrderSectionResponse;
+import com.intermanage.backend.deliorder.entity.OrderCategory;
+import com.intermanage.backend.deliorder.entity.OrderCategoryProduct;
+import com.intermanage.backend.deliorder.entity.OrderSection;
+import com.intermanage.backend.product.dto.ProductSearchResponse;
+import com.intermanage.backend.product.entity.Product;
 
 @Mapper
 public interface OrderFormMapper {

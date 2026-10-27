@@ -1,19 +1,19 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.ksef.mapper;
 
 import java.util.List;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.KsefConnectionResponse;
-import com.intermanage.backend.dto.KsefInternalIdResponse;
-import com.intermanage.backend.dto.KsefInvoiceSummary;
-import com.intermanage.backend.dto.KsefSkippedSupplierResponse;
-import com.intermanage.backend.entity.KsefConnection;
-import com.intermanage.backend.entity.KsefInternalId;
-import com.intermanage.backend.entity.KsefInvoice;
-import com.intermanage.backend.entity.KsefInvoiceEntry;
-import com.intermanage.backend.entity.KsefSkippedSupplier;
+import com.intermanage.backend.ksef.dto.KsefConnectionResponse;
+import com.intermanage.backend.ksef.dto.KsefInternalIdResponse;
+import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
+import com.intermanage.backend.ksef.dto.KsefSkippedSupplierResponse;
+import com.intermanage.backend.ksef.entity.KsefConnection;
+import com.intermanage.backend.ksef.entity.KsefInternalId;
+import com.intermanage.backend.ksef.entity.KsefInvoice;
+import com.intermanage.backend.ksef.entity.KsefInvoiceEntry;
+import com.intermanage.backend.ksef.entity.KsefSkippedSupplier;
 
 @Mapper
 public interface KsefMapper {

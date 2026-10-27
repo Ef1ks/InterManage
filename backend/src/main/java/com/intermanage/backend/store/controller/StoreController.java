@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.store.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -13,9 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.StoreRequest;
-import com.intermanage.backend.dto.StoreResponse;
-import com.intermanage.backend.service.StoreService;
+import com.intermanage.backend.store.dto.StoreRequest;
+import com.intermanage.backend.store.dto.StoreResponse;
+import com.intermanage.backend.store.service.StoreService;
 
 import jakarta.validation.Valid;
 

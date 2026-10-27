@@ -1,4 +1,4 @@
-package com.intermanage.backend.exception;
+package com.intermanage.backend.common.exception;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

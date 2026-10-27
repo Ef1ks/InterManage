@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.nomenclature.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,7 +9,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.NomenclatureImport;
+import com.intermanage.backend.nomenclature.entity.NomenclatureImport;
 
 public interface NomenclatureImportRepository extends JpaRepository<NomenclatureImport, UUID> {
 

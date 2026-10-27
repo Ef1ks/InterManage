@@ -1,21 +1,21 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.document.service;
 
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.DocumentResponse;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentGratis;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.entity.Supplier;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.DocumentGratisRepository;
-import com.intermanage.backend.repository.DocumentRepository;
-import com.intermanage.backend.repository.SupplierRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.dto.DocumentResponse;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentGratis;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DocumentGratisRepository;
+import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.supplier.entity.Supplier;
+import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
  * Rejestracja przeniesienia stanów jako gratisu od dostawcy: wartością gratisu jest sprzedaż brutto dokumentu.

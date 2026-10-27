@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.auth.entity;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -6,6 +6,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
+
+import com.intermanage.backend.store.entity.Store;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -61,7 +63,7 @@ public class AppUser {
 
     /**
      * Zwiększana przy zmianie hasła. Tokeny wydane ze starszą wersją są odrzucane
-     * (patrz {@link com.intermanage.backend.security.JwtAuthenticationFilter}).
+     * (patrz {@link com.intermanage.backend.auth.security.JwtAuthenticationFilter}).
      */
     @Column(name = "session_version", nullable = false)
     private int sessionVersion;

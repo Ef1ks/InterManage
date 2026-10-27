@@ -1,4 +1,4 @@
-package com.intermanage.backend.security;
+package com.intermanage.backend.auth.security;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -14,7 +14,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.WebUtils;
 
-import com.intermanage.backend.repository.AppUserRepository;
+import com.intermanage.backend.auth.repository.AppUserRepository;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

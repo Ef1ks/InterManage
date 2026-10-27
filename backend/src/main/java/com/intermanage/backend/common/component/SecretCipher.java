@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.common.component;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -14,7 +14,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.exception.ApiException;
+import com.intermanage.backend.common.exception.ApiException;
 
 /**
  * Szyfruje sekrety zapisywane w bazie (hasło do klucza KSeF) kluczem aplikacji {@code APP_SECRET_KEY}: 32 bajty

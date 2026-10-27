@@ -1,8 +1,10 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.sales.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import org.hibernate.annotations.Immutable;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -13,11 +15,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-import org.hibernate.annotations.Immutable;
-
 /**
  * Sprzedaż jednego artykułu (ITM8) pod jednym EAN-em w jednym dniu, do odczytu w raportach. Zapisuje ją wyłącznie import paczkami
- * ({@link com.intermanage.backend.repository.SaleRepository#insertNew}). Raz zapisana jest jedynym źródłem prawdy:
+ * ({@link com.intermanage.backend.sales.repository.SaleRepository#insertNew}). Raz zapisana jest jedynym źródłem prawdy:
  * nie zmienia się ani nie znika (pilnuje tego też wyzwalacz w bazie).
  * Znaczenie kolumn opisuje migracja V24__nomenclatures_and_sales.sql.
  */

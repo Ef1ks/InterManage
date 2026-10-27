@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.deliorder.repository;
 
 import java.util.List;
 import java.util.UUID;
@@ -8,8 +8,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.DeliOrder;
-import com.intermanage.backend.entity.DeliOrderStatus;
+import com.intermanage.backend.deliorder.entity.DeliOrder;
+import com.intermanage.backend.deliorder.entity.DeliOrderStatus;
 
 public interface DeliOrderRepository extends JpaRepository<DeliOrder, UUID> {
 
@@ -20,7 +20,7 @@ public interface DeliOrderRepository extends JpaRepository<DeliOrder, UUID> {
     @EntityGraph(attributePaths = {"formStore", "store", "submittedBy"})
     @Query("""
             select o from DeliOrder o where o.formStore.id = :formStoreId and o.formStoreDeletedAt is null
-            order by case when o.status = com.intermanage.backend.entity.DeliOrderStatus.NEW
+            order by case when o.status = com.intermanage.backend.deliorder.entity.DeliOrderStatus.NEW
                                and o.storeDeletedAt is null then 0 else 1 end,
                      o.submittedAt desc""")
     List<DeliOrder> findIncoming(UUID formStoreId, Limit limit);

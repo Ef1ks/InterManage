@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.ksef.controller;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -26,23 +26,23 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.dto.DocumentCandidate;
-import com.intermanage.backend.dto.KsefInternalIdRequest;
-import com.intermanage.backend.dto.KsefInvoicePage;
-import com.intermanage.backend.dto.KsefInvoiceSummary;
-import com.intermanage.backend.dto.KsefLinkConnectionRequest;
-import com.intermanage.backend.dto.KsefOverview;
-import com.intermanage.backend.dto.KsefSettingsResponse;
-import com.intermanage.backend.dto.KsefShareConnectionRequest;
-import com.intermanage.backend.dto.KsefSkippedSupplierRequest;
-import com.intermanage.backend.dto.LinkDocumentRequest;
-import com.intermanage.backend.repository.KsefInvoiceSearch;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.DocumentKsefLinkService;
-import com.intermanage.backend.service.DocumentService;
-import com.intermanage.backend.service.KsefConnectionService;
-import com.intermanage.backend.service.KsefInvoiceService;
-import com.intermanage.backend.service.KsefSyncService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.document.dto.DocumentCandidate;
+import com.intermanage.backend.document.dto.LinkDocumentRequest;
+import com.intermanage.backend.document.service.DocumentKsefLinkService;
+import com.intermanage.backend.document.service.DocumentService;
+import com.intermanage.backend.ksef.dto.KsefInternalIdRequest;
+import com.intermanage.backend.ksef.dto.KsefInvoicePage;
+import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
+import com.intermanage.backend.ksef.dto.KsefLinkConnectionRequest;
+import com.intermanage.backend.ksef.dto.KsefOverview;
+import com.intermanage.backend.ksef.dto.KsefSettingsResponse;
+import com.intermanage.backend.ksef.dto.KsefShareConnectionRequest;
+import com.intermanage.backend.ksef.dto.KsefSkippedSupplierRequest;
+import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
+import com.intermanage.backend.ksef.service.KsefConnectionService;
+import com.intermanage.backend.ksef.service.KsefInvoiceService;
+import com.intermanage.backend.ksef.service.KsefSyncService;
 
 import jakarta.validation.Valid;
 

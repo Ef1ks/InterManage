@@ -34,7 +34,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-import com.intermanage.backend.security.JwtService;
+import com.intermanage.backend.auth.security.JwtService;
 
 import jakarta.servlet.http.Cookie;
 

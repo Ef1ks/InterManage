@@ -1,11 +1,12 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.DeliOrderStatus;
+import com.intermanage.backend.deliorder.entity.DeliOrderStatus;
+import com.intermanage.backend.store.dto.StoreSummary;
 
 public record DeliOrderResponse(
         UUID id,

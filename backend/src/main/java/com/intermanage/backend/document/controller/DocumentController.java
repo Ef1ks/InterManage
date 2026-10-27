@@ -1,11 +1,9 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.document.controller;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -22,25 +20,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.CorrectionCandidate;
-import com.intermanage.backend.dto.DocumentPage;
-import com.intermanage.backend.dto.DocumentResponse;
-import com.intermanage.backend.dto.DocumentsOverview;
-import com.intermanage.backend.dto.InvoiceComparison;
-import com.intermanage.backend.dto.KsefInvoiceCandidate;
-import com.intermanage.backend.dto.LinkDocumentRequest;
-import com.intermanage.backend.dto.LinkKsefInvoiceRequest;
-import com.intermanage.backend.dto.RegisterGratisRequest;
-import com.intermanage.backend.dto.SupplierDocumentNumberRequest;
-import com.intermanage.backend.repository.DocumentSearch;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.DeliveryCorrectionService;
-import com.intermanage.backend.service.DeliveryReportService;
-import com.intermanage.backend.service.DocumentGratisService;
-import com.intermanage.backend.service.DocumentKsefLinkService;
-import com.intermanage.backend.service.DocumentService;
-import com.intermanage.backend.service.InvoiceAmountCheckService;
-import com.intermanage.backend.service.InvoiceComparisonService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.document.dto.CorrectionCandidate;
+import com.intermanage.backend.document.dto.DocumentPage;
+import com.intermanage.backend.document.dto.DocumentResponse;
+import com.intermanage.backend.document.dto.DocumentsOverview;
+import com.intermanage.backend.document.dto.InvoiceComparison;
+import com.intermanage.backend.document.dto.KsefInvoiceCandidate;
+import com.intermanage.backend.document.dto.LinkDocumentRequest;
+import com.intermanage.backend.document.dto.LinkKsefInvoiceRequest;
+import com.intermanage.backend.document.dto.RegisterGratisRequest;
+import com.intermanage.backend.document.dto.SupplierDocumentNumberRequest;
+import com.intermanage.backend.document.repository.DocumentSearch;
+import com.intermanage.backend.document.service.DeliveryCorrectionService;
+import com.intermanage.backend.document.service.DocumentGratisService;
+import com.intermanage.backend.document.service.DocumentKsefLinkService;
+import com.intermanage.backend.document.service.DocumentService;
+import com.intermanage.backend.document.service.InvoiceAmountCheckService;
+import com.intermanage.backend.document.service.InvoiceComparisonService;
 
 import jakarta.validation.Valid;
 
@@ -64,14 +61,11 @@ public class DocumentController {
     private final DeliveryCorrectionService corrections;
     private final InvoiceAmountCheckService amountChecks;
     private final InvoiceComparisonService invoiceComparison;
-    private final DeliveryReportService deliveryReport;
 
     public DocumentController(DocumentService documentService, DocumentGratisService gratisService,
             DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
-            InvoiceAmountCheckService amountChecks, InvoiceComparisonService invoiceComparison,
-            DeliveryReportService deliveryReport) {
+            InvoiceAmountCheckService amountChecks, InvoiceComparisonService invoiceComparison) {
         this.invoiceComparison = invoiceComparison;
-        this.deliveryReport = deliveryReport;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
         this.amountChecks = amountChecks;
@@ -101,23 +95,6 @@ public class DocumentController {
             @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "asc") String direction) {
         return documentService.list(storeId, type, page, query, product, DocumentSearch.Presence.of(invoice),
                 DocumentSearch.Presence.of(corrections), sort, direction);
-    }
-
-    /**
-     * Raport przyjęć PZ z okresu (dni wg daty bonu, najwyżej rok) w Excelu: przyjęcie z numerem bonu, fakturą,
-     * dostawcą i korektami, pod nim zakup netto po korektach według rejonów nomenklatury.
-     */
-    @GetMapping("/pz/period-report")
-    @PreAuthorize(VIEW)
-    public ResponseEntity<byte[]> deliveryPeriodReport(@PathVariable UUID storeId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        DocumentService.ExportFile file = deliveryReport.xlsx(storeId, from, to);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
-                .contentType(MediaType.parseMediaType(file.contentType()))
-                .body(file.content());
     }
 
     @GetMapping("/{type}/{id}")

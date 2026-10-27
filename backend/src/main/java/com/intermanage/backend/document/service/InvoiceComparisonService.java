@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.document.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -15,19 +15,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.intermanage.backend.component.KsefInvoiceReader;
-import com.intermanage.backend.dto.CorrectedDelivery;
-import com.intermanage.backend.dto.CorrectedDelivery.CorrectedLine;
-import com.intermanage.backend.dto.InvoiceComparison;
-import com.intermanage.backend.dto.InvoiceComparison.Row;
-import com.intermanage.backend.dto.InvoiceComparison.Status;
-import com.intermanage.backend.dto.LinkedKsefInvoice;
-import com.intermanage.backend.entity.DeliveryCorrection;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.DocumentRepository;
-import com.intermanage.backend.repository.ProductEanRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.dto.CorrectedDelivery.CorrectedLine;
+import com.intermanage.backend.document.dto.CorrectedDelivery;
+import com.intermanage.backend.document.dto.InvoiceComparison.Row;
+import com.intermanage.backend.document.dto.InvoiceComparison.Status;
+import com.intermanage.backend.document.dto.InvoiceComparison;
+import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader;
+import com.intermanage.backend.ksef.service.KsefInvoiceService;
+import com.intermanage.backend.product.repository.ProductEanRepository;
 
 /**
  * Szuka, w którym artykule przyjęcie PZ różni się od faktur KSeF: XML faktur (z bazy, za pierwszym razem z KSeF)

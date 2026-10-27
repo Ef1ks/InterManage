@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.product.repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -9,9 +9,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.Product;
-import com.intermanage.backend.entity.ProductImport;
-import com.intermanage.backend.entity.Store;
+import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.entity.ProductImport;
+import com.intermanage.backend.store.entity.Store;
 
 /** Wyszukiwanie produktów po słowach: {@link ProductSearch}. */
 public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpecificationExecutor<Product> {

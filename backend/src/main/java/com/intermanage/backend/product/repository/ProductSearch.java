@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.product.repository;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -9,7 +9,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
-import com.intermanage.backend.entity.Product;
+import com.intermanage.backend.product.entity.Product;
 
 import jakarta.persistence.criteria.Predicate;
 

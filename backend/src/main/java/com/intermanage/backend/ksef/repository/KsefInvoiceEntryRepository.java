@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.ksef.repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.KsefInvoiceEntry;
+import com.intermanage.backend.ksef.entity.KsefInvoiceEntry;
 
 public interface KsefInvoiceEntryRepository extends JpaRepository<KsefInvoiceEntry, KsefInvoiceEntry.Key> {
 

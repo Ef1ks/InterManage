@@ -1,6 +1,8 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliorder.entity;
 
 import java.math.BigDecimal;
+
+import com.intermanage.backend.product.entity.Product;
 
 /** W czym zamawia się produkt z formularza garmażu. Nazwa stałej trafia do bazy. */
 public enum OrderUnit {

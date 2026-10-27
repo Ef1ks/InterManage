@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.product.dto;
 
 /** Zmiana przypisania EAN wykryta przy imporcie; pola {@code previous*} puste, gdy danego rodzaju zmiany nie było. */
 public record EanChangeResponse(

@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.ksef.service;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -7,11 +7,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
 
-import com.intermanage.backend.component.KsefClient;
-import com.intermanage.backend.component.KsefCredentials;
-import com.intermanage.backend.component.KsefRateLimiter;
-import com.intermanage.backend.component.SecretCipher;
-import com.intermanage.backend.entity.KsefConnection;
+import com.intermanage.backend.common.component.SecretCipher;
+import com.intermanage.backend.ksef.component.KsefClient;
+import com.intermanage.backend.ksef.component.KsefCredentials;
+import com.intermanage.backend.ksef.component.KsefRateLimiter;
+import com.intermanage.backend.ksef.entity.KsefConnection;
 
 /**
  * Logowanie do KSeF certyfikatem z połączenia sklepu. Token dostępu jest trzymany w pamięci, póki ważny (logowanie to

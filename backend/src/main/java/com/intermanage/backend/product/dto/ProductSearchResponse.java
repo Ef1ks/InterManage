@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.product.dto;
 
 import java.math.BigDecimal;
 import java.util.UUID;

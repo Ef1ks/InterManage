@@ -650,6 +650,33 @@ export type DocumentPage = {
   saleTotal: number
 }
 
+/**
+ * Zamknięty raport przyjęć za okres (daty RRRR-MM-DD). {@code pendingChanges}: przyjęcia z tego okresu zmienione po
+ * zamknięciu, trafią do następnego raportu; {@code cancellable}: ostatnie zamknięcie, da się je cofnąć.
+ */
+export type DeliveryReportClosing = {
+  id: string
+  periodFrom: string
+  periodTo: string
+  closedAt: string
+  closedBy: string | null
+  cancelledAt: string | null
+  pendingChanges: number
+  cancellable: boolean
+}
+
+/** Dostawca pomijany w raporcie przyjęć (kod z linii dokumentów). */
+export type DeliveryReportExcludedSupplier = {
+  code: string
+  name: string | null
+}
+
+export type DeliveryReportClosingsOverview = {
+  closings: DeliveryReportClosing[]
+  pendingChanges: number
+  excludedSuppliers: DeliveryReportExcludedSupplier[]
+}
+
 export type DocumentLine = {
   id: string
   lineNumber: number

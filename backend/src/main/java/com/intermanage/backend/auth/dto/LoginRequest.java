@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
 

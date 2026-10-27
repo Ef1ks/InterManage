@@ -1,10 +1,10 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.auth.mapper;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import com.intermanage.backend.dto.PermissionCategoryResponse;
-import com.intermanage.backend.entity.PermissionCategory;
+import com.intermanage.backend.auth.dto.PermissionCategoryResponse;
+import com.intermanage.backend.auth.entity.PermissionCategory;
 
 @Mapper
 public interface PermissionCategoryMapper {

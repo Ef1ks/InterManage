@@ -1,10 +1,10 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliprice.dto;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.CalculationMode;
+import com.intermanage.backend.deliprice.entity.CalculationMode;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;

@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.auth.entity;
 
 /**
  * Poziom dostępu do kategorii. Brak wpisu w roli oznacza brak dostępu.

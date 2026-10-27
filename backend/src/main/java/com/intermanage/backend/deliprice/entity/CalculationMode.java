@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliprice.entity;
 
 /** Jak wpisano skład kalkulacji. Nazwa stałej trafia do bazy. */
 public enum CalculationMode {

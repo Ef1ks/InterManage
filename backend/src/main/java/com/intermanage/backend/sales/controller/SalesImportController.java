@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.sales.controller;
 
 import java.util.UUID;
 
@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.dto.SalesImportOverview;
-import com.intermanage.backend.dto.SalesImportResponse;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.SalesImportService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.sales.dto.SalesImportOverview;
+import com.intermanage.backend.sales.dto.SalesImportResponse;
+import com.intermanage.backend.sales.service.SalesImportService;
 
 /** Raport sprzedaży wg artykułu i dnia wgrywany w narzędziu Import danych. */
 @RestController

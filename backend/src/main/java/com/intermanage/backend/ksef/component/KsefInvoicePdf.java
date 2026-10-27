@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.ksef.component;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
@@ -29,13 +29,14 @@ import com.google.zxing.WriterException;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
-import com.intermanage.backend.component.KsefInvoiceReader.Block;
-import com.intermanage.backend.component.KsefInvoiceReader.Entry;
-import com.intermanage.backend.component.KsefInvoiceReader.Invoice;
-import com.intermanage.backend.component.KsefInvoiceReader.Line;
-import com.intermanage.backend.component.KsefInvoiceReader.Party;
-import com.intermanage.backend.component.KsefInvoiceReader.Table;
-import com.intermanage.backend.component.KsefInvoiceReader.TaxRow;
+import com.intermanage.backend.common.component.PdfFonts;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.Block;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.Entry;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.Invoice;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.Line;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.Party;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.Table;
+import com.intermanage.backend.ksef.component.KsefInvoiceReader.TaxRow;
 import com.lowagie.text.BadElementException;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;

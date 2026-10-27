@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.supplier.dto;
 
 /** Wiersz raportu "Lista dostawców"; {@code name} to Nazwa firmy 1 i 2 razem, {@code address} - Adres 1 i 2. */
 public record SupplierReportRow(

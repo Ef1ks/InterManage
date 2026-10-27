@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.document.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -14,17 +14,17 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.CorrectionTotals;
-import com.intermanage.backend.dto.InvoiceAmountCheck;
-import com.intermanage.backend.dto.LinkedKsefInvoice;
-import com.intermanage.backend.entity.DeliveryCorrection;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentAmountConfirmation;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.DocumentAmountConfirmationRepository;
-import com.intermanage.backend.repository.DocumentRepository;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.dto.CorrectionTotals;
+import com.intermanage.backend.document.dto.InvoiceAmountCheck;
+import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentAmountConfirmation;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DocumentAmountConfirmationRepository;
+import com.intermanage.backend.document.repository.DocumentRepository;
 
 /**
  * Zgodność kwot przyjęć PZ z fakturami KSeF: suma netto faktur przyjęcia (przypiętych, dopasowanych po numerze

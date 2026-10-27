@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.auth.component;
 
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -12,10 +12,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Role;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.RoleRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.entity.Role;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.auth.repository.RoleRepository;
 
 /** Zakłada pierwsze konto właściciela, jeśli w bazie nie ma żadnego. */
 @Component

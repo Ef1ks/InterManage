@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.document.entity;
 
 import java.math.BigDecimal;
 import java.util.Locale;
@@ -7,7 +7,7 @@ import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
 
-import com.intermanage.backend.dto.DocumentLineRow;
+import com.intermanage.backend.document.dto.DocumentLineRow;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -12,9 +12,9 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.intermanage.backend.component.KsefClient;
-import com.intermanage.backend.component.KsefRateLimiter;
-import com.intermanage.backend.component.KsefRateLimiter.Operation;
+import com.intermanage.backend.ksef.component.KsefClient;
+import com.intermanage.backend.ksef.component.KsefRateLimiter.Operation;
+import com.intermanage.backend.ksef.component.KsefRateLimiter;
 
 /** Własne limity zapytań do KSeF: krótkie okna przeczekuje, wyczerpana godzina i blokada 429 kończą od razu. */
 class KsefRateLimiterTests {

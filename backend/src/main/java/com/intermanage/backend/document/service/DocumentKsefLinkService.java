@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.document.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -19,27 +19,27 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.dto.DocumentCandidate;
-import com.intermanage.backend.dto.KsefInvoiceCandidate;
-import com.intermanage.backend.dto.LinkedKsefInvoice;
-import com.intermanage.backend.entity.DeliveryCorrection;
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentKsefInvoice;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.entity.KsefConnection;
-import com.intermanage.backend.entity.KsefInternalId;
-import com.intermanage.backend.entity.KsefInvoice;
-import com.intermanage.backend.entity.Supplier;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.DocumentKsefInvoiceRepository;
-import com.intermanage.backend.repository.DocumentRepository;
-import com.intermanage.backend.repository.DocumentSearch;
-import com.intermanage.backend.repository.KsefConnectionRepository;
-import com.intermanage.backend.repository.KsefInternalIdRepository;
-import com.intermanage.backend.repository.KsefInvoiceRepository;
-import com.intermanage.backend.repository.KsefInvoiceSearch;
-import com.intermanage.backend.repository.SupplierRepository;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.dto.DocumentCandidate;
+import com.intermanage.backend.document.dto.KsefInvoiceCandidate;
+import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentKsefInvoice;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DocumentKsefInvoiceRepository;
+import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.document.repository.DocumentSearch;
+import com.intermanage.backend.ksef.entity.KsefConnection;
+import com.intermanage.backend.ksef.entity.KsefInternalId;
+import com.intermanage.backend.ksef.entity.KsefInvoice;
+import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
+import com.intermanage.backend.ksef.repository.KsefInternalIdRepository;
+import com.intermanage.backend.ksef.repository.KsefInvoiceRepository;
+import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
+import com.intermanage.backend.supplier.entity.Supplier;
+import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
  * Faktury KSeF przy dokumentach sklepu (przyjęcia PZ i korekty od dostawcy). Przyjęcie z numerem faktury łączy się

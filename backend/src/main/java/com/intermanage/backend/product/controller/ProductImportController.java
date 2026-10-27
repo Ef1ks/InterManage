@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.product.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.dto.EanChangeResponse;
-import com.intermanage.backend.dto.ProductImportOverview;
-import com.intermanage.backend.dto.ProductImportResponse;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.ProductImportService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.product.dto.EanChangeResponse;
+import com.intermanage.backend.product.dto.ProductImportOverview;
+import com.intermanage.backend.product.dto.ProductImportResponse;
+import com.intermanage.backend.product.service.ProductImportService;
 
 @RestController
 @RequestMapping("/api/stores/{storeId}/imports/products")

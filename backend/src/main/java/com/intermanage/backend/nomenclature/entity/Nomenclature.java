@@ -1,10 +1,12 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.nomenclature.entity;
 
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
+
+import com.intermanage.backend.store.entity.Store;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

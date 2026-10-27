@@ -1,11 +1,11 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliprice.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.PriceSource;
+import com.intermanage.backend.deliprice.entity.PriceSource;
 
 /**
  * Produkt z kartoteki jako składnik: {@code unit} to jednostka, w której wpisuje się ilość, a {@code unitCost} cena

@@ -5,6 +5,8 @@ import { api, downloadFile } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
 import type {
   CorrectionCandidate,
+  DeliveryReportClosing,
+  DeliveryReportClosingsOverview,
   Document,
   DocumentPage,
   DocumentsOverview,
@@ -236,8 +238,9 @@ export function useDownloadDeliveryNote(storeId: string) {
 }
 
 /**
- * Raport przyjęć za okres (Excel): przyjęcie z bonem, fakturą, dostawcą i korektami, pod nim zakup netto po korektach
- * według rejonów nomenklatury. Daty RRRR-MM-DD, oba dni włącznie.
+ * Podgląd raportu przyjęć za okres (Excel, nic nie zapisuje): przyjęcie z bonem, fakturą, dostawcą i korektami, pod nim
+ * zakup netto po korektach według rejonów nomenklatury, a na końcu zmiany w innych zamkniętych okresach. Daty
+ * RRRR-MM-DD, oba dni włącznie.
  */
 export function useDownloadDeliveryReport(storeId: string) {
   return useMutation({
@@ -246,6 +249,82 @@ export function useDownloadDeliveryReport(storeId: string) {
         `${documentsPath(storeId)}/pz/period-report?${new URLSearchParams({ from, to })}`,
         `przyjecia-${from}-${to}.xlsx`,
       ),
+    meta: { invalidates: false },
+  })
+}
+
+const closingsKey = (storeId: string) => [...documentsKey(storeId), 'pz', 'report-closings'] as const
+const closingsPath = (storeId: string) => `${documentsPath(storeId)}/pz/report-closings`
+
+/** Zamknięte okresy raportu przyjęć i liczba przyjęć zmienionych po zamknięciu. */
+export function useDeliveryReportClosings(storeId: string) {
+  return useQuery({
+    queryKey: closingsKey(storeId),
+    queryFn: () => api<DeliveryReportClosingsOverview>(closingsPath(storeId)),
+  })
+}
+
+/**
+ * Zapisuje pełną listę kodów dostawców pomijanych w raporcie przyjęć. Odpowiedź to cały przegląd zamknięć (liczba
+ * zmian zależy od listy), więc podmienia go bez unieważniania; kolejne zmiany idą po kolei.
+ */
+export function useSetExcludedSuppliers(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (supplierCodes: string[]) =>
+      api<DeliveryReportClosingsOverview>(`${documentsPath(storeId)}/pz/report-excluded-suppliers`, {
+        method: 'PUT',
+        json: { supplierCodes },
+      }),
+    onSuccess: (overview) => queryClient.setQueryData(closingsKey(storeId), overview),
+    scope: { id: `delivery-report-excluded-suppliers-${storeId}` },
+    meta: { invalidates: false },
+  })
+}
+
+const downloadClosed = (storeId: string, closing: DeliveryReportClosing) =>
+  downloadFile(
+    `${closingsPath(storeId)}/${closing.id}/xlsx`,
+    `przyjecia-${closing.periodFrom}-${closing.periodTo}-zamkniety.xlsx`,
+  )
+
+/** Zamknięty raport tak, jak poszedł (późniejsze zmiany go nie ruszają). */
+export function useDownloadClosedReport(storeId: string) {
+  return useMutation({
+    mutationFn: (closing: DeliveryReportClosing) => downloadClosed(storeId, closing),
+    meta: { invalidates: false },
+  })
+}
+
+/** Zamyka okres i od razu pobiera zamknięty raport. */
+export function useCloseDeliveryReport(storeId: string) {
+  return useMutation({
+    mutationFn: async (period: { from: string; to: string }) => {
+      const closing = await api<DeliveryReportClosing>(closingsPath(storeId), { method: 'POST', json: period })
+      await downloadClosed(storeId, closing)
+      return closing
+    },
+  })
+}
+
+/** Cofnięcie ostatniego zamknięcia (znacznik) i jego przywrócenie. */
+export function useDeliveryReportClosingActions(storeId: string) {
+  return {
+    cancel: useMutation({
+      mutationFn: (id: string) => api<DeliveryReportClosing>(`${closingsPath(storeId)}/${id}`, { method: 'DELETE' }),
+    }),
+    restore: useMutation({
+      mutationFn: (id: string) =>
+        api<DeliveryReportClosing>(`${closingsPath(storeId)}/${id}/restore`, { method: 'POST' }),
+    }),
+  }
+}
+
+/** Same zmiany przyjęć z zamkniętych okresów, które czekają na następny raport. */
+export function useDownloadPendingChanges(storeId: string) {
+  return useMutation({
+    mutationFn: () =>
+      downloadFile(`${documentsPath(storeId)}/pz/period-report/changes`, 'przyjecia-zmiany-po-zamknieciu.xlsx'),
     meta: { invalidates: false },
   })
 }

@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.product.service;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,27 +21,27 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.component.ProductReportParser;
-import com.intermanage.backend.dto.EanChangeResponse;
-import com.intermanage.backend.dto.ParsedProductReport;
-import com.intermanage.backend.dto.ProductImportOverview;
-import com.intermanage.backend.dto.ProductImportResponse;
-import com.intermanage.backend.dto.ProductReportRow;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.Product;
-import com.intermanage.backend.entity.ProductEan;
-import com.intermanage.backend.entity.ProductEanChange;
-import com.intermanage.backend.entity.ProductImport;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.mapper.ProductImportMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.ProductEanChangeRepository;
-import com.intermanage.backend.repository.ProductEanRepository;
-import com.intermanage.backend.repository.ProductImportRepository;
-import com.intermanage.backend.repository.ProductRepository;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.product.component.ProductReportParser;
+import com.intermanage.backend.product.dto.EanChangeResponse;
+import com.intermanage.backend.product.dto.ParsedProductReport;
+import com.intermanage.backend.product.dto.ProductImportOverview;
+import com.intermanage.backend.product.dto.ProductImportResponse;
+import com.intermanage.backend.product.dto.ProductReportRow;
+import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.entity.ProductEan;
+import com.intermanage.backend.product.entity.ProductEanChange;
+import com.intermanage.backend.product.entity.ProductImport;
+import com.intermanage.backend.product.mapper.ProductImportMapper;
+import com.intermanage.backend.product.repository.ProductEanChangeRepository;
+import com.intermanage.backend.product.repository.ProductEanRepository;
+import com.intermanage.backend.product.repository.ProductImportRepository;
+import com.intermanage.backend.product.repository.ProductRepository;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Import codziennego raportu kartoteki produktów do wybranego sklepu (numer sklepu z nagłówka raportu musi się

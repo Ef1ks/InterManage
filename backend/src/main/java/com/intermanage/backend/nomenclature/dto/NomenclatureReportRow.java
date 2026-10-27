@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.nomenclature.dto;
 
 /**
  * Wiersz raportu "Lista nomenklatur": kod bez spacji ("01", "0101", "010101") i dane z kolumn. Puste kolumny

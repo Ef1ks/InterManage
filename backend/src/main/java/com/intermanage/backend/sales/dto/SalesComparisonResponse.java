@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.sales.dto;
 
 import java.time.LocalDate;
 import java.util.List;

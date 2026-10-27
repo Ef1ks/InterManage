@@ -1,11 +1,11 @@
-package com.intermanage.backend.security;
+package com.intermanage.backend.auth.security;
 
 import java.util.UUID;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Sprawdza dostęp do sklepu w {@code @PreAuthorize}, np.

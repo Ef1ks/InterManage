@@ -1,4 +1,4 @@
-package com.intermanage.backend.security;
+package com.intermanage.backend.auth.security;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -11,10 +11,10 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.PermissionCategory;
-import com.intermanage.backend.entity.PermissionLevel;
-import com.intermanage.backend.entity.Store;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.entity.PermissionCategory;
+import com.intermanage.backend.auth.entity.PermissionLevel;
+import com.intermanage.backend.store.entity.Store;
 
 /**
  * Zalogowany użytkownik, wczytywany z bazy przy każdym żądaniu na podstawie JWT. Uprawnienia:

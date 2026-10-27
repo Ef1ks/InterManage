@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.common.component;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -41,7 +41,10 @@ public class XlsxWriter {
         }
     }
 
-    /** Wiersz arkusza; {@code outlineLevel} 1 = wiersz zgrupowany pod wierszem nad nim (da się go zwinąć). */
+    /**
+     * Wiersz arkusza; {@code outlineLevel} 1 = wiersz zgrupowany pod wierszem nad nim. Grupy są na początku zwinięte,
+     * rozwija je "+" z lewej.
+     */
     public record Row(List<Object> cells, int outlineLevel) {
 
         /** Wiersz bez grupowania; {@code null} to pusta komórka. */
@@ -129,8 +132,11 @@ public class XlsxWriter {
             int rowNumber = r + 2;
             Row row = rows.get(r);
             xml.append("<row r=\"").append(rowNumber).append('"');
+            // Grupy otwierają się zwinięte: wiersze grupy ukryte, przycisk "+" przy wierszu nad nimi.
             if (row.outlineLevel() > 0) {
-                xml.append(" outlineLevel=\"").append(row.outlineLevel()).append('"');
+                xml.append(" outlineLevel=\"").append(row.outlineLevel()).append("\" hidden=\"1\"");
+            } else if (r + 1 < rows.size() && rows.get(r + 1).outlineLevel() > 0) {
+                xml.append(" collapsed=\"1\"");
             }
             xml.append('>');
             for (int c = 0; c < row.cells().size(); c++) {

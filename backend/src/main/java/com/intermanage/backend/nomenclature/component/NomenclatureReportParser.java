@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.nomenclature.component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,9 +21,11 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.dto.NomenclatureReportRow;
-import com.intermanage.backend.dto.ParsedNomenclatureReport;
-import com.intermanage.backend.exception.InvalidReportException;
+import com.intermanage.backend.common.component.ReportText;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.nomenclature.dto.NomenclatureReportRow;
+import com.intermanage.backend.nomenclature.dto.ParsedNomenclatureReport;
+import com.intermanage.backend.product.component.ProductReportParser;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.FinalText;
 import com.lowagie.text.pdf.parser.ParsedText;
@@ -355,7 +357,7 @@ public class NomenclatureReportParser {
         }
 
         private static String normalize(String value) {
-            return DocumentReportParser.normalize(value);
+            return ReportText.normalize(value);
         }
     }
 }

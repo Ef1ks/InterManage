@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.sales.service;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,21 +16,21 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.component.SalesReportParser;
-import com.intermanage.backend.dto.SalesImportOverview;
-import com.intermanage.backend.dto.SalesImportResponse;
-import com.intermanage.backend.dto.SalesReportBatch;
-import com.intermanage.backend.dto.SalesReportHeader;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.SalesImport;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.mapper.SalesMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.SaleRepository;
-import com.intermanage.backend.repository.SalesImportRepository;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.sales.component.SalesReportParser;
+import com.intermanage.backend.sales.dto.SalesImportOverview;
+import com.intermanage.backend.sales.dto.SalesImportResponse;
+import com.intermanage.backend.sales.dto.SalesReportBatch;
+import com.intermanage.backend.sales.dto.SalesReportHeader;
+import com.intermanage.backend.sales.entity.SalesImport;
+import com.intermanage.backend.sales.mapper.SalesMapper;
+import com.intermanage.backend.sales.repository.SaleRepository;
+import com.intermanage.backend.sales.repository.SalesImportRepository;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Import raportu sprzedaży wg artykułu i dnia. Pliki mają do ok. 500 tys. wierszy (na start ok. 2 mln w kilku

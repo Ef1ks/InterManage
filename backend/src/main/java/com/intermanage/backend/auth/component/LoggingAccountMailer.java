@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.auth.component;
 
 import java.time.Instant;
 
@@ -6,7 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.service.AccountMailer;
+import com.intermanage.backend.auth.service.AccountMailer;
 
 /** Zamiast wysyłać maila wypisuje jego treść do logów backendu. Do podmiany, gdy dojdzie system maili. */
 @Component

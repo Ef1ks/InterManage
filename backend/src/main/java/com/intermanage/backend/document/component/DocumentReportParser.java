@@ -1,10 +1,9 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.document.component;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Path;
-import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -23,11 +22,14 @@ import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.dto.DocumentLineRow;
-import com.intermanage.backend.dto.ParsedDocumentReport;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.exception.InvalidWorkbookException;
+import com.intermanage.backend.common.component.ReportText;
+import com.intermanage.backend.common.component.XlsxReader;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.common.exception.InvalidWorkbookException;
+import com.intermanage.backend.document.dto.DocumentLineRow;
+import com.intermanage.backend.document.dto.ParsedDocumentReport;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.product.component.ProductReportParser;
 
 /**
  * Czyta raport "Statystyka: Wejścia/Wyjścia" z systemu sklepu. Układ pliku: "sam. 24/10/2026 - 16:10:50  6745 linie",
@@ -53,16 +55,6 @@ public class DocumentReportParser {
             throw new InvalidReportException("Nie udało się odczytać pliku. Wgraj raport zapisany jako .xlsx lub .xlsm.");
         }
         return reader.finish();
-    }
-
-    /**
-     * Nazwa kolumny w postaci porównywalnej: "Numéro document interne" -> "numero document interne". Litera "ł"
-     * nie rozkłada się na znak i akcent, więc zamieniamy ją osobno ("Słowo klucz" -> "slowo klucz").
-     */
-    static String normalize(String value) {
-        String plain = Normalizer.normalize(value.replace('ł', 'l').replace('Ł', 'L'), Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "");
-        return plain.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
     }
 
     /** Stan czytania jednego pliku; bean parsera jest współdzielony, więc każdy import dostaje własny. */
@@ -162,7 +154,7 @@ public class DocumentReportParser {
             for (int i = 0; i < cells.size(); i++) {
                 String value = cells.get(i);
                 if (value != null && !value.isBlank()) {
-                    header.putIfAbsent(normalize(value), i);
+                    header.putIfAbsent(ReportText.normalize(value), i);
                 }
             }
             if (header.containsKey(TYPE) && header.containsKey(ITM8)) {

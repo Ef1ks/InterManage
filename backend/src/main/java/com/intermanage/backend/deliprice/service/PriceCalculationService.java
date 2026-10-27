@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.deliprice.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -20,29 +20,31 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.component.IngredientPricing;
-import com.intermanage.backend.component.XlsxWriter;
-import com.intermanage.backend.dto.FinishedProductResponse;
-import com.intermanage.backend.dto.PriceCalculationRequest;
-import com.intermanage.backend.dto.PriceCalculationResponse;
-import com.intermanage.backend.dto.PriceCalculationSummary;
-import com.intermanage.backend.dto.PriceChangeResponse;
-import com.intermanage.backend.dto.PriceProductResponse;
-import com.intermanage.backend.dto.RefreshPricesRequest;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.CalculationMode;
-import com.intermanage.backend.entity.IngredientPrice;
-import com.intermanage.backend.entity.PriceCalculation;
-import com.intermanage.backend.entity.PriceCalculationItem;
-import com.intermanage.backend.entity.Product;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.PriceCalculationMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.PriceCalculationRepository;
-import com.intermanage.backend.repository.ProductRepository;
-import com.intermanage.backend.repository.ProductSearch;
-import com.intermanage.backend.repository.StoreRepository;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.XlsxWriter;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.deliorder.service.DeliOrderFormService;
+import com.intermanage.backend.deliprice.component.IngredientPricing;
+import com.intermanage.backend.deliprice.dto.FinishedProductResponse;
+import com.intermanage.backend.deliprice.dto.PriceCalculationRequest;
+import com.intermanage.backend.deliprice.dto.PriceCalculationResponse;
+import com.intermanage.backend.deliprice.dto.PriceCalculationSummary;
+import com.intermanage.backend.deliprice.dto.PriceChangeResponse;
+import com.intermanage.backend.deliprice.dto.PriceProductResponse;
+import com.intermanage.backend.deliprice.dto.RefreshPricesRequest;
+import com.intermanage.backend.deliprice.entity.CalculationMode;
+import com.intermanage.backend.deliprice.entity.IngredientPrice;
+import com.intermanage.backend.deliprice.entity.PriceCalculation;
+import com.intermanage.backend.deliprice.entity.PriceCalculationItem;
+import com.intermanage.backend.deliprice.mapper.PriceCalculationMapper;
+import com.intermanage.backend.deliprice.repository.PriceCalculationRepository;
+import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.repository.ProductRepository;
+import com.intermanage.backend.product.repository.ProductSearch;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
+
 
 /**
  * Kalkulator cen garmażu: przepisy na gotowe wyroby z kartoteki (nomenklatury {@link #FINISHED_NOMENCLATURES}).

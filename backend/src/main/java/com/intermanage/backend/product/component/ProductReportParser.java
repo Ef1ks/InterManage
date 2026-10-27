@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.product.component;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -18,10 +18,11 @@ import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.dto.ParsedProductReport;
-import com.intermanage.backend.dto.ProductReportRow;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.exception.InvalidWorkbookException;
+import com.intermanage.backend.common.component.XlsxReader;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.common.exception.InvalidWorkbookException;
+import com.intermanage.backend.product.dto.ParsedProductReport;
+import com.intermanage.backend.product.dto.ProductReportRow;
 
 /**
  * Czyta raport kartoteki produktów ("DANE DO IMPEKA", arkusz Mercalys). Układ pliku:

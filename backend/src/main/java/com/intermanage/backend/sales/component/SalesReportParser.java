@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.sales.component;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -21,10 +21,13 @@ import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.dto.SalesReportBatch;
-import com.intermanage.backend.dto.SalesReportHeader;
-import com.intermanage.backend.exception.InvalidReportException;
-import com.intermanage.backend.exception.InvalidWorkbookException;
+import com.intermanage.backend.common.component.ReportText;
+import com.intermanage.backend.common.component.XlsxReader;
+import com.intermanage.backend.common.exception.InvalidReportException;
+import com.intermanage.backend.common.exception.InvalidWorkbookException;
+import com.intermanage.backend.product.component.ProductReportParser;
+import com.intermanage.backend.sales.dto.SalesReportBatch;
+import com.intermanage.backend.sales.dto.SalesReportHeader;
 
 /**
  * Czyta raport sprzedaży "Zestawienie: Wejścia/Wyjścia" (wg artykułu, wg dnia, sprzedaż po rabacie, FIFO).
@@ -196,7 +199,7 @@ public class SalesReportParser {
             for (int i = 0; i < cells.size(); i++) {
                 String value = cells.get(i);
                 if (value != null && !value.isBlank()) {
-                    header.putIfAbsent(DocumentReportParser.normalize(value), i);
+                    header.putIfAbsent(ReportText.normalize(value), i);
                 }
             }
             if (header.containsKey(ITM8) && header.containsKey(DATE_COLUMN)) {

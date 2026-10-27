@@ -1,10 +1,10 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.document.repository;
 
 import java.math.BigDecimal;
 
 import org.springframework.data.jpa.domain.Specification;
 
-import com.intermanage.backend.entity.Document;
+import com.intermanage.backend.document.entity.Document;
 
 /** Sumy do wiersza "Razem" pod listą dokumentów, liczone w bazie dla tego samego filtra co lista. */
 public interface DocumentTotalsRepository {

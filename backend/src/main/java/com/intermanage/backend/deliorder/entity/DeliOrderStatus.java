@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliorder.entity;
 
 /** Status zamówienia garmażu u dostawcy. Nazwa stałej trafia do bazy. */
 public enum DeliOrderStatus {

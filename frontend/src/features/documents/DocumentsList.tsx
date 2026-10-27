@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type DocumentColumn, type Presence, useDocuments } from '@/features/documents/api'
 import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
-import { DeliveryPeriodReport } from '@/features/documents/DeliveryPeriodReport'
+import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
 import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney } from '@/features/documents/format'
@@ -137,6 +137,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
     <>
       <BackToTypes />
       {first && totalCount > 0 && <StaleDataNotice generatedAt={first.lastReportGeneratedAt} />}
+      {upperType === 'PZ' && <PendingReportChanges storeId={storeId} />}
 
       <section aria-labelledby="documents-heading">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">

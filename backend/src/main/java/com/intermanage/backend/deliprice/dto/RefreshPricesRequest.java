@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliprice.dto;
 
 import java.util.List;
 import java.util.UUID;

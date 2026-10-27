@@ -1,17 +1,19 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.document.repository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentType;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentType;
 
 /** Listy dokumentów stronami: {@link JpaSpecificationExecutor} z filtrem z {@link DocumentSearch}. */
 public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSpecificationExecutor<Document>,
@@ -48,14 +50,14 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
 
     /** Przyjęcia PZ z numerem dokumentu dostawcy spośród podanych (wielkimi literami) - faktury KSeF już wprowadzone. */
     @Query("""
-            select d from Document d where d.store.id = :storeId and d.type = com.intermanage.backend.entity.DocumentType.PZ
+            select d from Document d where d.store.id = :storeId and d.type = com.intermanage.backend.document.entity.DocumentType.PZ
             and upper(d.supplierDocumentNumber) in :numbers order by d.documentDate""")
     List<Document> findDeliveriesBySupplierDocument(UUID storeId, Collection<String> numbers);
 
     /** Jak wyżej, w podanych sklepach (sklepach firmy), razem ze sklepem. */
     @Query("""
             select d from Document d join fetch d.store where d.store.id in :storeIds
-            and d.type = com.intermanage.backend.entity.DocumentType.PZ
+            and d.type = com.intermanage.backend.document.entity.DocumentType.PZ
             and upper(d.supplierDocumentNumber) in :numbers order by d.documentDate""")
     List<Document> findCompanyDeliveriesBySupplierDocument(Collection<UUID> storeIds, Collection<String> numbers);
 
@@ -68,6 +70,27 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
             where d.store.id = :storeId and d.type = :type and d.documentDate >= :from and d.documentDate < :to
             order by d.documentDate, d.number""")
     List<Document> findWithLinesBetween(UUID storeId, DocumentType type, LocalDateTime from, LocalDateTime to);
+
+    /** Nazwy dostawcy o kodzie z dokumentów sklepu, od najnowszego (gdy nie ma go na liście dostawców). */
+    @Query("""
+            select d.supplierName from Document d
+            where d.store.id = :storeId and d.supplierCode = :code and d.supplierName is not null
+            order by d.documentDate desc""")
+    List<String> findSupplierNames(UUID storeId, String code, Limit limit);
+
+    /**
+     * Przyjęcia PZ z okresu [from, to), które mogły się zmienić po {@code since}: dodane albo zmienione importem,
+     * z korektą przypiętą lub odpiętą później, albo z przypiętą korektą zmienioną importem później.
+     */
+    @Query("""
+            select d.id from Document d
+            where d.store.id = :storeId and d.type = com.intermanage.backend.document.entity.DocumentType.PZ
+              and d.documentDate >= :from and d.documentDate < :to
+              and (d.createdAt > :since or d.updatedAt > :since or exists (
+                  select 1 from DeliveryCorrection c where c.delivery = d
+                  and (c.linkedAt > :since or c.unlinkedAt > :since
+                      or (c.unlinkedAt is null and c.correction.updatedAt > :since))))""")
+    List<UUID> findChangedDeliveryIds(UUID storeId, LocalDateTime from, LocalDateTime to, Instant since);
 
     /**
      * Dokumenty typów z liniami od dostawcy z podanego okresu: wspólny dostawca dokumentu albo, gdy linie mają

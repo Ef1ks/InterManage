@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliprice.entity;
 
 /** Skąd pochodzi cena składnika kalkulacji. Nazwa stałej trafia do bazy. */
 public enum PriceSource {

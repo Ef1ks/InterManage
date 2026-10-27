@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.ksef.service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,27 +23,28 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.component.KsefClient;
-import com.intermanage.backend.component.KsefCredentials;
-import com.intermanage.backend.component.SecretCipher;
-import com.intermanage.backend.dto.KsefCompanyResponse;
-import com.intermanage.backend.dto.KsefCompanyStore;
-import com.intermanage.backend.dto.KsefSeenInternalId;
-import com.intermanage.backend.dto.KsefSettingsResponse;
-import com.intermanage.backend.entity.AppUser;
-import com.intermanage.backend.entity.KsefConnection;
-import com.intermanage.backend.entity.KsefInternalId;
-import com.intermanage.backend.entity.KsefSkippedSupplier;
-import com.intermanage.backend.entity.Store;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.mapper.KsefMapper;
-import com.intermanage.backend.repository.AppUserRepository;
-import com.intermanage.backend.repository.KsefConnectionRepository;
-import com.intermanage.backend.repository.KsefInternalIdRepository;
-import com.intermanage.backend.repository.KsefInvoiceRepository;
-import com.intermanage.backend.repository.KsefSkippedSupplierRepository;
-import com.intermanage.backend.repository.StoreRepository;
-import com.intermanage.backend.security.StoreAccess;
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.auth.security.StoreAccess;
+import com.intermanage.backend.common.component.Nip;
+import com.intermanage.backend.common.component.SecretCipher;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.ksef.component.KsefClient;
+import com.intermanage.backend.ksef.component.KsefCredentials;
+import com.intermanage.backend.ksef.dto.KsefCompanyResponse;
+import com.intermanage.backend.ksef.dto.KsefCompanyStore;
+import com.intermanage.backend.ksef.dto.KsefSeenInternalId;
+import com.intermanage.backend.ksef.dto.KsefSettingsResponse;
+import com.intermanage.backend.ksef.entity.KsefConnection;
+import com.intermanage.backend.ksef.entity.KsefInternalId;
+import com.intermanage.backend.ksef.entity.KsefSkippedSupplier;
+import com.intermanage.backend.ksef.mapper.KsefMapper;
+import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
+import com.intermanage.backend.ksef.repository.KsefInternalIdRepository;
+import com.intermanage.backend.ksef.repository.KsefInvoiceRepository;
+import com.intermanage.backend.ksef.repository.KsefSkippedSupplierRepository;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Ustawienia KSeF sklepu: połączenie (NIP firmy, certyfikat KSeF z kluczem i hasłem, test logowania), IDWew sklepu
@@ -55,7 +56,6 @@ import com.intermanage.backend.security.StoreAccess;
 @Service
 public class KsefConnectionService {
 
-    private static final int[] NIP_WEIGHTS = {6, 5, 7, 2, 3, 4, 5, 6, 7};
 
     private final TransactionTemplate transaction;
     private final KsefConnectionRepository connections;
@@ -155,7 +155,7 @@ public class KsefConnectionService {
      */
     public KsefSettingsResponse saveConnection(UUID storeId, String nip, MultipartFile certificateFile,
             MultipartFile keyFile, String password, UUID userId) {
-        String cleanNip = nip(nip, "nip");
+        String cleanNip = Nip.parse(nip, "nip");
         String previousNip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
         transaction.executeWithoutResult(status -> {
             Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
@@ -203,7 +203,7 @@ public class KsefConnectionService {
      * kopiuje ten, kto i tak mógłby w nim pracować.
      */
     public KsefSettingsResponse linkConnection(UUID storeId, String nip, UUID userId) {
-        String cleanNip = nip(nip, "nip");
+        String cleanNip = Nip.parse(nip, "nip");
         String previousNip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
         transaction.executeWithoutResult(status -> {
             Store store = store(storeId);
@@ -339,7 +339,7 @@ public class KsefConnectionService {
 
     @Transactional
     public KsefSettingsResponse addSkippedSupplier(UUID storeId, String nip, String name, UUID userId) {
-        String clean = nip(nip, "nip");
+        String clean = Nip.parse(nip, "nip");
         if (skippedSuppliers.existsActive(storeId, clean)) {
             throw ApiException.conflict("Ten dostawca jest już pomijany");
         }
@@ -364,23 +364,6 @@ public class KsefConnectionService {
         }
         item.restore();
         return settings(storeId);
-    }
-
-    /** NIP bez myślników i spacji, z poprawną cyfrą kontrolną. */
-    static String nip(String value, String field) {
-        String digits = value == null ? "" : value.replaceAll("[\\s-]", "");
-        if (!digits.matches("\\d{10}") || !nipChecksumMatches(digits)) {
-            throw ApiException.badRequest("Nieprawidłowy NIP").withProperty("errors", Map.of(field, "Nieprawidłowy NIP"));
-        }
-        return digits;
-    }
-
-    private static boolean nipChecksumMatches(String digits) {
-        int sum = 0;
-        for (int i = 0; i < NIP_WEIGHTS.length; i++) {
-            sum += NIP_WEIGHTS[i] * (digits.charAt(i) - '0');
-        }
-        return sum % 11 == digits.charAt(9) - '0';
     }
 
     /** CN certyfikatu, np. "JAN KOWALSKI (uwierzytelnienie)", a bez niego cały podmiot. */

@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.auth.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.CreateUserRequest;
-import com.intermanage.backend.dto.UpdateUserRequest;
-import com.intermanage.backend.dto.UserResponse;
-import com.intermanage.backend.service.UserService;
+import com.intermanage.backend.auth.dto.CreateUserRequest;
+import com.intermanage.backend.auth.dto.UpdateUserRequest;
+import com.intermanage.backend.auth.dto.UserResponse;
+import com.intermanage.backend.auth.service.UserService;
 
 import jakarta.validation.Valid;
 

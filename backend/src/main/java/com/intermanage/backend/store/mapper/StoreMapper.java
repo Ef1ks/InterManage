@@ -1,10 +1,10 @@
-package com.intermanage.backend.mapper;
+package com.intermanage.backend.store.mapper;
 
 import org.mapstruct.Mapper;
 
-import com.intermanage.backend.dto.StoreResponse;
-import com.intermanage.backend.dto.StoreSummary;
-import com.intermanage.backend.entity.Store;
+import com.intermanage.backend.store.dto.StoreResponse;
+import com.intermanage.backend.store.dto.StoreSummary;
+import com.intermanage.backend.store.entity.Store;
 
 @Mapper
 public interface StoreMapper {

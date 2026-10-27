@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.auth.service;
 
 import java.time.Instant;
 

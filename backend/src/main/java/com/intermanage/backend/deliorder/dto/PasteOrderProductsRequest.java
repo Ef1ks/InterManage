@@ -1,8 +1,8 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.util.List;
 
-import com.intermanage.backend.entity.OrderUnit;
+import com.intermanage.backend.deliorder.entity.OrderUnit;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;

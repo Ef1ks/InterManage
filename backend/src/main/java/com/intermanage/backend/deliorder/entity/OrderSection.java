@@ -1,4 +1,4 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.deliorder.entity;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
+
+import com.intermanage.backend.store.entity.Store;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;

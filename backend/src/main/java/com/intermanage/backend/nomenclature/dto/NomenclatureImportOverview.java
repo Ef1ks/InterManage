@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.nomenclature.dto;
 
 import java.util.List;
 

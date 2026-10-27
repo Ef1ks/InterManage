@@ -1,9 +1,9 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.document.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import com.intermanage.backend.entity.DocumentType;
+import com.intermanage.backend.document.entity.DocumentType;
 
 /** Jedna linia dokumentu z raportu Wejścia/Wyjścia, już sprawdzona i przeliczona na typy z bazy. */
 public record DocumentLineRow(

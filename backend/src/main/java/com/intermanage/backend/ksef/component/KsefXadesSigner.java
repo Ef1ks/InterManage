@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.ksef.component;
 
 import java.io.StringWriter;
 import java.security.GeneralSecurityException;

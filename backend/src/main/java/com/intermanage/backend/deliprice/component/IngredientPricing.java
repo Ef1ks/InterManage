@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.deliprice.component;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -9,12 +9,12 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
-import com.intermanage.backend.entity.DocumentLine;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.entity.IngredientPrice;
-import com.intermanage.backend.entity.PriceSource;
-import com.intermanage.backend.entity.Product;
-import com.intermanage.backend.repository.DocumentLineRepository;
+import com.intermanage.backend.deliprice.entity.IngredientPrice;
+import com.intermanage.backend.deliprice.entity.PriceSource;
+import com.intermanage.backend.document.entity.DocumentLine;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DocumentLineRepository;
+import com.intermanage.backend.product.entity.Product;
 
 /**
  * Aktualna cena składnika kalkulacji: z ostatniej dostawy (najnowsze przyjęcie towaru PZ z tym ITM8 w sklepie),

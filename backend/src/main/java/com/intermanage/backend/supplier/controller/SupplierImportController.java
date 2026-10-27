@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.supplier.controller;
 
 import java.util.UUID;
 
@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.intermanage.backend.dto.SupplierImportOverview;
-import com.intermanage.backend.dto.SupplierImportResponse;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.SupplierService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.supplier.dto.SupplierImportOverview;
+import com.intermanage.backend.supplier.dto.SupplierImportResponse;
+import com.intermanage.backend.supplier.service.SupplierService;
 
 /** Raport "Lista dostawców" wgrywany w narzędziu Import danych. */
 @RestController

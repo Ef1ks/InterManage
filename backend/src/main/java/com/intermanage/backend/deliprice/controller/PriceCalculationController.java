@@ -1,4 +1,4 @@
-package com.intermanage.backend.controller;
+package com.intermanage.backend.deliprice.controller;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,15 +21,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.intermanage.backend.dto.FinishedProductResponse;
-import com.intermanage.backend.dto.PriceCalculationRequest;
-import com.intermanage.backend.dto.PriceCalculationResponse;
-import com.intermanage.backend.dto.PriceCalculationSummary;
-import com.intermanage.backend.dto.PriceChangeResponse;
-import com.intermanage.backend.dto.PriceProductResponse;
-import com.intermanage.backend.dto.RefreshPricesRequest;
-import com.intermanage.backend.security.AppUserPrincipal;
-import com.intermanage.backend.service.PriceCalculationService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.deliprice.dto.FinishedProductResponse;
+import com.intermanage.backend.deliprice.dto.PriceCalculationRequest;
+import com.intermanage.backend.deliprice.dto.PriceCalculationResponse;
+import com.intermanage.backend.deliprice.dto.PriceCalculationSummary;
+import com.intermanage.backend.deliprice.dto.PriceChangeResponse;
+import com.intermanage.backend.deliprice.dto.PriceProductResponse;
+import com.intermanage.backend.deliprice.dto.RefreshPricesRequest;
+import com.intermanage.backend.deliprice.service.PriceCalculationService;
 
 import jakarta.validation.Valid;
 

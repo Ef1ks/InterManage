@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.ksef.component;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -8,10 +8,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.intermanage.backend.entity.KsefApiBlock;
-import com.intermanage.backend.entity.KsefApiCall;
-import com.intermanage.backend.repository.KsefApiBlockRepository;
-import com.intermanage.backend.repository.KsefApiCallRepository;
+import com.intermanage.backend.ksef.entity.KsefApiBlock;
+import com.intermanage.backend.ksef.entity.KsefApiCall;
+import com.intermanage.backend.ksef.repository.KsefApiBlockRepository;
+import com.intermanage.backend.ksef.repository.KsefApiCallRepository;
 
 /**
  * Historia zapytań do KSeF i blokad w bazie: po restarcie backendu (każde wdrożenie) limiter wie, ile zapytań poszło

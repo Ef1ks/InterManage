@@ -1,8 +1,8 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.ksef.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.intermanage.backend.entity.KsefApiBlock;
+import com.intermanage.backend.ksef.entity.KsefApiBlock;
 
 public interface KsefApiBlockRepository extends JpaRepository<KsefApiBlock, String> {
 }

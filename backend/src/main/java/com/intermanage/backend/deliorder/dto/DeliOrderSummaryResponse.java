@@ -1,10 +1,11 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.DeliOrderStatus;
+import com.intermanage.backend.deliorder.entity.DeliOrderStatus;
+import com.intermanage.backend.store.dto.StoreSummary;
 
 /** Zamówienie na liście: {@code store} zamawia u {@code formStore}. */
 public record DeliOrderSummaryResponse(

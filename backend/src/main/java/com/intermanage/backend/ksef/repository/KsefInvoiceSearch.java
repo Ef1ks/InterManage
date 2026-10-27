@@ -1,4 +1,4 @@
-package com.intermanage.backend.repository;
+package com.intermanage.backend.ksef.repository;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -10,13 +10,14 @@ import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
-import com.intermanage.backend.entity.Document;
-import com.intermanage.backend.entity.DocumentKsefInvoice;
-import com.intermanage.backend.entity.DocumentType;
-import com.intermanage.backend.entity.KsefConnection;
-import com.intermanage.backend.entity.KsefInvoice;
-import com.intermanage.backend.entity.KsefInvoiceEntry;
-import com.intermanage.backend.entity.KsefSkippedSupplier;
+import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentKsefInvoice;
+import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.repository.DocumentSearch;
+import com.intermanage.backend.ksef.entity.KsefConnection;
+import com.intermanage.backend.ksef.entity.KsefInvoice;
+import com.intermanage.backend.ksef.entity.KsefInvoiceEntry;
+import com.intermanage.backend.ksef.entity.KsefSkippedSupplier;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;

@@ -1,9 +1,9 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.deliorder.dto;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
-import com.intermanage.backend.entity.OrderUnit;
+import com.intermanage.backend.deliorder.entity.OrderUnit;
 
 /** Produkt w kategorii formularza. {@code id} to pozycja w kategorii, {@code productId} to produkt z kartoteki. */
 public record OrderProductResponse(

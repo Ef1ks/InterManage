@@ -1,4 +1,4 @@
-package com.intermanage.backend.exception;
+package com.intermanage.backend.common.exception;
 
 /** Plik nie jest poprawnym skoroszytem .xlsx / .xlsm. */
 public class InvalidWorkbookException extends Exception {

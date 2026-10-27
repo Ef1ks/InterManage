@@ -1,11 +1,11 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.document.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Jedna strona listy dokumentów typu (po {@value com.intermanage.backend.service.DocumentService#PAGE_SIZE}).
+ * Jedna strona listy dokumentów typu (po {@value com.intermanage.backend.document.service.DocumentService#PAGE_SIZE}).
  * {@code type.documentCount} to wszystkie dokumenty typu, {@code matchingCount} i sumy - te pasujące do wyszukiwania
  * (do wiersza "Razem"). {@code lastReportGeneratedAt} służy do ostrzeżenia o nieaktualnych danych.
  */

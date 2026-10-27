@@ -55,9 +55,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import com.intermanage.backend.component.KsefClient;
-import com.intermanage.backend.dto.KsefInvoiceMetadata;
-import com.intermanage.backend.security.JwtService;
+import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.ksef.component.KsefClient;
+import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;

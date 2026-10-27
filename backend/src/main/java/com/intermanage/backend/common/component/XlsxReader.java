@@ -1,4 +1,4 @@
-package com.intermanage.backend.component;
+package com.intermanage.backend.common.component;
 
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -13,14 +13,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import org.springframework.stereotype.Component;
-
-import com.intermanage.backend.exception.InvalidWorkbookException;
-
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+
+import org.springframework.stereotype.Component;
+
+import com.intermanage.backend.common.exception.InvalidWorkbookException;
 
 /**
  * Strumieniowy odczyt pierwszego arkusza pliku .xlsx / .xlsm (Office Open XML) bez ładowania całego arkusza do pamięci.

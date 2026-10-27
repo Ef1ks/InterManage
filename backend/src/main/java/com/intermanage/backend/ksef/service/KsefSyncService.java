@@ -1,4 +1,4 @@
-package com.intermanage.backend.service;
+package com.intermanage.backend.ksef.service;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -18,16 +18,16 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.intermanage.backend.component.KsefClient;
-import com.intermanage.backend.component.KsefRateLimiter;
-import com.intermanage.backend.dto.KsefInvoiceMetadata;
-import com.intermanage.backend.entity.KsefConnection;
-import com.intermanage.backend.entity.KsefInvoice;
-import com.intermanage.backend.entity.KsefSyncState;
-import com.intermanage.backend.exception.ApiException;
-import com.intermanage.backend.repository.KsefConnectionRepository;
-import com.intermanage.backend.repository.KsefInvoiceRepository;
-import com.intermanage.backend.repository.KsefSyncStateRepository;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.ksef.component.KsefClient;
+import com.intermanage.backend.ksef.component.KsefRateLimiter;
+import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
+import com.intermanage.backend.ksef.entity.KsefConnection;
+import com.intermanage.backend.ksef.entity.KsefInvoice;
+import com.intermanage.backend.ksef.entity.KsefSyncState;
+import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
+import com.intermanage.backend.ksef.repository.KsefInvoiceRepository;
+import com.intermanage.backend.ksef.repository.KsefSyncStateRepository;
 
 /**
  * Pobiera faktury zakupowe firmy (NIP z połączenia) z KSeF przyrostowo, po dacie trwałego zapisu rosnąco (tak zaleca

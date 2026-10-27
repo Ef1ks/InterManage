@@ -1,7 +1,9 @@
-package com.intermanage.backend.entity;
+package com.intermanage.backend.ksef.entity;
 
 import java.time.Instant;
 import java.util.UUID;
+
+import com.intermanage.backend.auth.entity.AppUser;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

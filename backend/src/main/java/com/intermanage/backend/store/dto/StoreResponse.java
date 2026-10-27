@@ -1,4 +1,4 @@
-package com.intermanage.backend.dto;
+package com.intermanage.backend.store.dto;
 
 import java.time.Instant;
 import java.util.UUID;
