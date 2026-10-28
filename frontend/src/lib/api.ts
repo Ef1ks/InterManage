@@ -100,10 +100,7 @@ async function toApiError(response: Response): Promise<ApiError> {
  * Idzie przez fetch, a nie zwykły link, żeby błędy (np. wygasła sesja) wracały jako ApiError.
  */
 export async function downloadFile(path: string, fallbackName = 'plik'): Promise<void> {
-  const response = await fetch(`/api${path}`, { credentials: 'same-origin' })
-  if (!response.ok) {
-    throw await toApiError(response)
-  }
+  const response = await fetchFile(path)
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
   const fileName = match ? decodeURIComponent(match[1] ?? match[2]) : fallbackName
@@ -116,4 +113,42 @@ export async function downloadFile(path: string, fallbackName = 'plik'): Promise
   link.remove()
   // Przeglądarka zaczyna pobieranie asynchronicznie - zwalniamy adres chwilę później.
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+/**
+ * Otwiera okno drukowania pliku PDF z API bez zapisywania go na dysku: plik ładuje się w ukrytej ramce,
+ * a przeglądarka drukuje go swoją przeglądarką PDF. Kończy się, gdy okno drukowania jest już otwarte.
+ */
+export async function printFile(path: string): Promise<void> {
+  const response = await fetchFile(path)
+  const blob = new Blob([await response.blob()], { type: 'application/pdf' })
+  const url = URL.createObjectURL(blob)
+  const frame = document.createElement('iframe')
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  frame.src = url
+  await new Promise<void>((resolve, reject) => {
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus()
+        frame.contentWindow?.print()
+        resolve()
+      } catch {
+        reject(new ApiError(0, 'Przeglądarka nie pozwoliła wydrukować pliku. Pobierz go i wydrukuj z dysku.'))
+      }
+    }
+    document.body.append(frame)
+  })
+  // Okno drukowania korzysta z ramki do końca wydruku - sprzątamy dopiero po dłuższej chwili.
+  setTimeout(() => {
+    frame.remove()
+    URL.revokeObjectURL(url)
+  }, 60_000)
+}
+
+async function fetchFile(path: string): Promise<Response> {
+  const response = await fetch(`/api${path}`, { credentials: 'same-origin' })
+  if (!response.ok) {
+    throw await toApiError(response)
+  }
+  return response
 }

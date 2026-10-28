@@ -17,12 +17,80 @@ export const PERIOD_MODES: { value: PeriodMode; label: string }[] = [
 export const MAX_PERIOD_DAYS = 366
 
 /**
- * Okres aktualny i ten sam okres rok wcześniej, porównywane w całości (2 dni do 2 dni, nie dzień po dniu).
- * Tydzień i miesiąc w toku kończą się na ostatnim dniu ze sprzedażą ({@code lastSaleDate}).
+ * Z czym porównujemy okres aktualny: ten sam okres rok wcześniej, okres tuż przed nim, ten sam dzień tydzień
+ * wcześniej albo dowolny okres wybrany ręcznie. Porównanie zawsze w całości (2 dni do 2 dni, nie dzień po dniu).
  */
-export function comparePeriods(mode: PeriodMode, anchor: string, custom: DateRange, lastSaleDate: string | null): Periods {
+export type CompareMode = 'year' | 'previous' | 'week' | 'custom'
+
+const PREVIOUS_LABELS: Record<PeriodMode, string> = {
+  day: 'Poprzedni dzień',
+  week: 'Poprzedni tydzień',
+  month: 'Poprzedni miesiąc',
+  custom: 'Poprzedni okres',
+}
+
+/** Tydzień temu ma sens tylko tam, gdzie nie jest tym samym co poprzedni okres (tydzień) ani rozjechanym miesiącem. */
+export function compareModes(mode: PeriodMode): { value: CompareMode; label: string }[] {
+  return [
+    { value: 'year', label: 'Rok temu' },
+    { value: 'previous', label: PREVIOUS_LABELS[mode] },
+    ...(mode === 'day' || mode === 'custom' ? [{ value: 'week' as const, label: 'Tydzień temu' }] : []),
+    { value: 'custom', label: 'Własny okres' },
+  ]
+}
+
+/** Tryb porównania dostępny przy danym okresie; niedostępny wraca do roku temu. */
+export function resolveCompareMode(mode: PeriodMode, compare: CompareMode): CompareMode {
+  return compareModes(mode).some((option) => option.value === compare) ? compare : 'year'
+}
+
+/** Jak nazywamy okres porównywany w nagłówkach kolumn ({@code column}) i w tekście ({@code inline}). */
+export const COMPARE_LABELS: Record<CompareMode, { column: string; inline: string }> = {
+  year: { column: 'Rok temu', inline: 'rok temu' },
+  previous: { column: 'Poprzedni', inline: 'poprzednio' },
+  week: { column: 'Tydzień temu', inline: 'tydzień temu' },
+  custom: { column: 'Porównywany', inline: 'porównywany' },
+}
+
+/** Okres aktualny i okres, z którym go porównujemy. Tydzień i miesiąc w toku kończą się na ostatnim dniu ze sprzedażą. */
+export function comparePeriods(
+  mode: PeriodMode,
+  anchor: string,
+  custom: DateRange,
+  lastSaleDate: string | null,
+  compare: CompareMode,
+  compareCustom: DateRange,
+): Periods {
   const current = currentPeriod(mode, anchor, custom, lastSaleDate)
-  return { current, previous: { from: addDays(current.from, -YEAR_AGO_DAYS), to: addDays(current.to, -YEAR_AGO_DAYS) } }
+  return {
+    current,
+    previous: comparedPeriod(mode, compare, current, compareCustom),
+  }
+}
+
+function comparedPeriod(mode: PeriodMode, compare: CompareMode, current: DateRange, compareCustom: DateRange): DateRange {
+  if (compare === 'custom') return compareCustom
+  if (compare === 'year') return shiftRange(current, -YEAR_AGO_DAYS)
+  if (compare === 'week') return shiftRange(current, -7)
+  if (mode === 'day') return shiftRange(current, -1)
+  if (mode === 'week') return shiftRange(current, -7)
+  if (mode === 'month') {
+    // Pełny miesiąc z pełnym poprzednim, miesiąc w toku (1-26) z tymi samymi dniami poprzedniego (1-26, najwyżej do jego końca).
+    const from = shiftMonth(current.from, -1)
+    const end = monthEnd(from)
+    if (current.to === monthEnd(current.from)) return { from, to: end }
+    const to = addDays(from, dayCount(current) - 1)
+    return { from, to: to > end ? end : to }
+  }
+  // Własny okres: tyle samo dni tuż przed nim.
+  return {
+    from: addDays(current.from, -dayCount(current)),
+    to: addDays(current.from, -1),
+  }
+}
+
+function shiftRange({ from, to }: DateRange, days: number): DateRange {
+  return { from: addDays(from, days), to: addDays(to, days) }
 }
 
 /**
@@ -31,7 +99,8 @@ export function comparePeriods(mode: PeriodMode, anchor: string, custom: DateRan
  */
 export const YEAR_AGO_DAYS = 364
 
-function currentPeriod(mode: PeriodMode, anchor: string, custom: DateRange, lastSaleDate: string | null): DateRange {
+/** Wybrany okres: dzień, pełny tydzień pon.-niedz., miesiąc (w toku do ostatniego dnia ze sprzedażą) albo własny. */
+export function currentPeriod(mode: PeriodMode, anchor: string, custom: DateRange, lastSaleDate: string | null): DateRange {
   if (mode === 'day') return { from: anchor, to: anchor }
   if (mode === 'week') {
     // Zawsze pełny tydzień od poniedziałku do niedzieli; który, pilnuje resolveAnchor.
@@ -104,11 +173,20 @@ function shiftMonth(first: string, months: number) {
   return toIsoDate(new Date(date.getFullYear(), date.getMonth() + months, 1))
 }
 
-const withYear = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-const withoutYear = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })
+const withYear = new Intl.DateTimeFormat('pl-PL', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+const withoutYear = new Intl.DateTimeFormat('pl-PL', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+})
 
 /**
- * Z dniami tygodnia, bo rok temu porównujemy te same dni tygodnia: "pon., 26 paź 2026",
+ * Z dniami tygodnia, bo sprzedaż zależy od dnia tygodnia: "pon., 26 paź 2026",
  * "pon., 19 paź – niedz., 25 paź 2026", "wt., 30 gru 2025 – pt., 2 sty 2026".
  */
 export function formatRange({ from, to }: DateRange): string {

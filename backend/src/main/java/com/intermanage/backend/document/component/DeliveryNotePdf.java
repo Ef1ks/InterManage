@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 import com.intermanage.backend.common.component.PdfFonts;
+import com.intermanage.backend.common.component.PdfPageFooter;
 import com.intermanage.backend.document.dto.CorrectedDelivery.CorrectedLine;
 import com.intermanage.backend.document.dto.CorrectedDelivery;
 import com.intermanage.backend.document.entity.Document;
@@ -35,12 +36,8 @@ import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.BaseFont;
-import com.lowagie.text.pdf.ColumnText;
-import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
-import com.lowagie.text.pdf.PdfPageEventHelper;
-import com.lowagie.text.pdf.PdfTemplate;
 import com.lowagie.text.pdf.PdfWriter;
 
 /**
@@ -85,7 +82,7 @@ public class DeliveryNotePdf {
         com.lowagie.text.Document document = new com.lowagie.text.Document(PageSize.A4.rotate(), 30, 30, 30, 48);
         try {
             PdfWriter writer = PdfWriter.getInstance(document, out);
-            writer.setPageEvent(new PageFooter(font(regular, 7.5f, MUTED), "Bon dostawy nr " + bon + " · sklep "
+            writer.setPageEvent(new PdfPageFooter(font(regular, 7.5f, MUTED), "Bon dostawy nr " + bon + " · sklep "
                     + note.store().getNumber() + " · wydruk " + DATE_TIME.format(ZonedDateTime.now(STORE_ZONE))));
             document.addTitle("Bon dostawy nr " + bon);
             document.addCreator("Intermanage");
@@ -507,43 +504,5 @@ public class DeliveryNotePdf {
 
     private static String format(String pattern, BigDecimal value) {
         return new DecimalFormat(pattern, DecimalFormatSymbols.getInstance(POLISH)).format(value);
-    }
-
-    /** Stopka: bon i data wydruku po lewej, "Strona X z Y" po prawej (liczba stron dopisywana na końcu). */
-    private static final class PageFooter extends PdfPageEventHelper {
-
-        private static final float TOTAL_WIDTH = 24;
-
-        private final Font font;
-        private final String text;
-        private PdfTemplate total;
-        private int pages;
-
-        PageFooter(Font font, String text) {
-            this.font = font;
-            this.text = text;
-        }
-
-        @Override
-        public void onOpenDocument(PdfWriter writer, com.lowagie.text.Document document) {
-            total = writer.getDirectContent().createTemplate(TOTAL_WIDTH, 12);
-        }
-
-        @Override
-        public void onEndPage(PdfWriter writer, com.lowagie.text.Document document) {
-            pages = writer.getPageNumber();
-            PdfContentByte canvas = writer.getDirectContent();
-            float y = document.bottom() - 22;
-            ColumnText.showTextAligned(canvas, Element.ALIGN_LEFT, new Phrase(text, font), document.left(), y, 0);
-            float right = document.right() - TOTAL_WIDTH;
-            ColumnText.showTextAligned(canvas, Element.ALIGN_RIGHT, new Phrase("Strona " + pages + " z", font),
-                    right, y, 0);
-            canvas.addTemplate(total, right + 3, y - 3);
-        }
-
-        @Override
-        public void onCloseDocument(PdfWriter writer, com.lowagie.text.Document document) {
-            ColumnText.showTextAligned(total, Element.ALIGN_LEFT, new Phrase(String.valueOf(pages), font), 0, 3, 0);
-        }
     }
 }

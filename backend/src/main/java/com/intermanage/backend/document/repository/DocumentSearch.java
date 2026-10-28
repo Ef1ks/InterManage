@@ -4,6 +4,7 @@ import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.DeliveryReportClosingDelivery;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentLine;
@@ -160,6 +162,29 @@ public final class DocumentSearch {
             subquery.select(cb.literal(1)).where(cb.equal(link.get("delivery"), root), cb.isNull(link.get("unlinkedAt")));
             return presence == Presence.WITH ? cb.exists(subquery) : cb.not(cb.exists(subquery));
         };
+    }
+
+    /**
+     * Przyjęcia, które poszły w aktywnym zamkniętym raporcie okresowym razem ze swoim okresem ({@code WITH}), albo
+     * jeszcze w żadnym ({@code WITHOUT}). Zmiana przeniesiona do raportu kolejnego okresu nie zamyka przyjęcia.
+     */
+    public static Specification<Document> inReportClosing(Presence presence) {
+        return (root, query, cb) -> {
+            if (presence == Presence.ALL) {
+                return cb.conjunction();
+            }
+            Subquery<Integer> subquery = query.subquery(Integer.class);
+            Root<DeliveryReportClosingDelivery> entry = subquery.from(DeliveryReportClosingDelivery.class);
+            subquery.select(cb.literal(1)).where(cb.equal(entry.get("delivery"), root),
+                    cb.isNull(entry.get("originClosing")), cb.isNull(entry.get("closing").get("cancelledAt")));
+            return presence == Presence.WITH ? cb.exists(subquery) : cb.not(cb.exists(subquery));
+        };
+    }
+
+    /** Bez dokumentów dostawców o tych kodach; dokumenty bez wspólnego dostawcy zostają. */
+    public static Specification<Document> withoutSuppliers(Collection<String> supplierCodes) {
+        return (root, query, cb) -> supplierCodes.isEmpty() ? cb.conjunction()
+                : cb.or(cb.isNull(root.get("supplierCode")), cb.not(root.get("supplierCode").in(supplierCodes)));
     }
 
     /** Dokumenty z datą w przedziale [from, to) - podpowiedzi przy przypinaniu do zamówienia garmażu. */

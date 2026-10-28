@@ -26,4 +26,10 @@ public interface DeliveryReportClosingDeliveryRepository extends JpaRepository<D
             where c.cancelledAt is null and r.delivery.id in :deliveryIds
               and ((o is null and c.id in :homeClosingIds) or o.id in :homeClosingIds)""")
     List<DeliveryReportClosingDelivery> findKnown(Collection<UUID> homeClosingIds, Collection<UUID> deliveryIds);
+
+    /** Wpisy przyjęć w aktywnych zamknięciach ich własnego okresu (bez zmian przeniesionych do późniejszych). */
+    @Query("""
+            select r from DeliveryReportClosingDelivery r join fetch r.closing c
+            where c.cancelledAt is null and r.originClosing is null and r.delivery.id in :deliveryIds""")
+    List<DeliveryReportClosingDelivery> findClosedDeliveries(Collection<UUID> deliveryIds);
 }

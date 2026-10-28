@@ -15,6 +15,7 @@ import { useDocument, useDownloadDeliveryNote } from '@/features/documents/api'
 import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
+import { DocumentTransferTargetSection } from '@/features/documents/DocumentTransferTarget'
 import { BackToTypes } from '@/features/documents/DocumentsList'
 import { SupplierDocumentNumber } from '@/features/documents/SupplierDocumentNumber'
 import {
@@ -189,6 +190,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
 
       <DeliveryCorrections storeId={storeId} document={document} />
       <DocumentGratisSection storeId={storeId} document={document} />
+      <DocumentTransferTargetSection storeId={storeId} document={document} />
       <DocumentKsefInvoices storeId={storeId} document={document} />
 
       {document.deliOrders.length > 0 && (

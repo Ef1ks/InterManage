@@ -333,6 +333,18 @@ export type DocumentSummary = {
   invoiceAmountCheck: InvoiceAmountCheck | null
   /** Faktury spoza KSeF wpisane ręcznie (przyjęcia i ich korekty). */
   manualInvoices: ManualInvoice[]
+  /** Przyjęcie PZ w zamkniętym raporcie okresowym ({@code null}, gdy jeszcze w żadnym). */
+  reportClosing: DocumentReportClosing | null
+  /** Ruch międzymagazynowy: sklep zaprzyjaźniony, dla którego go wystawiono. */
+  transferTarget: TransferTarget | null
+}
+
+/** Zamknięty raport przyjęć, w którym przyjęcie poszło razem ze swoim okresem (daty RRRR-MM-DD). */
+export type DocumentReportClosing = {
+  id: string
+  periodFrom: string
+  periodTo: string
+  closedAt: string
 }
 
 /** Faktura spoza KSeF: dostawca z listy dostawców sklepu i numer wpisany ręcznie. */
@@ -618,14 +630,23 @@ export type SalesReportsOverview = {
   lastReportGeneratedAt: string | null
 }
 
-/** Sprzedaż za okres; % marży i zmiany liczy front z sum. */
+/**
+ * Sprzedaż za okres; % marży i zmiany liczy front z sum. W raporcie kosztów garmażu koszt to wartość protokołów
+ * reprezentacji, a koszt i marża są puste poniżej całego garmażu (kosztu nie da się przypisać do rodzin i artykułów).
+ */
 export type SalesFigures = {
   quantity: number
-  /** Koszt zakupu FIFO netto. */
-  costValue: number
+  /** Koszt zakupu FIFO netto (w kosztach garmażu: protokoły reprezentacji). */
+  costValue: number | null
   saleValueGross: number
   saleValueNet: number
-  marginValue: number
+  marginValue: number | null
+}
+
+/** Skąd są koszty garmażu: najnowszy raport dokumentów i do którego dnia sięgają wgrane raporty (RRRR-MM-DD). */
+export type DeliCostsOverview = {
+  documentsReportGeneratedAt: string | null
+  costsCoveredUntil: string | null
 }
 
 export type SalesComparisonLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'PRODUCT'
@@ -652,6 +673,42 @@ export type SalesComparison = {
   rows: SalesComparisonRow[]
   previousTotal: SalesFigures
   currentTotal: SalesFigures
+}
+
+/** Pozycja nomenklatury sklepu (filtr raportów, ścieżka artykułu). */
+export type NomenclatureOption = {
+  /** Bez spacji: "01", "0101", "010101". */
+  code: string
+  name: string
+  level: Exclude<SalesComparisonLevel, 'PRODUCT'>
+}
+
+/** Sprzedaż dzień po dniu do wykresu; każdy dzień okresu, bez sprzedaży z zerami. */
+export type SalesHistory = {
+  from: string
+  to: string
+  days: { date: string; figures: SalesFigures }[]
+  total: SalesFigures
+}
+
+/** Artykuł z kartoteki: ceny, stan i rotacja z ostatniego raportu kartoteki, w którym był. */
+export type SalesArticle = {
+  itm8: string
+  ean: string
+  name: string | null
+  brand: string | null
+  supplier: string | null
+  unit: string | null
+  active: boolean | null
+  salePrice: number | null
+  purchasePrice: number | null
+  /** STAN, może być ujemny. */
+  stock: number | null
+  rotation: number | null
+  caseSize: number | null
+  reportGeneratedAt: string | null
+  /** Rejon, rodzina, podrodzina (te, które są w nomenklaturze sklepu). */
+  nomenclaturePath: NomenclatureOption[]
 }
 
 /**
@@ -742,6 +799,8 @@ export type Document = DocumentSummary & {
   lines: DocumentLine[]
   /** Zamówienia garmażu jadące na tym dokumencie (tylko ruchy międzymagazynowe). */
   deliOrders: LinkedDeliOrder[]
+  /** Dokument można wystawić dla sklepu zaprzyjaźnionego (ruchy międzymagazynowe). */
+  transferTargetAllowed: boolean
   /** Do przyjęcia PZ można przypinać korekty; wartości i wydruk bonu liczą się razem z nimi. */
   correctable: boolean
   /** Korekty przypięte do przyjęcia, od najstarszej. */
@@ -999,3 +1058,106 @@ export type KsefInvoicePage = {
   grossTotal: number
 }
 
+/** Sklep, dla którego wystawiono ruch międzymagazynowy; {@code enteredAt}, gdy sklep wprowadził go u siebie. */
+export type TransferTarget = {
+  store: StoreSummary
+  createdBy: string | null
+  createdAt: string
+  enteredBy: string | null
+  enteredAt: string | null
+}
+
+/** Ruch międzymagazynowy innego sklepu wystawiony dla tego sklepu; {@code id} to id wpisu, nie dokumentu. */
+export type IncomingTransfer = {
+  id: string
+  fromStore: StoreSummary
+  number: string
+  documentDate: string
+  lineCount: number
+  purchaseValue: number
+  saleValueGross: number
+  createdBy: string | null
+  createdAt: string
+  enteredBy: string | null
+  enteredAt: string | null
+  /** Pusta na liście, z liniami w szczegółach. */
+  lines: DocumentLine[]
+}
+
+export type IncomingTransfers = {
+  pending: IncomingTransfer[]
+  /** Ostatnio wprowadzone, od najnowszego. */
+  entered: IncomingTransfer[]
+}
+
+/** Znajomość albo zaproszenie od strony sklepu: {@code store} to drugi sklep, {@code sent} - ten sklep zapraszał. */
+export type StorePartner = {
+  id: string
+  store: StoreSummary
+  sent: boolean
+  invitedBy: string | null
+  invitedAt: string
+  acceptedBy: string | null
+  /** Pusty = zaproszenie czeka na odpowiedź. */
+  acceptedAt: string | null
+}
+
+export type StorePartners = {
+  partners: StorePartner[]
+  invitableStores: StoreSummary[]
+}
+
+/**
+ * Liczby wiersza podsumowania sprzedaży i strat (zł i %). Marża i marża po stratach w % od sprzedaży netto, straty
+ * w % od sprzedaży brutto, udział = sprzedaż brutto w sprzedaży brutto sklepu. Procent pusty, gdy nie ma od czego liczyć.
+ */
+export type PeriodSummaryFigures = {
+  saleValueNet: number
+  saleValueGross: number
+  costValue: number
+  marginValue: number
+  marginPercent: number | null
+  lossValue: number
+  lossPercent: number | null
+  marginAfterLossesValue: number
+  marginAfterLossesPercent: number | null
+  sharePercent: number | null
+}
+
+/** Wiersz podsumowania: nagłówek grupy (bez liczb), rejon albo suma grupy; {@code depth} 0 = grupa najwyższa. */
+export type PeriodSummaryLine = {
+  kind: 'GROUP' | 'REGION' | 'SUBTOTAL'
+  depth: number
+  /** Kod rejonu; pusty = bez nomenklatury. */
+  code: string | null
+  name: string | null
+  figures: PeriodSummaryFigures | null
+  marginBudgetPercent: number | null
+  maxLossPercent: number | null
+}
+
+export type PeriodSummary = {
+  storeNumber: string
+  storeName: string
+  from: string
+  to: string
+  lastSaleDate: string | null
+  documentsCoveredUntil: string | null
+  salesReportGeneratedAt: string | null
+  documentsReportGeneratedAt: string | null
+  budgetsSet: boolean
+  lines: PeriodSummaryLine[]
+  total: PeriodSummaryFigures
+}
+
+/** Budżet rejonu w ustawieniach sklepu; puste wartości = bez budżetu. */
+export type RegionBudget = {
+  regionCode: string
+  name: string | null
+  /** Grupa z podsumowania, np. "Świeże tradycyjne". */
+  group: string
+  marginPercent: number | null
+  maxLossPercent: number | null
+  updatedBy: string | null
+  updatedAt: string | null
+}

@@ -1,6 +1,8 @@
 package com.intermanage.backend.document.repository;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -103,6 +105,27 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
                   select 1 from DocumentLine l where l.document = d and l.supplierCode = :supplierCode)))""")
     List<Document> findBySupplierWithLines(UUID storeId, Collection<DocumentType> types, String supplierCode,
             LocalDateTime from, LocalDateTime to);
+
+    /** Suma wartości zakupu dokumentów jednego dnia. */
+    interface DayValue {
+        LocalDate getDay();
+
+        BigDecimal getPurchaseValue();
+    }
+
+    /**
+     * Wartość zakupu dokumentów typu dzień po dniu (wg daty dokumentu), {@code from} i {@code to} włącznie; dni bez
+     * dokumentów nie ma w wyniku. Wydania z magazynu (np. reprezentacja) mają wartość ze znakiem minus.
+     */
+    @Query(value = """
+            select cast(d.document_date as date) as day, sum(d.purchase_value) as purchase_value
+            from documents d
+            where d.store_id = :storeId and d.type = :type
+              and d.document_date >= cast(:from as timestamp) and d.document_date < cast(:to as timestamp) + interval '1 day'
+            group by 1
+            order by 1
+            """, nativeQuery = true)
+    List<DayValue> sumPurchaseValueByDay(UUID storeId, String type, LocalDate from, LocalDate to);
 
     /**
      * Blokada importu dokumentów sklepu do końca transakcji (dwa równoczesne importy tego samego pliku

@@ -22,6 +22,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
 
     Optional<Product> findByIdAndStoreId(UUID id, UUID storeId);
 
+    Optional<Product> findByStoreIdAndItm8(UUID storeId, String itm8);
+
     List<Product> findByIdInAndStoreId(Collection<UUID> ids, UUID storeId);
 
     /** Produkty sklepu po bieżącym EAN-ie (np. lista wklejona z Excela). */

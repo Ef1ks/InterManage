@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +39,7 @@ import com.intermanage.backend.document.dto.CorrectionTotals;
 import com.intermanage.backend.document.dto.DocumentImportResponse;
 import com.intermanage.backend.document.dto.DocumentLineRow;
 import com.intermanage.backend.document.dto.DocumentPage;
+import com.intermanage.backend.document.dto.DocumentReportClosing;
 import com.intermanage.backend.document.dto.DocumentResponse;
 import com.intermanage.backend.document.dto.DocumentTypeSummary;
 import com.intermanage.backend.document.dto.DocumentsOverview;
@@ -49,13 +51,16 @@ import com.intermanage.backend.document.dto.ParsedDocumentReport;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentGratis;
+import com.intermanage.backend.document.entity.DocumentTransferTarget;
 import com.intermanage.backend.document.entity.DocumentImport;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.mapper.DocumentMapper;
 import com.intermanage.backend.document.repository.DocumentGratisRepository;
+import com.intermanage.backend.document.repository.DocumentTransferTargetRepository;
 import com.intermanage.backend.document.repository.DocumentImportRepository;
 import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.document.repository.DeliveryReportClosingDeliveryRepository;
 import com.intermanage.backend.document.repository.DocumentSearch;
 import com.intermanage.backend.document.repository.DocumentTotalsRepository;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
@@ -99,14 +104,20 @@ public class DocumentService {
     private final DeliveryNotePdf deliveryNotePdf;
     private final InvoiceAmountCheckService amountCheckService;
     private final DocumentManualInvoiceService manualInvoices;
+    private final DeliveryReportClosingDeliveryRepository closingDeliveries;
+    private final DocumentTransferTargetRepository transferTargets;
 
     public DocumentService(TransactionTemplate transaction, DocumentReportParser reportParser,
             DocumentMapper documentMapper, DocumentImportRepository imports, DocumentRepository documents,
             AppUserRepository users, StoreRepository stores, DeliOrderDocumentRepository deliOrderDocuments,
             DocumentGratisRepository gratis, DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
             SupplierRepository suppliers, NomenclatureRepository nomenclatures, DeliveryNotePdf deliveryNotePdf,
-            InvoiceAmountCheckService amountCheckService, DocumentManualInvoiceService manualInvoices) {
+            InvoiceAmountCheckService amountCheckService, DocumentManualInvoiceService manualInvoices,
+            DeliveryReportClosingDeliveryRepository closingDeliveries,
+            DocumentTransferTargetRepository transferTargets) {
+        this.transferTargets = transferTargets;
         this.amountCheckService = amountCheckService;
+        this.closingDeliveries = closingDeliveries;
         this.manualInvoices = manualInvoices;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
@@ -142,19 +153,23 @@ public class DocumentService {
     /**
      * Strona listy dokumentów typu; wyszukiwanie, filtry i sortowanie w bazie ({@link DocumentSearch}). {@code product}
      * szuka artykułu w liniach, {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
-     * w przyjęciach.
+     * i {@code closed} (w zamkniętym raporcie okresowym) w przyjęciach. {@code hiddenSuppliers}: kody dostawców,
+     * których dokumentów lista nie pokazuje.
      */
     @Transactional(readOnly = true)
     public DocumentPage list(UUID storeId, String typeCode, int page, String query, String product,
-            DocumentSearch.Presence invoice, DocumentSearch.Presence withCorrections, String sort, String direction) {
+            DocumentSearch.Presence invoice, DocumentSearch.Presence withCorrections, DocumentSearch.Presence closed,
+            Collection<String> hiddenSuppliers, String sort, String direction) {
         DocumentType type = type(typeCode);
         Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query))
-                .and(DocumentSearch.withProduct(DocumentSearch.words(product)));
+                .and(DocumentSearch.withProduct(DocumentSearch.words(product)))
+                .and(DocumentSearch.withoutSuppliers(hiddenSuppliers));
         if (type.canLinkKsefInvoice() && invoice != DocumentSearch.Presence.ALL) {
             matching = matching.and(DocumentSearch.withInvoice(invoice, ksefLinks.nip(storeId)));
         }
         if (type == DocumentType.PZ) {
-            matching = matching.and(DocumentSearch.withCorrections(withCorrections));
+            matching = matching.and(DocumentSearch.withCorrections(withCorrections))
+                    .and(DocumentSearch.inReportClosing(closed));
         }
         Page<Document> found = documents.findAll(matching,
                 PageRequest.of(Math.max(page, 0), PAGE_SIZE, DocumentSearch.sort(sort, direction)));
@@ -176,6 +191,13 @@ public class DocumentService {
         Map<UUID, InvoiceAmountCheck> amountChecks =
                 amountCheckService.checks(found.getContent(), ksefInvoices, correctionTotals);
         Map<UUID, List<ManualInvoice>> manual = manualInvoices.invoicesOf(found.getContent());
+        Map<UUID, DocumentReportClosing> closings = type != DocumentType.PZ || found.isEmpty() ? Map.of()
+                : closingDeliveries.findClosedDeliveries(found.getContent().stream().map(Document::getId).toList())
+                        .stream().collect(Collectors.toMap(entry -> entry.getDelivery().getId(),
+                                documentMapper::toReportClosing, (first, second) -> first));
+        Map<UUID, DocumentTransferTarget> targets = type != DocumentType.MM || found.isEmpty() ? Map.of()
+                : transferTargets.findActive(found.getContent().stream().map(Document::getId).toList()).stream()
+                        .collect(Collectors.toMap(target -> target.getDocument().getId(), Function.identity()));
         return new DocumentPage(summary, imports.findNewestReportGeneratedAt(storeId).orElse(null),
                 found.getContent().stream()
                         .map(document -> documentMapper.toSummary(document, gratisByDocument.get(document.getId()),
@@ -184,7 +206,8 @@ public class DocumentService {
                                 deliveries.containsKey(document.getId())
                                         ? documentMapper.toLinkedDelivery(deliveries.get(document.getId())) : null,
                                 amountChecks.get(document.getId()),
-                                manual.getOrDefault(document.getId(), List.of())))
+                                manual.getOrDefault(document.getId(), List.of()),
+                                closings.get(document.getId()), targets.get(document.getId())))
                         .toList(),
                 found.getNumber(),
                 found.hasNext(), totals.count(), totals.purchaseValue(), totals.saleValueGross());
@@ -219,7 +242,9 @@ public class DocumentService {
                 ofDelivery.stream().map(documentMapper::toCorrectionResponse).toList(), corrected, totals,
                 delivery != null ? documentMapper.toLinkedDelivery(delivery) : null,
                 amountCheckService.checks(List.of(document), ksefInvoices, totalsByDocument).get(document.getId()),
-                manualInvoices.invoicesOf(List.of(document)).getOrDefault(document.getId(), List.of()));
+                manualInvoices.invoicesOf(List.of(document)).getOrDefault(document.getId(), List.of()),
+                document.getType() == DocumentType.MM ? transferTargets.findActive(document.getId()).orElse(null)
+                        : null);
     }
 
     /**

@@ -7,21 +7,34 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronUpIcon,
+  ChartColumnIcon,
   ListIcon,
   MinusIcon,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 
-import { DateField, SegmentedField } from '@/components/form'
+import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatMoney, formatQuantity } from '@/features/documents/format'
-import { salesComparisonKey, useSalesComparison, useSalesReportsOverview } from '@/features/sales/api'
+import {
+  type ReportKind,
+  type SalesChartTarget,
+  salesComparisonKey,
+  useDeliCostsOverview,
+  useSalesComparison,
+  useSalesNomenclatures,
+  useSalesReportsOverview,
+} from '@/features/sales/api'
+import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { salesPaths } from '@/features/sales/paths'
 import {
   canShiftForward,
+  COMPARE_LABELS,
+  type CompareMode,
+  compareModes,
   comparePeriods,
   type DateRange,
   dayCount,
@@ -33,6 +46,7 @@ import {
   type PeriodMode,
   type Periods,
   resolveAnchor,
+  resolveCompareMode,
   shiftAnchor,
 } from '@/features/sales/periods'
 import { addDays, todayIso } from '@/lib/dates'
@@ -40,7 +54,18 @@ import type { SalesComparison, SalesComparisonLevel, SalesComparisonRow, SalesFi
 import { cn } from '@/lib/utils'
 
 /** Okres w adresie strony po polsku, żeby link do raportu otwierał ten sam widok. */
-const MODE_PARAMS: Record<PeriodMode, string> = { day: 'dzien', week: 'tydzien', month: 'miesiac', custom: 'wlasny' }
+const MODE_PARAMS: Record<PeriodMode, string> = {
+  day: 'dzien',
+  week: 'tydzien',
+  month: 'miesiac',
+  custom: 'wlasny',
+}
+const COMPARE_PARAMS: Record<CompareMode, string> = {
+  year: 'rok',
+  previous: 'poprzedni',
+  week: 'tydzien',
+  custom: 'wlasny',
+}
 const ANCHOR_LABELS: Record<Exclude<PeriodMode, 'custom'>, string> = {
   day: 'Dzień',
   week: 'Tydzień z dniem',
@@ -54,13 +79,25 @@ const STEP_LABELS: Record<Exclude<PeriodMode, 'custom'>, [string, string]> = {
 
 type SaleBasis = 'gross' | 'net'
 
+/** Rejon nomenklatury garmażu: koszty garmażu liczą tylko jego sprzedaż. */
+const DELI_REGION = '36'
+
+/** Bez filtra nomenklatury (koszty garmażu i tak liczą tylko rejon 36). */
+const NO_FILTER: string[] = []
+
 /**
- * Porównanie sprzedaży okresu z tymi samymi dniami tygodnia rok wcześniej, w całości (nie dzień po dniu): na górze sumy sklepu,
+ * Porównanie sprzedaży okresu z innym okresem (domyślnie te same dni tygodnia rok wcześniej), w całości (nie dzień po dniu): na górze sumy sklepu,
  * pod nimi tabela wg nomenklatury. Rejon rozwija się w rodziny, rodzina w podrodziny, a podrodzina w sprzedane
  * artykuły; każdy poziom serwer liczy dopiero po rozwinięciu.
+ *
+ * {@code kind="deli"} to koszty garmażu: ten sam widok tylko dla rejonu 36, a zakup FIFO zastępuje wartość protokołów
+ * reprezentacji z okresu. Kosztu nie da się przypisać do rodzin i artykułów, więc koszt i marża są tylko przy całym
+ * garmażu (wiersz 36, Razem, kafelki, wykres rejonu).
  */
-export function SalesComparisonReport({ storeId }: { storeId: string }) {
+export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: string; kind?: ReportKind }) {
+  const deli = kind === 'deli'
   const overview = useSalesReportsOverview(storeId)
+  const costs = useDeliCostsOverview(storeId, deli)
   const [params, setParams] = useSearchParams()
   const [basis, setBasis] = useState<SaleBasis>('gross')
 
@@ -71,7 +108,16 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
   const fallbackDay = lastSaleDate
   const mode = (Object.keys(MODE_PARAMS) as PeriodMode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'day'
   const anchor = resolveAnchor(mode, params.get('data') ?? fallbackDay, lastSaleDate)
-  const custom: DateRange = { from: params.get('od') ?? addDays(fallbackDay, -6), to: params.get('do') ?? fallbackDay }
+  const custom: DateRange = {
+    from: params.get('od') ?? addDays(fallbackDay, -6),
+    to: params.get('do') ?? fallbackDay,
+  }
+  const filter = useMemo(() => (deli ? NO_FILTER : [...new Set(params.getAll('nom'))].sort()), [params, deli])
+  const nomenclatures = useSalesNomenclatures(storeId)
+  const compare = resolveCompareMode(
+    mode,
+    (Object.keys(COMPARE_PARAMS) as CompareMode[]).find((key) => COMPARE_PARAMS[key] === params.get('porownaj')) ?? 'year',
+  )
 
   const update = (changes: Record<string, string>) =>
     setParams(
@@ -83,15 +129,16 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
       { replace: true },
     )
 
-  const customError =
-    mode !== 'custom'
-      ? null
-      : custom.from > custom.to
-        ? 'Data „od” jest późniejsza niż „do”.'
-        : dayCount(custom) > MAX_PERIOD_DAYS
-          ? `Okres może mieć najwyżej ${MAX_PERIOD_DAYS} dni.`
-          : null
-  const periods = comparePeriods(mode, anchor, custom, lastSaleDate)
+  const customError = mode === 'custom' ? rangeError(custom) : null
+  // Bez wybranych dat własne porównanie startuje od roku temu.
+  const yearAgo = comparePeriods(mode, anchor, custom, lastSaleDate, 'year', custom).previous
+  const compareCustom: DateRange = {
+    from: params.get('por_od') ?? yearAgo.from,
+    to: params.get('por_do') ?? yearAgo.to,
+  }
+  const compareError = compare === 'custom' ? rangeError(compareCustom) : null
+  const periods = comparePeriods(mode, anchor, custom, lastSaleDate, compare, compareCustom)
+  const valid = !customError && !compareError
 
   return (
     <>
@@ -106,9 +153,24 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
       </Link>
 
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Porównanie sprzedaży</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{deli ? 'Koszty garmażu' : 'Porównanie sprzedaży'}</h2>
         {overview.data && <ReportFreshness generatedAt={overview.data.lastReportGeneratedAt} />}
       </div>
+      {deli && (
+        <div className="mb-4 max-w-3xl space-y-1 text-sm text-muted-foreground">
+          <p>
+            Sprzedaż nomenklatury 36 (garmaż) zestawiona z protokołami reprezentacji, czyli kosztem składników wydanych
+            na produkcję garmażu. Składniki są z różnych nomenklatur i nie wiadomo, do którego wyrobu poszły, dlatego
+            koszt i marża są tylko przy całym garmażu.
+          </p>
+          {costs.data && (
+            <p className="flex flex-wrap items-center gap-x-2">
+              Protokoły z raportu dokumentów
+              <ReportFreshness generatedAt={costs.data.documentsReportGeneratedAt} />
+            </p>
+          )}
+        </div>
+      )}
 
       <Card className="mb-4 gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,6 +179,23 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
             options={PERIOD_MODES}
             value={mode}
             onChange={(next) => update({ okres: MODE_PARAMS[next] })}
+          />
+          <SegmentedField
+            label="Porównaj z"
+            options={compareModes(mode)}
+            value={compare}
+            onChange={(next) =>
+              // Własny okres zaczyna od tego, z czym porównujemy teraz, żeby było go łatwo przesunąć.
+              update(
+                next === 'custom' && compare !== 'custom'
+                  ? {
+                      porownaj: COMPARE_PARAMS[next],
+                      por_od: periods.previous.from,
+                      por_do: periods.previous.to,
+                    }
+                  : { porownaj: COMPARE_PARAMS[next] },
+              )
+            }
           />
           <SegmentedField
             label="Sprzedaż"
@@ -145,7 +224,16 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                 value={custom.to}
                 onChange={(to) => update({ od: custom.from, do: to })}
                 max={lastSaleDate}
-                shortcuts={lastSaleDate ? [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }] : []}
+                shortcuts={
+                  lastSaleDate
+                    ? [
+                        {
+                          label: 'Ostatni dzień sprzedaży',
+                          value: lastSaleDate,
+                        },
+                      ]
+                    : []
+                }
                 error={customError ?? undefined}
                 className="w-full sm:w-64"
               />
@@ -170,8 +258,18 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
                   !lastSaleDate
                     ? []
                     : mode === 'week'
-                      ? [{ label: 'Ostatni pełny tydzień', value: lastCompleteWeekEnd(lastSaleDate) }]
-                      : [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }]
+                      ? [
+                          {
+                            label: 'Ostatni pełny tydzień',
+                            value: lastCompleteWeekEnd(lastSaleDate),
+                          },
+                        ]
+                      : [
+                          {
+                            label: 'Ostatni dzień sprzedaży',
+                            value: lastSaleDate,
+                          },
+                        ]
                 }
                 className="min-w-0 flex-1 sm:w-72 sm:flex-none"
               />
@@ -187,27 +285,105 @@ export function SalesComparisonReport({ storeId }: { storeId: string }) {
               </Button>
             </div>
           )}
+          {compare === 'custom' && (
+            <>
+              <DateField
+                label="Porównaj od"
+                value={compareCustom.from}
+                onChange={(from) => update({ por_od: from, por_do: compareCustom.to })}
+                max={lastSaleDate}
+                shortcuts={[]}
+                className="w-full sm:w-64"
+              />
+              <DateField
+                label="Porównaj do"
+                value={compareCustom.to}
+                onChange={(to) => update({ por_od: compareCustom.from, por_do: to })}
+                max={lastSaleDate}
+                shortcuts={[]}
+                error={compareError ?? undefined}
+                className="w-full sm:w-64"
+              />
+            </>
+          )}
         </div>
 
-        {!customError && <PeriodsSummary periods={periods} firstSaleDate={overview.data?.firstSaleDate ?? null} lastSaleDate={lastSaleDate} />}
+        {!deli && (
+        <MultiComboboxField
+          label="Nomenklatura"
+          description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
+          options={(nomenclatures.data ?? []).map((item) => ({
+            value: item.code,
+            label: `${displayCode(item.code)} ${item.name.replace(/^\d+_/, '')}`,
+            hint: LEVEL_STYLES[item.level].label,
+          }))}
+          value={filter}
+          onChange={(codes) =>
+            setParams(
+              (current) => {
+                const next = new URLSearchParams(current)
+                next.delete('nom')
+                codes.forEach((code) => next.append('nom', code))
+                return next
+              },
+              { replace: true },
+            )
+          }
+          placeholder={nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'}
+          className="max-w-3xl"
+        />
+        )}
+
+        {valid && (
+          <PeriodsSummary
+            periods={periods}
+            compare={compare}
+            firstSaleDate={overview.data?.firstSaleDate ?? null}
+            lastSaleDate={lastSaleDate}
+            costsCoveredUntil={deli && costs.data ? costs.data.costsCoveredUntil : undefined}
+          />
+        )}
       </Card>
 
       {/* Domyślny dzień to ostatni dzień ze sprzedażą, więc liczymy dopiero, gdy wiadomo, który to. */}
-      {!customError && !overview.isPending && <Comparison storeId={storeId} periods={periods} basis={basis} />}
+      {valid && !overview.isPending && (
+        <Comparison
+          storeId={storeId}
+          kind={kind}
+          periods={periods}
+          filter={filter}
+          compare={compare}
+          basis={basis}
+          lastSaleDate={lastSaleDate}
+        />
+      )}
     </>
   )
 }
 
+function rangeError(range: DateRange) {
+  if (range.from > range.to) return 'Data „od” jest późniejsza niż „do”.'
+  if (dayCount(range) > MAX_PERIOD_DAYS) return `Okres może mieć najwyżej ${MAX_PERIOD_DAYS} dni.`
+  return null
+}
+
 function PeriodsSummary({
   periods,
+  compare,
   firstSaleDate,
   lastSaleDate,
+  costsCoveredUntil,
 }: {
   periods: Periods
+  compare: CompareMode
   firstSaleDate: string | null
   lastSaleDate: string | null
+  /** Koszty garmażu: do kiedy sięgają wgrane raporty dokumentów ({@code null} = brak); bez wartości pomijane. */
+  costsCoveredUntil?: string | null
 }) {
   const days = dayCount(periods.current)
+  const comparedDays = dayCount(periods.previous)
+  const label = COMPARE_LABELS[compare].column
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t pt-4 text-sm tabular-nums">
       <p>
@@ -215,16 +391,36 @@ function PeriodsSummary({
         <span className="font-medium">{formatRange(periods.current)}</span>
       </p>
       <p>
-        <span className="text-muted-foreground">Rok temu </span>
+        <span className="text-muted-foreground">{label} </span>
         <span className="font-medium">{formatRange(periods.previous)}</span>
       </p>
-      <p className="text-muted-foreground">{daysLabel(days)} do {daysLabel(days)}</p>
+      <p className="text-muted-foreground">
+        {daysLabel(days)} do {daysLabel(comparedDays)}
+      </p>
+      {days !== comparedDays && (
+        <p className="text-amber-700 dark:text-amber-400">Okresy mają różną liczbę dni, sumy nie są porównywalne wprost</p>
+      )}
+      {lastSaleDate && periods.previous.to > lastSaleDate && (
+        <p className="text-amber-700 dark:text-amber-400">
+          {label} niepełny: sprzedaż jest wgrana do {formatRange({ from: lastSaleDate, to: lastSaleDate })}
+        </p>
+      )}
       {lastSaleDate && periods.current.to > lastSaleDate && (
-        <p className="text-amber-700 dark:text-amber-400">Sprzedaż jest wgrana do {formatRange({ from: lastSaleDate, to: lastSaleDate })}</p>
+        <p className="text-amber-700 dark:text-amber-400">
+          Sprzedaż jest wgrana do {formatRange({ from: lastSaleDate, to: lastSaleDate })}
+        </p>
       )}
       {firstSaleDate && periods.previous.from < firstSaleDate && (
         <p className="text-amber-700 dark:text-amber-400">
-          Rok temu niepełny: sprzedaż jest wgrana od {formatRange({ from: firstSaleDate, to: firstSaleDate })}
+          {label} niepełny: sprzedaż jest wgrana od {formatRange({ from: firstSaleDate, to: firstSaleDate })}
+        </p>
+      )}
+      {costsCoveredUntil === null && (
+        <p className="text-amber-700 dark:text-amber-400">Brak protokołów reprezentacji: wgraj raport dokumentów w Imporcie danych</p>
+      )}
+      {costsCoveredUntil && (periods.current.to > costsCoveredUntil || periods.previous.to > costsCoveredUntil) && (
+        <p className="text-amber-700 dark:text-amber-400">
+          Protokoły reprezentacji są wgrane do {formatRange({ from: costsCoveredUntil, to: costsCoveredUntil })}
         </p>
       )}
     </div>
@@ -232,14 +428,16 @@ function PeriodsSummary({
 }
 
 /** Wartość sprzedaży wg wybranej podstawy: brutto jak na paragonie albo netto, od którego liczy się marża. */
-const saleValue = (figures: SalesFigures, basis: SaleBasis) =>
-  basis === 'gross' ? figures.saleValueGross : figures.saleValueNet
+const saleValue = (figures: SalesFigures, basis: SaleBasis) => (basis === 'gross' ? figures.saleValueGross : figures.saleValueNet)
 
-/** % marży od sprzedaży netto, jak w raporcie systemu sklepu. */
+/** % marży od sprzedaży netto, jak w raporcie systemu sklepu; bez marży (koszty garmażu poniżej rejonu) pusty. */
 const marginPercent = (figures: SalesFigures) =>
-  figures.saleValueNet === 0 ? null : (figures.marginValue / figures.saleValueNet) * 100
+  figures.marginValue == null || figures.saleValueNet === 0 ? null : (figures.marginValue / figures.saleValueNet) * 100
 
-const percentFormat = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const percentFormat = new Intl.NumberFormat('pl-PL', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
 
 /** Klucz rozwijanego wiersza: kod nomenklatury jest unikalny na wszystkich poziomach ("01", "0101", "010101"). */
 const UNASSIGNED_KEY = 'brak'
@@ -287,12 +485,15 @@ const barClass = 'before:absolute before:inset-y-0 before:left-0 before:w-1'
 
 type Tree = {
   storeId: string
+  kind: ReportKind
   periods: Periods
+  filter: string[]
   basis: SaleBasis
   expanded: ReadonlySet<string>
   toggle: (key: string) => void
   /** Po wczytaniu poziomu przeliczamy przypięte wiersze i ściągę (zmieniła się tabela). */
   onLevelLoaded: () => void
+  openChart: (target: SalesChartTarget) => void
 }
 
 const TreeContext = createContext<Tree | null>(null)
@@ -304,15 +505,43 @@ function useTree() {
 }
 
 /** Wymiary tabeli, do których przypięte wiersze dopasowują swoje kolumny. */
-type TableLayout = { headerHeight: number; tableWidth: number; widths: number[] }
+type TableLayout = {
+  headerHeight: number
+  tableWidth: number
+  widths: number[]
+}
 
 /** Pozycja ściągi: każdy rejon, a pod rozwiniętymi rejonami ich rodziny i podrodziny. */
-type NavItem = { key: string; row: SalesComparisonRow; level: NomenclatureLevel; depth: number }
+type NavItem = {
+  key: string
+  row: SalesComparisonRow
+  level: NomenclatureLevel
+  depth: number
+}
 
-function Comparison({ storeId, periods, basis }: { storeId: string; periods: Periods; basis: SaleBasis }) {
-  const { data, isPending, isError, refetch, isPlaceholderData } = useSalesComparison(storeId, periods, '')
+function Comparison({
+  storeId,
+  kind,
+  periods,
+  filter,
+  compare,
+  basis,
+  lastSaleDate,
+}: {
+  storeId: string
+  kind: ReportKind
+  periods: Periods
+  filter: string[]
+  compare: CompareMode
+  basis: SaleBasis
+  lastSaleDate: string
+}) {
+  const deli = kind === 'deli'
+  const { data, isPending, isError, refetch, isPlaceholderData } = useSalesComparison(storeId, kind, periods, filter, '')
+  const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const queryClient = useQueryClient()
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
+  // W kosztach garmażu jest jeden rejon, więc od razu widać jego rodziny.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(deli ? [DELI_REGION] : []))
   const [pinned, setPinned] = useState<string[]>([])
   const [current, setCurrent] = useState<string | null>(null)
   const [layout, setLayout] = useState<TableLayout | null>(null)
@@ -418,11 +647,7 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
       0,
     )
     container.scrollTo({
-      top:
-        container.scrollTop +
-        row.getBoundingClientRect().top -
-        head.getBoundingClientRect().bottom -
-        ancestorsHeight,
+      top: container.scrollTop + row.getBoundingClientRect().top - head.getBoundingClientRect().bottom - ancestorsHeight,
       behavior,
     })
   }, [])
@@ -434,8 +659,18 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
   }
 
   const tree = useMemo<Tree>(
-    () => ({ storeId, periods, basis, expanded, toggle, onLevelLoaded }),
-    [storeId, periods, basis, expanded, toggle, onLevelLoaded],
+    () => ({
+      storeId,
+      kind,
+      periods,
+      filter,
+      basis,
+      expanded,
+      toggle,
+      onLevelLoaded,
+      openChart: setChart,
+    }),
+    [storeId, kind, periods, filter, basis, expanded, toggle, onLevelLoaded],
   )
 
   if (isError && !data) {
@@ -451,7 +686,7 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
 
   /** Wiersze poziomu z pamięci zapytań: każdy rozwinięty wiersz wczytał już swój poziom. */
   const cachedLevel = (parent: string) =>
-    queryClient.getQueryData<SalesComparison>(salesComparisonKey(storeId, periods, parent))
+    queryClient.getQueryData<SalesComparison>(salesComparisonKey(storeId, kind, periods, filter, parent))
 
   const pinnedRows = pinned.flatMap((key) => {
     const level = cachedLevel(parentOf(key))
@@ -481,19 +716,22 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
           previous={data && saleValue(data.previousTotal, basis)}
           current={data && saleValue(data.currentTotal, basis)}
           format={formatZloty}
+          compare={compare}
         />
         <TotalTile
           label="Marża"
-          previous={data?.previousTotal.marginValue}
-          current={data?.currentTotal.marginValue}
+          previous={data?.previousTotal.marginValue ?? undefined}
+          current={data?.currentTotal.marginValue ?? undefined}
           format={formatZloty}
+          compare={compare}
           note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
         />
         <TotalTile
-          label="Zakup FIFO"
-          previous={data?.previousTotal.costValue}
-          current={data?.currentTotal.costValue}
+          label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
+          previous={data?.previousTotal.costValue ?? undefined}
+          current={data?.currentTotal.costValue ?? undefined}
           format={formatZloty}
+          compare={compare}
           neutral
         />
         <TotalTile
@@ -501,14 +739,19 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
           previous={data?.previousTotal.quantity}
           current={data?.currentTotal.quantity}
           format={formatQuantity}
+          compare={compare}
         />
       </div>
 
       {empty ? (
         <Card className="items-center px-6 py-10 text-center">
-          <p className="font-medium">Brak sprzedaży w obu okresach</p>
+          <p className="font-medium">
+            {deli ? 'Brak sprzedaży garmażu i protokołów reprezentacji w obu okresach' : 'Brak sprzedaży w obu okresach'}
+          </p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            Wybierz inny okres albo wgraj raport sprzedaży w Imporcie danych.
+            {deli
+              ? 'Wybierz inny okres albo wgraj raport sprzedaży i raport dokumentów w Imporcie danych.'
+              : 'Wybierz inny okres albo wgraj raport sprzedaży w Imporcie danych.'}
           </p>
         </Card>
       ) : (
@@ -533,11 +776,7 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
             )}
           </div>
           <Card ref={cardRef} className="overflow-hidden py-0">
-            <div
-              ref={scrollRef}
-              onScroll={updatePinned}
-              className="relative max-h-[80svh] overflow-auto overscroll-contain"
-            >
+            <div ref={scrollRef} onScroll={updatePinned} className="relative max-h-[80svh] overflow-auto overscroll-contain">
               {pinnedRows.length > 0 && layout && (
                 // Wysokość 0: przypięte wiersze leżą nad tabelą i niczego nie przesuwają.
                 <div className="pointer-events-none sticky z-20 h-0" style={{ top: layout.headerHeight }}>
@@ -582,16 +821,18 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
               <table ref={tableRef} className="w-full caption-bottom text-sm tabular-nums">
                 <TableHeader ref={headRef} className="sticky top-0 z-30 bg-card shadow-[0_1px_0_var(--border)]">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead
-                      rowSpan={2}
-                      data-column="name"
-                      className="sticky left-0 z-10 min-w-64 bg-card pl-4 align-bottom"
-                    >
+                    <TableHead rowSpan={2} data-column="name" className="sticky left-0 z-10 min-w-64 bg-card pl-4 align-bottom">
                       Nomenklatura
                     </TableHead>
                     {GROUPS.map((group) => (
                       <TableHead key={group.key} colSpan={group.columns.length} className="h-9 border-l text-center">
-                        {group.key === 'sale' ? (basis === 'gross' ? 'Sprzedaż brutto zł' : 'Sprzedaż netto zł') : group.label}
+                        {group.key === 'sale'
+                          ? basis === 'gross'
+                            ? 'Sprzedaż brutto zł'
+                            : 'Sprzedaż netto zł'
+                          : group.key === 'cost' && deli
+                            ? 'Reprezentacja zł'
+                            : group.label}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -601,12 +842,9 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
                         <TableHead
                           key={`${group.key}-${column}`}
                           data-leaf
-                          className={cn(
-                            'h-8 text-right text-xs font-normal text-muted-foreground',
-                            index === 0 && 'border-l',
-                          )}
+                          className={cn('h-8 text-right text-xs font-normal text-muted-foreground', index === 0 && 'border-l')}
                         >
-                          {column}
+                          {columnLabel(column, compare)}
                         </TableHead>
                       )),
                     )}
@@ -635,6 +873,16 @@ function Comparison({ storeId, periods, basis }: { storeId: string; periods: Per
           <NomenclatureNav items={navItems} current={current} onJump={(key) => scrollToRow(key, true)} />
         </>
       )}
+
+      <SalesChartDialog
+        storeId={storeId}
+        kind={kind}
+        target={chart}
+        filter={filter}
+        basis={basis}
+        lastSaleDate={lastSaleDate}
+        onClose={() => setChart(null)}
+      />
     </div>
   )
 }
@@ -661,11 +909,19 @@ function firstRowBelow(rows: HTMLTableRowElement[], probe: number) {
  * ma osobną kolumnę zmiany (zmiana kwoty i różnica % marży w punktach procentowych).
  */
 const GROUPS = [
-  { key: 'quantity', label: 'Ilość', columns: ['Rok temu', 'Aktualny'] },
-  { key: 'cost', label: 'Zakup FIFO zł', columns: ['Rok temu', 'Aktualny'] },
-  { key: 'sale', label: 'Sprzedaż zł', columns: ['Rok temu', 'Aktualny'] },
-  { key: 'margin', label: 'Marża zł', columns: ['Rok temu', 'Aktualny', 'Zmiana'] },
+  { key: 'quantity', label: 'Ilość', columns: ['previous', 'current'] },
+  { key: 'cost', label: 'Zakup FIFO zł', columns: ['previous', 'current'] },
+  { key: 'sale', label: 'Sprzedaż zł', columns: ['previous', 'current'] },
+  {
+    key: 'margin',
+    label: 'Marża zł',
+    columns: ['previous', 'current', 'change'],
+  },
 ] as const
+
+/** Nagłówek kolumny; porównywany okres nazywa się wg trybu porównania (Rok temu, Poprzedni...). */
+const columnLabel = (column: (typeof GROUPS)[number]['columns'][number], compare: CompareMode) =>
+  column === 'previous' ? COMPARE_LABELS[compare].column : column === 'current' ? 'Aktualny' : 'Zmiana'
 
 /** Numery kolumn liczb, od których zaczyna się grupa (z kreską po lewej). */
 const GROUP_STARTS = new Set(
@@ -688,8 +944,8 @@ type LevelProps = {
 
 /** Wiersze jednego poziomu drzewa; rozwinięty wiersz wstawia pod sobą wiersze następnego poziomu. */
 function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
-  const { storeId, periods, basis, expanded, toggle, onLevelLoaded } = useTree()
-  const { data, isPending, isError, refetch } = useSalesComparison(storeId, periods, parent, unassigned)
+  const { storeId, kind, periods, filter, basis, expanded, toggle, onLevelLoaded, openChart } = useTree()
+  const { data, isPending, isError, refetch } = useSalesComparison(storeId, kind, periods, filter, parent, unassigned)
   const depth = ancestors.length
 
   useEffect(() => {
@@ -730,10 +986,7 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
         <TableRow
           data-key={expandable ? key : undefined}
           data-ancestors={ancestors.join(',')}
-          className={cn(
-            expandable && 'cursor-pointer',
-            style ? (open ? style.open : style.row) : 'bg-card hover:bg-muted',
-          )}
+          className={cn(expandable && 'cursor-pointer', style ? (open ? style.open : style.row) : 'bg-card hover:bg-muted')}
           onClick={expandable ? () => toggle(key) : undefined}
         >
           <TableCell
@@ -749,30 +1002,33 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
                 style={{ left: `calc(${indent(index)} + 0.5rem)` }}
               />
             ))}
-            {expandable ? (
-              <button
-                type="button"
-                aria-expanded={open}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  toggle(key)
-                }}
-                className="flex w-full items-start gap-1.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <ChevronRightIcon
-                  aria-hidden
-                  className={cn(
-                    'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none',
-                    open && 'rotate-90 text-foreground',
-                  )}
-                />
-                <RowLabel row={row} level={level} />
-              </button>
-            ) : (
-              <div className="pl-5.5">
-                <RowLabel row={row} level={level} />
-              </div>
-            )}
+            <div className="flex items-start gap-1">
+              {expandable ? (
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggle(key)
+                  }}
+                  className="flex min-w-0 flex-1 items-start gap-1.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <ChevronRightIcon
+                    aria-hidden
+                    className={cn(
+                      'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none',
+                      open && 'rotate-90 text-foreground',
+                    )}
+                  />
+                  <RowLabel row={row} level={level} />
+                </button>
+              ) : (
+                <div className="min-w-0 flex-1 pl-5.5">
+                  <RowLabel row={row} level={level} />
+                </div>
+              )}
+              <ChartButton onClick={() => openChart(chartTarget(row, level, key))} />
+            </div>
           </TableCell>
           <FigureCells previous={row.previous} current={row.current} basis={basis} strong={depth === 0 || open} />
         </TableRow>
@@ -786,6 +1042,52 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
       </Fragment>
     )
   })
+}
+
+/** Ikonka wykresu przy nazwie wiersza; nie rozwija wiersza. */
+function ChartButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      aria-label="Wykres sprzedaży"
+      title="Wykres sprzedaży"
+      className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+    >
+      <ChartColumnIcon />
+    </Button>
+  )
+}
+
+function chartTarget(row: SalesComparisonRow, level: SalesComparisonLevel, key: string): SalesChartTarget {
+  if (level === 'PRODUCT')
+    return {
+      kind: 'article',
+      itm8: row.code,
+      name: row.name,
+      ean: row.ean,
+      brand: row.brand,
+    }
+  if (key === UNASSIGNED_KEY) {
+    return {
+      kind: 'group',
+      code: '',
+      unassigned: true,
+      name: 'Bez nomenklatury',
+      levelLabel: 'Artykuły spoza kartoteki',
+    }
+  }
+  return {
+    kind: 'group',
+    code: row.code,
+    unassigned: false,
+    name: displayName(row) ?? 'Brak nazwy w nomenklaturze',
+    levelLabel: `${LEVEL_STYLES[level].label} ${displayCode(row.code)}`,
+  }
 }
 
 /** Wcięcie poziomu drzewa w rem (rozmiary interfejsu rosną z bazowym rem). */
@@ -816,7 +1118,13 @@ function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesCompari
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span className="shrink-0 text-xs text-muted-foreground">{displayCode(row.code)}</span>
-      <span className={cn(level === 'REGION' && 'font-semibold', level === 'FAMILY' && 'font-medium', !row.name && 'text-muted-foreground')}>
+      <span
+        className={cn(
+          level === 'REGION' && 'font-semibold',
+          level === 'FAMILY' && 'font-medium',
+          !row.name && 'text-muted-foreground',
+        )}
+      >
         {displayName(row) ?? 'Brak nazwy w nomenklaturze'}
       </span>
     </span>
@@ -936,11 +1244,20 @@ function FigureCells({
         <ChangeLine previous={previous.quantity} current={current.quantity} />
       </TableCell>
 
-      <TableCell className={previousClass}>{formatMoney(previous.costValue)}</TableCell>
-      <TableCell className={valueClass}>
-        {formatMoney(current.costValue)}
-        <ChangeLine previous={previous.costValue} current={current.costValue} neutral />
-      </TableCell>
+      {previous.costValue == null || current.costValue == null ? (
+        <>
+          <EmptyCell className={previousClass} />
+          <EmptyCell className={valueClass} />
+        </>
+      ) : (
+        <>
+          <TableCell className={previousClass}>{formatMoney(previous.costValue)}</TableCell>
+          <TableCell className={valueClass}>
+            {formatMoney(current.costValue)}
+            <ChangeLine previous={previous.costValue} current={current.costValue} neutral />
+          </TableCell>
+        </>
+      )}
 
       <TableCell className={previousClass}>{formatMoney(saleValue(previous, basis))}</TableCell>
       <TableCell className={valueClass}>
@@ -948,25 +1265,48 @@ function FigureCells({
         <ChangeLine previous={saleValue(previous, basis)} current={saleValue(current, basis)} />
       </TableCell>
 
-      <TableCell className={previousClass}>
-        {formatMoney(previous.marginValue)}
-        <MarginPercent figures={previous} />
-      </TableCell>
-      <TableCell className={valueClass}>
-        {formatMoney(current.marginValue)}
-        <MarginPercent figures={current} />
-      </TableCell>
-      <TableCell className="text-right">
-        <ChangeLine previous={previous.marginValue} current={current.marginValue} large />
-        <MarginPercentChange previous={previous} current={current} />
-      </TableCell>
+      {previous.marginValue == null || current.marginValue == null ? (
+        <>
+          <EmptyCell className={previousClass} />
+          <EmptyCell className={valueClass} />
+          <EmptyCell className="text-right" />
+        </>
+      ) : (
+        <>
+          <TableCell className={previousClass}>
+            {formatMoney(previous.marginValue)}
+            <MarginPercent figures={previous} />
+          </TableCell>
+          <TableCell className={valueClass}>
+            {formatMoney(current.marginValue)}
+            <MarginPercent figures={current} />
+          </TableCell>
+          <TableCell className="text-right">
+            <ChangeLine previous={previous.marginValue} current={current.marginValue} large />
+            <MarginPercentChange previous={previous} current={current} />
+          </TableCell>
+        </>
+      )}
     </>
+  )
+}
+
+/** Kosztu garmażu nie da się przypisać do rodzin i artykułów, więc ich koszt i marża są puste. */
+function EmptyCell({ className }: { className: string }) {
+  return (
+    <TableCell className={cn(className, 'text-muted-foreground')} title="Koszt jest tylko przy całym garmażu">
+      –
+    </TableCell>
   )
 }
 
 function MarginPercent({ figures }: { figures: SalesFigures }) {
   const percent = marginPercent(figures)
-  return <span className="block text-xs font-normal text-muted-foreground">{percent == null ? '–' : `${percentFormat.format(percent)}%`}</span>
+  return (
+    <span className="block text-xs font-normal text-muted-foreground">
+      {percent == null ? '–' : `${percentFormat.format(percent)}%`}
+    </span>
+  )
 }
 
 /** Różnica % marży w punktach procentowych. */
@@ -1023,7 +1363,9 @@ function ChangeLine({
   large?: boolean
 }) {
   const { label, direction } = change(previous, current)
-  return <span className={cn('block font-medium', large ? 'text-sm' : 'text-xs', directionClass(direction, neutral))}>{label}</span>
+  return (
+    <span className={cn('block font-medium', large ? 'text-sm' : 'text-xs', directionClass(direction, neutral))}>{label}</span>
+  )
 }
 
 function TotalTile({
@@ -1031,10 +1373,12 @@ function TotalTile({
   previous,
   current,
   format,
+  compare,
   neutral,
   note,
 }: {
   label: string
+  compare: CompareMode
   previous: number | undefined
   current: number | undefined
   format: (value: number) => string
@@ -1053,7 +1397,9 @@ function TotalTile({
             <p className={cn('text-sm font-medium tabular-nums', directionClass(delta!.direction, neutral))}>{delta!.label}</p>
           </div>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm text-muted-foreground tabular-nums">
-            <p>rok temu {format(previous)}</p>
+            <p>
+              {COMPARE_LABELS[compare].inline} {format(previous)}
+            </p>
             {note}
           </div>
         </>

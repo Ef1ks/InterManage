@@ -19,6 +19,8 @@ public interface NomenclatureRepository extends JpaRepository<Nomenclature, UUID
 
     List<Nomenclature> findByStoreIdAndCodeIn(UUID storeId, Collection<String> codes);
 
+    List<Nomenclature> findByStoreIdAndLevelOrderByCode(UUID storeId, NomenclatureLevel level);
+
     long countByStoreIdAndLevel(UUID storeId, NomenclatureLevel level);
 
     /** Blokada importu nomenklatury sklepu do końca transakcji, jak w {@link DocumentRepository#lockForImport}. */

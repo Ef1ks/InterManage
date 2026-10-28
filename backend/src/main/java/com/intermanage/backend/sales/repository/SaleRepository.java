@@ -102,10 +102,18 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
         BigDecimal getCurrentMarginValue();
     }
 
+    /** Warunek filtra nomenklatury na produkcie {@code p}: pusta tablica {@code codes} = bez filtra. */
+    String IN_CODES = """
+            (cardinality(cast(:codes as varchar[])) = 0
+             or exists (select 1 from unnest(cast(:codes as varchar[])) c(code)
+                        where p.subfamily_code like c.code || '%'))
+            """;
+
     /**
      * Sprzedaż każdego artykułu (ITM8, ze wszystkich EAN-ów) w obu okresach, z produktem z kartoteki, jeśli jest.
      * Okresy mogą na siebie nachodzić albo być daleko od siebie (rok do roku), więc każdy dzień trafia do sum okresów,
-     * w których leży. Artykuł bez sprzedaży w jednym z okresów ma tam zera.
+     * w których leży. Artykuł bez sprzedaży w jednym z okresów ma tam zera. Niepuste {@code codes} zostawia tylko
+     * artykuły z wybranych pozycji nomenklatury (dowolnego poziomu), więc odpada też sprzedaż bez nomenklatury.
      */
     String ARTICLE_SALES = """
             with article as (
@@ -138,8 +146,10 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                 select a.*, p.subfamily_code, p.name, p.ean, p.brand
                 from article a
                 left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+                where """ + IN_CODES + """
             )
             """;
+
 
     /**
      * Porównanie na jednym poziomie nomenklatury: kod to pierwsze {@code codeLength} cyfr podrodziny artykułu
@@ -172,7 +182,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             order by g.code nulls last
             """, nativeQuery = true)
     List<ComparisonRow> compareByNomenclature(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
-            LocalDate currentFrom, LocalDate currentTo, int codeLength, String parent);
+            LocalDate currentFrom, LocalDate currentTo, int codeLength, String parent, String[] codes);
 
     /**
      * Porównanie artykułów jednej podrodziny ({@code subfamily}), a przy pustym tekście artykułów bez nomenklatury
@@ -188,5 +198,86 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             order by current_sale_value_gross desc, previous_sale_value_gross desc, itm8
             """, nativeQuery = true)
     List<ComparisonRow> compareArticles(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
-            LocalDate currentFrom, LocalDate currentTo, String subfamily);
+            LocalDate currentFrom, LocalDate currentTo, String subfamily, String[] codes);
+
+    /** Sprzedaż jednego dnia; dni bez sprzedaży nie ma w wyniku. */
+    interface DayRow {
+        LocalDate getSaleDate();
+
+        BigDecimal getQuantity();
+
+        BigDecimal getCostValue();
+
+        BigDecimal getSaleValueGross();
+
+        BigDecimal getSaleValueNet();
+
+        BigDecimal getMarginValue();
+    }
+
+    String DAY_SUMS = """
+            select s.sale_date, sum(s.quantity) as quantity, sum(s.cost_value) as cost_value,
+                   sum(s.sale_value_gross) as sale_value_gross, sum(s.sale_value_net) as sale_value_net,
+                   sum(s.margin_value) as margin_value
+            """;
+
+    /** Sprzedaż artykułu (ITM8, ze wszystkich EAN-ów) dzień po dniu; z indeksu (sklep, ITM8, dzień). */
+    @Query(value = DAY_SUMS + """
+            from sales s
+            where s.store_id = :storeId and s.itm8 = :itm8 and s.sale_date between :from and :to
+            group by s.sale_date
+            order by s.sale_date
+            """, nativeQuery = true)
+    List<DayRow> articleHistory(UUID storeId, String itm8, LocalDate from, LocalDate to);
+
+    /**
+     * Sprzedaż pozycji nomenklatury dzień po dniu: artykułów, których podrodzina zaczyna się od {@code prefix}
+     * (pusty = cały sklep), a przy {@code unassigned} artykułów bez nomenklatury. Z filtrem {@code codes} jak porównanie.
+     */
+    @Query(value = DAY_SUMS + """
+            from sales s
+            left join products p on p.store_id = :storeId and p.itm8 = s.itm8
+            where s.store_id = :storeId and s.sale_date between :from and :to
+              and case when :unassigned then p.subfamily_code is null
+                       else :prefix = '' or p.subfamily_code like :prefix || '%' end
+              and """ + IN_CODES + """
+            group by s.sale_date
+            order by s.sale_date
+            """, nativeQuery = true)
+    List<DayRow> groupHistory(UUID storeId, String prefix, boolean unassigned, String[] codes, LocalDate from,
+            LocalDate to);
+
+    /** Sprzedaż rejonu nomenklatury za okres; pusty kod = sprzedaż artykułów bez nomenklatury (spoza kartoteki). */
+    interface RegionSales {
+        String getRegionCode();
+
+        BigDecimal getCostValue();
+
+        BigDecimal getSaleValueGross();
+
+        BigDecimal getSaleValueNet();
+
+        BigDecimal getMarginValue();
+    }
+
+    /**
+     * Sprzedaż okresu po rejonach nomenklatury: najpierw suma każdego ITM8 (z klucza sklep + dzień), dopiero potem
+     * łączenie z kartoteką, żeby nie łączyć z produktami każdego wiersza dnia.
+     */
+    @Query(value = """
+            with article as (
+                select itm8, sum(cost_value) as cost_value, sum(sale_value_gross) as sale_value_gross,
+                       sum(sale_value_net) as sale_value_net, sum(margin_value) as margin_value
+                from sales
+                where store_id = :storeId and sale_date between :from and :to
+                group by itm8
+            )
+            select coalesce(left(p.subfamily_code, 2), '') as region_code,
+                   sum(a.cost_value) as cost_value, sum(a.sale_value_gross) as sale_value_gross,
+                   sum(a.sale_value_net) as sale_value_net, sum(a.margin_value) as margin_value
+            from article a
+            left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+            group by 1
+            """, nativeQuery = true)
+    List<RegionSales> sumByRegion(UUID storeId, LocalDate from, LocalDate to);
 }

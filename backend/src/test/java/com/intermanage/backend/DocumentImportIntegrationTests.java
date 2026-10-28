@@ -151,15 +151,16 @@ class DocumentImportIntegrationTests {
         }
         upload(owner, report(STORE_NUMBER, lines)).andExpect(status().isCreated());
 
+        // Domyślnie od najwyższego numeru.
         mvc.perform(get(url("/wz")).cookie(owner))
                 .andExpect(jsonPath("$.documents.length()").value(100))
-                .andExpect(jsonPath("$.documents[0].number").value("WZ0000"))
+                .andExpect(jsonPath("$.documents[0].number").value("WZ0100"))
                 .andExpect(jsonPath("$.hasMore").value(true))
                 .andExpect(jsonPath("$.matchingCount").value(101))
                 .andExpect(jsonPath("$.purchaseTotal").value(101));
         mvc.perform(get(url("/wz")).param("page", "1").cookie(owner))
                 .andExpect(jsonPath("$.documents.length()").value(1))
-                .andExpect(jsonPath("$.documents[0].number").value("WZ0100"))
+                .andExpect(jsonPath("$.documents[0].number").value("WZ0000"))
                 .andExpect(jsonPath("$.hasMore").value(false));
     }
 
@@ -344,6 +345,20 @@ class DocumentImportIntegrationTests {
                 .andExpect(jsonPath("$.closings.length()").value(1))
                 .andExpect(jsonPath("$.closings[0].cancellable").value(true))
                 .andExpect(jsonPath("$.pendingChanges").value(0));
+
+        // Lista przyjęć: zamknięte w raporcie (z okresem) i jeszcze nie; ukryci dostawcy znikają z listy i sum.
+        mvc.perform(get(url(store, "/pz")).param("closed", "with").cookie(owner))
+                .andExpect(jsonPath("$.documents.length()").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(deliveryId))
+                .andExpect(jsonPath("$.documents[0].reportClosing.id").value(closing))
+                .andExpect(jsonPath("$.documents[0].reportClosing.periodFrom").value("2026-10-21"));
+        mvc.perform(get(url(store, "/pz")).param("closed", "without").cookie(owner))
+                .andExpect(jsonPath("$.documents.length()").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(otherId))
+                .andExpect(jsonPath("$.documents[0].reportClosing").isEmpty());
+        mvc.perform(get(url(store, "/pz")).param("hiddenSuppliers", "108").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(deliveryId));
         org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
                         get(url(store, "/pz/report-closings/" + closing + "/xlsx")).cookie(owner))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray()))

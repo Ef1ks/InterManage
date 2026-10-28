@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { DocumentDetail } from '@/features/documents/DocumentDetail'
 import { DocumentsList } from '@/features/documents/DocumentsList'
 import { DocumentTypesGrid } from '@/features/documents/DocumentTypesGrid'
+import { IncomingTransferDetail, IncomingTransfersPage } from '@/features/documents/IncomingTransfers'
 import { documentPaths } from '@/features/documents/format'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import type { StoreSummary } from '@/lib/types'
@@ -32,6 +33,9 @@ function StoreDocuments({ store }: { store: StoreSummary }) {
       <PageHeader title="Dokumenty" description={storeLabel(store)} />
       <Routes>
         <Route index element={<DocumentTypesGrid storeId={store.id} />} />
+        {/* Ruchy międzymagazynowe innych sklepów; stała ścieżka wygrywa z ":type". */}
+        <Route path="do-wprowadzenia" element={<IncomingTransfersPage storeId={store.id} />} />
+        <Route path="do-wprowadzenia/:transferId" element={<IncomingTransferDetail storeId={store.id} />} />
         <Route path=":type" element={<DocumentsList storeId={store.id} />} />
         <Route path=":type/:documentId" element={<DocumentDetail storeId={store.id} />} />
         <Route path="*" element={<Navigate to={documentPaths.overview} replace />} />

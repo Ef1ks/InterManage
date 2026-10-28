@@ -5,6 +5,8 @@ import java.math.BigDecimal;
 /**
  * Sprzedaż za okres: ilość (sztuki i kg razem, jak w raporcie), koszt zakupu FIFO netto, sprzedaż brutto i netto
  * po rabacie oraz marża FIFO. % marży i zmiany liczy front z tych sum, bo procentów nie da się sumować.
+ * W raporcie kosztów garmażu {@code costValue} to wartość protokołów reprezentacji, a {@code costValue}
+ * i {@code marginValue} są puste poniżej całego garmażu (kosztu nie da się przypisać do rodzin i artykułów).
  */
 public record SalesFigures(
         BigDecimal quantity,

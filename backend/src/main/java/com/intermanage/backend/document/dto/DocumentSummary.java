@@ -30,5 +30,9 @@ public record DocumentSummary(
         /** Przyjęcie z fakturą: porównanie kwot netto z fakturami ({@code null} bez faktury). */
         InvoiceAmountCheck invoiceAmountCheck,
         /** Faktury spoza KSeF wpisane ręcznie (przyjęcia i ich korekty). */
-        List<ManualInvoice> manualInvoices) {
+        List<ManualInvoice> manualInvoices,
+        /** Przyjęcie w aktywnym zamkniętym raporcie okresowym ({@code null}, gdy jeszcze w żadnym). */
+        DocumentReportClosing reportClosing,
+        /** Ruch międzymagazynowy: sklep zaprzyjaźniony, dla którego go wystawiono. */
+        TransferTargetResponse transferTarget) {
 }

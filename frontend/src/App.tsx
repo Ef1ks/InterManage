@@ -14,6 +14,7 @@ import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { ImportPage } from '@/features/imports/ImportPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
 import { RolesPage } from '@/features/settings/RolesPage'
+import { StoreSettingsPage } from '@/features/store-settings/StoreSettingsPage'
 import { StoresPage } from '@/features/settings/StoresPage'
 import { UsersPage } from '@/features/settings/UsersPage'
 import { TOOL_ROUTES } from '@/features/tools/categories'
@@ -62,6 +63,15 @@ const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: '/konto', element: <AccountPage /> },
       ...toolRoutes,
+      {
+        // Ustawienia wybranego sklepu: sekcje według uprawnień (budżet rejonów, sklepy zaprzyjaźnione).
+        path: '/ustawienia-sklepu/*',
+        element: (
+          <RequireAuth>
+            <StoreSettingsPage />
+          </RequireAuth>
+        ),
+      },
       {
         path: '/ustawienia/sklepy',
         element: (

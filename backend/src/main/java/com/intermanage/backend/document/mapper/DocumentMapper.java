@@ -13,22 +13,28 @@ import com.intermanage.backend.document.dto.DocumentGratisResponse;
 import com.intermanage.backend.document.dto.DocumentImportResponse;
 import com.intermanage.backend.document.dto.DocumentResponse.DocumentLineResponse;
 import com.intermanage.backend.document.dto.DocumentResponse;
+import com.intermanage.backend.document.dto.DocumentReportClosing;
 import com.intermanage.backend.document.dto.DocumentSummary;
 import com.intermanage.backend.document.dto.DocumentTypeSummary;
 import com.intermanage.backend.document.dto.InvoiceAmountCheck;
 import com.intermanage.backend.document.dto.LinkedDeliOrder;
 import com.intermanage.backend.document.dto.LinkedDelivery;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
+import com.intermanage.backend.document.dto.IncomingTransfer;
 import com.intermanage.backend.document.dto.ManualInvoice;
+import com.intermanage.backend.document.dto.TransferTargetResponse;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
+import com.intermanage.backend.document.entity.DeliveryReportClosingDelivery;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentGratis;
 import com.intermanage.backend.document.entity.DocumentImport;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
+import com.intermanage.backend.document.entity.DocumentTransferTarget;
 import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.store.mapper.StoreMapper;
 
-@Mapper
+@Mapper(uses = StoreMapper.class)
 public interface DocumentMapper {
 
     /** {@code importedBy} jest pusty, gdy konto osoby importującej zostało usunięte. */
@@ -48,9 +54,18 @@ public interface DocumentMapper {
     @Mapping(target = "saleValueGross", source = "document.saleValueGross")
     @Mapping(target = "invoiceAmountCheck", source = "invoiceAmountCheck")
     @Mapping(target = "manualInvoices", source = "manualInvoices")
+    @Mapping(target = "reportClosing", source = "reportClosing")
+    @Mapping(target = "transferTarget", source = "transferTarget")
     DocumentSummary toSummary(Document document, DocumentGratis gratis, List<LinkedKsefInvoice> ksefInvoices,
             CorrectionTotals correctionTotals, LinkedDelivery correctionOf, InvoiceAmountCheck invoiceAmountCheck,
-            List<ManualInvoice> manualInvoices);
+            List<ManualInvoice> manualInvoices, DocumentReportClosing reportClosing,
+            DocumentTransferTarget transferTarget);
+
+    @Mapping(target = "id", source = "closing.id")
+    @Mapping(target = "periodFrom", source = "closing.periodFrom")
+    @Mapping(target = "periodTo", source = "closing.periodTo")
+    @Mapping(target = "closedAt", source = "closing.closedAt")
+    DocumentReportClosing toReportClosing(DeliveryReportClosingDelivery entry);
 
     @Mapping(target = "id", source = "document.id")
     @Mapping(target = "gratis", source = "gratis")
@@ -78,10 +93,34 @@ public interface DocumentMapper {
     @Mapping(target = "invoiceAmountCheck", source = "invoiceAmountCheck")
     @Mapping(target = "manualInvoiceAllowed", expression = "java(document.getType().canHaveManualInvoice())")
     @Mapping(target = "manualInvoices", source = "manualInvoices")
+    @Mapping(target = "transferTargetAllowed",
+            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.MM)")
+    @Mapping(target = "transferTarget", source = "transferTarget")
     DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis,
             List<LinkedKsefInvoice> ksefInvoices, List<DeliveryCorrectionResponse> corrections,
             CorrectedDelivery corrected, CorrectionTotals correctionTotals, LinkedDelivery correctionOf,
-            InvoiceAmountCheck invoiceAmountCheck, List<ManualInvoice> manualInvoices);
+            InvoiceAmountCheck invoiceAmountCheck, List<ManualInvoice> manualInvoices,
+            DocumentTransferTarget transferTarget);
+
+    @Mapping(target = "store", source = "targetStore")
+    @Mapping(target = "createdBy", source = "createdBy.displayName")
+    @Mapping(target = "enteredBy", source = "enteredBy.displayName")
+    TransferTargetResponse toResponse(DocumentTransferTarget target);
+
+    /** Ruch międzymagazynowy innego sklepu; {@code lines} pusta na liście, z liniami w szczegółach. */
+    @Mapping(target = "id", source = "target.id")
+    @Mapping(target = "fromStore", source = "target.document.store")
+    @Mapping(target = "number", source = "target.document.number")
+    @Mapping(target = "documentDate", source = "target.document.documentDate")
+    @Mapping(target = "lineCount", source = "target.document.lineCount")
+    @Mapping(target = "purchaseValue", source = "target.document.purchaseValue")
+    @Mapping(target = "saleValueGross", source = "target.document.saleValueGross")
+    @Mapping(target = "createdBy", source = "target.createdBy.displayName")
+    @Mapping(target = "createdAt", source = "target.createdAt")
+    @Mapping(target = "enteredBy", source = "target.enteredBy.displayName")
+    @Mapping(target = "enteredAt", source = "target.enteredAt")
+    @Mapping(target = "lines", source = "lines")
+    IncomingTransfer toIncoming(DocumentTransferTarget target, List<DocumentLine> lines);
 
     @Mapping(target = "supplierId", source = "supplier.id")
     @Mapping(target = "supplierName", source = "supplier.name")

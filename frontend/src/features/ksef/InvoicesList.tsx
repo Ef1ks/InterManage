@@ -9,6 +9,7 @@ import {
   FileTextIcon,
   LinkIcon,
   LoaderCircleIcon,
+  PrinterIcon,
   RefreshCwIcon,
   UndoIcon,
   UnlinkIcon,
@@ -47,6 +48,7 @@ import {
   useKsefSettingsMutations,
   useKsefSync,
   useMarkEntered,
+  usePrintInvoice,
   useSyncFollow,
 } from '@/features/ksef/api'
 import { formatDate, formatDateTime, formatNip, invoicesWord, invoiceTypeLabel, ksefPaths } from '@/features/ksef/format'
@@ -376,6 +378,11 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
       { invoice, format },
       { onError: (error) => toast.error(errorMessage(error, 'Nie udało się pobrać faktury z KSeF')) },
     )
+  const print = usePrintInvoice(storeId)
+  const printInvoice = () =>
+    print.mutate(invoice, {
+      onError: (error) => toast.error(errorMessage(error, 'Nie udało się wydrukować faktury')),
+    })
   const settings = useKsefSettingsMutations(storeId)
   const foreign = invoice.currency !== 'PLN'
   // Ręczne oznaczenie cofa sklep, który je zrobił; z innego sklepu firmy widać je tylko jako status.
@@ -499,6 +506,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
                 loading={
                   markEntered.isPending ||
                   download.isPending ||
+                  print.isPending ||
                   settings.addSkippedSupplier.isPending ||
                   documentLinks.unlink.isPending
                 }
@@ -535,6 +543,10 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
                     Odepnij {delivery.typeSingular.toLowerCase()} {delivery.number}
                   </DropdownMenuItem>
                 ))}
+            <DropdownMenuItem onClick={printInvoice}>
+              <PrinterIcon />
+              Drukuj fakturę
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => downloadAs('pdf')}>
               <FileTextIcon />
               Pobierz fakturę (PDF)

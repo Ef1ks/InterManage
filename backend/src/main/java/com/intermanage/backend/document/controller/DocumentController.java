@@ -88,17 +88,20 @@ public class DocumentController {
      * Strona listy dokumentów typu (po 100). {@code sort}: number, date, supplier, supplierDocument, lines, purchase,
      * sale; {@code direction}: asc / desc; {@code query}: słowa do wyszukania w numerze, dostawcy, nr dok. dostawcy;
      * {@code product}: słowa z nazwy, marki, EAN-u albo ITM8 artykułu w liniach. {@code invoice} (przyjęcia i korekty
-     * od dostawcy) i {@code corrections} (przyjęcia): {@code with} / {@code without}.
+     * od dostawcy), {@code corrections} i {@code closed} (przyjęcia w zamkniętym raporcie okresowym): {@code with} /
+     * {@code without}. {@code hiddenSuppliers}: kody dostawców ukrytych na liście. Domyślnie od najwyższego numeru.
      */
     @GetMapping("/{type}")
     @PreAuthorize(VIEW)
     public DocumentPage list(@PathVariable UUID storeId, @PathVariable String type,
             @RequestParam(defaultValue = "0") int page, @RequestParam(required = false) String query,
             @RequestParam(required = false) String product, @RequestParam(required = false) String invoice,
-            @RequestParam(required = false) String corrections,
-            @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "asc") String direction) {
+            @RequestParam(required = false) String corrections, @RequestParam(required = false) String closed,
+            @RequestParam(defaultValue = "") List<String> hiddenSuppliers,
+            @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "desc") String direction) {
         return documentService.list(storeId, type, page, query, product, DocumentSearch.Presence.of(invoice),
-                DocumentSearch.Presence.of(corrections), sort, direction);
+                DocumentSearch.Presence.of(corrections), DocumentSearch.Presence.of(closed), hiddenSuppliers, sort,
+                direction);
     }
 
     @GetMapping("/{type}/{id}")

@@ -2,7 +2,7 @@ import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClie
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 
-import { api, downloadFile } from '@/lib/api'
+import { api, downloadFile, printFile } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
 import type {
   DocumentCandidate,
@@ -88,6 +88,14 @@ export function useDownloadInvoice(storeId: string) {
   return useMutation({
     mutationFn: ({ invoice, format }: { invoice: Pick<KsefInvoice, 'id' | 'ksefNumber'>; format: 'pdf' | 'xml' }) =>
       downloadFile(`${ksefPath(storeId)}/invoices/${invoice.id}/${format}`, `${invoice.ksefNumber}.${format}`),
+    meta: { invalidates: false },
+  })
+}
+
+/** Wydruk faktury od razu z okna drukowania przeglądarki, bez zapisywania PDF na dysku. */
+export function usePrintInvoice(storeId: string) {
+  return useMutation({
+    mutationFn: (invoice: Pick<KsefInvoice, 'id'>) => printFile(`${ksefPath(storeId)}/invoices/${invoice.id}/pdf`),
     meta: { invalidates: false },
   })
 }

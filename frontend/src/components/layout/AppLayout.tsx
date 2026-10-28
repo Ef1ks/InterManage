@@ -5,6 +5,7 @@ import {
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
+  SettingsIcon,
   ShieldIcon,
   StoreIcon,
   UserCogIcon,
@@ -26,6 +27,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { hasPermission, useCurrentUser, useLogout } from '@/features/auth/api'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
+import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
+import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import { cn } from '@/lib/utils'
@@ -84,6 +87,9 @@ function Sidebar() {
   const me = useCurrentUser()
   const { data: categories = [] } = usePermissionCategories()
   const tools = categories.filter((category) => hasPermission(me, category.code))
+  // Ustawienia sklepu: budżet rejonów (edycja sprzedaży) i sklepy zaprzyjaźnione (edycja dokumentów).
+  const canEditDocuments = hasPermission(me, 'DOCUMENTS', 'EDIT')
+  const canStoreSettings = canEditDocuments || hasPermission(me, 'SALES', 'EDIT')
 
   return (
     <nav className="flex h-full flex-col gap-6 p-3">
@@ -105,18 +111,36 @@ function Sidebar() {
               to={TOOL_ROUTES[category.code].path}
               icon={TOOL_ROUTES[category.code].icon}
               label={category.label}
-              badge={category.code === 'DELI_ORDERS' && <DeliNewOrdersBadge />}
+              badge={
+                category.code === 'DELI_ORDERS' ? (
+                  <DeliNewOrdersBadge />
+                ) : (
+                  category.code === 'DOCUMENTS' && <IncomingTransfersBadge />
+                )
+              }
             />
           ))}
         </div>
       )}
 
-      {me.owner && (
+      {(me.owner || canStoreSettings) && (
         <div className="grid gap-1">
           <SectionLabel>Ustawienia</SectionLabel>
-          <SidebarLink to="/ustawienia/sklepy" icon={StoreIcon} label="Sklepy" />
-          <SidebarLink to="/ustawienia/role" icon={ShieldIcon} label="Role i uprawnienia" />
-          <SidebarLink to="/ustawienia/uzytkownicy" icon={UserCogIcon} label="Użytkownicy" />
+          {canStoreSettings && (
+            <SidebarLink
+              to="/ustawienia-sklepu"
+              icon={SettingsIcon}
+              label="Ustawienia sklepu"
+              badge={canEditDocuments && <PartnerInvitationsBadge />}
+            />
+          )}
+          {me.owner && (
+            <>
+              <SidebarLink to="/ustawienia/sklepy" icon={StoreIcon} label="Sklepy" />
+              <SidebarLink to="/ustawienia/role" icon={ShieldIcon} label="Role i uprawnienia" />
+              <SidebarLink to="/ustawienia/uzytkownicy" icon={UserCogIcon} label="Użytkownicy" />
+            </>
+          )}
         </div>
       )}
     </nav>

@@ -1,40 +1,40 @@
 # Graph Report - intermanage  (2026-10-27)
 
 ## Corpus Check
-- 616 files · ~757,544 words
+- 663 files · ~782,471 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 24 file(s) not represented in the graph (top: (none) 10, .css 4, .properties 3)
+- Unclassified: 25 file(s) not represented in the graph (top: (none) 10, .css 4, .properties 3)
 
 ## Summary
-- 6501 nodes · 20250 edges · 258 communities (212 shown, 46 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 1020 edges (avg confidence: 0.85)
+- 6944 nodes · 22259 edges · 256 communities (207 shown, 49 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 1123 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `04e8a091`
+- Built from commit: `03b00932`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- KsefSettingsPage.tsx
+- Button
 - react
-- SalesComparisonReport.tsx
+- ImportPage.tsx
 - live-browser.js
 - AuthAndRolesIntegrationTests
-- auth/api.ts
-- KsefConnection
-- InvoicesList.tsx
+- lib/api.ts
 - uuid
+- documents/api.ts
+- list
 - shadcn Components Config
-- Button
+- org.mapstruct.Mapping
 - TS App Config
-- AppUser
+- KsefConnection
 - SalesImportIntegrationTests
 - connectSSE
 - TS Node Config
-- KsefInvoiceService
+- Store
 - Architecture Docs
-- DocumentsList.tsx
+- Card
 - Docker Postgres
 - draw.mjs
 - el
@@ -49,10 +49,10 @@
 - CalculationEditor.tsx
 - Vite Favicon
 - Maven Artifact
-- DocumentLine
-- DeliOrder
+- InvoicesList.tsx
+- Supplier
 - initPageChat
-- .update
+- com.lowagie.text.Document
 - types.ts
 - app-draw.mjs
 - Expo Animation Recipes
@@ -66,7 +66,7 @@
 - handleManualEditActivity
 - assets.mjs
 - inspect.mjs
-- Document
+- DocumentTransferTarget
 - impeccable/SKILL.md
 - onboard.md
 - Imagery
@@ -76,7 +76,7 @@
 - The Fixes
 - text
 - The Toolkit
-- periods.ts
+- DeliveryReportService
 - Prototyping Variants
 - actOnAgentTarget
 - createLiveBrowserDomHelpers
@@ -90,23 +90,23 @@
 - KsefInvoiceReader
 - animate.md
 - Operate mode depth (and Read notes)
-- org.mapstruct.Mapper
+- AuthService
 - Animation Standards Reference
 - The study
 - Generate Report
-- SaleRepository
+- SalesReportService
 - Working With Sonner
 - Init flow
 - optimize.md
 - lint.mjs
-- Scan mode (approach C: auto-extract, then confirm descriptive language)
+- document.md
 - New visual work
 - Layout
-- Worst-Case Catalog
+- Breaking UI
 - reference/critique.md
 - Simplify the Design
 - Hardening Dimensions
-- org.springframework.security.access.prepost.PreAuthorize
+- org.springframework.web.bind.annotation.PostMapping
 - Reviewing Animations
 - Colour
 - Scroll scenes
@@ -118,12 +118,12 @@
 - Building Animations
 - polish.md
 - quieter.md
-- scenes.mjs
+- DocumentImport
 - The list
 - App screens
 - Tells — the dated registry
 - Type
-- Page
+- ReportReader
 - ProductImportIntegrationTests.java
 - Generate Combined Critique Report
 - Nomenclature
@@ -134,13 +134,13 @@
 - Product
 - Common Cognitive Load Violations
 - iOS platform
-- imports/api.ts
+- Column
 - Shape
 - 2. The run for an app screen
 - Critique — judging the render
-- PriceCalculation
+- DeliveryReportClosingDelivery
 - PriceCalculationService
-- Column
+- uuid
 - Android platform
 - KsefInvoicePdf
 - Persona-Based Design Testing
@@ -149,36 +149,35 @@
 - KsefInvoice
 - environment
 - Cognitive Load Assessment
-- types.ts
+- TestcontainersConfiguration
 - Impeccable Manual Edit Applier
 - DeliOrderDocuments
 - live-browser-ignores.js
-- .merge
+- KsefCredentials
 - tasteskill v2 (`design-taste-frontend`)
-- KsefInvoiceSearch
+- DocumentLine
 - clip-path for Animation
 - Performance Rules
-- .notFound
-- KsefSyncService
+- .badRequest
+- KsefInvoiceService
 - SecurityConfig.java
 - app.json
-- DeliveryReportClosing
-- .conflict
-- ProductImport
+- OrderUnit
+- Product
+- SalesReportParser
 - ReportReader
-- KsefInvoicePdfTests
 - jakarta.servlet.http.Cookie
 - documentRefForElement
-- KsefCredentials.java
+- notnull
 - kinds
-- org.springframework.data.jpa.domain.Specification
+- .list
 - getJson
 - ReportReader
-- notnull
+- StoreService
 - Heuristics Scoring Guide
-- PriceCalculationItem
-- devDependencies
-- DeliveryReportExcludedSupplier
+- .update
+- package.json
+- Entered
 - builder
 - commerce
 - community
@@ -191,36 +190,36 @@
 - support
 - wallet
 - workspace
-- DocumentGratis
+- InvoiceComparisonService
 - captureElementToBlob
 - Role
-- documents/api.ts
-- DeliveryReportClosing
+- types.ts
+- PeriodSummaryPdf
 - onAnnotDown
 - KsefInvoicePdf.java
-- KsefRateHistory.java
-- DeliveryReportService
-- OrderUnit
+- KsefApiBlock
+- scenes.mjs
+- KsefInvoiceSearch
 - Impeccable Documenter
 - jakarta.servlet.http.Cookie
-- PriceCalculationMapper.java
+- ProductImport
 - DocumentImportIntegrationTests
 - XlsxWriter
 - DeliOrderFormIntegrationTests
-- ImportPage.tsx
-- NomenclatureImportIntegrationTests
+- types.ts
+- SalesReportIntegrationTests
 - PriceCalculationIntegrationTests
-- AppUserRepository
+- XlsxReader
 - with
-- ComparisonRow
-- ReportReader
+- PriceCalculationItem
+- AppUser
 - scripts
-- ProductSearch
+- org.springframework.transaction.annotation.Transactional
 - Generate Report
-- JwtAuthenticationFilter.java
-- KsefRateLimiter.java
+- ReportReader
+- Operation
 - steps
-- com.lowagie.text.Font
+- .group
 - Wdrożenie na produkcję (https://intermanage.pl)
 - deploy.yml
 - deploy
@@ -229,70 +228,67 @@
 - Extract Flow
 - 4. The canvas and the page title
 - scheduleAcceptCleanup
-- ReportReader
-- .compare
+- Level
+- org.springframework.transaction.annotation.Transactional
 - Impeccable Finish Reviewer
 - build
-- SalesReportBatch
-- Level
+- SalesImport
+- .cancel
 - jobs
 - Responsive Design
 - Visualize: Direction Comps & Asset Production
 - 6. Charts
 - Diagnostic Scan
-- DocumentTotalsRepositoryImpl.java
+- ComparisonRow
 - Operate mode depth (and Read notes)
-- SalesReportIntegrationTests
-- DocumentImport
+- org.springframework.data.jpa.domain.Specification
+- AppUserRepository
 - colorize.md
-- doctor.md
-- SalesImport
-- IngredientPricing
-- 8. Forms and settings
-- RefreshPricesRequest
-- .headers
-- XlsxReader
-- KsefInvoiceXml
-- .list
-- KsefSessionService
-- DeliOrderStatus
+- .correctionLabels
+- RegionBudget
 - Worst-Case Catalog
+- 8. Forms and settings
+- DeliveryReportExcludedSupplier
 - KsefXadesSigner
-- SalesReportParser
-- .submit
-- ProductSearchResponse
-- .pasteProducts
+- StorePartnerTransferIntegrationTests
+- SalesReportBatch
+- .headers
+- DocumentLineRepository
 - LimitedInputStream
-- DocumentLineRow
+- DocumentSearch.java
 - Component Building Principles
-- DeliveryReportController
-- .merge
-- SeenInternalId
+- org.springframework.security.access.prepost.PreAuthorize
+- NomenclatureImportIntegrationTests
+- doctor.md
+- KsefInvoiceTotalsRepository
+- Kind
+- KsefInvoiceXml
 - Spring Animations
+- DocumentService.java
 
 ## God Nodes (most connected - your core abstractions)
-1. `AppUser` - 195 edges
-2. `Document` - 153 edges
-3. `Store` - 124 edges
-4. `Button()` - 124 edges
-5. `Product` - 94 edges
-6. `api()` - 92 edges
-7. `AppUserPrincipal` - 89 edges
-8. `AppUserRepository` - 83 edges
-9. `react` - 71 edges
-10. `KsefInvoice` - 65 edges
+1. `AppUser` - 218 edges
+2. `Document` - 157 edges
+3. `Store` - 139 edges
+4. `Button()` - 139 edges
+5. `api()` - 106 edges
+6. `Product` - 103 edges
+7. `AppUserPrincipal` - 100 edges
+8. `AppUserRepository` - 92 edges
+9. `react` - 77 edges
+10. `Card()` - 75 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `Failure signatures` --references--> `title()`  [INFERRED]
+  .claude/skills/break-ui/SKILL.md → frontend/src/features/sales/SalesChartDialog.tsx
+- `Step 2b: Stage the frontmatter` --references--> `title()`  [INFERRED]
+  .claude/skills/impeccable/reference/document.md → frontend/src/features/sales/SalesChartDialog.tsx
 - `Step 2: Act by severity` --references--> `init()`  [INFERRED]
   .claude/skills/impeccable/reference/doctor.md → .claude/skills/impeccable/scripts/live-browser.js
 - `What this owns, and what it does not` --references--> `init()`  [INFERRED]
   .claude/skills/impeccable/reference/doctor.md → .claude/skills/impeccable/scripts/live-browser.js
 - `11. Testing — Swift Testing by default` --references--> `init()`  [INFERRED]
   .claude/skills/write-swift/SKILL.md → .claude/skills/impeccable/scripts/live-browser.js
-- `People and names` --references--> `J()`  [INFERRED]
-  .claude/skills/break-ui/CATALOG.md → .claude/skills/impeccable/scripts/modern-screenshot.umd.js
-- `4. Pick the properties` --references--> `x()`  [INFERRED]
-  .claude/skills/animate/SKILL.md → .claude/skills/impeccable/scripts/modern-screenshot.umd.js
 
 ## Import Cycles
 - None detected.
@@ -301,55 +297,51 @@
 - **Permission enforcement across backend and frontend** — claude_permissioncategory, claude_preauthorize_endpoints, claude_usecan_requireauth, claude_tool_routes, claude_new_module_procedure [EXTRACTED 1.00]
 - **Session-based authentication flow** — claude_session_csrf_auth, claude_lib_api, claude_principalrefreshfilter, claude_owner_role [INFERRED 0.85]
 
-## Communities (258 total, 46 thin omitted)
+## Communities (256 total, 49 thin omitted)
 
-### Community 0 - "KsefSettingsPage.tsx"
-Cohesion: 0.07
-Nodes (64): Form(), FormActions(), MultiComboboxField(), SwitchField(), TextField(), CardContent(), AccountPage(), Detail() (+56 more)
+### Community 0 - "Button"
+Cohesion: 0.05
+Nodes (127): Form(), FormActions(), FormAlert(), FormNote(), ComboboxOption, MultiComboboxField(), SegmentedField(), SegmentOption (+119 more)
 
 ### Community 1 - "react"
-Cohesion: 0.08
-Nodes (34): Props, DateField(), DateFieldProps, FieldShell(), FieldShellProps, describedBy(), fieldControlClass, floatedLabelClass (+26 more)
+Cohesion: 0.05
+Nodes (50): BrandMark(), Props, DateFieldProps, FieldShell(), FieldShellProps, describedBy(), fieldControlClass, floatedLabelClass (+42 more)
 
-### Community 2 - "SalesComparisonReport.tsx"
+### Community 2 - "ImportPage.tsx"
 Cohesion: 0.07
-Nodes (50): reportsKey(), reportsPath(), salesComparisonKey(), useSalesComparison(), useSalesReportsOverview(), Periods, ANCHOR_LABELS, Change (+42 more)
+Nodes (70): FileDropZone(), formatFileSize(), ImportError(), numberFormat, Alert(), AlertDescription(), AlertTitle(), alertVariants (+62 more)
 
 ### Community 3 - "live-browser.js"
 Cohesion: 0.03
 Nodes (139): applyGlobalBarLabelState(), applyLiveBarPreference(), applyParamDefaults(), applyParamValue(), applyPlaceholderSizingStyles(), applySavedParamValues(), bindEditBadgeProxy(), bufferToBase64() (+131 more)
 
-### Community 5 - "auth/api.ts"
-Cohesion: 0.04
-Nodes (78): dependencies, @base-ui/react@^1.9.0, class-variance-authority@^0.7.1, cn@^0.5.0, @fontsource-variable/geist@^5.3.0, lucide-react@^1.61.0, next-themes@^0.4.6, react@^19.3.1 (+70 more)
-
-### Community 6 - "KsefConnection"
+### Community 5 - "lib/api.ts"
 Cohesion: 0.10
-Nodes (4): KsefConnectionResponse, KsefInternalIdResponse, KsefSkippedSupplierResponse, KsefConnection
+Nodes (29): toolRoutes, CardDescription(), CardHeader(), CardTitle(), hasPermission(), meQueryKey, useMe(), Props (+21 more)
 
-### Community 7 - "InvoicesList.tsx"
-Cohesion: 0.07
-Nodes (55): BrandMark(), AppLayout(), BackButton(), SectionLabel(), Sidebar(), SidebarLink(), UserMenu(), DropdownMenu() (+47 more)
+### Community 7 - "documents/api.ts"
+Cohesion: 0.05
+Nodes (101): Switch(), useCan(), closingsKey(), closingsPath(), DocumentColumn, DocumentFilters, documentsKey(), documentsPath() (+93 more)
 
-### Community 8 - "uuid"
-Cohesion: 0.03
-Nodes (19): DeliFormInvitationRepository, DeliOrderDocumentRepository, DeliOrderRepository, OrderCategoryProductRepository, OrderCategoryRepository, OrderSectionRepository, DeliveryReportExcludedSupplierRepository, DocumentImportRepository (+11 more)
+### Community 8 - "list"
+Cohesion: 0.05
+Nodes (16): ActivationTokenRepository, DeliOrderRepository, OrderCategoryProductRepository, OrderCategoryRepository, OrderSectionRepository, PriceCalculationRepository, DeliveryReportExcludedSupplierRepository, ParsedProductReport (+8 more)
 
 ### Community 9 - "shadcn Components Config"
 Cohesion: 0.09
 Nodes (21): aliases, components, hooks, lib, ui, utils, iconLibrary, menuAccent (+13 more)
 
-### Community 10 - "Button"
-Cohesion: 0.06
-Nodes (101): Props, SearchInput(), Button(), Dialog(), DialogContent(), DialogDescription(), DialogFooter(), DialogHeader() (+93 more)
+### Community 10 - "org.mapstruct.Mapping"
+Cohesion: 0.07
+Nodes (13): NomenclatureImportOverview, NomenclatureImportResponse, ParsedNomenclatureReport, NomenclatureMapper, NomenclatureImportRepository, NomenclatureService, SupplierReportParser, CreateSupplierRequest (+5 more)
 
 ### Community 11 - "TS App Config"
 Cohesion: 0.10
 Nodes (20): compilerOptions, allowArbitraryExtensions, allowImportingTsExtensions, erasableSyntaxOnly, jsx, lib, module, moduleDetection (+12 more)
 
-### Community 12 - "AppUser"
-Cohesion: 0.04
-Nodes (9): AppUser, DocumentAmountConfirmation, InvoiceComparisonMatch, KsefInternalId, KsefSkippedSupplier, Store, SupplierReportRow, Supplier (+1 more)
+### Community 12 - "KsefConnection"
+Cohesion: 0.05
+Nodes (6): KsefConnectionResponse, KsefInternalIdResponse, KsefSkippedSupplierResponse, KsefConnection, KsefInternalId, KsefSkippedSupplier
 
 ### Community 13 - "SalesImportIntegrationTests"
 Cohesion: 0.16
@@ -363,17 +355,13 @@ Nodes (83): applyPlaceholderDimensions(), applySavedSessionMeta(), buildParamsPa
 Cohesion: 0.12
 Nodes (16): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, noEmit, noFallthroughCasesInSwitch (+8 more)
 
-### Community 16 - "KsefInvoiceService"
-Cohesion: 0.13
-Nodes (8): Delivery, KsefInvoiceSummary, Key, KsefInvoiceEntry, KsefMapper, KsefInvoiceEntryRepository, ExportFile, KsefInvoiceService
-
 ### Community 17 - "Architecture Docs"
 Cohesion: 0.13
 Nodes (10): Backend: Spring Boot 4.1 / Java 25 / Spring Security 7 / JPA, Frontend: Vite + React 19 + TS + shadcn/ui (Base UI) + Tailwind 4, Intermanage (Intermarché store management app), lib/api.ts request layer (CSRF, ApiError, applyServerErrors), PostgreSQL 17 via docker compose (port 5433), PrincipalRefreshFilter (session_version), Excel .xlsm data import, index.html SPA entry (#root, /src/main.tsx) (+2 more)
 
-### Community 18 - "DocumentsList.tsx"
+### Community 18 - "Card"
 Cohesion: 0.07
-Nodes (78): FullPageMessage(), Props, PageHeader(), Props, SortableHead(), TableSkeletonRows(), Badge(), badgeVariants (+70 more)
+Nodes (102): router, TOOL_PAGES, FullPageMessage(), Props, PageHeader(), SearchInput(), SortableHead(), TableSkeletonRows() (+94 more)
 
 ### Community 19 - "Docker Postgres"
 Cohesion: 0.15
@@ -412,20 +400,28 @@ Cohesion: 0.40
 Nodes (4): compilerOptions, paths, files, references
 
 ### Community 31 - "CalculationEditor.tsx"
+Cohesion: 0.08
+Nodes (62): AlertDialog(), AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay() (+54 more)
+
+### Community 35 - "InvoicesList.tsx"
+Cohesion: 0.08
+Nodes (61): EnteredFilter, KindFilter, KsefColumn, KsefFilters, ksefKey(), ksefPath(), useDocumentCandidates(), useDownloadCompanyDeliveryNote() (+53 more)
+
+### Community 36 - "Supplier"
 Cohesion: 0.07
-Nodes (64): SegmentedField(), HowTo(), Props, AlertDialog(), AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription() (+56 more)
+Nodes (3): SupplierReportRow, Supplier, SupplierImport
 
 ### Community 37 - "initPageChat"
 Cohesion: 0.09
 Nodes (49): armPageChatForTyping(), attachSteerFocusDebug(), attachSteerFocusGuard(), buildSteerProcessingDots(), buildSteerQueueHint(), clearSteerAwaitTimer(), clearSteerFocusRecoverTimer(), collapsePageChat() (+41 more)
 
-### Community 38 - ".update"
-Cohesion: 0.03
-Nodes (15): LoggingAccountMailer, OwnerBootstrap, CreateUserRequest, UserResponse, ActivationToken, UserMapper, ActivationTokenRepository, RoleRepository (+7 more)
+### Community 38 - "com.lowagie.text.Document"
+Cohesion: 0.18
+Nodes (3): PdfPageFooter, PageFooter, PageFooter
 
 ### Community 39 - "types.ts"
 Cohesion: 0.04
-Nodes (102): basePath(), ExtraLine, FormChange, formKey(), formScope(), invalidateOrderStores(), invalidateSupplierForms(), invitationsKey() (+94 more)
+Nodes (111): react-redux@^9.3.0, App(), HowTo(), Props, Toaster(), basePath(), ExtraLine, FormChange (+103 more)
 
 ### Community 40 - "app-draw.mjs"
 Cohesion: 0.11
@@ -475,10 +471,6 @@ Nodes (24): AIC_FIELDS, AIC_HEADERS, ARCHIVE_LICENCE, args, argv, fail(), FLAGS,
 Cohesion: 0.07
 Nodes (28): Command guidance, No-argument routing: the context-aware menu, Workflow questions, allow, appMode, args, asJson, dealtFonts (+20 more)
 
-### Community 52 - "Document"
-Cohesion: 0.03
-Nodes (40): CorrectionTotals, DeliveryCorrectionResponse, DocumentGratisResponse, DocumentPage, DocumentLineResponse, DocumentsOverview, DocumentSummary, DocumentTypeSummary (+32 more)
-
 ### Community 53 - "impeccable/SKILL.md"
 Cohesion: 0.06
 Nodes (28): Recommended Actions, Craft (deprecated alias), Apply, Live-mode signature params, Set the spatial thesis, Two isolated assessments, Verify, Visitor mode (+20 more)
@@ -515,9 +507,9 @@ Nodes (19): base(), first(), fromAic(), fromArchive(), fromMet(), fromNasa(), fr
 Cohesion: 0.10
 Nodes (20): Animate complex properties, Assess What "Extraordinary" Means Here, For data-heavy interfaces, For functional UI, For performance-critical UI, For visual/marketing surfaces, Implement with Discipline, Interact with the device (+12 more)
 
-### Community 62 - "periods.ts"
-Cohesion: 0.13
-Nodes (36): Calendar(), CalendarProps, dayLabel, MonthButton(), monthGrid(), monthStart(), monthTitle, shiftMonth() (+28 more)
+### Community 62 - "DeliveryReportService"
+Cohesion: 0.24
+Nodes (3): DeliveryReportService, ReportLine, ExportFile
 
 ### Community 63 - "Prototyping Variants"
 Cohesion: 0.10
@@ -560,8 +552,8 @@ Cohesion: 0.12
 Nodes (16): 1. Frequency — how often will a user see this?, 2. Purpose — why does this animate?, 3. Speed — can it stay inside budget?, 4. Function — does motion help or hinder here?, Finding Animation Opportunities, Hard Rules, Initial Response, Operating Posture (+8 more)
 
 ### Community 73 - "KsefInvoiceReader"
-Cohesion: 0.15
-Nodes (9): Block, Entry, InvalidInvoiceException, KsefInvoiceReader, Line, Party, Table, TaxRow (+1 more)
+Cohesion: 0.16
+Nodes (8): Block, Entry, InvalidInvoiceException, KsefInvoiceReader, Party, Table, TaxRow, Xml
 
 ### Community 74 - "animate.md"
 Cohesion: 0.12
@@ -571,9 +563,9 @@ Nodes (14): Accessibility and control, Choose material by meaning, Find the job,
 Cohesion: 0.09
 Nodes (18): Before you finish, Scope is sovereign, The amplification, The skeleton test, Why it reads flat, Craft floor, Refuse, Verify (+10 more)
 
-### Community 76 - "org.mapstruct.Mapper"
-Cohesion: 0.05
-Nodes (18): DeliInvitationResponse, DeliOverviewResponse, DeliSupplierResponse, DeliFormInvitation, InvitationStatus, ACCEPTED, DECLINED, PENDING (+10 more)
+### Community 76 - "AuthService"
+Cohesion: 0.11
+Nodes (7): AuthController, ActivateRequest, ChangePasswordRequest, LoginRequest, MeResponse, SetUpPasswordRequest, AuthService
 
 ### Community 77 - "Animation Standards Reference"
 Cohesion: 0.12
@@ -587,9 +579,9 @@ Nodes (15): 10. The 25 highest-scored sites and their ideas, 11. How the skill w
 Cohesion: 0.13
 Nodes (14): 1. Accessibility (A11y), 2. Performance, 3. Theming, 4. Responsive Design, 5. Implementation Integrity (CRITICAL), Audit Health Score, Detailed Findings by Severity, Diagnostic Scan (+6 more)
 
-### Community 80 - "SaleRepository"
-Cohesion: 0.13
-Nodes (8): SalesComparisonResponse, SalesComparisonRow, SalesFigures, Coverage, InsertCounts, SaleRepository, SalesImportRepository, SalesReportService
+### Community 80 - "SalesReportService"
+Cohesion: 0.04
+Nodes (20): DayValue, NomenclatureOption, NomenclatureLevel, FAMILY, REGION, SUBFAMILY, SalesArticleResponse, SalesComparisonRow (+12 more)
 
 ### Community 81 - "Working With Sonner"
 Cohesion: 0.15
@@ -607,7 +599,7 @@ Nodes (13): Animation Performance, Assess Performance Issues, Core Web Vitals Op
 Cohesion: 0.14
 Nodes (13): APP_LEVEL, appMode, args, asJson, byId, EXT, files, findings (+5 more)
 
-### Community 85 - "Scan mode (approach C: auto-extract, then confirm descriptive language)"
+### Community 85 - "document.md"
 Cohesion: 0.08
 Nodes (23): Component translation rules, Narrative mapping, Pitfalls, Scan mode (approach C: auto-extract, then confirm descriptive language), Schema, Seed mode, Step 1: Find the design assets, Step 1: Route through new-work's workshop (+15 more)
 
@@ -619,7 +611,7 @@ Nodes (13): 1. Decide what is already true, 2. Ask what will change the work, 3.
 Cohesion: 0.15
 Nodes (12): 10. How pages fail, 1. What strong pages do, 2. Margins and the grid, 3. Where text sits, 4. Empty space, 5. The frame: margins, balance and titles, 6. Sections: carry the idea, vary the arrangement, 7. Navigation (+4 more)
 
-### Community 88 - "Worst-Case Catalog"
+### Community 88 - "Breaking UI"
 Cohesion: 0.11
 Nodes (19): Breaking UI, Failure signatures, Hard Rules, Initial Response, Invocation Variants, Operating Posture, Part 1 — What broke, Part 2 — Decisions for you (+11 more)
 
@@ -635,9 +627,9 @@ Nodes (11): Assess Current State, Code Simplification, Content Simplification, D
 Cohesion: 0.17
 Nodes (11): Accessibility Resilience, Assess Hardening Needs, Edge Cases & Boundary Conditions, Error Handling, Hardening Dimensions, Input Validation & Sanitization, Internationalization (i18n), Performance Resilience (+3 more)
 
-### Community 92 - "org.springframework.security.access.prepost.PreAuthorize"
-Cohesion: 0.04
-Nodes (51): AuthController, UserController, ActivateRequest, LoginRequest, MeResponse, UpdateUserRequest, AppUserPrincipal, InviteStoresRequest (+43 more)
+### Community 92 - "org.springframework.web.bind.annotation.PostMapping"
+Cohesion: 0.07
+Nodes (23): UserController, CreateUserRequest, UpdateUserRequest, UserResponse, DeliveryReportController, DocumentImportController, ManualInvoiceController, InvoiceComparisonMatchResponse (+15 more)
 
 ### Community 93 - "Reviewing Animations"
 Cohesion: 0.17
@@ -656,8 +648,8 @@ Cohesion: 0.20
 Nodes (6): Column, DeliveryNotePdf, Note, Valuation, Valuations, CorrectedLine
 
 ### Community 97 - "OrderCategory"
-Cohesion: 0.07
-Nodes (7): OrderCategoryResponse, OrderProductResponse, OrderSectionResponse, OrderCategory, OrderCategoryProduct, OrderSection, OrderFormMapper
+Cohesion: 0.08
+Nodes (6): OrderCategoryResponse, OrderProductResponse, OrderSectionResponse, OrderCategory, OrderCategoryProduct, OrderSection
 
 ### Community 99 - "clarify.md"
 Cohesion: 0.18
@@ -679,10 +671,6 @@ Nodes (10): 1. Establish the system, 2. Gather the evidence, 3. Triage, 4. Polis
 Cohesion: 0.18
 Nodes (10): Assess Current State, Color Refinement, Composition Refinement, Motion Reduction, Plan Refinement, Refine the Design, Simplification, Verify Quality (+2 more)
 
-### Community 104 - "scenes.mjs"
-Cohesion: 0.12
-Nodes (14): alive(), Browser, findChrome(), sleep(), sweepProfiles(), args, go(), only (+6 more)
-
 ### Community 105 - "The list"
 Cohesion: 0.18
 Nodes (10): Charts, Common mismatches to catch, How to use this, Initial Response, Interaction & performance, Motion & visuals, Picking The Right Library, State & styling (+2 more)
@@ -700,16 +688,12 @@ Cohesion: 0.18
 Nodes (10): 1. What the study measured, 2. The scale: few sizes, far apart, 3. Setting display type, 4. Setting text, 5. Loading the fonts properly, 6. One family or two, 7. Details that separate set type from typed text, 8. Mistakes the inspector cannot see (+2 more)
 
 ### Community 110 - "ProductImportIntegrationTests.java"
-Cohesion: 0.08
-Nodes (9): JwtService, Status, MATCH, MISSING_IN_DELIVERY, MISSING_ON_INVOICE, NO_CODE, PRICE, QUANTITY (+1 more)
+Cohesion: 0.06
+Nodes (11): JwtService, InvoiceComparison, Row, Status, MATCH, MISSING_IN_DELIVERY, MISSING_ON_INVOICE, NO_CODE (+3 more)
 
 ### Community 111 - "Generate Combined Critique Report"
 Cohesion: 0.20
 Nodes (10): Design Health Score, Design Specificity Verdict, Generate Combined Critique Report, Minor Observations, Overall Impression, Persona Red Flags, Priority Issues, Questions to Consider (+2 more)
-
-### Community 112 - "Nomenclature"
-Cohesion: 0.05
-Nodes (6): Nomenclature, NomenclatureImport, NomenclatureLevel, FAMILY, REGION, SUBFAMILY
 
 ### Community 114 - "7. Tables and lists"
 Cohesion: 0.20
@@ -724,8 +708,8 @@ Cohesion: 0.05
 Nodes (38): 1. Should this animate at all?, 2. What is the purpose?, 3. What easing should it use?, 3D transforms for depth, 4. How fast should it be?, Accessibility, Asymmetric enter/exit timing, Beauty is leverage (+30 more)
 
 ### Community 117 - "Product"
-Cohesion: 0.09
-Nodes (3): Ingredient, ProductReportRow, Product
+Cohesion: 0.07
+Nodes (4): CalculationMode, PER_BATCH, PER_KG, PriceCalculation
 
 ### Community 118 - "Common Cognitive Load Violations"
 Cohesion: 0.22
@@ -735,9 +719,9 @@ Nodes (9): 1. The Wall of Options, 2. The Memory Bridge, 3. The Hidden Navigatio
 Cohesion: 0.22
 Nodes (9): Color & materials, Components & controls, iOS platform, Layout & structure, Motion, The iOS slop test, Touch targets, Typography (+1 more)
 
-### Community 120 - "imports/api.ts"
-Cohesion: 0.11
-Nodes (31): documentImportsKey(), documentImportsPath(), nomenclatureImportsKey(), nomenclatureImportsPath(), productImportsKey(), productImportsPath(), salesImportsKey(), salesImportsPath() (+23 more)
+### Community 120 - "Column"
+Cohesion: 0.09
+Nodes (14): Cell, CellCollector, Column, CODE, LABEL_COUNT, LABEL_FORMAT, NAME, SALE_TYPE (+6 more)
 
 ### Community 121 - "Shape"
 Cohesion: 0.22
@@ -751,37 +735,29 @@ Nodes (9): 2.1 Inventory the data and the jobs, 2.2 Name the screen's one questi
 Cohesion: 0.22
 Nodes (8): 1. How to look, 2. The score, 3. Caps, 4. Writing the critique, 5. What to fix first, 6. When to stop, Contents, Critique — judging the render
 
-### Community 124 - "PriceCalculation"
-Cohesion: 0.07
-Nodes (4): CalculationMode, PER_BATCH, PER_KG, PriceCalculation
+### Community 124 - "DeliveryReportClosingDelivery"
+Cohesion: 0.09
+Nodes (4): DeliveryReportClosing, DeliveryReportClosingDelivery, RegionAmount, Known
 
 ### Community 125 - "PriceCalculationService"
-Cohesion: 0.15
-Nodes (4): PriceCalculationResponse, PriceCalculationRepository, ExportFile, PriceCalculationService
-
-### Community 126 - "Column"
-Cohesion: 0.08
-Nodes (15): Cell, CellCollector, Column, CODE, LABEL_COUNT, LABEL_FORMAT, NAME, SALE_TYPE (+7 more)
+Cohesion: 0.10
+Nodes (10): PriceCalculationController, FinishedProductResponse, Item, PriceCalculationRequest, PriceCalculationResponse, PriceCalculationSummary, PriceChangeResponse, PriceCalculationMapper (+2 more)
 
 ### Community 127 - "Android platform"
 Cohesion: 0.25
 Nodes (8): Android platform, Color & theming, Components & motion, Layout & structure, The Android slop test, Touch targets, Typography, Verifying the build
 
 ### Community 128 - "KsefInvoicePdf"
-Cohesion: 0.26
-Nodes (3): Column, KsefInvoicePdf, Invoice
+Cohesion: 0.17
+Nodes (5): Column, KsefInvoicePdf, Invoice, Line, KsefInvoicePdfTests
 
 ### Community 129 - "Persona-Based Design Testing"
 Cohesion: 0.25
 Nodes (8): 1. Impatient Power User: "Alex", 2. Confused First-Timer: "Jordan", 3. Accessibility-Dependent User: "Sam", 4. Deliberate Stress Tester: "Riley", 5. Distracted Mobile User: "Casey", Persona-Based Design Testing, Project-Specific Personas, Selecting Personas
 
 ### Community 131 - "org.springframework.transaction.annotation.Transactional"
-Cohesion: 0.18
-Nodes (4): DeliOrderFormController, OrderFormResponse, OrderNameRequest, DeliOrderFormService
-
-### Community 132 - "KsefInvoice"
-Cohesion: 0.07
-Nodes (7): Buyer, Identifier, KsefInvoiceMetadata, Seller, ThirdSubject, InternalIdRef, KsefInvoice
+Cohesion: 0.10
+Nodes (9): DeliOrderFormController, AddOrderProductRequest, OrderFormResponse, OrderNameRequest, PasteOrderProductsRequest, PasteOrderProductsResponse, UpdateOrderUnitRequest, DeliOrderFormService (+1 more)
 
 ### Community 133 - "environment"
 Cohesion: 0.07
@@ -791,25 +767,21 @@ Nodes (28): environment, image, restart, command, depends_on, environment, image
 Cohesion: 0.29
 Nodes (7): Cognitive Load Assessment, Cognitive Load Checklist, Extraneous Load: Bad Design, Germane Load: Learning Effort, Intrinsic Load: The Task Itself, The Working Memory Rule, Three Types of Cognitive Load
 
-### Community 135 - "types.ts"
-Cohesion: 0.05
-Nodes (50): calculationsKey(), calculationsPath(), MIN_SEARCH_LENGTH, useCalculations(), useDeleteCalculation(), useFinishedProducts(), usePriceProductSearch(), useRefreshPrices() (+42 more)
+### Community 135 - "TestcontainersConfiguration"
+Cohesion: 0.14
+Nodes (4): PeriodSummaryIntegrationTests, Config, RecordingAccountMailer, TestcontainersConfiguration
 
 ### Community 136 - "Impeccable Manual Edit Applier"
 Cohesion: 0.29
 Nodes (6): Checks, Entry Atomicity, Impeccable Manual Edit Applier, Input Contract, Output Contract, Workflow
 
 ### Community 137 - "DeliOrderDocuments"
-Cohesion: 0.18
-Nodes (5): DeliOrderDocuments, Line, OrderDocument, PageFooter, ExportFile
+Cohesion: 0.24
+Nodes (4): DeliOrderDocuments, Line, OrderDocument, ExportFile
 
 ### Community 139 - "live-browser-ignores.js"
 Cohesion: 0.52
 Nodes (6): globToRegex(), matchesScope(), normalizeIgnoreRule(), normalizeIgnoreValue(), pageCandidates(), resolveDetectIgnores()
-
-### Community 140 - ".merge"
-Cohesion: 0.12
-Nodes (4): ParsedSupplierReport, SupplierImportOverview, SupplierImportResponse, SupplierResponse
 
 ### Community 141 - "tasteskill v2 (`design-taste-frontend`)"
 Cohesion: 0.29
@@ -823,69 +795,73 @@ Nodes (6): clip-path for Animation, Comparison sliders, Hold-to-delete pattern, 
 Cohesion: 0.33
 Nodes (6): CSS animations beat JS under load, CSS variables are inheritable, Framer Motion hardware acceleration caveat, Only animate transform and opacity, Performance Rules, Use WAAPI for programmatic CSS animations
 
-### Community 145 - ".notFound"
-Cohesion: 0.11
-Nodes (5): KsefCompanyResponse, KsefCompanyStore, KsefSeenInternalId, KsefSettingsResponse, KsefConnectionService
+### Community 145 - ".badRequest"
+Cohesion: 0.07
+Nodes (13): StoreAccess, SecretCipher, KsefCredentials, KsefRateLimiter, KsefCompanyResponse, KsefCompanyStore, KsefSeenInternalId, KsefSettingsResponse (+5 more)
 
-### Community 146 - "KsefSyncService"
-Cohesion: 0.11
-Nodes (3): KsefSyncState, KsefSyncService, Progress
+### Community 146 - "KsefInvoiceService"
+Cohesion: 0.05
+Nodes (17): DocumentKsefInvoiceRepository, KsefInvoicePage, Delivery, KsefInvoiceSummary, KsefSyncState, KsefMapper, KsefConnectionRepository, KsefInvoiceEntryRepository (+9 more)
 
 ### Community 147 - "SecurityConfig.java"
 Cohesion: 0.07
-Nodes (5): SecurityConfig, SchedulingConfig, Config, RecordingAccountMailer, TestcontainersConfiguration
+Nodes (3): SecurityConfig, JwtAuthenticationFilter, SchedulingConfig
 
 ### Community 148 - "app.json"
 Cohesion: 0.33
 Nodes (5): about, patterns, shells, styles, version
 
-### Community 149 - "DeliveryReportClosing"
-Cohesion: 0.17
-Nodes (4): DeliveryReportClosingDelivery, RegionAmount, DeliveryReportClosingDeliveryRepository, Known
-
-### Community 150 - ".conflict"
-Cohesion: 0.17
-Nodes (7): DeliOrderController, CorrectDeliOrderRequest, Line, DeliOrderDocumentResponse, DeliOrderItemResponse, DeliOrderResponse, DeliOrderService
-
-### Community 151 - "ProductImport"
+### Community 150 - "OrderUnit"
 Cohesion: 0.08
-Nodes (4): ProductEan, ProductEanChange, ProductImport, Catalog
+Nodes (9): Line, Row, Extra, Line, SubmitDeliOrderRequest, DeliOrderItem, OrderUnit, KG (+1 more)
+
+### Community 151 - "Product"
+Cohesion: 0.07
+Nodes (3): Ingredient, ProductReportRow, Product
+
+### Community 152 - "SalesReportParser"
+Cohesion: 0.20
+Nodes (6): ReportFormatException, SalesReportParser, Sink, Summary, SalesReportHeader, SalesReportParser.Sink
 
 ### Community 155 - "documentRefForElement"
 Cohesion: 0.06
 Nodes (39): addManualContextText(), canRestoreManualEditElement(), collectEditableTextRows(), visit(), collectManualContextPieces(), walk(), contextElementForManualEdit(), copyEditContainerContext() (+31 more)
 
-### Community 156 - "KsefCredentials.java"
-Cohesion: 0.12
-Nodes (3): KsefCredentials, Loaded, KsefSignatureTests
+### Community 156 - "notnull"
+Cohesion: 0.04
+Nodes (22): CorrectDeliOrderRequest, InviteStoresRequest, LinkDeliDocumentRequest, Choice, ACCEPT, KEEP, Decision, RefreshPricesRequest (+14 more)
 
 ### Community 157 - "kinds"
 Cohesion: 0.40
 Nodes (5): note, screens, styles, kinds, analytics
 
-### Community 158 - "org.springframework.data.jpa.domain.Specification"
+### Community 158 - ".list"
 Cohesion: 0.13
-Nodes (8): DeliDocumentCandidate, DocumentSearch, Presence, ALL, WITH, WITHOUT, DocumentTotalsRepository, Totals
+Nodes (7): DeliDocumentCandidate, TypeCount, DocumentSearch, Presence, ALL, WITH, WITHOUT
 
 ### Community 159 - "getJson"
 Cohesion: 0.20
 Nodes (15): applyThumb(), commonsApi(), commonsInfo(), commonsLicence(), fromCommons(), fromCommonsVideo(), getJson(), keyOf() (+7 more)
 
-### Community 161 - "notnull"
-Cohesion: 0.09
-Nodes (4): ChangePasswordRequest, SetUpPasswordRequest, AddOrderProductRequest, LinkDeliDocumentRequest
+### Community 161 - "StoreService"
+Cohesion: 0.12
+Nodes (7): OwnerBootstrap, UserMapper, RoleRepository, AccountMailer, ActivationService, UserService, StoreService
 
 ### Community 163 - "Heuristics Scoring Guide"
 Cohesion: 0.50
 Nodes (4): Heuristics Scoring Guide, Issue Severity (P0–P3), Reference Material, Score Summary
 
-### Community 164 - "PriceCalculationItem"
-Cohesion: 0.11
-Nodes (5): IngredientPrice, PriceCalculationItem, PriceSource, CATALOG, DELIVERY
+### Community 164 - ".update"
+Cohesion: 0.26
+Nodes (3): StoreController, StoreRequest, StoreResponse
 
-### Community 165 - "devDependencies"
-Cohesion: 0.09
-Nodes (22): devDependencies, oxlint@^1.88.0, tailwindcss@^4.3.3, @tailwindcss/vite@^4.3.3, @types/node@^24.19.2, @types/react@^19.3.0, @types/react-dom@^19.3.0, typescript@~6.0.3 (+14 more)
+### Community 165 - "package.json"
+Cohesion: 0.05
+Nodes (49): dependencies, @base-ui/react@^1.9.0, class-variance-authority@^0.7.1, cn@^0.5.0, @fontsource-variable/geist@^5.3.0, lucide-react@^1.61.0, next-themes@^0.4.6, react@^19.3.1 (+41 more)
+
+### Community 166 - "Entered"
+Cohesion: 0.50
+Nodes (4): Entered, ALL, ENTERED, NOT_ENTERED
 
 ### Community 167 - "builder"
 Cohesion: 0.50
@@ -935,85 +911,89 @@ Nodes (4): wallet, note, screens, styles
 Cohesion: 0.50
 Nodes (4): workspace, note, screens, styles
 
-### Community 179 - "DocumentGratis"
-Cohesion: 0.14
-Nodes (3): DocumentGratis, DocumentGratisRepository, DocumentGratisService
+### Community 179 - "InvoiceComparisonService"
+Cohesion: 0.26
+Nodes (3): Unavailable, Groups, Side
 
 ### Community 181 - "captureElementToBlob"
 Cohesion: 0.14
 Nodes (19): averageRgb01(), captureAndEmit(), captureElementFromRenderedAncestor(), captureElementToBlob(), compileShader(), cssColorToRgb01(), dominantRgb01(), findBackdropAncestor() (+11 more)
 
 ### Community 182 - "Role"
-Cohesion: 0.05
-Nodes (22): PermissionCategoryController, RoleController, PermissionCategoryResponse, RoleRequest, RoleResponse, PermissionCategory, DELI_ORDERS, DELI_PRICES (+14 more)
+Cohesion: 0.06
+Nodes (21): PermissionCategoryController, RoleController, PermissionCategoryResponse, RoleRequest, RoleResponse, PermissionCategory, DELI_ORDERS, DELI_PRICES (+13 more)
 
-### Community 183 - "documents/api.ts"
-Cohesion: 0.11
-Nodes (47): FormNote(), closingsKey(), closingsPath(), DocumentColumn, DocumentFilters, documentsKey(), documentsPath(), downloadClosed() (+39 more)
+### Community 183 - "types.ts"
+Cohesion: 0.03
+Nodes (146): DateField(), Props, ReportFreshness(), Calendar(), CalendarProps, dayLabel, MonthButton(), monthGrid() (+138 more)
 
-### Community 184 - "DeliveryReportClosing"
-Cohesion: 0.10
-Nodes (6): DeliveryReportClosingResponse, DeliveryReportClosingsOverview, DeliveryReportExcludedSupplierResponse, DeliveryReportClosing, DeliveryReportMapper, DeliveryReportClosingRepository
+### Community 184 - "PeriodSummaryPdf"
+Cohesion: 0.19
+Nodes (8): PeriodSummaryPdf, Figures, Kind, GROUP, REGION, SUBTOTAL, Line, PeriodSummaryResponse
 
 ### Community 185 - "onAnnotDown"
 Cohesion: 0.24
 Nodes (15): beginEditPin(), buildAnnotationsForCapture(), buildPinElement(), cancelEditingPin(), finalizeEditingPin(), initAnnotOverlay(), localCoords(), onAnnotDown() (+7 more)
 
-### Community 187 - "KsefRateHistory.java"
-Cohesion: 0.23
-Nodes (3): KsefRateHistory, KsefApiBlock, KsefApiBlockRepository
-
-### Community 188 - "DeliveryReportService"
-Cohesion: 0.18
-Nodes (5): Change, Current, DeliveryReportService, InvoiceRef, ReportLine
-
-### Community 189 - "OrderUnit"
-Cohesion: 0.11
-Nodes (5): UpdateOrderUnitRequest, DeliOrderItem, OrderUnit, KG, SZT
+### Community 188 - "scenes.mjs"
+Cohesion: 0.08
+Nodes (18): alive(), Browser, findChrome(), Page, sleep(), sweepProfiles(), args, go() (+10 more)
 
 ### Community 190 - "Impeccable Documenter"
 Cohesion: 0.40
 Nodes (4): Impeccable Documenter, Input Contract, Output Contract, Workflow
 
 ### Community 191 - "jakarta.servlet.http.Cookie"
-Cohesion: 0.16
-Nodes (4): AccessToken, KsefClient, Page, KsefIntegrationTests
+Cohesion: 0.14
+Nodes (9): AccessToken, KsefClient, Buyer, Identifier, KsefInvoiceMetadata, Page, Seller, ThirdSubject (+1 more)
 
-### Community 192 - "PriceCalculationMapper.java"
-Cohesion: 0.26
-Nodes (3): FinishedProductResponse, PriceProductResponse, PriceCalculationMapper
+### Community 192 - "ProductImport"
+Cohesion: 0.07
+Nodes (6): EanChangeResponse, ProductImportResponse, ProductEan, ProductEanChange, ProductImport, Catalog
 
 ### Community 194 - "XlsxWriter"
 Cohesion: 0.23
 Nodes (4): Cell, Column, Row, XlsxWriter
 
-### Community 196 - "ImportPage.tsx"
-Cohesion: 0.10
-Nodes (46): FileDropZone(), formatFileSize(), ImportError(), numberFormat, Props, ReportFreshness(), Alert(), AlertDescription() (+38 more)
-
-### Community 199 - "AppUserRepository"
-Cohesion: 0.05
-Nodes (26): AppUserRepository, AppUserDetailsService, StoreAccess, Nip, ReportText, ApiException, InvalidReportException, InvalidWorkbookException (+18 more)
+### Community 196 - "types.ts"
+Cohesion: 0.04
+Nodes (82): Input(), ReportKind, reportsKey(), reportsPath(), SalesChartTarget, summaryPdfPath(), useDeliCostsOverview(), usePeriodSummary() (+74 more)
 
 ### Community 200 - "with"
 Cohesion: 0.12
 Nodes (17): with, args, cache, cache-dependency-path, cache-from, cache-to, context, distribution (+9 more)
 
+### Community 201 - "PriceCalculationItem"
+Cohesion: 0.10
+Nodes (6): PriceProductResponse, IngredientPrice, PriceCalculationItem, PriceSource, CATALOG, DELIVERY
+
+### Community 202 - "AppUser"
+Cohesion: 0.03
+Nodes (12): ActivationToken, AppUser, Role, DeliOrder, DeliOrderDocument, DeliOrderStatus, FULFILLED, NEW (+4 more)
+
 ### Community 203 - "scripts"
 Cohesion: 0.33
 Nodes (6): scripts, build, certs, dev, lint, preview
+
+### Community 204 - "org.springframework.transaction.annotation.Transactional"
+Cohesion: 0.06
+Nodes (20): DeliInvitationResponse, DeliOrderDocumentResponse, DeliOrderItemResponse, DeliOrderResponse, DeliOverviewResponse, DeliSupplierResponse, DeliFormInvitation, InvitationStatus (+12 more)
 
 ### Community 205 - "Generate Report"
 Cohesion: 0.29
 Nodes (7): Audit Health Score, Detailed Findings by Severity, Executive Summary, Generate Report, Patterns & Systemic Issues, Platform Conformance Verdict, Positive Findings
 
-### Community 207 - "KsefRateLimiter.java"
-Cohesion: 0.09
-Nodes (14): KsefException, block(), blockedUntil(), History, KsefRateLimiter, Operation, AUTH, INVOICE (+6 more)
+### Community 207 - "Operation"
+Cohesion: 0.06
+Nodes (16): KsefException, KsefRateHistory, block(), blockedUntil(), History, Operation, AUTH, INVOICE (+8 more)
 
 ### Community 208 - "steps"
 Cohesion: 0.27
 Nodes (10): steps, steps, TARGET, env, name, run, uses, working-directory (+2 more)
+
+### Community 209 - ".group"
+Cohesion: 0.17
+Nodes (5): Group, RegionGroups, Builder, ExportFile, Sums
 
 ### Community 210 - "Wdrożenie na produkcję (https://intermanage.pl)"
 Cohesion: 0.20
@@ -1047,9 +1027,13 @@ Nodes (5): 4.1 Width and gutters, 4.2 One left edge, one right edge, 4.3 The tit
 Cohesion: 0.31
 Nodes (11): acceptedDomAlreadyClean(), clearHandledWrapperReloadStamp(), deferredRecoverySuperseded(), ensureAcceptedDomClean(), findAcceptedRuntimeWrappers(), handledWrapperReloadKey(), reloadAfterMissingAcceptedDom(), restoreAcceptedDomFromSnapshot() (+3 more)
 
-### Community 219 - ".compare"
-Cohesion: 0.22
-Nodes (5): InvoiceComparison, Row, Unavailable, Groups, Side
+### Community 218 - "Level"
+Cohesion: 0.40
+Nodes (5): Level, FAMILY, PRODUCT, REGION, SUBFAMILY
+
+### Community 219 - "org.springframework.transaction.annotation.Transactional"
+Cohesion: 0.03
+Nodes (38): CorrectedDelivery, CorrectionCandidate, CorrectionTotals, DeliveryCorrectionResponse, DocumentGratisResponse, DocumentReportClosing, DocumentLineResponse, DocumentResponse (+30 more)
 
 ### Community 220 - "Impeccable Finish Reviewer"
 Cohesion: 0.29
@@ -1059,13 +1043,9 @@ Nodes (6): Checks, in order, Disposition, Impeccable Finish Reviewer, Input Cont
 Cohesion: 0.33
 Nodes (6): needs, runs-on, strategy, build, app, matrix
 
-### Community 222 - "SalesReportBatch"
-Cohesion: 0.22
-Nodes (3): SalesReportBatch, SalesReportHeader, SalesReportParser.Sink
-
-### Community 223 - "Level"
-Cohesion: 0.40
-Nodes (5): Level, FAMILY, PRODUCT, REGION, SUBFAMILY
+### Community 223 - ".cancel"
+Cohesion: 0.16
+Nodes (5): DeliveryReportClosingResponse, DeliveryReportClosingsOverview, DeliveryReportExcludedSupplierResponse, DeliveryReportMapper, DeliveryReportClosingRepository
 
 ### Community 224 - "jobs"
 Cohesion: 0.40
@@ -1087,89 +1067,85 @@ Nodes (5): 6.1 Which chart for which question, 6.2 One question, one series, 6.3
 Cohesion: 0.33
 Nodes (6): 1. Accessibility (VoiceOver / TalkBack), 2. Performance, 3. Appearance & Theming, 4. Platform Conformance (CRITICAL), 5. Adaptivity, Diagnostic Scan
 
-### Community 229 - "DocumentTotalsRepositoryImpl.java"
-Cohesion: 0.21
-Nodes (4): DocumentTotalsRepositoryImpl, KsefInvoiceTotalsRepository, Totals, KsefInvoiceTotalsRepositoryImpl
-
 ### Community 230 - "Operate mode depth (and Read notes)"
 Cohesion: 0.22
 Nodes (9): Color, Components, Layout, Motion, Operate mode depth (and Read notes), Product constraints, Product permissions, The product slop test (+1 more)
+
+### Community 231 - "org.springframework.data.jpa.domain.Specification"
+Cohesion: 0.21
+Nodes (4): DocumentTotalsRepository, Totals, DocumentTotalsRepositoryImpl, KsefInvoiceTotalsRepositoryImpl
+
+### Community 232 - "AppUserRepository"
+Cohesion: 0.05
+Nodes (28): AppUserRepository, AppUserDetailsService, DeliOrderDocumentRepository, DocumentReportParser, DocumentCandidate, DocumentImportResponse, DocumentPage, DocumentsOverview (+20 more)
 
 ### Community 233 - "colorize.md"
 Cohesion: 0.25
 Nodes (7): Apply at system scale, Audit before choosing, Choose a strategy, Contrast and perception, Live-mode signature params, Verify, Visitor mode
 
-### Community 234 - "doctor.md"
+### Community 234 - ".correctionLabels"
 Cohesion: 0.25
-Nodes (7): Monorepo notes, Opting out of the boot check, Step 1: Run the pass, Step 2: Act by severity, Step 3: Deprecated fields are binding, Step 4: Do not overclaim on truth drift, What this owns, and what it does not
+Nodes (3): Change, Current, InvoiceRef
+
+### Community 236 - "Worst-Case Catalog"
+Cohesion: 0.17
+Nodes (10): Collections, Emails, URLs, identifiers, Environment, Images and media, Labels, titles, and copy from data, Numbers and money, People and names, States (+2 more)
 
 ### Community 237 - "8. Forms and settings"
 Cohesion: 0.50
 Nodes (4): 8.1 Fields, 8.2 Settings layout, 8.3 Buttons, 8. Forms and settings
 
-### Community 238 - "RefreshPricesRequest"
-Cohesion: 0.50
-Nodes (4): Choice, ACCEPT, KEEP, Decision
-
-### Community 239 - ".headers"
+### Community 243 - ".headers"
 Cohesion: 0.50
 Nodes (4): append-arrays, append-string, Consent prompt (use this phrasing), CSP detection (first-time only)
 
-### Community 242 - ".list"
-Cohesion: 0.23
-Nodes (10): KsefInvoicePage, Entered, ALL, ENTERED, NOT_ENTERED, Filter, Kind, ALL (+2 more)
+### Community 244 - "DocumentLineRepository"
+Cohesion: 0.28
+Nodes (3): IngredientPricing, DocumentLineRepository, RegionValue
 
-### Community 243 - "KsefSessionService"
-Cohesion: 0.30
-Nodes (3): SecretCipher, Cached, KsefSessionService
-
-### Community 244 - "DeliOrderStatus"
-Cohesion: 0.20
-Nodes (4): DeliOrderSummaryResponse, DeliOrderStatus, FULFILLED, NEW
-
-### Community 245 - "Worst-Case Catalog"
-Cohesion: 0.17
-Nodes (10): Collections, Emails, URLs, identifiers, Environment, Images and media, Labels, titles, and copy from data, Numbers and money, People and names, States (+2 more)
-
-### Community 247 - "SalesReportParser"
-Cohesion: 0.27
-Nodes (4): ReportFormatException, SalesReportParser, Sink, Summary
-
-### Community 248 - ".submit"
-Cohesion: 0.39
-Nodes (3): Extra, Line, SubmitDeliOrderRequest
-
-### Community 250 - ".pasteProducts"
-Cohesion: 0.25
-Nodes (3): PasteOrderProductsRequest, Row, PasteOrderProductsResponse
-
-### Community 253 - "Component Building Principles"
+### Community 247 - "Component Building Principles"
 Cohesion: 0.25
 Nodes (8): Animate enter states with @starting-style, Buttons must feel responsive, Component Building Principles, Make popovers origin-aware, Never animate from scale(0), Tooltips: skip delay on subsequent hovers, Use blur to mask imperfect transitions, Use CSS transitions over keyframes for interruptible UI
 
-### Community 257 - "Spring Animations"
+### Community 248 - "org.springframework.security.access.prepost.PreAuthorize"
+Cohesion: 0.06
+Nodes (12): AppUserPrincipal, DeliOrderController, DeliOrderSummaryResponse, DocumentController, DocumentTransferController, EnteredRequest, IncomingTransfer, IncomingTransfers (+4 more)
+
+### Community 250 - "doctor.md"
+Cohesion: 0.25
+Nodes (7): Monorepo notes, Opting out of the boot check, Step 1: Run the pass, Step 2: Act by severity, Step 3: Deprecated fields are binding, Step 4: Do not overclaim on truth drift, What this owns, and what it does not
+
+### Community 252 - "Kind"
+Cohesion: 0.50
+Nodes (4): Kind, ALL, CORRECTIONS, INVOICES
+
+### Community 254 - "Spring Animations"
 Cohesion: 0.40
 Nodes (5): Interruptibility advantage, Spring Animations, Spring-based mouse interactions, Spring configuration, When to use springs
 
+### Community 256 - "DocumentService.java"
+Cohesion: 0.08
+Nodes (9): LoggingAccountMailer, Nip, ReportText, ApiException, InvalidReportException, InvalidWorkbookException, NomenclatureReportParser, ProductReportParser (+1 more)
+
 ## Knowledge Gaps
-- **85 isolated node(s):** `com.trytoma:backend`, `SALES`, `INVENTORY`, `ORDERS`, `STAFF` (+80 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2000 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **46 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **88 isolated node(s):** `com.trytoma:backend`, `SALES`, `INVENTORY`, `ORDERS`, `STAFF` (+83 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2076 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CSP detection (first-time only)` connect `.headers` to `live.md`?**
-  _High betweenness centrality (0.384) - this node is a cross-community bridge._
+  _High betweenness centrality (0.407) - this node is a cross-community bridge._
 - **What connects `com.trytoma:backend`, `SALES`, `INVENTORY` to the rest of the system?**
-  _85 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `KsefSettingsPage.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.07039573820395738 - nodes in this community are weakly interconnected._
-- **Why does `Document` connect `Document` to `KsefInvoice`, `uuid`, `AppUser`, `KsefInvoiceService`, `DeliveryReportClosing`, `org.springframework.data.jpa.domain.Specification`, `DocumentLine`, `PriceCalculationItem`, `DeliOrder`, `DeliveryReportExcludedSupplier`, `DocumentGratis`, `DeliveryReportService`, `AppUserRepository`, `com.lowagie.text.Font`, `org.springframework.security.access.prepost.PreAuthorize`, `DeliveryNotePdf`, `DocumentTotalsRepositoryImpl.java`, `DocumentImport`, `.headers`, `DocumentLineRow`, `.merge`?**
-  _High betweenness centrality (0.252) - this node is a cross-community bridge._
+  _88 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Button` be split into smaller, more focused modules?**
+  _Cohesion score 0.04766469153014988 - nodes in this community are weakly interconnected._
+- **Why does `Document` connect `org.springframework.transaction.annotation.Transactional` to `DocumentService.java`, `uuid`, `list`, `DocumentLine`, `Store`, `KsefInvoiceService`, `.list`, `DocumentTransferTarget`, `DeliveryReportService`, `PriceCalculationItem`, `AppUser`, `.cancel`, `DeliveryNotePdf`, `org.springframework.data.jpa.domain.Specification`, `DocumentImport`, `AppUserRepository`, `.correctionLabels`, `.headers`, `DocumentSearch.java`, `DeliveryReportClosingDelivery`?**
+  _High betweenness centrality (0.288) - this node is a cross-community bridge._
 - **Should `react` be split into smaller, more focused modules?**
-  _Cohesion score 0.07878787878787878 - nodes in this community are weakly interconnected._
-- **Why does `init()` connect `setLiveState` to `live-browser.js`, `initPageChat`, `doctor.md`, `Operate mode depth (and Read notes)`, `live.md`, `connectSSE`, `handleManualEditActivity`, `Init flow`, `el`, `Write Swift`, `onAnnotDown`, `initGlobalBar`?**
-  _High betweenness centrality (0.212) - this node is a cross-community bridge._
-- **Should `SalesComparisonReport.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.07164404223227752 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05422838031533684 - nodes in this community are weakly interconnected._
+- **Why does `title()` connect `types.ts` to `Breaking UI`, `inspect.mjs`, `document.md`?**
+  _High betweenness centrality (0.235) - this node is a cross-community bridge._
+- **Should `ImportPage.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.07099099099099099 - nodes in this community are weakly interconnected._

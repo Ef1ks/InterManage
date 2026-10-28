@@ -59,7 +59,11 @@ public record DocumentResponse(
         Instant updatedAt,
         List<DocumentLineResponse> lines,
         /** Zamówienia garmażu jadące na tym dokumencie (tylko przy ruchach międzymagazynowych). */
-        List<LinkedDeliOrder> deliOrders) {
+        List<LinkedDeliOrder> deliOrders,
+        /** Dokument można wystawić dla sklepu zaprzyjaźnionego (ruchy międzymagazynowe). */
+        boolean transferTargetAllowed,
+        /** Sklep, dla którego wystawiono ruch międzymagazynowy. */
+        TransferTargetResponse transferTarget) {
 
     public record DocumentLineResponse(
             UUID id,

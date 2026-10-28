@@ -1,4 +1,4 @@
-import { ArrowLeftRightIcon, ChevronRightIcon, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRightIcon, ChefHatIcon, ChevronRightIcon, ClipboardListIcon, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { formatDocumentDate } from '@/features/documents/format'
@@ -11,10 +11,22 @@ type Report = { path: string; title: string; description: string; icon: LucideIc
 /** Raporty sprzedaży; kolejne dopisujemy tutaj jako następne kafelki. */
 const REPORTS: Report[] = [
   {
+    path: salesPaths.periodSummary,
+    title: 'Podsumowanie sprzedaży i strat',
+    description: 'Okres wg grup i rejonów: marża, likwidacje i marża po stratach względem budżetu. Z wydrukiem.',
+    icon: ClipboardListIcon,
+  },
+  {
     path: salesPaths.comparison,
     title: 'Porównanie sprzedaży',
     description: 'Dzień, tydzień, miesiąc albo własny okres z poprzednim: ilość, zakup, sprzedaż i marża wg nomenklatury.',
     icon: ArrowLeftRightIcon,
+  },
+  {
+    path: salesPaths.deliCosts,
+    title: 'Koszty garmażu',
+    description: 'Sprzedaż garmażu (nomenklatura 36) z kosztem z protokołów reprezentacji zamiast zakupu FIFO.',
+    icon: ChefHatIcon,
   },
 ]
 

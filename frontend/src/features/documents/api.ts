@@ -11,6 +11,8 @@ import type {
   Document,
   DocumentPage,
   DocumentsOverview,
+  IncomingTransfer,
+  IncomingTransfers,
   InvoiceComparison,
   KsefInvoiceCandidate,
   Supplier,
@@ -37,9 +39,17 @@ export type Presence = 'all' | 'with' | 'without'
 /**
  * Wyszukiwanie i filtry listy: {@code query} w numerze, dostawcy i nr dok. dostawcy, {@code product} w liniach
  * (nazwa, marka, EAN, ITM8). {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
- * w przyjęciach.
+ * i {@code closed} (w zamkniętym raporcie okresowym) w przyjęciach. {@code hiddenSuppliers}: kody dostawców,
+ * których dokumentów lista nie pokazuje.
  */
-export type DocumentFilters = { query: string; product: string; invoice: Presence; corrections: Presence }
+export type DocumentFilters = {
+  query: string
+  product: string
+  invoice: Presence
+  corrections: Presence
+  closed: Presence
+  hiddenSuppliers: string[]
+}
 
 /**
  * Lista dokumentów typu stronami po 100 (wyszukiwanie, filtry i sortowanie w bazie); kolejne strony dociąga
@@ -54,6 +64,8 @@ export function useDocuments(storeId: string, typeCode: string, filters: Documen
       if (filters.product) params.set('product', filters.product)
       if (filters.invoice !== 'all') params.set('invoice', filters.invoice)
       if (filters.corrections !== 'all') params.set('corrections', filters.corrections)
+      if (filters.closed !== 'all') params.set('closed', filters.closed)
+      filters.hiddenSuppliers.forEach((code) => params.append('hiddenSuppliers', code))
       return api<DocumentPage>(`${documentsPath(storeId)}/${typeCode}?${params}`)
     },
     initialPageParam: 0,
@@ -403,5 +415,61 @@ export function useCreateSupplier(storeId: string) {
     mutationFn: (request: { name: string; nip: string }) =>
       api<Supplier>(`/stores/${storeId}/suppliers`, { method: 'POST', json: request }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: suppliersKey(storeId) }),
+  })
+}
+
+/**
+ * Sklep zaprzyjaźniony, dla którego wystawiono ruch międzymagazynowy: wskazanie, zmiana, cofnięcie (znacznik)
+ * i przywrócenie. Każda zmiana zwraca cały dokument, który od razu podmieniamy.
+ */
+export function useTransferTarget(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/transfer-target`
+  const onSuccess = (document: Document) => queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+  return {
+    set: useMutation({
+      mutationFn: (targetStoreId: string) => api<Document>(path, { method: 'PUT', json: { storeId: targetStoreId } }),
+      onSuccess,
+    }),
+    cancel: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
+    restore: useMutation({ mutationFn: () => api<Document>(`${path}/restore`, { method: 'POST' }), onSuccess }),
+  }
+}
+
+/** Ruchy międzymagazynowe innych sklepów wystawione dla tego sklepu: do wprowadzenia i ostatnio wprowadzone. */
+const incomingKey = (storeId: string) => ['stores', storeId, 'incoming-transfers'] as const
+const incomingPath = (storeId: string) => `/stores/${storeId}/incoming-transfers`
+
+export function useIncomingTransfers(storeId: string) {
+  return useQuery({
+    queryKey: [...incomingKey(storeId), 'list'],
+    queryFn: () => api<IncomingTransfers>(incomingPath(storeId)),
+  })
+}
+
+/** Licznik w menu; odświeża się co minutę, bo dokument wystawia inny sklep. */
+export function useIncomingTransfersCount(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...incomingKey(storeId), 'count'],
+    queryFn: () => api<number>(`${incomingPath(storeId)}/count`),
+    enabled,
+    refetchInterval: 60_000,
+  })
+}
+
+export function useIncomingTransfer(storeId: string, id: string) {
+  return useQuery({
+    queryKey: [...incomingKey(storeId), id],
+    queryFn: () => api<IncomingTransfer>(`${incomingPath(storeId)}/${id}`),
+  })
+}
+
+/** Oznacza dokument jako wprowadzony w tym sklepie albo cofa oznaczenie. */
+export function useMarkTransferEntered(storeId: string, id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (entered: boolean) =>
+      api<IncomingTransfer>(`${incomingPath(storeId)}/${id}/entered`, { method: 'PUT', json: { entered } }),
+    onSuccess: (transfer) => queryClient.setQueryData([...incomingKey(storeId), id], transfer),
   })
 }

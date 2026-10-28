@@ -1,5 +1,6 @@
 package com.intermanage.backend.document.repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -21,4 +22,8 @@ public interface DocumentImportRepository extends JpaRepository<DocumentImport, 
     /** Najnowsze dane w bazie: data wygenerowania najświeższego wgranego raportu. */
     @Query("select max(i.reportGeneratedAt) from DocumentImport i where i.store.id = :storeId")
     Optional<LocalDateTime> findNewestReportGeneratedAt(UUID storeId);
+
+    /** Do jakiego dnia sięgają wgrane raporty dokumentów (koniec okresu "Wybór danych"). */
+    @Query("select max(i.periodTo) from DocumentImport i where i.store.id = :storeId")
+    Optional<LocalDate> findLastPeriodTo(UUID storeId);
 }

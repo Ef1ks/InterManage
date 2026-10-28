@@ -271,6 +271,30 @@ public class Product {
         return netContent;
     }
 
+    public String getSupplier() {
+        return supplier;
+    }
+
+    /** STAN z raportu kartoteki, może być ujemny. */
+    public BigDecimal getStock() {
+        return stock;
+    }
+
+    /** ROTACJA z raportu kartoteki. */
+    public BigDecimal getRotation() {
+        return rotation;
+    }
+
+    /** COLI: ile sztuk w kartonie. */
+    public BigDecimal getCaseSize() {
+        return caseSize;
+    }
+
+    /** Ostatni import, w którym produkt był; z jego raportu są stan i rotacja. */
+    public ProductImport getLastSeenImport() {
+        return lastSeenImport;
+    }
+
     /**
      * Jednostka, w której wpisuje się ilość produktu w przepisie. Artykuły wagowe ("A.Wa") są liczone na kilogramy,
      * reszta w jednostce z kartoteki (kg, L, szt.).

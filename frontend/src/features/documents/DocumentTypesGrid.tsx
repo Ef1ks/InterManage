@@ -5,6 +5,7 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { useDocumentsOverview } from '@/features/documents/api'
 import { DOCUMENT_ICONS, FALLBACK_ICON } from '@/features/documents/document-icons'
 import { countFormat, documentPaths, documentsWord, formatDocumentDate } from '@/features/documents/format'
+import { IncomingTransfersNotice } from '@/features/documents/IncomingTransfers'
 import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import type { DocumentTypeSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ export function DocumentTypesGrid({ storeId }: { storeId: string }) {
   return (
     <>
       {data && <StaleDataNotice generatedAt={data.lastReportGeneratedAt} />}
+      <IncomingTransfersNotice storeId={storeId} />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {isPending
           ? Array.from({ length: 8 }, (_, index) => (

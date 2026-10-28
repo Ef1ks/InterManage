@@ -7,6 +7,9 @@ export const documentPaths = {
   overview: base,
   list: (typeCode: string) => `${base}/${typeCode.toLowerCase()}`,
   document: (typeCode: string, id: string) => `${base}/${typeCode.toLowerCase()}/${id}`,
+  /** Ruchy międzymagazynowe innych sklepów wystawione dla tego sklepu. */
+  incoming: `${base}/do-wprowadzenia`,
+  incomingTransfer: (id: string) => `${base}/do-wprowadzenia/${id}`,
 }
 
 /**
