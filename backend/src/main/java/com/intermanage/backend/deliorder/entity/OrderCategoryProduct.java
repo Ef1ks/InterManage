@@ -28,7 +28,7 @@ public class OrderCategoryProduct {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "category_id", nullable = false, updatable = false)
+    @JoinColumn(name = "category_id", nullable = false)
     private OrderCategory category;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -82,5 +82,9 @@ public class OrderCategoryProduct {
 
     public int getPosition() {
         return position;
+    }
+
+    void setPosition(int position) {
+        this.position = position;
     }
 }

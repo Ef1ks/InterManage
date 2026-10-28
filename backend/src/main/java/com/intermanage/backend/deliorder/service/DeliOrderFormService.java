@@ -15,9 +15,11 @@ import com.intermanage.backend.deliorder.dto.OrderFormResponse;
 import com.intermanage.backend.deliorder.dto.PasteOrderProductsRequest;
 import com.intermanage.backend.deliorder.dto.PasteOrderProductsResponse;
 import com.intermanage.backend.deliorder.entity.OrderCategory;
+import com.intermanage.backend.deliorder.entity.OrderCategoryProduct;
 import com.intermanage.backend.deliorder.entity.OrderSection;
 import com.intermanage.backend.deliorder.entity.OrderUnit;
 import com.intermanage.backend.deliorder.mapper.OrderFormMapper;
+import com.intermanage.backend.deliorder.repository.OrderCategoryProductRepository;
 import com.intermanage.backend.deliorder.repository.OrderCategoryRepository;
 import com.intermanage.backend.deliorder.repository.OrderSectionRepository;
 import com.intermanage.backend.product.dto.ProductSearchResponse;
@@ -39,14 +41,17 @@ public class DeliOrderFormService {
 
     private final OrderSectionRepository sections;
     private final OrderCategoryRepository categories;
+    private final OrderCategoryProductRepository categoryProducts;
     private final ProductRepository products;
     private final StoreRepository stores;
     private final OrderFormMapper orderFormMapper;
 
     public DeliOrderFormService(OrderSectionRepository sections, OrderCategoryRepository categories,
-            ProductRepository products, StoreRepository stores, OrderFormMapper orderFormMapper) {
+            OrderCategoryProductRepository categoryProducts, ProductRepository products, StoreRepository stores,
+            OrderFormMapper orderFormMapper) {
         this.sections = sections;
         this.categories = categories;
+        this.categoryProducts = categoryProducts;
         this.products = products;
         this.stores = stores;
         this.orderFormMapper = orderFormMapper;
@@ -103,6 +108,38 @@ public class DeliOrderFormService {
     public OrderFormResponse deleteCategory(UUID storeId, UUID categoryId) {
         OrderCategory category = loadCategory(storeId, categoryId);
         category.getSection().getCategories().remove(category);
+        return current(storeId);
+    }
+
+    /** Przeciągnięcie kategorii na inne miejsce w jej dziale. */
+    @Transactional
+    public OrderFormResponse moveCategory(UUID storeId, UUID categoryId, int index) {
+        OrderCategory category = loadCategory(storeId, categoryId);
+        category.getSection().moveCategory(category, index);
+        return current(storeId);
+    }
+
+    /**
+     * Przeciągnięcie produktu na inne miejsce w kategorii albo do innej kategorii formularza. Pozycja zachowuje id
+     * i jednostkę; produktu, który już jest w kategorii docelowej, nie da się do niej przenieść.
+     */
+    @Transactional
+    public OrderFormResponse moveProduct(UUID storeId, UUID categoryId, UUID itemId, UUID targetCategoryId,
+            int index) {
+        OrderCategory source = loadCategory(storeId, categoryId);
+        OrderCategoryProduct item = source.findProduct(itemId)
+                .orElseThrow(() -> ApiException.notFound("Tego produktu nie ma w kategorii"));
+        if (targetCategoryId.equals(categoryId)) {
+            source.moveProduct(item, index);
+            return current(storeId);
+        }
+        OrderCategory target = loadCategory(storeId, targetCategoryId);
+        if (target.containsProduct(item.getProduct().getId())) {
+            throw ApiException.conflict("Ten produkt już jest w kategorii „" + target.getName() + "”");
+        }
+        source.numberWithout(item);
+        target.numberWith(item, index);
+        categoryProducts.moveToCategory(item.getId(), target);
         return current(storeId);
     }
 

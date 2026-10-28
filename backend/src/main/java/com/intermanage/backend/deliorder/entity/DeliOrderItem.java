@@ -58,13 +58,13 @@ public class DeliOrderItem {
     }
 
     DeliOrderItem(DeliOrder order, Product product, String sectionName, String categoryName, OrderUnit unit,
-            BigDecimal quantity, int position) {
+            BigDecimal orderedQuantity, BigDecimal quantity, int position) {
         this.order = order;
         this.product = product;
         this.sectionName = sectionName;
         this.categoryName = categoryName;
         this.unit = unit;
-        this.orderedQuantity = quantity;
+        this.orderedQuantity = orderedQuantity;
         this.quantity = quantity;
         this.position = position;
     }

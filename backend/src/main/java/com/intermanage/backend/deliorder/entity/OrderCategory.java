@@ -75,6 +75,38 @@ public class OrderCategory {
         return item;
     }
 
+    /** Przestawia produkt na miejsce {@code index} w tej kategorii. */
+    public void moveProduct(OrderCategoryProduct item, int index) {
+        products.remove(item);
+        products.add(Math.min(index, products.size()), item);
+        renumber(products);
+    }
+
+    /**
+     * Numeruje produkty tak, jakby {@code item} z innej kategorii stał na miejscu {@code index}. Do listy go nie
+     * dodaje: kategorię pozycji zmienia zapytanie, bo przeniesienie między listami z orphanRemoval skasowałoby ją.
+     */
+    public void numberWith(OrderCategoryProduct item, int index) {
+        List<OrderCategoryProduct> ordered = new ArrayList<>(products);
+        ordered.add(Math.min(index, ordered.size()), item);
+        renumber(ordered);
+    }
+
+    /** Numeruje produkty bez {@code item}, który przechodzi do innej kategorii. */
+    public void numberWithout(OrderCategoryProduct item) {
+        renumber(products.stream().filter(other -> other != item).toList());
+    }
+
+    private static void renumber(List<OrderCategoryProduct> ordered) {
+        for (int i = 0; i < ordered.size(); i++) {
+            ordered.get(i).setPosition(i);
+        }
+    }
+
+    public boolean containsProduct(UUID productId) {
+        return products.stream().anyMatch(item -> item.getProduct().getId().equals(productId));
+    }
+
     public Optional<OrderCategoryProduct> findProduct(UUID itemId) {
         return products.stream().filter(item -> item.getId().equals(itemId)).findFirst();
     }
@@ -101,6 +133,10 @@ public class OrderCategory {
 
     public int getPosition() {
         return position;
+    }
+
+    void setPosition(int position) {
+        this.position = position;
     }
 
     public List<OrderCategoryProduct> getProducts() {

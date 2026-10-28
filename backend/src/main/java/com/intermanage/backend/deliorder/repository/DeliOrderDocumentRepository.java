@@ -10,9 +10,13 @@ import com.intermanage.backend.deliorder.entity.DeliOrderDocument;
 
 public interface DeliOrderDocumentRepository extends JpaRepository<DeliOrderDocument, UUID> {
 
-    /** Zamówienia garmażu, do których przypięto dokument (widok dokumentu w module Dokumenty). */
+    /**
+     * Zamówienia garmażu, do których przypięto dokument (widok dokumentu w module Dokumenty). Bez zamówień
+     * połączonych w inne: połączone ma kopię ich dokumentów.
+     */
     @Query("""
             select l from DeliOrderDocument l join fetch l.order o join fetch o.store
-            where l.document.id = :documentId and l.unlinkedAt is null order by o.deliveryDate, o.id""")
+            where l.document.id = :documentId and l.unlinkedAt is null and o.mergedInto is null and o.splitAt is null
+            order by o.deliveryDate, o.id""")
     List<DeliOrderDocument> findActiveByDocumentId(UUID documentId);
 }

@@ -16,6 +16,14 @@ services:
       OWNER_USERNAME: ${OWNER_USERNAME:-admin}
       # Puste = losowe hasło wypisane raz w logach backendu przy pierwszym starcie.
       OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      # Maile przez SMTP Brevo; pusty MAIL_HOST = maile tylko w logach backendu.
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@intermanage.pl}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Intermanage}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
       FRONTEND_URL: https://intermanage.pl
       AUTH_COOKIE_SECURE: "true"
       # nginx podaje X-Forwarded-Proto, więc Spring wie, że żądanie przyszło po HTTPS.

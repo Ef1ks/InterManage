@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.deliorder.dto.ChangeDeliveryDateRequest;
 import com.intermanage.backend.deliorder.dto.CorrectDeliOrderRequest;
 import com.intermanage.backend.deliorder.dto.DeliDocumentCandidate;
 import com.intermanage.backend.deliorder.dto.DeliInvitationResponse;
@@ -30,6 +31,7 @@ import com.intermanage.backend.deliorder.dto.DeliOrderSummaryResponse;
 import com.intermanage.backend.deliorder.dto.DeliOverviewResponse;
 import com.intermanage.backend.deliorder.dto.InviteStoresRequest;
 import com.intermanage.backend.deliorder.dto.LinkDeliDocumentRequest;
+import com.intermanage.backend.deliorder.dto.MergeDeliOrdersRequest;
 import com.intermanage.backend.deliorder.dto.OrderFormResponse;
 import com.intermanage.backend.deliorder.dto.SubmitDeliOrderRequest;
 import com.intermanage.backend.deliorder.service.DeliInvitationService;
@@ -122,15 +124,48 @@ public class DeliOrderController {
         return orderService.order(storeId, orderId);
     }
 
+    /** Dostawca otworzył zamówienie: nowe staje się odczytane. */
+    @PostMapping("/orders/{orderId}/read")
+    @PreAuthorize(VIEW)
+    public DeliOrderResponse markRead(@PathVariable UUID storeId, @PathVariable UUID orderId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return orderService.markRead(storeId, orderId, principal.getId());
+    }
+
+    /** Zmiana daty dostawy niezrealizowanego zamówienia: zamawiający z Podglądem, dostawca z Edycją. */
+    @PutMapping("/orders/{orderId}/delivery-date")
+    @PreAuthorize(VIEW)
+    public DeliOrderResponse changeDeliveryDate(@PathVariable UUID storeId, @PathVariable UUID orderId,
+            @Valid @RequestBody ChangeDeliveryDateRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return orderService.changeDeliveryDate(storeId, orderId, request.deliveryDate(), canEdit(principal),
+                principal.getId());
+    }
+
+    /** Dostawca łączy zamówienia jednego sklepu na ten sam dzień w jedno. */
+    @PostMapping("/orders/merge")
+    @PreAuthorize(EDIT)
+    public DeliOrderResponse merge(@PathVariable UUID storeId, @Valid @RequestBody MergeDeliOrdersRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return orderService.merge(storeId, request.orderIds(), principal.getId());
+    }
+
+    /** Cofnięcie połączenia: zwraca zamówienia, które wróciły na listy. */
+    @PostMapping("/orders/{orderId}/split")
+    @PreAuthorize(EDIT)
+    public List<DeliOrderSummaryResponse> split(@PathVariable UUID storeId, @PathVariable UUID orderId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return orderService.split(storeId, orderId, principal.getId());
+    }
+
     /**
-     * Usuwa nowe zamówienie tylko u tego sklepu (dane zostają, druga strona widzi status "usunięte").
-     * Zamawiający - z Podglądem, dostawca - z Edycją.
+     * Usuwa niezrealizowane zamówienie tylko u tego sklepu (dane zostają, druga strona widzi status "usunięte").
+     * Zamawiający - z Podglądem, dostawca - z Edycją; zrealizowane - tylko właściciel.
      */
     @DeleteMapping("/orders/{orderId}")
     @PreAuthorize(VIEW)
     public DeliOrderResponse delete(@PathVariable UUID storeId, @PathVariable UUID orderId,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return orderService.delete(storeId, orderId, canEdit(principal), principal.getId());
+        return orderService.delete(storeId, orderId, canEdit(principal), isOwner(principal), principal.getId());
     }
 
     @PostMapping("/orders/{orderId}/restore")
@@ -138,6 +173,11 @@ public class DeliOrderController {
     public DeliOrderResponse restore(@PathVariable UUID storeId, @PathVariable UUID orderId,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return orderService.restore(storeId, orderId, canEdit(principal));
+    }
+
+    private static boolean isOwner(AppUserPrincipal principal) {
+        return principal.getAuthorities().stream()
+                .anyMatch(authority -> AppUserPrincipal.OWNER_AUTHORITY.equals(authority.getAuthority()));
     }
 
     private static boolean canEdit(AppUserPrincipal principal) {

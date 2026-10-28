@@ -14,11 +14,14 @@ public record DeliOrderSummaryResponse(
         StoreSummary store,
         DeliOrderStatus status,
         LocalDate deliveryDate,
+        LocalDate orderedDeliveryDate,
         Instant submittedAt,
         String submittedBy,
         int itemCount,
         /** Dostawca zmienił ilości po złożeniu zamówienia. */
         boolean corrected,
+        /** Powstało z połączenia kilku zamówień. */
+        boolean merged,
         /** Usunięte u zamawiającego albo u dostawcy (druga strona widzi je ze statusem "usunięte"). */
         Instant storeDeletedAt,
         Instant formStoreDeletedAt) {

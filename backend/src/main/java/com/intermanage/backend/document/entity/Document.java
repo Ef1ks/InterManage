@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.hibernate.annotations.Formula;
 import org.hibernate.annotations.UuidGenerator;
 
 import com.intermanage.backend.auth.entity.AppUser;
@@ -51,6 +52,10 @@ public class Document {
 
     @Column(nullable = false, length = 30, updatable = false)
     private String number;
+
+    /** Długość numeru do sortowania: krótszy numer to mniejsza liczba ("9999" przed "10000"), patrz DocumentSearch. */
+    @Formula("length(number)")
+    private int numberLength;
 
     @Column(name = "document_date", nullable = false)
     private LocalDateTime documentDate;

@@ -204,7 +204,8 @@ export type DeliOverview = {
   pendingInvitations: DeliInvitation[]
 }
 
-export type DeliOrderStatus = 'NEW' | 'FULFILLED'
+/** NEW: dostawca jeszcze go nie otworzył, READ: odczytane, czeka na realizację. */
+export type DeliOrderStatus = 'NEW' | 'READ' | 'FULFILLED'
 
 export type DeliOrderSummary = {
   id: string
@@ -213,10 +214,14 @@ export type DeliOrderSummary = {
   status: DeliOrderStatus
   /** Data bez godziny, RRRR-MM-DD. */
   deliveryDate: string
+  /** Data dostawy z chwili złożenia; różna od deliveryDate, gdy ktoś ją zmienił. */
+  orderedDeliveryDate: string
   submittedAt: string
   submittedBy: string | null
   itemCount: number
   corrected: boolean
+  /** Powstało z połączenia kilku zamówień. */
+  merged: boolean
   /** Usunięte u zamawiającego (wycofane) albo u dostawcy. Dane zostają, stronę, która usunęła, można przywrócić. */
   storeDeletedAt: string | null
   formStoreDeletedAt: string | null
@@ -236,7 +241,20 @@ export type DeliOrderItem = {
   quantity: number
 }
 
-export type DeliOrder = Omit<DeliOrderSummary, 'itemCount' | 'corrected'> & {
+export type DeliOrder = Omit<DeliOrderSummary, 'itemCount' | 'corrected' | 'merged'> & {
+  deliveryDateChangedAt: string | null
+  deliveryDateChangedBy: string | null
+  /** Pierwsze otwarcie u dostawcy. */
+  readAt: string | null
+  readBy: string | null
+  /** Zamówienie powstało z połączenia zamówień mergedFrom. */
+  mergedAt: string | null
+  mergedBy: string | null
+  mergedFrom: DeliOrderSummary[]
+  /** Zamówienie weszło do połączonego; dopóki połączenie trwa, nie ma go na listach. */
+  mergedIntoId: string | null
+  /** Połączenie cofnięte: zamówienie nie obowiązuje, źródłowe wróciły na listy. */
+  splitAt: string | null
   correctedAt: string | null
   correctedBy: string | null
   fulfilledAt: string | null

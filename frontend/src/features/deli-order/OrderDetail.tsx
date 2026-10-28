@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ArrowLeftIcon, CheckCheckIcon, RotateCcwIcon, SaveIcon, Trash2Icon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeftIcon, CheckCheckIcon, MergeIcon, PencilIcon, RotateCcwIcon, SaveIcon, SplitIcon, Trash2Icon } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -7,10 +7,12 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useCan } from '@/features/auth/api'
-import { useCorrectOrder, useDeleteOrder, useOrder } from '@/features/deli-order/api'
+import { useCan, useMe } from '@/features/auth/api'
+import { useCorrectOrder, useDeleteOrder, useMarkOrderRead, useOrder, useOrders } from '@/features/deli-order/api'
+import { DeliveryDateDialog } from '@/features/deli-order/DeliveryDateDialog'
 import { FulfillOrderDialog } from '@/features/deli-order/FulfillOrderDialog'
 import { groupItems } from '@/features/deli-order/group-items'
+import { mergeableGroups, MergeWithSiblings, ordersCount, useMergeWithUndo } from '@/features/deli-order/MergeOrders'
 import { OrderDownloads } from '@/features/deli-order/OrderDownloads'
 import { OrderMovementDocuments } from '@/features/deli-order/OrderMovementDocuments'
 import { OrderStatusBadge } from '@/features/deli-order/OrderStatusBadge'
@@ -18,7 +20,7 @@ import { deliPaths } from '@/features/deli-order/paths'
 import { QuantityInput, formatQuantity, parseQuantity } from '@/features/deli-order/QuantityInput'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
-import { formatLongDate } from '@/lib/dates'
+import { formatLongDate, formatShortDate } from '@/lib/dates'
 import type { DeliOrder, DeliOrderItem } from '@/lib/types'
 
 const dateTime = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
@@ -41,16 +43,39 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
   const incoming = order.formStore.id === storeId
   const sender = order.store.id === storeId
   const canEdit = useCan('DELI_ORDERS', 'EDIT')
+  const owner = useMe().data?.owner ?? false
   // Usunięcie działa po jednej stronie: "nasze" ukrywa zamówienie u nas, "ich" widzimy jako status.
   const deletedHere = (sender && order.storeDeletedAt) || (incoming && order.formStoreDeletedAt)
   const deletedThere = !deletedHere && (order.storeDeletedAt || order.formStoreDeletedAt)
   const deleted = Boolean(deletedHere || deletedThere)
-  const editable = incoming && canEdit && order.status === 'NEW' && !deleted
+  // Połączone w inne albo rozdzielone zamówienie tylko się ogląda; obowiązuje to, z którym je połączono.
+  const replaced = Boolean(order.mergedIntoId || order.splitAt)
+  const open = order.status !== 'FULFILLED'
+  const active = open && !deleted && !replaced
+  const editable = incoming && canEdit && active
   // Swoją stronę zamówienia sklep, który je złożył, zmienia z Podglądem, dostawca z Edycją.
   const managesOwnSide = sender || canEdit
-  const deletable = order.status === 'NEW' && managesOwnSide && !deletedHere
+  // Zrealizowane usuwa tylko właściciel.
+  const deletable = (open || owner) && managesOwnSide && !deletedHere && !replaced
   const correct = useCorrectOrder(storeId, order.id)
   const [fulfilling, setFulfilling] = useState(false)
+  const [changingDate, setChangingDate] = useState(false)
+  const { undo: split, undoPending: splitting } = useMergeWithUndo(storeId)
+  // Inne zamówienia tego sklepu na ten sam dzień, z którymi dostawca może połączyć to.
+  const incomingOrders = useOrders(storeId, 'incoming').data
+  const siblings = editable
+    ? (mergeableGroups(incomingOrders ?? []).find((group) => group.some((other) => other.id === order.id)) ?? [])
+        .filter((other) => other.id !== order.id)
+    : []
+
+  // Pierwsze otwarcie u dostawcy zmienia status z "nowe" na "odczytane" (raz na wejście).
+  const markRead = useMarkOrderRead(storeId, order.id)
+  const readRequested = useRef(false)
+  useEffect(() => {
+    if (!incoming || order.status !== 'NEW' || deleted || replaced || readRequested.current) return
+    readRequested.current = true
+    markRead.mutate()
+  }, [incoming, order.status, deleted, replaced, markRead])
   const { remove, restore } = useDeleteOrder(storeId, order.id)
   const navigate = useNavigate()
   const [draft, setDraft] = useState<Record<string, string>>(() =>
@@ -113,12 +138,42 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
           </div>
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             <dt className="text-muted-foreground">Dostawa</dt>
-            <dd className="font-medium">{formatLongDate(order.deliveryDate)}</dd>
+            <dd>
+              <span className="font-medium">{formatLongDate(order.deliveryDate)}</span>
+              {active && managesOwnSide && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="ml-1 -my-1 align-middle"
+                  aria-label="Zmień datę dostawy"
+                  title="Zmień datę dostawy"
+                  onClick={() => setChangingDate(true)}
+                >
+                  <PencilIcon />
+                </Button>
+              )}
+              {order.deliveryDate !== order.orderedDeliveryDate && (
+                <div className="text-xs text-muted-foreground tabular-nums">
+                  złożone na {formatShortDate(order.orderedDeliveryDate)}
+                  {order.deliveryDateChangedAt && `, zmienione ${dateTime.format(new Date(order.deliveryDateChangedAt))}`}
+                  {order.deliveryDateChangedBy && ` · ${order.deliveryDateChangedBy}`}
+                </div>
+              )}
+            </dd>
             <dt className="text-muted-foreground">Złożone</dt>
             <dd className="tabular-nums">
               {dateTime.format(new Date(order.submittedAt))}
               {order.submittedBy && ` · ${order.submittedBy}`}
             </dd>
+            {order.readAt && (
+              <>
+                <dt className="text-muted-foreground">Odczytane</dt>
+                <dd className="tabular-nums">
+                  {dateTime.format(new Date(order.readAt))}
+                  {order.readBy && ` · ${order.readBy}`}
+                </dd>
+              </>
+            )}
             {order.correctedAt && (
               <>
                 <dt className="text-muted-foreground">Poprawione</dt>
@@ -176,6 +231,58 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
           )}
         </div>
       </div>
+
+      <DeliveryDateDialog storeId={storeId} order={order} open={changingDate} onOpenChange={setChangingDate} />
+
+      {order.mergedIntoId && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-card px-4 py-3">
+          <MergeIcon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 text-sm font-medium">
+            To zamówienie połączono z innym zamówieniem tego sklepu na ten sam dzień - obowiązuje połączone.
+          </p>
+          <Button variant="outline" render={<Link to={deliPaths.orderDetail(order.mergedIntoId)} />}>
+            Otwórz połączone
+          </Button>
+        </div>
+      )}
+      {order.splitAt && (
+        <div className="mb-6 rounded-xl border bg-card px-4 py-3">
+          <p className="text-sm font-medium">Połączenie cofnięto - zamówienia znów są osobno</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Obowiązują zamówienia, z których powstało:{' '}
+            {order.mergedFrom.map((source, index) => (
+              <span key={source.id}>
+                {index > 0 && ', '}
+                <Link to={deliPaths.orderDetail(source.id)} className="underline underline-offset-2 hover:text-foreground">
+                  złożone {dateTime.format(new Date(source.submittedAt))}
+                </Link>
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
+      {order.mergedAt && !order.splitAt && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-card px-4 py-3">
+          <MergeIcon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Połączone z {ordersCount(order.mergedFrom.length)}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {order.mergedFrom
+                .map((source) => `${dateTime.format(new Date(source.submittedAt))}${source.submittedBy ? ` · ${source.submittedBy}` : ''} (${source.itemCount} poz.)`)
+                .join(', ')}
+              {order.mergedAt && `. Połączono ${dateTime.format(new Date(order.mergedAt))}`}
+              {order.mergedBy && ` · ${order.mergedBy}`}.
+            </p>
+          </div>
+          {editable && (
+            <Button variant="outline" loading={splitting} onClick={() => split(order.id)}>
+              <SplitIcon />
+              Rozdziel
+            </Button>
+          )}
+        </div>
+      )}
+      {siblings.length > 0 && <MergeWithSiblings storeId={storeId} orderId={order.id} siblings={siblings} />}
 
       {deletedHere && (
         <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-destructive/25 bg-card px-4 py-3">
@@ -237,13 +344,13 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
           ]}
         />
       )}
-      {!incoming && order.status === 'NEW' && !deleted && (
+      {!incoming && active && (
         <p className="mb-6 text-sm text-muted-foreground">
           Zamówienie czeka na realizację w sklepie {storeLabel(order.formStore)}. Jeśli zmieni ilości, zobaczysz je tutaj
           jako przekreślone.
         </p>
       )}
-      {!deleted && <OrderMovementDocuments storeId={storeId} order={order} />}
+      {!deleted && !replaced && <OrderMovementDocuments storeId={storeId} order={order} />}
 
       <div className="grid grid-cols-1 gap-6">
         {/* Pozycja poprawiona do zera nie zostanie dostarczona - poza edycją jej nie pokazujemy. */}

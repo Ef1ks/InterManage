@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.deliorder.dto.AddOrderProductRequest;
+import com.intermanage.backend.deliorder.dto.MoveOrderCategoryRequest;
+import com.intermanage.backend.deliorder.dto.MoveOrderProductRequest;
 import com.intermanage.backend.deliorder.dto.OrderFormResponse;
 import com.intermanage.backend.deliorder.dto.OrderNameRequest;
 import com.intermanage.backend.deliorder.dto.PasteOrderProductsRequest;
@@ -84,6 +86,22 @@ public class DeliOrderFormController {
     @PreAuthorize(EDIT)
     public OrderFormResponse deleteCategory(@PathVariable UUID storeId, @PathVariable UUID categoryId) {
         return formService.deleteCategory(storeId, categoryId);
+    }
+
+    /** Przeciągnięcie kategorii na inne miejsce w dziale. */
+    @PutMapping("/categories/{categoryId}/position")
+    @PreAuthorize(EDIT)
+    public OrderFormResponse moveCategory(@PathVariable UUID storeId, @PathVariable UUID categoryId,
+            @Valid @RequestBody MoveOrderCategoryRequest request) {
+        return formService.moveCategory(storeId, categoryId, request.index());
+    }
+
+    /** Przeciągnięcie produktu w kategorii albo do innej kategorii. */
+    @PutMapping("/categories/{categoryId}/products/{itemId}/position")
+    @PreAuthorize(EDIT)
+    public OrderFormResponse moveProduct(@PathVariable UUID storeId, @PathVariable UUID categoryId,
+            @PathVariable UUID itemId, @Valid @RequestBody MoveOrderProductRequest request) {
+        return formService.moveProduct(storeId, categoryId, itemId, request.categoryId(), request.index());
     }
 
     @PostMapping("/categories/{categoryId}/products")

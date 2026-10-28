@@ -61,7 +61,15 @@ Plik `/opt/intermanage/.env` z wzoru [.env.example](.env.example), `chmod 600`. 
 2. Zero Trust → Networks → Tunnels → Create a tunnel (Cloudflared) → skopiuj token do `TUNNEL_TOKEN` w `.env`.
 3. W tunelu Public Hostname: `intermanage.pl` (opcjonalnie też `www`), Service `HTTP`, URL `web:80`. Rekord DNS Cloudflare doda sam.
 
-## 4. Tailscale (dostęp dla GitHub Actions)
+## 4. Maile (Brevo)
+
+1. Brevo → Senders, Domains & Dedicated IPs → Domains → dodaj `intermanage.pl`. Rekordy, które poda (kod weryfikacyjny `brevo-code`, DKIM, DMARC), wpisz w DNS w Cloudflare jako **DNS only** (szara chmurka).
+2. SPF: jeden rekord TXT na domenę. Jeśli jest już SPF od skrzynki, dopisz Brevo do niego (np. `v=spf1 include:spf.brevo.com include:<hosting> ~all`), drugi rekord SPF psuje weryfikację.
+3. Senders → dodaj nadawcę `noreply@intermanage.pl` (albo inny z `MAIL_FROM_ADDRESS`).
+4. SMTP & API → SMTP → wygeneruj klucz SMTP. Login (`…@smtp-brevo.com`) do `MAIL_USERNAME`, klucz do `MAIL_PASSWORD` w `.env`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`.
+5. `docker compose up -d`, w logach backendu: „Maile wysyłane przez SMTP smtp-relay.brevo.com …”. Sprawdź, zapraszając pracownika na swój adres.
+
+## 5. Tailscale (dostęp dla GitHub Actions)
 
 1. Host `pve` udostępnia podsieć (`tailscale up --advertise-routes=192.168.33.0/24`). W Machines → pve → Edit route settings trasa `192.168.33.0/24` musi być zatwierdzona.
 2. Admin → Access controls, dopisz tag i dostęp **tylko** do SSH serwera aplikacji (nie do całej podsieci):
@@ -73,7 +81,7 @@ Plik `/opt/intermanage/.env` z wzoru [.env.example](.env.example), `chmod 600`. 
 
 Workflow dołącza do sieci jako tymczasowe urządzenie z `--accept-routes` (Linux bez tego nie korzysta z tras subnet routera) i znika po zakończeniu.
 
-## 5. Sekrety repozytorium GitHub
+## 6. Sekrety repozytorium GitHub
 
 Settings → Secrets and variables → Actions:
 
@@ -86,7 +94,7 @@ Settings → Secrets and variables → Actions:
 
 Obrazy w GHCR są prywatne. Serwer loguje się do nich przy każdym wdrożeniu tokenem z workflow, więc nie trzeba trzymać na nim hasła do GitHuba.
 
-## 6. Pierwsze uruchomienie
+## 7. Pierwsze uruchomienie
 
 Push na `main` albo Actions → Deploy → Run workflow. Potem na serwerze:
 

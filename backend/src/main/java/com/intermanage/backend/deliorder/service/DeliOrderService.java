@@ -6,6 +6,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -273,13 +275,145 @@ public class DeliOrderService {
         };
     }
 
+    /**
+     * Otwarcie zamówienia u dostawcy: nowe staje się odczytane. Zamówienie z własnego formularza oglądane przez osobę,
+     * która je złożyła, zostaje nowe - nikt inny go jeszcze nie widział.
+     */
+    @Transactional
+    public DeliOrderResponse markRead(UUID storeId, UUID orderId, UUID userId) {
+        DeliOrder order = loadIncoming(storeId, orderId);
+        boolean ownOrder = order.getStore().getId().equals(storeId) && order.getSubmittedBy() != null
+                && order.getSubmittedBy().getId().equals(userId);
+        if (!ownOrder) {
+            order.markRead(users.getReferenceById(userId));
+        }
+        return deliOrderMapper.toResponse(order);
+    }
+
+    /**
+     * Zmiana daty dostawy niezrealizowanego zamówienia, np. po pomyłce przy składaniu. Zamawiający zmienia ją
+     * z Podglądem, dostawca z Edycją.
+     */
+    @Transactional
+    public DeliOrderResponse changeDeliveryDate(UUID storeId, UUID orderId, LocalDate deliveryDate, boolean canEdit,
+            UUID userId) {
+        DeliOrder order = loadOwnSide(storeId, orderId, canEdit);
+        ensureActive(order);
+        if (!order.getStatus().isOpen()) {
+            throw ApiException.conflict("Zamówienie jest już zrealizowane - nie można zmienić daty dostawy");
+        }
+        if (deliveryDate.isBefore(LocalDate.now(STORE_ZONE))) {
+            throw ApiException.badRequest("Data dostawy nie może być w przeszłości");
+        }
+        if (!deliveryDate.equals(order.getDeliveryDate())) {
+            order.changeDeliveryDate(deliveryDate, users.getReferenceById(userId));
+        }
+        return deliOrderMapper.toResponse(order);
+    }
+
+    /**
+     * Łączy niezrealizowane zamówienia jednego sklepu na ten sam dzień dostawy (np. dwa wysłane tego samego dnia)
+     * w nowe zamówienie: te same produkty sumuje, dokumenty przypina do połączonego. Źródłowe zostają w bazie
+     * i znikają z list, dopóki połączenia nie cofnie {@link #split}.
+     */
+    @Transactional
+    public DeliOrderResponse merge(UUID storeId, List<UUID> orderIds, UUID userId) {
+        Set<UUID> ids = new HashSet<>(orderIds);
+        if (ids.size() < 2) {
+            throw ApiException.badRequest("Wybierz co najmniej dwa zamówienia");
+        }
+        List<DeliOrder> sources = new ArrayList<>(orders.findAllById(ids));
+        if (sources.size() != ids.size() || sources.stream().anyMatch(o -> !o.getFormStore().getId().equals(storeId))) {
+            throw ApiException.notFound("Nie znaleziono zamówienia");
+        }
+        DeliOrder first = sources.getFirst();
+        for (DeliOrder source : sources) {
+            ensureActive(source);
+            if (!source.getStatus().isOpen()) {
+                throw ApiException.conflict("Zrealizowanego zamówienia nie można połączyć z innym");
+            }
+            if (!source.getStore().getId().equals(first.getStore().getId())
+                    || !source.getDeliveryDate().equals(first.getDeliveryDate())) {
+                throw ApiException.badRequest("Połączyć można tylko zamówienia jednego sklepu na ten sam dzień dostawy");
+            }
+        }
+        sources.sort(Comparator.comparing(DeliOrder::getSubmittedAt).thenComparing(DeliOrder::getId));
+
+        AppUser by = users.getReferenceById(userId);
+        DeliOrder merged = DeliOrder.merged(sources, by);
+        // Dział za działem i kategoria za kategorią w kolejności pierwszego wystąpienia; pozycje spoza formularza
+        // zostają na końcu działu, a ten sam produkt w tej samej kategorii i jednostce jest jedną pozycją.
+        Map<String, Map<String, Map<String, MergedLine>>> bySection = new LinkedHashMap<>();
+        for (DeliOrder source : sources) {
+            for (DeliOrderItem item : source.getItems()) {
+                bySection.computeIfAbsent(item.getSectionName(), key -> new LinkedHashMap<>())
+                        .computeIfAbsent(item.getCategoryName(), key -> new LinkedHashMap<>())
+                        .computeIfAbsent(item.getProduct().getId() + ":" + item.getUnit(), key -> new MergedLine(item))
+                        .add(item);
+            }
+        }
+        bySection.forEach((section, categories) -> {
+            List<String> names = new ArrayList<>(categories.keySet());
+            if (names.remove(EXTRA_CATEGORY)) {
+                names.add(EXTRA_CATEGORY);
+            }
+            for (String category : names) {
+                for (MergedLine line : categories.get(category).values()) {
+                    merged.addItem(line.item.getProduct(), section, category, line.item.getUnit(), line.ordered,
+                            line.quantity);
+                }
+            }
+        });
+        orders.save(merged);
+        for (DeliOrder source : sources) {
+            source.getDocuments().forEach(link -> merged.linkDocument(link.getDocument(), by));
+        }
+        return deliOrderMapper.toResponse(orders.saveAndFlush(merged));
+    }
+
+    /** Suma pozycji jednego produktu z kilku łączonych zamówień. */
+    private static final class MergedLine {
+        private final DeliOrderItem item;
+        private BigDecimal ordered = BigDecimal.ZERO;
+        private BigDecimal quantity = BigDecimal.ZERO;
+
+        MergedLine(DeliOrderItem item) {
+            this.item = item;
+        }
+
+        void add(DeliOrderItem other) {
+            ordered = ordered.add(other.getOrderedQuantity());
+            quantity = quantity.add(other.getQuantity());
+        }
+    }
+
+    /**
+     * Cofa połączenie niezrealizowanego zamówienia: zamówienia źródłowe wracają na listy takie, jak przed połączeniem,
+     * a połączone (z ewentualnymi późniejszymi poprawkami) zostaje w bazie oznaczone jako rozdzielone.
+     */
+    @Transactional
+    public List<DeliOrderSummaryResponse> split(UUID storeId, UUID orderId, UUID userId) {
+        DeliOrder order = loadIncoming(storeId, orderId);
+        ensureActive(order);
+        if (order.getMergedAt() == null) {
+            throw ApiException.conflict("To zamówienie nie powstało z połączenia");
+        }
+        if (!order.getStatus().isOpen()) {
+            throw ApiException.conflict("Zamówienie jest już zrealizowane - nie można cofnąć połączenia");
+        }
+        List<DeliOrder> sources = List.copyOf(order.getMergedFrom());
+        order.split(users.getReferenceById(userId));
+        return sources.stream().map(deliOrderMapper::toSummary).toList();
+    }
+
     @Transactional
     public DeliOrderResponse correct(UUID storeId, UUID orderId, CorrectDeliOrderRequest request, UUID userId) {
         DeliOrder order = loadIncoming(storeId, orderId);
-        ensureNotDeleted(order);
-        if (order.getStatus() != DeliOrderStatus.NEW) {
+        ensureActive(order);
+        if (!order.getStatus().isOpen()) {
             throw ApiException.conflict("Zamówienie jest już zrealizowane - nie można zmieniać ilości");
         }
+        order.markRead(users.getReferenceById(userId));
         applyQuantities(order, request, userId);
         return deliOrderMapper.toResponse(order);
     }
@@ -307,15 +441,19 @@ public class DeliOrderService {
     }
 
     /**
-     * Usuwa nowe zamówienie tylko po stronie tego sklepu: znika z jego listy, a druga strona widzi status
+     * Usuwa niezrealizowane zamówienie tylko po stronie tego sklepu: znika z jego listy, a druga strona widzi status
      * "usunięte". Nic nie jest kasowane - {@link #restore} przywraca zamówienie. Sklep, który je złożył,
      * wycofuje je z uprawnieniem Podgląd, dostawca usuwa z uprawnieniem Edycja (jak poprawki i realizację).
+     * Zrealizowane usuwa tylko właściciel.
      */
     @Transactional
-    public DeliOrderResponse delete(UUID storeId, UUID orderId, boolean canEdit, UUID userId) {
+    public DeliOrderResponse delete(UUID storeId, UUID orderId, boolean canEdit, boolean owner, UUID userId) {
         DeliOrder order = loadOwnSide(storeId, orderId, canEdit);
-        if (order.getStatus() != DeliOrderStatus.NEW) {
-            throw ApiException.conflict("Zamówienie jest już zrealizowane - nie można go usunąć");
+        if (!order.getStatus().isOpen() && !owner) {
+            throw ApiException.conflict("Zamówienie jest już zrealizowane - usunąć je może tylko właściciel");
+        }
+        if (order.getMergedInto() != null || order.getSplitAt() != null) {
+            throw ApiException.conflict("Zamówienie jest połączone z innym - usuń połączone zamówienie");
         }
         AppUser by = users.getReferenceById(userId);
         // Przy zamówieniu z własnego formularza sklep jest obiema stronami naraz.
@@ -346,13 +484,22 @@ public class DeliOrderService {
         DeliOrder order = loadVisible(storeId, orderId);
         if (!order.getStore().getId().equals(storeId) && !canEdit) {
             throw ApiException.forbidden(
-                    "Przychodzące zamówienie może usunąć albo przywrócić osoba z uprawnieniem do edycji");
+                    "Przychodzące zamówienie może zmienić, usunąć albo przywrócić osoba z uprawnieniem do edycji");
         }
         return order;
     }
 
-    /** Usuniętego po którejkolwiek stronie zamówienia nie poprawiamy ani nie realizujemy. */
-    private static void ensureNotDeleted(DeliOrder order) {
+    /**
+     * Usuniętego po którejkolwiek stronie zamówienia nie poprawiamy ani nie realizujemy; tak samo połączonego w inne
+     * i rozdzielonego.
+     */
+    private static void ensureActive(DeliOrder order) {
+        if (order.getMergedInto() != null) {
+            throw ApiException.conflict("Zamówienie jest połączone z innym - zmieniaj połączone zamówienie");
+        }
+        if (order.getSplitAt() != null) {
+            throw ApiException.conflict("Połączenie zostało cofnięte - zmieniaj zamówienia, z których powstało");
+        }
         if (order.getStoreDeletedAt() != null) {
             throw ApiException.conflict("Sklep wycofał to zamówienie - nie można go poprawiać ani realizować");
         }
@@ -365,7 +512,7 @@ public class DeliOrderService {
     /** Realizacja; {@code request} (może być {@code null}) niesie zrealizowane ilości, zapisane w tej samej transakcji. */
     public DeliOrderResponse fulfill(UUID storeId, UUID orderId, CorrectDeliOrderRequest request, UUID userId) {
         DeliOrder order = loadIncoming(storeId, orderId);
-        ensureNotDeleted(order);
+        ensureActive(order);
         if (order.getStatus() == DeliOrderStatus.FULFILLED) {
             throw ApiException.conflict("Zamówienie jest już oznaczone jako zrealizowane");
         }
@@ -406,7 +553,7 @@ public class DeliOrderService {
     @Transactional
     public DeliOrderResponse linkDocument(UUID storeId, UUID orderId, UUID documentId, UUID userId) {
         DeliOrder order = loadIncoming(storeId, orderId);
-        ensureNotDeleted(order);
+        ensureActive(order);
         Document document = storeDocuments.findById(documentId)
                 .filter(d -> d.getType() == DocumentType.MM && d.getStore().getId().equals(storeId))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono dokumentu ruchu międzymagazynowego"));

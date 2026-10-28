@@ -63,11 +63,17 @@ public final class DocumentSearch {
                 .toList();
     }
 
-    /** Sortowanie po kolumnie z listy; nieznana kolumna = po numerze. Puste wartości zawsze na końcu, remis po id. */
+    /**
+     * Sortowanie po kolumnie z listy; nieznana kolumna = po numerze. Puste wartości zawsze na końcu, remis po id.
+     * Numer jest tekstem, więc najpierw porównujemy jego długość: inaczej "9999" byłby większy niż "10000".
+     */
     public static Sort sort(String column, String direction) {
         String field = SORTABLE.getOrDefault(column, "number");
-        Sort.Order order = "desc".equalsIgnoreCase(direction) ? Sort.Order.desc(field) : Sort.Order.asc(field);
-        return Sort.by(order.nullsLast(), Sort.Order.asc("id"));
+        Sort.Direction sortDirection = "desc".equalsIgnoreCase(direction) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Sort.Order order = new Sort.Order(sortDirection, field).nullsLast();
+        return field.equals("number")
+                ? Sort.by(new Sort.Order(sortDirection, "numberLength"), order, Sort.Order.asc("id"))
+                : Sort.by(order, Sort.Order.asc("id"));
     }
 
     public static Specification<Document> inStoreMatching(UUID storeId, DocumentType type, List<String> words) {

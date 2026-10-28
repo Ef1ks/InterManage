@@ -69,6 +69,15 @@ public class OrderSection {
         return category;
     }
 
+    /** Przestawia kategorię na miejsce {@code index} w dziale i numeruje kategorie od nowa. */
+    public void moveCategory(OrderCategory category, int index) {
+        categories.remove(category);
+        categories.add(Math.min(index, categories.size()), category);
+        for (int i = 0; i < categories.size(); i++) {
+            categories.get(i).setPosition(i);
+        }
+    }
+
     public UUID getId() {
         return id;
     }

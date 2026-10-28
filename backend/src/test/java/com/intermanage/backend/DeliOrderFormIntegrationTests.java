@@ -212,6 +212,14 @@ class DeliOrderFormIntegrationTests {
         String kabanosLine = id(order, "$.items[0].id");
 
         mvc.perform(get(url(supplier, "/overview")).cookie(owner)).andExpect(jsonPath("$.newIncomingCount").value(1));
+        // Otwarcie u dostawcy zmienia status z nowego na odczytane i zdejmuje zamówienie z licznika nowych.
+        mvc.perform(post(url(shop, "/orders/" + orderId + "/read")).cookie(owner).with(csrf()))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(url(supplier, "/orders/" + orderId + "/read")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.status").value("READ"))
+                .andExpect(jsonPath("$.readAt").isNotEmpty());
+        mvc.perform(get(url(supplier, "/overview")).cookie(owner)).andExpect(jsonPath("$.newIncomingCount").value(0));
+        mvc.perform(get(url(shop, "/orders/sent")).cookie(owner)).andExpect(jsonPath("$[0].status").value("READ"));
 
         // Pliki zamówienia: .lst z EAN-ami w kolejności, Excel i PDF.
         String kabanosEan = jdbc.queryForObject("select ean from products where id = ?::uuid", String.class, kabanos);
@@ -341,8 +349,12 @@ class DeliOrderFormIntegrationTests {
         mvc.perform(get(url(supplier, "/orders/incoming")).cookie(owner)).andExpect(jsonPath(rejectedFilter).isEmpty());
         mvc.perform(get(url(shop, "/orders/sent")).cookie(owner))
                 .andExpect(jsonPath(rejectedFilter + ".formStoreDeletedAt").isNotEmpty());
+        // Zrealizowane zamówienie usuwa tylko właściciel; przywraca się je tak samo jak niezrealizowane.
         mvc.perform(delete(url(shop, "/orders/" + orderId)).cookie(owner).with(csrf()))
-                .andExpect(status().isConflict());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storeDeletedAt").isNotEmpty());
+        mvc.perform(post(url(shop, "/orders/" + orderId + "/restore")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.storeDeletedAt").isEmpty());
 
         // Zamówienie jedzie na dokumencie ruchu międzymagazynowego dostawcy: dostawca go przypina, zamawiający widzi.
         String movement = insertDocument(supplier, "MM", "MM0000120261022", java.time.LocalDate.now().atTime(11, 49));
@@ -388,6 +400,147 @@ class DeliOrderFormIntegrationTests {
         // Sklep-dostawca zamawia ze swojego formularza bez zaproszenia.
         send(owner, post(url(supplier, "/suppliers/" + supplier + "/orders")), orderJson(today, kabanosItem, "3", pasztetItem, "1"))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void editorDragsCategoriesAndProductsBetweenCategories() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String kabanos = insertProduct(storeId, "KABANOSY 1KG");
+        String pasztet = insertProduct(storeId, "PASZTET 200G");
+        String smalec = insertProduct(storeId, "SMALEC 250G");
+        String section = id(send(owner, post(url(storeId, "/sections")), "{\"name\":\"Garmaż\"}")
+                .andReturn().getResponse().getContentAsString(), "$.sections[0].id");
+        send(owner, post(url(storeId, "/sections/" + section + "/categories")), "{\"name\":\"Wędliny\"}");
+        String form = send(owner, post(url(storeId, "/sections/" + section + "/categories")), "{\"name\":\"Pasty\"}")
+                .andReturn().getResponse().getContentAsString();
+        String wedliny = id(form, "$.sections[0].categories[0].id");
+        String pasty = id(form, "$.sections[0].categories[1].id");
+        for (String product : new String[] {kabanos, pasztet, smalec}) {
+            form = send(owner, post(url(storeId, "/categories/" + wedliny + "/products")),
+                    "{\"productId\":\"" + product + "\"}").andReturn().getResponse().getContentAsString();
+        }
+        String kabanosItem = id(form, "$.sections[0].categories[0].products[0].id");
+        String smalecItem = id(form, "$.sections[0].categories[0].products[2].id");
+
+        // Przestawienie w kategorii: smalec na początek.
+        send(owner, put(url(storeId, "/categories/" + wedliny + "/products/" + smalecItem + "/position")),
+                "{\"categoryId\":\"" + wedliny + "\",\"index\":0}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections[0].categories[0].products[0].productId").value(smalec))
+                .andExpect(jsonPath("$.sections[0].categories[0].products[1].productId").value(kabanos))
+                .andExpect(jsonPath("$.sections[0].categories[0].products[2].productId").value(pasztet));
+
+        // Przeniesienie do innej kategorii zachowuje pozycję (id i jednostkę).
+        send(owner, put(url(storeId, "/categories/" + wedliny + "/products/" + kabanosItem + "/position")),
+                "{\"categoryId\":\"" + pasty + "\",\"index\":5}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections[0].categories[0].products.length()").value(2))
+                .andExpect(jsonPath("$.sections[0].categories[1].products[0].id").value(kabanosItem))
+                .andExpect(jsonPath("$.sections[0].categories[1].products[0].orderUnit").value("KG"));
+
+        // Produktu, który już jest w kategorii docelowej, nie da się do niej przenieść.
+        send(owner, post(url(storeId, "/categories/" + pasty + "/products")), "{\"productId\":\"" + smalec + "\"}");
+        send(owner, put(url(storeId, "/categories/" + wedliny + "/products/" + smalecItem + "/position")),
+                "{\"categoryId\":\"" + pasty + "\",\"index\":0}")
+                .andExpect(status().isConflict());
+
+        send(owner, put(url(storeId, "/categories/" + pasty + "/position")), "{\"index\":0}")
+                .andExpect(jsonPath("$.sections[0].categories[0].name").value("Pasty"))
+                .andExpect(jsonPath("$.sections[0].categories[1].name").value("Wędliny"));
+        send(owner, put(url(storeId, "/categories/" + pasty + "/position")), "{\"index\":-1}")
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void supplierMergesOrdersForTheSameDayAndOrdersChangeDeliveryDate() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String kabanos = insertProduct(storeId, "KABANOSY 1KG", "kg");
+        String pasztet = insertProduct(storeId, "PASZTET 200G", "szt.");
+        String section = id(send(owner, post(url(storeId, "/sections")), "{\"name\":\"Garmaż\"}")
+                .andReturn().getResponse().getContentAsString(), "$.sections[0].id");
+        String category = id(send(owner, post(url(storeId, "/sections/" + section + "/categories")),
+                "{\"name\":\"Wędliny\"}").andReturn().getResponse().getContentAsString(), "$.sections[0].categories[0].id");
+        send(owner, post(url(storeId, "/categories/" + category + "/products")), "{\"productId\":\"" + kabanos + "\"}");
+        String form = send(owner, post(url(storeId, "/categories/" + category + "/products")),
+                "{\"productId\":\"" + pasztet + "\"}").andReturn().getResponse().getContentAsString();
+        String kabanosItem = id(form, "$.sections[0].categories[0].products[0].id");
+        String pasztetItem = id(form, "$.sections[0].categories[0].products[1].id");
+
+        String orderUrl = url(storeId, "/suppliers/" + storeId + "/orders");
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Warsaw"));
+        String first = id(send(owner, post(orderUrl), orderJson(today.toString(), kabanosItem, "1.5", pasztetItem, "2"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String second = id(send(owner, post(orderUrl), "{\"deliveryDate\":\"" + today + "\",\"items\":[{\"itemId\":\""
+                + kabanosItem + "\",\"quantity\":0.5}]}").andReturn().getResponse().getContentAsString(), "$.id");
+        String third = id(send(owner, post(orderUrl),
+                orderJson(today.plusDays(1).toString(), kabanosItem, "1", pasztetItem, "1"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+
+        // Własne zamówienie oglądane przez osobę, która je złożyła, zostaje nowe.
+        mvc.perform(post(url(storeId, "/orders/" + first + "/read")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.status").value("NEW"));
+
+        // Łączy się tylko zamówienia jednego sklepu na ten sam dzień.
+        send(owner, post(url(storeId, "/orders/merge")), mergeJson(first, third)).andExpect(status().isBadRequest());
+        send(owner, post(url(storeId, "/orders/merge")), mergeJson(first)).andExpect(status().isBadRequest());
+
+        // Zmiana daty dostawy: nie w przeszłość; data z chwili złożenia zostaje.
+        send(owner, put(url(storeId, "/orders/" + third + "/delivery-date")),
+                "{\"deliveryDate\":\"" + today.minusDays(1) + "\"}").andExpect(status().isBadRequest());
+        send(owner, put(url(storeId, "/orders/" + third + "/delivery-date")), "{\"deliveryDate\":\"" + today + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveryDate").value(today.toString()))
+                .andExpect(jsonPath("$.orderedDeliveryDate").value(today.plusDays(1).toString()))
+                .andExpect(jsonPath("$.deliveryDateChangedAt").isNotEmpty());
+
+        // Połączone: te same produkty zsumowane, źródłowe znikają z list, ale zostają w bazie.
+        String merged = send(owner, post(url(storeId, "/orders/merge")), mergeJson(first, second))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READ"))
+                .andExpect(jsonPath("$.mergedAt").isNotEmpty())
+                .andExpect(jsonPath("$.mergedFrom.length()").value(2))
+                .andExpect(jsonPath("$.mergedFrom[0].id").value(first))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].quantity").value(2))
+                .andExpect(jsonPath("$.items[0].orderedQuantity").value(2))
+                .andExpect(jsonPath("$.items[1].quantity").value(2))
+                .andReturn().getResponse().getContentAsString();
+        String mergedId = id(merged, "$.id");
+        mvc.perform(get(url(storeId, "/orders/incoming")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.id == '" + first + "')]").isEmpty())
+                .andExpect(jsonPath("$[?(@.id == '" + mergedId + "')].merged").value(org.hamcrest.Matchers.contains(true)));
+        mvc.perform(get(url(storeId, "/orders/sent")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.id == '" + second + "')]").isEmpty());
+        mvc.perform(get(url(storeId, "/orders/" + first)).cookie(owner))
+                .andExpect(jsonPath("$.mergedIntoId").value(mergedId));
+        send(owner, put(url(storeId, "/orders/" + first + "/items")),
+                "{\"items\":[{\"id\":\"" + mergedId + "\",\"quantity\":1}]}").andExpect(status().isConflict());
+        send(owner, post(url(storeId, "/orders/merge")), mergeJson(first, third)).andExpect(status().isConflict());
+
+        // Cofnięcie połączenia przywraca zamówienia źródłowe, połączone zostaje w bazie jako rozdzielone.
+        mvc.perform(post(url(storeId, "/orders/" + mergedId + "/split")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get(url(storeId, "/orders/incoming")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.id == '" + first + "')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.id == '" + mergedId + "')]").isEmpty());
+        mvc.perform(get(url(storeId, "/orders/" + mergedId)).cookie(owner))
+                .andExpect(jsonPath("$.splitAt").isNotEmpty());
+        mvc.perform(post(url(storeId, "/orders/" + mergedId + "/split")).cookie(owner).with(csrf()))
+                .andExpect(status().isConflict());
+
+        // Zrealizowanego nie da się połączyć ani przenieść na inny dzień.
+        mvc.perform(post(url(storeId, "/orders/" + third + "/fulfill")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.status").value("FULFILLED"));
+        send(owner, post(url(storeId, "/orders/merge")), mergeJson(first, third)).andExpect(status().isConflict());
+        send(owner, put(url(storeId, "/orders/" + third + "/delivery-date")), "{\"deliveryDate\":\"" + today + "\"}")
+                .andExpect(status().isConflict());
+    }
+
+    private static String mergeJson(String... orderIds) {
+        return "{\"orderIds\":[\"" + String.join("\",\"", orderIds) + "\"]}";
     }
 
     private static String orderJson(String deliveryDate, String firstItem, String firstQuantity, String secondItem,

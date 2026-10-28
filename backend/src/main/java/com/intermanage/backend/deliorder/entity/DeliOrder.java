@@ -49,8 +49,19 @@ public class DeliOrder {
     @Column(nullable = false, length = 20)
     private DeliOrderStatus status = DeliOrderStatus.NEW;
 
-    @Column(name = "delivery_date", nullable = false, updatable = false)
+    /** Obowiązująca data dostawy; zmieniona po złożeniu różni się od {@link #orderedDeliveryDate}. */
+    @Column(name = "delivery_date", nullable = false)
     private LocalDate deliveryDate;
+
+    @Column(name = "ordered_delivery_date", nullable = false, updatable = false)
+    private LocalDate orderedDeliveryDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "delivery_date_changed_by")
+    private AppUser deliveryDateChangedBy;
+
+    @Column(name = "delivery_date_changed_at")
+    private Instant deliveryDateChangedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "submitted_by", updatable = false)
@@ -58,6 +69,14 @@ public class DeliOrder {
 
     @Column(name = "submitted_at", nullable = false, updatable = false)
     private Instant submittedAt;
+
+    /** Pierwsze otwarcie u dostawcy (status {@link DeliOrderStatus#READ}). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "read_by")
+    private AppUser readBy;
+
+    @Column(name = "read_at")
+    private Instant readAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "corrected_by")
@@ -89,6 +108,31 @@ public class DeliOrder {
     @JoinColumn(name = "form_store_deleted_by")
     private AppUser formStoreDeletedBy;
 
+    /** Zamówienie powstało z połączenia zamówień {@link #mergedFrom}. */
+    @Column(name = "merged_at")
+    private Instant mergedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "merged_by")
+    private AppUser mergedBy;
+
+    /** Zamówienie weszło do połączonego; dopóki połączenie trwa, nie ma go na listach. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "merged_into_id")
+    private DeliOrder mergedInto;
+
+    @OneToMany(mappedBy = "mergedInto")
+    @OrderBy("submittedAt, id")
+    private List<DeliOrder> mergedFrom = new ArrayList<>();
+
+    /** Połączenie cofnięte: to zamówienie znika z list, źródłowe wracają. */
+    @Column(name = "split_at")
+    private Instant splitAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "split_by")
+    private AppUser splitBy;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position, id")
     private List<DeliOrderItem> items = new ArrayList<>();
@@ -106,13 +150,66 @@ public class DeliOrder {
         this.formStore = formStore;
         this.store = store;
         this.deliveryDate = deliveryDate;
+        this.orderedDeliveryDate = deliveryDate;
         this.submittedBy = submittedBy;
         this.submittedAt = Instant.now();
     }
 
+    /**
+     * Puste zamówienie, do którego wejdą {@code sources} (ten sam sklep, dostawca i dzień, od najwcześniej złożonego).
+     * Złożone jest jak pierwsze z nich, a odczytane przez osobę, która łączy.
+     */
+    public static DeliOrder merged(List<DeliOrder> sources, AppUser by) {
+        DeliOrder first = sources.getFirst();
+        DeliOrder order = new DeliOrder(first.formStore, first.store, first.deliveryDate, first.submittedBy);
+        order.submittedAt = first.submittedAt;
+        order.status = DeliOrderStatus.READ;
+        order.readBy = by;
+        order.readAt = Instant.now();
+        order.mergedBy = by;
+        order.mergedAt = order.readAt;
+        for (DeliOrder source : sources) {
+            source.mergedInto = order;
+            order.mergedFrom.add(source);
+            if (source.correctedAt != null && (order.correctedAt == null || source.correctedAt.isAfter(order.correctedAt))) {
+                order.correctedAt = source.correctedAt;
+                order.correctedBy = source.correctedBy;
+            }
+        }
+        return order;
+    }
+
+    /** Cofa połączenie: zamówienia źródłowe wracają na listy, a to znika. */
+    public void split(AppUser by) {
+        splitAt = Instant.now();
+        splitBy = by;
+        mergedFrom.forEach(source -> source.mergedInto = null);
+    }
+
     public void addItem(Product product, String sectionName, String categoryName, OrderUnit unit,
             BigDecimal quantity) {
-        items.add(new DeliOrderItem(this, product, sectionName, categoryName, unit, quantity, items.size()));
+        addItem(product, sectionName, categoryName, unit, quantity, quantity);
+    }
+
+    public void addItem(Product product, String sectionName, String categoryName, OrderUnit unit,
+            BigDecimal orderedQuantity, BigDecimal quantity) {
+        items.add(new DeliOrderItem(this, product, sectionName, categoryName, unit, orderedQuantity, quantity,
+                items.size()));
+    }
+
+    /** Pierwsze otwarcie u dostawcy zmienia status z nowego na odczytane. */
+    public void markRead(AppUser by) {
+        if (status == DeliOrderStatus.NEW) {
+            status = DeliOrderStatus.READ;
+            readBy = by;
+            readAt = Instant.now();
+        }
+    }
+
+    public void changeDeliveryDate(LocalDate date, AppUser by) {
+        deliveryDate = date;
+        deliveryDateChangedBy = by;
+        deliveryDateChangedAt = Instant.now();
     }
 
     public void markCorrected(AppUser by) {
@@ -121,6 +218,7 @@ public class DeliOrder {
     }
 
     public void markFulfilled(AppUser by) {
+        markRead(by);
         status = DeliOrderStatus.FULFILLED;
         fulfilledBy = by;
         fulfilledAt = Instant.now();
@@ -144,6 +242,50 @@ public class DeliOrder {
     public void restoreForFormStore() {
         formStoreDeletedAt = null;
         formStoreDeletedBy = null;
+    }
+
+    public LocalDate getOrderedDeliveryDate() {
+        return orderedDeliveryDate;
+    }
+
+    public AppUser getDeliveryDateChangedBy() {
+        return deliveryDateChangedBy;
+    }
+
+    public Instant getDeliveryDateChangedAt() {
+        return deliveryDateChangedAt;
+    }
+
+    public AppUser getReadBy() {
+        return readBy;
+    }
+
+    public Instant getReadAt() {
+        return readAt;
+    }
+
+    public Instant getMergedAt() {
+        return mergedAt;
+    }
+
+    public AppUser getMergedBy() {
+        return mergedBy;
+    }
+
+    public DeliOrder getMergedInto() {
+        return mergedInto;
+    }
+
+    public List<DeliOrder> getMergedFrom() {
+        return mergedFrom;
+    }
+
+    public Instant getSplitAt() {
+        return splitAt;
+    }
+
+    public AppUser getSplitBy() {
+        return splitBy;
     }
 
     public Instant getStoreDeletedAt() {

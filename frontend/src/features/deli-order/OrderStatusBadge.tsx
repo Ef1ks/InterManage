@@ -7,7 +7,7 @@ type Props = {
 }
 
 /**
- * Dla dostawcy nowe zamówienie czeka na realizację, dla zamawiającego jest wysłane.
+ * Dla dostawcy nowe zamówienie czeka na otwarcie, dla zamawiającego jest wysłane; otwarte u dostawcy jest odczytane.
  * Usunięte po drugiej stronie pokazujemy z informacją, kto je usunął.
  */
 export function OrderStatusBadge({ order, incoming }: Props) {
@@ -31,6 +31,14 @@ export function OrderStatusBadge({ order, incoming }: Props) {
       <Badge variant="outline" className="gap-1.5">
         <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
         Zrealizowane
+      </Badge>
+    )
+  }
+  if (order.status === 'READ') {
+    return (
+      <Badge variant="outline" className="gap-1.5">
+        <span aria-hidden className="size-1.5 rounded-full bg-sky-500" />
+        Odczytane
       </Badge>
     )
   }

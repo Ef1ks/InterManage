@@ -5,7 +5,9 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useCan } from '@/features/auth/api'
 import { useOrders } from '@/features/deli-order/api'
+import { MergeSuggestions } from '@/features/deli-order/MergeOrders'
 import { OrderDownloads } from '@/features/deli-order/OrderDownloads'
 import { OrderStatusBadge } from '@/features/deli-order/OrderStatusBadge'
 import { deliPaths } from '@/features/deli-order/paths'
@@ -24,6 +26,7 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
   const { data: orders, isPending, isError, refetch } = useOrders(storeId, kind)
   const navigate = useNavigate()
   const incoming = kind === 'incoming'
+  const canEdit = useCan('DELI_ORDERS', 'EDIT')
 
   if (isError) {
     return (
@@ -53,9 +56,10 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
     <>
       <p className="mb-3 text-sm text-muted-foreground">
         {incoming
-          ? 'Nowe zamówienia są na górze, na żółtym tle. Kliknij wiersz, żeby wydrukować zamówienie, poprawić ilości i oznaczyć je jako zrealizowane.'
+          ? 'Nowe zamówienia są na górze, na żółtym tle; po otwarciu stają się odczytane. Kliknij wiersz, żeby wydrukować zamówienie, poprawić ilości i oznaczyć je jako zrealizowane.'
           : 'Kliknij wiersz, żeby zobaczyć zamówienie i ilości poprawione przez dostawcę.'}
       </p>
+      {incoming && canEdit && orders && <MergeSuggestions storeId={storeId} orders={orders} />}
       <Card className="py-0">
         <Table>
           <TableHeader>
@@ -96,12 +100,20 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
                       <div className={cn(fresh && 'font-semibold')}>{storeLabel(incoming ? order.store : order.formStore)}</div>
                       {order.submittedBy && <div className="text-xs text-muted-foreground">{order.submittedBy}</div>}
                     </TableCell>
-                    <TableCell className={cn(fresh && 'font-semibold')}>{formatShortDate(order.deliveryDate)}</TableCell>
+                    <TableCell className={cn(fresh && 'font-semibold')}>
+                      {formatShortDate(order.deliveryDate)}
+                      {order.deliveryDate !== order.orderedDeliveryDate && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          zamiast {formatShortDate(order.orderedDeliveryDate)}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{dateTime.format(new Date(order.submittedAt))}</TableCell>
                     <TableCell className="text-right">{order.itemCount}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <OrderStatusBadge order={order} incoming={incoming} />
+                        {order.merged && <span className="text-xs text-muted-foreground">połączone</span>}
                         {order.corrected && <span className="text-xs text-muted-foreground">poprawione</span>}
                       </div>
                     </TableCell>

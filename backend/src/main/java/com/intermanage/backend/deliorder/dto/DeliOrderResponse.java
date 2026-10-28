@@ -14,8 +14,15 @@ public record DeliOrderResponse(
         StoreSummary store,
         DeliOrderStatus status,
         LocalDate deliveryDate,
+        /** Data z chwili złożenia; różna od {@code deliveryDate}, gdy ktoś ją zmienił. */
+        LocalDate orderedDeliveryDate,
+        Instant deliveryDateChangedAt,
+        String deliveryDateChangedBy,
         Instant submittedAt,
         String submittedBy,
+        /** Pierwsze otwarcie u dostawcy. */
+        Instant readAt,
+        String readBy,
         Instant correctedAt,
         String correctedBy,
         Instant fulfilledAt,
@@ -26,6 +33,14 @@ public record DeliOrderResponse(
         /** Usunięte u dostawcy. */
         Instant formStoreDeletedAt,
         String formStoreDeletedBy,
+        /** Zamówienie powstało z połączenia {@code mergedFrom}. */
+        Instant mergedAt,
+        String mergedBy,
+        List<DeliOrderSummaryResponse> mergedFrom,
+        /** Zamówienie weszło do połączonego {@code mergedIntoId}. */
+        UUID mergedIntoId,
+        /** Połączenie cofnięte - zamówienie nie obowiązuje, źródłowe wróciły na listy. */
+        Instant splitAt,
         List<DeliOrderItemResponse> items,
         /** Dokumenty ruchu międzymagazynowego, na których jedzie zamówienie (przypina dostawca). */
         List<DeliOrderDocumentResponse> documents) {

@@ -22,6 +22,7 @@ public interface DeliOrderMapper {
     @Mapping(target = "submittedBy", source = "submittedBy.displayName")
     @Mapping(target = "itemCount", expression = "java(order.getItems().size())")
     @Mapping(target = "corrected", expression = "java(order.getCorrectedAt() != null)")
+    @Mapping(target = "merged", expression = "java(order.getMergedAt() != null)")
     DeliOrderSummaryResponse toSummary(DeliOrder order);
 
     @Mapping(target = "submittedBy", source = "submittedBy.displayName")
@@ -29,6 +30,10 @@ public interface DeliOrderMapper {
     @Mapping(target = "fulfilledBy", source = "fulfilledBy.displayName")
     @Mapping(target = "storeDeletedBy", source = "storeDeletedBy.displayName")
     @Mapping(target = "formStoreDeletedBy", source = "formStoreDeletedBy.displayName")
+    @Mapping(target = "deliveryDateChangedBy", source = "deliveryDateChangedBy.displayName")
+    @Mapping(target = "readBy", source = "readBy.displayName")
+    @Mapping(target = "mergedBy", source = "mergedBy.displayName")
+    @Mapping(target = "mergedIntoId", source = "mergedInto.id")
     DeliOrderResponse toResponse(DeliOrder order);
 
     @Mapping(target = "documentId", source = "document.id")

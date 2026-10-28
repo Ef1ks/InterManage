@@ -78,6 +78,12 @@ type FormChange =
   | { type: 'addProduct'; categoryId: string; productId: string }
   | { type: 'setOrderUnit'; categoryId: string; itemId: string; orderUnit: OrderUnit }
   | { type: 'removeProduct'; categoryId: string; itemId: string }
+  | MoveChange
+
+/** Przeciągnięcie kategorii w dziale albo produktu w kategorii lub do innej kategorii (`index` od 0). */
+export type MoveChange =
+  | { type: 'moveCategory'; categoryId: string; index: number }
+  | { type: 'moveProduct'; categoryId: string; itemId: string; targetCategoryId: string; index: number }
 
 function sendFormChange(storeId: string, change: FormChange): Promise<OrderForm> {
   const path = basePath(storeId)
@@ -106,6 +112,13 @@ function sendFormChange(storeId: string, change: FormChange): Promise<OrderForm>
       })
     case 'removeProduct':
       return api(`${path}/categories/${change.categoryId}/products/${change.itemId}`, { method: 'DELETE' })
+    case 'moveCategory':
+      return api(`${path}/categories/${change.categoryId}/position`, { method: 'PUT', json: { index: change.index } })
+    case 'moveProduct':
+      return api(`${path}/categories/${change.categoryId}/products/${change.itemId}/position`, {
+        method: 'PUT',
+        json: { categoryId: change.targetCategoryId, index: change.index },
+      })
   }
 }
 
@@ -143,6 +156,24 @@ export function useChangeOrderForm(storeId: string) {
       invalidateSupplierForms(queryClient, storeId)
     },
   })
+}
+
+/**
+ * Przeciąganie: nowy układ (`arranged`) widać od razu, a odpowiedź serwera go potwierdza. Przy błędzie formularz
+ * pobiera się od nowa, więc wraca do stanu z bazy.
+ */
+export function useMoveInOrderForm(storeId: string) {
+  const queryClient = useQueryClient()
+  const change = useChangeOrderForm(storeId)
+  return (move: MoveChange, arranged: OrderForm, onError: (error: unknown) => void) => {
+    queryClient.setQueryData(formKey(storeId), arranged)
+    change.mutate(move, {
+      onError: (error) => {
+        queryClient.invalidateQueries({ queryKey: formKey(storeId) })
+        onError(error)
+      },
+    })
+  }
 }
 
 export type PastedProduct = { ean: string; orderUnit: OrderUnit }
@@ -289,6 +320,45 @@ function useOrderMutation<T>(storeId: string, orderId: string, request: (variabl
   })
 }
 
+/**
+ * Dostawca otworzył zamówienie: nowe staje się odczytane. Bez globalnego odświeżania - wystarczą to zamówienie,
+ * listy i liczniki obu sklepów.
+ */
+export function useMarkOrderRead(storeId: string, orderId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<DeliOrder>(`${basePath(storeId)}/orders/${orderId}/read`, { method: 'POST' }),
+    meta: { invalidates: false },
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKey(storeId, orderId), order)
+      invalidateOrderStores(queryClient, order.store.id, order.formStore.id)
+    },
+  })
+}
+
+/** Zmiana daty dostawy niezrealizowanego zamówienia (zamawiający albo dostawca z Edycją). */
+export function useChangeDeliveryDate(storeId: string, orderId: string) {
+  return useOrderMutation(storeId, orderId, (deliveryDate: string) =>
+    api<DeliOrder>(`${basePath(storeId)}/orders/${orderId}/delivery-date`, { method: 'PUT', json: { deliveryDate } }),
+  )
+}
+
+/**
+ * Łączenie zamówień jednego sklepu na ten sam dzień w jedno i cofnięcie połączenia (zwraca zamówienia, które
+ * wróciły na listy). Listy odświeża globalne unieważnianie po mutacji.
+ */
+export function useMergeOrders(storeId: string) {
+  const merge = useMutation({
+    mutationFn: (orderIds: string[]) =>
+      api<DeliOrder>(`${basePath(storeId)}/orders/merge`, { method: 'POST', json: { orderIds } }),
+  })
+  const split = useMutation({
+    mutationFn: (orderId: string) =>
+      api<DeliOrderSummary[]>(`${basePath(storeId)}/orders/${orderId}/split`, { method: 'POST' }),
+  })
+  return { merge, split }
+}
+
 export function useCorrectOrder(storeId: string, orderId: string) {
   return useOrderMutation(storeId, orderId, (items: { id: string; quantity: number }[]) =>
     api<DeliOrder>(`${basePath(storeId)}/orders/${orderId}/items`, { method: 'PUT', json: { items } }),
@@ -344,7 +414,7 @@ export const orderExportPath = (storeId: string, orderId: string, format: 'pdf' 
   `${basePath(storeId)}/orders/${orderId}/export/${format}`
 
 /**
- * Usunięcie nowego zamówienia po stronie tego sklepu i jego przywrócenie. Nic nie jest kasowane: zamówienie
+ * Usunięcie niezrealizowanego zamówienia (zrealizowanego: tylko właściciel) po stronie tego sklepu i jego przywrócenie. Nic nie jest kasowane: zamówienie
  * znika z naszej listy, druga strona widzi je jako usunięte. Odświeżenie list jest w hooku (a nie w mutate),
  * bo "Przywróć" klika się w toaście, gdy szczegóły zamówienia są już zamknięte.
  */
