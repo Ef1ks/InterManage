@@ -528,6 +528,75 @@ class KsefIntegrationTests {
     }
 
     @Test
+    void invoicesAreLinkedAutomaticallyBySupplierAndAmount() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, storeId, nip, "haslo-testowe").andExpect(status().isOk());
+        OffsetDateTime stored = OffsetDateTime.of(2026, 10, 20, 8, 0, 0, 0, ZoneOffset.UTC);
+        when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
+                false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
+                        invoice("FV/A", "1111111111", "MLECZARNIA", stored, "Vat", null, new BigDecimal("1000.00")),
+                        invoice("FV/B", "1111111111", "MLECZARNIA", stored.plusMinutes(1), "Vat", null,
+                                new BigDecimal("1006.00")),
+                        invoice("FV/C", "1111111111", "MLECZARNIA", stored.plusMinutes(2), "Vat", null,
+                                new BigDecimal("5000.00")),
+                        invoice("KOR/A", "1111111111", "MLECZARNIA", stored.plusMinutes(3), "Kor", null,
+                                new BigDecimal("1003.00")),
+                        invoice("FV/D", "2222222222", "PIEKARNIA", stored.plusMinutes(4), "Vat", null,
+                                new BigDecimal("995.00")))));
+        syncAndWait(owner, storeId);
+        jdbc.update("insert into suppliers (store_id, code, name, nip) values (?::uuid, 'S1', 'MLECZARNIA', "
+                + "'1111111111'), (?::uuid, 'S2', 'PIEKARNIA', '2222222222')", storeId, storeId);
+        String pz1 = insertDocument(storeId, "PZ", "PZ1", null, "1002.00");
+        String pz2 = insertDocument(storeId, "PZ", "PZ2", null, "1005.00");
+        String pz3 = insertDocument(storeId, "PZ", "PZ3", null, "1000.00");
+        String pz4 = insertDocument(storeId, "PZ", "PZ4", null, "2000.00");
+        String pz5 = insertDocument(storeId, "PZ", "PZ5", "FV/C", "5000.00");
+        jdbc.update("update documents set supplier_code = 'S1' where id in (?::uuid, ?::uuid, ?::uuid, ?::uuid)",
+                pz1, pz2, pz4, pz5);
+        jdbc.update("update documents set supplier_code = 'S2' where id = ?::uuid", pz3);
+
+        // Przyjęcie, na które nic nie przyszło (0 zł), nie jest na liście ani w liczniku.
+        insertDocument(storeId, "PZ", "PZ0", null, "0.00");
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pz").cookie(owner))
+                .andExpect(jsonPath("$.type.documentCount").value(5))
+                .andExpect(jsonPath("$.matchingCount").value(5))
+                .andExpect(jsonPath("$.documents[*].number").value(not(org.hamcrest.Matchers.hasItem("PZ0"))));
+
+        // Najpierw najmniejsza różnica: PZ2 bierze FV/B (1 zł), PZ1 zostaje FV/A (2 zł); korekta i PZ z fakturą odpadają.
+        String auto = "/api/stores/" + storeId + "/documents/pz/auto-ksef-invoices";
+        String proposals = mvc.perform(get(auto).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[?(@.documentNumber == 'PZ1')].invoiceNumber").value(contains("FV/A")))
+                .andExpect(jsonPath("$[?(@.documentNumber == 'PZ2')].invoiceNumber").value(contains("FV/B")))
+                .andExpect(jsonPath("$[?(@.documentNumber == 'PZ3')].invoiceNumber").value(contains("FV/D")))
+                .andExpect(jsonPath("$[?(@.documentNumber == 'PZ3')].difference").value(contains(5.0)))
+                .andReturn().getResponse().getContentAsString();
+        String fvA = JsonPath.<List<String>>read(proposals, "$[?(@.documentNumber == 'PZ1')].invoiceId").getFirst();
+        String fvB = JsonPath.<List<String>>read(proposals, "$[?(@.documentNumber == 'PZ2')].invoiceId").getFirst();
+        String pairs = "{\"matches\":[{\"documentId\":\"" + pz1 + "\",\"invoiceId\":\"" + fvA + "\"},"
+                + "{\"documentId\":\"" + pz2 + "\",\"invoiceId\":\"" + fvB + "\"}]}";
+
+        send(owner, post(auto), pairs).andExpect(status().isOk()).andExpect(jsonPath("$").value(2));
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pz/" + pz1).cookie(owner))
+                .andExpect(jsonPath("$.ksefInvoices[0].invoiceNumber").value("FV/A"));
+        mvc.perform(get(auto).cookie(owner))
+                .andExpect(jsonPath("$[*].documentNumber").value(contains("PZ3")));
+        // Ponowne przypięcie innej faktury do przyjęcia z fakturą wycofuje całość.
+        send(owner, post(auto), "{\"matches\":[{\"documentId\":\"" + pz1 + "\",\"invoiceId\":\"" + fvB + "\"}]}")
+                .andExpect(status().isConflict());
+
+        // Cofnięcie odpina (znacznik), przyjęcia znów czekają na fakturę.
+        send(owner, post(auto + "/undo"), pairs).andExpect(status().isNoContent());
+        mvc.perform(get(auto).cookie(owner)).andExpect(jsonPath("$.length()").value(3));
+        assertThat(jdbc.queryForObject("select count(*) from document_ksef_invoices where document_id in "
+                + "(?::uuid, ?::uuid) and unlinked_at is not null", Integer.class, pz1, pz2)).isEqualTo(2);
+    }
+
+    @Test
     void storeWithoutInternalIdSeesAllAndFixedPzNumberLinksInvoice() throws Exception {
         Cookie owner = login();
         String storeId = createStore(owner);

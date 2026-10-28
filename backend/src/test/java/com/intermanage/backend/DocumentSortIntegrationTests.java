@@ -63,7 +63,7 @@ class DocumentSortIntegrationTests {
         jdbc.update("""
                 insert into documents (store_id, type, number, document_date, line_count, purchase_value,
                     sale_value_gross, first_import_id, last_import_id)
-                values (?::uuid, 'PZ', ?, ?, 0, 0, 0, ?::uuid, ?::uuid)""",
+                values (?::uuid, 'PZ', ?, ?, 0, 1, 0, ?::uuid, ?::uuid)""",
                 storeId, number, LocalDateTime.of(2026, 10, 20, 8, 0), importId, importId);
     }
 

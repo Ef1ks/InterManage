@@ -1,9 +1,12 @@
 package com.intermanage.backend.document.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.dto.AutoInvoiceMatch;
+import com.intermanage.backend.document.dto.AutoInvoiceMatchesRequest;
 import com.intermanage.backend.document.dto.DocumentCandidate;
 import com.intermanage.backend.document.dto.KsefInvoiceCandidate;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
@@ -54,6 +59,10 @@ public class DocumentKsefLinkService {
 
     /** Domyślny zakres podpowiedzi: kwota netto faktury w granicach ±10% wartości zakupu dokumentu. */
     public static final BigDecimal AMOUNT_TOLERANCE_PERCENT = BigDecimal.TEN;
+    /** Automatyczne przypięcie: kwota netto faktury najwyżej o tyle różna od wartości zakupu przyjęcia. */
+    public static final BigDecimal AUTO_MATCH_TOLERANCE = BigDecimal.TEN;
+    /** Automatyczne przypięcie: faktura wystawiona najwyżej tyle dni przed albo po przyjęciu. */
+    public static final int AUTO_MATCH_DAYS = 45;
     private static final int SCANNED = 200;
     private static final int CANDIDATES = 30;
 
@@ -227,6 +236,95 @@ public class DocumentKsefLinkService {
                         .thenComparing(DocumentCandidate::difference))
                 .limit(CANDIDATES)
                 .toList();
+    }
+
+    /**
+     * Propozycje automatycznego przypięcia: przyjęcia PZ bez faktury (przypiętej, po numerze ani spoza KSeF)
+     * i niewprowadzone faktury (nie korekty) tego samego dostawcy, wystawione do {@link #AUTO_MATCH_DAYS} dni
+     * przed albo po przyjęciu, z kwotą netto różną od wartości zakupu najwyżej o {@link #AUTO_MATCH_TOLERANCE}.
+     * Pary są dobierane od najmniejszej różnicy kwot, potem najbliższej daty; każde przyjęcie i każda faktura
+     * trafia najwyżej do jednej pary. Niczego nie zapisuje.
+     */
+    @Transactional(readOnly = true)
+    public List<AutoInvoiceMatch> autoMatches(UUID storeId) {
+        String nip = nip(storeId);
+        if (nip == null) {
+            throw ApiException.badRequest("Sklep nie jest połączony z KSeF");
+        }
+        Map<String, String> nips = supplierNips(storeId);
+        List<Document> deliveries = documents.findAll(DocumentSearch.inStoreMatching(storeId, DocumentType.PZ, List.of())
+                        .and(DocumentSearch.withInvoice(DocumentSearch.Presence.WITHOUT, nip))).stream()
+                .filter(document -> document.getPurchaseValue() != null && document.getPurchaseValue().signum() > 0
+                        && nips.containsKey(document.getSupplierCode()))
+                .toList();
+        if (deliveries.isEmpty()) {
+            return List.of();
+        }
+        LocalDate from = deliveries.stream().map(document -> document.getDocumentDate().toLocalDate())
+                .min(Comparator.naturalOrder()).orElseThrow().minusDays(AUTO_MATCH_DAYS);
+        LocalDate to = deliveries.stream().map(document -> document.getDocumentDate().toLocalDate())
+                .max(Comparator.naturalOrder()).orElseThrow().plusDays(AUTO_MATCH_DAYS);
+        Set<String> sellerNips = deliveries.stream().map(document -> nips.get(document.getSupplierCode()))
+                .collect(Collectors.toSet());
+        Specification<KsefInvoice> free = KsefInvoiceSearch.matching(storeId, nip, ownInternalIds(storeId),
+                new KsefInvoiceSearch.Filter(null, from, to, KsefInvoiceSearch.Entered.NOT_ENTERED,
+                        KsefInvoiceSearch.Kind.INVOICES, null, false));
+        Map<String, List<KsefInvoice>> bySeller = invoices
+                .findAll(free.and((root, q, cb) -> root.get("sellerNip").in(sellerNips))).stream()
+                .filter(invoice -> invoice.getNetAmount() != null && invoice.getIssueDate() != null)
+                .collect(Collectors.groupingBy(KsefInvoice::getSellerNip));
+
+        record Pair(Document delivery, KsefInvoice invoice, BigDecimal difference, long days) {
+        }
+        List<Pair> pairs = new ArrayList<>();
+        for (Document delivery : deliveries) {
+            LocalDate date = delivery.getDocumentDate().toLocalDate();
+            for (KsefInvoice invoice : bySeller.getOrDefault(nips.get(delivery.getSupplierCode()), List.of())) {
+                long days = Math.abs(ChronoUnit.DAYS.between(date, invoice.getIssueDate()));
+                BigDecimal difference = difference(invoice.getNetAmount(), delivery.getPurchaseValue());
+                if (days <= AUTO_MATCH_DAYS && difference.compareTo(AUTO_MATCH_TOLERANCE) <= 0) {
+                    pairs.add(new Pair(delivery, invoice, difference, days));
+                }
+            }
+        }
+        pairs.sort(Comparator.comparing(Pair::difference).thenComparingLong(Pair::days));
+        Set<UUID> usedDeliveries = new HashSet<>();
+        Set<UUID> usedInvoices = new HashSet<>();
+        List<AutoInvoiceMatch> result = new ArrayList<>();
+        for (Pair pair : pairs) {
+            if (usedDeliveries.contains(pair.delivery().getId()) || usedInvoices.contains(pair.invoice().getId())) {
+                continue;
+            }
+            usedDeliveries.add(pair.delivery().getId());
+            usedInvoices.add(pair.invoice().getId());
+            Document delivery = pair.delivery();
+            KsefInvoice invoice = pair.invoice();
+            result.add(new AutoInvoiceMatch(delivery.getId(), delivery.getNumber(), delivery.getDocumentDate(),
+                    delivery.getSupplierName(), delivery.getSupplierDocumentNumber(), delivery.getPurchaseValue(),
+                    invoice.getId(), invoice.getKsefNumber(), invoice.getInvoiceNumber(), invoice.getIssueDate(),
+                    invoice.getSellerName(), invoice.getNetAmount(), pair.difference()));
+        }
+        result.sort(Comparator.comparing(AutoInvoiceMatch::documentDate).reversed());
+        return result;
+    }
+
+    /** Przypina zaakceptowane pary z {@link #autoMatches}; błąd którejkolwiek (np. przyjęcie ma już fakturę) wycofuje wszystkie. */
+    @Transactional
+    public int linkAll(UUID storeId, List<AutoInvoiceMatchesRequest.Pair> matches, UUID userId) {
+        for (AutoInvoiceMatchesRequest.Pair pair : matches) {
+            link(storeId, pair.documentId(), pair.invoiceId(), userId);
+        }
+        return matches.size();
+    }
+
+    /** Cofnięcie automatycznego przypięcia: odpina pary (znacznik), już odpięte pomija. */
+    @Transactional
+    public void unlinkAll(UUID storeId, List<AutoInvoiceMatchesRequest.Pair> matches, UUID userId) {
+        for (AutoInvoiceMatchesRequest.Pair pair : matches) {
+            documents.findHeader(storeId, pair.documentId())
+                    .flatMap(document -> links.findActive(document.getId(), pair.invoiceId()))
+                    .ifPresent(link -> link.unlink(userId != null ? users.getReferenceById(userId) : null));
+        }
     }
 
     /**

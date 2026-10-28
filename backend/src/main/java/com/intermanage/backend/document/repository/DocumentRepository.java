@@ -30,9 +30,12 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
         LocalDateTime getLastDocumentDate();
     }
 
+    /** Bez przyjęć za 0 zł, których lista nie pokazuje ({@link DocumentSearch#withoutZeroDeliveries}). */
     @Query("""
             select d.type as type, count(d) as documentCount, max(d.documentDate) as lastDocumentDate
-            from Document d where d.store.id = :storeId group by d.type""")
+            from Document d where d.store.id = :storeId
+            and not (d.type = com.intermanage.backend.document.entity.DocumentType.PZ and d.purchaseValue = 0)
+            group by d.type""")
     List<TypeCount> countByType(UUID storeId);
 
     /** Dokumenty z importowanego pliku, które już są w bazie, razem z liniami do porównania. */

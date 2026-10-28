@@ -1,5 +1,6 @@
 package com.intermanage.backend.document.repository;
 
+import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -185,6 +186,15 @@ public final class DocumentSearch {
                     cb.isNull(entry.get("originClosing")), cb.isNull(entry.get("closing").get("cancelledAt")));
             return presence == Presence.WITH ? cb.exists(subquery) : cb.not(cb.exists(subquery));
         };
+    }
+
+    /**
+     * Bez przyjęć za 0 zł: system sklepu zostawia przyjęcie, na które nic nie przyszło (wszystkie linie z ilością 0),
+     * a takie tylko zaśmiecają listę. Inne typy zostają, bo tam 0 zł bywa prawdziwe (np. gratisy).
+     */
+    public static Specification<Document> withoutZeroDeliveries() {
+        return (root, query, cb) -> cb.or(cb.notEqual(root.get("type"), DocumentType.PZ),
+                cb.notEqual(root.get("purchaseValue"), BigDecimal.ZERO));
     }
 
     /** Bez dokumentów dostawców o tych kodach; dokumenty bez wspólnego dostawcy zostają. */

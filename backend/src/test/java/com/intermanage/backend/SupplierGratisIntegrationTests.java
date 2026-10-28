@@ -261,7 +261,7 @@ class SupplierGratisIntegrationTests {
             String name, String quantity, String saleValue) {
         return new String[] {"010102", "MIODY", supplierCode, "DOSTAWCA " + supplierCode, "21/10/2026 00:00:00", type,
                 number, "0", String.valueOf(lineNumber), itm8, "", name, "", "Sztuka", quantity, "0", "10.99", "10.99",
-                "0", saleValue, saleValue, "5", "0", "0", "0%"};
+                type.equals("PZ") ? saleValue : "0", saleValue, saleValue, "5", "0", "0", "0%"};
     }
 
     private static byte[] documentReport(String storeNumber, String[]... lines) throws IOException {

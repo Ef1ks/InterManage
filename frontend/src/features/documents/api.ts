@@ -5,6 +5,7 @@ import { ksefKey } from '@/features/ksef/api'
 import { api, downloadFile } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
 import type {
+  AutoInvoiceMatch,
   CorrectionCandidate,
   DeliveryReportClosing,
   DeliveryReportClosingsOverview,
@@ -73,6 +74,31 @@ export function useDocuments(storeId: string, typeCode: string, filters: Documen
     // Przy zmianie wyszukiwania albo sortowania lista nie znika, tylko podmienia się po wczytaniu.
     placeholderData: keepPreviousData,
   })
+}
+
+/** Propozycje automatycznego przypięcia faktur KSeF do przyjęć bez faktury; pobierane po otwarciu okna. */
+export function useAutoInvoiceMatches(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...documentsKey(storeId), 'pz', 'auto-ksef-invoices'],
+    queryFn: () => api<AutoInvoiceMatch[]>(`${documentsPath(storeId)}/pz/auto-ksef-invoices`),
+    enabled,
+    staleTime: 0,
+  })
+}
+
+export type AutoInvoicePair = { documentId: string; invoiceId: string }
+
+/** Przypięcie zaakceptowanych propozycji (zwraca liczbę przypiętych) i jego cofnięcie. */
+export function useAutoInvoiceLinks(storeId: string) {
+  const path = `${documentsPath(storeId)}/pz/auto-ksef-invoices`
+  return {
+    link: useMutation({
+      mutationFn: (matches: AutoInvoicePair[]) => api<number>(path, { method: 'POST', json: { matches } }),
+    }),
+    undo: useMutation({
+      mutationFn: (matches: AutoInvoicePair[]) => api<void>(`${path}/undo`, { method: 'POST', json: { matches } }),
+    }),
+  }
 }
 
 export function useDocument(storeId: string, typeCode: string, id: string) {
@@ -175,7 +201,14 @@ export function useDocumentKsefLinks(storeId: string, typeCode: string, id: stri
   }
 }
 
-/** Faktury spoza KSeF dokumentu: dopisanie, usunięcie (znacznik) i przywrócenie. Każda zmiana zwraca dokument. */
+/** Adres pliku faktury spoza KSeF (podgląd, pobranie, wydruk). */
+export const manualInvoiceFilePath = (storeId: string, typeCode: string, documentId: string, invoiceId: string) =>
+  `${documentsPath(storeId)}/${typeCode.toLowerCase()}/${documentId}/manual-invoices/${invoiceId}/file`
+
+/**
+ * Faktury spoza KSeF dokumentu: dopisanie, usunięcie (znacznik) i przywrócenie, a także plik faktury (dołączenie
+ * albo wymiana, usunięcie i przywrócenie). Każda zmiana zwraca dokument.
+ */
 export function useManualInvoices(storeId: string, typeCode: string, id: string) {
   const queryClient = useQueryClient()
   const path = `${documentsPath(storeId)}/${typeCode}/${id}/manual-invoices`
@@ -195,6 +228,22 @@ export function useManualInvoices(storeId: string, typeCode: string, id: string)
     }),
     restore: useMutation({
       mutationFn: (invoiceId: string) => api<Document>(`${path}/${invoiceId}/restore`, { method: 'POST' }),
+      onSuccess,
+    }),
+    attachFile: useMutation({
+      mutationFn: ({ invoiceId, file }: { invoiceId: string; file: File }) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        return api<Document>(`${path}/${invoiceId}/file`, { method: 'PUT', formData })
+      },
+      onSuccess,
+    }),
+    removeFile: useMutation({
+      mutationFn: (invoiceId: string) => api<Document>(`${path}/${invoiceId}/file`, { method: 'DELETE' }),
+      onSuccess,
+    }),
+    restoreFile: useMutation({
+      mutationFn: (invoiceId: string) => api<Document>(`${path}/${invoiceId}/file/restore`, { method: 'POST' }),
       onSuccess,
     }),
   }

@@ -163,7 +163,8 @@ public class DocumentService {
         DocumentType type = type(typeCode);
         Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query))
                 .and(DocumentSearch.withProduct(DocumentSearch.words(product)))
-                .and(DocumentSearch.withoutSuppliers(hiddenSuppliers));
+                .and(DocumentSearch.withoutSuppliers(hiddenSuppliers))
+                .and(DocumentSearch.withoutZeroDeliveries());
         if (type.canLinkKsefInvoice() && invoice != DocumentSearch.Presence.ALL) {
             matching = matching.and(DocumentSearch.withInvoice(invoice, ksefLinks.nip(storeId)));
         }

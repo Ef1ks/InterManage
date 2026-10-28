@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronRightIcon, LoaderCircleIcon, LockIcon } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { BackLink } from '@/components/BackLink'
+import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type DocumentColumn, type Presence, useDocuments } from '@/features/documents/api'
+import { AutoInvoiceMatching } from '@/features/documents/AutoInvoiceMatching'
 import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
@@ -22,7 +24,7 @@ import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMo
 import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import { isReportFresh } from '@/lib/report-freshness'
-import { nextSort, type SortState } from '@/lib/table-sort'
+import { nextSort, type SortDirection, type SortState } from '@/lib/table-sort'
 import type { DocumentReportClosing, DocumentSummary } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
@@ -60,6 +62,21 @@ export function BackToTypes() {
   )
 }
 
+/** Filtry „ma / nie ma” w adresie strony: `?faktura=z|bez` itd.; `all` = brak parametru. */
+const PRESENCE_PARAMS: Record<Presence, string | null> = { all: null, with: 'z', without: 'bez' }
+const presenceOf = (value: string | null): Presence => (value === 'z' ? 'with' : value === 'bez' ? 'without' : 'all')
+
+const SORT_COLUMNS: DocumentColumn[] = ['number', 'date', 'supplier', 'supplierDocument', 'lines', 'purchase', 'sale']
+/** Domyślnie po numerze dokumentu, od najnowszego (najwyższego numeru bonu); domyślne nie trafia do adresu. */
+const DEFAULT_SORT: SortState<DocumentColumn> = { key: 'number', direction: 'desc' }
+
+function sortOf(params: URLSearchParams): SortState<DocumentColumn> {
+  const key = SORT_COLUMNS.find((column) => column === params.get('sortuj'))
+  if (!key) return DEFAULT_SORT
+  const direction: SortDirection = params.get('kierunek') === 'rosnaco' ? 'asc' : 'desc'
+  return { key, direction }
+}
+
 /** Przyjęcia i korekty od dostawcy - do nich przypina się faktury z KSeF (jak `DocumentType.canLinkKsefInvoice`). */
 const KSEF_LINKABLE_TYPES = new Set(['PZ', 'WZ'])
 
@@ -72,16 +89,51 @@ const KSEF_LINKABLE_TYPES = new Set(['PZ', 'WZ'])
 export function DocumentsList({ storeId }: { storeId: string }) {
   const typeCode = useParams().type ?? ''
   const upperType = typeCode.toUpperCase()
-  const [query, setQuery] = useState('')
-  const [product, setProduct] = useState('')
-  const [invoice, setInvoice] = useState<Presence>('all')
-  const [corrections, setCorrections] = useState<Presence>('all')
-  const [closed, setClosed] = useState<Presence>('all')
+  // Wyszukiwanie, filtry i sortowanie są w adresie strony: po wejściu w dokument i powrocie lista jest ta sama
+  // (z pamięci zapytań), więc ScrollRestoration wraca w to samo miejsce.
+  const [params, setParams] = useSearchParams()
+  const updateParams = (changes: Record<string, string | null>) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)))
+        return next
+      },
+      { replace: true },
+    )
+  const [query, setQuery] = useState(() => params.get('szukaj') ?? '')
+  const [product, setProduct] = useState(() => params.get('produkt') ?? '')
+  const invoice = presenceOf(params.get('faktura'))
+  const corrections = presenceOf(params.get('korekty'))
+  const closed = presenceOf(params.get('raport'))
+  const setInvoice = (value: Presence) => updateParams({ faktura: PRESENCE_PARAMS[value] })
+  const setCorrections = (value: Presence) => updateParams({ korekty: PRESENCE_PARAMS[value] })
+  const setClosed = (value: Presence) => updateParams({ raport: PRESENCE_PARAMS[value] })
   const [hiddenSuppliers, setHiddenSuppliers] = useHiddenSuppliers(storeId)
   const debouncedQuery = useDebouncedValue(query.trim(), 300)
   const debouncedProduct = useDebouncedValue(product.trim(), 300)
-  // Domyślnie po numerze dokumentu, od najnowszego (najwyższego numeru bonu).
-  const [sort, setSort] = useState<SortState<DocumentColumn>>({ key: 'number', direction: 'desc' })
+  // Pola wyszukiwania trafiają do adresu dopiero po chwili bez pisania, jak do zapytania.
+  useEffect(() => {
+    const changes: Record<string, string | null> = {}
+    if ((params.get('szukaj') ?? '') !== debouncedQuery) changes.szukaj = debouncedQuery || null
+    if ((params.get('produkt') ?? '') !== debouncedProduct) changes.produkt = debouncedProduct || null
+    if (Object.keys(changes).length === 0) return
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, value) : next.delete(key)))
+        return next
+      },
+      { replace: true },
+    )
+  }, [debouncedQuery, debouncedProduct, params, setParams])
+  const sort = sortOf(params)
+  const setSort = (next: SortState<DocumentColumn>) =>
+    updateParams(
+      next.key === DEFAULT_SORT.key && next.direction === DEFAULT_SORT.direction
+        ? { sortuj: null, kierunek: null }
+        : { sortuj: next.key, kierunek: next.direction === 'asc' ? 'rosnaco' : 'malejaco' },
+    )
   const invoiceFilter = KSEF_LINKABLE_TYPES.has(upperType)
   const correctionFilter = upperType === 'PZ'
   const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage, isPlaceholderData } =
@@ -128,12 +180,11 @@ export function DocumentsList({ storeId }: { storeId: string }) {
     (invoiceFilter && invoice !== 'all') ||
     (correctionFilter && (corrections !== 'all' || closed !== 'all')) ||
     hiddenSuppliers.length > 0
+  // Pola wyszukiwania znikną z adresu po chwili, razem z zapytaniem.
   const clearFilters = () => {
     setQuery('')
     setProduct('')
-    setInvoice('all')
-    setCorrections('all')
-    setClosed('all')
+    updateParams({ faktura: null, korekty: null, raport: null })
     setHiddenSuppliers([])
   }
   const open = (document: DocumentSummary) => navigate(documentPaths.document(typeCode, document.id))
@@ -177,6 +228,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 onHiddenSuppliersChange={setHiddenSuppliers}
                 onClear={clearFilters}
               />
+              {upperType === 'PZ' && <AutoInvoiceMatching storeId={storeId} />}
               {upperType === 'PZ' && <DeliveryPeriodReport storeId={storeId} />}
             </div>
           )}
@@ -292,7 +344,15 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {document.supplierDocumentNumber}
+                        {document.supplierDocumentNumber && (
+                          <span className="inline-flex items-center gap-0.5">
+                            {document.supplierDocumentNumber}
+                            <CopyButton
+                              value={document.supplierDocumentNumber}
+                              label={`Kopiuj numer ${document.supplierDocumentNumber}`}
+                            />
+                          </span>
+                        )}
                         {KSEF_LINKABLE_TYPES.has(typeCode.toUpperCase()) && (
                           <DocumentRowKsef
                             storeId={storeId}

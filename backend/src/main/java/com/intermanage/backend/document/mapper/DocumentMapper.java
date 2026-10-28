@@ -22,6 +22,7 @@ import com.intermanage.backend.document.dto.LinkedDelivery;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
 import com.intermanage.backend.document.dto.IncomingTransfer;
 import com.intermanage.backend.document.dto.ManualInvoice;
+import com.intermanage.backend.document.dto.ManualInvoiceFile;
 import com.intermanage.backend.document.dto.TransferTargetResponse;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.DeliveryReportClosingDelivery;
@@ -30,6 +31,7 @@ import com.intermanage.backend.document.entity.DocumentGratis;
 import com.intermanage.backend.document.entity.DocumentImport;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
+import com.intermanage.backend.document.repository.DocumentManualInvoiceFileRepository;
 import com.intermanage.backend.document.entity.DocumentTransferTarget;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.store.mapper.StoreMapper;
@@ -122,10 +124,17 @@ public interface DocumentMapper {
     @Mapping(target = "lines", source = "lines")
     IncomingTransfer toIncoming(DocumentTransferTarget target, List<DocumentLine> lines);
 
-    @Mapping(target = "supplierId", source = "supplier.id")
-    @Mapping(target = "supplierName", source = "supplier.name")
-    @Mapping(target = "createdBy", source = "createdBy.displayName")
-    ManualInvoice toManualInvoice(DocumentManualInvoice invoice);
+    @Mapping(target = "id", source = "invoice.id")
+    @Mapping(target = "invoiceNumber", source = "invoice.invoiceNumber")
+    @Mapping(target = "issueDate", source = "invoice.issueDate")
+    @Mapping(target = "supplierId", source = "invoice.supplier.id")
+    @Mapping(target = "supplierName", source = "invoice.supplier.name")
+    @Mapping(target = "createdAt", source = "invoice.createdAt")
+    @Mapping(target = "createdBy", source = "invoice.createdBy.displayName")
+    @Mapping(target = "file", source = "file")
+    ManualInvoice toManualInvoice(DocumentManualInvoice invoice, ManualInvoiceFile file);
+
+    ManualInvoiceFile toManualInvoiceFile(DocumentManualInvoiceFileRepository.Summary summary);
 
     /** Korekta przypięta do przyjęcia: dane dokumentu korekty i kto ją przypiął. */
     @Mapping(target = "id", source = "correction.id")

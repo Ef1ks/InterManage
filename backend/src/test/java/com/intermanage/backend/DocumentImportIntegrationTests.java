@@ -463,6 +463,37 @@ class DocumentImportIntegrationTests {
         mvc.perform(post(url(store, "/pk/" + storeErrorId + "/manual-invoices/" + manualInvoice + "/restore"))
                         .cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$.manualInvoices.length()").value(1));
+
+        // Plik faktury: PDF rozpoznany po treści, nie po nazwie; wymiana i usunięcie to znacznik.
+        String fileUrl = url(store, "/pk/" + storeErrorId + "/manual-invoices/" + manualInvoice + "/file");
+        byte[] invoicePdf = "%PDF-1.4\n% faktura\n".getBytes(StandardCharsets.US_ASCII);
+        mvc.perform(multipart(org.springframework.http.HttpMethod.PUT, fileUrl)
+                        .file(new MockMultipartFile("file", "C:\\skany\\faktura.txt", "text/plain", invoicePdf))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.manualInvoices[0].file.fileName").value("faktura.txt"))
+                .andExpect(jsonPath("$.manualInvoices[0].file.contentType").value("application/pdf"))
+                .andExpect(jsonPath("$.manualInvoices[0].file.sizeBytes").value(invoicePdf.length));
+        mvc.perform(get(fileUrl).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+        org.assertj.core.api.Assertions.assertThat(mvc.perform(get(fileUrl).cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()).isEqualTo(invoicePdf);
+        mvc.perform(multipart(org.springframework.http.HttpMethod.PUT, fileUrl)
+                        .file(new MockMultipartFile("file", "faktura.pdf", "application/pdf",
+                                "<html>".getBytes(StandardCharsets.US_ASCII)))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isBadRequest());
+        byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0};
+        mvc.perform(multipart(org.springframework.http.HttpMethod.PUT, fileUrl)
+                        .file(new MockMultipartFile("file", "", "image/png", png)).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.manualInvoices[0].file.fileName").value("faktura.png"));
+        mvc.perform(delete(fileUrl).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.manualInvoices[0].file").value(org.hamcrest.Matchers.nullValue()));
+        mvc.perform(get(fileUrl).cookie(owner)).andExpect(status().isNotFound());
+        mvc.perform(post(fileUrl + "/restore").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.manualInvoices[0].file.contentType").value("image/png"));
     }
 
     /** Arkusz z pliku .xlsx (XML pierwszego arkusza). */

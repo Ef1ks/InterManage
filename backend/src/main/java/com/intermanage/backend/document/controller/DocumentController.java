@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.document.dto.AutoInvoiceMatch;
+import com.intermanage.backend.document.dto.AutoInvoiceMatchesRequest;
 import com.intermanage.backend.document.dto.CorrectionCandidate;
 import com.intermanage.backend.document.dto.DocumentPage;
 import com.intermanage.backend.document.dto.DocumentResponse;
@@ -120,6 +122,33 @@ public class DocumentController {
             @PathVariable UUID id, @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "true") boolean amountRange) {
         return ksefLinks.invoiceCandidates(storeId, type, id, query, amountRange);
+    }
+
+    /**
+     * Propozycje automatycznego przypięcia faktur KSeF do przyjęć bez faktury: ten sam dostawca, kwota netto
+     * różna najwyżej o 10 zł. Niczego nie zapisuje.
+     */
+    @GetMapping("/pz/auto-ksef-invoices")
+    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    public List<AutoInvoiceMatch> autoKsefInvoices(@PathVariable UUID storeId) {
+        return ksefLinks.autoMatches(storeId);
+    }
+
+    /** Przypina zaakceptowane propozycje; zwraca liczbę przypiętych. */
+    @PostMapping("/pz/auto-ksef-invoices")
+    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    public int linkAutoKsefInvoices(@PathVariable UUID storeId, @Valid @RequestBody AutoInvoiceMatchesRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return ksefLinks.linkAll(storeId, request.matches(), principal.getId());
+    }
+
+    /** Cofa automatyczne przypięcie (toast „Cofnij”): odpina pary, znacznik jak przy zwykłym odpięciu. */
+    @PostMapping("/pz/auto-ksef-invoices/undo")
+    @PreAuthorize(EDIT)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void undoAutoKsefInvoices(@PathVariable UUID storeId, @Valid @RequestBody AutoInvoiceMatchesRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        ksefLinks.unlinkAll(storeId, request.matches(), principal.getId());
     }
 
     /** Przypina fakturę KSeF do dokumentu - faktura staje się wprowadzona. */

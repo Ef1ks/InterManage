@@ -374,6 +374,15 @@ export type ManualInvoice = {
   supplierName: string
   createdAt: string
   createdBy: string | null
+  /** Dołączony plik faktury (PDF albo zdjęcie); treść pod `…/manual-invoices/{id}/file`. */
+  file: ManualInvoiceFile | null
+}
+
+export type ManualInvoiceFile = {
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  uploadedAt: string
 }
 
 /**
@@ -522,6 +531,26 @@ export type LinkedKsefInvoice = {
 }
 
 /** Faktura do przypięcia; {@code difference}: różnica kwoty netto od wartości dokumentu (bez znaku). */
+/**
+ * Propozycja automatycznego przypięcia faktury KSeF do przyjęcia bez faktury: ten sam dostawca, kwota netto różna
+ * od wartości zakupu najwyżej o 10 zł ({@code difference} bez znaku).
+ */
+export type AutoInvoiceMatch = {
+  documentId: string
+  documentNumber: string
+  documentDate: string
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  purchaseValue: number
+  invoiceId: string
+  ksefNumber: string
+  invoiceNumber: string
+  issueDate: string
+  sellerName: string | null
+  netAmount: number
+  difference: number
+}
+
 export type KsefInvoiceCandidate = {
   id: string
   ksefNumber: string

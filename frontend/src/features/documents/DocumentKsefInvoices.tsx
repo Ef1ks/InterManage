@@ -1,5 +1,15 @@
-import { useState } from 'react'
-import { DownloadIcon, LinkIcon, PlusIcon, Trash2Icon, UnlinkIcon } from 'lucide-react'
+import { useRef, useState } from 'react'
+import {
+  DownloadIcon,
+  FileXIcon,
+  LinkIcon,
+  PaperclipIcon,
+  PlusIcon,
+  PrinterIcon,
+  Trash2Icon,
+  UnlinkIcon,
+  XIcon,
+} from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -11,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from '@/components/ui/switch'
 import { useCan } from '@/features/auth/api'
 import {
+  manualInvoiceFilePath,
   useDocumentKsefLinks,
   useKsefInvoiceCandidates,
   useManualInvoices,
@@ -22,7 +33,7 @@ import { InvoiceComparisonPanel } from '@/features/documents/InvoiceComparisonPa
 import { AddSupplierForm, SupplierPicker } from '@/features/documents/SupplierPicker'
 import { useDownloadInvoice } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
-import { ApiError } from '@/lib/api'
+import { ApiError, downloadFile, printFile } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { Document, KsefInvoiceCandidate, LinkedKsefInvoice, ManualInvoice } from '@/lib/types'
@@ -130,7 +141,10 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
           {document.manualInvoices.map((invoice) => (
             <ManualInvoiceRow
               key={invoice.id}
+              storeId={storeId}
+              document={document}
               invoice={invoice}
+              canEdit={canEditDocuments}
               onRemove={canEditDocuments ? () => onRemoveManual(invoice) : undefined}
               removing={manual.remove.isPending && manual.remove.variables === invoice.id}
             />
@@ -154,14 +168,60 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
 }
 
 function ManualInvoiceRow({
+  storeId,
+  document,
   invoice,
+  canEdit,
   onRemove,
   removing,
 }: {
+  storeId: string
+  document: Document
   invoice: ManualInvoice
+  canEdit: boolean
   onRemove?: () => void
   removing: boolean
 }) {
+  const manual = useManualInvoices(storeId, document.type.toLowerCase(), document.id)
+  const [busy, setBusy] = useState<'download' | 'print' | null>(null)
+  const filePath = manualInvoiceFilePath(storeId, document.type, document.id, invoice.id)
+  const file = invoice.file
+  const isPdf = file?.contentType === 'application/pdf'
+
+  const run = async (kind: 'download' | 'print') => {
+    setBusy(kind)
+    try {
+      if (kind === 'print') await printFile(filePath)
+      else await downloadFile(filePath, file?.fileName ?? 'faktura')
+    } catch (error) {
+      toast.error(errorMessage(error, 'Nie udało się pobrać pliku faktury'))
+    } finally {
+      setBusy(null)
+    }
+  }
+  const attach = (picked: File) =>
+    manual.attachFile.mutate(
+      { invoiceId: invoice.id, file: picked },
+      {
+        onSuccess: () => toast.success(file ? 'Wymieniono plik faktury' : 'Dołączono plik faktury'),
+        onError: (error) => toast.error(errorMessage(error, 'Nie udało się dołączyć pliku')),
+      },
+    )
+  const removeFile = () =>
+    manual.removeFile.mutate(invoice.id, {
+      onSuccess: () =>
+        toast.success(`Usunięto plik faktury ${invoice.invoiceNumber}`, {
+          action: {
+            label: 'Przywróć',
+            onClick: () =>
+              manual.restoreFile.mutate(invoice.id, {
+                onError: (error) => toast.error(errorMessage(error, 'Nie udało się przywrócić pliku')),
+              }),
+          },
+        }),
+      onError: (error) => toast.error(errorMessage(error, 'Nie udało się usunąć pliku')),
+    })
+
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 tabular-nums">
       <div className="min-w-0 flex-1">
@@ -174,7 +234,53 @@ function ManualInvoiceRow({
           {' · wpisana ręcznie'}
           {invoice.createdBy && `, ${invoice.createdBy}`}
         </div>
+        {file && (
+          <div className="mt-0.5 truncate text-xs text-muted-foreground" title={file.fileName}>
+            <PaperclipIcon aria-hidden className="mr-1 inline size-3" />
+            {file.fileName} · {formatFileSize(file.sizeBytes)}
+          </div>
+        )}
       </div>
+      {file && (
+        <div className="flex gap-1">
+          <Button variant="outline" size="sm" loading={busy === 'download'} onClick={() => run('download')}>
+            <DownloadIcon />
+            {isPdf ? 'PDF' : 'Plik'}
+          </Button>
+          {isPdf && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Drukuj fakturę ${invoice.invoiceNumber}`}
+              title="Drukuj"
+              loading={busy === 'print'}
+              onClick={() => run('print')}
+            >
+              <PrinterIcon />
+            </Button>
+          )}
+        </div>
+      )}
+      {canEdit && (
+        <InvoiceFileButton
+          label={file ? 'Wymień plik' : 'Dołącz plik'}
+          iconOnly={Boolean(file)}
+          loading={manual.attachFile.isPending}
+          onFile={attach}
+        />
+      )}
+      {canEdit && file && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Usuń plik faktury ${invoice.invoiceNumber}`}
+          title="Usuń plik"
+          loading={manual.removeFile.isPending}
+          onClick={removeFile}
+        >
+          <FileXIcon />
+        </Button>
+      )}
       {onRemove && (
         <Button
           variant="ghost"
@@ -461,8 +567,9 @@ function ManualInvoiceForm({
   onCancel: () => void
   onSaved: () => void
 }) {
-  const { add, remove } = useManualInvoices(storeId, target.type.toLowerCase(), target.id)
+  const { add, remove, attachFile } = useManualInvoices(storeId, target.type.toLowerCase(), target.id)
   const suggested = useSuggestedSupplier(storeId, target.supplierCode)
+  const [file, setFile] = useState<File | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
@@ -503,6 +610,13 @@ function ManualInvoiceForm({
             description: `${target.typeSingular} ${target.number} · faktura spoza KSeF.`,
             action: created ? { label: 'Cofnij', onClick: () => remove.mutate(created.id) } : undefined,
           })
+          // Faktura jest już zapisana; nieudany plik da się dołączyć jeszcze raz przy fakturze.
+          if (file && created && !created.file) {
+            attachFile.mutate(
+              { invoiceId: created.id, file },
+              { onError: (error) => toast.error(errorMessage(error, 'Faktura zapisana, ale nie udało się dołączyć pliku')) },
+            )
+          }
         },
         onError: (error) => setFormError(applyServerErrors(error, setError, ['invoiceNumber', 'issueDate'])),
       },
@@ -553,6 +667,28 @@ function ManualInvoiceForm({
           )}
         />
       </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <InvoiceFileButton label={file ? 'Zmień plik' : 'Dołącz plik faktury (PDF, JPG, PNG)'} onFile={setFile} />
+        {file ? (
+          <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground">
+            <span className="truncate" title={file.name}>
+              {file.name} · {formatFileSize(file.size)}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Nie dołączaj pliku"
+              title="Nie dołączaj pliku"
+              onClick={() => setFile(null)}
+            >
+              <XIcon />
+            </Button>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">opcjonalnie, do {MAX_FILE_MB} MB</span>
+        )}
+      </div>
 
       <FormActions>
         <Button type="button" variant="outline" size="lg" onClick={onBack ?? onCancel}>
@@ -563,6 +699,63 @@ function ManualInvoiceForm({
         </Button>
       </FormActions>
     </Form>
+  )
+}
+
+/** Największy plik faktury, jak `DocumentManualInvoiceService.MAX_FILE_BYTES`. */
+const MAX_FILE_MB = 10
+const ACCEPTED_FILES = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png'
+
+function formatFileSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} kB`
+    : `${(bytes / 1024 / 1024).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} MB`
+}
+
+/** Wybór pliku faktury (PDF albo zdjęcie); za duży plik odrzuca od razu, typ po treści sprawdza serwer. */
+function InvoiceFileButton({
+  label,
+  iconOnly,
+  loading,
+  onFile,
+}: {
+  label: string
+  iconOnly?: boolean
+  loading?: boolean
+  onFile: (file: File) => void
+}) {
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <>
+      <input
+        ref={input}
+        type="file"
+        accept={ACCEPTED_FILES}
+        className="hidden"
+        onChange={(event) => {
+          const picked = event.target.files?.[0]
+          event.target.value = ''
+          if (!picked) return
+          if (picked.size > MAX_FILE_MB * 1024 * 1024) {
+            toast.error(`Plik jest za duży (najwyżej ${MAX_FILE_MB} MB)`)
+            return
+          }
+          onFile(picked)
+        }}
+      />
+      <Button
+        type="button"
+        variant={iconOnly ? 'ghost' : 'outline'}
+        size={iconOnly ? 'icon-sm' : 'sm'}
+        aria-label={label}
+        title={label}
+        loading={loading}
+        onClick={() => input.current?.click()}
+      >
+        <PaperclipIcon />
+        {!iconOnly && label}
+      </Button>
+    </>
   )
 }
 
@@ -597,15 +790,33 @@ export function DocumentRowKsef({ storeId, target }: { storeId: string; target: 
       onKeyDown={(event) => event.stopPropagation()}
     >
       <KsefInvoiceChips storeId={storeId} invoices={target.ksefInvoices} />
-      {target.manualInvoices.map((invoice) => (
-        <span
-          key={invoice.id}
-          className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground"
-          title={`Faktura spoza KSeF od ${invoice.supplierName}`}
-        >
-          {invoice.invoiceNumber}
-        </span>
-      ))}
+      {target.manualInvoices.map((invoice) =>
+        invoice.file ? (
+          <button
+            key={invoice.id}
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+            title={`Faktura spoza KSeF od ${invoice.supplierName} · pobierz ${invoice.file.fileName}`}
+            onClick={() =>
+              downloadFile(
+                manualInvoiceFilePath(storeId, target.type, target.id, invoice.id),
+                invoice.file?.fileName ?? 'faktura',
+              ).catch((error) => toast.error(errorMessage(error, 'Nie udało się pobrać pliku faktury')))
+            }
+          >
+            <PaperclipIcon aria-hidden className="size-3" />
+            {invoice.invoiceNumber}
+          </button>
+        ) : (
+          <span
+            key={invoice.id}
+            className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground"
+            title={`Faktura spoza KSeF od ${invoice.supplierName}`}
+          >
+            {invoice.invoiceNumber}
+          </span>
+        ),
+      )}
       {canEditDocuments && canAddInvoice(target) && (
         <>
           <Button
