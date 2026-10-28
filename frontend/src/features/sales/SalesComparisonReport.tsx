@@ -1,18 +1,16 @@
 import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeftIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronUpIcon,
   ChartColumnIcon,
-  ListIcon,
-  MinusIcon,
 } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 
+import { BackLink } from '@/components/BackLink'
 import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
@@ -144,13 +142,9 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
     <>
       {/* Tabela ma dużo kolumn, więc raport bierze całą szerokość strony (AppLayout). */}
       <span data-wide-page hidden />
-      <Link
-        to={salesPaths.overview}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
+      <BackLink to={salesPaths.overview}>
         Wszystkie raporty
-      </Link>
+      </BackLink>
 
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">{deli ? 'Koszty garmażu' : 'Porównanie sprzedaży'}</h2>
@@ -775,102 +769,105 @@ function Comparison({
               </Button>
             )}
           </div>
-          <Card ref={cardRef} className="overflow-hidden py-0">
-            <div ref={scrollRef} onScroll={updatePinned} className="relative max-h-[80svh] overflow-auto overscroll-contain">
-              {pinnedRows.length > 0 && layout && (
-                // Wysokość 0: przypięte wiersze leżą nad tabelą i niczego nie przesuwają.
-                <div className="pointer-events-none sticky z-20 h-0" style={{ top: layout.headerHeight }}>
-                  <table
-                    className="pointer-events-auto table-fixed text-sm tabular-nums shadow-[0_6px_10px_-8px_rgb(0_0_0/0.35)]"
-                    style={{ width: layout.tableWidth }}
-                  >
-                    <colgroup>
-                      {layout.widths.map((width, index) => (
-                        <col key={index} style={{ width }} />
-                      ))}
-                    </colgroup>
-                    <tbody>
-                      {pinnedRows.map((entry) => (
-                        <TableRow
-                          key={entry.key}
-                          className={cn('cursor-pointer', LEVEL_STYLES[entry.level].open)}
-                          title="Zwiń i wróć do początku grupy"
-                          onClick={() => collapsePinned(entry.key)}
-                        >
-                          <TableCell
-                            className={cn(
-                              'sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal',
-                              barClass,
-                              LEVEL_STYLES[entry.level].bar,
-                            )}
-                            style={{ paddingLeft: indent(entry.depth) }}
+          {/* Od xl ściąga nomenklatury stoi w kolumnie obok tabeli, więc niczego nie zasłania. */}
+          <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start xl:gap-4">
+            <Card ref={cardRef} className="overflow-hidden py-0">
+              <div ref={scrollRef} onScroll={updatePinned} className="relative max-h-[80svh] overflow-auto overscroll-contain">
+                {pinnedRows.length > 0 && layout && (
+                  // Wysokość 0: przypięte wiersze leżą nad tabelą i niczego nie przesuwają.
+                  <div className="pointer-events-none sticky z-20 h-0" style={{ top: layout.headerHeight }}>
+                    <table
+                      className="pointer-events-auto table-fixed text-sm tabular-nums shadow-[0_6px_10px_-8px_rgb(0_0_0/0.35)]"
+                      style={{ width: layout.tableWidth }}
+                    >
+                      <colgroup>
+                        {layout.widths.map((width, index) => (
+                          <col key={index} style={{ width }} />
+                        ))}
+                      </colgroup>
+                      <tbody>
+                        {pinnedRows.map((entry) => (
+                          <TableRow
+                            key={entry.key}
+                            className={cn('cursor-pointer', LEVEL_STYLES[entry.level].open)}
+                            title="Zwiń i wróć do początku grupy"
+                            onClick={() => collapsePinned(entry.key)}
                           >
-                            <span className="flex items-start gap-1.5">
-                              <ChevronRightIcon aria-hidden className="mt-0.5 size-4 shrink-0 rotate-90 text-foreground" />
-                              <RowLabel row={entry.row} level={entry.level} />
-                            </span>
-                          </TableCell>
-                          <FigureCells previous={entry.row.previous} current={entry.row.current} basis={basis} strong />
-                        </TableRow>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <table ref={tableRef} className="w-full caption-bottom text-sm tabular-nums">
-                <TableHeader ref={headRef} className="sticky top-0 z-30 bg-card shadow-[0_1px_0_var(--border)]">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead rowSpan={2} data-column="name" className="sticky left-0 z-10 min-w-64 bg-card pl-4 align-bottom">
-                      Nomenklatura
-                    </TableHead>
-                    {GROUPS.map((group) => (
-                      <TableHead key={group.key} colSpan={group.columns.length} className="h-9 border-l text-center">
-                        {group.key === 'sale'
-                          ? basis === 'gross'
-                            ? 'Sprzedaż brutto zł'
-                            : 'Sprzedaż netto zł'
-                          : group.key === 'cost' && deli
-                            ? 'Reprezentacja zł'
-                            : group.label}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                  <TableRow className="hover:bg-transparent">
-                    {GROUPS.map((group) =>
-                      group.columns.map((column, index) => (
-                        <TableHead
-                          key={`${group.key}-${column}`}
-                          data-leaf
-                          className={cn('h-8 text-right text-xs font-normal text-muted-foreground', index === 0 && 'border-l')}
-                        >
-                          {columnLabel(column, compare)}
-                        </TableHead>
-                      )),
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isPending ? (
-                    <LoadingRow depth={0} rows={6} />
-                  ) : (
-                    <TreeContext.Provider value={tree}>
-                      <LevelRows parent="" ancestors={[]} />
-                    </TreeContext.Provider>
-                  )}
-                </TableBody>
-                {data && (
-                  <TableFooter className="sticky bottom-0 z-30 bg-muted shadow-[0_-1px_0_var(--border)]">
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell className="sticky left-0 z-10 bg-muted py-3 pl-4 font-semibold">Razem</TableCell>
-                      <FigureCells previous={data.previousTotal} current={data.currentTotal} basis={basis} strong />
-                    </TableRow>
-                  </TableFooter>
+                            <TableCell
+                              className={cn(
+                                'sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal',
+                                barClass,
+                                LEVEL_STYLES[entry.level].bar,
+                              )}
+                              style={{ paddingLeft: indent(entry.depth) }}
+                            >
+                              <span className="flex items-start gap-1.5">
+                                <ChevronRightIcon aria-hidden className="mt-0.5 size-4 shrink-0 rotate-90 text-foreground" />
+                                <RowLabel row={entry.row} level={entry.level} />
+                              </span>
+                            </TableCell>
+                            <FigureCells previous={entry.row.previous} current={entry.row.current} basis={basis} strong />
+                          </TableRow>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </table>
-            </div>
-          </Card>
-          <NomenclatureNav items={navItems} current={current} onJump={(key) => scrollToRow(key, true)} />
+
+                <table ref={tableRef} className="w-full caption-bottom text-sm tabular-nums">
+                  <TableHeader ref={headRef} className="sticky top-0 z-30 bg-card shadow-[0_1px_0_var(--border)]">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead rowSpan={2} data-column="name" className="sticky left-0 z-10 min-w-64 bg-card pl-4 align-bottom">
+                        Nomenklatura
+                      </TableHead>
+                      {GROUPS.map((group) => (
+                        <TableHead key={group.key} colSpan={group.columns.length} className="h-9 border-l text-center">
+                          {group.key === 'sale'
+                            ? basis === 'gross'
+                              ? 'Sprzedaż brutto zł'
+                              : 'Sprzedaż netto zł'
+                            : group.key === 'cost' && deli
+                              ? 'Reprezentacja zł'
+                              : group.label}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                    <TableRow className="hover:bg-transparent">
+                      {GROUPS.map((group) =>
+                        group.columns.map((column, index) => (
+                          <TableHead
+                            key={`${group.key}-${column}`}
+                            data-leaf
+                            className={cn('h-8 text-right text-xs font-normal text-muted-foreground', index === 0 && 'border-l')}
+                          >
+                            {columnLabel(column, compare)}
+                          </TableHead>
+                        )),
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isPending ? (
+                      <LoadingRow depth={0} rows={6} />
+                    ) : (
+                      <TreeContext.Provider value={tree}>
+                        <LevelRows parent="" ancestors={[]} />
+                      </TreeContext.Provider>
+                    )}
+                  </TableBody>
+                  {data && (
+                    <TableFooter className="sticky bottom-0 z-30 bg-muted shadow-[0_-1px_0_var(--border)]">
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell className="sticky left-0 z-10 bg-muted py-3 pl-4 font-semibold">Razem</TableCell>
+                        <FigureCells previous={data.previousTotal} current={data.currentTotal} basis={basis} strong />
+                      </TableRow>
+                    </TableFooter>
+                  )}
+                </table>
+              </div>
+            </Card>
+            <NomenclatureNav items={navItems} current={current} onJump={(key) => scrollToRow(key, true)} />
+          </div>
         </>
       )}
 
@@ -1132,8 +1129,9 @@ function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesCompari
 }
 
 /**
- * Ściąga do szybkiego przejścia po nomenklaturze, jak spis kategorii w zamówieniu garmażu: na komputerze w prawym
- * dolnym rogu (można ją zwinąć), na telefonie strzałki po lewej - poprzednia / następna pozycja.
+ * Ściąga do szybkiego przejścia po nomenklaturze, jak spis kategorii w zamówieniu garmażu: na dużym ekranie
+ * w kolumnie obok tabeli (przyklejona pod paskiem aplikacji), na mniejszych strzałki po lewej - poprzednia / następna
+ * pozycja.
  */
 function NomenclatureNav({
   items,
@@ -1144,20 +1142,29 @@ function NomenclatureNav({
   current: string | null
   onJump: (key: string) => void
 }) {
-  const [open, setOpen] = useState(true)
   const listRef = useRef<HTMLOListElement>(null)
   const currentIndex = items.findIndex((item) => item.key === current)
 
-  // Bieżąca pozycja zawsze widoczna w spisie, także gdy rozwinięto dużo grup.
+  // Bieżąca pozycja zawsze widoczna w spisie, także gdy rozwinięto dużo grup. Przewijamy sam spis, nie stronę.
   useEffect(() => {
-    listRef.current?.querySelector('[aria-current="location"]')?.scrollIntoView({ block: 'nearest' })
+    const list = listRef.current
+    const active = list?.querySelector<HTMLElement>('[aria-current="location"]')
+    if (!list || !active) return
+    const top = active.offsetTop - list.offsetTop
+    if (top < list.scrollTop || top + active.offsetHeight > list.scrollTop + list.clientHeight) {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      list.scrollTo({
+        top: top - list.clientHeight / 2 + active.offsetHeight / 2,
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      })
+    }
   }, [current])
 
   if (items.length < 2) return null
 
   return (
     <>
-      <div className="fixed bottom-4 left-4 z-40 flex flex-col gap-2 md:hidden">
+      <div className="fixed bottom-4 left-4 z-40 flex flex-col gap-2 xl:hidden">
         <Button
           variant="outline"
           size="icon-lg"
@@ -1180,44 +1187,34 @@ function NomenclatureNav({
         </Button>
       </div>
 
-      <nav aria-label="Nomenklatura" className="fixed right-6 bottom-6 z-40 hidden md:block">
-        {open ? (
-          <div className="w-72 overflow-hidden rounded-xl bg-background shadow-[0_8px_24px_-8px_rgb(0_0_0/0.18)] ring-1 ring-foreground/10">
-            <div className="flex items-center justify-between border-b py-1 pr-1 pl-3">
-              <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Nomenklatura</span>
-              <Button variant="ghost" size="icon-sm" aria-label="Zwiń ściągę" onClick={() => setOpen(false)}>
-                <MinusIcon />
-              </Button>
-            </div>
-            <ol ref={listRef} className="max-h-[45svh] overflow-y-auto overscroll-contain p-1">
-              {items.map((item) => (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    aria-current={item.key === current ? 'location' : undefined}
-                    onClick={() => onJump(item.key)}
-                    style={{ paddingLeft: `${0.5 + item.depth * 0.875}rem` }}
-                    className={cn(
-                      'flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm text-muted-foreground transition-colors duration-150 outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
-                      item.key === current && 'bg-muted font-medium text-foreground',
-                    )}
-                  >
-                    <span aria-hidden className={cn('size-2 shrink-0 rounded-sm', LEVEL_STYLES[item.level].dot)} />
-                    <span className="shrink-0 text-xs tabular-nums">{item.row.code ? displayCode(item.row.code) : '–'}</span>
-                    <span className="min-w-0 flex-1 truncate">
-                      {item.row.code === '' ? 'Bez nomenklatury' : (displayName(item.row) ?? 'Brak nazwy')}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </div>
-        ) : (
-          <Button variant="outline" className="rounded-full bg-background shadow-md" onClick={() => setOpen(true)}>
-            <ListIcon />
+      <nav aria-label="Nomenklatura" className="sticky top-20 hidden xl:block">
+        <div className="overflow-hidden rounded-xl bg-background ring-1 ring-foreground/10">
+          <div className="border-b px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Nomenklatura
-          </Button>
-        )}
+          </div>
+          <ol ref={listRef} className="max-h-[calc(80svh-2.5rem)] overflow-y-auto overscroll-contain p-1">
+            {items.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  aria-current={item.key === current ? 'location' : undefined}
+                  onClick={() => onJump(item.key)}
+                  style={{ paddingLeft: `${0.5 + item.depth * 0.875}rem` }}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm text-muted-foreground transition-colors duration-200 ease-out outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+                    item.key === current && 'bg-muted font-medium text-foreground',
+                  )}
+                >
+                  <span aria-hidden className={cn('size-2 shrink-0 rounded-sm', LEVEL_STYLES[item.level].dot)} />
+                  <span className="shrink-0 text-xs tabular-nums">{item.row.code ? displayCode(item.row.code) : '–'}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {item.row.code === '' ? 'Bez nomenklatury' : (displayName(item.row) ?? 'Brak nazwy')}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
       </nav>
     </>
   )

@@ -40,7 +40,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
 import { type MoveChange, useChangeOrderForm, useMoveInOrderForm, useOrderForm, usePasteOrderProducts } from '@/features/deli-order/api'
-import { CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
+import { CATEGORY_NAV_GRID, CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
 import { InvitationsPanel } from '@/features/deli-order/InvitationsPanel'
 import { NameDialog, type NameDialogState } from '@/features/deli-order/NameDialog'
 import { type PasteDialogState, PasteProductsDialog } from '@/features/deli-order/PasteProductsDialog'
@@ -185,97 +185,101 @@ export function FormEditor({ store }: { store: StoreSummary }) {
             )}
           </div>
 
-          {sections.map((section) => (
-            <Tabs.Panel key={section.id} value={section.id} className="outline-none">
-              <SectionPanel
-                storeId={store.id}
-                section={section}
-                editing={isEditing}
-                busy={change.isPending}
-                onRename={() =>
-                  setNameDialog({
-                    title: 'Zmień nazwę działu',
-                    label: 'Nazwa działu',
-                    initialName: section.name,
-                    submitLabel: 'Zapisz',
-                    onSubmit: (name) => change.mutateAsync({ type: 'renameSection', sectionId: section.id, name }),
-                  })
-                }
-                onDelete={() =>
-                  setConfirmation({
-                    title: `Usunąć dział „${section.name}”?`,
-                    description: `Razem z nim znikną jego kategorie (${section.categories.length}) i listy produktów. Produkty zostają w kartotece.`,
-                    confirmLabel: 'Usuń dział',
-                    onConfirm: () =>
-                      change.mutate({ type: 'deleteSection', sectionId: section.id }, { onError: onChangeError }),
-                  })
-                }
-                onAddCategory={() =>
-                  setNameDialog({
-                    title: `Nowa kategoria w dziale ${section.name}`,
-                    label: 'Nazwa kategorii',
-                    submitLabel: 'Dodaj kategorię',
-                    onSubmit: (name) => change.mutateAsync({ type: 'createCategory', sectionId: section.id, name }),
-                  })
-                }
-                onRenameCategory={(category) =>
-                  setNameDialog({
-                    title: 'Zmień nazwę kategorii',
-                    label: 'Nazwa kategorii',
-                    initialName: category.name,
-                    submitLabel: 'Zapisz',
-                    onSubmit: (name) => change.mutateAsync({ type: 'renameCategory', categoryId: category.id, name }),
-                  })
-                }
-                onDeleteCategory={(category) =>
-                  setConfirmation({
-                    title: `Usunąć kategorię „${category.name}”?`,
-                    description: `Z formularza zniknie lista ${category.products.length} produktów tej kategorii. Produkty zostają w kartotece.`,
-                    confirmLabel: 'Usuń kategorię',
-                    onConfirm: () =>
-                      change.mutate({ type: 'deleteCategory', categoryId: category.id }, { onError: onChangeError }),
-                  })
-                }
-                onAddProduct={(category, productId) =>
-                  change.mutate({ type: 'addProduct', categoryId: category.id, productId }, { onError: onChangeError })
-                }
-                onPasteProducts={(category, initialText) =>
-                  setPasteDialog({
-                    categoryName: category.name,
-                    initialText,
-                    onSubmit: (rows) => paste.mutateAsync({ categoryId: category.id, rows }),
-                  })
-                }
-                onRemoveProduct={(category, itemId) =>
-                  change.mutate({ type: 'removeProduct', categoryId: category.id, itemId }, { onError: onChangeError })
-                }
-                onSetUnit={(category, itemId, orderUnit) =>
-                  change.mutate(
-                    { type: 'setOrderUnit', categoryId: category.id, itemId, orderUnit },
-                    { onError: onChangeError },
-                  )
-                }
-                onMove={(moveChange, categories) =>
-                  form &&
-                  move(
-                    moveChange,
-                    { sections: sections.map((other) => (other.id === section.id ? { ...section, categories } : other)) },
-                    onChangeError,
-                  )
-                }
+          <div className={CATEGORY_NAV_GRID}>
+            <div className="min-w-0">
+              {sections.map((section) => (
+                <Tabs.Panel key={section.id} value={section.id} className="outline-none">
+                  <SectionPanel
+                    storeId={store.id}
+                    section={section}
+                    editing={isEditing}
+                    busy={change.isPending}
+                    onRename={() =>
+                      setNameDialog({
+                        title: 'Zmień nazwę działu',
+                        label: 'Nazwa działu',
+                        initialName: section.name,
+                        submitLabel: 'Zapisz',
+                        onSubmit: (name) => change.mutateAsync({ type: 'renameSection', sectionId: section.id, name }),
+                      })
+                    }
+                    onDelete={() =>
+                      setConfirmation({
+                        title: `Usunąć dział „${section.name}”?`,
+                        description: `Razem z nim znikną jego kategorie (${section.categories.length}) i listy produktów. Produkty zostają w kartotece.`,
+                        confirmLabel: 'Usuń dział',
+                        onConfirm: () =>
+                          change.mutate({ type: 'deleteSection', sectionId: section.id }, { onError: onChangeError }),
+                      })
+                    }
+                    onAddCategory={() =>
+                      setNameDialog({
+                        title: `Nowa kategoria w dziale ${section.name}`,
+                        label: 'Nazwa kategorii',
+                        submitLabel: 'Dodaj kategorię',
+                        onSubmit: (name) => change.mutateAsync({ type: 'createCategory', sectionId: section.id, name }),
+                      })
+                    }
+                    onRenameCategory={(category) =>
+                      setNameDialog({
+                        title: 'Zmień nazwę kategorii',
+                        label: 'Nazwa kategorii',
+                        initialName: category.name,
+                        submitLabel: 'Zapisz',
+                        onSubmit: (name) => change.mutateAsync({ type: 'renameCategory', categoryId: category.id, name }),
+                      })
+                    }
+                    onDeleteCategory={(category) =>
+                      setConfirmation({
+                        title: `Usunąć kategorię „${category.name}”?`,
+                        description: `Z formularza zniknie lista ${category.products.length} produktów tej kategorii. Produkty zostają w kartotece.`,
+                        confirmLabel: 'Usuń kategorię',
+                        onConfirm: () =>
+                          change.mutate({ type: 'deleteCategory', categoryId: category.id }, { onError: onChangeError }),
+                      })
+                    }
+                    onAddProduct={(category, productId) =>
+                      change.mutate({ type: 'addProduct', categoryId: category.id, productId }, { onError: onChangeError })
+                    }
+                    onPasteProducts={(category, initialText) =>
+                      setPasteDialog({
+                        categoryName: category.name,
+                        initialText,
+                        onSubmit: (rows) => paste.mutateAsync({ categoryId: category.id, rows }),
+                      })
+                    }
+                    onRemoveProduct={(category, itemId) =>
+                      change.mutate({ type: 'removeProduct', categoryId: category.id, itemId }, { onError: onChangeError })
+                    }
+                    onSetUnit={(category, itemId, orderUnit) =>
+                      change.mutate(
+                        { type: 'setOrderUnit', categoryId: category.id, itemId, orderUnit },
+                        { onError: onChangeError },
+                      )
+                    }
+                    onMove={(moveChange, categories) =>
+                      form &&
+                      move(
+                        moveChange,
+                        { sections: sections.map((other) => (other.id === section.id ? { ...section, categories } : other)) },
+                        onChangeError,
+                      )
+                    }
+                  />
+                </Tabs.Panel>
+              ))}
+            </div>
+            {activeSection && (
+              <CategoryNav
+                items={activeSection.categories.map((category) => ({
+                  id: category.id,
+                  name: category.name,
+                  count: category.products.length,
+                }))}
               />
-            </Tabs.Panel>
-          ))}
+            )}
+          </div>
         </Tabs.Root>
-      )}
-      {activeSection && (
-        <CategoryNav
-          items={activeSection.categories.map((category) => ({
-            id: category.id,
-            name: category.name,
-            count: category.products.length,
-          }))}
-        />
       )}
 
       <NameDialog state={nameDialog} onClose={() => setNameDialog(null)} />

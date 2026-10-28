@@ -110,6 +110,10 @@ public class Product {
     @Column(name = "cn_code")
     private String cnCode;
 
+    /** CENA_CAD: cena sprzedaży sztuki narzucona przez centralę (cadencier). */
+    @Column(name = "cadencier_price", precision = 12, scale = 2)
+    private BigDecimal cadencierPrice;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "first_seen_import_id", nullable = false, updatable = false)
     private ProductImport firstSeenImport;
@@ -192,7 +196,8 @@ public class Product {
                 && Objects.equals(typeCode, row.typeCode())
                 && Objects.equals(kind, row.kind())
                 && Objects.equals(saleUnitCode, row.saleUnitCode())
-                && Objects.equals(cnCode, row.cnCode());
+                && Objects.equals(cnCode, row.cnCode())
+                && sameNumber(cadencierPrice, row.cadencierPrice());
     }
 
     /** {@link BigDecimal#equals} rozróżnia 1.0 i 1.00, a liczy się wartość. */
@@ -225,6 +230,7 @@ public class Product {
         kind = row.kind();
         saleUnitCode = row.saleUnitCode();
         cnCode = row.cnCode();
+        cadencierPrice = row.cadencierPrice();
     }
 
     public UUID getId() {
@@ -332,6 +338,11 @@ public class Product {
     /** Czy ilość w przepisie wpisuje się w sztukach - tylko wtedy ma sens {@link #getPieceWeight()}. */
     public boolean isCountedInPieces() {
         return "szt.".equals(getCostUnit());
+    }
+
+    /** CENA_CAD z raportu kartoteki; {@code null}, gdy centrala nie narzuca ceny. */
+    public BigDecimal getCadencierPrice() {
+        return cadencierPrice;
     }
 
     public BigDecimal getPieceWeight() {

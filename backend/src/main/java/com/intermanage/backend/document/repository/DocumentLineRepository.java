@@ -2,6 +2,7 @@ package com.intermanage.backend.document.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +25,36 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
               and l.purchasePrice > 0 and l.quantity > 0
             order by d.documentDate desc, d.number desc, l.lineNumber desc""")
     List<DocumentLine> findPricedLines(UUID storeId, DocumentType type, Collection<String> itm8s);
+
+    /** Cena zakupu artykułu w linii przyjęcia od dostawcy. */
+    interface SupplierPrice {
+        String getItm8();
+
+        UUID getDocumentId();
+
+        String getDocumentNumber();
+
+        LocalDateTime getDocumentDate();
+
+        BigDecimal getPurchasePrice();
+    }
+
+    /**
+     * Ceny zakupu z linii przyjęć PZ od dostawców (kod z linii) z dokumentów z datą w [from, to), od najstarszego
+     * (weryfikacja cen: ostatnia cena z bazy przed dostawą od innego dostawcy).
+     */
+    @Query(value = """
+            select l.itm8 as itm8, d.id as document_id, d.number as document_number,
+                   d.document_date as document_date, l.purchase_price as purchase_price
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type = 'PZ' and l.supplier_code in (:supplierCodes)
+              and l.purchase_price > 0 and l.quantity > 0
+              and d.document_date >= :from and d.document_date < :to
+            order by d.document_date, d.number, l.line_number
+            """, nativeQuery = true)
+    List<SupplierPrice> findSupplierPrices(UUID storeId, Collection<String> supplierCodes, LocalDateTime from,
+            LocalDateTime to);
 
     /** Wartość zakupu linii jednego typu dokumentu w rejonie nomenklatury (pusty kod = linie bez nomenklatury). */
     interface RegionValue {

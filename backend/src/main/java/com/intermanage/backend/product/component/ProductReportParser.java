@@ -185,7 +185,8 @@ public class ProductReportParser {
                     smallInteger(cells, "TYP"),
                     text(cells, "RODZ", 30),
                     smallInteger(cells, "JMSP"),
-                    text(cells, "CN", 30));
+                    text(cells, "CN", 30),
+                    decimal(cells, "CENA_CAD", 2));
         }
 
         /** Kod z samych cyfr (EAN, ITM8). Zera wiodące są częścią kodu. */

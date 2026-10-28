@@ -28,5 +28,7 @@ public record ProductReportRow(
         Short typeCode,
         String kind,
         Short saleUnitCode,
-        String cnCode) {
+        String cnCode,
+        /** CENA_CAD: cena sprzedaży sztuki narzucona przez centralę (cadencier); starsze raporty jej nie mają. */
+        BigDecimal cadencierPrice) {
 }

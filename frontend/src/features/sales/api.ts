@@ -3,9 +3,15 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type { DateRange, Periods } from '@/features/sales/periods'
 import { api, ApiError, downloadFile, printFile } from '@/lib/api'
 import type {
+  CadencierImport,
+  CadencierOverview,
   DeliCostsOverview,
   NomenclatureOption,
   PeriodSummary,
+  PriceCheckReport,
+  PriceCheckReview,
+  PriceCheckSettings,
+  PriceCheckStatus,
   RegionBudget,
   SalesArticle,
   SalesComparison,
@@ -192,4 +198,71 @@ export function useSaveRegionBudgets(storeId: string) {
       api<RegionBudget[]>(`${reportsPath(storeId)}/region-budgets`, { method: 'PUT', json: { budgets } }),
     onSuccess: (budgets) => queryClient.setQueryData([...reportsKey(storeId), 'region-budgets'], budgets),
   })
+}
+
+const priceCheckPath = (storeId: string) => `${reportsPath(storeId)}/price-check`
+const priceCheckSettingsKey = (storeId: string) => [...reportsKey(storeId), 'price-check', 'settings'] as const
+
+/** Zakup bazowy poza bazą: przyjęcia z ostatnich 30 dni z artykułami z cadencier od innych dostawców. */
+export function usePriceCheck(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'price-check', 'report'],
+    queryFn: () => api<PriceCheckReport>(priceCheckPath(storeId)),
+  })
+}
+
+/** Lista artykułów obecnych w cadencier (Ustawienia sklepu): ile ich jest i ostatnie wgrania. */
+export function useCadencier(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'price-check', 'cadencier'],
+    queryFn: () => api<CadencierOverview>(`${priceCheckPath(storeId)}/cadencier`),
+    enabled,
+  })
+}
+
+export function useImportCadencier(storeId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<CadencierImport>(`${priceCheckPath(storeId)}/cadencier`, { method: 'POST', formData })
+    },
+  })
+}
+
+/** Minimalna marża artykułu z cadencier kupionego u innego dostawcy (Ustawienia sklepu). */
+export function usePriceCheckSettings(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: priceCheckSettingsKey(storeId),
+    queryFn: () => api<PriceCheckSettings>(`${priceCheckPath(storeId)}/settings`),
+    enabled,
+  })
+}
+
+export function useSavePriceCheckSettings(storeId: string) {
+  return useMutation({
+    mutationFn: (minMarginPercent: number | null) =>
+      api<PriceCheckSettings>(`${priceCheckPath(storeId)}/settings`, { method: 'PUT', json: { minMarginPercent } }),
+  })
+}
+
+/** Status wyjaśniania przyjęcia: nowy wpis, cofnięcie (znacznik) i przywrócenie; każde zwraca historię. */
+export function usePriceCheckReviewActions(storeId: string) {
+  return {
+    review: useMutation({
+      mutationFn: ({ documentId, status, note }: { documentId: string; status: PriceCheckStatus; note: string }) =>
+        api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/documents/${documentId}/reviews`, {
+          method: 'POST',
+          json: { status, note },
+        }),
+    }),
+    remove: useMutation({
+      mutationFn: (reviewId: string) =>
+        api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/reviews/${reviewId}`, { method: 'DELETE' }),
+    }),
+    restore: useMutation({
+      mutationFn: (reviewId: string) =>
+        api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/reviews/${reviewId}/restore`, { method: 'POST' }),
+    }),
+  }
 }

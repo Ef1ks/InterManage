@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftIcon, CircleAlertIcon, LoaderCircleIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
-import { Link, useBlocker, useNavigate } from 'react-router'
+import { CircleAlertIcon, LoaderCircleIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { useBlocker, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
+import { BackLink } from '@/components/BackLink'
 import { FormAlert, SegmentedField } from '@/components/form'
 import { HowTo } from '@/components/HowTo'
 import { SearchInput } from '@/components/SearchInput'
@@ -230,13 +231,9 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
 
   return (
     <>
-      <Link
-        to={pricePaths.list}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
+      <BackLink to={pricePaths.list}>
         Wszystkie kalkulacje
-      </Link>
+      </BackLink>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>

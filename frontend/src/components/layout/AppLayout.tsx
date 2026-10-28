@@ -11,7 +11,7 @@ import {
   UserCogIcon,
   UserIcon,
 } from 'lucide-react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { BrandMark } from '@/components/BrandMark'
@@ -31,6 +31,7 @@ import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBa
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
+import { historyIndex, recordLocation } from '@/lib/history-trail'
 import { cn } from '@/lib/utils'
 import { closeMobileNav, toggleMobileNav } from '@/store/uiSlice'
 import { useAppDispatch, useAppSelector } from '@/store'
@@ -43,6 +44,10 @@ export function AppLayout() {
   useEffect(() => {
     dispatch(closeMobileNav())
   }, [location.pathname, dispatch])
+
+  useEffect(() => {
+    recordLocation(location.pathname)
+  }, [location.key, location.pathname])
 
   return (
     <div className="min-h-svh bg-muted/30 md:grid md:grid-cols-[15rem_1fr]">
@@ -78,6 +83,9 @@ export function AppLayout() {
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none">
           <Outlet />
         </main>
+        {/* Przewinięcie zapamiętane per ścieżka: powrót na listę wraca w to samo miejsce, a zmiana filtrów
+            w adresie (ta sama ścieżka) nie przerzuca strony na górę. */}
+        <ScrollRestoration getKey={(location) => location.pathname} />
       </div>
     </div>
   )
@@ -154,8 +162,8 @@ function Sidebar() {
 function BackButton() {
   const navigate = useNavigate()
   const location = useLocation()
-  // react-router trzyma w history.state numer wpisu; 0 = pierwszy ekran tej karty.
-  const hasHistory = ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0
+  // 0 = pierwszy ekran tej karty.
+  const hasHistory = historyIndex() > 0
   const disabled = !hasHistory && location.pathname === '/'
 
   return (

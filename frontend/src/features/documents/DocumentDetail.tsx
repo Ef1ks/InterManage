@@ -1,8 +1,9 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { ArrowLeftIcon, ClipboardListIcon, PrinterIcon } from 'lucide-react'
+import { ClipboardListIcon, PrinterIcon } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
+import { BackLink } from '@/components/BackLink'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -127,13 +128,9 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
 
   return (
     <>
-      <Link
-        to={documentPaths.list(document.type)}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
+      <BackLink to={documentPaths.list(document.type)}>
         {document.typeLabel}
-      </Link>
+      </BackLink>
 
       <div className="mb-6">
         <div className="flex flex-wrap items-start justify-between gap-3">

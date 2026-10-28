@@ -1,8 +1,9 @@
 import { useDeferredValue, useState } from 'react'
-import { ArrowLeftIcon, ArrowRightLeftIcon, CheckCircle2Icon, ChevronRightIcon } from 'lucide-react'
+import { ArrowRightLeftIcon, CheckCircle2Icon, ChevronRightIcon } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
+import { BackLink } from '@/components/BackLink'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
@@ -152,13 +153,9 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
   const deferredQuery = useDeferredValue(query)
 
   const back = (
-    <Link
-      to={documentPaths.incoming}
-      className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeftIcon className="size-4" />
+    <BackLink to={documentPaths.incoming}>
       Od innych sklepów
-    </Link>
+    </BackLink>
   )
 
   if (isError) {

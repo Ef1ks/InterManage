@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import {
-  ArrowLeftIcon,
   CheckIcon,
   ChevronRightIcon,
   HandshakeIcon,
   type LucideIcon,
+  ScaleIcon,
   StoreIcon,
   TargetIcon,
 } from 'lucide-react'
 import { Link, Navigate, Route, Routes } from 'react-router'
 import { toast } from 'sonner'
 
+import { BackLink } from '@/components/BackLink'
 import { Form, SelectField } from '@/components/form'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
@@ -19,8 +20,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan } from '@/features/auth/api'
-import { useRegionBudgets } from '@/features/sales/api'
+import { countFormat } from '@/features/documents/format'
+import { useCadencier, usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
 import { useStorePartnerActions, useStorePartners } from '@/features/store-settings/api'
+import { storeSettingsPaths } from '@/features/store-settings/paths'
+import { CadencierUpload } from '@/features/store-settings/CadencierUpload'
+import { PriceCheckSettingsForm } from '@/features/store-settings/PriceCheckSettingsForm'
 import { RegionBudgets } from '@/features/store-settings/RegionBudgets'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
@@ -28,17 +33,13 @@ import type { StorePartner, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
+const budgetPercent = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
 
-const base = '/ustawienia-sklepu'
-const paths = {
-  overview: base,
-  budgets: `${base}/budzet`,
-  partners: `${base}/sklepy-zaprzyjaznione`,
-}
+const paths = storeSettingsPaths
 
 /**
  * Ustawienia wybranego sklepu: kafelek na każde ustawienie, samo ustawienie na osobnej podstronie. Budżet rejonów
- * do podsumowania sprzedaży i strat ({@code SALES:EDIT}) i sklepy zaprzyjaźnione do ruchów międzymagazynowych
+ * do podsumowania sprzedaży i strat i minimalna marża do raportu zakupu bazowego poza bazą ({@code SALES:EDIT}) i sklepy zaprzyjaźnione do ruchów międzymagazynowych
  * ({@code DOCUMENTS:EDIT}); każde tylko z jego uprawnieniem.
  */
 export function StoreSettingsPage() {
@@ -93,6 +94,30 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        {canEditSales && (
+          <Route
+            path="weryfikacja-cen"
+            element={
+              <section aria-labelledby="price-check-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="price-check-heading" className="text-lg font-semibold tracking-tight">
+                    Weryfikacja cen
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Artykuł z listy cadencier (formularza zamówień do bazy) kupiony u dostawcy innego niż baza trafia
+                    do raportu „Zakup bazowy poza bazą”. Minimalna marża oznacza w raporcie artykuły, na których sklep
+                    zarabia za mało.
+                  </p>
+                </div>
+                <div className="grid max-w-2xl gap-4">
+                  <CadencierUpload key={store.id} storeId={store.id} />
+                  <PriceCheckSettingsForm key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         {canEditDocuments && (
           <Route
             path="sklepy-zaprzyjaznione"
@@ -112,17 +137,13 @@ export function StoreSettingsPage() {
 
 function BackToSettings() {
   return (
-    <Link
-      to={paths.overview}
-      className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeftIcon className="size-4" />
+    <BackLink to={paths.overview} className="mb-0">
       Ustawienia sklepu
-    </Link>
+    </BackLink>
   )
 }
 
-/** Kafelki ustawień ze stanem w skrócie: ile rejonów ma budżet, ilu jest znajomych i czy czekają zaproszenia. */
+/** Kafelki ustawień ze stanem w skrócie: ile rejonów ma budżet, minimalna marża, ilu jest znajomych i czy czekają zaproszenia. */
 function SettingsGrid({
   storeId,
   canEditSales,
@@ -133,6 +154,8 @@ function SettingsGrid({
   canEditDocuments: boolean
 }) {
   const budgets = useRegionBudgets(storeId, canEditSales)
+  const priceCheck = usePriceCheckSettings(storeId, canEditSales)
+  const cadencier = useCadencier(storeId, canEditSales)
   const partners = useStorePartners(storeId, canEditDocuments)
   const budgeted = budgets.data?.filter((budget) => budget.marginPercent != null || budget.maxLossPercent != null).length
   const accepted = partners.data?.partners.filter((partner) => partner.acceptedAt).length
@@ -151,6 +174,26 @@ function SettingsGrid({
               ? budgeted
                 ? `Budżet ma ${budgeted} z ${budgets.data.length} rejonów`
                 : 'Budżet nie jest jeszcze ustawiony'
+              : ' '
+          }
+        />
+      )}
+      {canEditSales && (
+        <SettingsTile
+          to={paths.priceCheck}
+          icon={ScaleIcon}
+          title="Weryfikacja cen"
+          description="Lista artykułów z cadencier i minimalna marża do raportu zakupu bazowego poza bazą."
+          status={
+            cadencier.data && priceCheck.data
+              ? [
+                  cadencier.data.imports.length
+                    ? `Cadencier: ${countFormat.format(cadencier.data.itemCount)} art.`
+                    : 'Brak listy cadencier',
+                  priceCheck.data.minMarginPercent != null
+                    ? `marża min. ${budgetPercent.format(priceCheck.data.minMarginPercent)}%`
+                    : 'bez minimalnej marży',
+                ].join(' · ')
               : ' '
           }
         />

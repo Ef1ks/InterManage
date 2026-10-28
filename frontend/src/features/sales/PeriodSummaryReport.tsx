@@ -1,7 +1,8 @@
-import { ArrowLeftIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
+import { BackLink } from '@/components/BackLink'
 import { DateField, SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
@@ -100,13 +101,9 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
     <>
       {/* Tabela ma dużo kolumn, więc raport bierze całą szerokość strony (AppLayout). */}
       <span data-wide-page hidden />
-      <Link
-        to={salesPaths.overview}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
+      <BackLink to={salesPaths.overview}>
         Wszystkie raporty
-      </Link>
+      </BackLink>
 
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">Podsumowanie sprzedaży i strat</h2>

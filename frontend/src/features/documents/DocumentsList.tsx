@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ArrowLeftIcon, ChevronRightIcon, LoaderCircleIcon, LockIcon } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { ChevronRightIcon, LoaderCircleIcon, LockIcon } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router'
 
+import { BackLink } from '@/components/BackLink'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
@@ -53,13 +54,9 @@ function ClosedLock({ closing }: { closing: DocumentReportClosing }) {
 
 export function BackToTypes() {
   return (
-    <Link
-      to={documentPaths.overview}
-      className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeftIcon className="size-4" />
+    <BackLink to={documentPaths.overview}>
       Wszystkie dokumenty
-    </Link>
+    </BackLink>
   )
 }
 

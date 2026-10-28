@@ -10,7 +10,7 @@ import { DateField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useDeliOverview, useSubmitOrder, useSupplierForm } from '@/features/deli-order/api'
-import { CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
+import { CATEGORY_NAV_GRID, CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
 import { deliPaths } from '@/features/deli-order/paths'
 import { ProductSearchField } from '@/features/deli-order/ProductSearchField'
 import { QuantityInput, UnitToggle, parseQuantity } from '@/features/deli-order/QuantityInput'
@@ -245,69 +245,73 @@ function SupplierOrder({ storeId, supplier }: { storeId: string; supplier: DeliS
           </Tabs.List>
         </div>
 
-        {form.sections.map((section) => (
-          <Tabs.Panel key={section.id} value={section.id} className="grid grid-cols-1 gap-5 outline-none">
-            {section.categories.length === 0 && (
-              <p className="text-sm text-muted-foreground">W tym dziale nie ma jeszcze produktów.</p>
-            )}
-            {section.categories.map((category) => (
-              <section
-                key={category.id}
-                id={categoryAnchorId(category.id)}
-                aria-label={category.name}
-                className="scroll-mt-20"
-              >
-                <h2 className="mb-2 text-base font-semibold">{category.name}</h2>
-                <Card className="gap-0 divide-y py-0">
-                  {category.products.length === 0 && (
-                    <p className="px-4 py-5 text-center text-sm text-muted-foreground">Brak produktów w tej kategorii.</p>
-                  )}
-                  {category.products.map((product) => {
-                    const value = quantities[product.id] ?? ''
-                    const error = showErrors && value.trim() !== '' ? parseQuantity(value, product.orderUnit).error : undefined
-                    return (
-                      <div key={product.id} className="flex items-center gap-4 px-4 py-2.5">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{product.name ?? 'Bez nazwy'}</div>
-                          <div className="truncate text-xs text-muted-foreground tabular-nums">
-                            {product.brand && `${product.brand} · `}EAN {product.ean}
+        <div className={CATEGORY_NAV_GRID}>
+          <div className="min-w-0">
+            {form.sections.map((section) => (
+              <Tabs.Panel key={section.id} value={section.id} className="grid grid-cols-1 gap-5 outline-none">
+                {section.categories.length === 0 && (
+                  <p className="text-sm text-muted-foreground">W tym dziale nie ma jeszcze produktów.</p>
+                )}
+                {section.categories.map((category) => (
+                  <section
+                    key={category.id}
+                    id={categoryAnchorId(category.id)}
+                    aria-label={category.name}
+                    className="scroll-mt-20"
+                  >
+                    <h2 className="mb-2 text-base font-semibold">{category.name}</h2>
+                    <Card className="gap-0 divide-y py-0">
+                      {category.products.length === 0 && (
+                        <p className="px-4 py-5 text-center text-sm text-muted-foreground">Brak produktów w tej kategorii.</p>
+                      )}
+                      {category.products.map((product) => {
+                        const value = quantities[product.id] ?? ''
+                        const error = showErrors && value.trim() !== '' ? parseQuantity(value, product.orderUnit).error : undefined
+                        return (
+                          <div key={product.id} className="flex items-center gap-4 px-4 py-2.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium">{product.name ?? 'Bez nazwy'}</div>
+                              <div className="truncate text-xs text-muted-foreground tabular-nums">
+                                {product.brand && `${product.brand} · `}EAN {product.ean}
+                              </div>
+                              {error && <div className="text-xs text-destructive">{error}</div>}
+                            </div>
+                            <QuantityInput
+                              unit={product.orderUnit}
+                              value={value}
+                              invalid={Boolean(error)}
+                              label={product.name ?? product.ean}
+                              onChange={(value) => dispatch(setDraftQuantity({ key, itemId: product.id, value }))}
+                            />
                           </div>
-                          {error && <div className="text-xs text-destructive">{error}</div>}
-                        </div>
-                        <QuantityInput
-                          unit={product.orderUnit}
-                          value={value}
-                          invalid={Boolean(error)}
-                          label={product.name ?? product.ean}
-                          onChange={(value) => dispatch(setDraftQuantity({ key, itemId: product.id, value }))}
-                        />
-                      </div>
-                    )
-                  })}
-                </Card>
-              </section>
+                        )
+                      })}
+                    </Card>
+                  </section>
+                ))}
+                <ExtrasSection
+                  storeId={storeId}
+                  supplier={supplier}
+                  sectionId={section.id}
+                  extras={extras}
+                  showErrors={showErrors}
+                  onChange={(next) => update({ extras: next })}
+                />
+              </Tabs.Panel>
             ))}
-            <ExtrasSection
-              storeId={storeId}
-              supplier={supplier}
-              sectionId={section.id}
-              extras={extras}
-              showErrors={showErrors}
-              onChange={(next) => update({ extras: next })}
+          </div>
+          {activeSection && (
+            <CategoryNav
+              aboveStickyFooter
+              items={activeSection.categories.map((category) => ({
+                id: category.id,
+                name: category.name,
+                count: category.products.length,
+              }))}
             />
-          </Tabs.Panel>
-        ))}
+          )}
+        </div>
       </Tabs.Root>
-      {activeSection && (
-        <CategoryNav
-          aboveStickyFooter
-          items={activeSection.categories.map((category) => ({
-            id: category.id,
-            name: category.name,
-            count: category.products.length,
-          }))}
-        />
-      )}
 
       <div className="sticky bottom-0 z-10 -mx-4 mt-6 border-t bg-background/95 px-4 py-4 backdrop-blur-sm md:-mx-6 md:px-6">
         {/* Na telefonie data i przycisk w jednym wierszu, status pod nimi - stopka nie zasłania produktów. */}

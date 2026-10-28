@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeftIcon, CheckCheckIcon, MergeIcon, PencilIcon, RotateCcwIcon, SaveIcon, SplitIcon, Trash2Icon } from 'lucide-react'
+import { CheckCheckIcon, MergeIcon, PencilIcon, RotateCcwIcon, SaveIcon, SplitIcon, Trash2Icon } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
+import { BackLink } from '@/components/BackLink'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
@@ -120,13 +121,9 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
 
   return (
     <>
-      <Link
-        to={incoming ? deliPaths.incoming : deliPaths.sent}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
+      <BackLink to={incoming ? deliPaths.incoming : deliPaths.sent}>
         {incoming ? 'Przychodzące zamówienia' : 'Wysłane zamówienia'}
-      </Link>
+      </BackLink>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>

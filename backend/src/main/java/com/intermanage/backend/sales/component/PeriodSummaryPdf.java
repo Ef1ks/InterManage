@@ -9,6 +9,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import org.springframework.stereotype.Component;
@@ -31,9 +33,9 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 
 /**
- * Wydruk podsumowania sprzedaży i strat (A4 poziomo): nagłówek z okresem i kafelkami sum sklepu, tabela grup
- * i rejonów z budżetem obok wartości (procent w budżecie na zielono, poza budżetem na czerwono), na końcu objaśnienia
- * kolumn. Nagłówek tabeli powtarza się na każdej stronie, a wiersze nie dzielą się między strony.
+ * Wydruk podsumowania sprzedaży i strat na jednej kartce A4 (pionowo): nagłówek z okresem i kafelkami sum sklepu,
+ * tabela grup i rejonów z budżetem obok wartości (procent w budżecie na zielono, poza budżetem na czerwono), na końcu
+ * objaśnienia kolumn. Gdy treść nie mieści się na stronie, cały wydruk jest proporcjonalnie zmniejszany.
  */
 @Component
 public class PeriodSummaryPdf {
@@ -54,11 +56,19 @@ public class PeriodSummaryPdf {
     private static final Color GOOD = new Color(4, 120, 87);
     private static final Color GOOD_BAND = new Color(209, 250, 229);
 
-    /** Kolumny: nazwa, liczby; szerokości względne. */
+    private static final Rectangle PAGE = PageSize.A4;
+    private static final float MARGIN = 24;
+    private static final float MARGIN_BOTTOM = 40;
+    private static final float WIDTH = PAGE.getWidth() - 2 * MARGIN;
+    /** Wysokość na treść, z zapasem na zaokrąglenia przy składaniu strony. */
+    private static final float HEIGHT = PAGE.getHeight() - MARGIN - MARGIN_BOTTOM - 6;
+    private static final float MIN_SCALE = 0.3f;
+
+    /** Kolumny: nazwa, liczby; szerokości względne. Kwoty w tabeli w pełnych złotych, żeby zmieściły się w pionie. */
     private static final String[] HEADERS = {"Rejon", "Sprzedaż\nnetto", "Sprzedaż\nbrutto", "Zakup\nFIFO",
             "Marża\nzł", "Marża\n%", "Budżet\nmarży", "Straty\nzł", "Straty\n%", "Max\nstrat",
             "Marża po\nstratach zł", "Marża po\nstratach %", "Udział\n%"};
-    private static final float[] WIDTHS = {23, 8.5f, 8.5f, 8.5f, 8, 6, 5.5f, 7.5f, 6, 5.5f, 8.5f, 7, 5.5f};
+    private static final float[] WIDTHS = {20.5f, 8, 8, 8, 8, 5.5f, 5, 8, 5, 5, 8, 6, 5};
 
     private final BaseFont regular;
     private final BaseFont bold;
@@ -70,7 +80,8 @@ public class PeriodSummaryPdf {
 
     public byte[] pdf(PeriodSummaryResponse summary, String printedBy) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        com.lowagie.text.Document document = new com.lowagie.text.Document(PageSize.A4.rotate(), 28, 28, 28, 46);
+        com.lowagie.text.Document document = new com.lowagie.text.Document(PAGE, MARGIN, MARGIN, MARGIN,
+                MARGIN_BOTTOM);
         try {
             PdfWriter writer = PdfWriter.getInstance(document, out);
             String footer = "Podsumowanie sprzedaży i strat · sklep " + summary.storeNumber() + " · "
@@ -80,9 +91,9 @@ public class PeriodSummaryPdf {
             document.addTitle("Podsumowanie sprzedaży i strat " + period(summary));
             document.addCreator("Intermanage");
             document.open();
-            writeHeader(document, summary);
-            document.add(table(summary));
-            writeLegend(document);
+            for (PdfPTable part : fit(summary)) {
+                document.add(part);
+            }
             document.close();
         } catch (DocumentException e) {
             throw new IllegalStateException("Nie udało się utworzyć wydruku podsumowania", e);
@@ -90,191 +101,244 @@ public class PeriodSummaryPdf {
         return out.toByteArray();
     }
 
-    private void writeHeader(com.lowagie.text.Document document, PeriodSummaryResponse summary)
-            throws DocumentException {
-        PdfPTable header = new PdfPTable(new float[] {34, 16.5f, 16.5f, 16.5f, 16.5f});
-        header.setWidthPercentage(100);
-        header.setSpacingAfter(12);
-
-        Phrase title = new Phrase();
-        title.add(new Phrase("Podsumowanie sprzedaży i strat\n", font(bold, 15, INK)));
-        title.add(new Phrase("Sklep " + summary.storeNumber() + " · " + summary.storeName() + "\n",
-                font(regular, 9, INK)));
-        long days = ChronoUnit.DAYS.between(summary.from(), summary.to()) + 1;
-        title.add(new Phrase(period(summary) + " (" + days + (days == 1 ? " dzień" : " dni") + ")",
-                font(bold, 9, INK)));
-        PdfPCell titleCell = new PdfPCell(title);
-        titleCell.setBorder(Rectangle.NO_BORDER);
-        titleCell.setLeading(0, 1.35f);
-        titleCell.setPaddingLeft(0);
-        header.addCell(titleCell);
-
-        Figures total = summary.total();
-        header.addCell(tile("Sprzedaż brutto", money(total.saleValueGross()) + " zł",
-                "netto " + money(total.saleValueNet()) + " zł", false));
-        header.addCell(tile("Marża", percent(total.marginPercent()), money(total.marginValue()) + " zł", false));
-        header.addCell(tile("Straty (likwidacje)", percent(total.lossPercent()),
-                money(total.lossValue()) + " zł", false));
-        header.addCell(tile("Marża po stratach", percent(total.marginAfterLossesPercent()),
-                money(total.marginAfterLossesValue()) + " zł", true));
-        document.add(header);
-
-        String warning = warning(summary);
-        if (warning != null) {
-            PdfPTable note = new PdfPTable(1);
-            note.setWidthPercentage(100);
-            note.setSpacingAfter(8);
-            PdfPCell cell = new PdfPCell(new Phrase(warning, font(bold, 8, BAD)));
-            cell.setBorder(Rectangle.NO_BORDER);
-            cell.setPaddingLeft(0);
-            note.addCell(cell);
-            document.add(note);
-        }
-    }
-
-    private PdfPCell tile(String label, String value, String detail, boolean strong) {
-        Phrase phrase = new Phrase();
-        phrase.add(new Phrase(label.toUpperCase(POLISH) + "\n", font(bold, 6.5f, strong ? Color.WHITE : MUTED)));
-        phrase.add(new Phrase(value + "\n", font(bold, 13, strong ? Color.WHITE : INK)));
-        phrase.add(new Phrase(detail, font(regular, 7.5f, strong ? new Color(212, 212, 216) : MUTED)));
-        PdfPCell cell = new PdfPCell(phrase);
-        // Biała lewa krawędź rozdziela kafelki.
-        cell.setBorder(Rectangle.LEFT);
-        cell.setBorderWidthLeft(4);
-        cell.setBorderColorLeft(Color.WHITE);
-        cell.setBackgroundColor(strong ? TOTAL_BAND : BAND);
-        cell.setPadding(7);
-        cell.setLeading(0, 1.3f);
-        return cell;
-    }
-
-    private PdfPTable table(PeriodSummaryResponse summary) {
-        PdfPTable table = new PdfPTable(WIDTHS);
-        table.setWidthPercentage(100);
-        table.setHeaderRows(1);
-        table.setSplitLate(true);
-        for (int i = 0; i < HEADERS.length; i++) {
-            PdfPCell cell = new PdfPCell(new Phrase(HEADERS[i], font(bold, 6.8f, MUTED)));
-            cell.setBackgroundColor(BAND);
-            cell.setBorder(Rectangle.BOTTOM);
-            cell.setBorderColor(RULE);
-            cell.setPadding(4);
-            cell.setLeading(0, 1.15f);
-            cell.setHorizontalAlignment(i == 0 ? Element.ALIGN_LEFT : Element.ALIGN_RIGHT);
-            cell.setVerticalAlignment(Element.ALIGN_BOTTOM);
-            table.addCell(cell);
-        }
-        for (Line line : summary.lines()) {
-            switch (line.kind()) {
-                case GROUP -> groupRow(table, line);
-                case REGION -> figuresRow(table, line.depth(), regionLabel(line), line.figures(),
-                        line.marginBudgetPercent(), line.maxLossPercent(), Kind.REGION);
-                case SUBTOTAL -> figuresRow(table, line.depth(), line.name(), line.figures(), null, null,
-                        Kind.SUBTOTAL);
+    /** Części wydruku w największej skali, w której mieszczą się na jednej stronie. */
+    private List<PdfPTable> fit(PeriodSummaryResponse summary) {
+        List<PdfPTable> parts = List.of();
+        for (float scale = 1; scale >= MIN_SCALE; scale -= 0.02f) {
+            parts = new Layout(scale).parts(summary);
+            if (height(parts) <= HEIGHT) {
+                break;
             }
         }
-        totalRow(table, summary.total());
-        return table;
+        return parts;
     }
 
-    private void groupRow(PdfPTable table, Line line) {
-        PdfPCell cell = new PdfPCell(new Phrase(line.name().toUpperCase(POLISH),
-                font(bold, line.depth() == 0 ? 8 : 7.5f, INK)));
-        cell.setColspan(HEADERS.length);
-        cell.setBorder(Rectangle.NO_BORDER);
-        cell.setBackgroundColor(line.depth() == 0 ? GROUP_BAND : BAND);
-        cell.setPadding(4);
-        cell.setPaddingTop(line.depth() == 0 ? 7 : 5);
-        cell.setPaddingLeft(4 + line.depth() * 9);
-        table.addCell(cell);
+    private static float height(List<PdfPTable> parts) {
+        float height = 0;
+        for (PdfPTable part : parts) {
+            height += part.spacingBefore() + part.getTotalHeight() + part.spacingAfter();
+        }
+        return height;
     }
 
-    private void figuresRow(PdfPTable table, int depth, String label, Figures figures, BigDecimal marginBudget,
-            BigDecimal maxLoss, Kind kind) {
-        boolean subtotal = kind == Kind.SUBTOTAL;
-        BaseFont base = subtotal ? bold : regular;
-        // Względem budżetu: null = bez budżetu, true = w budżecie, false = poza nim.
-        Boolean marginOk = marginBudget == null || figures.marginPercent() == null ? null
-                : figures.marginPercent().compareTo(marginBudget) >= 0;
-        Boolean lossOk = maxLoss == null || figures.lossPercent() == null ? null
-                : figures.lossPercent().compareTo(maxLoss) <= 0;
+    /** Układ wydruku w danej skali: fonty, odstępy i marginesy komórek są mnożone przez {@code scale}. */
+    private final class Layout {
 
-        PdfPCell name = new PdfPCell(new Phrase(label, font(base, 7.8f, INK)));
-        name.setPaddingLeft(4 + depth * 9);
-        table.addCell(style(name, subtotal, Element.ALIGN_LEFT));
-        table.addCell(number(money(figures.saleValueNet()), base, INK, subtotal));
-        table.addCell(number(money(figures.saleValueGross()), base, INK, subtotal));
-        table.addCell(number(money(figures.costValue()), base, MUTED, subtotal));
-        table.addCell(number(money(figures.marginValue()), base, INK, subtotal));
-        table.addCell(budgeted(percent(figures.marginPercent()), marginOk, base, subtotal));
-        table.addCell(budgeted(budget(marginBudget), marginOk, regular, subtotal));
-        table.addCell(number(money(figures.lossValue()), base, INK, subtotal));
-        table.addCell(budgeted(percent(figures.lossPercent()), lossOk, base, subtotal));
-        table.addCell(budgeted(budget(maxLoss), lossOk, regular, subtotal));
-        table.addCell(number(money(figures.marginAfterLossesValue()), bold, INK, subtotal));
-        table.addCell(number(percent(figures.marginAfterLossesPercent()), bold, INK, subtotal));
-        table.addCell(number(percent(figures.sharePercent()), base, MUTED, subtotal));
-    }
+        private final float scale;
 
-    private void totalRow(PdfPTable table, Figures total) {
-        String[] values = {"Razem sklep", money(total.saleValueNet()), money(total.saleValueGross()),
-                money(total.costValue()), money(total.marginValue()), percent(total.marginPercent()), "",
-                money(total.lossValue()), percent(total.lossPercent()), "",
-                money(total.marginAfterLossesValue()), percent(total.marginAfterLossesPercent()), "100%"};
-        for (int i = 0; i < values.length; i++) {
-            PdfPCell cell = new PdfPCell(new Phrase(values[i], font(bold, 8, Color.WHITE)));
+        Layout(float scale) {
+            this.scale = scale;
+        }
+
+        List<PdfPTable> parts(PeriodSummaryResponse summary) {
+            List<PdfPTable> parts = new ArrayList<>();
+            parts.add(header(summary));
+            String warning = warning(summary);
+            if (warning != null) {
+                parts.add(note(warning));
+            }
+            parts.add(table(summary));
+            parts.add(legend());
+            for (PdfPTable part : parts) {
+                part.setTotalWidth(WIDTH);
+                part.setLockedWidth(true);
+            }
+            return parts;
+        }
+
+        private PdfPTable header(PeriodSummaryResponse summary) {
+            PdfPTable header = new PdfPTable(4);
+            header.setSpacingAfter(s(8));
+
+            Phrase title = new Phrase();
+            title.add(new Phrase("Podsumowanie sprzedaży i strat\n", font(bold, s(14), INK)));
+            long days = ChronoUnit.DAYS.between(summary.from(), summary.to()) + 1;
+            title.add(new Phrase("Sklep " + summary.storeNumber() + " · " + summary.storeName() + " · ",
+                    font(regular, s(9), INK)));
+            title.add(new Phrase(period(summary) + " (" + days + (days == 1 ? " dzień" : " dni") + ")",
+                    font(bold, s(9), INK)));
+            PdfPCell titleCell = new PdfPCell(title);
+            titleCell.setColspan(4);
+            titleCell.setBorder(Rectangle.NO_BORDER);
+            titleCell.setLeading(0, 1.3f);
+            titleCell.setPadding(0);
+            titleCell.setPaddingBottom(s(6));
+            header.addCell(titleCell);
+
+            Figures total = summary.total();
+            header.addCell(tile("Sprzedaż brutto", money(total.saleValueGross()) + " zł",
+                    "netto " + money(total.saleValueNet()) + " zł", false));
+            header.addCell(tile("Marża", percent(total.marginPercent()), money(total.marginValue()) + " zł",
+                    false));
+            header.addCell(tile("Straty (likwidacje)", percent(total.lossPercent()),
+                    money(total.lossValue()) + " zł", false));
+            header.addCell(tile("Marża po stratach", percent(total.marginAfterLossesPercent()),
+                    money(total.marginAfterLossesValue()) + " zł", true));
+            return header;
+        }
+
+        private PdfPTable note(String warning) {
+            PdfPTable note = new PdfPTable(1);
+            note.setSpacingAfter(s(6));
+            PdfPCell cell = new PdfPCell(new Phrase(warning, font(bold, s(8), BAD)));
             cell.setBorder(Rectangle.NO_BORDER);
-            cell.setBackgroundColor(TOTAL_BAND);
-            cell.setPadding(5);
-            cell.setPaddingBottom(6);
-            cell.setHorizontalAlignment(i == 0 ? Element.ALIGN_LEFT : Element.ALIGN_RIGHT);
+            cell.setPadding(0);
+            note.addCell(cell);
+            return note;
+        }
+
+        private PdfPCell tile(String label, String value, String detail, boolean strong) {
+            Phrase phrase = new Phrase();
+            phrase.add(new Phrase(label.toUpperCase(POLISH) + "\n",
+                    font(bold, s(6.5f), strong ? Color.WHITE : MUTED)));
+            phrase.add(new Phrase(value + "\n", font(bold, s(12), strong ? Color.WHITE : INK)));
+            phrase.add(new Phrase(detail, font(regular, s(7), strong ? new Color(212, 212, 216) : MUTED)));
+            PdfPCell cell = new PdfPCell(phrase);
+            // Biała lewa krawędź rozdziela kafelki.
+            cell.setBorder(Rectangle.LEFT);
+            cell.setBorderWidthLeft(s(4));
+            cell.setBorderColorLeft(Color.WHITE);
+            cell.setBackgroundColor(strong ? TOTAL_BAND : BAND);
+            cell.setPadding(s(6));
+            cell.setLeading(0, 1.25f);
+            return cell;
+        }
+
+        private PdfPTable table(PeriodSummaryResponse summary) {
+            PdfPTable table = new PdfPTable(WIDTHS);
+            table.setHeaderRows(1);
+            for (int i = 0; i < HEADERS.length; i++) {
+                PdfPCell cell = new PdfPCell(new Phrase(HEADERS[i], font(bold, s(6), MUTED)));
+                cell.setBackgroundColor(BAND);
+                cell.setBorder(Rectangle.BOTTOM);
+                cell.setBorderColor(RULE);
+                cell.setPadding(s(2.5f));
+                cell.setLeading(0, 1.1f);
+                cell.setHorizontalAlignment(i == 0 ? Element.ALIGN_LEFT : Element.ALIGN_RIGHT);
+                cell.setVerticalAlignment(Element.ALIGN_BOTTOM);
+                table.addCell(cell);
+            }
+            for (Line line : summary.lines()) {
+                switch (line.kind()) {
+                    case GROUP -> groupRow(table, line);
+                    case REGION -> figuresRow(table, line.depth(), regionLabel(line), line.figures(),
+                            line.marginBudgetPercent(), line.maxLossPercent(), Kind.REGION);
+                    case SUBTOTAL -> figuresRow(table, line.depth(), line.name(), line.figures(), null, null,
+                            Kind.SUBTOTAL);
+                }
+            }
+            totalRow(table, summary.total());
+            return table;
+        }
+
+        private void groupRow(PdfPTable table, Line line) {
+            PdfPCell cell = new PdfPCell(new Phrase(line.name().toUpperCase(POLISH),
+                    font(bold, s(line.depth() == 0 ? 7 : 6.5f), INK)));
+            cell.setColspan(HEADERS.length);
+            cell.setBorder(Rectangle.NO_BORDER);
+            cell.setBackgroundColor(line.depth() == 0 ? GROUP_BAND : BAND);
+            cell.setLeading(0, 1.15f);
+            cell.setPadding(s(1.5f));
+            cell.setPaddingTop(s(line.depth() == 0 ? 3 : 2));
+            cell.setPaddingBottom(s(2.5f));
+            cell.setPaddingLeft(s(3 + line.depth() * 6));
             table.addCell(cell);
         }
-    }
 
-    /** Procent albo budżet: tło zielone w budżecie, czerwone poza nim, bez tła, gdy budżetu nie ma. */
-    private PdfPCell budgeted(String value, Boolean ok, BaseFont base, boolean subtotal) {
-        if (ok == null) {
-            return number(value, base, base == regular && value.isEmpty() ? MUTED : INK, subtotal);
+        private void figuresRow(PdfPTable table, int depth, String label, Figures figures, BigDecimal marginBudget,
+                BigDecimal maxLoss, Kind kind) {
+            boolean subtotal = kind == Kind.SUBTOTAL;
+            BaseFont base = subtotal ? bold : regular;
+            // Względem budżetu: null = bez budżetu, true = w budżecie, false = poza nim.
+            Boolean marginOk = marginBudget == null || figures.marginPercent() == null ? null
+                    : figures.marginPercent().compareTo(marginBudget) >= 0;
+            Boolean lossOk = maxLoss == null || figures.lossPercent() == null ? null
+                    : figures.lossPercent().compareTo(maxLoss) <= 0;
+
+            PdfPCell name = style(new PdfPCell(new Phrase(label, font(base, s(6.8f), INK))), subtotal,
+                    Element.ALIGN_LEFT);
+            name.setPaddingLeft(s(3 + depth * 6));
+            table.addCell(name);
+            table.addCell(number(whole(figures.saleValueNet()), base, INK, subtotal));
+            table.addCell(number(whole(figures.saleValueGross()), base, INK, subtotal));
+            table.addCell(number(whole(figures.costValue()), base, MUTED, subtotal));
+            table.addCell(number(whole(figures.marginValue()), base, INK, subtotal));
+            table.addCell(budgeted(percent(figures.marginPercent()), marginOk, base, subtotal));
+            table.addCell(budgeted(budget(marginBudget), marginOk, regular, subtotal));
+            table.addCell(number(whole(figures.lossValue()), base, INK, subtotal));
+            table.addCell(budgeted(percent(figures.lossPercent()), lossOk, base, subtotal));
+            table.addCell(budgeted(budget(maxLoss), lossOk, regular, subtotal));
+            table.addCell(number(whole(figures.marginAfterLossesValue()), bold, INK, subtotal));
+            table.addCell(number(percent(figures.marginAfterLossesPercent()), bold, INK, subtotal));
+            table.addCell(number(percent(figures.sharePercent()), base, MUTED, subtotal));
         }
-        PdfPCell cell = number(value, bold, ok ? GOOD : BAD, subtotal);
-        cell.setBackgroundColor(ok ? GOOD_BAND : BAD_BAND);
-        return cell;
-    }
 
-    private PdfPCell number(String value, BaseFont base, Color color, boolean subtotal) {
-        return style(new PdfPCell(new Phrase(value, font(base, 7.8f, color))), subtotal, Element.ALIGN_RIGHT);
-    }
+        private void totalRow(PdfPTable table, Figures total) {
+            String[] values = {"Razem sklep", whole(total.saleValueNet()), whole(total.saleValueGross()),
+                    whole(total.costValue()), whole(total.marginValue()), percent(total.marginPercent()), "",
+                    whole(total.lossValue()), percent(total.lossPercent()), "",
+                    whole(total.marginAfterLossesValue()), percent(total.marginAfterLossesPercent()), "100%"};
+            for (int i = 0; i < values.length; i++) {
+                PdfPCell cell = new PdfPCell(new Phrase(values[i], font(bold, s(7), Color.WHITE)));
+                cell.setBorder(Rectangle.NO_BORDER);
+                cell.setBackgroundColor(TOTAL_BAND);
+                cell.setLeading(0, 1.15f);
+                cell.setPadding(s(3));
+                cell.setPaddingBottom(s(4));
+                cell.setHorizontalAlignment(i == 0 ? Element.ALIGN_LEFT : Element.ALIGN_RIGHT);
+                table.addCell(cell);
+            }
+        }
 
-    private static PdfPCell style(PdfPCell cell, boolean subtotal, int alignment) {
-        cell.setBorder(subtotal ? Rectangle.TOP | Rectangle.BOTTOM : Rectangle.BOTTOM);
-        cell.setBorderColor(subtotal ? MUTED : RULE);
-        cell.setPadding(3.5f);
-        cell.setPaddingBottom(4.5f);
-        cell.setHorizontalAlignment(alignment);
-        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
-        return cell;
-    }
+        /** Procent albo budżet: tło zielone w budżecie, czerwone poza nim, bez tła, gdy budżetu nie ma. */
+        private PdfPCell budgeted(String value, Boolean ok, BaseFont base, boolean subtotal) {
+            if (ok == null) {
+                return number(value, base, base == regular && value.isEmpty() ? MUTED : INK, subtotal);
+            }
+            PdfPCell cell = number(value, bold, ok ? GOOD : BAD, subtotal);
+            cell.setBackgroundColor(ok ? GOOD_BAND : BAD_BAND);
+            return cell;
+        }
 
-    private void writeLegend(com.lowagie.text.Document document) throws DocumentException {
-        PdfPTable legend = new PdfPTable(1);
-        legend.setWidthPercentage(100);
-        legend.setSpacingBefore(10);
-        legend.setKeepTogether(true);
-        Phrase phrase = new Phrase();
-        phrase.add(new Phrase("Jak czytać: ", font(bold, 7, INK)));
-        phrase.add(new Phrase("Marża % od sprzedaży netto. Straty to likwidacje w cenach zakupu, % od sprzedaży "
-                + "brutto. Marża po stratach = marża − straty, % od sprzedaży netto. Udział = sprzedaż brutto rejonu w sprzedaży brutto sklepu. Budżet marży "
-                + "i max strat ustawia się w Ustawieniach sklepu: na zielono procent w budżecie, na czerwono marża "
-                + "poniżej budżetu i straty powyżej limitu.", font(regular, 7, MUTED)));
-        PdfPCell cell = new PdfPCell(phrase);
-        cell.setBorder(Rectangle.TOP);
-        cell.setBorderColor(RULE);
-        cell.setPaddingTop(6);
-        cell.setPaddingLeft(0);
-        cell.setLeading(0, 1.4f);
-        legend.addCell(cell);
-        document.add(legend);
+        private PdfPCell number(String value, BaseFont base, Color color, boolean subtotal) {
+            return style(new PdfPCell(new Phrase(value, font(base, s(6.8f), color))), subtotal,
+                    Element.ALIGN_RIGHT);
+        }
+
+        private PdfPCell style(PdfPCell cell, boolean subtotal, int alignment) {
+            cell.setBorder(subtotal ? Rectangle.TOP | Rectangle.BOTTOM : Rectangle.BOTTOM);
+            cell.setBorderColor(subtotal ? MUTED : RULE);
+            cell.setLeading(0, 1.15f);
+            cell.setPadding(s(1.5f));
+            cell.setPaddingBottom(s(2.5f));
+            cell.setHorizontalAlignment(alignment);
+            cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+            return cell;
+        }
+
+        private PdfPTable legend() {
+            PdfPTable legend = new PdfPTable(1);
+            legend.setSpacingBefore(s(6));
+            Phrase phrase = new Phrase();
+            phrase.add(new Phrase("Jak czytać: ", font(bold, s(6.5f), INK)));
+            phrase.add(new Phrase("Kwoty w tabeli w pełnych złotych. Marża % od sprzedaży netto. Straty to "
+                    + "likwidacje w cenach zakupu, % od sprzedaży brutto. Marża po stratach = marża − straty, % od "
+                    + "sprzedaży netto. Udział = sprzedaż brutto rejonu w sprzedaży brutto sklepu. Budżet marży i max "
+                    + "strat ustawia się w Ustawieniach sklepu: na zielono procent w budżecie, na czerwono marża "
+                    + "poniżej budżetu i straty powyżej limitu.", font(regular, s(6.5f), MUTED)));
+            PdfPCell cell = new PdfPCell(phrase);
+            cell.setBorder(Rectangle.TOP);
+            cell.setBorderColor(RULE);
+            cell.setPadding(0);
+            cell.setPaddingTop(s(4));
+            cell.setLeading(0, 1.3f);
+            legend.addCell(cell);
+            return legend;
+        }
+
+        private float s(float size) {
+            return size * scale;
+        }
     }
 
     private static String regionLabel(Line line) {
@@ -310,6 +374,10 @@ public class PeriodSummaryPdf {
 
     private static String money(BigDecimal value) {
         return value == null ? "–" : format("#,##0.00", value);
+    }
+
+    private static String whole(BigDecimal value) {
+        return value == null ? "–" : format("#,##0", value);
     }
 
     private static String percent(BigDecimal value) {

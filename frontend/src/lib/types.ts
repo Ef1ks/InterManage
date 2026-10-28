@@ -1179,3 +1179,97 @@ export type RegionBudget = {
   updatedBy: string | null
   updatedAt: string | null
 }
+
+/** Status wyjaśniania przyjęcia z ceną wyższą niż baza; brak wpisu = do wyjaśnienia. */
+export type PriceCheckStatus = 'REPORTED' | 'RESOLVED'
+
+export type PriceCheckReview = {
+  id: string
+  status: PriceCheckStatus
+  note: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+/**
+ * Artykuł z cadencier kupiony u dostawcy innego niż baza. Ceny za sztukę, po korektach. {@code belowMinimum}: marża
+ * na bonie poniżej minimum z ustawień; wtedy {@code excessValue} mówi, o ile za drogo.
+ */
+export type PriceCheckLine = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  supplierCode: string | null
+  quantity: number
+  purchasePrice: number
+  purchaseValue: number
+  salePriceGross: number | null
+  salePriceNet: number | null
+  marginPercent: number | null
+  belowMinimum: boolean
+  targetPurchasePrice: number | null
+  excessValue: number
+  cadencierPrice: number | null
+  basePrice: number | null
+  baseDate: string | null
+  baseDocumentId: string | null
+  baseDocumentNumber: string | null
+  corrected: boolean
+}
+
+/** Przyjęcie z artykułami z cadencier od innego dostawcy; puste {@code lines} = po korektach już ich nie ma. */
+export type PriceCheckDelivery = {
+  id: string
+  number: string
+  documentDate: string
+  supplierCode: string | null
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  correctionCount: number
+  purchaseValue: number
+  linesPurchaseValue: number
+  belowMinimumCount: number
+  excessValue: number
+  baseDifferenceValue: number
+  review: PriceCheckReview | null
+  history: PriceCheckReview[]
+  lines: PriceCheckLine[]
+}
+
+export type PriceCheckReport = {
+  from: string
+  to: string
+  periodDays: number
+  minMarginPercent: number | null
+  baseSupplierCodes: string[]
+  cadencierCount: number
+  cadencierGeneratedAt: string | null
+  cadencierImportedAt: string | null
+  documentsCoveredUntil: string | null
+  documentsReportGeneratedAt: string | null
+  deliveries: PriceCheckDelivery[]
+}
+
+export type PriceCheckSettings = {
+  minMarginPercent: number | null
+  updatedBy: string | null
+  updatedAt: string | null
+}
+
+/** Wgranie listy „OBECNE W CADENCIER”. */
+export type CadencierImport = {
+  id: string
+  fileName: string
+  reportGeneratedAt: string | null
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  addedCount: number
+  removedCount: number
+}
+
+export type CadencierOverview = {
+  itemCount: number
+  imports: CadencierImport[]
+}

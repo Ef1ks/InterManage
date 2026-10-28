@@ -1,5 +1,6 @@
 package com.intermanage.backend.product.repository;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +29,17 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
 
     /** Produkty sklepu po bieżącym EAN-ie (np. lista wklejona z Excela). */
     List<Product> findByStoreIdAndEanIn(UUID storeId, Collection<String> eans);
+
+    /** Artykuł z ceną sprzedaży narzuconą przez centralę (CENA_CAD). */
+    interface CadencierPrice {
+        String getItm8();
+
+        BigDecimal getCadencierPrice();
+    }
+
+    @Query("select p.itm8 as itm8, p.cadencierPrice as cadencierPrice from Product p "
+            + "where p.store.id = :storeId and p.cadencierPrice > 0")
+    List<CadencierPrice> findCadencierPrices(UUID storeId);
 
     /** Produkty sklepu, których nie było w danym imporcie (zostają w bazie z danymi z wcześniejszego). */
     long countByStoreAndLastSeenImportNot(Store store, ProductImport productImport);
