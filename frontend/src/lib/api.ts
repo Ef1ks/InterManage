@@ -100,11 +100,8 @@ async function toApiError(response: Response): Promise<ApiError> {
  * Idzie przez fetch, a nie zwykły link, żeby błędy (np. wygasła sesja) wracały jako ApiError.
  */
 export async function downloadFile(path: string, fallbackName = 'plik'): Promise<void> {
-  const response = await fetchFile(path)
-  const disposition = response.headers.get('Content-Disposition') ?? ''
-  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
-  const fileName = match ? decodeURIComponent(match[1] ?? match[2]) : fallbackName
-  const url = URL.createObjectURL(await response.blob())
+  const { fileName, blob } = await fetchNamedFile(path, fallbackName)
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = fileName
@@ -113,6 +110,15 @@ export async function downloadFile(path: string, fallbackName = 'plik'): Promise
   link.remove()
   // Przeglądarka zaczyna pobieranie asynchronicznie - zwalniamy adres chwilę później.
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+/** Plik z API z nazwą z nagłówka Content-Disposition (np. do zapisu w wybranym folderze). */
+export async function fetchNamedFile(path: string, fallbackName = 'plik'): Promise<{ fileName: string; blob: Blob }> {
+  const response = await fetchFile(path)
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
+  const fileName = match ? decodeURIComponent(match[1] ?? match[2]) : fallbackName
+  return { fileName, blob: await response.blob() }
 }
 
 /**

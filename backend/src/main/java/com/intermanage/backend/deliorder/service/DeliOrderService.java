@@ -3,6 +3,8 @@ package com.intermanage.backend.deliorder.service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -238,8 +240,14 @@ public class DeliOrderService {
     public record ExportFile(String fileName, String contentType, byte[] content) {
     }
 
+    private static final DateTimeFormatter PROTO_TIME = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+
+    /**
+     * {@code username} trafia do nazwy pliku PROTO6: {@code PROTO6_RRRRMMDD_HHMMSS_POCHODZENIE_UZYTKOWNIK.Traite0},
+     * gdzie pochodzenie to numer sklepu zamawiającego, a czas to chwila wygenerowania pliku.
+     */
     @Transactional(readOnly = true)
-    public ExportFile export(UUID storeId, UUID orderId, String format) {
+    public ExportFile export(UUID storeId, UUID orderId, String format, String username) {
         DeliOrder order = loadVisible(storeId, orderId);
         DeliOrderDocuments.OrderDocument document = new DeliOrderDocuments.OrderDocument(order.getId(),
                 order.getStore().getNumber(), order.getStore().getName(), order.getFormStore().getNumber(),
@@ -257,6 +265,10 @@ public class DeliOrderService {
             case "xlsx" -> new ExportFile(baseName + ".xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", documents.xlsx(document));
             case "pdf" -> new ExportFile(baseName + ".pdf", "application/pdf", documents.pdf(document));
+            case "proto" -> new ExportFile(
+                    "PROTO6_" + ZonedDateTime.now(STORE_ZONE).format(PROTO_TIME) + "_" + order.getStore().getNumber()
+                            + "_" + username.replaceAll("[^A-Za-z0-9._-]", "_") + ".Traite0",
+                    "text/plain;charset=US-ASCII", documents.proto(document));
             default -> throw ApiException.notFound("Nieznany format pliku: " + format);
         };
     }
@@ -268,6 +280,12 @@ public class DeliOrderService {
         if (order.getStatus() != DeliOrderStatus.NEW) {
             throw ApiException.conflict("Zamówienie jest już zrealizowane - nie można zmieniać ilości");
         }
+        applyQuantities(order, request, userId);
+        return deliOrderMapper.toResponse(order);
+    }
+
+    /** Zapisuje nowe ilości pozycji; gdy któraś się zmieniła, zamówienie jest oznaczone jako poprawione. */
+    private void applyQuantities(DeliOrder order, CorrectDeliOrderRequest request, UUID userId) {
         Map<UUID, DeliOrderItem> byId = new HashMap<>();
         order.getItems().forEach(item -> byId.put(item.getId(), item));
         Set<UUID> seen = new HashSet<>();
@@ -286,7 +304,6 @@ public class DeliOrderService {
         if (changed) {
             order.markCorrected(users.getReferenceById(userId));
         }
-        return deliOrderMapper.toResponse(order);
     }
 
     /**
@@ -345,11 +362,15 @@ public class DeliOrderService {
     }
 
     @Transactional
-    public DeliOrderResponse fulfill(UUID storeId, UUID orderId, UUID userId) {
+    /** Realizacja; {@code request} (może być {@code null}) niesie zrealizowane ilości, zapisane w tej samej transakcji. */
+    public DeliOrderResponse fulfill(UUID storeId, UUID orderId, CorrectDeliOrderRequest request, UUID userId) {
         DeliOrder order = loadIncoming(storeId, orderId);
         ensureNotDeleted(order);
         if (order.getStatus() == DeliOrderStatus.FULFILLED) {
             throw ApiException.conflict("Zamówienie jest już oznaczone jako zrealizowane");
+        }
+        if (request != null) {
+            applyQuantities(order, request, userId);
         }
         order.markFulfilled(users.getReferenceById(userId));
         return deliOrderMapper.toResponse(order);

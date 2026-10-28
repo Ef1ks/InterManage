@@ -27,11 +27,12 @@ type Props = {
   label: string
   invalid?: boolean
   disabled?: boolean
+  autoFocus?: boolean
   className?: string
 }
 
 /** Pole ilości w wierszu produktu, z jednostką na stałe w polu (kg albo szt.). */
-export function QuantityInput({ unit, value, onChange, label, invalid, disabled, className }: Props) {
+export function QuantityInput({ unit, value, onChange, label, invalid, disabled, autoFocus, className }: Props) {
   return (
     <label
       className={cn(
@@ -52,6 +53,7 @@ export function QuantityInput({ unit, value, onChange, label, invalid, disabled,
         placeholder="0"
         value={value}
         disabled={disabled}
+        autoFocus={autoFocus}
         onChange={(event) => onChange(event.target.value)}
         className="h-full w-full min-w-0 bg-transparent pl-3 text-right text-sm font-medium tabular-nums outline-none placeholder:text-muted-foreground/50"
       />

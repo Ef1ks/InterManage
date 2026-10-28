@@ -273,6 +273,19 @@ class DeliOrderFormIntegrationTests {
         assertThat(mvc.perform(get(url(shop, "/orders/" + secondId + "/export/lst")).cookie(owner))
                 .andReturn().getResponse().getContentAsString()).isEqualTo(kabanosEan + "\r\n");
         assertThat(pasztetLine).isNotBlank();
+        // Realizacja z ilościami zapisuje je w tym samym kroku.
+        String secondKabanos = id(secondOrder, "$.items[0].id");
+        send(owner, post(url(supplier, "/orders/" + secondId + "/fulfill")),
+                "{\"items\":[{\"id\":\"" + secondKabanos + "\",\"quantity\":0.75}]}")
+                .andExpect(jsonPath("$.status").value("FULFILLED"))
+                .andExpect(jsonPath("$.items[0].quantity").value(0.75))
+                .andExpect(jsonPath("$.correctedAt").isNotEmpty());
+        // PROTO6: EAN i ilość w tysięcznych na 9 cyfrach, w nazwie czas, sklep zamawiający i login.
+        var proto = mvc.perform(get(url(supplier, "/orders/" + secondId + "/export/proto")).cookie(owner))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        assertThat(proto.getContentAsString()).isEqualTo(kabanosEan + "000000750\r\n");
+        assertThat(proto.getHeader("Content-Disposition"))
+                .containsPattern("filename=\"PROTO6_\\d{8}_\\d{6}_\\d+_wlasciciel\\.Traite0\"");
 
         // Pozycje spoza formularza: zamawiający szuka w kartotece dostawcy i dopisuje produkt w wybranej jednostce.
         String smalec = insertProduct(supplier, "SMALEC DOMOWY 250G", "szt.");

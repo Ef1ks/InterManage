@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/api.ts": {
-    "mtime": 1793120749.141895,
-    "seen": 1793120804.198155,
-    "ast_hash": "57e1190f954e84eef13c57b8958de06a",
+    "mtime": 1793171210.722156,
+    "seen": 1793171403.5064225,
+    "ast_hash": "960e1101654c89d70ac52a7a686b854b",
     "semantic_hash": ""
   },
   "frontend/src/lib/form-errors.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793126954.1645765,
-    "seen": 1793126971.2901475,
-    "ast_hash": "d5d440bda54ac0a6be7d622979087604",
+    "mtime": 1793172623.4952335,
+    "seen": 1793172640.6926126,
+    "ast_hash": "0333111571251dca3e2c0a7a47cf6637",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1176,9 +1176,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DeliOrderFormIntegrationTests.java": {
-    "mtime": 1793097229.9682064,
-    "seen": 1793098001.898529,
-    "ast_hash": "524e87b8c863d2db3e17798502358b6c",
+    "mtime": 1793172576.8388066,
+    "seen": 1793172640.6573212,
+    "ast_hash": "c4ff7e699ddcc4715eb13fa563b6ba6c",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/DeliOrderPage.tsx": {
@@ -1200,9 +1200,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/api.ts": {
-    "mtime": 1793084998.5903015,
-    "seen": 1793085319.2644124,
-    "ast_hash": "1e45e46026497f43e4f53823145962d0",
+    "mtime": 1793172606.0743265,
+    "seen": 1793172640.6699028,
+    "ast_hash": "b91e94902063126bf61fd23ac5ffd2eb",
     "semantic_hash": ""
   },
   "frontend/src/components/form/date-field.tsx": {
@@ -1236,9 +1236,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderDetail.tsx": {
-    "mtime": 1792930207.944888,
-    "seen": 1792942411.818842,
-    "ast_hash": "7dbfad62ffa8f0c8b9068f49ac302360",
+    "mtime": 1793172593.0495849,
+    "seen": 1793172640.6688654,
+    "ast_hash": "e751a38547d82afb2c707c4494d97da1",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderStatusBadge.tsx": {
@@ -1260,9 +1260,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/QuantityInput.tsx": {
-    "mtime": 1792930173.090443,
-    "seen": 1792942411.818842,
-    "ast_hash": "7243a25527aa60085f263a2527131cab",
+    "mtime": 1793171277.938467,
+    "seen": 1793171403.4979146,
+    "ast_hash": "1528400a9421538e4403cd25c2d23b88",
     "semantic_hash": ""
   },
   "frontend/src/lib/dates.ts": {
@@ -1278,9 +1278,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderDownloads.tsx": {
-    "mtime": 1793084998.5913014,
-    "seen": 1793085319.2634132,
-    "ast_hash": "b32f182d37f028a7fefe205f0925eb87",
+    "mtime": 1793172593.0495849,
+    "seen": 1793172640.6688654,
+    "ast_hash": "5b4e1334306baaccd7c078475cc15e94",
     "semantic_hash": ""
   },
   "backend/src/main/resources/fonts/DejaVu-LICENSE.txt": {
@@ -1980,15 +1980,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/component/DeliOrderDocuments.java": {
-    "mtime": 1793097229.8583653,
-    "seen": 1793098001.8975291,
-    "ast_hash": "20607407f1b52573cd59535f66c55298",
+    "mtime": 1793172564.3593144,
+    "seen": 1793172640.6132073,
+    "ast_hash": "fb07b5510b7ad88318e746d275231762",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/controller/DeliOrderController.java": {
-    "mtime": 1793097229.8593647,
-    "seen": 1793098001.8975291,
-    "ast_hash": "75fc2a26a8d57a4c3a46f3561d1e9518",
+    "mtime": 1793172552.4354987,
+    "seen": 1793172640.6132073,
+    "ast_hash": "0750f9ee790120d6f66f95223578921c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/controller/DeliOrderFormController.java": {
@@ -2244,9 +2244,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/service/DeliOrderService.java": {
-    "mtime": 1793097229.8757997,
-    "seen": 1793098001.8975291,
-    "ast_hash": "b813260911dbde21ef0f129bb9cc6b9e",
+    "mtime": 1793172552.4354987,
+    "seen": 1793172640.619981,
+    "ast_hash": "241097ce67bc390d2b01c5d51a407a14",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliprice/component/IngredientPricing.java": {
@@ -3819,6 +3819,30 @@
     "mtime": 1793126524.3588667,
     "seen": 1793126599.4587252,
     "ast_hash": "3845397f0ab09ae53ef2c226c950e8c5",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/SavedFolder.tsx": {
+    "mtime": 1793171231.1934862,
+    "seen": 1793171403.4912462,
+    "ast_hash": "cc909f5c46bba2c1742e4b388f947117",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-order/FulfillOrderDialog.tsx": {
+    "mtime": 1793172593.0485861,
+    "seen": 1793172640.66834,
+    "ast_hash": "a7abbe49aee21d026e24115da6932629",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-order/group-items.ts": {
+    "mtime": 1793171277.9390056,
+    "seen": 1793171403.4979146,
+    "ast_hash": "5672408e888acc58b3bbe4db9ae5f541",
+    "semantic_hash": ""
+  },
+  "frontend/src/lib/saved-folders.ts": {
+    "mtime": 1793171220.3553405,
+    "seen": 1793171403.5069284,
+    "ast_hash": "910966e61e73eef4707a79d36fd7ec09",
     "semantic_hash": ""
   }
 }

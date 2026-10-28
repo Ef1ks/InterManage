@@ -95,8 +95,8 @@ public class DeliOrderController {
     @GetMapping("/orders/{orderId}/export/{format}")
     @PreAuthorize(VIEW)
     public ResponseEntity<byte[]> export(@PathVariable UUID storeId, @PathVariable UUID orderId,
-            @PathVariable String format) {
-        ExportFile file = orderService.export(storeId, orderId, format);
+            @PathVariable String format, @AuthenticationPrincipal AppUserPrincipal principal) {
+        ExportFile file = orderService.export(storeId, orderId, format, principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName()).build().toString())
@@ -152,11 +152,13 @@ public class DeliOrderController {
         return orderService.correct(storeId, orderId, request, principal.getId());
     }
 
+    /** Bez treści oznacza same zrealizowanie; z pozycjami najpierw zapisuje zrealizowane ilości. */
     @PostMapping("/orders/{orderId}/fulfill")
     @PreAuthorize(EDIT)
     public DeliOrderResponse fulfill(@PathVariable UUID storeId, @PathVariable UUID orderId,
+            @Valid @RequestBody(required = false) CorrectDeliOrderRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return orderService.fulfill(storeId, orderId, principal.getId());
+        return orderService.fulfill(storeId, orderId, request, principal.getId());
     }
 
     /** Ruchy międzymagazynowe dostawcy do przypięcia: z okolic daty dostawy albo pasujące do {@code query}. */

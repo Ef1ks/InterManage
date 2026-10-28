@@ -8,7 +8,9 @@ import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan } from '@/features/auth/api'
-import { useCorrectOrder, useDeleteOrder, useFulfillOrder, useOrder } from '@/features/deli-order/api'
+import { useCorrectOrder, useDeleteOrder, useOrder } from '@/features/deli-order/api'
+import { FulfillOrderDialog } from '@/features/deli-order/FulfillOrderDialog'
+import { groupItems } from '@/features/deli-order/group-items'
 import { OrderDownloads } from '@/features/deli-order/OrderDownloads'
 import { OrderMovementDocuments } from '@/features/deli-order/OrderMovementDocuments'
 import { OrderStatusBadge } from '@/features/deli-order/OrderStatusBadge'
@@ -48,7 +50,7 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
   const managesOwnSide = sender || canEdit
   const deletable = order.status === 'NEW' && managesOwnSide && !deletedHere
   const correct = useCorrectOrder(storeId, order.id)
-  const fulfill = useFulfillOrder(storeId, order.id)
+  const [fulfilling, setFulfilling] = useState(false)
   const { remove, restore } = useDeleteOrder(storeId, order.id)
   const navigate = useNavigate()
   const [draft, setDraft] = useState<Record<string, string>>(() =>
@@ -67,12 +69,6 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
         onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać'),
       },
     )
-
-  const markFulfilled = () =>
-    fulfill.mutate(undefined, {
-      onSuccess: () => toast.success('Zamówienie oznaczone jako zrealizowane'),
-      onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się oznaczyć'),
-    })
 
   const restoreOrder = () =>
     toast.promise(restore.mutateAsync(), {
@@ -153,10 +149,17 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
                 Zapisz poprawki ({changed.length})
               </Button>
             )}
-            <Button size="xl" loading={fulfill.isPending} disabled={changed.length > 0} onClick={markFulfilled}>
+            <Button size="xl" onClick={() => setFulfilling(true)}>
               <CheckCheckIcon />
-              Oznacz jako zrealizowane
+              Potwierdź zrealizowanie
             </Button>
+            <FulfillOrderDialog
+              storeId={storeId}
+              order={order}
+              initial={draft}
+              open={fulfilling}
+              onOpenChange={setFulfilling}
+            />
             </>
           )}
           {deletable && (
@@ -227,8 +230,9 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
             </>,
             <>
               Gdy towar jest wydany, <strong className="font-semibold text-foreground">przypnij dokument ruchu
-              międzymagazynowego</strong>, na którym jedzie, i kliknij{' '}
-              <strong className="font-semibold text-foreground">Oznacz jako zrealizowane</strong>.
+              międzymagazynowego</strong>, na którym jedzie, kliknij{' '}
+              <strong className="font-semibold text-foreground">Potwierdź zrealizowanie</strong> i wpisz wydane ilości
+              (Enter przechodzi do następnego produktu). Plik PROTO6 zapisze się w wybranym folderze i program sklepu sam go wczyta.
             </>,
           ]}
         />
@@ -312,17 +316,4 @@ function QuantityView({ item }: { item: DeliOrderItem }) {
       )}
     </div>
   )
-}
-
-/** Pozycje w kolejności formularza, pogrupowane po dziale i kategorii (nazwy z chwili złożenia zamówienia). */
-function groupItems(items: DeliOrderItem[]) {
-  const sections: { section: string; categories: { category: string; items: DeliOrderItem[] }[] }[] = []
-  for (const item of items) {
-    let section = sections.find((s) => s.section === item.sectionName)
-    if (!section) sections.push((section = { section: item.sectionName, categories: [] }))
-    let category = section.categories.find((c) => c.category === item.categoryName)
-    if (!category) section.categories.push((category = { category: item.categoryName, items: [] }))
-    category.items.push(item)
-  }
-  return sections
 }
