@@ -2,6 +2,10 @@ package com.intermanage.backend.document.controller;
 
 import java.util.UUID;
 
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,8 +22,10 @@ import com.intermanage.backend.document.dto.DocumentResponse;
 import com.intermanage.backend.document.dto.EnteredRequest;
 import com.intermanage.backend.document.dto.IncomingTransfer;
 import com.intermanage.backend.document.dto.IncomingTransfers;
+import com.intermanage.backend.document.dto.ReceiveTransferRequest;
 import com.intermanage.backend.document.dto.SetTransferTargetRequest;
 import com.intermanage.backend.document.service.DocumentTransferService;
+import com.intermanage.backend.document.service.DocumentTransferService.ExportFile;
 
 import jakarta.validation.Valid;
 
@@ -83,6 +89,27 @@ public class DocumentTransferController {
     @PreAuthorize(VIEW)
     public IncomingTransfer incomingTransfer(@PathVariable UUID storeId, @PathVariable UUID id) {
         return transferService.incomingTransfer(storeId, id);
+    }
+
+    /** Ilości, które naprawdę przyjechały; zapis oznacza dokument jako wprowadzony. */
+    @PostMapping("/incoming-transfers/{id}/receive")
+    @PreAuthorize(EDIT)
+    public IncomingTransfer receive(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody ReceiveTransferRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return transferService.receive(storeId, id, request.items(), principal.getId());
+    }
+
+    /** Plik przyjęcia w przyjętych ilościach: {@code proto} (PROTO6, .Traite0) albo {@code xlsx}. */
+    @GetMapping("/incoming-transfers/{id}/export/{format}")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> export(@PathVariable UUID storeId, @PathVariable UUID id,
+            @PathVariable String format, @AuthenticationPrincipal AppUserPrincipal principal) {
+        ExportFile file = transferService.export(storeId, id, format, principal.getUsername());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .body(file.content());
     }
 
     /** Oznacza dokument jako wprowadzony w tym sklepie albo cofa oznaczenie. */

@@ -60,7 +60,8 @@ public record PriceCheckReport(
 
     /**
      * Artykuł z cadencier od innego dostawcy ({@code supplierCode} z linii). {@code cadencierItm8}: ITM8 z cadencier,
-     * gdy dostawca ma artykuł pod innym ITM8 (połączony po EAN-ie), inaczej pusty. Ceny za sztukę: zakupu po korektach,
+     * gdy dostawca ma artykuł pod innym ITM8 (połączony po EAN-ie), inaczej pusty. {@code regionCode}: rejon
+     * nomenklatury z linii (dwie cyfry, do własnych kategorii raportu). Ceny za sztukę: zakupu po korektach,
      * sprzedaży z bonu (brutto i netto). {@code marginPercent} pusta, gdy bon nie ma ceny sprzedaży.
      * {@code targetPurchasePrice}: najwyższa cena zakupu, przy której marża byłaby minimalna (pusta bez minimum);
      * {@code excessValue} różna od zera tylko przy {@code belowMinimum}. {@code cadencierPrice}: CENA_CAD z kartoteki;
@@ -73,6 +74,7 @@ public record PriceCheckReport(
             String ean,
             String name,
             String brand,
+            String regionCode,
             String supplierCode,
             BigDecimal quantity,
             BigDecimal purchasePrice,

@@ -359,6 +359,13 @@ export function useMergeOrders(storeId: string) {
   return { merge, split }
 }
 
+/** Dopisanie produktów, których zamawiający wcześniej nie zamówił (z formularza albo spoza niego). */
+export function useAddOrderItems(storeId: string, orderId: string) {
+  return useOrderMutation(storeId, orderId, (request: { items: OrderLine[]; extras: ExtraLine[] }) =>
+    api<DeliOrder>(`${basePath(storeId)}/orders/${orderId}/items`, { method: 'POST', json: request }),
+  )
+}
+
 export function useCorrectOrder(storeId: string, orderId: string) {
   return useOrderMutation(storeId, orderId, (items: { id: string; quantity: number }[]) =>
     api<DeliOrder>(`${basePath(storeId)}/orders/${orderId}/items`, { method: 'PUT', json: { items } }),

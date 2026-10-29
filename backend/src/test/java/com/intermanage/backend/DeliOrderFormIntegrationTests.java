@@ -539,6 +539,55 @@ class DeliOrderFormIntegrationTests {
                 .andExpect(status().isConflict());
     }
 
+    @Test
+    void ordererAddsProductsMissingFromTheSentOrder() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String kabanos = insertProduct(storeId, "KABANOSY 1KG", "kg");
+        String pasztet = insertProduct(storeId, "PASZTET 200G", "szt.");
+        String salatka = insertProduct(storeId, "SALATKA JARZYNOWA", "kg");
+        String section = id(send(owner, post(url(storeId, "/sections")), "{\"name\":\"Garmaż\"}")
+                .andReturn().getResponse().getContentAsString(), "$.sections[0].id");
+        String category = id(send(owner, post(url(storeId, "/sections/" + section + "/categories")),
+                "{\"name\":\"Wędliny\"}").andReturn().getResponse().getContentAsString(), "$.sections[0].categories[0].id");
+        send(owner, post(url(storeId, "/categories/" + category + "/products")), "{\"productId\":\"" + kabanos + "\"}");
+        String form = send(owner, post(url(storeId, "/categories/" + category + "/products")),
+                "{\"productId\":\"" + pasztet + "\"}").andReturn().getResponse().getContentAsString();
+        String kabanosItem = id(form, "$.sections[0].categories[0].products[0].id");
+        String pasztetItem = id(form, "$.sections[0].categories[0].products[1].id");
+
+        String today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Warsaw")).toString();
+        String order = id(send(owner, post(url(storeId, "/suppliers/" + storeId + "/orders")),
+                "{\"deliveryDate\":\"" + today + "\",\"items\":[{\"itemId\":\"" + kabanosItem + "\",\"quantity\":1}]}")
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String itemsUrl = url(storeId, "/orders/" + order + "/items");
+
+        // Pozycja z formularza i spoza niego trafiają na koniec zamówienia z informacją, kto je dopisał.
+        send(owner, post(itemsUrl), "{\"items\":[{\"itemId\":\"" + pasztetItem + "\",\"quantity\":3}],"
+                + "\"extras\":[{\"productId\":\"" + salatka + "\",\"sectionId\":\"" + section
+                + "\",\"unit\":\"KG\",\"quantity\":0.5}]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].addedAt").isEmpty())
+                .andExpect(jsonPath("$.items[1].productId").value(pasztet))
+                .andExpect(jsonPath("$.items[1].categoryName").value("Wędliny"))
+                .andExpect(jsonPath("$.items[1].orderedQuantity").value(3))
+                .andExpect(jsonPath("$.items[1].addedAt").isNotEmpty())
+                .andExpect(jsonPath("$.items[1].addedBy").isNotEmpty())
+                .andExpect(jsonPath("$.items[2].categoryName").value("Spoza formularza"));
+
+        // Produkt, który już jest w kategorii zamówienia, się nie powtarza; pusta lista to błąd.
+        send(owner, post(itemsUrl), "{\"items\":[{\"itemId\":\"" + kabanosItem + "\",\"quantity\":1}]}")
+                .andExpect(status().isConflict());
+        send(owner, post(itemsUrl), "{\"items\":[]}").andExpect(status().isBadRequest());
+
+        // Do zrealizowanego nie da się dopisać.
+        mvc.perform(post(url(storeId, "/orders/" + order + "/fulfill")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.status").value("FULFILLED"));
+        send(owner, post(itemsUrl), "{\"items\":[{\"itemId\":\"" + pasztetItem + "\",\"quantity\":1}]}")
+                .andExpect(status().isConflict());
+    }
+
     private static String mergeJson(String... orderIds) {
         return "{\"orderIds\":[\"" + String.join("\",\"", orderIds) + "\"]}";
     }

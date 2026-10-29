@@ -1,5 +1,14 @@
 import { useDeferredValue, useState } from 'react'
-import { ArrowRightLeftIcon, CheckCircle2Icon, ChevronRightIcon } from 'lucide-react'
+import {
+  ArrowRightLeftIcon,
+  BarcodeIcon,
+  CheckCircle2Icon,
+  ChevronRightIcon,
+  DownloadIcon,
+  FileSpreadsheetIcon,
+  FolderInputIcon,
+  PencilIcon,
+} from 'lucide-react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -8,10 +17,24 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
-import { useIncomingTransfer, useIncomingTransfers, useMarkTransferEntered } from '@/features/documents/api'
+import { PROTO_FOLDER } from '@/features/deli-order/api'
+import {
+  incomingTransferExportPath,
+  useIncomingTransfer,
+  useIncomingTransfers,
+  useMarkTransferEntered,
+} from '@/features/documents/api'
 import { BackToTypes } from '@/features/documents/DocumentsList'
+import { ReceiveTransferDialog, receivedQuantities } from '@/features/documents/ReceiveTransferDialog'
 import {
   countFormat,
   documentPaths,
@@ -21,7 +44,8 @@ import {
   formatQuantity,
 } from '@/features/documents/format'
 import { storeLabel } from '@/features/stores/current-store'
-import { ApiError } from '@/lib/api'
+import { ApiError, downloadFile } from '@/lib/api'
+import { folderSavingSupported, saveApiFileToFolder, useSavedFolder } from '@/lib/saved-folders'
 import { matchesSearch } from '@/lib/search'
 import type { IncomingTransfer } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -151,6 +175,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
   const canEdit = useCan('DOCUMENTS', 'EDIT')
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
+  const [receiving, setReceiving] = useState(false)
 
   const back = (
     <BackLink to={documentPaths.incoming}>
@@ -185,13 +210,14 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
     mark.mutate(entered, {
       onSuccess: () =>
         entered
-          ? toast.success('Oznaczono jako wprowadzony', {
-              action: { label: 'Cofnij', onClick: () => mark.mutate(false, { onError }) },
-            })
-          : toast.success('Cofnięto oznaczenie'),
+          ? toast.success('Oznaczono jako wprowadzony')
+          : toast.success('Cofnięto oznaczenie', {
+              action: { label: 'Przywróć', onClick: () => mark.mutate(true, { onError }) },
+            }),
       onError,
     })
 
+  const received = receivedQuantities(transfer)
   const lines = transfer.lines.filter((line) =>
     matchesSearch([line.name, line.brand, line.ean, line.itm8], deferredQuery),
   )
@@ -233,18 +259,30 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
               : `Wskazał(a) ${transfer.createdBy ?? 'sklep wysyłający'}, ${dateFormat.format(new Date(transfer.createdAt))}`}
           </p>
         </div>
-        {canEdit &&
-          (transfer.enteredAt ? (
-            <Button variant="ghost" loading={mark.isPending} onClick={() => setEntered(false)}>
-              Cofnij
-            </Button>
-          ) : (
-            <Button loading={mark.isPending} onClick={() => setEntered(true)}>
-              <CheckCircle2Icon />
-              Oznacz jako wprowadzony
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit &&
+            (transfer.enteredAt ? (
+              <>
+                <Button variant="ghost" loading={mark.isPending} onClick={() => setEntered(false)}>
+                  Cofnij
+                </Button>
+                <Button variant="outline" onClick={() => setReceiving(true)}>
+                  <PencilIcon />
+                  Popraw przyjęte ilości
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => setReceiving(true)}>
+                <CheckCircle2Icon />
+                Wpisz przyjęte ilości
+              </Button>
+            ))}
+          <TransferDownloads storeId={storeId} transferId={transfer.id} />
+        </div>
       </div>
+      {canEdit && (
+        <ReceiveTransferDialog storeId={storeId} transfer={transfer} open={receiving} onOpenChange={setReceiving} />
+      )}
 
       <SearchInput
         className="mb-3 w-full sm:w-96"
@@ -262,6 +300,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
                 <TableHead>EAN</TableHead>
                 <TableHead>ITM8</TableHead>
                 <TableHead className="text-right">Ilość</TableHead>
+                <TableHead className="text-right">Przyjęto</TableHead>
                 <TableHead className="text-right">Cena zakupu</TableHead>
                 <TableHead className="text-right">Wartość zakupu</TableHead>
                 <TableHead className="pr-4 text-right">Cena sprzedaży</TableHead>
@@ -270,7 +309,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
             <TableBody>
               {lines.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-6 text-center text-muted-foreground">
                     Brak linii pasujących do wyszukiwania.
                   </TableCell>
                 </TableRow>
@@ -284,7 +323,9 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
                     </TableCell>
                     <TableCell>{line.ean ?? '–'}</TableCell>
                     <TableCell className="text-muted-foreground">{line.itm8}</TableCell>
-                    <TableCell className="text-right font-medium">{formatQuantity(line.quantity)}</TableCell>
+                    <TableCell className="text-right">{formatQuantity(Math.abs(line.quantity))}</TableCell>
+                    <ReceivedCell sent={Math.abs(line.quantity)} received={received.get(line.id)} />
+
                     <TableCell className="text-right">{formatOptional(unsigned(line.purchasePrice), formatPrice)}</TableCell>
                     <TableCell className="text-right">{formatOptional(unsigned(line.purchaseValue), formatMoney)}</TableCell>
                     <TableCell className="pr-4 text-right">{formatOptional(line.salePriceDocument, formatPrice)}</TableCell>
@@ -299,4 +340,98 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
   )
 }
 
-const formatOptional = (value: number | null, format: (value: number) => string) => (value == null ? '–' : format(value))
+/** Przyjęta ilość; różna od dokumentu na bursztynowo, z różnicą pod spodem. */
+function ReceivedCell({ sent, received }: { sent: number; received: number | undefined }) {
+  const value = received ?? sent
+  const difference = value - sent
+  return (
+    <TableCell className={cn('text-right font-medium', difference !== 0 && 'bg-amber-50/70 dark:bg-amber-500/10')}>
+      {formatQuantity(value)}
+      {difference !== 0 && (
+        <span className="block text-xs font-normal text-amber-800 dark:text-amber-300">
+          {difference > 0 ? '+' : '−'}
+          {formatQuantity(Math.abs(difference))}
+        </span>
+      )}
+    </TableCell>
+  )
+}
+
+const DOWNLOADS = [
+  { format: 'proto', label: 'Plik PROTO6', hint: 'EAN z przyjętą ilością dla programu sklepu', icon: BarcodeIcon },
+  { format: 'xlsx', label: 'Excel', hint: 'Ilość w dokumencie, przyjęta i różnica', icon: FileSpreadsheetIcon },
+] as const
+
+/** Pobranie pliku przyjęcia w przyjętych ilościach albo zapis PROTO6 w folderze programu sklepu. */
+function TransferDownloads({ storeId, transferId }: { storeId: string; transferId: string }) {
+  const [pending, setPending] = useState(false)
+  const folder = useSavedFolder(PROTO_FOLDER.key)
+
+  const run = async (action: () => Promise<void>) => {
+    setPending(true)
+    try {
+      await action()
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się pobrać pliku')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const download = (format: 'proto' | 'xlsx') =>
+    run(() =>
+      downloadFile(
+        incomingTransferExportPath(storeId, transferId, format),
+        format === 'proto' ? 'przyjecie.Traite0' : 'przyjecie.xlsx',
+      ),
+    )
+
+  // Bez wybranego folderu najpierw okno wyboru (zapamiętane na kolejne razy), potem zapis.
+  const saveToFolder = () =>
+    run(async () => {
+      if (!folder.name) {
+        if (PROTO_FOLDER.suggestedPath) navigator.clipboard?.writeText(PROTO_FOLDER.suggestedPath).catch(() => {})
+        if (!(await folder.pick())) return
+      }
+      const path = incomingTransferExportPath(storeId, transferId, 'proto')
+      toast.success(`Zapisano ${await saveApiFileToFolder(PROTO_FOLDER.key, path, 'przyjecie.Traite0')}`)
+    })
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" loading={pending} />}>
+        <DownloadIcon />
+        Pobierz
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        {DOWNLOADS.map(({ format, label, hint, icon: Icon }) => (
+          <DropdownMenuItem key={format} onClick={() => download(format)} className="items-start gap-2.5 py-2">
+            <Icon className="mt-0.5" />
+            <span className="grid">
+              <span>{label}</span>
+              <span className="text-xs text-muted-foreground">{hint}</span>
+            </span>
+          </DropdownMenuItem>
+        ))}
+        {folderSavingSupported && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={saveToFolder} className="items-start gap-2.5 py-2">
+              <FolderInputIcon className="mt-0.5" />
+              <span className="grid">
+                <span>{folder.name ? `Zapisz PROTO6 w ${folder.name}` : 'Zapisz PROTO6 w folderze…'}</span>
+                <span className="text-xs text-muted-foreground">
+                  {folder.name
+                    ? 'Folder zapamiętany w przeglądarce'
+                    : `Wybierz folder raz, np. ${PROTO_FOLDER.suggestedPath} (ścieżka w schowku)`}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const formatOptional =(value: number | null, format: (value: number) => string) => (value == null ? '–' : format(value))

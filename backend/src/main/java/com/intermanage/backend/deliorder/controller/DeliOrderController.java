@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.deliorder.dto.AddDeliOrderItemsRequest;
 import com.intermanage.backend.deliorder.dto.ChangeDeliveryDateRequest;
 import com.intermanage.backend.deliorder.dto.CorrectDeliOrderRequest;
 import com.intermanage.backend.deliorder.dto.DeliDocumentCandidate;
@@ -183,6 +184,14 @@ public class DeliOrderController {
     private static boolean canEdit(AppUserPrincipal principal) {
         return principal.getAuthorities().stream()
                 .anyMatch(authority -> "DELI_ORDERS:EDIT".equals(authority.getAuthority()));
+    }
+
+    /** Dopisanie produktów, których wcześniej nie zamówiono: zamawiający z Podglądem, dostawca z Edycją. */
+    @PostMapping("/orders/{orderId}/items")
+    @PreAuthorize(VIEW)
+    public DeliOrderResponse addItems(@PathVariable UUID storeId, @PathVariable UUID orderId,
+            @Valid @RequestBody AddDeliOrderItemsRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return orderService.addItems(storeId, orderId, request, canEdit(principal), principal.getId());
     }
 
     @PutMapping("/orders/{orderId}/items")

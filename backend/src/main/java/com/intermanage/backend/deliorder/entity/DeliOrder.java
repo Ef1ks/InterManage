@@ -197,6 +197,18 @@ public class DeliOrder {
                 items.size()));
     }
 
+    /**
+     * Pozycja dopisana do złożonego zamówienia. Trafia na koniec listy, a widoki i wydruki grupują pozycje po nazwach
+     * działu i kategorii w kolejności pierwszego wystąpienia, więc ląduje na końcu swojej kategorii.
+     */
+    public void addLaterItem(Product product, String sectionName, String categoryName, OrderUnit unit,
+            BigDecimal quantity, AppUser by) {
+        DeliOrderItem item = new DeliOrderItem(this, product, sectionName, categoryName, unit, quantity, quantity,
+                items.size());
+        item.markAdded(by);
+        items.add(item);
+    }
+
     /** Pierwsze otwarcie u dostawcy zmienia status z nowego na odczytane. */
     public void markRead(AppUser by) {
         if (status == DeliOrderStatus.NEW) {

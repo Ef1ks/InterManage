@@ -11,6 +11,7 @@ import type {
   IncidentOverview,
   NomenclatureOption,
   PeriodSummary,
+  PriceCheckCategory,
   PriceCheckReport,
   PriceCheckReview,
   PriceCheckSettings,
@@ -295,6 +296,34 @@ export function useSavePriceCheckSettings(storeId: string) {
     mutationFn: (minMarginPercent: number | null) =>
       api<PriceCheckSettings>(`${priceCheckPath(storeId)}/settings`, { method: 'PUT', json: { minMarginPercent } }),
   })
+}
+
+/** Własne kategorie raportu (druga linia zakładek), w kolejności dodania. */
+export function usePriceCheckCategories(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'price-check', 'categories'],
+    queryFn: () => api<PriceCheckCategory[]>(`${priceCheckPath(storeId)}/categories`),
+  })
+}
+
+/** Dodanie, zmiana, usunięcie (znacznik) i przywrócenie kategorii raportu. */
+export function usePriceCheckCategoryActions(storeId: string) {
+  const path = `${priceCheckPath(storeId)}/categories`
+  return {
+    save: useMutation({
+      mutationFn: ({ id, name, regionCodes }: { id?: string; name: string; regionCodes: string[] }) =>
+        api<PriceCheckCategory>(id ? `${path}/${id}` : path, {
+          method: id ? 'PUT' : 'POST',
+          json: { name, regionCodes },
+        }),
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => api<void>(`${path}/${id}`, { method: 'DELETE' }),
+    }),
+    restore: useMutation({
+      mutationFn: (id: string) => api<PriceCheckCategory>(`${path}/${id}/restore`, { method: 'POST' }),
+    }),
+  }
 }
 
 /** Status wyjaśniania przyjęcia: nowy wpis, cofnięcie (znacznik) i przywrócenie; każde zwraca historię. */

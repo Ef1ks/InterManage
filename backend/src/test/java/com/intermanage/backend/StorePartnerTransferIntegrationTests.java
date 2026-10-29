@@ -1,10 +1,12 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -141,6 +143,63 @@ class StorePartnerTransferIntegrationTests {
         send(owner, post(documentsUrl(sender) + "/mm/" + transfer + "/transfer-target/restore"), "{}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.transferTarget.store.id").value(receiver));
+    }
+
+    @Test
+    void receivedQuantitiesMarkEnteredAndGoToProtoFile() throws Exception {
+        Cookie owner = login();
+        String sender = createStore(owner);
+        String receiver = createStore(owner);
+        String transfer = insertTransfer(sender, "MM0000220261022");
+        jdbc.update("""
+                insert into document_lines (document_id, line_number, itm8, ean, name, quantity, purchase_value)
+                values (?::uuid, 2, '0000000000002', '5900000000017', 'PIEROGI', -3, -30)""", transfer);
+        String invited = send(owner, post(partnersUrl(sender)), "{\"storeId\":\"" + receiver + "\"}")
+                .andReturn().getResponse().getContentAsString();
+        send(owner, post(partnersUrl(receiver) + "/" + JsonPath.read(invited, "$.partners[0].id") + "/accept"),
+                "{}").andExpect(status().isOk());
+        setTarget(owner, sender, transfer, receiver).andExpect(status().isOk());
+        String targetId = JsonPath.read(mvc.perform(get(incomingUrl(receiver)).cookie(owner))
+                .andReturn().getResponse().getContentAsString(), "$.pending[0].id");
+        String detail = mvc.perform(get(incomingUrl(receiver) + "/" + targetId).cookie(owner))
+                .andExpect(jsonPath("$.received.length()").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String pierogi = JsonPath.read(detail, "$.lines[?(@.name == 'PIEROGI')].id").toString()
+                .replaceAll("[\\[\\]\"]", "");
+
+        // Bez wpisanych ilości plik ma ilości z dokumentu (bez minusa wydania); linia bez EAN-u jest pominięta.
+        String proto = mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/export/proto").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header()
+                        .string("Content-Disposition", Matchers.containsString(".Traite0")))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(proto).isEqualTo("5900000000017000003000\r\n");
+
+        send(owner, post(incomingUrl(receiver) + "/" + targetId + "/receive"),
+                "{\"items\":[{\"lineId\":\"" + transfer + "\",\"quantity\":1}]}")
+                .andExpect(status().isBadRequest());
+        send(owner, post(incomingUrl(receiver) + "/" + targetId + "/receive"),
+                "{\"items\":[{\"lineId\":\"" + pierogi + "\",\"quantity\":-1}]}")
+                .andExpect(status().isBadRequest());
+        send(owner, post(incomingUrl(receiver) + "/" + targetId + "/receive"),
+                "{\"items\":[{\"lineId\":\"" + pierogi + "\",\"quantity\":2.5}]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enteredAt").isNotEmpty())
+                .andExpect(jsonPath("$.receivedAt").isNotEmpty())
+                .andExpect(jsonPath("$.received[0].quantity").value(2.5));
+        // Poprawka nadpisuje poprzednią ilość.
+        send(owner, post(incomingUrl(receiver) + "/" + targetId + "/receive"),
+                "{\"items\":[{\"lineId\":\"" + pierogi + "\",\"quantity\":2.75}]}")
+                .andExpect(jsonPath("$.received.length()").value(1))
+                .andExpect(jsonPath("$.received[0].quantity").value(2.75));
+
+        proto = mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/export/proto").cookie(owner))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(proto).isEqualTo("5900000000017000002750\r\n");
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/export/xlsx").cookie(owner))
+                .andExpect(status().isOk());
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/export/xml").cookie(owner))
+                .andExpect(status().isNotFound());
     }
 
     private ResultActions setTarget(Cookie owner, String storeId, String documentId, String targetStoreId)

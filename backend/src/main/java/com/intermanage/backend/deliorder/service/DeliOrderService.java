@@ -3,8 +3,6 @@ package com.intermanage.backend.deliorder.service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -24,8 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.Proto6;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.deliorder.component.DeliOrderDocuments;
+import com.intermanage.backend.deliorder.dto.AddDeliOrderItemsRequest;
 import com.intermanage.backend.deliorder.dto.CorrectDeliOrderRequest;
 import com.intermanage.backend.deliorder.dto.DeliDocumentCandidate;
 import com.intermanage.backend.deliorder.dto.DeliOrderResponse;
@@ -242,8 +242,6 @@ public class DeliOrderService {
     public record ExportFile(String fileName, String contentType, byte[] content) {
     }
 
-    private static final DateTimeFormatter PROTO_TIME = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-
     /**
      * {@code username} trafia do nazwy pliku PROTO6: {@code PROTO6_RRRRMMDD_HHMMSS_POCHODZENIE_UZYTKOWNIK.Traite0},
      * gdzie pochodzenie to numer sklepu zamawiającego, a czas to chwila wygenerowania pliku.
@@ -267,10 +265,8 @@ public class DeliOrderService {
             case "xlsx" -> new ExportFile(baseName + ".xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", documents.xlsx(document));
             case "pdf" -> new ExportFile(baseName + ".pdf", "application/pdf", documents.pdf(document));
-            case "proto" -> new ExportFile(
-                    "PROTO6_" + ZonedDateTime.now(STORE_ZONE).format(PROTO_TIME) + "_" + order.getStore().getNumber()
-                            + "_" + username.replaceAll("[^A-Za-z0-9._-]", "_") + ".Traite0",
-                    "text/plain;charset=US-ASCII", documents.proto(document));
+            case "proto" -> new ExportFile(Proto6.fileName(order.getStore().getNumber(), username),
+                    Proto6.CONTENT_TYPE, documents.proto(document));
             default -> throw ApiException.notFound("Nieznany format pliku: " + format);
         };
     }
@@ -404,6 +400,78 @@ public class DeliOrderService {
         List<DeliOrder> sources = List.copyOf(order.getMergedFrom());
         order.split(users.getReferenceById(userId));
         return sources.stream().map(deliOrderMapper::toSummary).toList();
+    }
+
+    /**
+     * Dopisuje do złożonego, niezrealizowanego zamówienia produkty, których zamawiający wcześniej nie zamówił:
+     * z kategorii formularza dostawcy albo spoza formularza (z kartoteki dostawcy, do wybranego działu). Produkt, który
+     * już jest w tej kategorii zamówienia, daje 409 - jego ilość zmienia dostawca. Zamawiający dopisuje z Podglądem,
+     * dostawca z Edycją, póki zamawiający ma dostęp do formularza.
+     */
+    @Transactional
+    public DeliOrderResponse addItems(UUID storeId, UUID orderId, AddDeliOrderItemsRequest request, boolean canEdit,
+            UUID userId) {
+        DeliOrder order = loadOwnSide(storeId, orderId, canEdit);
+        ensureActive(order);
+        if (!order.getStatus().isOpen()) {
+            throw ApiException.conflict("Zamówienie jest już zrealizowane - nie można dopisać produktów");
+        }
+        UUID formStoreId = order.getFormStore().getId();
+        ensureCanOrderFrom(order.getStore().getId(), formStoreId);
+        if (request.itemsOrEmpty().isEmpty() && request.extrasOrEmpty().isEmpty()) {
+            throw ApiException.badRequest("Wpisz ilość przy co najmniej jednym produkcie");
+        }
+
+        Set<String> present = new HashSet<>();
+        order.getItems().forEach(item -> present.add(item.getCategoryName() + ":" + item.getProduct().getId()));
+        AppUser by = users.getReferenceById(userId);
+
+        Map<UUID, BigDecimal> quantities = new LinkedHashMap<>();
+        for (SubmitDeliOrderRequest.Line line : request.itemsOrEmpty()) {
+            if (quantities.put(line.itemId(), line.quantity()) != null) {
+                throw ApiException.badRequest("Ten sam produkt występuje w zamówieniu dwa razy");
+            }
+        }
+        Map<UUID, OrderCategoryProduct> formLines = new HashMap<>();
+        if (!quantities.isEmpty()) {
+            formItems.findInForm(quantities.keySet(), formStoreId).forEach(item -> formLines.put(item.getId(), item));
+        }
+        if (formLines.size() != quantities.size()) {
+            throw ApiException.conflict("Formularz zmienił się w międzyczasie. Odśwież stronę i spróbuj ponownie.");
+        }
+        quantities.forEach((itemId, quantity) -> {
+            OrderCategoryProduct item = formLines.get(itemId);
+            String category = item.getCategory().getName();
+            if (!present.add(category + ":" + item.getProduct().getId())) {
+                throw ApiException.conflict(name(item.getProduct()) + " jest już w tej kategorii zamówienia");
+            }
+            ensureFits(item.getOrderUnit(), quantity, item.getProduct().getName());
+            order.addLaterItem(item.getProduct(), item.getCategory().getSection().getName(), category,
+                    item.getOrderUnit(), quantity, by);
+        });
+
+        Map<UUID, List<SubmitDeliOrderRequest.Extra>> extrasBySection = new HashMap<>();
+        Map<UUID, Product> extraProducts = loadExtras(formStoreId, request.extrasOrEmpty(), extrasBySection);
+        for (OrderSection section : sections.findByStoreId(formStoreId)) {
+            for (SubmitDeliOrderRequest.Extra extra : extrasBySection.getOrDefault(section.getId(), List.of())) {
+                Product product = extraProducts.get(extra.productId());
+                if (!present.add(EXTRA_CATEGORY + ":" + product.getId())) {
+                    throw ApiException.conflict(name(product) + " jest już w tej kategorii zamówienia");
+                }
+                ensureFits(extra.unit(), extra.quantity(), product.getName());
+                order.addLaterItem(product, section.getName(), EXTRA_CATEGORY, extra.unit(), extra.quantity(), by);
+            }
+            extrasBySection.remove(section.getId());
+        }
+        if (!extrasBySection.isEmpty()) {
+            throw ApiException.conflict("Formularz zmienił się w międzyczasie. Odśwież stronę i spróbuj ponownie.");
+        }
+        orders.flush();
+        return deliOrderMapper.toResponse(order);
+    }
+
+    private static String name(Product product) {
+        return product.getName() != null ? product.getName() : "Produkt";
     }
 
     @Transactional

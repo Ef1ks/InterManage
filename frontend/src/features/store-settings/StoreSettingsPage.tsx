@@ -25,6 +25,7 @@ import { useCadencier, usePriceCheckSettings, useRegionBudgets } from '@/feature
 import { useStorePartnerActions, useStorePartners } from '@/features/store-settings/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { CadencierUpload } from '@/features/store-settings/CadencierUpload'
+import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCategories'
 import { PriceCheckSettingsForm } from '@/features/store-settings/PriceCheckSettingsForm'
 import { RegionBudgets } from '@/features/store-settings/RegionBudgets'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -113,6 +114,7 @@ export function StoreSettingsPage() {
                 <div className="grid max-w-2xl gap-4">
                   <CadencierUpload key={store.id} storeId={store.id} />
                   <PriceCheckSettingsForm key={store.id} storeId={store.id} />
+                  <PriceCheckCategories key={store.id} storeId={store.id} />
                 </div>
               </section>
             }

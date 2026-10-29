@@ -32,6 +32,7 @@ import com.intermanage.backend.document.entity.DocumentImport;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.repository.DocumentManualInvoiceFileRepository;
+import com.intermanage.backend.document.entity.DocumentTransferReceivedLine;
 import com.intermanage.backend.document.entity.DocumentTransferTarget;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.store.mapper.StoreMapper;
@@ -121,8 +122,15 @@ public interface DocumentMapper {
     @Mapping(target = "createdAt", source = "target.createdAt")
     @Mapping(target = "enteredBy", source = "target.enteredBy.displayName")
     @Mapping(target = "enteredAt", source = "target.enteredAt")
+    @Mapping(target = "receivedBy", source = "target.receivedBy.displayName")
+    @Mapping(target = "receivedAt", source = "target.receivedAt")
     @Mapping(target = "lines", source = "lines")
-    IncomingTransfer toIncoming(DocumentTransferTarget target, List<DocumentLine> lines);
+    @Mapping(target = "received", source = "received")
+    IncomingTransfer toIncoming(DocumentTransferTarget target, List<DocumentLine> lines,
+            List<DocumentTransferReceivedLine> received);
+
+    @Mapping(target = "lineId", source = "documentLineId")
+    IncomingTransfer.ReceivedQuantity toReceived(DocumentTransferReceivedLine line);
 
     @Mapping(target = "id", source = "invoice.id")
     @Mapping(target = "invoiceNumber", source = "invoice.invoiceNumber")

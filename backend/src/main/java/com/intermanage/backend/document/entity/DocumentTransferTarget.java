@@ -52,6 +52,14 @@ public class DocumentTransferTarget {
     @Column(name = "entered_at")
     private Instant enteredAt;
 
+    /** Kto i kiedy ostatnio wpisał ilości, które naprawdę przyjechały ({@code DocumentTransferReceivedLine}). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "received_by")
+    private AppUser receivedBy;
+
+    @Column(name = "received_at")
+    private Instant receivedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "deleted_by")
     private AppUser deletedBy;
@@ -77,6 +85,11 @@ public class DocumentTransferTarget {
     public void markEntered(AppUser by, boolean entered) {
         enteredAt = entered ? Instant.now() : null;
         enteredBy = entered ? by : null;
+    }
+
+    public void markReceived(AppUser by) {
+        receivedAt = Instant.now();
+        receivedBy = by;
     }
 
     public void markDeleted(AppUser by) {
@@ -115,6 +128,14 @@ public class DocumentTransferTarget {
 
     public Instant getEnteredAt() {
         return enteredAt;
+    }
+
+    public AppUser getReceivedBy() {
+        return receivedBy;
+    }
+
+    public Instant getReceivedAt() {
+        return receivedAt;
     }
 
     public Instant getDeletedAt() {

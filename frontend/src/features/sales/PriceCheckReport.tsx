@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import {
+  ArrowUpRightIcon,
   ChevronRightIcon,
   CircleCheckIcon,
   InfoIcon,
+  PackageXIcon,
+  SearchCheckIcon,
   SendIcon,
   TriangleAlertIcon,
   Undo2Icon,
@@ -33,14 +36,20 @@ import {
   formatPrice,
   formatQuantity,
 } from '@/features/documents/format'
-import { usePriceCheck, usePriceCheckReviewActions } from '@/features/sales/api'
+import { usePriceCheck, usePriceCheckCategories, usePriceCheckReviewActions } from '@/features/sales/api'
 import { IncidentUpload } from '@/features/sales/IncidentUpload'
 import { salesPaths } from '@/features/sales/paths'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import { matchesSearch } from '@/lib/search'
-import type { PriceCheckDelivery, PriceCheckReport as Report, PriceCheckReview, PriceCheckStatus } from '@/lib/types'
+import type {
+  PriceCheckCategory,
+  PriceCheckDelivery,
+  PriceCheckReport as Report,
+  PriceCheckReview,
+  PriceCheckStatus,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type StatusFilter = 'open' | 'reported' | 'resolved' | 'all'
@@ -90,6 +99,46 @@ const ALL_SUPPLIERS = 'wszyscy'
 /** Weryfikacja albo przyjęcia usprawiedliwione incydentem zamówienia do bazy (`?widok=incydenty`). */
 type View = 'verify' | 'incidents'
 const VIEW_PARAMS: Record<View, string> = { verify: 'weryfikacja', incidents: 'incydenty' }
+
+/** Własne kategorie z Ustawień sklepu (`?kategoria=<id>`), do tego wszystkie i przyjęcia spoza kategorii. */
+const ALL_CATEGORIES = 'wszystkie'
+const OTHER_CATEGORY = 'pozostale'
+type CategoryKey = string
+
+/** Przyjęcie należy do kategorii, gdy ma artykuł z jej rejonu; „pozostałe” = z żadnej kategorii. */
+function inCategory(delivery: PriceCheckDelivery, key: CategoryKey, categories: PriceCheckCategory[]) {
+  if (key === ALL_CATEGORIES) return true
+  const regions = (codes: string[]) => delivery.lines.some((line) => line.regionCode && codes.includes(line.regionCode))
+  if (key === OTHER_CATEGORY) return !categories.some((category) => regions(category.regionCodes))
+  const category = categories.find((item) => item.id === key)
+  return category ? regions(category.regionCodes) : true
+}
+
+/** Kolor statusu wyjaśniania: bursztyn czeka na sklep, niebieski na dostawcę, zieleń zamknięte. */
+const STATUS_STYLES: Record<
+  Exclude<StatusFilter, 'all'>,
+  { label: string; dot: string; badge: string; tile: string }
+> = {
+  open: {
+    label: 'Do wyjaśnienia',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+    tile: 'border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10',
+  },
+  reported: {
+    label: 'Zgłoszone dostawcy',
+    dot: 'bg-sky-500',
+    badge: 'bg-sky-100 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
+    tile: 'border-sky-200 bg-sky-50/70 dark:border-sky-500/30 dark:bg-sky-500/10',
+  },
+  resolved: {
+    label: 'Wyjaśnione',
+    dot: 'bg-emerald-500',
+    badge: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200',
+    tile: 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10',
+  },
+}
+const STATUS_ORDER: Exclude<StatusFilter, 'all'>[] = ['open', 'reported', 'resolved']
 
 const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
 
@@ -166,6 +215,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
     )
 
   const report = usePriceCheck(storeId)
+  const categories = usePriceCheckCategories(storeId).data ?? []
   const all = report.data?.deliveries ?? []
   const suppliers = [...new Map(all.map((delivery) => [supplierKey(delivery), delivery])).values()]
     .map((delivery) => ({
@@ -197,7 +247,12 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
   const filtersActive = query !== '' || supplier !== ALL_SUPPLIERS || period !== '30' || priceFilter !== 'all'
   const viewCounts = { verify: 0, incidents: 0 }
   filtered.forEach((delivery) => viewCounts[delivery.afterIncident ? 'incidents' : 'verify']++)
-  const deliveries = filtered.filter((delivery) => delivery.afterIncident === (view === 'incidents'))
+  const inView = filtered.filter((delivery) => delivery.afterIncident === (view === 'incidents'))
+  const categoryParam = params.get('kategoria')
+  const category: CategoryKey =
+    categories.find((item) => item.id === categoryParam)?.id ??
+    (categoryParam === OTHER_CATEGORY && categories.length > 0 ? OTHER_CATEGORY : ALL_CATEGORIES)
+  const deliveries = inView.filter((delivery) => inCategory(delivery, category, categories))
   const counts = { open: 0, reported: 0, resolved: 0 }
   deliveries.forEach((delivery) => counts[filterOf(delivery)]++)
   const open = deliveries.filter((delivery) => filterOf(delivery) === 'open')
@@ -242,23 +297,29 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
             onChange={(next) => setParam('widok', next === 'incidents' ? VIEW_PARAMS.incidents : null)}
           />
 
+          <CategoryTabs
+            categories={categories}
+            deliveries={inView}
+            value={category}
+            onChange={(next) => setParam('kategoria', next === ALL_CATEGORIES ? null : next)}
+          />
+
           <ReportNotices report={report.data} />
 
           {view === 'incidents' && <IncidentUpload storeId={storeId} incidentDays={report.data.incidentDays} />}
 
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <SummaryTile
-              label="Do wyjaśnienia"
-              value={String(counts.open)}
+              status="open"
+              value={counts.open}
               detail={
                 counts.open
                   ? `zakup ${formatMoney(openValue)} zł${openExcess > 0 ? ` · za drogo o ${formatMoney(openExcess)} zł` : ''}`
                   : 'nic nie czeka'
               }
-              tone={counts.open ? 'warning' : undefined}
             />
-            <SummaryTile label="Zgłoszone dostawcy" value={String(counts.reported)} detail="czekają na odpowiedź" />
-            <SummaryTile label="Wyjaśnione" value={String(counts.resolved)} detail="także starsze niż 30 dni" />
+            <SummaryTile status="reported" value={counts.reported} detail="czekają na odpowiedź" />
+            <SummaryTile status="resolved" value={counts.resolved} detail="także starsze niż 30 dni" />
           </div>
 
           <div className="mb-3 grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
@@ -360,18 +421,38 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
               </p>
             </Card>
           ) : (
-            <Card className="gap-0 divide-y py-0">
-              {shown.map((delivery) => (
-                <DeliveryRow
-                  key={delivery.id}
-                  storeId={storeId}
-                  delivery={delivery}
-                  hasMinimum={report.data.minMarginPercent != null}
-                  open={expanded.has(delivery.id)}
-                  onToggle={() => toggle(delivery.id)}
-                />
-              ))}
-            </Card>
+            <div className="grid gap-6">
+              {STATUS_ORDER.map((status) => {
+                const group = shown.filter((delivery) => filterOf(delivery) === status)
+                if (group.length === 0) return null
+                const style = STATUS_STYLES[status]
+                const excess = group.reduce((sum, delivery) => sum + delivery.baseDifferenceValue, 0)
+                return (
+                  <section key={status} aria-label={style.label}>
+                    <h3 className="mb-2 flex flex-wrap items-baseline gap-x-2 px-1 text-sm">
+                      <span aria-hidden className={cn('size-2.5 self-center rounded-full', style.dot)} />
+                      <span className="font-semibold">{style.label}</span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {group.length} {group.length === 1 ? 'przyjęcie' : 'przyjęć'}
+                        {excess > 0 && ` · drożej niż baza o ${formatMoney(excess)} zł`}
+                      </span>
+                    </h3>
+                    <Card className="gap-0 divide-y py-0">
+                      {group.map((delivery) => (
+                        <DeliveryRow
+                          key={delivery.id}
+                          storeId={storeId}
+                          delivery={delivery}
+                          hasMinimum={report.data.minMarginPercent != null}
+                          open={expanded.has(delivery.id)}
+                          onToggle={() => toggle(delivery.id)}
+                        />
+                      ))}
+                    </Card>
+                  </section>
+                )
+              })}
+            </div>
           )}
         </>
       )}
@@ -391,18 +472,27 @@ function ViewTabs({
   incidentDays: number
   onChange: (view: View) => void
 }) {
-  const tabs: { value: View; label: string; detail: string }[] = [
-    { value: 'verify', label: 'Do weryfikacji', detail: 'zakup u innego dostawcy bez powodu z bazy' },
+  const tabs: { value: View; label: string; detail: string; icon: typeof SearchCheckIcon; tone: string }[] = [
+    {
+      value: 'verify',
+      label: 'Do weryfikacji',
+      detail: 'zakup u innego dostawcy bez powodu z bazy',
+      icon: SearchCheckIcon,
+      tone: 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100 [&_[data-icon]]:bg-amber-500 [&_[data-icon]]:text-white',
+    },
     {
       value: 'incidents',
       label: 'Po incydencie z bazy',
       detail: `baza nie dowiozła: przyjęcie do ${incidentDays} dni po incydencie`,
+      icon: PackageXIcon,
+      tone: 'border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-100 [&_[data-icon]]:bg-sky-600 [&_[data-icon]]:text-white',
     },
   ]
   return (
-    <div role="tablist" aria-label="Kategoria" className="mb-4 grid gap-2 sm:grid-cols-2">
+    <div role="tablist" aria-label="Kategoria" className="mb-2 grid gap-2 sm:grid-cols-2">
       {tabs.map((tab) => {
         const selected = tab.value === view
+        const Icon = tab.icon
         return (
           <button
             key={tab.value}
@@ -411,15 +501,96 @@ function ViewTabs({
             aria-selected={selected}
             onClick={() => onChange(tab.value)}
             className={cn(
-              'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-[background-color,border-color,box-shadow] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-              selected ? 'border-foreground/25 bg-card shadow-sm' : 'bg-muted/40 hover:bg-muted/70',
+              'flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99] motion-reduce:active:scale-100',
+              selected
+                ? cn('shadow-sm', tab.tone)
+                : 'bg-card text-foreground hover:bg-muted/60 [&_[data-icon]]:bg-muted [&_[data-icon]]:text-muted-foreground',
             )}
           >
-            <span className="min-w-0">
-              <span className={cn('block font-medium', !selected && 'text-muted-foreground')}>{tab.label}</span>
-              <span className="block text-sm text-muted-foreground">{tab.detail}</span>
+            <span
+              data-icon
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-150"
+            >
+              <Icon className="size-4.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">{tab.label}</span>
+              <span className={cn('block text-sm', selected ? 'opacity-80' : 'text-muted-foreground')}>
+                {tab.detail}
+              </span>
             </span>
             <span className="text-2xl font-semibold tabular-nums">{counts[tab.value]}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * Druga linia zakładek: własne kategorie z Ustawień sklepu (rejony nomenklatury) w bieżącej zakładce, z liczbą
+ * przyjęć. Bez kategorii pokazuje tylko odnośnik do ustawień.
+ */
+function CategoryTabs({
+  categories,
+  deliveries,
+  value,
+  onChange,
+}: {
+  categories: PriceCheckCategory[]
+  deliveries: PriceCheckDelivery[]
+  value: CategoryKey
+  onChange: (key: CategoryKey) => void
+}) {
+  const canEdit = useCan('SALES', 'EDIT')
+  if (categories.length === 0) {
+    return canEdit ? (
+      <p className="mb-4 px-1 text-sm text-muted-foreground">
+        Własne kategorie (np. napoje, chemia) dodasz w{' '}
+        <Link to={storeSettingsPaths.priceCheck} className="underline underline-offset-4 hover:text-foreground">
+          Ustawieniach sklepu
+        </Link>
+        .
+      </p>
+    ) : (
+      <div className="mb-4" />
+    )
+  }
+  const tabs = [
+    { key: ALL_CATEGORIES, label: 'Wszystkie' },
+    ...categories.map((category) => ({ key: category.id, label: category.name })),
+    { key: OTHER_CATEGORY, label: 'Pozostałe' },
+  ]
+  return (
+    <div role="tablist" aria-label="Kategorie własne" className="mb-4 flex flex-wrap gap-1.5">
+      {tabs.map((tab) => {
+        const selected = tab.key === value
+        const count = deliveries.filter((delivery) => inCategory(delivery, tab.key, categories)).length
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(tab.key)}
+            className={cn(
+              'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm transition-[background-color,border-color,color,transform] duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97] motion-reduce:active:scale-100',
+              selected
+                ? 'border-foreground bg-foreground font-medium text-background'
+                : 'bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+              tab.key === OTHER_CATEGORY && !selected && 'border-dashed',
+            )}
+          >
+            {tab.label}
+            <span
+              className={cn(
+                'min-w-5 rounded-full px-1.5 text-xs tabular-nums',
+                selected ? 'bg-background/20' : 'bg-muted',
+              )}
+            >
+              {count}
+            </span>
           </button>
         )
       })}
@@ -471,20 +642,23 @@ function MissingCadencier() {
   )
 }
 
+/** Kafelek statusu: w kolorze statusu, gdy coś w nim jest, wyciszony przy zerze. */
 function SummaryTile({
-  label,
+  status,
   value,
   detail,
-  tone,
 }: {
-  label: string
-  value: string
+  status: Exclude<StatusFilter, 'all'>
+  value: number
   detail: string
-  tone?: 'warning'
 }) {
+  const style = STATUS_STYLES[status]
   return (
-    <Card className={cn('gap-1 p-4', tone === 'warning' && 'border-amber-300 dark:border-amber-500/40')}>
-      <p className="text-sm text-muted-foreground">{label}</p>
+    <Card className={cn('gap-1 p-4', value > 0 && style.tile)}>
+      <p className="flex items-center gap-2 text-sm font-medium">
+        <span aria-hidden className={cn('size-2.5 rounded-full', value > 0 ? style.dot : 'bg-muted-foreground/30')} />
+        {style.label}
+      </p>
       <p className="text-2xl font-semibold tabular-nums">{value}</p>
       <p className="text-sm text-muted-foreground tabular-nums">{detail}</p>
     </Card>
@@ -530,7 +704,10 @@ function DeliveryRow({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={onToggle}
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-4 py-3 text-left transition-colors duration-150 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+        className={cn(
+          'grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-4 py-3 text-left transition-colors duration-150 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center',
+          open && 'bg-muted/60 hover:bg-muted/70',
+        )}
       >
         <ChevronRightIcon
           aria-hidden
@@ -547,43 +724,41 @@ function DeliveryRow({
             )}
             <StatusBadge status={status} />
           </span>
-          <span className="block text-sm text-muted-foreground tabular-nums">
-            Bon {bonNumber(delivery.number)} · {formatDocumentDate(delivery.documentDate)}
-            {delivery.supplierDocumentNumber && ` · faktura ${delivery.supplierDocumentNumber}`}
-            {delivery.correctionCount > 0 &&
-              ` · ${delivery.correctionCount === 1 ? '1 korekta' : `korekty: ${delivery.correctionCount}`}`}
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums">
+            <span className="rounded bg-muted px-1.5 font-medium text-foreground">Bon {bonNumber(delivery.number)}</span>
+            {formatDocumentDate(delivery.documentDate)}
+            {delivery.supplierDocumentNumber && <span>· faktura {delivery.supplierDocumentNumber}</span>}
+            {delivery.correctionCount > 0 && (
+              <span>· {delivery.correctionCount === 1 ? '1 korekta' : `korekty: ${delivery.correctionCount}`}</span>
+            )}
           </span>
         </span>
-        <span className="col-start-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular-nums md:col-start-3 md:justify-end md:text-right">
-          <span>
-            <span className="text-muted-foreground">z cadencier </span>
-            <span className="font-medium">{articlesWord(delivery.lines.length)}</span>
-          </span>
+        <span className="col-start-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums md:col-start-3 md:justify-end md:text-right">
+          <MoneyPill label="z cadencier" value={articlesWord(delivery.lines.length)} tone="neutral" />
           {hasMinimum && delivery.belowMinimumCount > 0 && (
-            <span className="font-medium text-destructive">poniżej minimum: {delivery.belowMinimumCount}</span>
+            <MoneyPill label="poniżej minimum" value={String(delivery.belowMinimumCount)} tone="loss" />
           )}
-          <span>
-            <span className="text-muted-foreground">zakup </span>
-            <span className="font-semibold">{formatMoney(delivery.linesPurchaseValue)} zł</span>
-          </span>
+          <MoneyPill label="zakup" value={`${formatMoney(delivery.linesPurchaseValue)} zł`} tone="neutral" />
           {delivery.baseDifferenceValue > 0 && (
-            <span>
-              <span className="text-muted-foreground">drożej niż baza </span>
-              <span className="font-semibold">{formatMoney(delivery.baseDifferenceValue)} zł</span>
-            </span>
+            <MoneyPill
+              label="drożej niż baza"
+              value={`${formatMoney(delivery.baseDifferenceValue)} zł`}
+              tone="loss"
+            />
           )}
         </span>
       </button>
 
       {open && (
-        <div id={panelId} className="border-t bg-muted/20">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div id={panelId} className="border-t bg-muted/40 px-3 pt-1 pb-3 sm:px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-2.5">
             <Link
               to={documentPaths.document('PZ', delivery.id)}
-              className="text-sm font-medium underline-offset-4 hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
               title={`Numer wewnętrzny ${delivery.number}`}
             >
               Otwórz bon {bonNumber(delivery.number)}
+              <ArrowUpRightIcon aria-hidden className="size-3.5" />
             </Link>
             {canEdit && (
               <div className="flex flex-wrap gap-2">
@@ -604,7 +779,7 @@ function DeliveryRow({
           </div>
 
           {delivery.lines.length === 0 ? (
-            <p className="px-4 pb-3 text-sm text-muted-foreground">
+            <p className="rounded-lg border bg-background px-4 py-3 text-sm text-muted-foreground">
               Po korektach w tym przyjęciu nie ma już artykułów z cadencier od innego dostawcy.
             </p>
           ) : (
@@ -612,14 +787,14 @@ function DeliveryRow({
           )}
 
           {delivery.history.length > 0 && (
-            <ul className="grid gap-1 border-t px-4 py-3 text-sm">
+            <ul className="mt-3 grid gap-1 rounded-lg border bg-background px-4 py-3 text-sm">
               {delivery.history.map((entry, index) => (
                 <li key={entry.id} className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-medium">{STATUS_LABELS[entry.status]}</span>
                   <span className="text-muted-foreground tabular-nums">
                     {[entry.createdBy, dateTimeFormat.format(new Date(entry.createdAt))].filter(Boolean).join(', ')}
                   </span>
-                  {entry.note && <span className="min-w-0 break-words">„{entry.note}”</span>}
+                  {entry.note && <span className="min-w-0 wrap-break-word">„{entry.note}”</span>}
                   {canEdit && index === 0 && (
                     <Button
                       variant="link"
@@ -662,28 +837,37 @@ function DeliveryRow({
 }
 
 function StatusBadge({ status }: { status: PriceCheckStatus | null }) {
-  if (status === 'RESOLVED') {
-    return <Badge variant="secondary">Wyjaśnione</Badge>
-  }
-  if (status === 'REPORTED') {
-    return (
-      <Badge variant="outline" className="border-sky-300 text-sky-800 dark:border-sky-500/40 dark:text-sky-300">
-        Zgłoszone dostawcy
-      </Badge>
-    )
-  }
+  const style = STATUS_STYLES[status === 'RESOLVED' ? 'resolved' : status === 'REPORTED' ? 'reported' : 'open']
   return (
-    <Badge variant="outline" className="border-amber-300 text-amber-800 dark:border-amber-500/40 dark:text-amber-300">
-      Do wyjaśnienia
+    <Badge className={cn('gap-1.5 border-transparent font-medium', style.badge)}>
+      <span aria-hidden className={cn('size-1.5 rounded-full', style.dot)} />
+      {style.label}
     </Badge>
+  )
+}
+
+/** Kwota w pigułce: czerwona, gdy oznacza stratę sklepu (drożej niż baza, poniżej minimum). */
+function MoneyPill({ label, value, tone }: { label: string; value: string; tone: 'loss' | 'neutral' }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-baseline gap-1.5 rounded-md px-2 py-0.5',
+        tone === 'loss' ? 'bg-red-50 text-red-900 dark:bg-red-500/10 dark:text-red-200' : '',
+      )}
+    >
+      <span className={tone === 'loss' ? 'text-red-800/80 dark:text-red-200/80' : 'text-muted-foreground'}>
+        {label}
+      </span>
+      <span className="font-semibold">{value}</span>
+    </span>
   )
 }
 
 function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; hasMinimum: boolean }) {
   return (
-    <div className="overflow-x-auto border-t bg-background">
+    <div className="overflow-x-auto rounded-lg border bg-background shadow-xs">
       <Table className="tabular-nums">
-        <TableHeader>
+        <TableHeader className="bg-muted/60">
           <TableRow className="hover:bg-transparent">
             <TableHead className="pl-4">Artykuł</TableHead>
             <TableHead className="text-right">Ilość</TableHead>
@@ -734,9 +918,10 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
                 )}
                 {line.incidentDate && (
                   <p
-                    className="mt-1 text-xs font-medium text-sky-800 dark:text-sky-300"
+                    className="mt-1 inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-500/10 dark:text-sky-200"
                     title={line.incidentComment ?? undefined}
                   >
+                    <PackageXIcon aria-hidden className="size-3.5 shrink-0" />
                     Incydent z bazy {formatDocumentDate(line.incidentDate)}
                     {line.incidentReason && `: ${line.incidentReason}`}
                   </p>
@@ -795,14 +980,16 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
 function BaseDifference({ purchasePrice, basePrice }: { purchasePrice: number; basePrice: number }) {
   const difference = purchasePrice - basePrice
   if (Math.abs(difference) < 0.005) {
-    return <span className="block text-xs text-muted-foreground">tyle samo</span>
+    return <span className="mt-0.5 block text-xs text-muted-foreground">tyle samo</span>
   }
   const percent = basePrice > 0 ? (difference / basePrice) * 100 : null
   return (
     <span
       className={cn(
-        'block text-xs font-medium',
-        difference > 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+        'mt-0.5 inline-block rounded px-1.5 text-xs font-medium',
+        difference > 0
+          ? 'bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300'
+          : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
       )}
     >
       {difference > 0 ? 'drożej o ' : 'taniej o '}

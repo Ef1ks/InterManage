@@ -263,6 +263,37 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[0].lines[0].incidentReason")
                         .value("Chwilowy brak w magazynie centralnym"));
 
+        // Własne kategorie: rejon linii z nomenklatury, nazwa unikalna, usunięcie ze znacznikiem i przywróceniem.
+        jdbc.update("update document_lines set nomenclature_code = '570101' where document_id = ?::uuid", delivery);
+        mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].regionCode").value("57"));
+        mvc.perform(post(url(storeId) + "/categories").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Napoje\",\"regionCodes\":[\"7\"]}"))
+                .andExpect(status().isBadRequest());
+        String category = mvc.perform(post(url(storeId) + "/categories").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\" Napoje \",\"regionCodes\":[\"57\",\"14\",\"57\"]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Napoje"))
+                .andExpect(jsonPath("$.regionCodes.length()").value(2))
+                .andExpect(jsonPath("$.regionCodes[0]").value("14"))
+                .andReturn().getResponse().getContentAsString();
+        String categoryId = JsonPath.read(category, "$.id");
+        mvc.perform(post(url(storeId) + "/categories").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"napoje\",\"regionCodes\":[\"31\"]}"))
+                .andExpect(status().isConflict());
+        mvc.perform(put(url(storeId) + "/categories/" + categoryId).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Napoje\",\"regionCodes\":[\"57\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.regionCodes.length()").value(1));
+        mvc.perform(delete(url(storeId) + "/categories/" + categoryId).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(url(storeId) + "/categories").cookie(owner)).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(url(storeId) + "/categories/" + categoryId + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        mvc.perform(get(url(storeId) + "/categories").cookie(owner))
+                .andExpect(jsonPath("$[0].name").value("Napoje"));
+
         mvc.perform(post(url(storeId) + "/documents/" + old + "/reviews").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RESOLVED\"}"))
                 .andExpect(status().isOk());

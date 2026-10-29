@@ -555,3 +555,17 @@ export function useMarkTransferEntered(storeId: string, id: string) {
     onSuccess: (transfer) => queryClient.setQueryData([...incomingKey(storeId), id], transfer),
   })
 }
+
+/** Ilości, które naprawdę przyjechały; zapis oznacza dokument jako wprowadzony. */
+export function useReceiveTransfer(storeId: string, id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (items: { lineId: string; quantity: number }[]) =>
+      api<IncomingTransfer>(`${incomingPath(storeId)}/${id}/receive`, { method: 'POST', json: { items } }),
+    onSuccess: (transfer) => queryClient.setQueryData([...incomingKey(storeId), id], transfer),
+  })
+}
+
+/** Plik przyjęcia w przyjętych ilościach: PROTO6 (.Traite0) dla programu sklepu albo Excel. */
+export const incomingTransferExportPath = (storeId: string, id: string, format: 'proto' | 'xlsx') =>
+  `${incomingPath(storeId)}/${id}/export/${format}`

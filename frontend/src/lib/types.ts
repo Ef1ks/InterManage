@@ -239,6 +239,9 @@ export type DeliOrderItem = {
   unit: OrderUnit
   orderedQuantity: number
   quantity: number
+  /** Dopisane po złożeniu zamówienia (kiedy i kto); przy złożeniu `null`. */
+  addedAt: string | null
+  addedBy: string | null
 }
 
 export type DeliOrder = Omit<DeliOrderSummary, 'itemCount' | 'corrected' | 'merged'> & {
@@ -1148,8 +1151,13 @@ export type IncomingTransfer = {
   createdAt: string
   enteredBy: string | null
   enteredAt: string | null
+  /** Kto i kiedy ostatnio wpisał ilości, które naprawdę przyjechały. */
+  receivedBy: string | null
+  receivedAt: string | null
   /** Pusta na liście, z liniami w szczegółach. */
   lines: DocumentLine[]
+  /** Przyjęte ilości; linia bez wpisu przyjechała w ilości z dokumentu. */
+  received: { lineId: string; quantity: number }[]
 }
 
 export type IncomingTransfers = {
@@ -1285,6 +1293,8 @@ export type PriceCheckLine = {
   ean: string | null
   name: string | null
   brand: string | null
+  /** Rejon nomenklatury linii (dwie cyfry), do własnych kategorii raportu. */
+  regionCode: string | null
   supplierCode: string | null
   quantity: number
   purchasePrice: number
@@ -1342,6 +1352,13 @@ export type PriceCheckReport = {
   incidentDays: number
   lastIncidentDate: string | null
   deliveries: PriceCheckDelivery[]
+}
+
+/** Własna kategoria raportu zakupu bazowego poza bazą: nazwa i rejony nomenklatury. */
+export type PriceCheckCategory = {
+  id: string
+  name: string
+  regionCodes: string[]
 }
 
 /** Wgranie pliku incydentów zamówień do bazy; dzień incydentu z nazwy pliku. */

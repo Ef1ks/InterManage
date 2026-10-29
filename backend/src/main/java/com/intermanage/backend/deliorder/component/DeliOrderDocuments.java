@@ -20,8 +20,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.intermanage.backend.common.component.PdfFonts;
+import com.intermanage.backend.common.component.Proto6;
 import com.intermanage.backend.common.component.XlsxWriter;
-import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.deliorder.entity.OrderUnit;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
@@ -101,23 +101,10 @@ public class DeliOrderDocuments {
         return text.toString().getBytes(StandardCharsets.US_ASCII);
     }
 
-    /** Najwięcej, ile mieści pole ilości w pliku PROTO6: 6 cyfr całości i 3 po przecinku. */
-    private static final BigDecimal PROTO_MAX = new BigDecimal("999999.999");
-
-    /**
-     * Plik PROTO6 dla programu sklepu: w linii EAN i zaraz za nim ilość na 9 cyfrach, 6 całości i 3 po przecinku,
-     * bez separatora (1 szt. = 000001000, 0,5 kg = 000000500). CRLF jak w .lst.
-     */
+    /** Plik PROTO6 dla programu sklepu, w kolejności zamówienia. */
     public byte[] proto(OrderDocument order) {
-        StringBuilder text = new StringBuilder();
-        for (Line line : order.orderedLines()) {
-            if (line.quantity().compareTo(PROTO_MAX) > 0) {
-                throw ApiException.badRequest("Ilość " + line.quantity() + " nie mieści się w pliku PROTO6");
-            }
-            long thousandths = line.quantity().movePointRight(3).longValueExact();
-            text.append(line.ean()).append(String.format("%09d", thousandths)).append("\r\n");
-        }
-        return text.toString().getBytes(StandardCharsets.US_ASCII);
+        return Proto6.content(order.orderedLines().stream()
+                .map(line -> new Proto6.Line(line.ean(), line.quantity())).toList());
     }
 
     public byte[] xlsx(OrderDocument order) {

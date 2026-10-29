@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCheckIcon, MergeIcon, PencilIcon, RotateCcwIcon, SaveIcon, SplitIcon, Trash2Icon } from 'lucide-react'
+import { CheckCheckIcon, MergeIcon, PencilIcon, PlusIcon, RotateCcwIcon, SaveIcon, SplitIcon, Trash2Icon } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -9,6 +9,7 @@ import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan, useMe } from '@/features/auth/api'
+import { AddOrderItemsDialog } from '@/features/deli-order/AddOrderItemsDialog'
 import { useCorrectOrder, useDeleteOrder, useMarkOrderRead, useOrder, useOrders } from '@/features/deli-order/api'
 import { DeliveryDateDialog } from '@/features/deli-order/DeliveryDateDialog'
 import { FulfillOrderDialog } from '@/features/deli-order/FulfillOrderDialog'
@@ -58,6 +59,9 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
   const managesOwnSide = sender || canEdit
   // Zrealizowane usuwa tylko właściciel.
   const deletable = (open || owner) && managesOwnSide && !deletedHere && !replaced
+  // Zapomniany produkt dopisuje zamawiający (albo dostawca z Edycją), dopóki zamówienie czeka na realizację.
+  const canAddItems = active && managesOwnSide
+  const [adding, setAdding] = useState<{ section: string; category: string } | null>(null)
   const correct = useCorrectOrder(storeId, order.id)
   const [fulfilling, setFulfilling] = useState(false)
   const [changingDate, setChangingDate] = useState(false)
@@ -79,9 +83,12 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
   }, [incoming, order.status, deleted, replaced, markRead])
   const { remove, restore } = useDeleteOrder(storeId, order.id)
   const navigate = useNavigate()
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(order.items.map((item) => [item.id, String(item.quantity).replace('.', ',')])),
-  )
+  // Wpisane poprawki na tle bieżących ilości: pozycja dopisana w międzyczasie startuje od swojej ilości.
+  const [edits, setEdits] = useState<Record<string, string>>({})
+  const draft: Record<string, string> = {
+    ...Object.fromEntries(order.items.map((item) => [item.id, String(item.quantity).replace('.', ',')])),
+    ...edits,
+  }
 
   const parsed = order.items.map((item) => ({ item, ...parseQuantity(draft[item.id] ?? '', item.unit) }))
   const changed = parsed.filter(({ item, value }) => value !== undefined && value !== item.quantity)
@@ -230,6 +237,14 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
       </div>
 
       <DeliveryDateDialog storeId={storeId} order={order} open={changingDate} onOpenChange={setChangingDate} />
+      <AddOrderItemsDialog
+        storeId={storeId}
+        order={order}
+        section={adding?.section ?? ''}
+        category={adding?.category ?? ''}
+        open={adding !== null}
+        onOpenChange={(next) => !next && setAdding(null)}
+      />
 
       {order.mergedIntoId && (
         <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border bg-card px-4 py-3">
@@ -344,7 +359,7 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
       {!incoming && active && (
         <p className="mb-6 text-sm text-muted-foreground">
           Zamówienie czeka na realizację w sklepie {storeLabel(order.formStore)}. Jeśli zmieni ilości, zobaczysz je tutaj
-          jako przekreślone.
+          jako przekreślone. Zapomniałeś o czymś? Dopisz to plusem przy kategorii.
         </p>
       )}
       {!deleted && !replaced && <OrderMovementDocuments storeId={storeId} order={order} />}
@@ -357,7 +372,20 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
             <div className="grid grid-cols-1 gap-4">
               {categories.map(({ category, items }) => (
                 <div key={category}>
-                  <h4 className="mb-2 text-base font-semibold">{category}</h4>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="text-base font-semibold">{category}</h4>
+                    {canAddItems && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Dopisz produkt do kategorii ${category}`}
+                        onClick={() => setAdding({ section, category })}
+                      >
+                        <PlusIcon />
+                        Dopisz
+                      </Button>
+                    )}
+                  </div>
                   <Card className="gap-0 divide-y py-0">
                     {items.map((item) => {
                       const error = parsed.find((p) => p.item.id === item.id)?.error
@@ -374,6 +402,12 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
                                 zamówiono {formatQuantity(item.orderedQuantity, item.unit)}
                               </div>
                             )}
+                            {item.addedAt && (
+                              <div className="text-xs text-muted-foreground tabular-nums">
+                                dopisane {dateTime.format(new Date(item.addedAt))}
+                                {item.addedBy && ` · ${item.addedBy}`}
+                              </div>
+                            )}
                             {error && <div className="text-xs text-destructive">{error}</div>}
                           </div>
                           {editable ? (
@@ -382,7 +416,7 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
                               value={draft[item.id] ?? ''}
                               invalid={Boolean(error)}
                               label={item.name ?? item.ean}
-                              onChange={(next) => setDraft((current) => ({ ...current, [item.id]: next }))}
+                              onChange={(next) => setEdits((current) => ({ ...current, [item.id]: next }))}
                             />
                           ) : (
                             <QuantityView item={item} />

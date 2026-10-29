@@ -48,5 +48,6 @@ public interface DeliOrderMapper {
     @Mapping(target = "ean", source = "product.ean")
     @Mapping(target = "name", source = "product.name")
     @Mapping(target = "brand", source = "product.brand")
+    @Mapping(target = "addedBy", source = "addedBy.displayName")
     DeliOrderItemResponse toResponse(DeliOrderItem item);
 }

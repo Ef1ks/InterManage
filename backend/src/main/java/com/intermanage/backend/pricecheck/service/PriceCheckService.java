@@ -211,6 +211,15 @@ public class PriceCheckService {
                 && !BASE_SUPPLIER_CODES.contains(supplierOf(line, delivery)));
     }
 
+    /** Rejon z kodu nomenklatury linii ("570101" albo "57 01 01" -> "57"). */
+    private static String regionOf(String nomenclatureCode) {
+        if (nomenclatureCode == null) {
+            return null;
+        }
+        String digits = nomenclatureCode.replaceAll("\\D", "");
+        return digits.length() < 2 ? null : digits.substring(0, 2);
+    }
+
     /** EAN bez zer wiodących (GTIN-14 = EAN-13); kod krótszy niż {@link #MIN_EAN_LENGTH} cyfr to brak EAN-u. */
     private static String eanKey(String ean) {
         if (ean == null) {
@@ -356,7 +365,7 @@ public class PriceCheckService {
             IncidentItem incident = incidents.before(cadencierItm8, line.itm8(), line.ean(),
                     delivery.getDocumentDate().toLocalDate());
             lines.add(new Line(line.itm8(), cadencierItm8.equals(line.itm8()) ? null : cadencierItm8, line.ean(),
-                    line.name(), line.brand(), supplier, quantity,
+                    line.name(), line.brand(), regionOf(line.nomenclatureCode()), supplier, quantity,
                     line.purchasePrice(), purchaseValue, line.salePriceDocument(), salePriceNet, marginPercent,
                     belowMinimum, targetPurchasePrice, excessValue,
                     cadencierPrice != null ? cadencierPrice : cadencierPrices.get(line.itm8()),

@@ -1,10 +1,12 @@
 package com.intermanage.backend.deliorder.entity;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
 
+import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.product.entity.Product;
 
 import jakarta.persistence.Column;
@@ -54,6 +56,14 @@ public class DeliOrderItem {
     @Column(nullable = false, updatable = false)
     private int position;
 
+    /** Pozycja dopisana do złożonego zamówienia (zamawiający o niej zapomniał); przy złożeniu - {@code null}. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "added_by", updatable = false)
+    private AppUser addedBy;
+
+    @Column(name = "added_at", updatable = false)
+    private Instant addedAt;
+
     protected DeliOrderItem() {
     }
 
@@ -95,6 +105,19 @@ public class DeliOrderItem {
 
     public BigDecimal getQuantity() {
         return quantity;
+    }
+
+    public AppUser getAddedBy() {
+        return addedBy;
+    }
+
+    public Instant getAddedAt() {
+        return addedAt;
+    }
+
+    void markAdded(AppUser by) {
+        addedBy = by;
+        addedAt = Instant.now();
     }
 
     public void setQuantity(BigDecimal quantity) {

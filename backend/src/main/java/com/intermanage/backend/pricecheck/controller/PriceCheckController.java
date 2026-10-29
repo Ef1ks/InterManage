@@ -24,6 +24,8 @@ import com.intermanage.backend.pricecheck.dto.CadencierImportResponse;
 import com.intermanage.backend.pricecheck.dto.CadencierOverview;
 import com.intermanage.backend.pricecheck.dto.IncidentImportResponse;
 import com.intermanage.backend.pricecheck.dto.IncidentOverview;
+import com.intermanage.backend.pricecheck.dto.PriceCheckCategoryRequest;
+import com.intermanage.backend.pricecheck.dto.PriceCheckCategoryResponse;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReport;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
@@ -31,6 +33,7 @@ import com.intermanage.backend.pricecheck.dto.PriceCheckSettingsRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckSettingsResponse;
 import com.intermanage.backend.pricecheck.service.CadencierService;
 import com.intermanage.backend.pricecheck.service.IncidentService;
+import com.intermanage.backend.pricecheck.service.PriceCheckCategoryService;
 import com.intermanage.backend.pricecheck.service.PriceCheckService;
 
 import jakarta.validation.Valid;
@@ -51,12 +54,14 @@ public class PriceCheckController {
     private final PriceCheckService priceCheckService;
     private final CadencierService cadencierService;
     private final IncidentService incidentService;
+    private final PriceCheckCategoryService categoryService;
 
     public PriceCheckController(PriceCheckService priceCheckService, CadencierService cadencierService,
-            IncidentService incidentService) {
+            IncidentService incidentService, PriceCheckCategoryService categoryService) {
         this.priceCheckService = priceCheckService;
         this.cadencierService = cadencierService;
         this.incidentService = incidentService;
+        this.categoryService = categoryService;
     }
 
     /** Przyjęcia z ostatnich {@value PriceCheckService#PERIOD_DAYS} dni. */
@@ -96,6 +101,45 @@ public class PriceCheckController {
     public IncidentImportResponse importIncidents(@PathVariable UUID storeId,
             @RequestParam("file") MultipartFile file, @AuthenticationPrincipal AppUserPrincipal principal) {
         return incidentService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Własne kategorie raportu (rejony nomenklatury), w kolejności dodania. */
+    @GetMapping("/categories")
+    @PreAuthorize(VIEW)
+    public List<PriceCheckCategoryResponse> categories(@PathVariable UUID storeId) {
+        return categoryService.list(storeId);
+    }
+
+    @PostMapping("/categories")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(EDIT)
+    public PriceCheckCategoryResponse createCategory(@PathVariable UUID storeId,
+            @Valid @RequestBody PriceCheckCategoryRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return categoryService.create(storeId, request, principal.getId());
+    }
+
+    @PutMapping("/categories/{categoryId}")
+    @PreAuthorize(EDIT)
+    public PriceCheckCategoryResponse updateCategory(@PathVariable UUID storeId, @PathVariable UUID categoryId,
+            @Valid @RequestBody PriceCheckCategoryRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return categoryService.update(storeId, categoryId, request, principal.getId());
+    }
+
+    /** Usunięcie kategorii (znacznik). */
+    @DeleteMapping("/categories/{categoryId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(EDIT)
+    public void deleteCategory(@PathVariable UUID storeId, @PathVariable UUID categoryId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        categoryService.delete(storeId, categoryId, principal.getId());
+    }
+
+    @PostMapping("/categories/{categoryId}/restore")
+    @PreAuthorize(EDIT)
+    public PriceCheckCategoryResponse restoreCategory(@PathVariable UUID storeId, @PathVariable UUID categoryId) {
+        return categoryService.restore(storeId, categoryId);
     }
 
     @GetMapping("/settings")
