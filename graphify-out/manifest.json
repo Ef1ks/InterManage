@@ -1374,9 +1374,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentDetail.tsx": {
-    "mtime": 1793221731.8695962,
-    "seen": 1793250375.8731706,
-    "ast_hash": "c555b7c77128070765a3d618b11dbd40",
+    "mtime": 1793272682.8815482,
+    "seen": 1793272726.4298387,
+    "ast_hash": "4bdb077bda6a567a626f2410835d4ed5",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentTypesGrid.tsx": {
@@ -1386,9 +1386,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentsList.tsx": {
-    "mtime": 1793254790.215608,
-    "seen": 1793255045.2489445,
-    "ast_hash": "73c85a6b5d616c17c636493d3d578c0a",
+    "mtime": 1793272675.5974014,
+    "seen": 1793272726.4308386,
+    "ast_hash": "e3ee79a1667717981ea2185ef599d885",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/StaleDataNotice.tsx": {
@@ -1416,9 +1416,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderMovementDocuments.tsx": {
-    "mtime": 1792930173.0803974,
-    "seen": 1792942411.818842,
-    "ast_hash": "d1c5defb71c0a6e28806dde7c6b89909",
+    "mtime": 1793272682.8831215,
+    "seen": 1793272726.426834,
+    "ast_hash": "9d9461d4197a9ac974a772b9be6841d1",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/SupplierGratisIntegrationTests.java": {
@@ -1500,9 +1500,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/InvoicesList.tsx": {
-    "mtime": 1793120770.011091,
-    "seen": 1793120804.195154,
-    "ast_hash": "75f1679e2dba3e3c6b15893c977f7b61",
+    "mtime": 1793272682.884162,
+    "seen": 1793272726.432342,
+    "ast_hash": "051e3755ab0c314f58ce3a4339f1a671",
     "semantic_hash": ""
   },
   "frontend/src/features/ksef/KsefPage.tsx": {
@@ -1644,9 +1644,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DeliveryCorrections.tsx": {
-    "mtime": 1793085230.9661775,
-    "seen": 1793085319.2654123,
-    "ast_hash": "3fa0ef8c8d3d1e8f6a1324783b8bac07",
+    "mtime": 1793272682.8836427,
+    "seen": 1793272726.4298387,
+    "ast_hash": "550e3e860d9d1fa01ab212a5634d5770",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/InvoiceAmountCheck.tsx": {
@@ -3696,9 +3696,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/IncomingTransfers.tsx": {
-    "mtime": 1793261048.723392,
-    "seen": 1793261240.4680798,
-    "ast_hash": "d993840d9387103c4c4b81441627326d",
+    "mtime": 1793272682.8815482,
+    "seen": 1793272726.4308386,
+    "ast_hash": "4597c6232f5af6ffb5d648c23e852c0c",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/IncomingTransfersBadge.tsx": {
@@ -4026,9 +4026,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/PriceCheckReport.tsx": {
-    "mtime": 1793259785.7753797,
-    "seen": 1793259838.5229337,
-    "ast_hash": "f3991ee462d13fa74b30ecbedc079487",
+    "mtime": 1793272682.8825963,
+    "seen": 1793272726.4333472,
+    "ast_hash": "4156183ffdcfaf5477e3ac061659e7b9",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/PriceCheckSettingsForm.tsx": {

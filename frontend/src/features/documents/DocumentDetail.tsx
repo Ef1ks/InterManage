@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
+import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -137,8 +138,16 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight tabular-nums">
             {document.typeSingular} {document.number}
+            <CopyButton value={document.number} label={`Kopiuj numer ${document.number}`} className="ml-1 align-middle" />
             {document.correctable && (
-              <span className="ml-2 text-base font-normal text-muted-foreground">bon {bonNumber(document.number)}</span>
+              <span className="ml-2 text-base font-normal text-muted-foreground">
+                bon {bonNumber(document.number)}
+                <CopyButton
+                  value={bonNumber(document.number)}
+                  label={`Kopiuj numer bonu ${bonNumber(document.number)}`}
+                  className="ml-1 align-middle"
+                />
+              </span>
             )}
           </h2>
           {document.correctable && (

@@ -1,24 +1,24 @@
 # Graph Report - intermanage  (2026-10-29)
 
 ## Corpus Check
-- 760 files · ~811,898 words
+- 760 files · ~812,022 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 25 file(s) not represented in the graph (top: (none) 10, .css 4, .properties 3)
 
 ## Summary
-- 7853 nodes · 26214 edges · 279 communities (221 shown, 58 thin omitted)
+- 7853 nodes · 26233 edges · 280 communities (222 shown, 58 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 1364 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7c1a9e1f`
+- Built from commit: `e9dfe140`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Button
 - KsefInvoicePdf.java
-- types.ts
+- ImportPage.tsx
 - live-browser.js
 - AuthAndRolesIntegrationTests
 - api
@@ -52,8 +52,8 @@
 - jakarta.servlet.http.Cookie
 - Supplier
 - initPageChat
-- ReceiveTransferDialog.tsx
-- App.tsx
+- utils.ts
+- types.ts
 - app-draw.mjs
 - Expo Animation Recipes
 - Animation Recipes
@@ -66,7 +66,7 @@
 - handleManualEditActivity
 - assets.mjs
 - inspect.mjs
-- react
+- StoreSettingsPage.tsx
 - impeccable/SKILL.md
 - onboard.md
 - Imagery
@@ -146,7 +146,7 @@
 - Persona-Based Design Testing
 - InvoiceComparisonService
 - org.springframework.transaction.annotation.Transactional
-- dependencies
+- getJson
 - environment
 - Cognitive Load Assessment
 - KsefConnection
@@ -192,14 +192,14 @@
 - wallet
 - workspace
 - DocumentImport
-- main.tsx
+- 9. Type and colour
 - GratisReportPdf
 - types.ts
 - com.lowagie.text.pdf.PdfPTable
 - onAnnotDown
 - DeliOrderDocuments.java
 - org.springframework.stereotype.Component
-- scenes.mjs
+- 3. The shell
 - Store
 - Impeccable Documenter
 - jakarta.servlet.http.Cookie
@@ -233,7 +233,7 @@
 - ProductEan
 - Impeccable Finish Reviewer
 - build
-- deliOrderDraftSlice.ts
+- 4. The canvas and the page title
 - jobs
 - Responsive Design
 - Diagnostic Scan
@@ -249,7 +249,7 @@
 - .badRequest
 - SalesReportBatch
 - org.springframework.transaction.annotation.Transactional
-- uiSlice.ts
+- 6. Charts
 - PriceCheckService.java
 - jakarta.servlet.http.Cookie
 - KsefXadesSigner
@@ -289,6 +289,7 @@
 - Spring Animations
 - .parse
 - TypeCount
+- 8. Forms and settings
 
 ## God Nodes (most connected - your core abstractions)
 1. `AppUser` - 262 edges
@@ -321,27 +322,27 @@
 - **Permission enforcement across backend and frontend** — claude_permissioncategory, claude_preauthorize_endpoints, claude_usecan_requireauth, claude_tool_routes, claude_new_module_procedure [EXTRACTED 1.00]
 - **Session-based authentication flow** — claude_session_csrf_auth, claude_lib_api, claude_principalrefreshfilter, claude_owner_role [INFERRED 0.85]
 
-## Communities (279 total, 58 thin omitted)
+## Communities (280 total, 58 thin omitted)
 
 ### Community 0 - "Button"
-Cohesion: 0.04
-Nodes (156): Form(), FormActions(), FormAlert(), FormNote(), MultiComboboxField(), SegmentedField(), SegmentOption, SwitchField() (+148 more)
+Cohesion: 0.05
+Nodes (147): Form(), FormActions(), FormAlert(), FormNote(), FormProps, SegmentedField(), SegmentOption, SwitchField() (+139 more)
 
 ### Community 1 - "KsefInvoicePdf.java"
 Cohesion: 0.10
 Nodes (3): PdfPageFooter, PageFooter, PageFooter
 
-### Community 2 - "types.ts"
-Cohesion: 0.02
-Nodes (184): FileDropZone(), formatFileSize(), ImportError(), numberFormat, Props, ReportFreshness(), Alert(), AlertDescription() (+176 more)
+### Community 2 - "ImportPage.tsx"
+Cohesion: 0.06
+Nodes (90): FileDropZone(), formatFileSize(), Props, ImportError(), numberFormat, Alert(), AlertDescription(), AlertTitle() (+82 more)
 
 ### Community 3 - "live-browser.js"
 Cohesion: 0.03
 Nodes (139): applyGlobalBarLabelState(), applyLiveBarPreference(), applyParamDefaults(), applyParamValue(), applyPlaceholderSizingStyles(), applySavedParamValues(), bindEditBadgeProxy(), bufferToBase64() (+131 more)
 
 ### Community 5 - "api"
-Cohesion: 0.05
-Nodes (92): ComboboxOption, Badge(), badgeVariants, meQueryKey, AutoInvoicePair, closingsKey(), closingsPath(), DocumentColumn (+84 more)
+Cohesion: 0.06
+Nodes (77): ComboboxOption, MultiComboboxField(), invitationsKey(), useInvitableStores(), useInvitations(), useInviteStores(), useRevokeInvitation(), InvitationBadge() (+69 more)
 
 ### Community 7 - "org.springframework.security.access.prepost.PreAuthorize"
 Cohesion: 0.06
@@ -380,16 +381,16 @@ Cohesion: 0.12
 Nodes (16): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, noEmit, noFallthroughCasesInSwitch (+8 more)
 
 ### Community 16 - "DocumentsList.tsx"
-Cohesion: 0.05
-Nodes (136): BackLink(), CopyButton(), FullPageMessage(), Props, PageHeader(), Props, SortableHead(), TableSkeletonRows() (+128 more)
+Cohesion: 0.04
+Nodes (160): CopyButton(), FullPageMessage(), Props, Props, SearchInput(), Props, SortableHead(), TableSkeletonRows() (+152 more)
 
 ### Community 17 - "Architecture Docs"
 Cohesion: 0.13
 Nodes (10): Backend: Spring Boot 4.1 / Java 25 / Spring Security 7 / JPA, Frontend: Vite + React 19 + TS + shadcn/ui (Base UI) + Tailwind 4, Intermanage (Intermarché store management app), lib/api.ts request layer (CSRF, ApiError, applyServerErrors), PostgreSQL 17 via docker compose (port 5433), PrincipalRefreshFilter (session_version), Excel .xlsm data import, index.html SPA entry (#root, /src/main.tsx) (+2 more)
 
 ### Community 18 - "InvoicesList.tsx"
-Cohesion: 0.07
-Nodes (79): SearchInput(), Switch(), useCan(), useDeliveryCorrections(), commonItemsLabel(), CorrectedDelivery(), CorrectionBadge(), CorrectionPicker() (+71 more)
+Cohesion: 0.05
+Nodes (85): UserMenu(), DropdownMenu(), DropdownMenuContent(), DropdownMenuGroup(), DropdownMenuItem(), DropdownMenuLabel(), DropdownMenuSeparator(), DropdownMenuSubContent() (+77 more)
 
 ### Community 19 - "Docker Postgres"
 Cohesion: 0.15
@@ -425,19 +426,19 @@ Nodes (4): compilerOptions, paths, files, references
 
 ### Community 31 - "CalculationEditor.tsx"
 Cohesion: 0.05
-Nodes (85): AlertDialog(), AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader(), AlertDialogOverlay() (+77 more)
+Nodes (99): router, TOOL_PAGES, toolRoutes, PageHeader(), AlertDialog(), AlertDialogAction(), AlertDialogCancel(), AlertDialogContent() (+91 more)
 
 ### Community 37 - "initPageChat"
 Cohesion: 0.09
 Nodes (49): armPageChatForTyping(), attachSteerFocusDebug(), attachSteerFocusGuard(), buildSteerProcessingDots(), buildSteerQueueHint(), clearSteerAwaitTimer(), clearSteerFocusRecoverTimer(), collapsePageChat() (+41 more)
 
-### Community 38 - "ReceiveTransferDialog.tsx"
-Cohesion: 0.09
-Nodes (39): UserMenu(), SavedFolder(), DropdownMenu(), DropdownMenuContent(), DropdownMenuGroup(), DropdownMenuItem(), DropdownMenuLabel(), DropdownMenuSeparator() (+31 more)
+### Community 38 - "utils.ts"
+Cohesion: 0.10
+Nodes (20): DateField(), DateFieldProps, FieldShell(), FieldShellProps, describedBy(), fieldControlClass, floatedLabelClass, floatingLabelClass (+12 more)
 
-### Community 39 - "App.tsx"
-Cohesion: 0.20
-Nodes (15): router, TOOL_PAGES, toolRoutes, CardDescription(), CardHeader(), CardTitle(), Props, RequireAuth() (+7 more)
+### Community 39 - "types.ts"
+Cohesion: 0.03
+Nodes (105): Props, gratisPdfPath(), priceCheckSettingsKey(), ReportKind, reportsKey(), reportsPath(), SalesChartTarget, summaryPdfPath() (+97 more)
 
 ### Community 40 - "app-draw.mjs"
 Cohesion: 0.11
@@ -480,16 +481,16 @@ Cohesion: 0.19
 Nodes (24): clearStoredManualApplyState(), fetchPendingCount(), handleManualEditActivity(), hidePendingApplyDock(), manualApplyLoadingText(), manualApplyStateKey(), manualEditEventForCurrentPage(), numberOrNull() (+16 more)
 
 ### Community 50 - "assets.mjs"
-Cohesion: 0.08
-Nodes (34): AIC_FIELDS, AIC_HEADERS, applyThumb(), ARCHIVE_LICENCE, args, argv, commonsApi(), commonsInfo() (+26 more)
+Cohesion: 0.09
+Nodes (24): AIC_FIELDS, AIC_HEADERS, ARCHIVE_LICENCE, args, argv, fail(), FLAGS, LICENCE_ALIAS (+16 more)
 
 ### Community 51 - "inspect.mjs"
 Cohesion: 0.07
 Nodes (28): Command guidance, No-argument routing: the context-aware menu, Workflow questions, allow, appMode, args, asJson, dealtFonts (+20 more)
 
-### Community 52 - "react"
-Cohesion: 0.04
-Nodes (73): BrandMark(), Props, DateFieldProps, FieldShell(), FieldShellProps, describedBy(), fieldControlClass, floatedLabelClass (+65 more)
+### Community 52 - "StoreSettingsPage.tsx"
+Cohesion: 0.06
+Nodes (55): App(), BrandMark(), AppLayout(), BackButton(), SectionLabel(), Sidebar(), SidebarLink(), SelectItem() (+47 more)
 
 ### Community 53 - "impeccable/SKILL.md"
 Cohesion: 0.06
@@ -520,8 +521,8 @@ Cohesion: 0.09
 Nodes (21): 10. Status bar color doesn't match, 11. Right in Chrome, wrong on phone, 1. Hover state stuck after tap, 2. Gray/blue flash on tap, 3. Layout has the wrong height, 4. Page zooms into the input, 5. Tap feels laggy, 6. Pull-to-refresh hijacks scroll (+13 more)
 
 ### Community 60 - "text"
-Cohesion: 0.16
-Nodes (24): base(), commonsLicence(), first(), fromAic(), fromArchive(), fromCommons(), fromCommonsVideo(), fromMet() (+16 more)
+Cohesion: 0.19
+Nodes (19): base(), first(), fromAic(), fromArchive(), fromMet(), fromNasa(), fromOpenverse(), licenceFromUrl() (+11 more)
 
 ### Community 61 - "The Toolkit"
 Cohesion: 0.10
@@ -620,8 +621,8 @@ Cohesion: 0.14
 Nodes (13): APP_LEVEL, appMode, args, asJson, byId, EXT, files, findings (+5 more)
 
 ### Community 85 - "scenes.mjs"
-Cohesion: 0.11
-Nodes (15): alive(), findChrome(), sweepProfiles(), args, go(), only, outDir, problems (+7 more)
+Cohesion: 0.10
+Nodes (15): alive(), Browser, findChrome(), Page, sleep(), sweepProfiles(), args, go() (+7 more)
 
 ### Community 86 - "New visual work"
 Cohesion: 0.15
@@ -696,8 +697,8 @@ Cohesion: 0.18
 Nodes (10): Charts, Common mismatches to catch, How to use this, Initial Response, Interaction & performance, Motion & visuals, Picking The Right Library, State & styling (+2 more)
 
 ### Community 106 - "App screens"
-Cohesion: 0.06
-Nodes (35): 10. Density, 11. Empty, zero, loading and error states, 12. The phone, 13. House rules for app screens, 14. Tells of generated dashboards, 1. When this applies, 3.1 Five archetypes, 3.2 Sidebar (+27 more)
+Cohesion: 0.18
+Nodes (10): 10. Density, 11. Empty, zero, loading and error states, 12. The phone, 13. House rules for app screens, 14. Tells of generated dashboards, 1. When this applies, 5. KPIs, App screens (+2 more)
 
 ### Community 107 - "Tells — the dated registry"
 Cohesion: 0.18
@@ -708,8 +709,8 @@ Cohesion: 0.18
 Nodes (10): 1. What the study measured, 2. The scale: few sizes, far apart, 3. Setting display type, 4. Setting text, 5. Loading the fonts properly, 6. One family or two, 7. Details that separate set type from typed text, 8. Mistakes the inspector cannot see (+2 more)
 
 ### Community 109 - "deli-order/api.ts"
-Cohesion: 0.05
-Nodes (103): DateField(), useMe(), AddForm(), AddOrderItemsDialog(), Extra, ProductName(), Props, basePath() (+95 more)
+Cohesion: 0.03
+Nodes (157): HowTo(), Props, SavedFolder(), AddForm(), AddOrderItemsDialog(), Extra, ProductName(), Props (+149 more)
 
 ### Community 110 - "ProductImportIntegrationTests.java"
 Cohesion: 0.09
@@ -791,9 +792,9 @@ Nodes (5): InvoiceComparison, Row, Unavailable, Groups, Side
 Cohesion: 0.09
 Nodes (10): DeliOrderFormController, AddOrderProductRequest, MoveOrderCategoryRequest, MoveOrderProductRequest, OrderFormResponse, OrderNameRequest, PasteOrderProductsRequest, PasteOrderProductsResponse (+2 more)
 
-### Community 132 - "dependencies"
-Cohesion: 0.09
-Nodes (23): dependencies, @base-ui/react@^1.9.0, class-variance-authority@^0.7.1, cn@^0.5.0, @dnd-kit/core@^6.3.1, @dnd-kit/sortable@^10.0.0, @dnd-kit/utilities@^3.2.2, @fontsource-variable/geist@^5.3.0 (+15 more)
+### Community 132 - "getJson"
+Cohesion: 0.20
+Nodes (15): applyThumb(), commonsApi(), commonsInfo(), commonsLicence(), fromCommons(), fromCommonsVideo(), getJson(), keyOf() (+7 more)
 
 ### Community 133 - "environment"
 Cohesion: 0.06
@@ -888,8 +889,8 @@ Cohesion: 0.50
 Nodes (4): Heuristics Scoring Guide, Issue Severity (P0–P3), Reference Material, Score Summary
 
 ### Community 165 - "package.json"
-Cohesion: 0.11
-Nodes (25): devDependencies, oxlint@^1.88.0, tailwindcss@^4.3.3, @tailwindcss/vite@^4.3.3, @tanstack/react-query-devtools@^5.104.5, @types/node@^24.19.2, @types/react@^19.3.0, @types/react-dom@^19.3.0 (+17 more)
+Cohesion: 0.04
+Nodes (58): dependencies, @base-ui/react@^1.9.0, class-variance-authority@^0.7.1, cn@^0.5.0, @dnd-kit/core@^6.3.1, @dnd-kit/sortable@^10.0.0, @dnd-kit/utilities@^3.2.2, @fontsource-variable/geist@^5.3.0 (+50 more)
 
 ### Community 166 - "PriceCalculationItem"
 Cohesion: 0.11
@@ -943,17 +944,17 @@ Nodes (4): wallet, note, screens, styles
 Cohesion: 0.50
 Nodes (4): workspace, note, screens, styles
 
-### Community 181 - "main.tsx"
-Cohesion: 0.14
-Nodes (11): next-themes@^0.4.6, react-dom@^19.3.1, react-redux@^9.3.0, App(), Toaster(), queryClient, Register, @tanstack/react-query (+3 more)
+### Community 181 - "9. Type and colour"
+Cohesion: 0.33
+Nodes (6): 9.1 Type, 9.2 Colour on light screens, 9.3 Colour on dark screens, 9.4 Surfaces, radius, icons, spacing, 9.5 Default tokens, 9. Type and colour
 
 ### Community 182 - "GratisReportPdf"
 Cohesion: 0.18
 Nodes (3): GratisReportPdf, Page, GratisReportPdfTests
 
 ### Community 183 - "types.ts"
-Cohesion: 0.03
-Nodes (170): Calendar(), CalendarProps, dayLabel, MonthButton(), monthGrid(), monthStart(), monthTitle, shiftMonth() (+162 more)
+Cohesion: 0.02
+Nodes (163): BackLink(), Props, ReportFreshness(), Calendar(), CalendarProps, dayLabel, MonthButton(), monthGrid() (+155 more)
 
 ### Community 184 - "com.lowagie.text.pdf.PdfPTable"
 Cohesion: 0.18
@@ -971,9 +972,9 @@ Nodes (7): Proto6, Figures, GratisReportResponse, Region, Tile, Figures, GratisR
 Cohesion: 0.08
 Nodes (20): ReportText, XlsxReader, InvalidReportException, InvalidWorkbookException, DocumentReportParser, NomenclatureReportParser, CadencierReportParser, IncidentReportParser (+12 more)
 
-### Community 188 - "scenes.mjs"
-Cohesion: 0.25
-Nodes (3): Browser, Page, sleep()
+### Community 188 - "3. The shell"
+Cohesion: 0.40
+Nodes (5): 3.1 Five archetypes, 3.2 Sidebar, 3.3 Top bar, 3.4 Right rail and pinned columns, 3. The shell
 
 ### Community 189 - "Store"
 Cohesion: 0.03
@@ -1063,9 +1064,9 @@ Nodes (6): Checks, in order, Disposition, Impeccable Finish Reviewer, Input Cont
 Cohesion: 0.33
 Nodes (6): needs, runs-on, strategy, build, app, matrix
 
-### Community 222 - "deliOrderDraftSlice.ts"
-Cohesion: 0.16
-Nodes (13): @reduxjs/toolkit@^2.13.0, DeliOrderDraft, deliOrderDraftSlice, DraftExtra, DraftState, EMPTY_DRAFT, hasDraftContent(), initialState (+5 more)
+### Community 222 - "4. The canvas and the page title"
+Cohesion: 0.40
+Nodes (5): 4.1 Width and gutters, 4.2 One left edge, one right edge, 4.3 The title, 4.4 Tabs, filters and the date range, 4. The canvas and the page title
 
 ### Community 224 - "jobs"
 Cohesion: 0.40
@@ -1123,9 +1124,9 @@ Nodes (4): SalesReportBatch, SalesReportHeader, InsertCounts, SalesReportParser.
 Cohesion: 0.04
 Nodes (21): DeliOrderDocumentRepository, Pair, KsefInvoiceCandidate, DeliveryReportClosingDeliveryRepository, DocumentGratisRepository, MonthCount, MonthRegionValue, DocumentManualInvoiceFileRepository (+13 more)
 
-### Community 239 - "uiSlice.ts"
-Cohesion: 0.21
-Nodes (9): isUuid(), readStoredDrafts(), hiddenSuppliersKey(), initialState, persistCurrentStoreId(), readHiddenDocumentSuppliers(), readStoredStoreId(), uiSlice (+1 more)
+### Community 239 - "6. Charts"
+Cohesion: 0.40
+Nodes (5): 6.1 Which chart for which question, 6.2 One question, one series, 6.3 Axes and gridlines, 6.4 Marks, 6. Charts
 
 ### Community 240 - "PriceCheckService.java"
 Cohesion: 0.06
@@ -1207,6 +1208,10 @@ Nodes (5): Choice, ACCEPT, KEEP, Decision, RefreshPricesRequest
 Cohesion: 0.40
 Nodes (5): Interruptibility advantage, Spring Animations, Spring-based mouse interactions, Spring configuration, When to use springs
 
+### Community 279 - "8. Forms and settings"
+Cohesion: 0.50
+Nodes (4): 8.1 Fields, 8.2 Settings layout, 8.3 Buttons, 8. Forms and settings
+
 ## Knowledge Gaps
 - **100 isolated node(s):** `com.trytoma:backend`, `SALES`, `INVENTORY`, `ORDERS`, `STAFF` (+95 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2255 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
@@ -1216,16 +1221,16 @@ Nodes (5): Interruptibility advantage, Spring Animations, Spring-based mouse int
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CSP detection (first-time only)` connect `.headers` to `live.md`?**
-  _High betweenness centrality (0.406) - this node is a cross-community bridge._
+  _High betweenness centrality (0.405) - this node is a cross-community bridge._
 - **What connects `com.trytoma:backend`, `SALES`, `INVENTORY` to the rest of the system?**
   _100 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Button` be split into smaller, more focused modules?**
-  _Cohesion score 0.044347573379831445 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.048051948051948054 - nodes in this community are weakly interconnected._
 - **Why does `Document` connect `Document` to `GratisFilter`, `jakarta.persistence.Entity`, `uuid`, `CadencierEan`, `.merge`, `DeliveryReportService`, `ValueField`, `DocumentTotalsRepository`, `AppUserRepository`, `.notFound`, `DocumentLine`, `PriceCalculationItem`, `DocumentImport`, `DeliOrderDocuments.java`, `Store`, `.list`, `org.springframework.data.jpa.domain.Specification`, `KsefInvoiceService`, `DocumentService.java`, `DeliveryReportClosingDelivery`, `DeliveryNotePdf`, `.pendingChanges`, `org.springframework.transaction.annotation.Transactional`, `PriceCheckService.java`, `.headers`, `org.mapstruct.Mapping`, `.flaggedLines`, `AppUser`, `DocumentManualInvoice`?**
-  _High betweenness centrality (0.276) - this node is a cross-community bridge._
+  _High betweenness centrality (0.281) - this node is a cross-community bridge._
 - **Should `KsefInvoicePdf.java` be split into smaller, more focused modules?**
   _Cohesion score 0.09747899159663866 - nodes in this community are weakly interconnected._
 - **Why does `title()` connect `types.ts` to `Breaking UI`, `document.md`, `inspect.mjs`?**
-  _High betweenness centrality (0.263) - this node is a cross-community bridge._
-- **Should `types.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.024966331710349114 - nodes in this community are weakly interconnected._
+  _High betweenness centrality (0.257) - this node is a cross-community bridge._
+- **Should `ImportPage.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.056175047338523035 - nodes in this community are weakly interconnected._

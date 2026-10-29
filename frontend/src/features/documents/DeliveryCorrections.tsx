@@ -3,6 +3,7 @@ import { FileDiffIcon, LinkIcon, PackageIcon, UnlinkIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 
+import { CopyButton } from '@/components/CopyButton'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -63,6 +64,11 @@ function DeliveryCorrectionList({ storeId, document }: { storeId: string; docume
                 >
                   {correction.typeSingular} {correction.number}
                 </Link>
+                <CopyButton
+                  value={correction.number}
+                  label={`Kopiuj numer ${correction.number}`}
+                  className="ml-0.5 align-middle"
+                />
                 <div className="text-xs text-muted-foreground">
                   {formatDocumentDate(correction.documentDate)} · {correction.lineCount} poz.
                   {correction.linkedBy && ` · przypiął(-ęła) ${correction.linkedBy}`}
@@ -124,6 +130,11 @@ function CorrectedDelivery({ storeId, document }: { storeId: string; document: D
             >
               Bon {bonNumber(delivery.number)}
             </Link>
+            <CopyButton
+              value={bonNumber(delivery.number)}
+              label={`Kopiuj numer bonu ${bonNumber(delivery.number)}`}
+              className="ml-0.5 align-middle"
+            />
             <div className="text-xs text-muted-foreground">
               {formatDocumentDate(delivery.documentDate)}
               {delivery.supplierName && ` · ${delivery.supplierName}`} · nr wewn. {delivery.number}

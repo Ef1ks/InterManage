@@ -13,6 +13,7 @@ import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
+import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
@@ -228,7 +229,10 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div>
           <p className="text-sm text-muted-foreground">Ruch międzymagazynowy od {storeLabel(transfer.fromStore)}</p>
-          <h2 className="text-xl font-semibold tracking-tight tabular-nums">{transfer.number}</h2>
+          <h2 className="text-xl font-semibold tracking-tight tabular-nums">
+            {transfer.number}
+            <CopyButton value={transfer.number} label={`Kopiuj numer ${transfer.number}`} className="ml-1 align-middle" />
+          </h2>
           <p className="text-sm text-muted-foreground tabular-nums">
             {formatDocumentDate(transfer.documentDate)} · {countFormat.format(transfer.lineCount)} linii · zakup{' '}
             {formatMoney(Math.abs(transfer.purchaseValue))} zł · sprzedaż brutto {formatMoney(transfer.saleValueGross)} zł

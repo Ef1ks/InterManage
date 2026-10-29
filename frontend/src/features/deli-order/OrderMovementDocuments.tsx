@@ -3,6 +3,7 @@ import { LinkIcon, PlusIcon, TruckIcon, XIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 
+import { CopyButton } from '@/components/CopyButton'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -89,6 +90,11 @@ export function OrderMovementDocuments({ storeId, order }: { storeId: string; or
                 ) : (
                   <span className="font-medium">{document.number}</span>
                 )}
+                <CopyButton
+                  value={document.number}
+                  label={`Kopiuj numer ${document.number}`}
+                  className="ml-0.5 align-middle"
+                />
                 <span className="text-muted-foreground">
                   {' '}
                   · {formatDocumentDate(document.documentDate)} · linii: {document.lineCount}

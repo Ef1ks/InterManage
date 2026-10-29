@@ -390,6 +390,11 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                           <span className="inline-flex items-center gap-2 whitespace-nowrap">
                             {document.reportClosing && <ClosedLock closing={document.reportClosing} />}
                             {document.number}
+                            <CopyButton
+                              value={document.number}
+                              label={`Kopiuj numer ${document.number}`}
+                              className="-ml-1.5"
+                            />
                           </span>
                           <GratisBadge document={document} />
                           <CorrectionBadge document={document} />

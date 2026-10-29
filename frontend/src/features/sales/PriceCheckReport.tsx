@@ -17,6 +17,7 @@ import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
+import { CopyButton } from '@/components/CopyButton'
 import { Form, FormActions, SegmentedField, SelectField, TextField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
@@ -760,6 +761,11 @@ function DeliveryRow({
               Otwórz bon {bonNumber(delivery.number)}
               <ArrowUpRightIcon aria-hidden className="size-3.5" />
             </Link>
+            <CopyButton
+              value={bonNumber(delivery.number)}
+              label={`Kopiuj numer bonu ${bonNumber(delivery.number)}`}
+              className="-ml-2 mr-auto"
+            />
             {canEdit && (
               <div className="flex flex-wrap gap-2">
                 {status !== 'REPORTED' && status !== 'RESOLVED' && (

@@ -17,6 +17,7 @@ import {
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 
+import { CopyButton } from '@/components/CopyButton'
 import { DateField, SegmentedField, SelectField } from '@/components/form'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -591,6 +592,10 @@ function InvoiceDocuments({ storeId, invoice }: { storeId: string; invoice: Ksef
               <span className="truncate">
                 {delivery.type === 'PZ' ? `bon ${bonNumber(delivery.number)}` : delivery.number}
               </span>
+              <CopyButton
+                value={delivery.type === 'PZ' ? bonNumber(delivery.number) : delivery.number}
+                label={`Kopiuj numer ${delivery.type === 'PZ' ? bonNumber(delivery.number) : delivery.number}`}
+              />
               {delivery.type === 'PZ' && (
                 <button
                   type="button"
