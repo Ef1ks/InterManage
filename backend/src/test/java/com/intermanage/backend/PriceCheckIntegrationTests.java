@@ -195,6 +195,84 @@ class PriceCheckIntegrationTests {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void matchesSupplierItemsByEanAndKeepsReviewedDeliveriesRegardlessOfDate() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String storeNumber = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class, storeId);
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Warsaw"));
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', ?::timestamp, ?::date, ?::date, 3, 3, 3, 0, 0) returning id""",
+                String.class, storeId, today + " 08:00", today.minusDays(60), today);
+        // EAN z listy cadencier dla CADENCIER_ITEM to 5900000000101 (patrz cadencierReport).
+        String baseDelivery = insertDocument(storeId, documentImport, "PZ", "200050", today.minusDays(20), "538");
+        insertLine(baseDelivery, 1, "0000000000999", "538", "10", "30.00", "37.00");
+        jdbc.update("update document_lines set ean = '5900000000101' where document_id = ?::uuid", baseDelivery);
+        // Dostawca spoza bazy przywozi ten sam towar pod swoim ITM8 (99...); EAN z zerem wiodącym (GTIN-14).
+        String delivery = insertDocument(storeId, documentImport, "PZ", "200100", today.minusDays(5), "200");
+        insertLine(delivery, 1, "0000099000101", "200", "10", "35.00", "37.00");
+        insertLine(delivery, 2, "0000099000102", "200", "10", "35.00", "37.00");
+        jdbc.update("update document_lines set ean = '05900000000101' where document_id = ?::uuid and line_number = 1",
+                delivery);
+        jdbc.update("update document_lines set ean = '101' where document_id = ?::uuid and line_number = 2",
+                delivery);
+        // Starsze niż 30 dni: w raporcie dopiero ze statusem wyjaśniania.
+        String old = insertDocument(storeId, documentImport, "PZ", "200010", today.minusDays(45), "200");
+        insertLine(old, 1, "0000099000101", "200", "10", "35.00", "37.00");
+        jdbc.update("update document_lines set ean = '5900000000101' where document_id = ?::uuid", old);
+
+        uploadCadencier(storeId, owner, storeNumber, "28/10/2026  15:02:59", CADENCIER_ITEM)
+                .andExpect(status().isCreated());
+
+        mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.deliveries.length()").value(1))
+                .andExpect(jsonPath("$.deliveries[0].id").value(delivery))
+                // kod "101" to nie EAN: nie łączy się z cadencier
+                .andExpect(jsonPath("$.deliveries[0].lines.length()").value(1))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].itm8").value("0000099000101"))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].cadencierItm8").value(CADENCIER_ITEM))
+                // cena z bazy po EAN-ie, bo baza miała towar pod innym ITM8
+                .andExpect(jsonPath("$.deliveries[0].lines[0].basePrice").value(3.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].baseDocumentId").value(baseDelivery));
+
+        // Incydent zamówienia do bazy 11 dni przed przyjęciem: za dawno, przyjęcie zostaje do weryfikacji.
+        uploadIncidents(storeId, owner, storeNumber + "_" + yymmdd(today.minusDays(16)) + "_W_NS_INCYDENTY.xlsx",
+                storeNumber).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.incidentDate").value(today.minusDays(16).toString()))
+                .andExpect(jsonPath("$.totalRows").value(1))
+                .andExpect(jsonPath("$.addedCount").value(1));
+        mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.incidentDays").value(10))
+                .andExpect(jsonPath("$.deliveries[0].afterIncident").value(false))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].incidentDate").value(nullValue()));
+        // Plik innego sklepu i nazwa bez daty są odrzucane.
+        uploadIncidents(storeId, owner, "999_" + yymmdd(today) + "_INCYDENTY.xlsx", "999")
+                .andExpect(status().isConflict());
+        uploadIncidents(storeId, owner, "INCYDENTY.xlsx", storeNumber).andExpect(status().isBadRequest());
+        // Incydent 8 dni przed przyjęciem (ITM8 z 8 cyframi z pliku = ITM8 z cadencier): osobna kategoria.
+        uploadIncidents(storeId, owner, storeNumber + "_" + yymmdd(today.minusDays(13)) + "_" + yymmdd(today)
+                + "_W_NS_INCYDENTY.xlsx", storeNumber).andExpect(status().isCreated());
+        mvc.perform(get(url(storeId) + "/incidents").cookie(owner))
+                .andExpect(jsonPath("$.lastIncidentDate").value(today.minusDays(13).toString()))
+                .andExpect(jsonPath("$.imports.length()").value(2));
+        mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[0].afterIncident").value(true))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].incidentDate").value(today.minusDays(13).toString()))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].incidentReason")
+                        .value("Chwilowy brak w magazynie centralnym"));
+
+        mvc.perform(post(url(storeId) + "/documents/" + old + "/reviews").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RESOLVED\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.deliveries.length()").value(2))
+                .andExpect(jsonPath("$.deliveries[1].id").value(old))
+                .andExpect(jsonPath("$.deliveries[1].review.status").value("RESOLVED"))
+                .andExpect(jsonPath("$.deliveries[1].lines[0].cadencierItm8").value(CADENCIER_ITEM));
+    }
+
     private static String url(String storeId) {
         return "/api/stores/" + storeId + "/reports/price-check";
     }
@@ -204,6 +282,25 @@ class PriceCheckIntegrationTests {
         return mvc.perform(multipart(url(storeId) + "/cadencier")
                 .file(new MockMultipartFile("file", "obecne w cad.xlsx", "application/octet-stream",
                         cadencierReport(storeNumber, date, itm8s)))
+                .cookie(owner).with(csrf()));
+    }
+
+    private static String yymmdd(LocalDate date) {
+        return date.format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd"));
+    }
+
+    /** Plik incydentów w układzie z prawdziwego: nagłówek w pierwszym wierszu, ITM8 z 8 cyframi, jeden artykuł. */
+    private ResultActions uploadIncidents(String storeId, Cookie owner, String fileName, String storeNumber)
+            throws Exception {
+        List<String[]> rows = List.of(
+                new String[] {"Baza", "Sklep", "Nazwa Sklepu", "Przyczyna", "Komentarz", "ITM8", "Marka", "Nazwa",
+                        "EAN", "Pakow", "Zamówiono", "Dostarczono", "ITM8 Odpowiednika", "Kod Incydentu",
+                        "Czy Zamawiał"},
+                new String[] {"095", storeNumber, "IM TEST", "Chwilowy brak w magazynie centralnym",
+                        "prosimy o ponowienie zamówienia", "00000101", "MARKA", "ARTYKUŁ", "5900000000101", "20",
+                        "1", "0", "", "005", "TAK"});
+        return mvc.perform(multipart(url(storeId) + "/incidents")
+                .file(new MockMultipartFile("file", fileName, "application/octet-stream", workbook(rows)))
                 .cookie(owner).with(csrf()));
     }
 

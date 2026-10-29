@@ -30,6 +30,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     interface SupplierPrice {
         String getItm8();
 
+        String getEan();
+
         UUID getDocumentId();
 
         String getDocumentNumber();
@@ -44,7 +46,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * (weryfikacja cen: ostatnia cena z bazy przed dostawą od innego dostawcy).
      */
     @Query(value = """
-            select l.itm8 as itm8, d.id as document_id, d.number as document_number,
+            select l.itm8 as itm8, l.ean as ean, d.id as document_id, d.number as document_number,
                    d.document_date as document_date, l.purchase_price as purchase_price
             from document_lines l
             join documents d on d.id = l.document_id

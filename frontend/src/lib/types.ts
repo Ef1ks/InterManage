@@ -1280,6 +1280,8 @@ export type PriceCheckReview = {
  */
 export type PriceCheckLine = {
   itm8: string
+  /** ITM8 z cadencier, gdy dostawca ma artykuł pod własnym ITM8 (połączony po EAN-ie). */
+  cadencierItm8: string | null
   ean: string | null
   name: string | null
   brand: string | null
@@ -1298,6 +1300,10 @@ export type PriceCheckLine = {
   baseDate: string | null
   baseDocumentId: string | null
   baseDocumentNumber: string | null
+  /** Dzień incydentu zamówienia do bazy (do 10 dni przed przyjęciem), który usprawiedliwia zakup u innego dostawcy. */
+  incidentDate: string | null
+  incidentReason: string | null
+  incidentComment: string | null
   corrected: boolean
 }
 
@@ -1310,6 +1316,8 @@ export type PriceCheckDelivery = {
   supplierName: string | null
   supplierDocumentNumber: string | null
   correctionCount: number
+  /** Każdy artykuł z cadencier w przyjęciu był wcześniej w incydencie (osobna kategoria raportu). */
+  afterIncident: boolean
   purchaseValue: number
   linesPurchaseValue: number
   belowMinimumCount: number
@@ -1331,7 +1339,25 @@ export type PriceCheckReport = {
   cadencierImportedAt: string | null
   documentsCoveredUntil: string | null
   documentsReportGeneratedAt: string | null
+  incidentDays: number
+  lastIncidentDate: string | null
   deliveries: PriceCheckDelivery[]
+}
+
+/** Wgranie pliku incydentów zamówień do bazy; dzień incydentu z nazwy pliku. */
+export type IncidentImport = {
+  id: string
+  fileName: string
+  incidentDate: string
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  addedCount: number
+}
+
+export type IncidentOverview = {
+  lastIncidentDate: string | null
+  imports: IncidentImport[]
 }
 
 export type PriceCheckSettings = {

@@ -22,12 +22,15 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.pricecheck.dto.CadencierImportResponse;
 import com.intermanage.backend.pricecheck.dto.CadencierOverview;
+import com.intermanage.backend.pricecheck.dto.IncidentImportResponse;
+import com.intermanage.backend.pricecheck.dto.IncidentOverview;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReport;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
 import com.intermanage.backend.pricecheck.dto.PriceCheckSettingsRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckSettingsResponse;
 import com.intermanage.backend.pricecheck.service.CadencierService;
+import com.intermanage.backend.pricecheck.service.IncidentService;
 import com.intermanage.backend.pricecheck.service.PriceCheckService;
 
 import jakarta.validation.Valid;
@@ -47,10 +50,13 @@ public class PriceCheckController {
 
     private final PriceCheckService priceCheckService;
     private final CadencierService cadencierService;
+    private final IncidentService incidentService;
 
-    public PriceCheckController(PriceCheckService priceCheckService, CadencierService cadencierService) {
+    public PriceCheckController(PriceCheckService priceCheckService, CadencierService cadencierService,
+            IncidentService incidentService) {
         this.priceCheckService = priceCheckService;
         this.cadencierService = cadencierService;
+        this.incidentService = incidentService;
     }
 
     /** Przyjęcia z ostatnich {@value PriceCheckService#PERIOD_DAYS} dni. */
@@ -74,6 +80,22 @@ public class PriceCheckController {
     public CadencierImportResponse importCadencier(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return cadencierService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Najnowszy dzień z incydentami i ostatnie wgrania. */
+    @GetMapping("/incidents")
+    @PreAuthorize(VIEW)
+    public IncidentOverview incidents(@PathVariable UUID storeId) {
+        return incidentService.overview(storeId);
+    }
+
+    /** Plik incydentów zamówień do bazy (.xlsx), dzień z nazwy pliku ({@code <nr sklepu>_RRMMDD_...}). */
+    @PostMapping(path = "/incidents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(EDIT)
+    public IncidentImportResponse importIncidents(@PathVariable UUID storeId,
+            @RequestParam("file") MultipartFile file, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return incidentService.importReport(storeId, file, principal.getId());
     }
 
     @GetMapping("/settings")

@@ -73,9 +73,13 @@ public final class DocumentSearch {
         String field = SORTABLE.getOrDefault(column, "number");
         Sort.Direction sortDirection = "desc".equalsIgnoreCase(direction) ? Sort.Direction.DESC : Sort.Direction.ASC;
         Sort.Order order = new Sort.Order(sortDirection, field).nullsLast();
-        return field.equals("number")
-                ? Sort.by(new Sort.Order(sortDirection, "numberLength"), order, Sort.Order.asc("id"))
-                : Sort.by(order, Sort.Order.asc("id"));
+        Sort byNumber = Sort.by(new Sort.Order(sortDirection, "numberLength"), new Sort.Order(sortDirection, "number"));
+        return switch (field) {
+            case "number" -> byNumber.and(Sort.by(Sort.Order.asc("id")));
+            // Dokumenty z jednego dnia po numerze w tym samym kierunku (najnowszy dzień: najnowszy bon na górze).
+            case "documentDate" -> Sort.by(order).and(byNumber).and(Sort.by(Sort.Order.asc("id")));
+            default -> Sort.by(order, Sort.Order.asc("id"));
+        };
     }
 
     public static Specification<Document> inStoreMatching(UUID storeId, DocumentType type, List<String> words) {

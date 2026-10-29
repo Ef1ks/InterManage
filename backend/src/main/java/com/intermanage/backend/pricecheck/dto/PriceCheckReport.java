@@ -12,6 +12,8 @@ import java.util.UUID;
  * obecnymi w cadencier kupionymi u dostawcy innego niż baza ({@code baseSupplierCodes}) oraz przyjęcia, które już mają
  * status wyjaśniania. {@code minMarginPercent} pusta = bez minimum, wtedy linie nie są oznaczane.
  * {@code cadencierCount}: ile artykułów jest teraz w cadencier (0 = lista nie została wgrana).
+ * {@code incidentDays}: ile dni po incydencie zamówienia do bazy przyjęcie od innego dostawcy jest usprawiedliwione;
+ * {@code lastIncidentDate}: najnowszy wgrany dzień z incydentami (pusty = nic nie wgrano).
  */
 public record PriceCheckReport(
         LocalDate from,
@@ -24,6 +26,8 @@ public record PriceCheckReport(
         Instant cadencierImportedAt,
         LocalDate documentsCoveredUntil,
         LocalDateTime documentsReportGeneratedAt,
+        int incidentDays,
+        LocalDate lastIncidentDate,
         List<Delivery> deliveries) {
 
     /**
@@ -32,7 +36,8 @@ public record PriceCheckReport(
      * względem ceny zakupu, przy której marża byłaby minimalna; {@code baseDifferenceValue}: o ile drożej niż ostatnio
      * w bazie (tylko linie z ceną z bazy). {@code review}: obowiązujący status (pusty = do wyjaśnienia),
      * {@code history}: wszystkie zmiany statusu od najnowszej. Puste {@code lines} = po korektach nie ma już artykułów
-     * z cadencier od innego dostawcy.
+     * z cadencier od innego dostawcy. {@code afterIncident}: każdy artykuł z cadencier w przyjęciu był w incydencie
+     * zamówienia do bazy najwyżej {@code incidentDays} dni wcześniej (osobna kategoria raportu).
      */
     public record Delivery(
             UUID id,
@@ -42,6 +47,7 @@ public record PriceCheckReport(
             String supplierName,
             String supplierDocumentNumber,
             int correctionCount,
+            boolean afterIncident,
             BigDecimal purchaseValue,
             BigDecimal linesPurchaseValue,
             int belowMinimumCount,
@@ -53,14 +59,17 @@ public record PriceCheckReport(
     }
 
     /**
-     * Artykuł z cadencier od innego dostawcy ({@code supplierCode} z linii). Ceny za sztukę: zakupu po korektach,
+     * Artykuł z cadencier od innego dostawcy ({@code supplierCode} z linii). {@code cadencierItm8}: ITM8 z cadencier,
+     * gdy dostawca ma artykuł pod innym ITM8 (połączony po EAN-ie), inaczej pusty. Ceny za sztukę: zakupu po korektach,
      * sprzedaży z bonu (brutto i netto). {@code marginPercent} pusta, gdy bon nie ma ceny sprzedaży.
      * {@code targetPurchasePrice}: najwyższa cena zakupu, przy której marża byłaby minimalna (pusta bez minimum);
      * {@code excessValue} różna od zera tylko przy {@code belowMinimum}. {@code cadencierPrice}: CENA_CAD z kartoteki;
-     * {@code basePrice}: ostatnia cena zakupu z bazy przed tym przyjęciem (do roku wstecz).
+     * {@code basePrice}: ostatnia cena zakupu z bazy przed tym przyjęciem (do roku wstecz). {@code incidentDate}:
+     * dzień incydentu zamówienia do bazy tego artykułu, który usprawiedliwia przyjęcie (z przyczyną i komentarzem).
      */
     public record Line(
             String itm8,
+            String cadencierItm8,
             String ean,
             String name,
             String brand,
@@ -79,6 +88,9 @@ public record PriceCheckReport(
             LocalDateTime baseDate,
             UUID baseDocumentId,
             String baseDocumentNumber,
+            LocalDate incidentDate,
+            String incidentReason,
+            String incidentComment,
             boolean corrected) {
     }
 }

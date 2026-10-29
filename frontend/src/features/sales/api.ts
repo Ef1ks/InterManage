@@ -7,6 +7,8 @@ import type {
   CadencierOverview,
   DeliCostsOverview,
   GratisReport,
+  IncidentImport,
+  IncidentOverview,
   NomenclatureOption,
   PeriodSummary,
   PriceCheckReport,
@@ -256,6 +258,25 @@ export function useImportCadencier(storeId: string) {
       const formData = new FormData()
       formData.append('file', file)
       return api<CadencierImport>(`${priceCheckPath(storeId)}/cadencier`, { method: 'POST', formData })
+    },
+  })
+}
+
+/** Incydenty zamówień do bazy: najnowszy dzień i ostatnie wgrania. */
+export function useIncidents(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'price-check', 'incidents'],
+    queryFn: () => api<IncidentOverview>(`${priceCheckPath(storeId)}/incidents`),
+    enabled,
+  })
+}
+
+export function useImportIncidents(storeId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<IncidentImport>(`${priceCheckPath(storeId)}/incidents`, { method: 'POST', formData })
     },
   })
 }

@@ -57,4 +57,25 @@ public interface CadencierImportRepository extends JpaRepository<CadencierImport
     /** ITM8 artykułów obecnych w cadencier sklepu. */
     @Query(value = "select c.itm8 from cadencier_items c where c.store_id = :storeId", nativeQuery = true)
     List<String> findCurrentItm8s(UUID storeId);
+
+    interface CadencierEan {
+        String getItm8();
+
+        String getEan();
+    }
+
+    /**
+     * EAN-y artykułów z cadencier: z listy i wszystkie z par ITM8 + EAN z kartoteki. Dostawca spoza bazy przywozi
+     * ten sam towar pod własnym, lokalnym ITM8 (np. 99...), więc jego linię łączy z cadencier dopiero EAN.
+     */
+    @Query(value = """
+            select c.itm8 as itm8, c.ean as ean from cadencier_items c
+            where c.store_id = :storeId and c.ean is not null
+            union
+            select c.itm8, pe.ean from cadencier_items c
+            join products p on p.store_id = c.store_id and p.itm8 = c.itm8
+            join product_eans pe on pe.product_id = p.id
+            where c.store_id = :storeId and pe.ean is not null
+            """, nativeQuery = true)
+    List<CadencierEan> findCurrentEans(UUID storeId);
 }

@@ -75,11 +75,11 @@ const presenceOf = (value: string | null): Presence => (value === 'z' ? 'with' :
 
 const SORT_COLUMNS: DocumentColumn[] = ['number', 'date', 'supplier', 'supplierDocument', 'lines', 'purchase', 'sale']
 /**
- * Domyślnie po numerze dokumentu, od najnowszego (najwyższego numeru bonu). Numery przeniesień stanów nie idą
- * z czasem, więc te od najnowszej daty. Domyślne nie trafia do adresu.
+ * Przyjęcia domyślnie po numerze, od najnowszego bonu. Pozostałe typy od najnowszej daty dokumentu (ich numery
+ * nie zawsze idą z czasem), w obrębie dnia po numerze. Domyślne nie trafia do adresu.
  */
 const defaultSort = (upperType: string): SortState<DocumentColumn> =>
-  upperType === 'PPP' ? { key: 'date', direction: 'desc' } : { key: 'number', direction: 'desc' }
+  upperType === 'PZ' ? { key: 'number', direction: 'desc' } : { key: 'date', direction: 'desc' }
 
 function sortOf(params: URLSearchParams, fallback: SortState<DocumentColumn>): SortState<DocumentColumn> {
   const key = SORT_COLUMNS.find((column) => column === params.get('sortuj'))

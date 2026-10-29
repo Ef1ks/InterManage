@@ -1,6 +1,5 @@
 package com.intermanage.backend.pricecheck.repository;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,12 +11,12 @@ import com.intermanage.backend.pricecheck.entity.PriceCheckReview;
 
 public interface PriceCheckReviewRepository extends JpaRepository<PriceCheckReview, UUID> {
 
-    /** Wpisy bez znacznika do przyjęć z datą w [from, to), od najnowszego. */
+    /** Wszystkie wpisy bez znacznika w sklepie, od najnowszego (przyjęcie ze statusem zostaje w raporcie bez terminu). */
     @Query("""
-            select r from PriceCheckReview r join fetch r.document d left join fetch r.createdBy
-            where r.store.id = :storeId and r.deletedAt is null and d.documentDate >= :from and d.documentDate < :to
+            select r from PriceCheckReview r join fetch r.document left join fetch r.createdBy
+            where r.store.id = :storeId and r.deletedAt is null
             order by r.createdAt desc""")
-    List<PriceCheckReview> findActiveBetween(UUID storeId, LocalDateTime from, LocalDateTime to);
+    List<PriceCheckReview> findActive(UUID storeId);
 
     /** Wpisy bez znacznika jednego przyjęcia, od najnowszego. */
     @Query("""

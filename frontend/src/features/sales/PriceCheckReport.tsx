@@ -8,13 +8,15 @@ import {
   TriangleAlertIcon,
   Undo2Icon,
   UploadIcon,
+  XIcon,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
-import { Form, FormActions, SegmentedField, TextField } from '@/components/form'
+import { Form, FormActions, SegmentedField, SelectField, TextField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
+import { SearchInput } from '@/components/SearchInput'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -32,10 +34,12 @@ import {
   formatQuantity,
 } from '@/features/documents/format'
 import { usePriceCheck, usePriceCheckReviewActions } from '@/features/sales/api'
+import { IncidentUpload } from '@/features/sales/IncidentUpload'
 import { salesPaths } from '@/features/sales/paths'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
+import { matchesSearch } from '@/lib/search'
 import type { PriceCheckDelivery, PriceCheckReport as Report, PriceCheckReview, PriceCheckStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -62,10 +66,44 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as PriceCheckStatus[]).map((v
   label: STATUS_LABELS[value],
 }))
 
+type PeriodFilter = '7' | '14' | '30'
+const PERIOD_FILTERS: { value: PeriodFilter; label: string }[] = [
+  { value: '7', label: '7 dni' },
+  { value: '14', label: '14 dni' },
+  { value: '30', label: '30 dni' },
+]
+
+type PriceFilter = 'all' | 'below-minimum' | 'above-base'
+const PRICE_FILTERS: { value: PriceFilter; label: string }[] = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'below-minimum', label: 'Poniżej minimum' },
+  { value: 'above-base', label: 'Drożej niż baza' },
+]
+const PRICE_PARAMS: Record<PriceFilter, string | null> = {
+  all: null,
+  'below-minimum': 'ponizej-minimum',
+  'above-base': 'drozej-niz-baza',
+}
+
+const ALL_SUPPLIERS = 'wszyscy'
+
+/** Weryfikacja albo przyjęcia usprawiedliwione incydentem zamówienia do bazy (`?widok=incydenty`). */
+type View = 'verify' | 'incidents'
+const VIEW_PARAMS: Record<View, string> = { verify: 'weryfikacja', incidents: 'incydenty' }
+
 const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
 
 const filterOf = (delivery: PriceCheckDelivery): Exclude<StatusFilter, 'all'> =>
   delivery.review?.status === 'REPORTED' ? 'reported' : delivery.review?.status === 'RESOLVED' ? 'resolved' : 'open'
+
+const supplierKey = (delivery: PriceCheckDelivery) => delivery.supplierCode ?? delivery.supplierName ?? ''
+
+/** Data RRRR-MM-DD o `days - 1` dni przed `to` (okres z dzisiejszym dniem włącznie). */
+function periodStart(to: string, days: number) {
+  const date = new Date(`${to}T12:00:00`)
+  date.setDate(date.getDate() - (days - 1))
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
+}
 
 /** "1 artykuł", "3 artykuły", "5 artykułów". */
 function articlesWord(count: number) {
@@ -110,9 +148,56 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
   const filter =
     (Object.keys(FILTER_PARAMS) as StatusFilter[]).find((key) => FILTER_PARAMS[key] === params.get('status')) ?? 'open'
   const { expanded, toggle } = useExpanded(storeId)
+  const view: View = params.get('widok') === VIEW_PARAMS.incidents ? 'incidents' : 'verify'
+  const query = params.get('szukaj') ?? ''
+  const supplier = params.get('dostawca') ?? ALL_SUPPLIERS
+  const period = PERIOD_FILTERS.find((option) => option.value === params.get('okres'))?.value ?? '30'
+  const priceFilter =
+    (Object.keys(PRICE_PARAMS) as PriceFilter[]).find((key) => PRICE_PARAMS[key] === params.get('ceny')) ?? 'all'
+  const setParam = (key: string, value: string | null) =>
+    setParams(
+      (current) => {
+        const updated = new URLSearchParams(current)
+        if (value) updated.set(key, value)
+        else updated.delete(key)
+        return updated
+      },
+      { replace: true },
+    )
 
   const report = usePriceCheck(storeId)
-  const deliveries = report.data?.deliveries ?? []
+  const all = report.data?.deliveries ?? []
+  const suppliers = [...new Map(all.map((delivery) => [supplierKey(delivery), delivery])).values()]
+    .map((delivery) => ({
+      value: supplierKey(delivery),
+      label: [delivery.supplierName, delivery.supplierCode].filter(Boolean).join(' · ') || 'Nieznany dostawca',
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+  const from = report.data && period !== '30' ? periodStart(report.data.to, Number(period)) : null
+  // Przyjęcie ze statusem wyjaśniania zostaje bez względu na datę, więc okres zawęża tylko te do wyjaśnienia.
+  const filtered = all.filter(
+    (delivery) =>
+      (supplier === ALL_SUPPLIERS || supplierKey(delivery) === supplier) &&
+      (!from || delivery.review != null || delivery.documentDate.slice(0, 10) >= from) &&
+      (priceFilter !== 'below-minimum' || delivery.belowMinimumCount > 0) &&
+      (priceFilter !== 'above-base' || delivery.baseDifferenceValue > 0) &&
+      (!query ||
+        matchesSearch(
+          [
+            delivery.supplierName,
+            delivery.supplierCode,
+            delivery.number,
+            bonNumber(delivery.number),
+            delivery.supplierDocumentNumber,
+            ...delivery.lines.flatMap((line) => [line.name, line.brand, line.ean, line.itm8, line.cadencierItm8]),
+          ],
+          query,
+        )),
+  )
+  const filtersActive = query !== '' || supplier !== ALL_SUPPLIERS || period !== '30' || priceFilter !== 'all'
+  const viewCounts = { verify: 0, incidents: 0 }
+  filtered.forEach((delivery) => viewCounts[delivery.afterIncident ? 'incidents' : 'verify']++)
+  const deliveries = filtered.filter((delivery) => delivery.afterIncident === (view === 'incidents'))
   const counts = { open: 0, reported: 0, resolved: 0 }
   deliveries.forEach((delivery) => counts[filterOf(delivery)]++)
   const open = deliveries.filter((delivery) => filterOf(delivery) === 'open')
@@ -131,7 +216,8 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
       </div>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
         Przyjęcia z ostatnich 30 dni, w których artykuł z cadencier (formularza zamówień do bazy) przyszedł od innego
-        dostawcy niż baza. Wartości po korektach: korekta przypięta do przyjęcia od razu zmienia raport.
+        dostawcy niż baza, rozpoznany po ITM8 albo EAN-ie. Przyjęcia ze statusem wyjaśniania zostają bez względu na
+        datę. Wartości po korektach: korekta przypięta do przyjęcia od razu zmienia raport.
       </p>
 
       {report.isError ? (
@@ -149,7 +235,16 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
         <MissingCadencier />
       ) : (
         <>
+          <ViewTabs
+            view={view}
+            counts={viewCounts}
+            incidentDays={report.data.incidentDays}
+            onChange={(next) => setParam('widok', next === 'incidents' ? VIEW_PARAMS.incidents : null)}
+          />
+
           <ReportNotices report={report.data} />
+
+          {view === 'incidents' && <IncidentUpload storeId={storeId} incidentDays={report.data.incidentDays} />}
 
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <SummaryTile
@@ -163,7 +258,60 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
               tone={counts.open ? 'warning' : undefined}
             />
             <SummaryTile label="Zgłoszone dostawcy" value={String(counts.reported)} detail="czekają na odpowiedź" />
-            <SummaryTile label="Wyjaśnione" value={String(counts.resolved)} detail="w ostatnich 30 dniach" />
+            <SummaryTile label="Wyjaśnione" value={String(counts.resolved)} detail="także starsze niż 30 dni" />
+          </div>
+
+          <div className="mb-3 grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+            <SearchInput
+              value={query}
+              onChange={(next) => setParam('szukaj', next || null)}
+              placeholder="Szukaj: dostawca, bon, faktura, artykuł, EAN, ITM8"
+            />
+            <SelectField
+              label="Dostawca"
+              options={[{ value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' }, ...suppliers]}
+              value={supplier}
+              onChange={(next) => setParam('dostawca', next && next !== ALL_SUPPLIERS ? next : null)}
+            />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:col-span-2">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                Przyjęte w ostatnich
+                <SegmentedField
+                  label="Okres"
+                  options={PERIOD_FILTERS}
+                  value={period}
+                  onChange={(next) => setParam('okres', next === '30' ? null : next)}
+                />
+              </span>
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                Ceny
+                <SegmentedField
+                  label="Ceny"
+                  options={PRICE_FILTERS}
+                  value={priceFilter}
+                  onChange={(next) => setParam('ceny', PRICE_PARAMS[next])}
+                />
+              </span>
+              {filtersActive && (
+                <Button
+                  variant="ghost"
+                  className="ml-auto"
+                  onClick={() =>
+                    setParams(
+                      (current) => {
+                        const updated = new URLSearchParams(current)
+                        for (const key of ['szukaj', 'dostawca', 'okres', 'ceny']) updated.delete(key)
+                        return updated
+                      },
+                      { replace: true },
+                    )
+                  }
+                >
+                  <XIcon />
+                  Wyczyść filtry
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -171,16 +319,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
               label="Status"
               options={STATUS_FILTERS}
               value={filter}
-              onChange={(next) =>
-                setParams(
-                  (current) => {
-                    const updated = new URLSearchParams(current)
-                    updated.set('status', FILTER_PARAMS[next])
-                    return updated
-                  },
-                  { replace: true },
-                )
-              }
+              onChange={(next) => setParam('status', FILTER_PARAMS[next])}
             />
             <p className="text-sm text-muted-foreground tabular-nums">
               {report.data.minMarginPercent == null ? (
@@ -206,10 +345,18 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
             <Card className="items-center gap-1 px-6 py-10 text-center">
               <CircleCheckIcon aria-hidden className="mb-1 size-6 text-muted-foreground" />
               <p className="font-medium">
-                {filter === 'open' ? 'Nic nie czeka na wyjaśnienie' : 'Brak przyjęć z tym statusem'}
+                {filtersActive
+                  ? 'Brak przyjęć dla wybranych filtrów'
+                  : filter === 'open'
+                    ? 'Nic nie czeka na wyjaśnienie'
+                    : 'Brak przyjęć z tym statusem'}
               </p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                W ostatnich 30 dniach artykuły z cadencier przychodziły tylko z bazy.
+                {filtersActive
+                  ? 'Zmień albo wyczyść filtry nad listą.'
+                  : view === 'incidents'
+                    ? `Żadne przyjęcie od innego dostawcy nie przyszło do ${report.data.incidentDays} dni po incydencie z bazy.`
+                    : 'W ostatnich 30 dniach artykuły z cadencier przychodziły tylko z bazy.'}
               </p>
             </Card>
           ) : (
@@ -229,6 +376,54 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
         </>
       )}
     </>
+  )
+}
+
+/** Dwie kategorie raportu u góry: do weryfikacji i po incydencie z bazy, z liczbą przyjęć po filtrach. */
+function ViewTabs({
+  view,
+  counts,
+  incidentDays,
+  onChange,
+}: {
+  view: View
+  counts: Record<View, number>
+  incidentDays: number
+  onChange: (view: View) => void
+}) {
+  const tabs: { value: View; label: string; detail: string }[] = [
+    { value: 'verify', label: 'Do weryfikacji', detail: 'zakup u innego dostawcy bez powodu z bazy' },
+    {
+      value: 'incidents',
+      label: 'Po incydencie z bazy',
+      detail: `baza nie dowiozła: przyjęcie do ${incidentDays} dni po incydencie`,
+    },
+  ]
+  return (
+    <div role="tablist" aria-label="Kategoria" className="mb-4 grid gap-2 sm:grid-cols-2">
+      {tabs.map((tab) => {
+        const selected = tab.value === view
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(tab.value)}
+            className={cn(
+              'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-[background-color,border-color,box-shadow] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+              selected ? 'border-foreground/25 bg-card shadow-sm' : 'bg-muted/40 hover:bg-muted/70',
+            )}
+          >
+            <span className="min-w-0">
+              <span className={cn('block font-medium', !selected && 'text-muted-foreground')}>{tab.label}</span>
+              <span className="block text-sm text-muted-foreground">{tab.detail}</span>
+            </span>
+            <span className="text-2xl font-semibold tabular-nums">{counts[tab.value]}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -534,6 +729,18 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
                 <p className="text-xs text-muted-foreground">
                   {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`].filter(Boolean).join(' · ')}
                 </p>
+                {line.cadencierItm8 && (
+                  <p className="text-xs text-muted-foreground">w cadencier jako ITM8 {line.cadencierItm8} (ten sam EAN)</p>
+                )}
+                {line.incidentDate && (
+                  <p
+                    className="mt-1 text-xs font-medium text-sky-800 dark:text-sky-300"
+                    title={line.incidentComment ?? undefined}
+                  >
+                    Incydent z bazy {formatDocumentDate(line.incidentDate)}
+                    {line.incidentReason && `: ${line.incidentReason}`}
+                  </p>
+                )}
               </TableCell>
               <TableCell className="text-right">{formatQuantity(line.quantity)}</TableCell>
               <TableCell className="text-right font-medium">{formatPrice(line.purchasePrice)}</TableCell>
