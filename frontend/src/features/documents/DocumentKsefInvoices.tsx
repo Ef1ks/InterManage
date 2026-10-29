@@ -27,6 +27,7 @@ import {
   useManualInvoices,
   useSuggestedSupplier,
 } from '@/features/documents/api'
+import { DeliveryKsefCorrections } from '@/features/documents/DeliveryKsefCorrections'
 import { formatMoney } from '@/features/documents/format'
 import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { InvoiceComparisonPanel } from '@/features/documents/InvoiceComparisonPanel'
@@ -152,6 +153,7 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
         </Card>
       )}
 
+      <DeliveryKsefCorrections storeId={storeId} document={document} />
       <InvoiceAmountCheck storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
       <InvoiceComparisonPanel storeId={storeId} documentId={document.id} check={document.invoiceAmountCheck} />
 

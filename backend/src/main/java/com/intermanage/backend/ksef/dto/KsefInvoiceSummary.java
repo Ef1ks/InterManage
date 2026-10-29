@@ -10,7 +10,8 @@ import java.util.UUID;
  * Wiersz listy faktur KSeF. {@code entered}: faktura ma dokument w którymś sklepie firmy ({@code deliveries}:
  * przyjęcie PZ z jej numerem albo dokument przypięty ręcznie) albo ktoś ją oznaczył ręcznie w sklepie firmy
  * ({@code enteredBy}, {@code enteredAt}, {@code enteredStoreId}, {@code enteredStore}). {@code internalIds} to IDWew
- * z Podmiotu 3.
+ * z Podmiotu 3. {@code correctedInvoices}: przy korekcie numery faktur, które koryguje ({@code null}, dopóki XML korekty
+ * nie został odczytany).
  */
 public record KsefInvoiceSummary(
         UUID id,
@@ -34,7 +35,8 @@ public record KsefInvoiceSummary(
         UUID enteredStoreId,
         String enteredStore,
         List<Delivery> deliveries,
-        boolean supplierSkipped) {
+        boolean supplierSkipped,
+        List<String> correctedInvoices) {
 
     /**
      * Dokument sklepu firmy z tą fakturą: przyjęcie PZ z jej numerem ({@code linked} = false) albo przyjęcie lub

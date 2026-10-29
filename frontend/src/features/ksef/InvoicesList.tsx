@@ -452,6 +452,14 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
             </span>
           )}
         </div>
+        {invoice.correctedInvoices != null && invoice.correctedInvoices.length > 0 && (
+          <div
+            className="truncate text-xs text-muted-foreground"
+            title={`Koryguje: ${invoice.correctedInvoices.join(', ')}`}
+          >
+            koryguje {invoice.correctedInvoices.join(', ')}
+          </div>
+        )}
         {/* Numer KSeF i IDWew to dane techniczne: mniejszy krój o stałej szerokości i plakietka, żeby nie zlewały się
             z dostawcą i kwotami w sąsiednich kolumnach. */}
         <div className="mt-1 flex flex-wrap items-center gap-1.5">

@@ -40,8 +40,19 @@ public interface KsefMapper {
     @Mapping(target = "enteredStoreId", source = "entry.id.storeId")
     @Mapping(target = "enteredStore", source = "enteredStore")
     @Mapping(target = "deliveries", source = "deliveries")
+    @Mapping(target = "correctedInvoices", expression = "java(correctedInvoices(invoice))")
     KsefInvoiceSummary toSummary(KsefInvoice invoice, KsefInvoiceEntry entry,
             List<KsefInvoiceSummary.Delivery> deliveries, boolean supplierSkipped, String enteredStore);
+
+    default List<String> correctedInvoices(KsefInvoice invoice) {
+        if (!invoice.isCorrection() || invoice.getCorrectedReadAt() == null) {
+            return null;
+        }
+        return invoice.getCorrectedInvoices().stream()
+                .map(ref -> ref.invoiceNumber() != null ? ref.invoiceNumber() : ref.ksefNumber())
+                .sorted()
+                .toList();
+    }
 
     default List<String> internalIds(KsefInvoice invoice) {
         return invoice.getInternalIds().stream().map(KsefInvoice.InternalIdRef::internalId).sorted().toList();

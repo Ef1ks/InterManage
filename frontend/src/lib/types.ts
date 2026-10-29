@@ -533,6 +533,48 @@ export type LinkedKsefInvoice = {
   viaCorrection: string | null
 }
 
+/**
+ * Korekty z KSeF faktury przyjęcia PZ (po fakturze korygowanej z XML korekty, który pobiera się w tle);
+ * {@code pendingCount}: korekty dostawcy, których XML jeszcze nie odczytano.
+ */
+export type DeliveryKsefCorrections = {
+  corrections: DeliveryKsefCorrection[]
+  pendingCount: number
+}
+
+/**
+ * Korekta z KSeF przyjęcia: {@code documents} to korekty od dostawcy (WZ) z tą fakturą ({@code attached}: przypięta do
+ * tego przyjęcia), {@code candidates} - podpowiedzi WZ (ten sam dostawca, zbliżona kwota i data), gdy żadnej nie ma.
+ */
+export type DeliveryKsefCorrection = {
+  id: string
+  ksefNumber: string
+  invoiceNumber: string
+  issueDate: string
+  sellerName: string | null
+  netAmount: number
+  grossAmount: number
+  correctedInvoiceNumber: string
+  documents: {
+    id: string
+    type: string
+    typeSingular: string
+    number: string
+    documentDate: string
+    purchaseValue: number
+    attached: boolean
+    otherDeliveryBon: string | null
+  }[]
+  candidates: {
+    id: string
+    number: string
+    documentDate: string
+    purchaseValue: number
+    difference: number
+    attached: boolean
+  }[]
+}
+
 /** Faktura do przypięcia; {@code difference}: różnica kwoty netto od wartości dokumentu (bez znaku). */
 /**
  * Propozycja automatycznego przypięcia faktury KSeF do przyjęcia bez faktury: ten sam dostawca, kwota netto różna
@@ -1104,6 +1146,8 @@ export type KsefInvoice = {
   enteredStore: string | null
   deliveries: KsefInvoiceDocument[]
   supplierSkipped: boolean
+  /** Przy korekcie: numery faktur, które koryguje (z XML); `null`, dopóki XML korekty nie został odczytany. */
+  correctedInvoices: string[] | null
 }
 
 /**

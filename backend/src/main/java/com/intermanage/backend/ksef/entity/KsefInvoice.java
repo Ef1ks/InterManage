@@ -92,6 +92,17 @@ public class KsefInvoice {
     @CollectionTable(name = "ksef_invoice_internal_ids", joinColumns = @JoinColumn(name = "invoice_id"))
     private Set<InternalIdRef> internalIds = new HashSet<>();
 
+    /** Przy korekcie: faktury, które koryguje (z XML), odczytane w tle ({@link #getCorrectedReadAt()}). */
+    @ElementCollection
+    @CollectionTable(name = "ksef_invoice_corrected", joinColumns = @JoinColumn(name = "invoice_id"))
+    private Set<CorrectedRef> correctedInvoices = new HashSet<>();
+
+    @Column(name = "corrected_read_at")
+    private Instant correctedReadAt;
+
+    @Column(name = "corrected_error", length = 500)
+    private String correctedError;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -103,6 +114,14 @@ public class KsefInvoice {
     public record InternalIdRef(
             @Column(name = "internal_id", nullable = false, length = 16) String internalId,
             @Column(length = 512) String name) {
+    }
+
+    /** Faktura korygowana: numer, data wystawienia i numer KSeF (brak przy fakturze spoza KSeF). */
+    @Embeddable
+    public record CorrectedRef(
+            @Column(name = "invoice_number", length = 256) String invoiceNumber,
+            @Column(name = "ksef_number", length = 36) String ksefNumber,
+            @Column(name = "issue_date") LocalDate issueDate) {
     }
 
     protected KsefInvoice() {
@@ -162,6 +181,14 @@ public class KsefInvoice {
                         subject -> new InternalIdRef(subject.identifier().value(), subject.name()),
                         (first, second) -> first))
                 .values().stream().collect(Collectors.toSet());
+    }
+
+    /** Faktury korygowane odczytane z XML korekty; {@code error}: XML nie dał się pobrać albo odczytać. */
+    public void recordCorrected(Set<CorrectedRef> refs, String error) {
+        correctedInvoices.clear();
+        correctedInvoices.addAll(refs);
+        correctedReadAt = Instant.now();
+        correctedError = error;
     }
 
     public boolean isCorrection() {
@@ -238,6 +265,18 @@ public class KsefInvoice {
 
     public Set<InternalIdRef> getInternalIds() {
         return internalIds;
+    }
+
+    public Set<CorrectedRef> getCorrectedInvoices() {
+        return correctedInvoices;
+    }
+
+    public Instant getCorrectedReadAt() {
+        return correctedReadAt;
+    }
+
+    public String getCorrectedError() {
+        return correctedError;
     }
 
     public Instant getCreatedAt() {

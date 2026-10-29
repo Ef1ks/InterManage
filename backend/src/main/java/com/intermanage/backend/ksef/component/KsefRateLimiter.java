@@ -140,28 +140,11 @@ public class KsefRateLimiter {
             Duration wait;
             synchronized (this) {
                 Instant now = clock.instant();
-                if (loaded.add("block|" + nip)) {
-                    Instant saved = store.blockedUntil(nip);
-                    if (saved != null) {
-                        blockedUntil.merge(nip, saved, (current, next) -> next.isAfter(current) ? next : current);
-                    }
-                }
-                Instant blocked = blockedUntil.get(nip);
+                Instant blocked = blocked(nip);
                 if (blocked != null && blocked.isAfter(now)) {
                     throw limited(operation, Duration.between(now, blocked), "KSeF wstrzymał zapytania");
                 }
-                String key = nip + "|" + operation;
-                Deque<Instant> calls = history.computeIfAbsent(key, ignored -> new ArrayDeque<>());
-                if (loaded.add(key)) {
-                    // Pierwsze zapytanie po starcie: zapytania sprzed restartu wciąż liczą się w KSeF.
-                    store.recentCalls(nip, operation, now.minus(Duration.ofHours(1))).forEach(calls::addFirst);
-                    List<Instant> sorted = calls.stream().sorted().toList();
-                    calls.clear();
-                    calls.addAll(sorted);
-                }
-                while (!calls.isEmpty() && !calls.peekFirst().isAfter(now.minus(Duration.ofHours(1)))) {
-                    calls.pollFirst();
-                }
+                Deque<Instant> calls = calls(nip, operation, now);
                 wait = max(waitFor(calls, now, Duration.ofSeconds(1), operation.perSecond),
                         waitFor(calls, now, Duration.ofMinutes(1), operation.perMinute),
                         waitFor(calls, now, Duration.ofHours(1), operation.perHour));
@@ -181,6 +164,50 @@ public class KsefRateLimiter {
                 throw new KsefClient.KsefException("Przerwano czekanie na limit KSeF", null);
             }
         }
+    }
+
+    /**
+     * Ile zapytań tego rodzaju zostało w bieżącej godzinie (0 w czasie blokady z KSeF) - zadania w tle zostawiają
+     * dzięki temu zapas na zapytania ludzi.
+     */
+    public synchronized int remaining(String nip, Operation operation) {
+        if (!enabled) {
+            return operation.perHour;
+        }
+        Instant now = clock.instant();
+        Instant blocked = blocked(nip);
+        if (blocked != null && blocked.isAfter(now)) {
+            return 0;
+        }
+        return Math.max(0, operation.perHour - calls(nip, operation, now).size());
+    }
+
+    /** Koniec blokady z KSeF ({@code null} = brak); pierwsze sięgnięcie po starcie wczytuje ją z {@link History}. */
+    private Instant blocked(String nip) {
+        if (loaded.add("block|" + nip)) {
+            Instant saved = store.blockedUntil(nip);
+            if (saved != null) {
+                blockedUntil.merge(nip, saved, (current, next) -> next.isAfter(current) ? next : current);
+            }
+        }
+        return blockedUntil.get(nip);
+    }
+
+    /** Zapytania z ostatniej godziny; pierwsze sięgnięcie po starcie wczytuje je z {@link History}. */
+    private Deque<Instant> calls(String nip, Operation operation, Instant now) {
+        String key = nip + "|" + operation;
+        Deque<Instant> calls = history.computeIfAbsent(key, ignored -> new ArrayDeque<>());
+        if (loaded.add(key)) {
+            // Pierwsze zapytanie po starcie: zapytania sprzed restartu wciąż liczą się w KSeF.
+            store.recentCalls(nip, operation, now.minus(Duration.ofHours(1))).forEach(calls::addFirst);
+            List<Instant> sorted = calls.stream().sorted().toList();
+            calls.clear();
+            calls.addAll(sorted);
+        }
+        while (!calls.isEmpty() && !calls.peekFirst().isAfter(now.minus(Duration.ofHours(1)))) {
+            calls.pollFirst();
+        }
+        return calls;
     }
 
     /** Blokada z KSeF (HTTP 429): do jej końca nie wysyłamy z tego kontekstu żadnych zapytań. */

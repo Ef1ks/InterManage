@@ -58,6 +58,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.ksef.component.KsefClient;
 import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
+import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;
@@ -88,6 +89,9 @@ class KsefIntegrationTests {
 
     @Autowired
     PasswordEncoder passwordEncoder;
+
+    @Autowired
+    KsefCorrectedInvoiceService correctedInvoices;
 
     @MockitoBean
     KsefClient ksef;
@@ -661,6 +665,109 @@ class KsefIntegrationTests {
         send(both, post(url(shared, "/settings/connection/link")), "{\"nip\":\"" + nip + "\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.connection.nip").value(nip));
+    }
+
+    @Test
+    void ksefCorrectionsAreReadInBackgroundAndPinnedToDeliveryThroughWz() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, storeId, nip, "haslo-testowe").andExpect(status().isOk());
+        OffsetDateTime stored = OffsetDateTime.of(2026, 10, 20, 8, 0, 0, 0, ZoneOffset.UTC);
+        when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
+                false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
+                        invoice("FV/50/2026", "1111111111", "MLECZARNIA", stored, "Vat", null,
+                                new BigDecimal("500.00")),
+                        invoice("KOR/50/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(1), "Kor", null,
+                                new BigDecimal("-40.00")),
+                        invoice("KOR/51/2026", "1111111111", "MLECZARNIA", stored.plusMinutes(2), "Kor", null,
+                                new BigDecimal("-10.00")),
+                        invoice("KOR/SCA/1", "7821977018", "SCA PR POLSKA", stored.plusMinutes(3), "Kor", null,
+                                new BigDecimal("-5.00")))));
+        syncAndWait(owner, storeId);
+        jdbc.update("insert into suppliers (store_id, code, name, nip) values (?::uuid, 'S1', 'MLECZARNIA', "
+                + "'1111111111')", storeId);
+        String pz = insertDocument(storeId, "PZ", "PZ50", "FV/50/2026", "500.00");
+        String wz1 = insertDocument(storeId, "WZ", "WZ1", null, "-41.00");
+        String wz2 = insertDocument(storeId, "WZ", "WZ2", null, "-200.00");
+        jdbc.update("update documents set supplier_code = 'S1' where id in (?::uuid, ?::uuid, ?::uuid)", pz, wz1, wz2);
+
+        // Przed odczytem XML nie wiadomo, co korygują korekty dostawcy (korekty bazy się nie liczą).
+        String path = "/api/stores/" + storeId + "/documents/pz/" + pz + "/ksef-corrections";
+        mvc.perform(get(path).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.corrections.length()").value(0))
+                .andExpect(jsonPath("$.pendingCount").value(2));
+
+        when(ksef.invoiceXml(eq("token"), anyString())).thenAnswer(call -> {
+            String number = jdbc.queryForObject("select invoice_number from ksef_invoices where ksef_number = ?",
+                    String.class, call.<String>getArgument(1));
+            return correctionXml(number.equals("KOR/50/2026") ? "fv/50/2026" : "FV/99/2026").getBytes(
+                    StandardCharsets.UTF_8);
+        });
+        assertThat(correctedInvoices.read(nip)).isEqualTo(new KsefCorrectedInvoiceService.Result(0, 2));
+        assertThat(correctedInvoices.read(nip)).isEqualTo(new KsefCorrectedInvoiceService.Result(0, 0));
+        String scaKsefNumber = jdbc.queryForObject("select ksef_number from ksef_invoices where invoice_number = "
+                + "'KOR/SCA/1' and nip = ?", String.class, nip);
+        verify(ksef, times(0)).invoiceXml(anyString(), eq(scaKsefNumber));
+        list(owner, storeId, "&kind=CORRECTIONS")
+                .andExpect(jsonPath("$.invoices[?(@.invoiceNumber == 'KOR/50/2026')].correctedInvoices[0]")
+                        .value(contains("fv/50/2026")))
+                .andExpect(jsonPath("$.invoices[?(@.invoiceNumber == 'KOR/SCA/1')].correctedInvoices")
+                        .value(contains(nullValue())));
+
+        // Korekta faktury przyjęcia (numer bez względu na wielkość liter) z podpowiedzią WZ o zbliżonej kwocie.
+        String correction = JsonPath.read(mvc.perform(get(path).cookie(owner))
+                .andExpect(jsonPath("$.pendingCount").value(0))
+                .andExpect(jsonPath("$.corrections[*].invoiceNumber").value(contains("KOR/50/2026")))
+                .andExpect(jsonPath("$.corrections[0].correctedInvoiceNumber").value("FV/50/2026"))
+                .andExpect(jsonPath("$.corrections[0].documents.length()").value(0))
+                .andExpect(jsonPath("$.corrections[0].candidates[*].number").value(contains("WZ1")))
+                .andExpect(jsonPath("$.corrections[0].candidates[0].difference").value(1.0))
+                .andReturn().getResponse().getContentAsString(), "$.corrections[0].id");
+
+        // Przypięcie: faktura do WZ i WZ do przyjęcia; cofnięcie odpina oba.
+        send(owner, post(path + "/" + correction + "/document"), "{\"documentId\":\"" + wz1 + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attached").value(true));
+        mvc.perform(get(path).cookie(owner))
+                .andExpect(jsonPath("$.corrections[0].documents[0].number").value("WZ1"))
+                .andExpect(jsonPath("$.corrections[0].documents[0].attached").value(true))
+                .andExpect(jsonPath("$.corrections[0].candidates.length()").value(0));
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pz/" + pz).cookie(owner))
+                .andExpect(jsonPath("$.corrections[*].number").value(contains("WZ1")))
+                .andExpect(jsonPath("$.ksefInvoices[?(@.invoiceNumber == 'KOR/50/2026')].viaCorrection")
+                        .value(contains("WZ1")));
+        send(owner, delete(path + "/" + correction + "/document/" + wz1).param("detach", "true"), "")
+                .andExpect(status().isOk());
+        mvc.perform(get(path).cookie(owner))
+                .andExpect(jsonPath("$.corrections[0].documents.length()").value(0))
+                .andExpect(jsonPath("$.corrections[0].candidates[*].number").value(contains("WZ1")));
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pz/" + pz).cookie(owner))
+                .andExpect(jsonPath("$.corrections.length()").value(0));
+
+        // Korekty, która nie dotyczy faktury przyjęcia, nie da się przez nie przypiąć.
+        String other = jdbc.queryForObject("select id from ksef_invoices where invoice_number = 'KOR/51/2026' "
+                + "and nip = ?", String.class, nip);
+        send(owner, post(path + "/" + other + "/document"), "{\"documentId\":\"" + wz2 + "\"}")
+                .andExpect(status().isNotFound());
+    }
+
+    /** Minimalna faktura korygująca FA(3) z jedną fakturą korygowaną (spoza KSeF, bez numeru KSeF). */
+    private static String correctionXml(String correctedNumber) {
+        return """
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)">FA</KodFormularza></Naglowek>
+                  <Fa>
+                    <RodzajFaktury>KOR</RodzajFaktury>
+                    <DaneFaKorygowanej>
+                      <DataWystFaKorygowanej>2026-10-10</DataWystFaKorygowanej>
+                      <NrFaKorygowanej>%s</NrFaKorygowanej>
+                      <NrKSeFN>1</NrKSeFN>
+                    </DaneFaKorygowanej>
+                  </Fa>
+                </Faktura>""".formatted(correctedNumber);
     }
 
     /** Losowy NIP z poprawną cyfrą kontrolną. */

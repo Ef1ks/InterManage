@@ -191,6 +191,23 @@ public class KsefInvoiceReader {
                 root.child("Naglowek").text("SystemInfo"));
     }
 
+    /** Faktura korygowana z {@code DaneFaKorygowanej}; {@code ksefNumber} brak przy fakturze spoza KSeF. */
+    public record CorrectedInvoice(String number, LocalDate issueDate, String ksefNumber) {
+    }
+
+    /** Faktury, które koryguje faktura korygująca (pusta lista przy zwykłej fakturze). */
+    public List<CorrectedInvoice> correctedInvoices(byte[] xml) {
+        Xml root = parse(xml);
+        if (!"Faktura".equals(root.name())) {
+            throw new InvalidInvoiceException("To nie jest faktura KSeF (" + root.name() + ")", null);
+        }
+        return root.child("Fa").children("DaneFaKorygowanej").stream()
+                .map(corrected -> new CorrectedInvoice(corrected.text("NrFaKorygowanej"),
+                        corrected.date("DataWystFaKorygowanej"), corrected.text("NrKSeFFaKorygowanej")))
+                .filter(corrected -> corrected.number() != null || corrected.ksefNumber() != null)
+                .toList();
+    }
+
     private static Party party(Xml subject, String role) {
         if (!subject.present()) {
             return null;

@@ -7,6 +7,7 @@ import type { SortState } from '@/lib/table-sort'
 import type {
   AutoInvoiceMatch,
   CorrectionCandidate,
+  DeliveryKsefCorrections,
   DeliveryReportClosing,
   DeliveryReportClosingsOverview,
   Document,
@@ -335,6 +336,33 @@ export function useInvoiceComparison(storeId: string, id: string, enabled: boole
     retry: false,
     staleTime: 5 * 60_000,
   })
+}
+
+/** Korekty z KSeF faktury przyjęcia PZ z podpowiedziami korekt od dostawcy (WZ). */
+export function useDeliveryKsefCorrections(storeId: string, id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...documentsKey(storeId), 'pz', id, 'ksef-corrections'],
+    queryFn: () => api<DeliveryKsefCorrections>(`${documentsPath(storeId)}/pz/${id}/ksef-corrections`),
+    enabled,
+  })
+}
+
+/**
+ * Przypina korektę z KSeF do korekty od dostawcy (WZ) i WZ do przyjęcia; `attached` mówi, czy WZ przypięto teraz
+ * (cofnięcie odpina ją wtedy od przyjęcia).
+ */
+export function useDeliveryKsefCorrectionLinks(storeId: string, id: string) {
+  const path = `${documentsPath(storeId)}/pz/${id}/ksef-corrections`
+  return {
+    link: useMutation({
+      mutationFn: ({ invoiceId, documentId }: { invoiceId: string; documentId: string }) =>
+        api<{ attached: boolean }>(`${path}/${invoiceId}/document`, { method: 'POST', json: { documentId } }),
+    }),
+    unlink: useMutation({
+      mutationFn: ({ invoiceId, documentId, detach }: { invoiceId: string; documentId: string; detach: boolean }) =>
+        api<void>(`${path}/${invoiceId}/document/${documentId}?detach=${detach}`, { method: 'DELETE' }),
+    }),
+  }
 }
 
 /**
