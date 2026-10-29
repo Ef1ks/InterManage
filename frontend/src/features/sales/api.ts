@@ -6,6 +6,7 @@ import type {
   CadencierImport,
   CadencierOverview,
   DeliCostsOverview,
+  GratisReport,
   NomenclatureOption,
   PeriodSummary,
   PriceCheckReport,
@@ -177,6 +178,35 @@ export function usePeriodSummaryPdf(storeId: string) {
     }),
     download: useMutation({
       mutationFn: (range: DateRange) => downloadFile(summaryPdfPath(storeId, range), 'podsumowanie.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
+}
+
+/** Miesiące raportu gratisów: od i do (RRRR-MM). */
+export type MonthRange = { from: string; to: string }
+
+/** Raport przyjętych gratisów za miesiące (kafelek na miesiąc, przy kilku też podsumowanie). */
+export function useGratisReport(storeId: string, range: MonthRange) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'gratis', range],
+    queryFn: () => api<GratisReport>(`${reportsPath(storeId)}/gratis?${new URLSearchParams(range)}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+const gratisPdfPath = (storeId: string, range: MonthRange) =>
+  `${reportsPath(storeId)}/gratis/pdf?${new URLSearchParams(range)}`
+
+/** Wydruk raportu gratisów: PDF od razu w oknie drukowania albo zapis pliku. */
+export function useGratisReportPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (range: MonthRange) => printFile(gratisPdfPath(storeId, range)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (range: MonthRange) => downloadFile(gratisPdfPath(storeId, range), 'gratisy.pdf'),
       meta: { invalidates: false },
     }),
   }

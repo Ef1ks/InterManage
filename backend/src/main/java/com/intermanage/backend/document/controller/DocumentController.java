@@ -1,5 +1,6 @@
 package com.intermanage.backend.document.controller;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -32,6 +33,7 @@ import com.intermanage.backend.document.dto.DocumentsOverview;
 import com.intermanage.backend.document.dto.InvoiceComparison;
 import com.intermanage.backend.document.dto.InvoiceComparisonMatchRequest;
 import com.intermanage.backend.document.dto.InvoiceComparisonMatchResponse;
+import com.intermanage.backend.document.dto.GratisSupplierSuggestion;
 import com.intermanage.backend.document.dto.KsefInvoiceCandidate;
 import com.intermanage.backend.document.dto.LinkDocumentRequest;
 import com.intermanage.backend.document.dto.LinkKsefInvoiceRequest;
@@ -91,7 +93,11 @@ public class DocumentController {
      * sale; {@code direction}: asc / desc; {@code query}: słowa do wyszukania w numerze, dostawcy, nr dok. dostawcy;
      * {@code product}: słowa z nazwy, marki, EAN-u albo ITM8 artykułu w liniach. {@code invoice} (przyjęcia i korekty
      * od dostawcy), {@code corrections} i {@code closed} (przyjęcia w zamkniętym raporcie okresowym): {@code with} /
-     * {@code without}. {@code hiddenSuppliers}: kody dostawców ukrytych na liście. Domyślnie od najwyższego numeru.
+     * {@code without}; {@code gratis} (przeniesienia stanów zarejestrowane jako gratis) tak samo albo {@code candidate}
+     * (nieoznaczone z pozycją GRATIS).
+     * {@code hideValueFrom} / {@code hideValueTo}: ukrywa dokumenty z kwotą w tym przedziale (granice włącznie,
+     * jedna wystarczy), {@code hideValueOf}: {@code purchase} (domyślnie) albo {@code sale} (sprzedaż brutto).
+     * {@code hiddenSuppliers}: kody dostawców ukrytych na liście. Domyślnie od najwyższego numeru.
      */
     @GetMapping("/{type}")
     @PreAuthorize(VIEW)
@@ -99,11 +105,15 @@ public class DocumentController {
             @RequestParam(defaultValue = "0") int page, @RequestParam(required = false) String query,
             @RequestParam(required = false) String product, @RequestParam(required = false) String invoice,
             @RequestParam(required = false) String corrections, @RequestParam(required = false) String closed,
+            @RequestParam(required = false) String gratis, @RequestParam(required = false) String hideValueOf,
+            @RequestParam(required = false) BigDecimal hideValueFrom,
+            @RequestParam(required = false) BigDecimal hideValueTo,
             @RequestParam(defaultValue = "") List<String> hiddenSuppliers,
             @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "desc") String direction) {
         return documentService.list(storeId, type, page, query, product, DocumentSearch.Presence.of(invoice),
-                DocumentSearch.Presence.of(corrections), DocumentSearch.Presence.of(closed), hiddenSuppliers, sort,
-                direction);
+                DocumentSearch.Presence.of(corrections), DocumentSearch.Presence.of(closed),
+                DocumentSearch.GratisFilter.of(gratis), DocumentSearch.ValueField.of(hideValueOf), hideValueFrom,
+                hideValueTo, hiddenSuppliers, sort, direction);
     }
 
     @GetMapping("/{type}/{id}")
@@ -300,12 +310,21 @@ public class DocumentController {
         return documentService.restoreSupplierDocumentNumber(storeId, type, id);
     }
 
-    /** Rejestruje przeniesienie stanów jako gratis od dostawcy albo zmienia dostawcę. */
+    /** Rejestruje przeniesienie stanów jako gratis od dostawcy albo zmienia dostawcę, rodzaj lub miesiąc. */
     @PutMapping("/{type}/{id}/gratis")
     @PreAuthorize(EDIT)
     public DocumentResponse registerGratis(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id,
             @Valid @RequestBody RegisterGratisRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
-        return gratisService.register(storeId, type, id, request.supplierId(), principal.getId());
+        return gratisService.register(storeId, type, id, request.supplierId(), request.kind(), request.reportMonth(),
+                principal.getId());
+    }
+
+    /** Ostatni dostawcy artykułów z dokumentu (z przyjęć PZ), do wyboru dostawcy gratisu. */
+    @GetMapping("/{type}/{id}/gratis/supplier-suggestions")
+    @PreAuthorize(EDIT)
+    public List<GratisSupplierSuggestion> gratisSupplierSuggestions(@PathVariable UUID storeId,
+            @PathVariable String type, @PathVariable UUID id) {
+        return gratisService.supplierSuggestions(storeId, type, id);
     }
 
     /** Cofa rejestrację (znacznik, do przywrócenia). */

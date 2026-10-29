@@ -24,6 +24,7 @@ import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.auth.service.AuthService;
 import com.intermanage.backend.common.exception.ApiException;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
@@ -67,7 +68,7 @@ public class AuthController {
         if (!principal.hasStoreAccess()) {
             throw new ApiException(HttpStatus.FORBIDDEN, AuthService.NO_STORE_MESSAGE);
         }
-        jwtService.writeTokenCookie(response, principal);
+        jwtService.writeTokenCookie(response, principal, Boolean.TRUE.equals(request.rememberMe()));
         return authService.me(principal.getId());
     }
 
@@ -75,15 +76,16 @@ public class AuthController {
     @PostMapping("/activate")
     public MeResponse activate(@Valid @RequestBody ActivateRequest request, HttpServletResponse response) {
         AppUserPrincipal principal = authService.activate(request.token());
-        jwtService.writeTokenCookie(response, principal);
+        jwtService.writeTokenCookie(response, principal, false);
         return authService.me(principal.getId());
     }
 
     @PostMapping("/password/setup")
     public MeResponse setUpPassword(@AuthenticationPrincipal AppUserPrincipal principal,
-            @Valid @RequestBody SetUpPasswordRequest request, HttpServletResponse response) {
+            @Valid @RequestBody SetUpPasswordRequest request, HttpServletRequest httpRequest,
+            HttpServletResponse response) {
         AppUserPrincipal updated = authService.setUpPassword(principal.getId(), request.newPassword());
-        jwtService.writeTokenCookie(response, updated);
+        jwtService.writeTokenCookie(response, updated, jwtService.rememberMe(httpRequest));
         return authService.me(updated.getId());
     }
 
@@ -95,11 +97,12 @@ public class AuthController {
     @PutMapping("/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changePassword(@AuthenticationPrincipal AppUserPrincipal principal,
-            @Valid @RequestBody ChangePasswordRequest request, HttpServletResponse response) {
+            @Valid @RequestBody ChangePasswordRequest request, HttpServletRequest httpRequest,
+            HttpServletResponse response) {
         AppUserPrincipal updated = authService.changeOwnPassword(
                 principal.getId(), request.currentPassword(), request.newPassword());
 
         // Tokeny z innych urządzeń wygasną (nowa wersja sesji), bieżące dostaje nowy token.
-        jwtService.writeTokenCookie(response, updated);
+        jwtService.writeTokenCookie(response, updated, jwtService.rememberMe(httpRequest));
     }
 }

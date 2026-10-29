@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
+import { GratisReport } from '@/features/sales/GratisReport'
 import { PeriodSummaryReport } from '@/features/sales/PeriodSummaryReport'
 import { PriceCheckReport } from '@/features/sales/PriceCheckReport'
 import { ReportsGrid } from '@/features/sales/ReportsGrid'
@@ -34,6 +35,7 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="podsumowanie" element={<PeriodSummaryReport storeId={store.id} />} />
         <Route path="koszty-garmazu" element={<SalesComparisonReport key="deli" storeId={store.id} kind="deli" />} />
         <Route path="zakup-bazowy-poza-baza" element={<PriceCheckReport storeId={store.id} />} />
+        <Route path="gratisy" element={<GratisReport storeId={store.id} />} />
         <Route path="*" element={<Navigate to={salesPaths.overview} replace />} />
       </Routes>
     </>

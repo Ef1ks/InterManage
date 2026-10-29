@@ -280,4 +280,30 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             group by 1
             """, nativeQuery = true)
     List<RegionSales> sumByRegion(UUID storeId, LocalDate from, LocalDate to);
+
+    /** Sprzedaż brutto rejonu w miesiącu (pierwszy dzień); pusty kod = artykuły bez nomenklatury. */
+    interface MonthRegionSales {
+        LocalDate getMonth();
+
+        String getRegionCode();
+
+        BigDecimal getSaleValueGross();
+    }
+
+    /** Sprzedaż brutto po miesiącach i rejonach nomenklatury, jak {@link #sumByRegion}: najpierw suma ITM8. */
+    @Query(value = """
+            with article as (
+                select cast(date_trunc('month', sale_date) as date) as month, itm8,
+                       sum(sale_value_gross) as sale_value_gross
+                from sales
+                where store_id = :storeId and sale_date between :from and :to
+                group by 1, 2
+            )
+            select a.month as month, coalesce(left(p.subfamily_code, 2), '') as region_code,
+                   sum(a.sale_value_gross) as sale_value_gross
+            from article a
+            left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+            group by 1, 2
+            """, nativeQuery = true)
+    List<MonthRegionSales> sumGrossByMonthAndRegion(UUID storeId, LocalDate from, LocalDate to);
 }

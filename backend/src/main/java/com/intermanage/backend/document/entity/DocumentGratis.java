@@ -1,6 +1,8 @@
 package com.intermanage.backend.document.entity;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
@@ -10,6 +12,8 @@ import com.intermanage.backend.supplier.entity.Supplier;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -19,7 +23,8 @@ import jakarta.persistence.Table;
 
 /**
  * Dokument zarejestrowany jako gratis od dostawcy. Wartością gratisu jest sprzedaż brutto dokumentu, więc nie jest
- * tu kopiowana. Cofnięcie ustawia {@code deletedAt}; zmiana dostawcy to cofnięcie tego wpisu i nowy wpis.
+ * tu kopiowana. Cofnięcie ustawia {@code deletedAt}; zmiana dostawcy, rodzaju albo miesiąca to cofnięcie tego wpisu
+ * i nowy wpis. {@code reportMonth} to miesiąc wybrany ręcznie (pierwszy dzień); pusty = miesiąc daty dokumentu.
  */
 @Entity
 @Table(name = "document_gratis")
@@ -36,6 +41,13 @@ public class DocumentGratis {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "supplier_id", nullable = false, updatable = false)
     private Supplier supplier;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, updatable = false)
+    private GratisKind kind;
+
+    @Column(name = "report_month", updatable = false)
+    private LocalDate reportMonth;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "registered_by", updatable = false)
@@ -54,9 +66,12 @@ public class DocumentGratis {
     protected DocumentGratis() {
     }
 
-    public DocumentGratis(Document document, Supplier supplier, AppUser registeredBy) {
+    public DocumentGratis(Document document, Supplier supplier, GratisKind kind, YearMonth reportMonth,
+            AppUser registeredBy) {
         this.document = document;
         this.supplier = supplier;
+        this.kind = kind;
+        this.reportMonth = reportMonth != null ? reportMonth.atDay(1) : null;
         this.registeredBy = registeredBy;
     }
 
@@ -85,6 +100,20 @@ public class DocumentGratis {
 
     public Supplier getSupplier() {
         return supplier;
+    }
+
+    public GratisKind getKind() {
+        return kind;
+    }
+
+    /** Miesiąc wybrany ręcznie; pusty = miesiąc daty dokumentu. */
+    public YearMonth getReportMonth() {
+        return reportMonth != null ? YearMonth.from(reportMonth) : null;
+    }
+
+    /** Miesiąc, do którego gratis liczy się w raporcie. */
+    public YearMonth getEffectiveMonth() {
+        return reportMonth != null ? YearMonth.from(reportMonth) : YearMonth.from(document.getDocumentDate());
     }
 
     public AppUser getRegisteredBy() {

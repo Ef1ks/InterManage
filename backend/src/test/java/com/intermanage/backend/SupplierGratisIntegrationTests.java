@@ -1,18 +1,22 @@
 package com.intermanage.backend;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -155,6 +159,28 @@ class SupplierGratisIntegrationTests {
                 .andExpect(jsonPath("$.gratis.supplierCode").value("214"));
         registerGratis(owner, storeId, "/pz/" + receiptId, imported).andExpect(status().isBadRequest());
 
+        // Filtry listy: oznaczone jako gratis, nie, mogące być gratisem (z pozycją GRATIS), ukryty zakres kwot (granice włącznie, w dowolnej kolejności).
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("gratis", "with").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(plainId));
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("gratis", "without").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(transferId));
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("gratis", "candidate").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(transferId));
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("hideValueOf", "sale")
+                        .param("hideValueFrom", "66").param("hideValueTo", "65.94").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(transferId));
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("hideValueOf", "sale").param("hideValueTo", "65.93")
+                        .cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(plainId));
+        mvc.perform(get(documentsUrl(storeId, "/pz")).param("hideValueFrom", "-10").param("hideValueTo", "10")
+                        .cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1));
+
         registerGratis(owner, storeId, "/ppp/" + transferId, imported)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.gratis.supplierName").value("MAZURSKIE MIODY"))
@@ -189,7 +215,117 @@ class SupplierGratisIntegrationTests {
     private ResultActions registerGratis(Cookie owner, String storeId, String document, String supplierId)
             throws Exception {
         return mvc.perform(put(documentsUrl(storeId, document + "/gratis")).cookie(owner).with(csrf())
-                .contentType(MediaType.APPLICATION_JSON).content("{\"supplierId\":\"" + supplierId + "\"}"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"supplierId\":\"" + supplierId + "\",\"kind\":\"TRADE\"}"));
+    }
+
+    private ResultActions registerGratis(Cookie owner, String storeId, String document, String supplierId,
+            String kind, String reportMonth) throws Exception {
+        return mvc.perform(put(documentsUrl(storeId, document + "/gratis")).cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"supplierId\":\"" + supplierId + "\",\"kind\":\"" + kind + "\",\"reportMonth\":"
+                        + (reportMonth != null ? "\"" + reportMonth + "\"" : "null") + "}"));
+    }
+
+    @Test
+    void suggestsRecentSuppliersAndReportsGratisByMonthRegionAndKind() throws Exception {
+        Cookie owner = login();
+        String storeNumber = storeNumber();
+        String storeId = createStore(owner, storeNumber);
+        uploadSuppliers(owner, storeId, supplierReport(storeNumber, 2,
+                supplier("214", "MAZURSKIE", "MAZURSKIE MIODY", "", "Bezpośr."),
+                supplier("538", "SCAPR", "SCAPR POLSKA SP.Z.O.O.", "", "Baza")))
+                .andExpect(status().isCreated());
+        String suppliers = mvc.perform(get(suppliersUrl(storeId)).cookie(owner))
+                .andReturn().getResponse().getContentAsString();
+        String honey = JsonPath.<List<String>>read(suppliers, "$[?(@.code == '214')].id").getFirst();
+        String base = JsonPath.<List<String>>read(suppliers, "$[?(@.code == '538')].id").getFirst();
+
+        String transfer = "PPP" + ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999);
+        String losses = "PPP" + ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999);
+        uploadDocuments(owner, storeId, documentReport(storeNumber,
+                line("PZ", "PZ1" + transfer, 1, "538", "0000000151642", "KONCENTRAT 190G", "PUDLISZKI", "011605",
+                        "10/10/2026", "10", "50"),
+                line("PZ", "PZ2" + transfer, 1, "214", "0000099037716", "MIODOWA MALINA 400G", "", "140101",
+                        "15/10/2026", "6", "40"),
+                line("PPP", transfer, 1, "19", "0000099007782", "GRATIS SPOŻYWKA MIX", "", "010106", "21/10/2026",
+                        "-1", "-0.01"),
+                line("PPP", transfer, 2, "538", "0000000151642", "KONCENTRAT 190G", "PUDLISZKI", "011605",
+                        "21/10/2026", "20", "100"),
+                line("PPP", transfer, 3, "214", "0000099037716", "MIODOWA MALINA 400G", "", "140101", "21/10/2026",
+                        "5", "50"),
+                line("PPP", losses, 1, "538", "0000000151642", "KONCENTRAT 190G", "PUDLISZKI", "011605",
+                        "21/10/2026", "6", "30")))
+                .andExpect(status().isCreated());
+        String list = mvc.perform(get(documentsUrl(storeId, "/ppp")).cookie(owner))
+                .andReturn().getResponse().getContentAsString();
+        String transferId = JsonPath.<List<String>>read(list, "$.documents[?(@.number == '" + transfer + "')].id").getFirst();
+        String lossesId = JsonPath.<List<String>>read(list, "$.documents[?(@.number == '" + losses + "')].id").getFirst();
+
+        // Ostatni dostawcy artykułów z przyjęć, od najświeższej dostawy; baza z marką, bez pozycji GRATIS.
+        mvc.perform(get(documentsUrl(storeId, "/ppp/" + transferId + "/gratis/supplier-suggestions")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].supplierCode").value("214"))
+                .andExpect(jsonPath("$[0].supplierId").value(honey))
+                .andExpect(jsonPath("$[0].supplierName").value("MAZURSKIE MIODY"))
+                .andExpect(jsonPath("$[0].brand").value(nullValue()))
+                .andExpect(jsonPath("$[1].supplierCode").value("538"))
+                .andExpect(jsonPath("$[1].brand").value("PUDLISZKI"))
+                .andExpect(jsonPath("$[1].productCount").value(1));
+
+        // Miesiąc równy miesiącowi dokumentu nie jest zapisywany jako wybrany ręcznie.
+        registerGratis(owner, storeId, "/ppp/" + transferId, honey, "TRADE", "2026-10")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gratis.kind").value("TRADE"))
+                .andExpect(jsonPath("$.gratis.reportMonth").value(nullValue()))
+                .andExpect(jsonPath("$.gratis.effectiveMonth").value("2026-10"));
+        registerGratis(owner, storeId, "/ppp/" + lossesId, base, "LOSSES", "2026-09")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gratis.kind").value("LOSSES"))
+                .andExpect(jsonPath("$.gratis.reportMonth").value("2026-09"))
+                .andExpect(jsonPath("$.gratis.effectiveMonth").value("2026-09"));
+
+        String report = "/api/stores/" + storeId + "/reports/gratis";
+        mvc.perform(get(report).param("from", "2026-09").param("to", "2026-10").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.months.length()").value(2))
+                .andExpect(jsonPath("$.months[0].label").value("Wrzesień 2026"))
+                .andExpect(jsonPath("$.months[0].documentCount").value(1))
+                .andExpect(jsonPath("$.months[0].regions.length()").value(1))
+                .andExpect(jsonPath("$.months[0].regions[0].code").value("01"))
+                .andExpect(jsonPath("$.months[0].regions[0].figures.lossValue").value(30))
+                .andExpect(jsonPath("$.months[0].regions[0].figures.tradeValue").value(0))
+                .andExpect(jsonPath("$.months[1].regions.length()").value(2))
+                .andExpect(jsonPath("$.months[1].regions[0].figures.tradeValue").value(99.99))
+                .andExpect(jsonPath("$.months[1].regions[1].code").value("14"))
+                .andExpect(jsonPath("$.months[1].total.gratisValue").value(149.99))
+                .andExpect(jsonPath("$.months[1].total.gratisPercent").value(nullValue()))
+                .andExpect(jsonPath("$.summary.label").value("Wrzesień – październik 2026"))
+                .andExpect(jsonPath("$.summary.documentCount").value(2))
+                .andExpect(jsonPath("$.summary.total.tradeValue").value(149.99))
+                .andExpect(jsonPath("$.summary.total.lossValue").value(30));
+
+        // Jeden miesiąc: bez podsumowania. Cofnięty gratis znika z raportu.
+        mvc.perform(delete(documentsUrl(storeId, "/ppp/" + lossesId + "/gratis")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        mvc.perform(get(report).param("from", "2026-09").param("to", "2026-09").cookie(owner))
+                .andExpect(jsonPath("$.summary").value(nullValue()))
+                .andExpect(jsonPath("$.months[0].regions.length()").value(0));
+
+        mvc.perform(get(report).param("from", "2025-12").param("to", "2026-01").cookie(owner))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(report).param("from", "2026-10").param("to", "2026-09").cookie(owner))
+                .andExpect(status().isBadRequest());
+        String nextMonth = YearMonth.now(ZoneId.of("Europe/Warsaw")).plusMonths(1).toString();
+        mvc.perform(get(report).param("from", "2026-01").param("to", nextMonth).cookie(owner))
+                .andExpect(status().isBadRequest());
+
+        byte[] pdf = mvc.perform(get(report + "/pdf").param("from", "2026-01").param("to", "2026-10").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertEquals("%PDF", new String(pdf, 0, 4, StandardCharsets.US_ASCII));
     }
 
     private ResultActions uploadSuppliers(Cookie owner, String storeId, byte[] file) throws Exception {
@@ -262,6 +398,14 @@ class SupplierGratisIntegrationTests {
         return new String[] {"010102", "MIODY", supplierCode, "DOSTAWCA " + supplierCode, "21/10/2026 00:00:00", type,
                 number, "0", String.valueOf(lineNumber), itm8, "", name, "", "Sztuka", quantity, "0", "10.99", "10.99",
                 type.equals("PZ") ? saleValue : "0", saleValue, saleValue, "5", "0", "0", "0%"};
+    }
+
+    private static String[] line(String type, String number, int lineNumber, String supplierCode, String itm8,
+            String name, String brand, String nomenclature, String date, String quantity, String saleValue) {
+        return new String[] {nomenclature, "NOMENKLATURA", supplierCode, "DOSTAWCA " + supplierCode,
+                date + " 00:00:00", type, number, "0", String.valueOf(lineNumber), itm8, "", name, brand, "Sztuka",
+                quantity, "0", "10.99", "10.99", type.equals("PZ") ? saleValue : "0", saleValue, saleValue, "5", "0",
+                "0", "0%"};
     }
 
     private static byte[] documentReport(String storeNumber, String[]... lines) throws IOException {

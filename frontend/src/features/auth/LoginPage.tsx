@@ -1,7 +1,7 @@
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 
-import { Form, TextField } from '@/components/form'
+import { Form, SwitchField, TextField } from '@/components/form'
 import { AuthLayout } from '@/components/layout/AuthLayout'
 import { Button } from '@/components/ui/button'
 import { useLogin, useMe } from '@/features/auth/api'
@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api'
 type LoginForm = {
   username: string
   password: string
+  rememberMe: boolean
 }
 
 export function LoginPage() {
@@ -22,8 +23,9 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
-  } = useForm<LoginForm>({ defaultValues: { username: '', password: '' } })
+  } = useForm<LoginForm>({ defaultValues: { username: '', password: '', rememberMe: false } })
 
   if (me) {
     return <Navigate to={me.passwordChangeRequired ? '/ustaw-haslo' : from} replace />
@@ -60,6 +62,18 @@ export function LoginPage() {
           autoComplete="current-password"
           error={errors.password?.message}
           {...register('password', { required: 'Podaj hasło' })}
+        />
+        <Controller
+          control={control}
+          name="rememberMe"
+          render={({ field }) => (
+            <SwitchField
+              label="Nie wylogowuj mnie"
+              description="Zostaniesz zalogowany przez 30 dni od ostatniego użycia. Nie zaznaczaj na wspólnym komputerze."
+              checked={field.value}
+              onCheckedChange={field.onChange}
+            />
+          )}
         />
         <Button type="submit" size="xl" loading={login.isPending} className="mt-2 w-full">
           Zaloguj się

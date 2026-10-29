@@ -24,6 +24,17 @@ const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximum
 const price = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 const quantity = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 3 })
 const percent = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
+/**
+ * Potrzeby sklepu, likwidacje, reprezentacja i przeniesienia stanów: dostawca jest tylko przy liniach (linie mają
+ * różnych dostawców), więc lista i nagłówek dokumentu go nie pokazują.
+ */
+const WITHOUT_SUPPLIER_TYPES = new Set(['RWPO', 'PL', 'RWREP', 'PPP'])
+
+/** Czy lista i nagłówek dokumentu tego typu pokazują dostawcę i nr dok. dostawcy. */
+export function showsSupplier(typeCode: string) {
+  return !WITHOUT_SUPPLIER_TYPES.has(typeCode.toUpperCase())
+}
+
 export const countFormat = new Intl.NumberFormat('pl-PL')
 
 /** Kwota w złotych z dwoma miejscami ("1 049,40"); kolumny mają "zł" w nagłówku. */
@@ -62,4 +73,11 @@ export function documentsWord(count: number) {
   const lastTwo = count % 100
   const last = count % 10
   return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? 'dokumenty' : 'dokumentów'
+}
+
+/** Kwota wpisana w pole: przecinek albo kropka, spacje między tysiącami; pusta = `null`, błędna = `undefined`. */
+export function parseAmount(text: string): number | null | undefined {
+  const normalized = text.replace(/\s/g, '').replace(',', '.')
+  if (normalized === '') return null
+  return /^-?\d+(\.\d{1,2})?$/.test(normalized) ? Number(normalized) : undefined
 }

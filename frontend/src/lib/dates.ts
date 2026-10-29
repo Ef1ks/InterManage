@@ -36,3 +36,22 @@ export function formatLongDate(value: string): string {
 export function formatShortDate(value: string): string {
   return shortDate.format(parseIsoDate(value))
 }
+
+/** Miesiące jako tekst RRRR-MM, tak jak YearMonth w backendzie. */
+export function currentMonth(): string {
+  return todayIso().slice(0, 7)
+}
+
+export function addMonths(month: string, months: number): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const date = new Date(year, monthNumber - 1 + months, 1)
+  return toIsoDate(date).slice(0, 7)
+}
+
+const monthYear = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric' })
+
+/** "Październik 2026" */
+export function formatMonth(month: string): string {
+  const text = monthYear.format(parseIsoDate(`${month}-01`))
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}

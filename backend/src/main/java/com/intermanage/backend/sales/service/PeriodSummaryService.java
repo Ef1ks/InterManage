@@ -173,7 +173,7 @@ public class PeriodSummaryService {
     }
 
     /** Nazwy rejonów z nomenklatury sklepu, bez kodu z przodu ("14_OWOCE/WARZYWA" → "OWOCE/WARZYWA"). */
-    private Map<String, String> regionNames(UUID storeId) {
+    public Map<String, String> regionNames(UUID storeId) {
         Map<String, String> names = new HashMap<>();
         for (Nomenclature region : nomenclatures.findByStoreIdAndLevelOrderByCode(storeId, NomenclatureLevel.REGION)) {
             names.put(region.getCode(), region.getName().replaceFirst("^\\d+_", "").strip());

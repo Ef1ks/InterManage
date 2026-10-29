@@ -12,7 +12,7 @@ import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { type DocumentColumn, type Presence, useDocuments } from '@/features/documents/api'
+import { type DocumentColumn, type GratisFilter, type HiddenValueRange, type Presence, type ValueField, useDocuments } from '@/features/documents/api'
 import { AutoInvoiceMatching } from '@/features/documents/AutoInvoiceMatching'
 import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
@@ -20,7 +20,7 @@ import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { TransferTargetBadge } from '@/features/documents/DocumentTransferTarget'
 import { DocumentFilters, useHiddenSuppliers } from '@/features/documents/DocumentFilters'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
-import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney } from '@/features/documents/format'
+import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney, parseAmount, showsSupplier } from '@/features/documents/format'
 import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import { isReportFresh } from '@/lib/report-freshness'
@@ -54,6 +54,13 @@ function ClosedLock({ closing }: { closing: DocumentReportClosing }) {
   )
 }
 
+/** "od 0,00 do 10,00 zł", "do 0,00 zł", "od 100,00 zł". */
+function hiddenRangeLabel({ from, to }: HiddenValueRange) {
+  const low = from !== null && to !== null ? Math.min(from, to) : from
+  const high = from !== null && to !== null ? Math.max(from, to) : to
+  return [low !== null && `od ${formatMoney(low)}`, high !== null && `do ${formatMoney(high)}`].filter(Boolean).join(' ') + ' zł'
+}
+
 export function BackToTypes() {
   return (
     <BackLink to={documentPaths.overview}>
@@ -67,23 +74,41 @@ const PRESENCE_PARAMS: Record<Presence, string | null> = { all: null, with: 'z',
 const presenceOf = (value: string | null): Presence => (value === 'z' ? 'with' : value === 'bez' ? 'without' : 'all')
 
 const SORT_COLUMNS: DocumentColumn[] = ['number', 'date', 'supplier', 'supplierDocument', 'lines', 'purchase', 'sale']
-/** Domyślnie po numerze dokumentu, od najnowszego (najwyższego numeru bonu); domyślne nie trafia do adresu. */
-const DEFAULT_SORT: SortState<DocumentColumn> = { key: 'number', direction: 'desc' }
+/**
+ * Domyślnie po numerze dokumentu, od najnowszego (najwyższego numeru bonu). Numery przeniesień stanów nie idą
+ * z czasem, więc te od najnowszej daty. Domyślne nie trafia do adresu.
+ */
+const defaultSort = (upperType: string): SortState<DocumentColumn> =>
+  upperType === 'PPP' ? { key: 'date', direction: 'desc' } : { key: 'number', direction: 'desc' }
 
-function sortOf(params: URLSearchParams): SortState<DocumentColumn> {
+function sortOf(params: URLSearchParams, fallback: SortState<DocumentColumn>): SortState<DocumentColumn> {
   const key = SORT_COLUMNS.find((column) => column === params.get('sortuj'))
-  if (!key) return DEFAULT_SORT
+  if (!key) return fallback
   const direction: SortDirection = params.get('kierunek') === 'rosnaco' ? 'asc' : 'desc'
   return { key, direction }
 }
 
 /** Przyjęcia i korekty od dostawcy - do nich przypina się faktury z KSeF (jak `DocumentType.canLinkKsefInvoice`). */
 const KSEF_LINKABLE_TYPES = new Set(['PZ', 'WZ'])
+/** Przeniesienia stanów - tylko je rejestruje się jako gratis (jak `DocumentType.canBeGratis`). */
+const GRATIS_TYPES = new Set(['PPP'])
+
+/**
+ * Ukryty zakres kwot z adresu (`?ukryj_od=&ukryj_do=&kwota=zakup|sprzedaz`). Bez `kwota` liczy się zakup, a
+ * w przeniesieniach stanów sprzedaż brutto, bo zakup jest w nich zawsze 0.
+ */
+function hiddenValuesOf(params: URLSearchParams, upperType: string): HiddenValueRange {
+  const amount = (key: string) => parseAmount(params.get(key) ?? '') ?? null
+  const kwota = params.get('kwota')
+  const field: ValueField =
+    kwota === 'sprzedaz' ? 'sale' : kwota === 'zakup' ? 'purchase' : GRATIS_TYPES.has(upperType) ? 'sale' : 'purchase'
+  return { field, from: amount('ukryj_od'), to: amount('ukryj_do') }
+}
 
 /**
  * Dokumenty jednego typu (z adresu strony). Dokumentów są tysiące, więc serwer oddaje je po 100, a kolejne strony
  * dochodzą przy przewijaniu; wyszukiwanie (też po artykułach w liniach), filtry (przypięte faktury i korekty,
- * zamknięcie w raporcie okresowym, ukryci dostawcy), sortowanie po nagłówkach i suma "Razem" liczą się w bazie.
+ * zamknięcie w raporcie okresowym, gratis, ukryty zakres kwot, ukryci dostawcy), sortowanie po nagłówkach i suma "Razem" liczą się w bazie.
  * Przyjęcia z zamkniętego raportu mają kłódkę i inne tło.
  */
 export function DocumentsList({ storeId }: { storeId: string }) {
@@ -106,10 +131,21 @@ export function DocumentsList({ storeId }: { storeId: string }) {
   const invoice = presenceOf(params.get('faktura'))
   const corrections = presenceOf(params.get('korekty'))
   const closed = presenceOf(params.get('raport'))
+  const gratis: GratisFilter = params.get('gratis') === 'moze' ? 'candidate' : presenceOf(params.get('gratis'))
+  const hiddenValues = hiddenValuesOf(params, upperType)
+  const hidingValues = hiddenValues.from !== null || hiddenValues.to !== null
   const setInvoice = (value: Presence) => updateParams({ faktura: PRESENCE_PARAMS[value] })
   const setCorrections = (value: Presence) => updateParams({ korekty: PRESENCE_PARAMS[value] })
   const setClosed = (value: Presence) => updateParams({ raport: PRESENCE_PARAMS[value] })
-  const [hiddenSuppliers, setHiddenSuppliers] = useHiddenSuppliers(storeId)
+  const setGratis = (value: GratisFilter) =>
+    updateParams({ gratis: value === 'candidate' ? 'moze' : PRESENCE_PARAMS[value] })
+  const setHiddenValues = (range: HiddenValueRange) =>
+    updateParams({
+      ukryj_od: range.from === null ? null : String(range.from),
+      ukryj_do: range.to === null ? null : String(range.to),
+      kwota: range.field === 'sale' ? 'sprzedaz' : 'zakup',
+    })
+  const [hiddenSuppliers, setHiddenSuppliers] = useHiddenSuppliers(storeId, upperType)
   const debouncedQuery = useDebouncedValue(query.trim(), 300)
   const debouncedProduct = useDebouncedValue(product.trim(), 300)
   // Pola wyszukiwania trafiają do adresu dopiero po chwili bez pisania, jak do zapytania.
@@ -127,15 +163,19 @@ export function DocumentsList({ storeId }: { storeId: string }) {
       { replace: true },
     )
   }, [debouncedQuery, debouncedProduct, params, setParams])
-  const sort = sortOf(params)
+  const initialSort = defaultSort(upperType)
+  const sort = sortOf(params, initialSort)
   const setSort = (next: SortState<DocumentColumn>) =>
     updateParams(
-      next.key === DEFAULT_SORT.key && next.direction === DEFAULT_SORT.direction
+      next.key === initialSort.key && next.direction === initialSort.direction
         ? { sortuj: null, kierunek: null }
         : { sortuj: next.key, kierunek: next.direction === 'asc' ? 'rosnaco' : 'malejaco' },
     )
   const invoiceFilter = KSEF_LINKABLE_TYPES.has(upperType)
   const correctionFilter = upperType === 'PZ'
+  const gratisFilter = GRATIS_TYPES.has(upperType)
+  const supplierColumns = showsSupplier(upperType)
+  const columnCount = supplierColumns ? 8 : 6
   const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage, isPlaceholderData } =
     useDocuments(
       storeId,
@@ -146,6 +186,8 @@ export function DocumentsList({ storeId }: { storeId: string }) {
         invoice: invoiceFilter ? invoice : 'all',
         corrections: correctionFilter ? corrections : 'all',
         closed: correctionFilter ? closed : 'all',
+        gratis: gratisFilter ? gratis : 'all',
+        hiddenValues,
         hiddenSuppliers,
       },
       sort,
@@ -179,12 +221,14 @@ export function DocumentsList({ storeId }: { storeId: string }) {
     debouncedProduct !== '' ||
     (invoiceFilter && invoice !== 'all') ||
     (correctionFilter && (corrections !== 'all' || closed !== 'all')) ||
+    (gratisFilter && gratis !== 'all') ||
+    hidingValues ||
     hiddenSuppliers.length > 0
   // Pola wyszukiwania znikną z adresu po chwili, razem z zapytaniem.
   const clearFilters = () => {
     setQuery('')
     setProduct('')
-    updateParams({ faktura: null, korekty: null, raport: null })
+    updateParams({ faktura: null, korekty: null, raport: null, gratis: null, ukryj_od: null, ukryj_do: null, kwota: null })
     setHiddenSuppliers([])
   }
   const open = (document: DocumentSummary) => navigate(documentPaths.document(typeCode, document.id))
@@ -224,6 +268,9 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 invoice={invoiceFilter ? { value: invoice, onChange: setInvoice } : null}
                 corrections={correctionFilter ? { value: corrections, onChange: setCorrections } : null}
                 closed={correctionFilter ? { value: closed, onChange: setClosed } : null}
+                gratis={gratisFilter ? { value: gratis, onChange: setGratis } : null}
+                hiddenValues={hiddenValues}
+                onHiddenValuesChange={setHiddenValues}
                 hiddenSuppliers={hiddenSuppliers}
                 onHiddenSuppliersChange={setHiddenSuppliers}
                 onClear={clearFilters}
@@ -237,11 +284,24 @@ export function DocumentsList({ storeId }: { storeId: string }) {
         {totalCount > 0 && (
           <Card className="mb-4 gap-3 p-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: numer, dostawca, nr dok. dostawcy" />
+              <SearchInput value={query} onChange={setQuery} placeholder={supplierColumns ? 'Szukaj: numer, dostawca, nr dok. dostawcy' : 'Szukaj: numer dokumentu'} />
               <SearchInput value={product} onChange={setProduct} placeholder="Szukaj produktu: nazwa, marka, EAN, ITM8" />
             </div>
             {searching && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                {hidingValues && (
+                  <span>
+                    Ukryte kwoty ({hiddenValues.field === 'sale' ? 'sprzedaż brutto' : 'zakup'}):{' '}
+                    {hiddenRangeLabel(hiddenValues)} ·{' '}
+                    <Button
+                      variant="link"
+                      className="h-auto p-0 text-sm"
+                      onClick={() => updateParams({ ukryj_od: null, ukryj_do: null, kwota: null })}
+                    >
+                      pokaż
+                    </Button>
+                  </span>
+                )}
                 {hiddenSuppliers.length > 0 && (
                   <span>
                     Ukryci dostawcy: {hiddenSuppliers.length} ·{' '}
@@ -276,12 +336,16 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                   <SortableHead column="date" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
                     Data
                   </SortableHead>
-                  <SortableHead column="supplier" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
-                    Dostawca
-                  </SortableHead>
-                  <SortableHead column="supplierDocument" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
-                    Nr dok. dostawcy
-                  </SortableHead>
+                  {supplierColumns && (
+                    <>
+                      <SortableHead column="supplier" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
+                        Dostawca
+                      </SortableHead>
+                      <SortableHead column="supplierDocument" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
+                        Nr dok. dostawcy
+                      </SortableHead>
+                    </>
+                  )}
                   <SortableHead column="lines" sort={sort} onSort={(key) => setSort(nextSort(sort, key))} align="right">
                     Linie
                   </SortableHead>
@@ -298,10 +362,10 @@ export function DocumentsList({ storeId }: { storeId: string }) {
               </TableHeader>
               <TableBody>
                 {isPending ? (
-                  <TableSkeletonRows columns={8} />
+                  <TableSkeletonRows columns={columnCount} />
                 ) : documents.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={columnCount} className="py-8 text-center text-sm text-muted-foreground">
                       {debouncedQuery && !debouncedProduct
                         ? `Żaden dokument nie pasuje do „${debouncedQuery}”.`
                         : 'Żaden dokument nie pasuje do wyszukiwania i filtrów.'}
@@ -321,55 +385,61 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                         document.reportClosing && 'bg-muted/60 text-muted-foreground hover:bg-muted',
                       )}
                     >
-                      <TableCell className="py-3 pl-4 font-medium">
-                        <div className="flex items-center gap-2">
-                          {document.reportClosing && <ClosedLock closing={document.reportClosing} />}
-                          {document.number}
+                      <TableCell className="py-3 pl-4 font-medium whitespace-normal">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                            {document.reportClosing && <ClosedLock closing={document.reportClosing} />}
+                            {document.number}
+                          </span>
                           <GratisBadge document={document} />
                           <CorrectionBadge document={document} />
                           <TransferTargetBadge document={document} />
                         </div>
                       </TableCell>
                       <TableCell>{formatDocumentDate(document.documentDate)}</TableCell>
-                      <TableCell className="max-w-64 truncate" title={document.supplierName ?? undefined}>
-                        {document.supplierName ? (
-                          <>
-                            {document.supplierName}
-                            {document.supplierCode && (
-                              <span className="ml-1.5 text-xs text-muted-foreground">{document.supplierCode}</span>
+                      {supplierColumns && (
+                        <>
+                          <TableCell className="max-w-64 truncate" title={document.supplierName ?? undefined}>
+                            {document.supplierName ? (
+                              <>
+                                {document.supplierName}
+                                {document.supplierCode && (
+                                  <span className="ml-1.5 text-xs text-muted-foreground">{document.supplierCode}</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">różni dostawcy</span>
                             )}
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">różni dostawcy</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {document.supplierDocumentNumber && (
-                          <span className="inline-flex items-center gap-0.5">
-                            {document.supplierDocumentNumber}
-                            <CopyButton
-                              value={document.supplierDocumentNumber}
-                              label={`Kopiuj numer ${document.supplierDocumentNumber}`}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {document.supplierDocumentNumber && (
+                              <span className="inline-flex items-center gap-0.5">
+                                {document.supplierDocumentNumber}
+                                <CopyButton
+                                  value={document.supplierDocumentNumber}
+                                  label={`Kopiuj numer ${document.supplierDocumentNumber}`}
+                                />
+                              </span>
+                            )}
+                            {KSEF_LINKABLE_TYPES.has(typeCode.toUpperCase()) && (
+                              <DocumentRowKsef
+                                storeId={storeId}
+                                target={{
+                                  ...document,
+                                  type: typeCode.toUpperCase(),
+                                  typeSingular: first?.type.singular ?? 'Dokument',
+                                }}
+                              />
+                            )}
+                            <InvoiceAmountCheck
+                              storeId={storeId}
+                              documentId={document.id}
+                              check={document.invoiceAmountCheck}
+                              compact
                             />
-                          </span>
-                        )}
-                        {KSEF_LINKABLE_TYPES.has(typeCode.toUpperCase()) && (
-                          <DocumentRowKsef
-                            storeId={storeId}
-                            target={{
-                              ...document,
-                              type: typeCode.toUpperCase(),
-                              typeSingular: first?.type.singular ?? 'Dokument',
-                            }}
-                          />
-                        )}
-                        <InvoiceAmountCheck
-                          storeId={storeId}
-                          documentId={document.id}
-                          check={document.invoiceAmountCheck}
-                          compact
-                        />
-                      </TableCell>
+                          </TableCell>
+                        </>
+                      )}
                       <TableCell className="text-right">{countFormat.format(document.lineCount)}</TableCell>
                       <TableCell className="text-right">
                         <ListValue value={document.purchaseValue} corrected={document.correctionTotals?.purchaseValue} />
@@ -387,7 +457,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
               {first && first.matchingCount > 0 && (
                 <TableFooter>
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5} className="pl-4 font-medium">
+                    <TableCell colSpan={columnCount - 3} className="pl-4 font-medium">
                       Razem{' '}
                       <span className="font-normal text-muted-foreground tabular-nums">
                         ({countFormat.format(first.matchingCount)} {documentsWord(first.matchingCount)}

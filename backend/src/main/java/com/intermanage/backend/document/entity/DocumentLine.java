@@ -109,7 +109,7 @@ public class DocumentLine {
     }
 
     /** Pozycja-znacznik gratisu z systemu sklepu, np. "GRATIS SPOŻYWKA MIX". */
-    boolean isGratisItem() {
+    public boolean isGratisItem() {
         return name != null && name.toUpperCase(Locale.ROOT).contains("GRATIS");
     }
 

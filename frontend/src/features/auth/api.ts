@@ -41,7 +41,7 @@ export function useCan(category: PermissionCategory, level: PermissionLevel = 'V
 export function useLogin() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (credentials: { username: string; password: string }) =>
+    mutationFn: (credentials: { username: string; password: string; rememberMe: boolean }) =>
       api<Me>('/auth/login', { method: 'POST', json: credentials }),
     onSuccess: (me) => {
       queryClient.setQueryData(meQueryKey, me)

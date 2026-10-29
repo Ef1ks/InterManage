@@ -581,13 +581,34 @@ export type DocumentCandidate = {
   difference: number
 }
 
+/** Za co jest gratis: handel / ekspozycja albo pokrycie strat. */
+export type GratisKind = 'TRADE' | 'LOSSES'
+
 export type DocumentGratis = {
   supplierId: string
   /** Pusty u dostawcy dodanego ręcznie. */
   supplierCode: string | null
   supplierName: string
+  kind: GratisKind
+  /** Miesiąc wybrany ręcznie (RRRR-MM); pusty = miesiąc daty dokumentu. */
+  reportMonth: string | null
+  /** Miesiąc, do którego gratis liczy się w raporcie (RRRR-MM). */
+  effectiveMonth: string
   registeredBy: string | null
   registeredAt: string
+}
+
+/**
+ * Dostawca, który ostatnio przywoził artykuły z dokumentu (z przyjęć PZ). Przy bazie (538, 88110) {@code brand} to marka
+ * artykułów. {@code supplierId} pusty, gdy dostawcy nie ma na liście sklepu.
+ */
+export type GratisSupplierSuggestion = {
+  supplierId: string | null
+  supplierCode: string
+  supplierName: string | null
+  brand: string | null
+  lastDeliveryDate: string
+  productCount: number
 }
 
 /** Dostawca sklepu: z listy z systemu sklepu albo dodany ręcznie ({@code manual}, bez kodu). */
@@ -1195,6 +1216,39 @@ export type PeriodSummary = {
   budgetsSet: boolean
   lines: PeriodSummaryLine[]
   total: PeriodSummaryFigures
+}
+
+/** Gratisy za handel / ekspozycję i za straty, sprzedaż brutto i udział gratisów w niej (pusty bez sprzedaży). */
+export type GratisFigures = {
+  tradeValue: number
+  lossValue: number
+  gratisValue: number
+  saleValueGross: number
+  gratisPercent: number | null
+}
+
+/** Kafelek raportu gratisów: miesiąc albo podsumowanie okresu (miesiące RRRR-MM), tylko rejony z gratisem. */
+export type GratisReportTile = {
+  from: string
+  to: string
+  label: string
+  documentCount: number
+  /** Pusty {@code code} = linie bez nomenklatury. */
+  regions: { code: string; name: string | null; figures: GratisFigures }[]
+  /** {@code saleValueGross} to sprzedaż całego sklepu. */
+  total: GratisFigures
+}
+
+export type GratisReport = {
+  storeNumber: string
+  storeName: string
+  from: string
+  to: string
+  lastSaleDate: string | null
+  documentsCoveredUntil: string | null
+  months: GratisReportTile[]
+  /** Przy kilku miesiącach: ten sam kafelek za cały okres. */
+  summary: GratisReportTile | null
 }
 
 /** Budżet rejonu w ustawieniach sklepu; puste wartości = bez budżetu. */

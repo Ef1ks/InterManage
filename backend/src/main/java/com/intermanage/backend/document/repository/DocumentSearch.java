@@ -17,6 +17,7 @@ import org.springframework.data.jpa.domain.Specification;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.DeliveryReportClosingDelivery;
 import com.intermanage.backend.document.entity.Document;
+import com.intermanage.backend.document.entity.DocumentGratis;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
@@ -195,6 +196,84 @@ public final class DocumentSearch {
     public static Specification<Document> withoutZeroDeliveries() {
         return (root, query, cb) -> cb.or(cb.notEqual(root.get("type"), DocumentType.PZ),
                 cb.notEqual(root.get("purchaseValue"), BigDecimal.ZERO));
+    }
+
+    /** Kwota dokumentu z raportu, po której działa filtr zakresu: wartość zakupu albo sprzedaży brutto. */
+    public enum ValueField {
+        PURCHASE("purchaseValue"), SALE("saleValueGross");
+
+        private final String attribute;
+
+        ValueField(String attribute) {
+            this.attribute = attribute;
+        }
+
+        /** {@code sale} = sprzedaż brutto, inaczej zakup. */
+        public static ValueField of(String value) {
+            return "sale".equalsIgnoreCase(value) ? SALE : PURCHASE;
+        }
+    }
+
+    /**
+     * Bez dokumentów, których kwota (z raportu, ze znakiem) leży w przedziale [from, to]; brak granicy = przedział
+     * otwarty z tej strony, odwrócone granice są zamieniane. Bez obu granic niczego nie ukrywa.
+     */
+    public static Specification<Document> outsideValueRange(ValueField field, BigDecimal from, BigDecimal to) {
+        return (root, query, cb) -> {
+            if (from == null && to == null) {
+                return cb.conjunction();
+            }
+            BigDecimal low = from;
+            BigDecimal high = to;
+            if (low != null && high != null && low.compareTo(high) > 0) {
+                low = to;
+                high = from;
+            }
+            Expression<BigDecimal> value = root.get(field.attribute);
+            List<Predicate> inRange = new ArrayList<>();
+            if (low != null) {
+                inRange.add(cb.greaterThanOrEqualTo(value, low));
+            }
+            if (high != null) {
+                inRange.add(cb.lessThanOrEqualTo(value, high));
+            }
+            return cb.not(cb.and(inRange.toArray(Predicate[]::new)));
+        };
+    }
+
+    /**
+     * Filtr gratisów z parametru API: {@code with} zarejestrowane jako gratis, {@code without} bez gratisu,
+     * {@code candidate} jeszcze nieoznaczone z pozycją GRATIS (mogą być gratisem), inaczej wszystkie.
+     */
+    public enum GratisFilter {
+        ALL, WITH, WITHOUT, CANDIDATE;
+
+        public static GratisFilter of(String value) {
+            return "candidate".equalsIgnoreCase(value) ? CANDIDATE
+                    : switch (Presence.of(value)) {
+                        case WITH -> WITH;
+                        case WITHOUT -> WITHOUT;
+                        case ALL -> ALL;
+                    };
+        }
+    }
+
+    /** Dokumenty zarejestrowane jako gratis od dostawcy (aktywny, niecofnięty wpis), bez gratisu albo kandydaci. */
+    public static Specification<Document> withGratis(GratisFilter filter) {
+        return (root, query, cb) -> {
+            if (filter == GratisFilter.ALL) {
+                return cb.conjunction();
+            }
+            Subquery<Integer> subquery = query.subquery(Integer.class);
+            Root<DocumentGratis> gratis = subquery.from(DocumentGratis.class);
+            subquery.select(cb.literal(1)).where(cb.equal(gratis.get("document"), root), cb.isNull(gratis.get("deletedAt")));
+            return switch (filter) {
+                case WITH -> cb.exists(subquery);
+                case WITHOUT -> cb.not(cb.exists(subquery));
+                case CANDIDATE -> cb.and(cb.isTrue(root.get("gratisCandidate")), cb.not(cb.exists(subquery)));
+                case ALL -> cb.conjunction();
+            };
+        };
     }
 
     /** Bez dokumentów dostawców o tych kodach; dokumenty bez wspólnego dostawcy zostają. */

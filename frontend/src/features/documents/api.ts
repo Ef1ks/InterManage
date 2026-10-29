@@ -12,6 +12,8 @@ import type {
   Document,
   DocumentPage,
   DocumentsOverview,
+  GratisKind,
+  GratisSupplierSuggestion,
   IncomingTransfer,
   IncomingTransfers,
   InvoiceComparison,
@@ -37,11 +39,21 @@ export type DocumentColumn = 'number' | 'date' | 'supplier' | 'supplierDocument'
 /** Ma / nie ma (faktury, korekt); `all` = bez filtra. */
 export type Presence = 'all' | 'with' | 'without'
 
+/** Gratisy: oznaczone, nieoznaczone albo `candidate` - nieoznaczone z pozycją GRATIS (mogą być gratisem). */
+export type GratisFilter = Presence | 'candidate'
+
+/** Kwota, po której działa ukrywanie zakresu: zakup albo sprzedaż brutto. */
+export type ValueField = 'purchase' | 'sale'
+
+/** Dokumenty z kwotą w przedziale [from, to] są ukryte; `null` = granica otwarta, obie `null` = bez filtra. */
+export type HiddenValueRange = { field: ValueField; from: number | null; to: number | null }
+
 /**
  * Wyszukiwanie i filtry listy: {@code query} w numerze, dostawcy i nr dok. dostawcy, {@code product} w liniach
  * (nazwa, marka, EAN, ITM8). {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
- * i {@code closed} (w zamkniętym raporcie okresowym) w przyjęciach. {@code hiddenSuppliers}: kody dostawców,
- * których dokumentów lista nie pokazuje.
+ * i {@code closed} (w zamkniętym raporcie okresowym) w przyjęciach, {@code gratis} w przeniesieniach stanów.
+ * {@code hiddenValues}: zakres kwot do ukrycia. {@code hiddenSuppliers}: kody dostawców, których dokumentów lista
+ * nie pokazuje.
  */
 export type DocumentFilters = {
   query: string
@@ -49,6 +61,8 @@ export type DocumentFilters = {
   invoice: Presence
   corrections: Presence
   closed: Presence
+  gratis: GratisFilter
+  hiddenValues: HiddenValueRange
   hiddenSuppliers: string[]
 }
 
@@ -66,6 +80,13 @@ export function useDocuments(storeId: string, typeCode: string, filters: Documen
       if (filters.invoice !== 'all') params.set('invoice', filters.invoice)
       if (filters.corrections !== 'all') params.set('corrections', filters.corrections)
       if (filters.closed !== 'all') params.set('closed', filters.closed)
+      if (filters.gratis !== 'all') params.set('gratis', filters.gratis)
+      const { field, from, to } = filters.hiddenValues
+      if (from !== null || to !== null) {
+        params.set('hideValueOf', field)
+        if (from !== null) params.set('hideValueFrom', String(from))
+        if (to !== null) params.set('hideValueTo', String(to))
+      }
       filters.hiddenSuppliers.forEach((code) => params.append('hiddenSuppliers', code))
       return api<DocumentPage>(`${documentsPath(storeId)}/${typeCode}?${params}`)
     },
@@ -121,12 +142,24 @@ export function useDocumentGratis(storeId: string, typeCode: string, id: string)
   }
   return {
     register: useMutation({
-      mutationFn: (supplierId: string) => api<Document>(path, { method: 'PUT', json: { supplierId } }),
+      mutationFn: (request: RegisterGratis) => api<Document>(path, { method: 'PUT', json: request }),
       onSuccess,
     }),
     cancel: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
     restore: useMutation({ mutationFn: () => api<Document>(`${path}/restore`, { method: 'POST' }), onSuccess }),
   }
+}
+
+/** {@code reportMonth} (RRRR-MM) pusty = miesiąc daty dokumentu. */
+export type RegisterGratis = { supplierId: string; kind: GratisKind; reportMonth: string | null }
+
+/** Ostatni dostawcy artykułów z dokumentu (z przyjęć PZ), do wyboru dostawcy gratisu. */
+export function useGratisSupplierSuggestions(storeId: string, typeCode: string, id: string) {
+  return useQuery({
+    queryKey: [...documentsKey(storeId), typeCode, id, 'gratis-suppliers'],
+    queryFn: () =>
+      api<GratisSupplierSuggestion[]>(`${documentsPath(storeId)}/${typeCode}/${id}/gratis/supplier-suggestions`),
+  })
 }
 
 /**

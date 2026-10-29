@@ -1,25 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { SlidersHorizontalIcon } from 'lucide-react'
 
-import { MultiComboboxField, SegmentedField, type ComboboxOption } from '@/components/form'
+import { MultiComboboxField, SegmentedField, TextField, type ComboboxOption } from '@/components/form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { type Presence, useSuppliers } from '@/features/documents/api'
+import { type GratisFilter, type HiddenValueRange, type Presence, type ValueField, useSuppliers } from '@/features/documents/api'
+import { parseAmount } from '@/features/documents/format'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useAppDispatch, useAppSelector } from '@/store'
-import { persistHiddenDocumentSuppliers, setHiddenDocumentSuppliers } from '@/store/uiSlice'
+import { hiddenSuppliersKey, persistHiddenDocumentSuppliers, setHiddenDocumentSuppliers } from '@/store/uiSlice'
 
 const NO_SUPPLIERS: string[] = []
 
-/** Dostawcy ukryci na listach dokumentów sklepu; wybór zostaje w przeglądarce po odświeżeniu strony. */
-export function useHiddenSuppliers(storeId: string) {
+/**
+ * Dostawcy ukryci na liście dokumentów jednego typu w sklepie (każdy typ ma swoją listę); wybór zostaje
+ * w przeglądarce po odświeżeniu strony.
+ */
+export function useHiddenSuppliers(storeId: string, typeCode: string) {
   const all = useAppSelector((state) => state.ui.hiddenDocumentSuppliers)
   const dispatch = useAppDispatch()
+  const key = hiddenSuppliersKey(storeId, typeCode)
   const set = (codes: string[]) => {
-    dispatch(setHiddenDocumentSuppliers({ storeId, codes }))
-    persistHiddenDocumentSuppliers({ ...all, [storeId]: codes })
+    dispatch(setHiddenDocumentSuppliers({ key, codes }))
+    persistHiddenDocumentSuppliers({ ...all, [key]: codes })
   }
-  return [all[storeId] ?? NO_SUPPLIERS, set] as const
+  return [all[key] ?? NO_SUPPLIERS, set] as const
 }
 
 const INVOICE_OPTIONS: { value: Presence; label: string }[] = [
@@ -40,6 +46,20 @@ const CLOSED_OPTIONS: { value: Presence; label: string }[] = [
   { value: 'with', label: 'Zakończone' },
 ]
 
+const GRATIS_OPTIONS: { value: GratisFilter; label: string }[] = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'candidate', label: 'Może być gratisem' },
+  { value: 'with', label: 'Gratisy' },
+  { value: 'without', label: 'Nieoznaczone' },
+]
+
+const VALUE_FIELD_OPTIONS: { value: ValueField; label: string }[] = [
+  { value: 'purchase', label: 'Zakup' },
+  { value: 'sale', label: 'Sprzedaż brutto' },
+]
+
+const amountText = (value: number | null) => (value === null ? '' : String(value).replace('.', ','))
+
 /** Filtr "ma / nie ma"; {@code null} = niedostępny dla tego typu dokumentów. */
 type PresenceFilter = { value: Presence; onChange: (value: Presence) => void } | null
 
@@ -48,20 +68,26 @@ type Props = {
   invoice: PresenceFilter
   corrections: PresenceFilter
   closed: PresenceFilter
+  gratis: { value: GratisFilter; onChange: (value: GratisFilter) => void } | null
+  hiddenValues: HiddenValueRange
+  onHiddenValuesChange: (range: HiddenValueRange) => void
   hiddenSuppliers: string[]
   onHiddenSuppliersChange: (codes: string[]) => void
   onClear: () => void
 }
 
 /**
- * Przycisk "Filtry" nad listą dokumentów i okno z filtrami: faktura, korekty, zamknięcie w raporcie okresowym
- * (zależnie od typu) i dostawcy ukryci na liście. Zmiany działają od razu.
+ * Przycisk "Filtry" nad listą dokumentów i okno z filtrami: faktura, korekty, zamknięcie w raporcie okresowym, gratis
+ * (zależnie od typu), ukryty zakres kwot i dostawcy ukryci na liście. Zmiany działają od razu.
  */
 export function DocumentFilters({
   storeId,
   invoice,
   corrections,
   closed,
+  gratis,
+  hiddenValues,
+  onHiddenValuesChange,
   hiddenSuppliers,
   onHiddenSuppliersChange,
   onClear,
@@ -69,7 +95,8 @@ export function DocumentFilters({
   const [open, setOpen] = useState(false)
   const { data: suppliers } = useSuppliers(storeId)
   const active =
-    [invoice, corrections, closed].filter((filter) => filter && filter.value !== 'all').length +
+    [invoice, corrections, closed, gratis].filter((filter) => filter && filter.value !== 'all').length +
+    (hiddenValues.from !== null || hiddenValues.to !== null ? 1 : 0) +
     (hiddenSuppliers.length > 0 ? 1 : 0)
 
   const options = useMemo<ComboboxOption[]>(() => {
@@ -98,10 +125,10 @@ export function DocumentFilters({
         <DialogContent className="gap-5 p-6 sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-lg">Filtry listy</DialogTitle>
-            <DialogDescription>Lista zmienia się od razu. Ukryci dostawcy zostają zapamiętani w tej przeglądarce.</DialogDescription>
+            <DialogDescription>Lista zmienia się od razu. Ukryci dostawcy dotyczą tylko tego typu dokumentów i zostają zapamiętani w tej przeglądarce.</DialogDescription>
           </DialogHeader>
 
-          {(invoice || corrections || closed) && (
+          {(invoice || corrections || closed || gratis) && (
             <div className="grid gap-4">
               {closed && (
                 <FilterRow label="Raport okresowy" hint="Zakończone poszły w zamkniętym raporcie za okres.">
@@ -123,8 +150,15 @@ export function DocumentFilters({
                   />
                 </FilterRow>
               )}
+              {gratis && (
+                <FilterRow label="Gratis" hint="Może być gratisem: jeszcze nieoznaczone, z pozycją GRATIS.">
+                  <SegmentedField label="Gratis" options={GRATIS_OPTIONS} value={gratis.value} onChange={gratis.onChange} />
+                </FilterRow>
+              )}
             </div>
           )}
+
+          <ValueRangeFilter value={hiddenValues} onChange={onHiddenValuesChange} />
 
           <MultiComboboxField
             label="Ukryci dostawcy"
@@ -156,6 +190,60 @@ function FilterRow({ label, hint, children }: { label: string; hint?: string; ch
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
       {children}
+    </div>
+  )
+}
+
+/**
+ * Ukrywanie dokumentów z kwotą w podanym przedziale (granice włącznie, np. od -1 do 1 chowa drobne dokumenty).
+ * Jedna granica wystarczy: samo "do 0" chowa dokumenty bez wartości i ujemne. Pola trafiają do listy po chwili bez
+ * pisania; wyczyszczenie filtrów z zewnątrz czyści też pola.
+ */
+function ValueRangeFilter({ value, onChange }: { value: HiddenValueRange; onChange: (range: HiddenValueRange) => void }) {
+  const [from, setFrom] = useState(() => amountText(value.from))
+  const [to, setTo] = useState(() => amountText(value.to))
+  const [applied, setApplied] = useState(value)
+  // Pola nadążają za zmianą z zewnątrz (np. "Wyczyść filtry"); tekst w trakcie pisania zostaje.
+  if (applied.from !== value.from || applied.to !== value.to) {
+    setApplied(value)
+    if (parseAmount(from) !== value.from) setFrom(amountText(value.from))
+    if (parseAmount(to) !== value.to) setTo(amountText(value.to))
+  }
+  const parsedFrom = parseAmount(useDebouncedValue(from, 400))
+  const parsedTo = parseAmount(useDebouncedValue(to, 400))
+  useEffect(() => {
+    if (parsedFrom === undefined || parsedTo === undefined) return
+    if (parsedFrom === value.from && parsedTo === value.to) return
+    onChange({ ...value, from: parsedFrom, to: parsedTo })
+  }, [parsedFrom, parsedTo, value, onChange])
+  const invalid = 'Wpisz kwotę, np. 10 albo -2,50'
+
+  return (
+    <div className="grid gap-3">
+      <FilterRow label="Ukryj kwoty" hint="Dokumenty z kwotą w tym przedziale znikną z listy i z „Razem”.">
+        <SegmentedField
+          label="Kwota do ukrycia"
+          options={VALUE_FIELD_OPTIONS}
+          value={value.field}
+          onChange={(field) => onChange({ ...value, field })}
+        />
+      </FilterRow>
+      <div className="grid grid-cols-2 gap-3">
+        <TextField
+          label="Od zł"
+          inputMode="decimal"
+          value={from}
+          onChange={(event) => setFrom(event.target.value)}
+          error={parseAmount(from) === undefined ? invalid : undefined}
+        />
+        <TextField
+          label="Do zł"
+          inputMode="decimal"
+          value={to}
+          onChange={(event) => setTo(event.target.value)}
+          error={parseAmount(to) === undefined ? invalid : undefined}
+        />
+      </div>
     </div>
   )
 }

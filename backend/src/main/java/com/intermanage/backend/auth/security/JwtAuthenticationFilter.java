@@ -27,8 +27,12 @@ import jakarta.servlet.http.HttpServletResponse;
  * użytkownika z bazy, żeby zmiany wprowadzone przez właściciela (uprawnienia roli, zmiana roli, blokada konta,
  * reset hasła) działały od razu, bez ponownego logowania. Nieważny lub wygasły token, zablokowane konto albo inna
  * wersja sesji niż w tokenie zostawiają żądanie nieuwierzytelnione (chronione endpointy zwrócą 401).
+ * Ważny, ale starszy token jest wymieniany na nowy ({@link JwtService#refreshIfDue}), więc aktywny użytkownik
+ * nie zostaje wylogowany w trakcie pracy.
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final String LOGOUT_PATH = "/api/auth/logout";
 
     private final JwtService jwtService;
     private final AppUserRepository users;
@@ -46,23 +50,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Cookie cookie = WebUtils.getCookie(request, JwtService.COOKIE_NAME);
         if (cookie != null && !cookie.getValue().isBlank()) {
-            authenticate(cookie.getValue()).ifPresent(principal -> {
+            decode(cookie.getValue()).ifPresent(jwt -> authenticate(jwt).ifPresent(principal -> {
                 SecurityContext context = contextHolder.createEmptyContext();
                 context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
                         principal, null, principal.getAuthorities()));
                 contextHolder.setContext(context);
-            });
+                // Przy wylogowaniu nie odnawiamy, bo nowe ciasteczko przykryłoby to czyszczące.
+                if (!LOGOUT_PATH.equals(request.getRequestURI())) {
+                    jwtService.refreshIfDue(response, jwt, principal);
+                }
+            }));
         }
         chain.doFilter(request, response);
     }
 
-    private Optional<AppUserPrincipal> authenticate(String token) {
-        Jwt jwt;
+    private Optional<Jwt> decode(String token) {
+        try {
+            return Optional.of(jwtService.decoder().decode(token));
+        } catch (JwtException e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<AppUserPrincipal> authenticate(Jwt jwt) {
         UUID userId;
         try {
-            jwt = jwtService.decoder().decode(token);
             userId = UUID.fromString(jwt.getSubject());
-        } catch (JwtException | IllegalArgumentException e) {
+        } catch (IllegalArgumentException | NullPointerException e) {
             return Optional.empty();
         }
         Number tokenVersion = jwt.getClaim(JwtService.SESSION_VERSION_CLAIM);

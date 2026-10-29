@@ -146,6 +146,21 @@ class AuthAndRolesIntegrationTests {
     }
 
     @Test
+    void rememberMeGivesPersistentCookieAndPlainLoginSessionCookie() throws Exception {
+        assertThat(login(OWNER, OWNER_PASSWORD).getMaxAge()).isEqualTo(-1);
+
+        MvcResult remembered = mvc.perform(post("/api/auth/login").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + OWNER + "\",\"password\":\"" + OWNER_PASSWORD
+                                + "\",\"rememberMe\":true}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie cookie = tokenCookie(remembered);
+        assertThat(cookie.getMaxAge()).isEqualTo((int) java.time.Duration.ofDays(30).toSeconds());
+        mvc.perform(get("/api/auth/me").cookie(cookie)).andExpect(status().isOk());
+    }
+
+    @Test
     void invalidTokenIsRejectedButDoesNotBlockLogin() throws Exception {
         Cookie forged = new Cookie(JwtService.COOKIE_NAME, "nie-jest-to-jwt");
 

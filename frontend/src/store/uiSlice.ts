@@ -9,7 +9,10 @@ type UiState = {
   currentStoreId: string | null
   /** Schowane podpowiedzi "jak to działa" (identyfikatory), zapamiętane w przeglądarce. */
   hiddenHints: string[]
-  /** Kody dostawców ukrytych na listach dokumentów, osobno dla każdego sklepu, zapamiętane w przeglądarce. */
+  /**
+   * Kody dostawców ukrytych na listach dokumentów, osobno dla każdego sklepu i typu dokumentów (klucz
+   * `hiddenSuppliersKey`), zapamiętane w przeglądarce.
+   */
   hiddenDocumentSuppliers: Record<string, string[]>
 }
 
@@ -53,16 +56,22 @@ export function persistHiddenHints(hints: string[]) {
   }
 }
 
+/** Klucz ukrytych dostawców: sklep i typ dokumentów (kod typu, np. PZ). */
+export const hiddenSuppliersKey = (storeId: string, typeCode: string) => `${storeId}:${typeCode.toUpperCase()}`
+
 function readHiddenDocumentSuppliers(): Record<string, string[]> {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(HIDDEN_DOCUMENT_SUPPLIERS_KEY) ?? '{}')
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-    return Object.fromEntries(
-      Object.entries(value).map(([storeId, codes]) => [
-        storeId,
-        Array.isArray(codes) ? codes.filter((code) => typeof code === 'string') : [],
-      ]),
-    )
+    const entries = Object.entries(value).map(([key, codes]): [string, string[]] => [
+      key,
+      Array.isArray(codes) ? codes.filter((code) => typeof code === 'string') : [],
+    ])
+    // Zapis sprzed podziału na typy (klucz = sam sklep) był ustawiany głównie na przyjęciach, więc trafia do PZ.
+    const result: Record<string, string[]> = {}
+    entries.filter(([key]) => !key.includes(':')).forEach(([storeId, codes]) => (result[hiddenSuppliersKey(storeId, 'PZ')] = codes))
+    entries.filter(([key]) => key.includes(':')).forEach(([key, codes]) => (result[key] = codes))
+    return result
   } catch {
     return {}
   }
@@ -101,8 +110,8 @@ const uiSlice = createSlice({
       state.hiddenHints = state.hiddenHints.filter((h) => h !== hint)
       if (hidden) state.hiddenHints.push(hint)
     },
-    setHiddenDocumentSuppliers(state, action: PayloadAction<{ storeId: string; codes: string[] }>) {
-      state.hiddenDocumentSuppliers[action.payload.storeId] = action.payload.codes
+    setHiddenDocumentSuppliers(state, action: PayloadAction<{ key: string; codes: string[] }>) {
+      state.hiddenDocumentSuppliers[action.payload.key] = action.payload.codes
     },
   },
 })

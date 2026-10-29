@@ -1,6 +1,7 @@
 package com.intermanage.backend.document.service;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -159,12 +160,17 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public DocumentPage list(UUID storeId, String typeCode, int page, String query, String product,
             DocumentSearch.Presence invoice, DocumentSearch.Presence withCorrections, DocumentSearch.Presence closed,
-            Collection<String> hiddenSuppliers, String sort, String direction) {
+            DocumentSearch.GratisFilter withGratis, DocumentSearch.ValueField hiddenValueField, BigDecimal hiddenValueFrom,
+            BigDecimal hiddenValueTo, Collection<String> hiddenSuppliers, String sort, String direction) {
         DocumentType type = type(typeCode);
         Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query))
                 .and(DocumentSearch.withProduct(DocumentSearch.words(product)))
                 .and(DocumentSearch.withoutSuppliers(hiddenSuppliers))
-                .and(DocumentSearch.withoutZeroDeliveries());
+                .and(DocumentSearch.withoutZeroDeliveries())
+                .and(DocumentSearch.outsideValueRange(hiddenValueField, hiddenValueFrom, hiddenValueTo));
+        if (type.canBeGratis()) {
+            matching = matching.and(DocumentSearch.withGratis(withGratis));
+        }
         if (type.canLinkKsefInvoice() && invoice != DocumentSearch.Presence.ALL) {
             matching = matching.and(DocumentSearch.withInvoice(invoice, ksefLinks.nip(storeId)));
         }

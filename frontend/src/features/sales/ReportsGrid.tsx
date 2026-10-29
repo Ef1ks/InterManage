@@ -3,6 +3,7 @@ import {
   ChefHatIcon,
   ChevronRightIcon,
   ClipboardListIcon,
+  GiftIcon,
   type LucideIcon,
   ScaleIcon,
 } from 'lucide-react'
@@ -13,8 +14,8 @@ import { useSalesReportsOverview } from '@/features/sales/api'
 import { salesPaths } from '@/features/sales/paths'
 import { cn } from '@/lib/utils'
 
-/** {@code fromDocuments}: raport liczy się z dokumentów, nie ze sprzedaży, więc pod kafelkiem nie ma zakresu sprzedaży. */
-type Report = { path: string; title: string; description: string; icon: LucideIcon; fromDocuments?: boolean }
+/** {@code fromDocuments}: raport liczy się z dokumentów, więc pod kafelkiem zamiast zakresu sprzedaży jest ten opis. */
+type Report = { path: string; title: string; description: string; icon: LucideIcon; fromDocuments?: string }
 
 /** Raporty sprzedaży; kolejne dopisujemy tutaj jako następne kafelki. */
 const REPORTS: Report[] = [
@@ -41,7 +42,14 @@ const REPORTS: Report[] = [
     title: 'Zakup bazowy poza bazą',
     description: 'Artykuły z cadencier kupione u innego dostawcy niż baza w ostatnich 30 dniach. Do wyjaśnienia z dostawcą.',
     icon: ScaleIcon,
-    fromDocuments: true,
+    fromDocuments: 'Z przyjęć PZ i ich korekt',
+  },
+  {
+    path: salesPaths.gratis,
+    title: 'Przyjęte gratisy',
+    description: 'Gratisy od dostawców po miesiącach i rejonach: za handel i ekspozycję, za straty i ich udział w obrocie.',
+    icon: GiftIcon,
+    fromDocuments: 'Z przeniesień stanów zarejestrowanych jako gratis',
   },
 ]
 
@@ -78,7 +86,7 @@ export function ReportsGrid({ storeId }: { storeId: string }) {
             <p className="mt-0.5 text-sm text-muted-foreground">{report.description}</p>
           </div>
           <p className="mt-auto text-sm text-muted-foreground tabular-nums">
-            {report.fromDocuments ? 'Z przyjęć PZ i ich korekt' : coverage}
+            {report.fromDocuments ?? coverage}
           </p>
         </Link>
       ))}

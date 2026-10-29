@@ -80,4 +80,36 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             group by 1, 2
             """, nativeQuery = true)
     List<RegionValue> sumByRegion(UUID storeId, Collection<String> types, LocalDate from, LocalDate to);
+
+    /** Dostawca (przy bazie z marką) artykułów z przyjęć PZ: kiedy ostatnio przywiózł i ile z podanych artykułów. */
+    interface RecentSupplier {
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        String getBrand();
+
+        LocalDateTime getLastDeliveryDate();
+
+        long getProductCount();
+    }
+
+    /**
+     * Ostatni dostawcy podanych artykułów z przyjęć PZ, od najświeższej dostawy. Dostawcy z {@code brandSuppliers}
+     * (baza) są rozbici na marki artykułów, bo gratis daje producent.
+     */
+    @Query(value = """
+            select l.supplier_code as supplier_code, max(l.supplier_name) as supplier_name,
+                   case when l.supplier_code in (:brandSuppliers) then nullif(trim(l.brand), '') end as brand,
+                   max(d.document_date) as last_delivery_date, count(distinct l.itm8) as product_count
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type = 'PZ' and l.itm8 in (:itm8s) and l.quantity > 0
+              and l.supplier_code is not null
+            group by 1, 3
+            order by 4 desc
+            limit :limit
+            """, nativeQuery = true)
+    List<RecentSupplier> findRecentSuppliers(UUID storeId, Collection<String> itm8s,
+            Collection<String> brandSuppliers, int limit);
 }

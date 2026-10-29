@@ -28,6 +28,7 @@ import {
   formatPercent,
   formatPrice,
   formatQuantity,
+  showsSupplier,
 } from '@/features/documents/format'
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
@@ -160,15 +161,21 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr_auto_1fr]">
           <dt className="text-muted-foreground">Data</dt>
           <dd className="tabular-nums">{formatDocumentDate(document.documentDate)}</dd>
-          <dt className="text-muted-foreground">Dostawca</dt>
-          <dd>
-            {document.supplierName ?? <span className="text-muted-foreground">różni dostawcy - przy liniach</span>}
-            {document.supplierCode && <span className="ml-1.5 text-muted-foreground tabular-nums">{document.supplierCode}</span>}
-          </dd>
-          <dt className="text-muted-foreground">Nr dok. dostawcy</dt>
-          <dd>
-            <SupplierDocumentNumber storeId={storeId} document={document} />
-          </dd>
+          {showsSupplier(document.type) && (
+            <>
+              <dt className="text-muted-foreground">Dostawca</dt>
+              <dd>
+                {document.supplierName ?? <span className="text-muted-foreground">różni dostawcy - przy liniach</span>}
+                {document.supplierCode && (
+                  <span className="ml-1.5 text-muted-foreground tabular-nums">{document.supplierCode}</span>
+                )}
+              </dd>
+              <dt className="text-muted-foreground">Nr dok. dostawcy</dt>
+              <dd>
+                <SupplierDocumentNumber storeId={storeId} document={document} />
+              </dd>
+            </>
+          )}
           <dt className="text-muted-foreground">Linie</dt>
           <dd className="tabular-nums">
             {countFormat.format(document.lineCount)}
