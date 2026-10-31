@@ -32,6 +32,18 @@ public interface DocumentKsefInvoiceRepository extends JpaRepository<DocumentKse
             order by d.documentDate""")
     List<DocumentKsefInvoice> findActiveByInvoiceIdsInStores(Collection<UUID> storeIds, Collection<UUID> invoiceIds);
 
+    /**
+     * Faktury korygujące z odczytanym XML (wiadomo, co korygują) przypięte do korekt od dostawcy (WZ) sklepu, które
+     * nigdy nie były przy przyjęciu (odpiętej ręcznie nie przypinamy z powrotem).
+     */
+    @Query("""
+            select l from DocumentKsefInvoice l join fetch l.document d join fetch l.invoice i
+            where d.store.id = :storeId and d.type = com.intermanage.backend.document.entity.DocumentType.WZ
+            and l.unlinkedAt is null and i.correctedInvoices is not empty
+            and not exists (select c from DeliveryCorrection c where c.correction = d)
+            order by d.documentDate, l.linkedAt""")
+    List<DocumentKsefInvoice> findCorrectionsNeverAttached(UUID storeId);
+
     @Query("""
             select l from DocumentKsefInvoice l
             where l.document.id = :documentId and l.invoice.id = :invoiceId and l.unlinkedAt is null""")

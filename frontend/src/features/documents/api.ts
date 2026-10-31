@@ -98,24 +98,34 @@ export function useDocuments(storeId: string, typeCode: string, filters: Documen
   })
 }
 
-/** Propozycje automatycznego przypięcia faktur KSeF do przyjęć bez faktury; pobierane po otwarciu okna. */
-export function useAutoInvoiceMatches(storeId: string, enabled: boolean) {
+/**
+ * Propozycje automatycznego przypięcia faktur KSeF do przyjęć (PZ) albo korekt od dostawcy (WZ) bez faktury;
+ * pobierane po otwarciu okna.
+ */
+export function useAutoInvoiceMatches(storeId: string, typeCode: 'pz' | 'wz', enabled: boolean) {
   return useQuery({
-    queryKey: [...documentsKey(storeId), 'pz', 'auto-ksef-invoices'],
-    queryFn: () => api<AutoInvoiceMatch[]>(`${documentsPath(storeId)}/pz/auto-ksef-invoices`),
+    queryKey: [...documentsKey(storeId), typeCode, 'auto-ksef-invoices'],
+    queryFn: () => api<AutoInvoiceMatch[]>(`${documentsPath(storeId)}/${typeCode}/auto-ksef-invoices`),
     enabled,
     staleTime: 0,
   })
 }
 
-export type AutoInvoicePair = { documentId: string; invoiceId: string }
+/** Korekta od dostawcy (WZ), która przy przypięciu faktury trafiła sama do przyjęcia z fakturą korygowaną. */
+export type CorrectionAttachment = { deliveryId: string; correctionId: string }
 
-/** Przypięcie zaakceptowanych propozycji (zwraca liczbę przypiętych) i jego cofnięcie. */
-export function useAutoInvoiceLinks(storeId: string) {
-  const path = `${documentsPath(storeId)}/pz/auto-ksef-invoices`
+/** `attached`: korekty od dostawcy przypięte przy tym do przyjęć (cofnięcie je odpina). */
+export type AutoInvoicePair = { documentId: string; invoiceId: string; attached?: CorrectionAttachment[] }
+
+/**
+ * Przypięcie zaakceptowanych propozycji (zwraca przypięte pary z korektami, które trafiły przy tym do przyjęć) i jego
+ * cofnięcie (te pary odpinają też te korekty).
+ */
+export function useAutoInvoiceLinks(storeId: string, typeCode: 'pz' | 'wz') {
+  const path = `${documentsPath(storeId)}/${typeCode}/auto-ksef-invoices`
   return {
     link: useMutation({
-      mutationFn: (matches: AutoInvoicePair[]) => api<number>(path, { method: 'POST', json: { matches } }),
+      mutationFn: (matches: AutoInvoicePair[]) => api<AutoInvoicePair[]>(path, { method: 'POST', json: { matches } }),
     }),
     undo: useMutation({
       mutationFn: (matches: AutoInvoicePair[]) => api<void>(`${path}/undo`, { method: 'POST', json: { matches } }),

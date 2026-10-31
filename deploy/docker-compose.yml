@@ -24,6 +24,8 @@ services:
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@intermanage.pl}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Intermanage}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+      # Propozycje AI we Wprowadzaniu danych; pusty klucz = propozycje tylko z kartoteki sklepu.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       FRONTEND_URL: https://intermanage.pl
       AUTH_COOKIE_SECURE: "true"
       # nginx podaje X-Forwarded-Proto, więc Spring wie, że żądanie przyszło po HTTPS.

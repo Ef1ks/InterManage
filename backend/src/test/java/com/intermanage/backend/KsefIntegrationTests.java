@@ -56,6 +56,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.document.service.DocumentKsefLinkService;
 import com.intermanage.backend.ksef.component.KsefClient;
 import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
 import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
@@ -92,6 +93,9 @@ class KsefIntegrationTests {
 
     @Autowired
     KsefCorrectedInvoiceService correctedInvoices;
+
+    @Autowired
+    DocumentKsefLinkService ksefLinks;
 
     @MockitoBean
     KsefClient ksef;
@@ -549,7 +553,9 @@ class KsefIntegrationTests {
                         invoice("KOR/A", "1111111111", "MLECZARNIA", stored.plusMinutes(3), "Kor", null,
                                 new BigDecimal("1003.00")),
                         invoice("FV/D", "2222222222", "PIEKARNIA", stored.plusMinutes(4), "Vat", null,
-                                new BigDecimal("995.00")))));
+                                new BigDecimal("995.00")),
+                        invoice("KOR/B", "1111111111", "MLECZARNIA", stored.plusMinutes(5), "Kor", null,
+                                new BigDecimal("-50.00")))));
         syncAndWait(owner, storeId);
         jdbc.update("insert into suppliers (store_id, code, name, nip) values (?::uuid, 'S1', 'MLECZARNIA', "
                 + "'1111111111'), (?::uuid, 'S2', 'PIEKARNIA', '2222222222')", storeId, storeId);
@@ -584,7 +590,7 @@ class KsefIntegrationTests {
         String pairs = "{\"matches\":[{\"documentId\":\"" + pz1 + "\",\"invoiceId\":\"" + fvA + "\"},"
                 + "{\"documentId\":\"" + pz2 + "\",\"invoiceId\":\"" + fvB + "\"}]}";
 
-        send(owner, post(auto), pairs).andExpect(status().isOk()).andExpect(jsonPath("$").value(2));
+        send(owner, post(auto), pairs).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
         mvc.perform(get("/api/stores/" + storeId + "/documents/pz/" + pz1).cookie(owner))
                 .andExpect(jsonPath("$.ksefInvoices[0].invoiceNumber").value("FV/A"));
         mvc.perform(get(auto).cookie(owner))
@@ -598,6 +604,71 @@ class KsefIntegrationTests {
         mvc.perform(get(auto).cookie(owner)).andExpect(jsonPath("$.length()").value(3));
         assertThat(jdbc.queryForObject("select count(*) from document_ksef_invoices where document_id in "
                 + "(?::uuid, ?::uuid) and unlinked_at is not null", Integer.class, pz1, pz2)).isEqualTo(2);
+
+        // Korekty od dostawcy dostają faktury korygujące z kwotą tego samego znaku: WZ1 bierze KOR/B,
+        // a WZ2 nie bierze KOR/A (+1003 zł przy korekcie -1003 zł).
+        String wz1 = insertDocument(storeId, "WZ", "WZ1", null, "-52.00");
+        String wz2 = insertDocument(storeId, "WZ", "WZ2", null, "-1003.00");
+        jdbc.update("update documents set supplier_code = 'S1' where id in (?::uuid, ?::uuid)", wz1, wz2);
+        String autoWz = "/api/stores/" + storeId + "/documents/wz/auto-ksef-invoices";
+        String wzProposals = mvc.perform(get(autoWz).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documentNumber").value("WZ1"))
+                .andExpect(jsonPath("$[0].invoiceNumber").value("KOR/B"))
+                .andExpect(jsonPath("$[0].difference").value(2.0))
+                .andReturn().getResponse().getContentAsString();
+        String korB = JsonPath.read(wzProposals, "$[0].invoiceId");
+        // KOR/B koryguje FV/C, która jest fakturą PZ5 (po numerze), więc WZ1 trafia też do PZ5.
+        jdbc.update("insert into ksef_invoice_corrected (invoice_id, invoice_number) values (?::uuid, 'FV/C')", korB);
+        String wzPairs = "{\"matches\":[{\"documentId\":\"" + wz1 + "\",\"invoiceId\":\"" + korB + "\"}]}";
+        send(owner, post(autoWz), wzPairs)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].attached[0].deliveryId").value(pz5))
+                .andExpect(jsonPath("$[0].attached[0].correctionId").value(wz1));
+        mvc.perform(get(autoWz).cookie(owner)).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/api/stores/" + storeId + "/documents/wz/" + wz1).cookie(owner))
+                .andExpect(jsonPath("$.correctionOf.id").value(pz5));
+
+        // Cofnięcie z przyjęciem odpina też korektę od przyjęcia.
+        send(owner, post(autoWz + "/undo"), "{\"matches\":[{\"documentId\":\"" + wz1 + "\",\"invoiceId\":\"" + korB
+                + "\",\"attached\":[{\"deliveryId\":\"" + pz5 + "\",\"correctionId\":\"" + wz1 + "\"}]}]}")
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/stores/" + storeId + "/documents/wz/" + wz1).cookie(owner))
+                .andExpect(jsonPath("$.correctionOf").doesNotExist())
+                .andExpect(jsonPath("$.ksefInvoices.length()").value(0));
+
+        // Przypięcie z dokumentu działa tak samo.
+        send(owner, post("/api/stores/" + storeId + "/documents/wz/" + wz1 + "/ksef-invoices"),
+                "{\"invoiceId\":\"" + korB + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correctionOf.id").value(pz5));
+
+        // W drugą stronę: WZ2 ma KOR/A, która koryguje FV/A, a przyjęcie z FV/A jeszcze nie ma faktury - nic się nie
+        // przypina. Przypięcie FV/A do PZ1 dociąga WZ2 do PZ1.
+        String korA = jdbc.queryForObject("select id::text from ksef_invoices where invoice_number = 'KOR/A'",
+                String.class);
+        jdbc.update("insert into ksef_invoice_corrected (invoice_id, invoice_number) values (?::uuid, 'FV/A')", korA);
+        send(owner, post("/api/stores/" + storeId + "/documents/wz/" + wz2 + "/ksef-invoices"),
+                "{\"invoiceId\":\"" + korA + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correctionOf").doesNotExist());
+        send(owner, post("/api/stores/" + storeId + "/documents/pz/" + pz1 + "/ksef-invoices"),
+                "{\"invoiceId\":\"" + fvA + "\"}").andExpect(status().isOk());
+        mvc.perform(get("/api/stores/" + storeId + "/documents/wz/" + wz2).cookie(owner))
+                .andExpect(jsonPath("$.correctionOf.id").value(pz1));
+
+        // Korekty odpiętej ręcznie nic nie przypina z powrotem (ani przebieg w tle).
+        mvc.perform(delete("/api/stores/" + storeId + "/documents/pz/" + pz1 + "/corrections/" + wz2)
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        assertThat(ksefLinks.attachPendingCorrections(UUID.fromString(storeId), null)).isEmpty();
+        mvc.perform(get("/api/stores/" + storeId + "/documents/wz/" + wz2).cookie(owner))
+                .andExpect(jsonPath("$.correctionOf").doesNotExist());
+
+        mvc.perform(get("/api/stores/" + storeId + "/documents/pl/auto-ksef-invoices").cookie(owner))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

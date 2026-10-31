@@ -6,8 +6,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Propozycja automatycznego przypięcia faktury KSeF do przyjęcia PZ bez faktury: ten sam dostawca (NIP z listy
- * dostawców = NIP sprzedawcy), kwota netto faktury różni się od wartości zakupu o {@code difference} (bez znaku).
+ * Propozycja automatycznego przypięcia faktury KSeF do przyjęcia PZ albo korekty od dostawcy WZ bez faktury: ten sam
+ * dostawca (NIP z listy dostawców = NIP sprzedawcy), kwota netto faktury różni się od wartości zakupu
+ * o {@code difference} (bez znaku).
  */
 public record AutoInvoiceMatch(
         UUID documentId,

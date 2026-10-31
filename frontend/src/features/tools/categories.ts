@@ -7,6 +7,7 @@ import {
   FileSpreadsheetIcon,
   FileTextIcon,
   ReceiptTextIcon,
+  SheetIcon,
   TruckIcon,
   UsersIcon,
   type LucideIcon,
@@ -29,6 +30,7 @@ export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: Lucid
   DOCUMENTS: { path: '/dokumenty', icon: FileTextIcon },
   DELI_PRICES: { path: '/kalkulator-garmazu', icon: CalculatorIcon },
   KSEF_INVOICES: { path: '/faktury-ksef', icon: ReceiptTextIcon },
+  DATA_ENTRY: { path: '/wprowadzanie-danych', icon: SheetIcon },
 }
 
 export function usePermissionCategories() {

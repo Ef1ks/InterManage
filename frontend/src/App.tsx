@@ -7,6 +7,7 @@ import { ActivationPage } from '@/features/auth/ActivationPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
+import { DataEntryPage } from '@/features/data-entry/DataEntryPage'
 import { DeliOrderPage } from '@/features/deli-order/DeliOrderPage'
 import { PriceCalculatorPage } from '@/features/deli-prices/PriceCalculatorPage'
 import { SalesPage } from '@/features/sales/SalesPage'
@@ -30,6 +31,7 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   DOCUMENTS: <DocumentsPage />,
   DELI_PRICES: <PriceCalculatorPage />,
   KSEF_INVOICES: <KsefPage />,
+  DATA_ENTRY: <DataEntryPage />,
 }
 
 const toolRoutes = (Object.keys(TOOL_ROUTES) as PermissionCategory[]).map((category) => ({

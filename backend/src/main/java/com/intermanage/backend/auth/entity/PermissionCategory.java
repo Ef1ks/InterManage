@@ -14,7 +14,8 @@ public enum PermissionCategory {
     DELI_ORDERS("Zamówienie garmażu", "Formularz zamówień działów: rzeźnia, garmaż i inne"),
     DOCUMENTS("Dokumenty", "Dokumenty magazynowe z systemu sklepu: przyjęcia PZ i kolejne typy"),
     DELI_PRICES("Kalkulator cen garmażu", "Koszt wyrobów na kg z przepisów i cen zakupu z kartoteki"),
-    KSEF_INVOICES("Faktury KSeF", "Faktury zakupowe z Krajowego Systemu e-Faktur i połączenie sklepu z KSeF");
+    KSEF_INVOICES("Faktury KSeF", "Faktury zakupowe z Krajowego Systemu e-Faktur i połączenie sklepu z KSeF"),
+    DATA_ENTRY("Wprowadzanie danych", "Nowe artykuły z faktur KSeF: tabela jak w Excelu, propozycje AI, eksport");
 
     private final String label;
     private final String description;

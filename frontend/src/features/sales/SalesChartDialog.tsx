@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
@@ -11,7 +12,7 @@ import type { SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type ChartRange = 'month' | 'quarter' | 'half' | 'year'
-type Metric = 'sale' | 'quantity' | 'cost' | 'margin'
+type Metric = 'price' | 'quantity' | 'sale' | 'cost'
 type SaleBasis = 'gross' | 'net'
 
 /**
@@ -26,31 +27,40 @@ const RANGES: Record<ChartRange, { label: string; days: number; step: 1 | 7 }> =
   year: { label: 'Rok', days: 364, step: 7 },
 }
 
-const METRICS: { value: Metric; label: string }[] = [
-  { value: 'sale', label: 'Sprzedaż' },
-  { value: 'quantity', label: 'Ilość' },
-  { value: 'margin', label: 'Marża' },
-]
-
 /**
- * Koszty garmażu: przy całym garmażu (rejon 36) koszt protokołów reprezentacji i marża, niżej kosztu nie da się
- * przypisać, więc zostaje sprzedaż i ilość.
+ * Artykuł: najpierw średnia cena sprzedaży z ilością, potem to, co przy nomenklaturze: ilość i sprzedaż z % marży.
+ * Koszty garmażu: marża i koszt reprezentacji są tylko przy całym garmażu (rejon 36), niżej kosztu nie da się
+ * przypisać, więc sprzedaż jest bez marży.
  */
-const DELI_METRICS: { value: Metric; label: string }[] = [
-  { value: 'sale', label: 'Sprzedaż' },
-  { value: 'quantity', label: 'Ilość' },
-  { value: 'cost', label: 'Koszt reprezentacji' },
-  { value: 'margin', label: 'Marża' },
-]
-const DELI_GROUP_METRICS = DELI_METRICS.slice(0, 2)
-
-function metricsFor(kind: ReportKind, target: SalesChartTarget) {
-  if (kind === 'sales') return METRICS
-  return target.kind === 'group' && target.code === '36' ? DELI_METRICS : DELI_GROUP_METRICS
+function metricsFor(kind: ReportKind, target: SalesChartTarget): { value: Metric; label: string }[] {
+  const metrics: { value: Metric; label: string }[] = [
+    { value: 'quantity', label: 'Ilość' },
+    { value: 'sale', label: hasMargin(kind, target) ? 'Sprzedaż i marża %' : 'Sprzedaż' },
+  ]
+  if (target.kind === 'article') metrics.unshift({ value: 'price', label: 'Cena i ilość' })
+  if (kind === 'deli' && isDeliTotal(target)) metrics.push({ value: 'cost', label: 'Koszt reprezentacji' })
+  return metrics
 }
 
-/** Słupek wykresu: dzień albo tydzień. */
-type Bar = { from: string; to: string; value: number }
+const isDeliTotal = (target: SalesChartTarget) => target.kind === 'group' && target.code === '36'
+const hasMargin = (kind: ReportKind, target: SalesChartTarget) => kind === 'sales' || isDeliTotal(target)
+
+/** Słupek wykresu: dzień albo tydzień z sumami sprzedaży. */
+type Bar = { from: string; to: string; figures: SalesFigures }
+
+/** Seria wykresu: słupki albo linia na prawej osi. */
+type Series = {
+  label: string
+  value: (figures: SalesFigures) => number | null
+  format: (value: number) => string
+  unit: string
+}
+
+/** Średnia cena brutto sztuki (kg), jak cena na półce; dzień bez sprzedaży jej nie ma. */
+const averagePrice = (figures: SalesFigures) => (figures.quantity > 0 ? figures.saleValueGross / figures.quantity : null)
+
+const marginPercent = (figures: SalesFigures) =>
+  figures.marginValue != null && figures.saleValueNet !== 0 ? (figures.marginValue / figures.saleValueNet) * 100 : null
 
 /**
  * Okno z wykresem sprzedaży wiersza raportu. Przy artykule na górze jego bieżące dane z kartoteki (stan, rotacja,
@@ -79,7 +89,7 @@ export function SalesChartDialog({
 
   return (
     <Dialog open={target != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-5 p-6 sm:max-w-4xl">
+      <DialogContent className="gap-5 p-6 sm:max-w-5xl">
         {shown && (
           <ChartContent
             key={chartKey(shown)}
@@ -114,41 +124,37 @@ function ChartContent({
   basis: SaleBasis
   lastSaleDate: string
 }) {
+  const metrics = metricsFor(kind, target)
   const [rangeKey, setRangeKey] = useState<ChartRange>('month')
-  const [metric, setMetric] = useState<Metric>('sale')
+  const [metric, setMetric] = useState<Metric>(metrics[0].value)
   const range: DateRange = {
     from: addDays(lastSaleDate, -(RANGES[rangeKey].days - 1)),
     to: lastSaleDate,
   }
   const history = useSalesHistory(storeId, kind, target, range, filter)
-  const metrics = metricsFor(kind, target)
   const article = useSalesArticle(storeId, target.kind === 'article' ? target.itm8 : null)
+  const showMargin = hasMargin(kind, target)
 
-  const value = (figures: SalesFigures) =>
-    metric === 'quantity'
-      ? figures.quantity
-      : metric === 'margin'
-        ? (figures.marginValue ?? 0)
-        : metric === 'cost'
-          ? (figures.costValue ?? 0)
-          : basis === 'gross'
-            ? figures.saleValueGross
-            : figures.saleValueNet
-  const format = metric === 'quantity' ? formatQuantity : formatZloty
-  const metricLabel =
-    metric === 'quantity'
-      ? 'Ilość'
-      : metric === 'margin'
-        ? 'Marża'
-        : metric === 'cost'
-          ? 'Koszt reprezentacji'
-          : basis === 'gross'
-            ? 'Sprzedaż brutto'
-            : 'Sprzedaż netto'
+  const quantity: Series = { label: 'Ilość', value: (f) => f.quantity, format: formatQuantity, unit: 'ilość' }
+  const sale: Series = {
+    label: basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto',
+    value: (f) => (basis === 'gross' ? f.saleValueGross : f.saleValueNet),
+    format: formatZloty,
+    unit: 'zł',
+  }
+  const cost: Series = { label: 'Koszt reprezentacji', value: (f) => f.costValue ?? 0, format: formatZloty, unit: 'zł' }
+  const price: Series = { label: 'Średnia cena brutto', value: averagePrice, format: formatZloty, unit: 'zł' }
+  const margin: Series = { label: 'Marża', value: marginPercent, format: formatPercentValue, unit: '%' }
+
+  const bar = metric === 'sale' ? sale : metric === 'cost' ? cost : quantity
+  const line = metric === 'price' ? price : metric === 'sale' && showMargin ? margin : null
 
   const data = history.data
-  const bars = data ? toBars(data, RANGES[rangeKey].step, value) : []
+  const step = RANGES[rangeKey].step
+  const bars = data ? toBars(data, step) : []
   const days = data?.days.length ?? 0
+  const total = data ? (bar.value(data.total) ?? 0) : 0
+  const lineTotal = data && line ? line.value(data.total) : null
 
   return (
     <>
@@ -172,40 +178,47 @@ function ChartContent({
         />
       </div>
 
-      <div className={cn('grid gap-3 transition-opacity duration-150', history.isPlaceholderData && 'opacity-60')}>
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm tabular-nums">
-          <p className="text-muted-foreground">{formatRange(range)}</p>
+      <div className={cn('grid gap-4 transition-opacity duration-150', history.isPlaceholderData && 'opacity-60')}>
+        <div className="grid gap-2">
+          <p className="text-sm text-muted-foreground">{formatRange(range)}</p>
           {data && (
-            <>
-              <p>
-                <span className="text-muted-foreground">{metricLabel} razem </span>
-                <span className="font-medium">{format(value(data.total))}</span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">średnio dziennie </span>
-                <span className="font-medium">{format(value(data.total) / days)}</span>
-              </p>
-              {metric === 'margin' && data.total.marginValue != null && data.total.saleValueNet !== 0 && (
-                <p>
-                  <span className="text-muted-foreground">marża </span>
-                  <span className="font-medium">
-                    {percentFormat.format((data.total.marginValue / data.total.saleValueNet) * 100)}%
-                  </span>
-                </p>
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+              <Stat label={`${bar.label} razem`}>{bar.format(total)}</Stat>
+              <Stat label="Średnio dziennie">{bar.format(days > 0 ? total / days : 0)}</Stat>
+              {line && (
+                <Stat label={line === price ? 'Średnia cena w okresie' : 'Marża % w okresie'} accent>
+                  {lineTotal == null ? '—' : line.format(lineTotal)}
+                </Stat>
               )}
-            </>
+              {line === price && <Stat label="Sprzedaż brutto razem">{formatZloty(data.total.saleValueGross)}</Stat>}
+              {line === margin && data.total.marginValue != null && (
+                <Stat label="Marża razem">{formatZloty(data.total.marginValue)}</Stat>
+              )}
+            </dl>
           )}
         </div>
 
         {history.isError && !data ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
         ) : !data ? (
-          <div aria-hidden className="h-64 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <div aria-hidden className="h-80 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
         ) : (
-          <BarChart bars={bars} format={format} label={metricLabel} step={RANGES[rangeKey].step} />
+          <BarChart bars={bars} bar={bar} line={line} basis={basis} showMargin={showMargin} step={step} />
         )}
       </div>
     </>
+  )
+}
+
+function Stat({ label, accent, children }: { label: string; accent?: boolean; children: ReactNode }) {
+  return (
+    <div className="bg-card px-4 py-2.5">
+      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {accent && <span aria-hidden className="size-2 rounded-full bg-amber-500 dark:bg-amber-400" />}
+        {label}
+      </dt>
+      <dd className="text-base font-semibold tabular-nums">{children}</dd>
+    </div>
   )
 }
 
@@ -291,30 +304,58 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Dni albo tygodnie liczone wstecz od ostatniego dnia, żeby ostatni słupek był pełny. */
-function toBars(history: SalesHistory, step: 1 | 7, value: (figures: SalesFigures) => number): Bar[] {
+function toBars(history: SalesHistory, step: 1 | 7): Bar[] {
   const bars: Bar[] = []
   for (let end = history.days.length; end > 0; end -= step) {
     const days = history.days.slice(Math.max(0, end - step), end)
-    bars.unshift({
-      from: days[0].date,
-      to: days.at(-1)!.date,
-      value: days.reduce((sum, day) => sum + value(day.figures), 0),
-    })
+    bars.unshift({ from: days[0].date, to: days.at(-1)!.date, figures: sumFigures(days.map((day) => day.figures)) })
   }
   return bars
 }
 
-const CHART_HEIGHT = 256
-const PADDING = { top: 12, right: 8, bottom: 28, left: 64 }
+function sumFigures(list: SalesFigures[]): SalesFigures {
+  const sum = (pick: (figures: SalesFigures) => number) => list.reduce((total, figures) => total + pick(figures), 0)
+  const sumNullable = (pick: (figures: SalesFigures) => number | null) =>
+    list.some((figures) => pick(figures) != null) ? sum((figures) => pick(figures) ?? 0) : null
+  return {
+    quantity: sum((figures) => figures.quantity),
+    costValue: sumNullable((figures) => figures.costValue),
+    saleValueGross: sum((figures) => figures.saleValueGross),
+    saleValueNet: sum((figures) => figures.saleValueNet),
+    marginValue: sumNullable((figures) => figures.marginValue),
+  }
+}
+
+const CHART_HEIGHT = 300
+const PADDING = { top: 24, bottom: 28, left: 56 }
 
 /**
- * Słupki jednej serii w SVG: cicha siatka, oś zera, zaokrąglony koniec słupka od strony wartości, podpowiedź po
- * najechaniu (pole trafienia to cała kolumna). Szerokość z kontenera, bo tekst w SVG nie może się rozciągać.
+ * Słupki jednej serii w SVG i opcjonalnie linia drugiej serii na prawej osi (cena, % marży), z własną skalą bez
+ * zera, bo cena czy marża wahają się w wąskim przedziale. Cicha siatka, oś zera, przerywana linia średniej słupków,
+ * przy dniach podział na tygodnie i podpisane poniedziałki, dzień bez sprzedaży jako kreska na osi. Podpowiedź po
+ * najechaniu (pole trafienia to cała kolumna) pokazuje wszystkie liczby słupka. Szerokość z kontenera, bo tekst
+ * w SVG nie może się rozciągać.
  */
-function BarChart({ bars, format, label, step }: { bars: Bar[]; format: (value: number) => string; label: string; step: 1 | 7 }) {
+function BarChart({
+  bars,
+  bar: barSeries,
+  line,
+  basis,
+  showMargin,
+  step,
+}: {
+  bars: Bar[]
+  bar: Series
+  line: Series | null
+  basis: SaleBasis
+  showMargin: boolean
+  step: 1 | 7
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   const [hovered, setHovered] = useState<number | null>(null)
+  // Położenie wykresu na ekranie przy najechaniu, do podpowiedzi w portalu.
+  const [origin, setOrigin] = useState<DOMRect | null>(null)
 
   useEffect(() => {
     const element = ref.current
@@ -324,103 +365,309 @@ function BarChart({ bars, format, label, step }: { bars: Bar[]; format: (value: 
     return () => observer.disconnect()
   }, [])
 
-  const values = bars.map((bar) => bar.value)
+  const paddingRight = line ? 56 : 12
+  const values = bars.map((bar) => barSeries.value(bar.figures) ?? 0)
   const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values))
   const low = ticks[0]
   const high = ticks.at(-1)!
-  const plotWidth = Math.max(0, width - PADDING.left - PADDING.right)
+  const plotWidth = Math.max(0, width - PADDING.left - paddingRight)
   const plotHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom
+  const plotRight = PADDING.left + plotWidth
   const y = (value: number) => PADDING.top + ((high - value) / (high - low || 1)) * plotHeight
   const band = bars.length > 0 ? plotWidth / bars.length : 0
-  // Odstęp 2px między słupkami, ale słupek nie węższy niż 1px.
-  const barWidth = Math.max(1, band - 2)
-  const labelEvery = Math.max(1, Math.ceil(bars.length / Math.max(1, Math.floor(plotWidth / 72))))
+  // Odstęp między słupkami rośnie z szerokością pasma (do 6px), słupek nie węższy niż 1px.
+  const barWidth = Math.max(1, band - Math.max(1, Math.min(6, band * 0.25)))
+  const left = (index: number) => PADDING.left + index * band
+  const center = (index: number) => left(index) + band / 2
+  const average = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
+
+  const lineValues = line ? bars.map((bar) => line.value(bar.figures)) : []
+  const defined = lineValues.filter((value): value is number => value != null)
+  const lineTicks = defined.length > 0 ? lineRangeTicks(Math.min(...defined), Math.max(...defined)) : []
+  const lineLow = lineTicks[0] ?? 0
+  const lineHigh = lineTicks.at(-1) ?? 1
+  const lineY = (value: number) => PADDING.top + ((lineHigh - value) / (lineHigh - lineLow || 1)) * plotHeight
+
+  // Przy dniach podpisujemy poniedziałki (co któryś, gdy się nie mieszczą), przy tygodniach co któryś słupek.
+  const maxLabels = Math.max(1, Math.floor(plotWidth / 72))
+  const mondays = step === 1 ? bars.flatMap((bar, index) => (isMonday(bar.from) ? [index] : [])) : []
+  const candidates = step === 1 ? mondays : bars.map((_, index) => index)
+  const every = Math.max(1, Math.ceil(candidates.length / maxLabels))
+  const labelled = new Set(candidates.filter((_, position) => position % every === 0))
+
   const active = hovered == null ? null : bars[hovered]
+  const activeLine = hovered == null ? null : lineValues[hovered]
+  const activeTop =
+    hovered == null ? 0 : Math.min(y(Math.max(0, values[hovered])), activeLine == null ? Infinity : lineY(activeLine))
 
   return (
-    <div ref={ref} className="relative" onMouseLeave={() => setHovered(null)}>
-      {width > 0 && (
-        <svg
-          width={width}
-          height={CHART_HEIGHT}
-          role="img"
-          aria-label={`${label}: wykres ${step === 1 ? 'dzienny' : 'tygodniowy'}`}
-        >
-          {ticks.map((tick) => (
-            <g key={tick}>
-              <line
-                x1={PADDING.left}
-                x2={width - PADDING.right}
-                y1={y(tick)}
-                y2={y(tick)}
-                className={tick === 0 ? 'stroke-foreground/30' : 'stroke-border'}
-                strokeDasharray={tick === 0 ? undefined : '2 4'}
-              />
-              <text
-                x={PADDING.left - 8}
-                y={y(tick)}
-                dy="0.32em"
-                textAnchor="end"
-                className="fill-muted-foreground text-[0.6875rem] tabular-nums"
-              >
-                {compactFormat.format(tick)}
-              </text>
-            </g>
-          ))}
-          {bars.map((bar, index) => {
-            const x = PADDING.left + index * band + (band - barWidth) / 2
-            return (
-              <g key={bar.from}>
-                <path
-                  d={barPath(x, y(0), barWidth, y(bar.value) - y(0))}
-                  className={cn(
-                    'transition-[fill] duration-100',
-                    bar.value < 0 ? 'fill-rose-500 dark:fill-rose-400' : 'fill-sky-600 dark:fill-sky-400',
-                    hovered != null && hovered !== index && 'opacity-50',
-                  )}
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 rounded-sm bg-sky-600 dark:bg-sky-400" />
+          {barSeries.label} (oś z lewej)
+        </span>
+        {line && (
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="h-0.5 w-4 rounded-full bg-amber-500 dark:bg-amber-400" />
+            {line.label} (oś z prawej)
+          </span>
+        )}
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="w-4 border-t border-dashed border-foreground/60" />
+          średnio na {step === 1 ? 'dzień' : 'tydzień'}
+        </span>
+      </div>
+
+      <div ref={ref} className="relative" onMouseLeave={() => setHovered(null)}>
+        {width > 0 && (
+          <svg
+            width={width}
+            height={CHART_HEIGHT}
+            role="img"
+            aria-label={`${barSeries.label}${line ? ` i ${line.label}` : ''}: wykres ${step === 1 ? 'dzienny' : 'tygodniowy'}`}
+          >
+            {mondays
+              .filter((index) => index > 0)
+              .map((index) => (
+                <line
+                  key={`week${index}`}
+                  x1={left(index)}
+                  x2={left(index)}
+                  y1={PADDING.top}
+                  y2={CHART_HEIGHT - PADDING.bottom + 6}
+                  className="stroke-border"
                 />
-                {index % labelEvery === 0 && (
-                  <text
-                    x={PADDING.left + index * band + band / 2}
-                    y={CHART_HEIGHT - 8}
-                    textAnchor="middle"
-                    className="fill-muted-foreground text-[0.6875rem]"
-                  >
-                    {axisDate.format(parseIsoDate(bar.from))}
-                  </text>
-                )}
-                <rect
-                  x={PADDING.left + index * band}
-                  y={PADDING.top}
-                  width={band}
-                  height={plotHeight}
-                  fill="transparent"
-                  onMouseEnter={() => setHovered(index)}
+              ))}
+            {ticks.map((tick) => (
+              <g key={tick}>
+                <line
+                  x1={PADDING.left}
+                  x2={plotRight}
+                  y1={y(tick)}
+                  y2={y(tick)}
+                  className={tick === 0 ? 'stroke-foreground/30' : 'stroke-border'}
+                  strokeDasharray={tick === 0 ? undefined : '2 4'}
                 />
+                <text
+                  x={PADDING.left - 8}
+                  y={y(tick)}
+                  dy="0.32em"
+                  textAnchor="end"
+                  className="fill-muted-foreground text-[0.6875rem] tabular-nums"
+                >
+                  {compactFormat.format(tick)}
+                </text>
               </g>
-            )
-          })}
-        </svg>
-      )}
-      {active && hovered != null && (
-        <div
-          className="pointer-events-none absolute z-10 w-max rounded-lg bg-popover px-3 py-2 text-sm shadow-md ring-1 ring-foreground/10"
-          style={{
-            left: Math.min(Math.max(PADDING.left + hovered * band + band / 2, 80), width - 80),
-            top: Math.max(0, Math.min(y(active.value), y(0)) - 8),
-            transform: 'translate(-50%, -100%)',
-          }}
-        >
-          <p className="text-xs text-muted-foreground">{formatRange({ from: active.from, to: active.to })}</p>
-          <p className="font-medium tabular-nums">{format(active.value)}</p>
-        </div>
-      )}
-      <p className="mt-1 text-xs text-muted-foreground">
-        {step === 1 ? 'Słupek = dzień' : 'Słupek = 7 dni, do ostatniego dnia ze sprzedażą'}
+            ))}
+            <text
+              x={PADDING.left - 8}
+              y={PADDING.top - 12}
+              textAnchor="end"
+              className="fill-sky-700 text-[0.6875rem] font-medium dark:fill-sky-300"
+            >
+              {barSeries.unit}
+            </text>
+
+            {hovered != null && (
+              <rect x={left(hovered)} y={PADDING.top} width={band} height={plotHeight} className="fill-foreground/5" />
+            )}
+
+            {bars.map((bar, index) => {
+              const x = left(index) + (band - barWidth) / 2
+              const value = values[index]
+              return (
+                <g key={bar.from}>
+                  {value === 0 ? (
+                    <rect x={x} y={y(0) - 2} width={barWidth} height={2} rx={1} className="fill-foreground/25" />
+                  ) : (
+                    <path
+                      d={barPath(x, y(0), barWidth, y(value) - y(0))}
+                      className={cn(
+                        'transition-opacity duration-100',
+                        value < 0 ? 'fill-rose-500 dark:fill-rose-400' : 'fill-sky-600 dark:fill-sky-400',
+                        hovered != null && hovered !== index && 'opacity-55',
+                      )}
+                    />
+                  )}
+                  {labelled.has(index) && (
+                    <text
+                      x={step === 1 ? left(index) + 3 : center(index)}
+                      y={CHART_HEIGHT - 8}
+                      textAnchor={step === 1 ? 'start' : 'middle'}
+                      className="fill-muted-foreground text-[0.6875rem]"
+                    >
+                      {(step === 1 ? mondayDate : axisDate).format(parseIsoDate(bar.from))}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+
+            {average > 0 && (
+              <g className="pointer-events-none">
+                <line
+                  x1={PADDING.left}
+                  x2={plotRight}
+                  y1={y(average)}
+                  y2={y(average)}
+                  className="stroke-foreground/60"
+                  strokeDasharray="5 4"
+                />
+                <text
+                  x={plotRight - 4}
+                  y={y(average) - 5}
+                  textAnchor="end"
+                  className="fill-foreground text-[0.6875rem] font-medium tabular-nums [paint-order:stroke] stroke-card stroke-[3px]"
+                >
+                  śr. {compactFormat.format(average)}
+                </text>
+              </g>
+            )}
+
+            {line && lineTicks.length > 0 && (
+              <g className="pointer-events-none">
+                {lineTicks.map((tick) => (
+                  <text
+                    key={tick}
+                    x={plotRight + 8}
+                    y={lineY(tick)}
+                    dy="0.32em"
+                    className="fill-amber-700 text-[0.6875rem] tabular-nums dark:fill-amber-300"
+                  >
+                    {lineTickFormat.format(tick)}
+                  </text>
+                ))}
+                <text
+                  x={plotRight + 8}
+                  y={PADDING.top - 12}
+                  className="fill-amber-700 text-[0.6875rem] font-medium dark:fill-amber-300"
+                >
+                  {line.unit}
+                </text>
+                <path
+                  d={linePath(lineValues, center, lineY)}
+                  fill="none"
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  className="stroke-amber-500 dark:stroke-amber-400"
+                />
+                {lineValues.map((value, index) =>
+                  value == null || (bars.length > 60 && hovered !== index) ? null : (
+                    <circle
+                      key={bars[index].from}
+                      cx={center(index)}
+                      cy={lineY(value)}
+                      r={hovered === index ? 4.5 : 3}
+                      strokeWidth={2}
+                      className="fill-card stroke-amber-500 dark:stroke-amber-400"
+                    />
+                  ),
+                )}
+              </g>
+            )}
+
+            {bars.map((bar, index) => (
+              <rect
+                key={`hit${bar.from}`}
+                x={left(index)}
+                y={PADDING.top}
+                width={band}
+                height={plotHeight}
+                fill="transparent"
+                onMouseEnter={() => {
+                  setOrigin(ref.current?.getBoundingClientRect() ?? null)
+                  setHovered(index)
+                }}
+              />
+            ))}
+          </svg>
+        )}
+        {/* Podpowiedź w portalu z position: fixed, więc może wyjść poza okno zamiast przewijać je w bok. */}
+        {active &&
+          hovered != null &&
+          origin &&
+          createPortal(
+            <div
+              className="pointer-events-none fixed z-100 grid w-max gap-1 rounded-lg bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              style={{
+                left: Math.min(Math.max(origin.left + center(hovered), 120), window.innerWidth - 120),
+                top: Math.max(8, origin.top + activeTop - 10),
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <p className="text-xs text-muted-foreground">
+                {step === 1 ? tooltipDate.format(parseIsoDate(active.from)) : formatRange({ from: active.from, to: active.to })}
+              </p>
+              <BarDetails figures={active.figures} basis={basis} showMargin={showMargin} />
+            </div>,
+            document.body,
+          )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {step === 1
+          ? 'Słupek = dzień, pionowe linie oddzielają tygodnie (od poniedziałku), kreska na osi = dzień bez sprzedaży'
+          : 'Słupek = 7 dni, do ostatniego dnia ze sprzedażą'}
       </p>
     </div>
   )
 }
+
+/** Wszystkie liczby słupka w podpowiedzi, bez względu na wybraną serię. */
+function BarDetails({ figures, basis, showMargin }: { figures: SalesFigures; basis: SaleBasis; showMargin: boolean }) {
+  if (figures.quantity === 0 && figures.saleValueGross === 0 && !figures.costValue) {
+    return <p className="font-medium">Brak sprzedaży</p>
+  }
+  const price = averagePrice(figures)
+  const margin = marginPercent(figures)
+  const rows: [string, string][] = [
+    ['Ilość', formatQuantity(figures.quantity)],
+    [
+      basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto',
+      formatZloty(basis === 'gross' ? figures.saleValueGross : figures.saleValueNet),
+    ],
+  ]
+  if (price != null) rows.push(['Średnia cena brutto', formatZloty(price)])
+  if (figures.costValue != null && showMargin) rows.push(['Koszt', formatZloty(figures.costValue)])
+  if (showMargin && figures.marginValue != null) {
+    rows.push(['Marża', `${formatZloty(figures.marginValue)}${margin == null ? '' : ` · ${formatPercentValue(margin)}`}`])
+  }
+  return (
+    <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular-nums">
+      {rows.map(([label, value]) => (
+        <Fragment key={label}>
+          <dt className="text-muted-foreground">{label}</dt>
+          <dd className="text-right font-medium">{value}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  )
+}
+
+/** Linia przez słupki z wartością; słupek bez wartości (brak sprzedaży) przerywa linię. */
+function linePath(values: (number | null)[], x: (index: number) => number, y: (value: number) => number) {
+  let path = ''
+  let drawing = false
+  values.forEach((value, index) => {
+    if (value == null) {
+      drawing = false
+      return
+    }
+    path += `${drawing ? 'L' : 'M'}${x(index)},${y(value)} `
+    drawing = true
+  })
+  return path
+}
+
+/** Podziałki prawej osi bez wymuszonego zera; przy jednej wartości przedział wokół niej. */
+function lineRangeTicks(min: number, max: number) {
+  if (min !== max) return niceTicks(min, max)
+  const spread = Math.abs(min) * 0.1 || 1
+  return niceTicks(min - spread, max + spread)
+}
+
+const isMonday = (iso: string) => parseIsoDate(iso).getDay() === 1
 
 /** Słupek z zaokrąglonym końcem (4px) od strony wartości i płaską podstawą na osi zera. */
 function barPath(x: number, base: number, width: number, height: number) {
@@ -439,7 +686,7 @@ function barPath(x: number, base: number, width: number, height: number) {
   ].join(' ')
 }
 
-/** Okrągłe podziałki osi (1, 2, 2,5 albo 5 × 10^n), od {@code min} do {@code max} włącznie z zerem. */
+/** Okrągłe podziałki osi (1, 2, 2,5 albo 5 × 10^n) od {@code min} do {@code max}. */
 function niceTicks(min: number, max: number): number[] {
   if (min === max) return [0, 1]
   const rough = (max - min) / 4
@@ -452,16 +699,20 @@ function niceTicks(min: number, max: number): number[] {
   return ticks
 }
 
+const percentFormat = new Intl.NumberFormat('pl-PL', {
+  maximumFractionDigits: 1,
+})
 const formatZloty = (value: number) => `${formatMoney(value)} zł`
+const formatPercentValue = (value: number) => `${percentFormat.format(value)}%`
 const compactFormat = new Intl.NumberFormat('pl-PL', {
   notation: 'compact',
   maximumFractionDigits: 1,
 })
-const percentFormat = new Intl.NumberFormat('pl-PL', {
-  maximumFractionDigits: 1,
-})
+const lineTickFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
 const dayFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 })
 const axisDate = new Intl.DateTimeFormat('pl-PL', {
   day: 'numeric',
   month: 'short',
 })
+const mondayDate = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })
+const tooltipDate = new Intl.DateTimeFormat('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })

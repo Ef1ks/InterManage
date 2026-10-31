@@ -135,25 +135,28 @@ public class DocumentController {
     }
 
     /**
-     * Propozycje automatycznego przypięcia faktur KSeF do przyjęć bez faktury: ten sam dostawca, kwota netto
-     * różna najwyżej o 10 zł. Niczego nie zapisuje.
+     * Propozycje automatycznego przypięcia faktur KSeF do przyjęć (faktury) albo korekt od dostawcy (faktury
+     * korygujące) bez faktury: ten sam dostawca, kwota netto różna najwyżej o 10 zł. Niczego nie zapisuje.
      */
-    @GetMapping("/pz/auto-ksef-invoices")
+    @GetMapping("/{type}/auto-ksef-invoices")
     @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
-    public List<AutoInvoiceMatch> autoKsefInvoices(@PathVariable UUID storeId) {
-        return ksefLinks.autoMatches(storeId);
+    public List<AutoInvoiceMatch> autoKsefInvoices(@PathVariable UUID storeId, @PathVariable String type) {
+        return ksefLinks.autoMatches(storeId, type);
     }
 
-    /** Przypina zaakceptowane propozycje; zwraca liczbę przypiętych. */
-    @PostMapping("/pz/auto-ksef-invoices")
+    /**
+     * Przypina zaakceptowane propozycje; zwraca przypięte pary z korektami od dostawcy, które trafiły przy tym do
+     * przyjęć (do cofnięcia).
+     */
+    @PostMapping("/{type}/auto-ksef-invoices")
     @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
-    public int linkAutoKsefInvoices(@PathVariable UUID storeId, @Valid @RequestBody AutoInvoiceMatchesRequest request,
+    public List<AutoInvoiceMatchesRequest.Pair> linkAutoKsefInvoices(@PathVariable UUID storeId, @Valid @RequestBody AutoInvoiceMatchesRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return ksefLinks.linkAll(storeId, request.matches(), principal.getId());
     }
 
     /** Cofa automatyczne przypięcie (toast „Cofnij”): odpina pary, znacznik jak przy zwykłym odpięciu. */
-    @PostMapping("/pz/auto-ksef-invoices/undo")
+    @PostMapping("/{type}/auto-ksef-invoices/undo")
     @PreAuthorize(EDIT)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void undoAutoKsefInvoices(@PathVariable UUID storeId, @Valid @RequestBody AutoInvoiceMatchesRequest request,

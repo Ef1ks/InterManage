@@ -10,6 +10,7 @@ export type PermissionCategory =
   | 'DOCUMENTS'
   | 'DELI_PRICES'
   | 'KSEF_INVOICES'
+  | 'DATA_ENTRY'
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -1443,3 +1444,67 @@ export type CadencierOverview = {
   itemCount: number
   imports: CadencierImport[]
 }
+
+/** Wprowadzanie danych: rodzaj sprzedaży artykułu (JED z kartoteki). */
+export type SaleUnit = 'kg' | 'L' | 'szt.'
+
+/** Artykuł z kartoteki sklepu dla EAN-u ({@code ean} bez zer wiodących); {@code salePrice} brutto sztuki. */
+export type DataEntryCatalogProduct = {
+  ean: string
+  itm8: string
+  name: string | null
+  brand: string | null
+  salePrice: number | null
+  unit: SaleUnit
+  netContent: number
+  subfamilyCode: string | null
+}
+
+/** Pozycja faktury z KSeF; bez {@code product} to nowy artykuł, a miara jest z nazwy z faktury. */
+export type DataEntryLine = {
+  number: string | null
+  ean: string | null
+  quantity: number | null
+  unitNet: number | null
+  invoiceName: string | null
+  invoiceUnit: string | null
+  vatPercent: number | null
+  product: DataEntryCatalogProduct | null
+  unit: SaleUnit
+  netContent: number
+}
+
+export type DataEntryInvoice = {
+  invoiceId: string
+  invoiceNumber: string
+  sellerName: string | null
+  sellerNip: string
+  issueDate: string
+  lines: DataEntryLine[]
+}
+
+/** Kod 2, 4 albo 6 cyfr: rejon, rodzina, podrodzina. */
+export type NomenclatureItem = { code: string; name: string }
+
+export type SuggestionStatus = 'CERTAIN' | 'AGREED' | 'TO_CHECK'
+export type SuggestionSource = 'MODEL' | 'NAMES' | 'PRODUCER'
+
+export type SuggestionProposal = { code: string; sources: SuggestionSource[] }
+
+/** Propozycja AI; przy TO_CHECK {@code subfamilyCode} jest puste, wybiera się z {@code proposals}. */
+export type Suggestion = {
+  key: string
+  id: string
+  name: string | null
+  brand: string | null
+  unit: SaleUnit
+  netContent: number
+  unitMismatch: boolean
+  subfamilyCode: string | null
+  status: SuggestionStatus
+  confidence: number | null
+  proposals: SuggestionProposal[]
+}
+
+export type SuggestionResponse = { modelUsed: boolean; message: string | null; items: Suggestion[] }
+

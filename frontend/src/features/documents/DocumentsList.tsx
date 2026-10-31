@@ -275,7 +275,9 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 onHiddenSuppliersChange={setHiddenSuppliers}
                 onClear={clearFilters}
               />
-              {upperType === 'PZ' && <AutoInvoiceMatching storeId={storeId} />}
+              {(upperType === 'PZ' || upperType === 'WZ') && (
+                <AutoInvoiceMatching storeId={storeId} typeCode={upperType === 'PZ' ? 'pz' : 'wz'} />
+              )}
               {upperType === 'PZ' && <DeliveryPeriodReport storeId={storeId} />}
             </div>
           )}

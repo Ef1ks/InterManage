@@ -23,14 +23,47 @@ function invoicesWord(count: number) {
   return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? 'faktury' : 'faktur'
 }
 
+/** „1 korektę”, „2 korekty”, „5 korekt” (biernik). */
+function correctionsWord(count: number) {
+  if (count === 1) return 'korektę'
+  const lastTwo = count % 100
+  const last = count % 10
+  return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? 'korekty' : 'korekt'
+}
+
 const pairOf = (match: AutoInvoiceMatch) => ({ documentId: match.documentId, invoiceId: match.invoiceId })
 
+/** Teksty okna: przyjęcia dostają faktury, korekty od dostawcy faktury korygujące. */
+const TEXTS = {
+  pz: {
+    description:
+      'Przyjęcia bez faktury i faktury z KSeF od tego samego dostawcy, z kwotą netto różną najwyżej o 10 zł ' +
+      '(wystawione do 45 dni przed albo po przyjęciu). Odznacz pary, których nie chcesz przypinać.',
+    loading: 'Szukam faktur do przyjęć…',
+    empty: 'Żadne przyjęcie bez faktury nie ma faktury tego dostawcy z podobną kwotą.',
+    document: 'Nr dok. w przyjęciu',
+    pairLabel: (match: AutoInvoiceMatch) =>
+      `Przypnij fakturę ${match.invoiceNumber} do przyjęcia ${match.documentNumber}`,
+  },
+  wz: {
+    description:
+      'Korekty od dostawcy bez faktury i faktury korygujące z KSeF od tego samego dostawcy, z kwotą netto różną ' +
+      'najwyżej o 10 zł (wystawione do 45 dni przed albo po korekcie). Odznacz pary, których nie chcesz przypinać.',
+    loading: 'Szukam faktur korygujących do korekt…',
+    empty: 'Żadna korekta od dostawcy bez faktury nie ma faktury korygującej tego dostawcy z podobną kwotą.',
+    document: 'Korekta',
+    pairLabel: (match: AutoInvoiceMatch) =>
+      `Przypnij fakturę korygującą ${match.invoiceNumber} do korekty ${match.documentNumber}`,
+  },
+}
+
 /**
- * Przycisk nad listą przyjęć i okno automatycznego przypisania faktur KSeF: przyjęcia bez faktury i niewprowadzone
- * faktury tego samego dostawcy z kwotą netto różną najwyżej o 10 zł. Wszystkie propozycje są zaznaczone, odznacza się
- * te, których nie chcemy; zatwierdzenie przypina resztę, a toast pozwala cofnąć całość.
+ * Przycisk nad listą przyjęć albo korekt od dostawcy i okno automatycznego przypisania faktur KSeF: dokumenty bez
+ * faktury i niewprowadzone faktury (do korekt: faktury korygujące) tego samego dostawcy z kwotą netto różną najwyżej
+ * o 10 zł. Wszystkie propozycje są zaznaczone, odznacza się te, których nie chcemy; zatwierdzenie przypina resztę,
+ * a toast pozwala cofnąć całość.
  */
-export function AutoInvoiceMatching({ storeId }: { storeId: string }) {
+export function AutoInvoiceMatching({ storeId, typeCode }: { storeId: string; typeCode: 'pz' | 'wz' }) {
   const canEdit = useCan('DOCUMENTS', 'EDIT')
   const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
   const [open, setOpen] = useState(false)
@@ -43,16 +76,25 @@ export function AutoInvoiceMatching({ storeId }: { storeId: string }) {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-4 p-6 sm:max-w-5xl">
-          {open && <AutoInvoiceMatchingContent storeId={storeId} onDone={() => setOpen(false)} />}
+          {open && <AutoInvoiceMatchingContent storeId={storeId} typeCode={typeCode} onDone={() => setOpen(false)} />}
         </DialogContent>
       </Dialog>
     </>
   )
 }
 
-function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDone: () => void }) {
-  const { data: matches, isPending, isError, error } = useAutoInvoiceMatches(storeId, true)
-  const { link, undo } = useAutoInvoiceLinks(storeId)
+function AutoInvoiceMatchingContent({
+  storeId,
+  typeCode,
+  onDone,
+}: {
+  storeId: string
+  typeCode: 'pz' | 'wz'
+  onDone: () => void
+}) {
+  const texts = TEXTS[typeCode]
+  const { data: matches, isPending, isError, error } = useAutoInvoiceMatches(storeId, typeCode, true)
+  const { link, undo } = useAutoInvoiceLinks(storeId, typeCode)
   // Odznaczone propozycje; nowe (po odświeżeniu) są zaznaczone.
   const [rejected, setRejected] = useState<Set<string>>(() => new Set())
   const all = matches ?? []
@@ -69,14 +111,20 @@ function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDo
   const accept = () => {
     const pairs = accepted.map(pairOf)
     link.mutate(pairs, {
-      onSuccess: (count) => {
+      onSuccess: (linked) => {
         onDone()
+        const count = linked.length
+        const attached = linked.reduce((sum, pair) => sum + (pair.attached?.length ?? 0), 0)
         toast.success(`Przypięto ${count} ${invoicesWord(count)}`, {
-          description: 'Faktury w KSeF są wprowadzone.',
+          description:
+            attached > 0
+              ? `Faktury w KSeF są wprowadzone. Do przyjęć trafiło też ${attached} ${correctionsWord(attached)} ` +
+                'od dostawcy (według faktur, które korygują).'
+              : 'Faktury w KSeF są wprowadzone.',
           action: {
             label: 'Cofnij',
             onClick: () =>
-              undo.mutate(pairs, {
+              undo.mutate(linked, {
                 onSuccess: () => toast.success('Cofnięto automatyczne przypisanie'),
                 onError: (failure) => toast.error(errorMessage(failure, 'Nie udało się cofnąć przypisania')),
               }),
@@ -91,16 +139,13 @@ function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDo
     <>
       <DialogHeader>
         <DialogTitle className="text-lg">Automatyczne przypisanie faktur</DialogTitle>
-        <DialogDescription>
-          Przyjęcia bez faktury i faktury z KSeF od tego samego dostawcy, z kwotą netto różną najwyżej o 10 zł
-          (wystawione do 45 dni przed albo po przyjęciu). Odznacz pary, których nie chcesz przypinać.
-        </DialogDescription>
+        <DialogDescription>{texts.description}</DialogDescription>
       </DialogHeader>
 
       {isPending ? (
         <p className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
           <LoaderCircleIcon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
-          Szukam faktur do przyjęć…
+          {texts.loading}
         </p>
       ) : isError ? (
         <p className="py-10 text-center text-sm text-destructive">
@@ -109,9 +154,7 @@ function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDo
       ) : all.length === 0 ? (
         <div className="py-10 text-center">
           <p className="font-medium">Brak propozycji</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Żadne przyjęcie bez faktury nie ma faktury tego dostawcy z podobną kwotą.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{texts.empty}</p>
         </div>
       ) : (
         <div className="max-h-[60vh] overflow-auto rounded-lg border">
@@ -132,7 +175,7 @@ function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDo
                     }
                   />
                 </TableHead>
-                <TableHead>Nr dok. w przyjęciu</TableHead>
+                <TableHead>{texts.document}</TableHead>
                 <TableHead>Dostawca</TableHead>
                 <TableHead>Faktura</TableHead>
                 <TableHead className="text-right">Zakup netto zł</TableHead>
@@ -152,7 +195,7 @@ function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDo
                     <TableCell className="pl-4">
                       <input
                         type="checkbox"
-                        aria-label={`Przypnij fakturę ${match.invoiceNumber} do przyjęcia ${match.documentNumber}`}
+                        aria-label={texts.pairLabel(match)}
                         className="size-4 cursor-pointer accent-foreground"
                         checked={checked}
                         onClick={(event) => event.stopPropagation()}
@@ -160,12 +203,16 @@ function AutoInvoiceMatchingContent({ storeId, onDone }: { storeId: string; onDo
                       />
                     </TableCell>
                     <TableCell>
-                      <div
-                        className="font-medium"
-                        title={`Bon ${bonNumber(match.documentNumber)} · numer wewnętrzny ${match.documentNumber}`}
-                      >
-                        {match.supplierDocumentNumber ?? <span className="text-muted-foreground">brak nr dok.</span>}
-                      </div>
+                      {typeCode === 'pz' ? (
+                        <div
+                          className="font-medium"
+                          title={`Bon ${bonNumber(match.documentNumber)} · numer wewnętrzny ${match.documentNumber}`}
+                        >
+                          {match.supplierDocumentNumber ?? <span className="text-muted-foreground">brak nr dok.</span>}
+                        </div>
+                      ) : (
+                        <div className="font-medium">{match.documentNumber}</div>
+                      )}
                       <div className="text-xs text-muted-foreground">{formatDocumentDate(match.documentDate)}</div>
                     </TableCell>
                     <TableCell className="max-w-56 truncate" title={match.supplierName ?? undefined}>

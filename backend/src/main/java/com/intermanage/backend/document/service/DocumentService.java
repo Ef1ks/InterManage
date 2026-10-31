@@ -302,6 +302,8 @@ public class DocumentService {
             document.editSupplierDocumentNumber(trimmed, userId != null ? users.getReferenceById(userId) : null);
         }
         documents.flush();
+        // Po nowym numerze przyjęcie może mieć fakturę, której korekty czekają na przyjęcie.
+        ksefLinks.attachPendingCorrections(storeId, userId);
         return document(storeId, typeCode, id);
     }
 
@@ -310,6 +312,7 @@ public class DocumentService {
     public DocumentResponse restoreSupplierDocumentNumber(UUID storeId, String typeCode, UUID id) {
         editableDelivery(storeId, typeCode, id).restoreReportSupplierDocumentNumber();
         documents.flush();
+        ksefLinks.attachPendingCorrections(storeId, null);
         return document(storeId, typeCode, id);
     }
 
@@ -347,6 +350,12 @@ public class DocumentService {
         log.info("Import dokumentów do sklepu {} z {}: {} linii, zapisane {} (nowe dokumenty {}, uzupełnione {}), "
                 + "pominięte {} ({})", storeId, fileName, result.totalLines(), result.savedLines(), result.createdCount(),
                 result.updatedCount(), result.skippedLines(), result.skippedTypes());
+        // Nowe przyjęcia i korekty mogą połączyć czekające korekty z KSeF; błąd nie psuje zapisanego importu.
+        try {
+            ksefLinks.attachPendingCorrections(storeId, userId);
+        } catch (RuntimeException e) {
+            log.warn("Nie udało się przypiąć korekt do przyjęć po imporcie dokumentów sklepu {}", storeId, e);
+        }
         return result;
     }
 

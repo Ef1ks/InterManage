@@ -101,6 +101,10 @@ async function toApiError(response: Response): Promise<ApiError> {
  */
 export async function downloadFile(path: string, fallbackName = 'plik'): Promise<void> {
   const { fileName, blob } = await fetchNamedFile(path, fallbackName)
+  saveBlob(blob, fileName)
+}
+
+function saveBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -112,9 +116,27 @@ export async function downloadFile(path: string, fallbackName = 'plik'): Promise
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
+/**
+ * Pobiera plik, który serwer robi z danych wysłanych w żądaniu (POST z JSON-em, np. tabela do Excela), i zapisuje go
+ * jak {@link downloadFile}.
+ */
+export async function downloadPostedFile(path: string, json: unknown, fallbackName = 'plik'): Promise<void> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = await csrfToken()
+  if (token) headers['X-XSRF-TOKEN'] = token
+  const { fileName, blob } = await namedFile(
+    await fetchFile(path, { method: 'POST', headers, body: JSON.stringify(json) }),
+    fallbackName,
+  )
+  saveBlob(blob, fileName)
+}
+
 /** Plik z API z nazwą z nagłówka Content-Disposition (np. do zapisu w wybranym folderze). */
 export async function fetchNamedFile(path: string, fallbackName = 'plik'): Promise<{ fileName: string; blob: Blob }> {
-  const response = await fetchFile(path)
+  return namedFile(await fetchFile(path), fallbackName)
+}
+
+async function namedFile(response: Response, fallbackName: string): Promise<{ fileName: string; blob: Blob }> {
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
   const fileName = match ? decodeURIComponent(match[1] ?? match[2]) : fallbackName
@@ -151,8 +173,8 @@ export async function printFile(path: string): Promise<void> {
   }, 60_000)
 }
 
-async function fetchFile(path: string): Promise<Response> {
-  const response = await fetch(`/api${path}`, { credentials: 'same-origin' })
+async function fetchFile(path: string, init: RequestInit = {}): Promise<Response> {
+  const response = await fetch(`/api${path}`, { ...init, credentials: 'same-origin' })
   if (!response.ok) {
     throw await toApiError(response)
   }

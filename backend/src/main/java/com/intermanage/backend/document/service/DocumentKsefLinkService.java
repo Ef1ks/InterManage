@@ -6,12 +6,14 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -26,6 +28,7 @@ import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.dto.AutoInvoiceMatch;
 import com.intermanage.backend.document.dto.AutoInvoiceMatchesRequest;
+import com.intermanage.backend.document.dto.CorrectionAttachment;
 import com.intermanage.backend.document.dto.DocumentCandidate;
 import com.intermanage.backend.document.dto.KsefInvoiceCandidate;
 import com.intermanage.backend.document.dto.LinkedKsefInvoice;
@@ -74,12 +77,14 @@ public class DocumentKsefLinkService {
     private final KsefInternalIdRepository internalIds;
     private final SupplierRepository suppliers;
     private final AppUserRepository users;
+    private final DeliveryCorrectionService corrections;
 
     public DocumentKsefLinkService(DocumentKsefInvoiceRepository links, DocumentRepository documents,
             KsefInvoiceRepository invoices, KsefConnectionRepository connections,
             KsefInternalIdRepository internalIds, SupplierRepository suppliers, AppUserRepository users,
-            DocumentManualInvoiceRepository manualInvoices) {
+            DocumentManualInvoiceRepository manualInvoices, DeliveryCorrectionService corrections) {
         this.links = links;
+        this.corrections = corrections;
         this.manualInvoices = manualInvoices;
         this.documents = documents;
         this.invoices = invoices;
@@ -239,36 +244,44 @@ public class DocumentKsefLinkService {
     }
 
     /**
-     * Propozycje automatycznego przypięcia: przyjęcia PZ bez faktury (przypiętej, po numerze ani spoza KSeF)
-     * i niewprowadzone faktury (nie korekty) tego samego dostawcy, wystawione do {@link #AUTO_MATCH_DAYS} dni
-     * przed albo po przyjęciu, z kwotą netto różną od wartości zakupu najwyżej o {@link #AUTO_MATCH_TOLERANCE}.
-     * Pary są dobierane od najmniejszej różnicy kwot, potem najbliższej daty; każde przyjęcie i każda faktura
+     * Propozycje automatycznego przypięcia: dokumenty danego typu bez faktury (przyjęcia PZ: przypiętej, po numerze
+     * ani spoza KSeF; korekty od dostawcy WZ: bez żadnej) i niewprowadzone faktury tego samego dostawcy (do przyjęć
+     * faktury, do korekt faktury korygujące), wystawione do {@link #AUTO_MATCH_DAYS} dni przed albo po dokumencie,
+     * z kwotą netto tego samego znaku co wartość zakupu i różną od niej najwyżej o {@link #AUTO_MATCH_TOLERANCE}.
+     * Pary są dobierane od najmniejszej różnicy kwot, potem najbliższej daty; każdy dokument i każda faktura
      * trafia najwyżej do jednej pary. Niczego nie zapisuje.
      */
     @Transactional(readOnly = true)
-    public List<AutoInvoiceMatch> autoMatches(UUID storeId) {
+    public List<AutoInvoiceMatch> autoMatches(UUID storeId, String typeCode) {
+        DocumentType type = DocumentType.fromCode(typeCode)
+                .filter(DocumentType::canLinkKsefInvoice)
+                .orElseThrow(() -> ApiException.badRequest(
+                        "Faktury przypisuje się automatycznie do przyjęć i korekt od dostawcy"));
         String nip = nip(storeId);
         if (nip == null) {
             throw ApiException.badRequest("Sklep nie jest połączony z KSeF");
         }
         Map<String, String> nips = supplierNips(storeId);
-        List<Document> deliveries = documents.findAll(DocumentSearch.inStoreMatching(storeId, DocumentType.PZ, List.of())
+        List<Document> pending = documents.findAll(DocumentSearch.inStoreMatching(storeId, type, List.of())
                         .and(DocumentSearch.withInvoice(DocumentSearch.Presence.WITHOUT, nip))).stream()
-                .filter(document -> document.getPurchaseValue() != null && document.getPurchaseValue().signum() > 0
+                .filter(document -> document.getPurchaseValue() != null
+                        && (type == DocumentType.PZ ? document.getPurchaseValue().signum() > 0
+                                : document.getPurchaseValue().signum() != 0)
                         && nips.containsKey(document.getSupplierCode()))
                 .toList();
-        if (deliveries.isEmpty()) {
+        if (pending.isEmpty()) {
             return List.of();
         }
-        LocalDate from = deliveries.stream().map(document -> document.getDocumentDate().toLocalDate())
+        LocalDate from = pending.stream().map(document -> document.getDocumentDate().toLocalDate())
                 .min(Comparator.naturalOrder()).orElseThrow().minusDays(AUTO_MATCH_DAYS);
-        LocalDate to = deliveries.stream().map(document -> document.getDocumentDate().toLocalDate())
+        LocalDate to = pending.stream().map(document -> document.getDocumentDate().toLocalDate())
                 .max(Comparator.naturalOrder()).orElseThrow().plusDays(AUTO_MATCH_DAYS);
-        Set<String> sellerNips = deliveries.stream().map(document -> nips.get(document.getSupplierCode()))
+        Set<String> sellerNips = pending.stream().map(document -> nips.get(document.getSupplierCode()))
                 .collect(Collectors.toSet());
         Specification<KsefInvoice> free = KsefInvoiceSearch.matching(storeId, nip, ownInternalIds(storeId),
                 new KsefInvoiceSearch.Filter(null, from, to, KsefInvoiceSearch.Entered.NOT_ENTERED,
-                        KsefInvoiceSearch.Kind.INVOICES, null, false));
+                        type == DocumentType.PZ ? KsefInvoiceSearch.Kind.INVOICES : KsefInvoiceSearch.Kind.CORRECTIONS,
+                        null, false));
         Map<String, List<KsefInvoice>> bySeller = invoices
                 .findAll(free.and((root, q, cb) -> root.get("sellerNip").in(sellerNips))).stream()
                 .filter(invoice -> invoice.getNetAmount() != null && invoice.getIssueDate() != null)
@@ -277,11 +290,14 @@ public class DocumentKsefLinkService {
         record Pair(Document delivery, KsefInvoice invoice, BigDecimal difference, long days) {
         }
         List<Pair> pairs = new ArrayList<>();
-        for (Document delivery : deliveries) {
+        for (Document delivery : pending) {
             LocalDate date = delivery.getDocumentDate().toLocalDate();
             for (KsefInvoice invoice : bySeller.getOrDefault(nips.get(delivery.getSupplierCode()), List.of())) {
+                if (invoice.getNetAmount().signum() != delivery.getPurchaseValue().signum()) {
+                    continue;
+                }
                 long days = Math.abs(ChronoUnit.DAYS.between(date, invoice.getIssueDate()));
-                BigDecimal difference = difference(invoice.getNetAmount(), delivery.getPurchaseValue());
+                BigDecimal difference = invoice.getNetAmount().subtract(delivery.getPurchaseValue()).abs();
                 if (days <= AUTO_MATCH_DAYS && difference.compareTo(AUTO_MATCH_TOLERANCE) <= 0) {
                     pairs.add(new Pair(delivery, invoice, difference, days));
                 }
@@ -308,31 +324,85 @@ public class DocumentKsefLinkService {
         return result;
     }
 
-    /** Przypina zaakceptowane pary z {@link #autoMatches}; błąd którejkolwiek (np. przyjęcie ma już fakturę) wycofuje wszystkie. */
+    /**
+     * Przypina zaakceptowane pary z {@link #autoMatches}; błąd którejkolwiek (np. przyjęcie ma już fakturę) wycofuje
+     * wszystkie. Zwraca przypięte pary z korektami od dostawcy, które trafiły przy tym do przyjęć
+     * ({@link #attachPendingCorrections}): przy WZ do przyjęcia z fakturą korygowaną, przy PZ korekty jego faktury.
+     */
     @Transactional
-    public int linkAll(UUID storeId, List<AutoInvoiceMatchesRequest.Pair> matches, UUID userId) {
+    public List<AutoInvoiceMatchesRequest.Pair> linkAll(UUID storeId, List<AutoInvoiceMatchesRequest.Pair> matches,
+            UUID userId) {
+        Map<UUID, List<CorrectionAttachment>> attached = new HashMap<>();
+        boolean deliveries = false;
         for (AutoInvoiceMatchesRequest.Pair pair : matches) {
-            link(storeId, pair.documentId(), pair.invoiceId(), userId);
+            Linked linked = linkOnly(storeId, pair.documentId(), pair.invoiceId(), userId);
+            if (linked == null) {
+                continue;
+            }
+            if (linked.document().getType() == DocumentType.PZ) {
+                deliveries = true;
+            } else {
+                attachToCorrectedDelivery(storeId, linked.document(), linked.invoice(), userId).ifPresent(
+                        attachment -> attached.computeIfAbsent(pair.documentId(), id -> new ArrayList<>())
+                                .add(attachment));
+            }
         }
-        return matches.size();
+        if (deliveries) {
+            for (CorrectionAttachment attachment : attachPendingCorrections(storeId, userId)) {
+                attached.computeIfAbsent(attachment.deliveryId(), id -> new ArrayList<>()).add(attachment);
+            }
+        }
+        return matches.stream().map(pair -> new AutoInvoiceMatchesRequest.Pair(pair.documentId(), pair.invoiceId(),
+                attached.getOrDefault(pair.documentId(), List.of()))).toList();
     }
 
-    /** Cofnięcie automatycznego przypięcia: odpina pary (znacznik), już odpięte pomija. */
+    /**
+     * Cofnięcie automatycznego przypięcia: odpina pary (znacznik), już odpięte pomija; korekty z {@code attached}
+     * odpina też od przyjęć, do których trafiły.
+     */
     @Transactional
     public void unlinkAll(UUID storeId, List<AutoInvoiceMatchesRequest.Pair> matches, UUID userId) {
         for (AutoInvoiceMatchesRequest.Pair pair : matches) {
             documents.findHeader(storeId, pair.documentId())
                     .flatMap(document -> links.findActive(document.getId(), pair.invoiceId()))
                     .ifPresent(link -> link.unlink(userId != null ? users.getReferenceById(userId) : null));
+            for (CorrectionAttachment attachment : pair.attached() != null ? pair.attached()
+                    : List.<CorrectionAttachment>of()) {
+                Document correction = documents.findHeader(storeId, attachment.correctionId()).orElse(null);
+                Document delivery = correction == null ? null
+                        : corrections.deliveriesOf(List.of(correction)).get(correction.getId());
+                if (delivery != null && delivery.getId().equals(attachment.deliveryId())) {
+                    corrections.detach(storeId, DocumentType.PZ.name(), delivery.getId(), correction.getId(), userId);
+                }
+            }
         }
     }
 
     /**
      * Przypina fakturę do dokumentu; już przypięta zostaje bez zmian. Przyjęcie PZ ma najwyżej jedną fakturę
-     * (przypiętą albo dopasowaną po numerze), korekta od dostawcy może mieć kilka.
+     * (przypiętą albo dopasowaną po numerze), korekta od dostawcy może mieć kilka. Korekty od dostawcy idą przy tym
+     * za fakturą korygowaną: WZ z fakturą korygującą trafia do przyjęcia z fakturą, którą ta koryguje, a przy
+     * przyjęciu - WZ z korektami jego faktury ({@link #attachPendingCorrections}). Zwraca korekty przypięte teraz.
      */
     @Transactional
-    public void link(UUID storeId, UUID documentId, UUID invoiceId, UUID userId) {
+    public List<CorrectionAttachment> link(UUID storeId, UUID documentId, UUID invoiceId, UUID userId) {
+        Linked linked = linkOnly(storeId, documentId, invoiceId, userId);
+        if (linked == null) {
+            return List.of();
+        }
+        if (linked.document().getType() == DocumentType.PZ) {
+            return attachPendingCorrections(storeId, userId).stream()
+                    .filter(attachment -> attachment.deliveryId().equals(documentId))
+                    .toList();
+        }
+        return attachToCorrectedDelivery(storeId, linked.document(), linked.invoice(), userId).stream().toList();
+    }
+
+    private record Linked(Document document, KsefInvoice invoice) {
+    }
+
+    /** Samo przypięcie z {@link #link}; {@code null}, gdy przyjęcie ma już tę fakturę. */
+    private Linked linkOnly(UUID storeId, UUID documentId, UUID invoiceId, UUID userId) {
         Document document = documents.findHeader(storeId, documentId)
                 .filter(found -> found.getType().canLinkKsefInvoice())
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono przyjęcia ani korekty od dostawcy"));
@@ -341,7 +411,7 @@ public class DocumentKsefLinkService {
             List<LinkedKsefInvoice> current = invoicesOf(storeId, List.of(document))
                     .getOrDefault(document.getId(), List.of());
             if (current.stream().anyMatch(linked -> linked.id().equals(invoice.getId()))) {
-                return;
+                return null;
             }
             String existing = !current.isEmpty() ? current.getFirst().invoiceNumber()
                     : manualInvoices.findActiveByDocumentIds(List.of(document.getId())).stream()
@@ -354,6 +424,84 @@ public class DocumentKsefLinkService {
         if (links.findActive(document.getId(), invoice.getId()).isEmpty()) {
             links.save(new DocumentKsefInvoice(document, invoice, userId != null ? users.getReferenceById(userId) : null));
         }
+        return new Linked(document, invoice);
+    }
+
+    /**
+     * Korekty od dostawcy (WZ) sklepu z przypiętą fakturą korygującą, które nigdy nie były przy przyjęciu, trafiają do
+     * przyjęcia z fakturą korygowaną ({@link #attachToCorrectedDelivery}). Woła się to po przypięciu faktury do
+     * przyjęcia, po zmianie numeru dokumentu dostawcy, po imporcie dokumentów i w tle (korekty przypięte wcześniej
+     * i takie, których XML odczytano później). WZ odpiętej kiedyś od przyjęcia nie przypina z powrotem.
+     */
+    @Transactional
+    public List<CorrectionAttachment> attachPendingCorrections(UUID storeId, UUID userId) {
+        if (nip(storeId) == null) {
+            return List.of();
+        }
+        List<CorrectionAttachment> result = new ArrayList<>();
+        Set<UUID> done = new HashSet<>();
+        for (DocumentKsefInvoice link : links.findCorrectionsNeverAttached(storeId)) {
+            if (done.contains(link.getDocument().getId())) {
+                continue;
+            }
+            attachToCorrectedDelivery(storeId, link.getDocument(), link.getInvoice(), userId).ifPresent(attachment -> {
+                done.add(attachment.correctionId());
+                result.add(attachment);
+            });
+        }
+        return result;
+    }
+
+    /**
+     * Korekta od dostawcy (WZ) z fakturą korygującą dotyczy przyjęcia, którego fakturę ta korekta koryguje (z XML,
+     * {@code correctedInvoices}): przypiętej do przyjęcia albo równej jego numerowi dokumentu dostawcy. Gdy WZ nie jest
+     * przy żadnym przyjęciu, a takie przyjęcie tego samego dostawcy jest dokładnie jedno, WZ zostaje do niego
+     * przypięta.
+     */
+    private Optional<CorrectionAttachment> attachToCorrectedDelivery(UUID storeId, Document document,
+            KsefInvoice invoice, UUID userId) {
+        if (document.getType() != DocumentType.WZ || document.getSupplierCode() == null
+                || invoice.getCorrectedInvoices().isEmpty()
+                || corrections.deliveriesOf(List.of(document)).containsKey(document.getId())) {
+            return Optional.empty();
+        }
+        String nip = nip(storeId);
+        Set<String> ksefNumbers = invoice.getCorrectedInvoices().stream().map(KsefInvoice.CorrectedRef::ksefNumber)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> numbers = invoice.getCorrectedInvoices().stream().map(KsefInvoice.CorrectedRef::invoiceNumber)
+                .filter(Objects::nonNull).map(DocumentKsefLinkService::upper)
+                .collect(Collectors.toCollection(HashSet::new));
+        List<KsefInvoice> originals = new ArrayList<>();
+        if (!ksefNumbers.isEmpty()) {
+            originals.addAll(invoices.findByKsefNumbers(nip, ksefNumbers));
+        }
+        if (!numbers.isEmpty()) {
+            invoices.findByInvoiceNumbers(nip, numbers).stream()
+                    .filter(original -> invoice.getSellerNip().equals(original.getSellerNip()))
+                    .forEach(originals::add);
+        }
+        originals.forEach(original -> numbers.add(upper(original.getInvoiceNumber())));
+
+        Map<UUID, Document> deliveries = new LinkedHashMap<>();
+        if (!originals.isEmpty()) {
+            links.findActiveByInvoiceIds(storeId, originals.stream().map(KsefInvoice::getId).distinct().toList())
+                    .stream().map(DocumentKsefInvoice::getDocument)
+                    .filter(found -> found.getType() == DocumentType.PZ)
+                    .forEach(found -> deliveries.putIfAbsent(found.getId(), found));
+        }
+        if (!numbers.isEmpty()) {
+            documents.findDeliveriesBySupplierDocument(storeId, numbers)
+                    .forEach(found -> deliveries.putIfAbsent(found.getId(), found));
+        }
+        List<Document> sameSupplier = deliveries.values().stream()
+                .filter(found -> document.getSupplierCode().equals(found.getSupplierCode()))
+                .toList();
+        if (sameSupplier.size() != 1) {
+            return Optional.empty();
+        }
+        Document delivery = sameSupplier.getFirst();
+        corrections.attach(storeId, DocumentType.PZ.name(), delivery.getId(), document.getId(), userId);
+        return Optional.of(new CorrectionAttachment(delivery.getId(), document.getId()));
     }
 
     /** Odpina fakturę (znacznik, wpis zostaje); ponowne przypięcie to „Przywróć”. */
