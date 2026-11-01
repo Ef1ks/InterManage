@@ -208,6 +208,38 @@ public class KsefInvoiceReader {
                 .toList();
     }
 
+    /**
+     * Pola pozycji, w których dostawcy podają kod towaru: {@code GTIN}, {@code Indeks} (kod dostawcy, czasem EAN),
+     * nazwa i wpisy {@code DodatkowyOpis} z numerem tej pozycji ({@code extras}: klucz → wartość, np. "EAN").
+     */
+    public record LineCodes(String number, boolean beforeCorrection, String gtin, String index, String name,
+            Map<String, String> extras) {
+    }
+
+    /** Kody pozycji faktury w kolejności {@code FaWiersz}, tej samej co {@link Invoice#lines()}. */
+    public List<LineCodes> lineCodes(byte[] xml) {
+        Xml root = parse(xml);
+        if (!"Faktura".equals(root.name())) {
+            throw new InvalidInvoiceException("To nie jest faktura KSeF (" + root.name() + ")", null);
+        }
+        Xml fa = root.child("Fa");
+        Map<String, Map<String, String>> extras = new java.util.HashMap<>();
+        for (Xml description : fa.children("DodatkowyOpis")) {
+            String row = description.text("NrWiersza");
+            String key = description.text("Klucz");
+            String value = description.text("Wartosc");
+            if (row != null && key != null && value != null) {
+                extras.computeIfAbsent(row.strip(), number -> new java.util.LinkedHashMap<>())
+                        .putIfAbsent(key.strip(), value.strip());
+            }
+        }
+        return fa.children("FaWiersz").stream().map(row -> {
+            String number = row.text("NrWierszaFa");
+            return new LineCodes(number, "1".equals(row.text("StanPrzed")), row.text("GTIN"), row.text("Indeks"),
+                    row.text("P_7"), number != null ? extras.getOrDefault(number.strip(), Map.of()) : Map.of());
+        }).toList();
+    }
+
     private static Party party(Xml subject, String role) {
         if (!subject.present()) {
             return null;
@@ -343,7 +375,6 @@ public class KsefInvoiceReader {
         List<String> details = new ArrayList<>();
         add(details, "Indeks: ", row.text("Indeks"));
         add(details, "GTIN: ", row.text("GTIN"));
-        add(details, "PKWiU: ", row.text("PKWiU"));
         add(details, "CN: ", row.text("CN"));
         add(details, "PKOB: ", row.text("PKOB"));
         add(details, "", row.text("GTU"));
@@ -412,7 +443,6 @@ public class KsefInvoiceReader {
         List<String> details = new ArrayList<>();
         add(details, "Indeks: ", row.text("IndeksZ"));
         add(details, "GTIN: ", row.text("GTINZ"));
-        add(details, "PKWiU: ", row.text("PKWiUZ"));
         add(details, "CN: ", row.text("CNZ"));
         add(details, "", row.text("GTUZ"));
         String rate = row.text("P_12Z") != null ? row.text("P_12Z") : row.text("P_12Z_XII");

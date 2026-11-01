@@ -174,7 +174,7 @@ function CompanyStoresCard({
               key={store.id}
               className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1 text-sm tabular-nums"
             >
-              <CircleCheckIcon className="size-3.5 text-emerald-600" aria-hidden />
+              <CircleCheckIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
               {label(store)}
             </li>
           ))}
@@ -423,7 +423,7 @@ function FilePicker({
       <label
         htmlFor={id}
         className={cn(
-          'flex h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-input bg-background px-3 transition-[border-color,background-color] duration-150 hover:bg-muted/40 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/30',
+          'flex h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-input bg-background dark:bg-input/30 px-3 transition-[border-color,background-color] duration-150 hover:bg-muted/40 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/30',
           error && 'border-destructive',
         )}
       >

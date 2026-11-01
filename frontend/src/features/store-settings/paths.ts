@@ -4,6 +4,8 @@ const base = '/ustawienia-sklepu'
 export const storeSettingsPaths = {
   overview: base,
   budgets: `${base}/budzet`,
+  margins: `${base}/marze`,
   priceCheck: `${base}/weryfikacja-cen`,
   partners: `${base}/sklepy-zaprzyjaznione`,
+  protoFiles: `${base}/pliki-proto`,
 }

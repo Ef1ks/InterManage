@@ -6,10 +6,10 @@ import { FormActions } from '@/components/form'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { PROTO_FOLDER } from '@/features/deli-order/api'
 import { incomingTransferExportPath, useReceiveTransfer } from '@/features/documents/api'
 import { formatQuantity } from '@/features/documents/format'
 import { ApiError, downloadFile } from '@/lib/api'
+import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveApiFileToFolder } from '@/lib/saved-folders'
 import type { IncomingTransfer } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -54,6 +54,7 @@ export function ReceiveTransferDialog({ open, onOpenChange, ...props }: Props) {
 }
 
 function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpenChange'> & { onDone: () => void }) {
+  const protoFolder = useProtoFolder(storeId)
   const receive = useReceiveTransfer(storeId, transfer.id)
   const lines = [...transfer.lines].sort((a, b) => a.lineNumber - b.lineNumber)
   // Pierwsze wpisanie startuje od pustych pól (ilość zwykle się różni); poprawka od zapisanych ilości.
@@ -96,7 +97,7 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
     setSubmitting(true)
     try {
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
-      const folderReady = await ensureFolderAccess(PROTO_FOLDER.key)
+      const folderReady = await ensureFolderAccess(protoFolder.key)
       await receive.mutateAsync(lines.map((line) => ({ lineId: line.id, quantity: parsed.get(line.id)!.value! })))
       onDone()
       if (!folderReady) {
@@ -105,7 +106,7 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
       }
       const path = incomingTransferExportPath(storeId, transfer.id, 'proto')
       try {
-        const fileName = await saveApiFileToFolder(PROTO_FOLDER.key, path, 'przyjecie.Traite0')
+        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'przyjecie.Traite0')
         toast.success('Zapisano przyjęte ilości', { description: `Zapisano ${fileName}` })
       } catch (error) {
         toast.error('Ilości zapisane, ale pliku PROTO6 nie zapisano', {
@@ -152,7 +153,7 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
               </div>
               <label
                 className={cn(
-                  'flex h-10 w-28 shrink-0 items-center rounded-xl border border-input bg-background pr-3 transition-[border-color,box-shadow] duration-150',
+                  'flex h-10 w-28 shrink-0 items-center rounded-xl border border-input bg-background dark:bg-input/30 pr-3 transition-[border-color,box-shadow] duration-150',
                   'focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30',
                   differs && !error && 'border-amber-400 bg-amber-50/60 dark:border-amber-500/50 dark:bg-amber-500/5',
                   error && 'border-destructive focus-within:border-destructive focus-within:ring-destructive/20',
@@ -177,7 +178,7 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
         })}
       </div>
 
-      <SavedFolder folder={PROTO_FOLDER} />
+      <SavedFolder folder={protoFolder} />
 
       <FormActions>
         <Button type="button" variant="outline" size="lg" onClick={onDone}>

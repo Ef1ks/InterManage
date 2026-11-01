@@ -1,21 +1,27 @@
 package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -105,6 +111,13 @@ class DataEntryIntegrationTests {
         jdbc.update("""
                 insert into product_eans (product_id, ean, first_seen_import_id, last_seen_import_id)
                 values (?::uuid, '5900000000029', ?::uuid, ?::uuid)""", yogurt, productImport, productImport);
+        // Jogurt bez CENA_CAD: cena z kartoteki zostaje, ale bez znacznika cadencier.
+        jdbc.update("update products set cadencier_price = null where id = ?::uuid", yogurt);
+        // EAN tylko w polu Indeks i tylko w dodatkowym opisie pozycji.
+        insertProduct(productImport, "0000000000103", "5900000000043", "MASLO EKSTRA 200G", "LAKA", "kg", "0.2",
+                "7.99", "25 42 01");
+        insertProduct(productImport, "0000000000104", "5900000000050", "KEFIR 400G", "LAKA", "kg", "0.4", "3.49",
+                "25 44 01");
         // Producent serów: pięć artykułów w jednej podrodzinie, nazwy podobne do sera z faktury.
         String[] cheeses = {"SER LILIPUT PLASTRY 150G", "SER LILIPUT KLINEK 300G", "SER GOUDA PLASTRY 150G",
                 "SER EDAMSKI PLASTRY 150G", "SER LILIPUT WEDZONY 200G"};
@@ -116,6 +129,13 @@ class DataEntryIntegrationTests {
                 "0.1", "5.49", "01 01 05");
         insertProduct(productImport, "0000000000302", "5905555000002", "CHIPSY SOLONE 100G", "LAJKONIK", "kg",
                 "0.1", "5.49", "01 01 05");
+        // Aktywne w cadencier tylko mleko: masło ma CENA_CAD, ale nie ma go na liście, więc bez znacznika.
+        String cadencierImport = jdbc.queryForObject("""
+                insert into cadencier_imports (store_id, file_name, total_rows)
+                values (?::uuid, 'obecne w cad.xlsx', 1) returning id""", String.class, storeId);
+        jdbc.update("""
+                insert into cadencier_items (store_id, itm8, ean, import_id)
+                values (?::uuid, '0000000000101', '5900000000012', ?::uuid)""", storeId, cadencierImport);
 
         String nomenclatureImport = jdbc.queryForObject("""
                 insert into nomenclature_imports (store_id, file_name, total_rows, created_count, updated_count,
@@ -143,17 +163,22 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.invoiceNumber").value("FV/77/2026"))
                 .andExpect(jsonPath("$.sellerNip").value(SELLER_NIP))
                 // Wiersz "przed korektą" pominięty.
-                .andExpect(jsonPath("$.lines.length()").value(6))
+                .andExpect(jsonPath("$.lines.length()").value(8))
+                .andExpect(jsonPath("$.source").value("AUTO"))
                 // GTIN-14 z zerem na początku = EAN-13 z kartoteki.
                 .andExpect(jsonPath("$.lines[0].ean").value("5900000000012"))
                 .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000101"))
                 .andExpect(jsonPath("$.lines[0].product.salePrice").value(3.49))
+                .andExpect(jsonPath("$.lines[0].fallbackCode").doesNotExist())
                 .andExpect(jsonPath("$.lines[0].product.subfamilyCode").value("254201"))
                 .andExpect(jsonPath("$.lines[0].unit").value("L"))
                 .andExpect(jsonPath("$.lines[0].vatPercent").value(5))
                 .andExpect(jsonPath("$.lines[0].unitNet").value(2.0))
                 // Dawny EAN artykułu (para z product_eans).
                 .andExpect(jsonPath("$.lines[1].product.itm8").value("0000000000102"))
+                .andExpect(jsonPath("$.lines[0].product.cadencier").value(true))
+                .andExpect(jsonPath("$.lines[1].product.salePrice").value(4.99))
+                .andExpect(jsonPath("$.lines[1].product.cadencier").value(false))
                 .andExpect(jsonPath("$.lines[1].netContent").value(0.4))
                 // Nowy artykuł: miara z nazwy z faktury, karton "/12" nie zmienia sztuki.
                 .andExpect(jsonPath("$.lines[2].product").doesNotExist())
@@ -164,15 +189,197 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.lines[3].invoiceUnit").value("op."))
                 // Pozycja bez kodu: bez EAN-u, sztuka.
                 .andExpect(jsonPath("$.lines[5].ean").doesNotExist())
+                // Bez EAN-u do kolumny idzie inny kod z faktury (indeks dostawcy), żeby pozycję dało się rozpoznać.
+                .andExpect(jsonPath("$.lines[5].fallbackCode").value("12345678"))
+                .andExpect(jsonPath("$.lines[5].fallbackSource").value("Indeks dostawcy"))
                 .andExpect(jsonPath("$.lines[5].unit").value("szt."))
                 .andExpect(jsonPath("$.lines[5].netContent").value(1))
-                .andExpect(jsonPath("$.lines[5].vatPercent").value(23));
+                .andExpect(jsonPath("$.lines[5].vatPercent").value(23))
+                // EAN z innych miejsc niż GTIN; indeks dostawcy "12345678" tylko wygląda jak EAN-8 (zła cyfra kontrolna).
+                .andExpect(jsonPath("$.lines[6].ean").value("5900000000043"))
+                .andExpect(jsonPath("$.lines[6].eanSource").value("INDEX"))
+                .andExpect(jsonPath("$.lines[6].product.itm8").value("0000000000103"))
+                .andExpect(jsonPath("$.lines[6].product.cadencier").value(false))
+                .andExpect(jsonPath("$.lines[6].product.cadencierPrice").doesNotExist())
+                .andExpect(jsonPath("$.lines[7].ean").value("5900000000050"))
+                .andExpect(jsonPath("$.lines[7].eanSource").value("EXTRA:EAN"))
+                .andExpect(jsonPath("$.sources[0].key").value("AUTO"))
+                .andExpect(jsonPath("$.sources[0].filled").value(7))
+                .andExpect(jsonPath("$.sources[0].matched").value(4))
+                .andExpect(jsonPath("$.sources[?(@.key == 'GTIN')].matched").value(hasItem(2)))
+                .andExpect(jsonPath("$.sources[?(@.key == 'INDEX')].matched").value(hasItem(1)))
+                // Indeks liczy też kody własne dostawcy ("KF-400"), więc da się go wybrać jak w piekarniach.
+                .andExpect(jsonPath("$.sources[?(@.key == 'INDEX')].filled").value(hasItem(3)))
+                .andExpect(jsonPath("$.sources[?(@.key == 'EXTRA:EAN')].label").value(hasItem("Dodatkowy opis: EAN")))
+                .andExpect(jsonPath("$.sources[?(@.key == 'NAME')]").isEmpty());
+
+        // Wybrane źródło: tylko GTIN - pozycje z EAN-em w indeksie albo opisie zostają bez kodu.
+        mvc.perform(get(url("/invoices/" + invoiceId + "?source=GTIN")).cookie(owner))
+                .andExpect(jsonPath("$.source").value("GTIN"))
+                .andExpect(jsonPath("$.lines[6].ean").doesNotExist())
+                .andExpect(jsonPath("$.lines[6].product").doesNotExist())
+                .andExpect(jsonPath("$.lines[6].fallbackCode").value("5900000000043"))
+                .andExpect(jsonPath("$.lines[7].fallbackCode").value("KF-400"))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000101"));
+        // Wybrany indeks: pozycja bez EAN-u w indeksie dostaje w kolumnie kod własny dostawcy, nie EAN z opisu.
+        mvc.perform(get(url("/invoices/" + invoiceId + "?source=INDEX")).cookie(owner))
+                .andExpect(jsonPath("$.lines[6].ean").value("5900000000043"))
+                .andExpect(jsonPath("$.lines[7].ean").doesNotExist())
+                .andExpect(jsonPath("$.lines[7].fallbackCode").value("KF-400"))
+                .andExpect(jsonPath("$.lines[7].fallbackSource").value("Indeks dostawcy"));
+        mvc.perform(get(url("/invoices/" + invoiceId + "?source=COS")).cookie(owner))
+                .andExpect(status().isBadRequest());
 
         mvc.perform(get(url("/products?ean=05900000000012&ean=5900000000029&ean=123")).cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2));
         mvc.perform(get(url("/nomenclatures")).cookie(owner))
                 .andExpect(jsonPath("$[?(@.code == '254302')].name").value(hasItem("SERY ZOLTE PLASTRY")));
+    }
+
+    @Test
+    void catalogListFiltersEachColumnWithWildcards() throws Exception {
+        jdbc.update("update products set supplier = 'MLECZARNIA ŁAKA' where store_id = ?::uuid and brand = 'LAKA'",
+                storeId);
+
+        // Gwiazdka = dowolny ciąg między członami, bez wielkości liter.
+        mvc.perform(get(url("/catalog?name=ser*plas")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].name").value(
+                        contains("SER EDAMSKI PLASTRY 150G", "SER GOUDA PLASTRY 150G", "SER LILIPUT PLASTRY 150G")))
+                .andExpect(jsonPath("$.hasMore").value(false));
+        // Kilka kolumn naraz; dostawca bez polskich znaków, ITM8 i EAN jako fragment.
+        mvc.perform(get(url("/catalog?supplier=laka&ean=0000004&itm8=103")).cookie(owner))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].name").value("MASLO EKSTRA 200G"))
+                .andExpect(jsonPath("$.items[0].supplier").value("MLECZARNIA ŁAKA"))
+                .andExpect(jsonPath("$.items[0].subfamilyName").value("MLEKO UHT"));
+        // Znaki specjalne LIKE są dosłowne.
+        mvc.perform(get(url("/catalog")).param("name", "3,2%").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("MLEKO 3,2% 1L")));
+        mvc.perform(get(url("/catalog?name=_")).cookie(owner))
+                .andExpect(jsonPath("$.items.length()").value(0));
+
+        // Nomenklatura: kod (ze spacjami) jako początek kodu podrodziny albo nazwa dowolnego poziomu.
+        mvc.perform(get(url("/catalog")).param("nomenclature", "25 44").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("JOGURT NATURALNY 400G", "KEFIR 400G")));
+        mvc.perform(get(url("/catalog")).param("nomenclature", "chrup").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("CHIPSY PAPRYKOWE 100G", "CHIPSY SOLONE 100G")));
+        // Przedział ceny sprzedaży z granicami włącznie i sortowanie po stanie (puste na końcu).
+        mvc.perform(get(url("/catalog?saleFrom=3.49&saleTo=4.99")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name")
+                        .value(contains("JOGURT NATURALNY 400G", "KEFIR 400G", "MLEKO 3,2% 1L")));
+        jdbc.update("update products set stock = 5, purchase_price = 2 where store_id = ?::uuid and itm8 = '0000000000101'",
+                storeId);
+        jdbc.update("update products set stock = -3, purchase_price = 3 where store_id = ?::uuid and itm8 = '0000000000104'",
+                storeId);
+        mvc.perform(get(url("/catalog?purchaseFrom=1&sort=stock&direction=desc")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("MLEKO 3,2% 1L", "KEFIR 400G")));
+        mvc.perform(get(url("/catalog?saleTo=3.49&sort=stock")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("KEFIR 400G", "MLEKO 3,2% 1L")));
+        // Sortowanie po kolumnie tekstowej malejąco; nieznana kolumna = po nazwie.
+        mvc.perform(get(url("/catalog")).param("nomenclature", "2544").param("sort", "name")
+                .param("direction", "desc").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("KEFIR 400G", "JOGURT NATURALNY 400G")));
+        mvc.perform(get(url("/catalog")).param("nomenclature", "2544").param("sort", "p.name; drop").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("JOGURT NATURALNY 400G", "KEFIR 400G")));
+    }
+
+    @Test
+    void linksInvoiceCodeToCatalogProductForSupplier() throws Exception {
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 2, 2, 0, 0, 0) returning id""", String.class, storeId);
+        insertProduct(productImport, "0000000000601", "5906666000001", "SZY KRU WIEP 1KG", "MASARNIA", "kg", "1",
+                "29.99", "25 42 01");
+        insertProduct(productImport, "0000000000602", "5906666000002", "KRUCHE CIASTKA 200G", "WAFLE", "kg", "0.2",
+                "4.99", "01 09 04");
+
+        // Kartoteka skraca nazwy: początki słów z faktury trafiają w skrót, kraj pochodzenia jest pomijany.
+        mvc.perform(get(url("/link-suggestions")).param("text", "Szynka krucha wieprzowa kr. poch. PL")
+                        .param("sellerNip", SELLER_NIP).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].itm8").value("0000000000601"));
+
+        // Ser z faktury (EAN spoza kartoteki) przypięty do sera z kartoteki u tego dostawcy.
+        String link = mvc.perform(post(url("/links")).with(csrf()).cookie(owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sellerNip":"%s","code":"%s","itm8":"0000000000200"}"""
+                                .formatted(SELLER_NIP, CHEESE_EAN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.product.itm8").value("0000000000200"))
+                .andReturn().getResponse().getContentAsString();
+        String linkId = JsonPath.read(link, "$.id");
+
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[2].product.itm8").value("0000000000200"))
+                .andExpect(jsonPath("$.lines[2].ean").value("5901234560001"))
+                .andExpect(jsonPath("$.lines[2].eanSource").value("LINK"))
+                .andExpect(jsonPath("$.lines[2].linkId").value(linkId))
+                .andExpect(jsonPath("$.lines[2].linkedCode").value(CHEESE_EAN));
+
+        // Kod własny dostawcy z indeksu przypięty przy wyborze "Indeks dostawcy".
+        mvc.perform(post(url("/links")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sellerNip":"%s","code":"kf-400","itm8":"0000000000601"}""".formatted(SELLER_NIP)))
+                .andExpect(status().isOk());
+        mvc.perform(get(url("/invoices/" + invoiceId + "?source=INDEX")).cookie(owner))
+                .andExpect(jsonPath("$.lines[7].product.itm8").value("0000000000601"))
+                .andExpect(jsonPath("$.lines[7].eanSource").value("LINK"))
+                .andExpect(jsonPath("$.lines[7].linkedCode").value("KF-400"));
+
+        // Odpięcie to znacznik: faktura wczytuje się znowu bez artykułu.
+        mvc.perform(delete(url("/links/" + linkId)).with(csrf()).cookie(owner))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[2].product").doesNotExist())
+                .andExpect(jsonPath("$.lines[2].linkId").doesNotExist());
+        assertThat(jdbc.queryForObject("select count(*) from data_entry_product_links where deleted_at is not null",
+                Integer.class)).isPositive();
+    }
+
+    @Test
+    void looksUpScaleLabelCodesWithPurchasePriceAndVat() throws Exception {
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 2, 2, 0, 0, 0) returning id""", String.class, storeId);
+        insertProduct(productImport, "0000000000501", "2404140000000", "KABANOS WIEPRZOWY", "MASARNIA", "kg", "1",
+                "39.99", "25 42 01");
+        insertProduct(productImport, "0000000000502", "2991150000000", "LOSOS FILET", "MORSKIE", "kg", "1",
+                "89.90", "25 42 01");
+        jdbc.update("update products set purchase_price = 26.5 where store_id = ?::uuid and itm8 = '0000000000501'",
+                storeId);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
+                    updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', 2, 2, 2, 0, 0) returning id""", String.class, storeId);
+        // Starsza dostawa ze stawką 8%, nowsza z 5%: obowiązuje najnowsza.
+        for (String[] doc : new String[][] {{"100", "2026-09-01", "8"}, {"200", "2026-10-01", "5"}}) {
+            String documentId = jdbc.queryForObject("""
+                    insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                        sale_value_gross, first_import_id, last_import_id)
+                    values (?::uuid, 'PZ', ?, ?::timestamp, 1, 0, 0, ?::uuid, ?::uuid) returning id""",
+                    String.class, storeId, doc[0], doc[1], documentImport, documentImport);
+            jdbc.update("""
+                    insert into document_lines (document_id, line_number, itm8, quantity, vat_rate)
+                    values (?::uuid, 1, '0000000000501', 1, ?::numeric)""", UUID.fromString(documentId), doc[2]);
+        }
+
+        // Etykieta ceny (24, 49,20 zł) z cyfrą kontrolną i bez niej, etykieta wagi (29, 1,234 kg).
+        mvc.perform(get(url("/products?ean=2404140049205&ean=240414004920&ean=2991150012347")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[?(@.ean == '2404140049205')].catalogEan").value(hasItem("2404140000000")))
+                .andExpect(jsonPath("$[?(@.ean == '240414004920')].itm8").value(hasItem("0000000000501")))
+                .andExpect(jsonPath("$[?(@.ean == '2404140049205')].purchasePrice").value(hasItem(26.5)))
+                .andExpect(jsonPath("$[?(@.ean == '2404140049205')].vatPercent").value(hasItem(5)))
+                .andExpect(jsonPath("$[?(@.ean == '2991150012347')].itm8").value(hasItem("0000000000502")));
+        // Inny artykuł z tym samym początkiem prefiksu nie łapie się.
+        mvc.perform(get(url("/products?ean=2404150049205")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
@@ -246,6 +453,76 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void invoiceXmlFile() throws Exception {
+        String number = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class, storeId);
+        jdbc.update("""
+                insert into suppliers (store_id, code, keyword, name, nip)
+                values (?::uuid, '154', 'SERY', 'SERY I CHIPSY SP. Z O.O.', ?)""",
+                storeId, SELLER_NIP);
+        // Nagłówek z faktury KSeF i listy dostawców; kod spoza EAN-u (zastępczy z faktury) daje 13 zer.
+        byte[] file = mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"invoiceId":"%s","rows":[
+                                 {"ean":"%s","quantity":12,"unitNet":2.499,"name":"CHIPSY & PAPRYKA 150G",
+                                  "vatPercent":5,"known":false},
+                                 {"ean":"Gratis Lipton","quantity":1,"unitNet":0.01,"name":"GRATIS","vatPercent":23,
+                                  "known":false}]}""".formatted(invoiceId, CHIPS_EAN)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        containsString("filename=\"" + number + "_154_FV_77_2026.xml\"")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(file, Charset.forName("windows-1250"))).isEqualTo("""
+                <?xml version="1.0" encoding="windows-1250"?>
+                <DOKUMENT>
+                \t<NAGLOWEK>
+                \t\t<NR_DOKUMENTU>FV/77/2026</NR_DOKUMENTU>
+                \t\t<DATA_DOKUMENTU>2026.10.30</DATA_DOKUMENTU>
+                \t\t<KOD_DOSTAWCY>SERY I CHIPSY SP. Z O.O.</KOD_DOSTAWCY>
+                \t\t<KOD_ODBIORCY>%s</KOD_ODBIORCY>
+                \t\t<ILOSC_POZYCJI>2</ILOSC_POZYCJI>
+                \t\t<WART_NET>30.01</WART_NET>
+                \t\t<NIP_DOSTAWCY>%s</NIP_DOSTAWCY>
+                \t</NAGLOWEK>
+                \t<POZYCJE>
+                \t\t<POZYCJA>
+                \t\t\t<OPERACJA>D</OPERACJA>
+                \t\t\t<LP>1</LP>
+                \t\t\t<NAZWA>CHIPSY &amp; PAPRYKA 150G</NAZWA>
+                \t\t\t<KOD_KRESKOWY>%s</KOD_KRESKOWY>
+                \t\t\t<CENA_NET>2.50</CENA_NET>
+                \t\t\t<PROC_RABAT>0.00</PROC_RABAT>
+                \t\t\t<PROC_VAT>5.00</PROC_VAT>
+                \t\t\t<PKWiU />
+                \t\t\t<ILOSC>12.000</ILOSC>
+                \t\t</POZYCJA>
+                \t\t<POZYCJA>
+                \t\t\t<OPERACJA>D</OPERACJA>
+                \t\t\t<LP>2</LP>
+                \t\t\t<NAZWA>GRATIS</NAZWA>
+                \t\t\t<KOD_KRESKOWY>0000000000000</KOD_KRESKOWY>
+                \t\t\t<CENA_NET>0.01</CENA_NET>
+                \t\t\t<PROC_RABAT>0.00</PROC_RABAT>
+                \t\t\t<PROC_VAT>23.00</PROC_VAT>
+                \t\t\t<PKWiU />
+                \t\t\t<ILOSC>1.000</ILOSC>
+                \t\t</POZYCJA>
+                \t</POZYCJE>
+                </DOKUMENT>
+                """.formatted(number, SELLER_NIP, CHIPS_EAN).replace("\n", "\r\n"));
+
+        // Tabela bez faktury: bez numeru i dostawcy, nazwa pliku z datą.
+        mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rows\":[{\"ean\":\"%s\",\"quantity\":1,\"unitNet\":2,\"name\":\"CHIPSY\",\"known\":false}]}"
+                                .formatted(CHIPS_EAN)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(".*filename=\"" + number + "_wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
+                .andExpect(content().string(containsString("<NR_DOKUMENTU />")));
+    }
+
+    @Test
     void withoutModelProposesFromCatalog() throws Exception {
         when(model.available()).thenReturn(true);
         when(model.name()).thenReturn("test-model");
@@ -292,6 +569,67 @@ class DataEntryIntegrationTests {
         suggest(stranger, items()).andExpect(status().isForbidden());
     }
 
+    @Test
+    void protocolFiles() throws Exception {
+        String settings = "/api/stores/" + storeId + "/proto-settings";
+        // Bez zapisanych ustawień: domyślny folder i wszystkie protokoły widoczne.
+        mvc.perform(get(settings).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.folderPath").value("N:\\avisoconfig"))
+                .andExpect(jsonPath("$.defaultFolder").value(true))
+                .andExpect(jsonPath("$.hiddenProtocols.length()").value(0));
+
+        // Plik PROTO1 (likwidacje): ilości ze znakiem, 0 pominięte, w nazwie numer sklepu i login.
+        String number = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class, storeId);
+        String lines = """
+                {"lines":[{"ean":"5900000000012","quantity":2},{"ean":"5900000000036","quantity":-0.5},
+                 {"ean":"5900000000043","quantity":0}]}""";
+        byte[] file = mvc.perform(post(url("/protocols/LIQUIDATION")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(lines))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(
+                                ".*filename=\"PROTO1_\\d{8}_\\d{6}_" + number + "_wlasciciel\\.Traite0\".*")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(file, StandardCharsets.US_ASCII))
+                .isEqualTo("5900000000012000002000\r\n5900000000036-00000500\r\n");
+        mvc.perform(post(url("/protocols/TRANSFER")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(lines))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("PROTO6_")));
+
+        // Ukryty protokół nie powstaje; folder sklepu wraca w ustawieniach.
+        mvc.perform(put(settings).cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"folderPath\":\" D:\\\\proto \",\"hiddenProtocols\":[\"DONATION\",\"ADVERTISING\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.folderPath").value("D:\\proto"))
+                .andExpect(jsonPath("$.defaultFolder").value(false))
+                .andExpect(jsonPath("$.hiddenProtocols", hasItem("DONATION")))
+                .andExpect(jsonPath("$.updatedBy").isNotEmpty());
+        mvc.perform(post(url("/protocols/DONATION")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(lines))
+                .andExpect(status().isBadRequest());
+
+        // Same zera albo kody niebędące EAN-em: brak pliku.
+        mvc.perform(post(url("/protocols/LIQUIDATION")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"ean\":\"5900000000012\",\"quantity\":0}]}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(url("/protocols/LIQUIDATION")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"ean\":\"KF-400\",\"quantity\":1}]}"))
+                .andExpect(status().isBadRequest());
+
+        // Ustawienia zmienia tylko osoba, która zapisuje pliki PROTO; odczyt każdy z dostępem do sklepu.
+        Cookie viewer = employee("{\"DATA_ENTRY\":\"VIEW\"}", storeId);
+        mvc.perform(get(settings).cookie(viewer)).andExpect(status().isOk());
+        mvc.perform(put(settings).cookie(viewer)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"folderPath\":null,\"hiddenProtocols\":[]}"))
+                .andExpect(status().isForbidden());
+    }
+
     private String items() {
         return """
                 {"invoiceId":"%s","sellerNip":"%s","sellerName":"SERY I CHIPSY SA",
@@ -320,6 +658,8 @@ class DataEntryIntegrationTests {
                   <Fa>
                     <KodWaluty>PLN</KodWaluty><P_1>2026-10-30</P_1><P_2>FV/77/2026</P_2><P_15>110.00</P_15>
                     <RodzajFaktury>VAT</RodzajFaktury>
+                    <DodatkowyOpis><NrWiersza>8</NrWiersza><Klucz>EAN</Klucz><Wartosc>5900000000050</Wartosc>
+                      </DodatkowyOpis>
                     <FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>Mleko 3,2%% 1 l</P_7><GTIN>05900000000012</GTIN>
                       <P_8A>szt.</P_8A><P_8B>10</P_8B><P_9A>2.00</P_9A><P_11>20.00</P_11><P_12>5</P_12></FaWiersz>
                     <FaWiersz><NrWierszaFa>2</NrWierszaFa><P_7>Jogurt naturalny 400g</P_7><GTIN>5900000000029</GTIN>
@@ -334,8 +674,12 @@ class DataEntryIntegrationTests {
                     <FaWiersz><NrWierszaFa>5</NrWierszaFa><P_7>Wisła Pianka Pasek Pom pon magic 30g/30</P_7>
                       <GTIN>%s</GTIN><P_8A>szt.</P_8A><P_8B>30</P_8B><P_9A>0.80</P_9A><P_11>24.00</P_11>
                       <P_12>5</P_12></FaWiersz>
-                    <FaWiersz><NrWierszaFa>6</NrWierszaFa><P_7>Transport</P_7><P_8A>usł.</P_8A><P_8B>1</P_8B>
-                      <P_9A>10.00</P_9A><P_11>10.00</P_11><P_12>23</P_12></FaWiersz>
+                    <FaWiersz><NrWierszaFa>6</NrWierszaFa><P_7>Transport</P_7><Indeks>12345678</Indeks>
+                      <P_8A>usł.</P_8A><P_8B>1</P_8B><P_9A>10.00</P_9A><P_11>10.00</P_11><P_12>23</P_12></FaWiersz>
+                    <FaWiersz><NrWierszaFa>7</NrWierszaFa><P_7>Masło ekstra 200g</P_7><Indeks>5900000000043</Indeks>
+                      <P_8A>szt.</P_8A><P_8B>10</P_8B><P_9A>6.00</P_9A><P_11>60.00</P_11><P_12>5</P_12></FaWiersz>
+                    <FaWiersz><NrWierszaFa>8</NrWierszaFa><P_7>Kefir 400g</P_7><Indeks>KF-400</Indeks>
+                      <P_8A>szt.</P_8A><P_8B>10</P_8B><P_9A>2.50</P_9A><P_11>25.00</P_11><P_12>5</P_12></FaWiersz>
                   </Fa>
                 </Faktura>""".formatted(CHEESE_EAN, CHIPS_EAN, CHIPS_EAN, MARSHMALLOW_EAN);
     }
@@ -343,11 +687,12 @@ class DataEntryIntegrationTests {
     private String insertProduct(String importId, String itm8, String ean, String name, String brand, String unit,
             String netContent, String salePrice, String nomenclature) {
         return jdbc.queryForObject("""
-                insert into products (store_id, itm8, ean, name, brand, unit, net_content, sale_price, nomenclature,
-                    active, first_seen_import_id, last_seen_import_id)
-                values (?::uuid, ?, ?, ?, ?, ?, ?::numeric, ?::numeric, ?, true, ?::uuid, ?::uuid) returning id""",
-                String.class, storeId, itm8, ean, name, brand, unit, netContent, salePrice, nomenclature, importId,
-                importId);
+                insert into products (store_id, itm8, ean, name, brand, unit, net_content, sale_price, cadencier_price,
+                    nomenclature, active, first_seen_import_id, last_seen_import_id)
+                values (?::uuid, ?, ?, ?, ?, ?, ?::numeric, ?::numeric, ?::numeric, ?, true, ?::uuid, ?::uuid)
+                returning id""",
+                String.class, storeId, itm8, ean, name, brand, unit, netContent, salePrice, salePrice, nomenclature,
+                importId, importId);
     }
 
     private String url(String path) {

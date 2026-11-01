@@ -1,5 +1,7 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -189,6 +191,118 @@ class SalesReportIntegrationTests {
     }
 
     @Test
+    void monthlySumsGiveSameTotalsAsDailySales() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 2, 2, 0, 0, 0) returning id""", String.class, storeId);
+        String bread = insertProduct(storeId, productImport, "PIECZYWO WASA", "01 01 01");
+        String ham = insertProduct(storeId, productImport, "SZYNKA", "02 01 01");
+        String salesImport = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', timestamp '2026-10-03 07:15:00', date '2026-07-31',
+                    date '2026-10-02', 7, 7, 0, 0) returning id""", String.class, storeId);
+        // Sprzedaż na brzegach miesięcy: 31.07, 1.08, 14.08, 15.08, 31.08, 1.09 (dwa EAN-y), 30.09, 2.10.
+        String[][] days = {{"2026-07-31", "1"}, {"2026-08-01", "2"}, {"2026-08-14", "4"}, {"2026-08-15", "8"},
+                {"2026-08-31", "16"}, {"2026-09-30", "64"}, {"2026-10-02", "128"}};
+        for (String[] day : days) {
+            insertSale(storeId, salesImport, day[0], bread, "590001", day[1], "0", day[1], "0", "0");
+        }
+        // Dwa wiersze jednego dnia (dwa EAN-y) jednym poleceniem, jak paczka z importu.
+        jdbc.update("""
+                insert into sales (store_id, sale_date, itm8, ean, quantity, cost_value, sale_value_gross, vat_value,
+                    margin_value, import_id)
+                values (?::uuid, date '2026-09-01', ?, '590001', 32, 0, 32, 0, 0, ?::uuid),
+                       (?::uuid, date '2026-09-01', ?, '590099', 1000, 0, 1000, 0, 0, ?::uuid)""",
+                storeId, bread, salesImport, storeId, ham, salesImport);
+
+        // Wyzwalacz dopisał sumy miesięcy.
+        assertThat(jdbc.queryForObject("""
+                select sale_value_gross from sales_monthly
+                where store_id = ?::uuid and month = date '2026-08-01' and itm8 = ?""",
+                BigDecimal.class, storeId, bread)).isEqualByComparingTo("30");
+
+        // 15.08-30.09 (niepełny sierpień + pełny wrzesień) z 1.08-14.08 (sam niepełny miesiąc).
+        mvc.perform(get(reportsUrl(storeId) + "/sales-comparison").cookie(owner)
+                        .param("previousFrom", "2026-08-01").param("previousTo", "2026-08-14")
+                        .param("currentFrom", "2026-08-15").param("currentTo", "2026-09-30").param("parent", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.previousTotal.saleValueGross").value(6))
+                .andExpect(jsonPath("$.currentTotal.saleValueGross").value(8 + 16 + 32 + 64 + 1000));
+        // Okresy nachodzące na siebie: 31.07-2.10 i pełny sierpień; rozwinięty rejon czyta tylko swoje artykuły.
+        mvc.perform(get(reportsUrl(storeId) + "/sales-comparison").cookie(owner)
+                        .param("previousFrom", "2026-08-01").param("previousTo", "2026-08-31")
+                        .param("currentFrom", "2026-07-31").param("currentTo", "2026-10-02").param("parent", "01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows.length()").value(1))
+                .andExpect(jsonPath("$.rows[0].previous.saleValueGross").value(30))
+                .andExpect(jsonPath("$.rows[0].current.saleValueGross").value(255));
+        // Artykuły podrodziny i podsumowanie okresu z tymi samymi sumami.
+        mvc.perform(get(reportsUrl(storeId) + "/sales-comparison").cookie(owner)
+                        .param("previousFrom", "2026-08-01").param("previousTo", "2026-08-31")
+                        .param("currentFrom", "2026-07-31").param("currentTo", "2026-10-02").param("parent", "010101"))
+                .andExpect(jsonPath("$.rows[0].current.quantity").value(255));
+        mvc.perform(get(reportsUrl(storeId) + "/period-summary").cookie(owner)
+                        .param("from", "2026-08-02").param("to", "2026-09-30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines[?(@.kind == 'REGION' && @.code == '01')].figures.saleValueGross")
+                        .value(hasItem(124.0)));
+    }
+
+    @Test
+    void listsArticleDeliveriesNewestFirst() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-10-03 08:00:00', date '2026-09-01',
+                    date '2026-10-02', 4, 4, 3, 0, 0) returning id""", String.class, storeId);
+        String itm8 = "0000000123456";
+        String older = insertDocument(storeId, documentImport, "PZ", "999300", "2026-09-10 10:00");
+        insertDeliveryLine(older, 1, itm8, "10", "40");
+        String newer = insertDocument(storeId, documentImport, "PZ", "1000100", "2026-09-20 10:00");
+        // Dwie linie artykułu w jednym przyjęciu są sumowane, cena = wartość / ilość.
+        insertDeliveryLine(newer, 1, itm8, "4", "18");
+        insertDeliveryLine(newer, 2, itm8, "2", "9");
+        // Linia z ilością 0 (np. nic nie przyjechało) nie jest dostawą.
+        String empty = insertDocument(storeId, documentImport, "PZ", "1000200", "2026-09-25 10:00");
+        insertDeliveryLine(empty, 1, itm8, "0", "0");
+
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + itm8 + "/deliveries").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].documentId").value(newer))
+                .andExpect(jsonPath("$[0].documentNumber").value("1000100"))
+                .andExpect(jsonPath("$[0].supplierName").value("WASA"))
+                .andExpect(jsonPath("$[0].quantity").value(6.0))
+                .andExpect(jsonPath("$[0].purchasePrice").value(4.5))
+                .andExpect(jsonPath("$[0].purchaseValue").value(27.0))
+                .andExpect(jsonPath("$[1].documentId").value(older))
+                .andExpect(jsonPath("$[1].purchasePrice").value(4.0));
+
+        // Straty na wykresie: likwidacje w wartości zakupu netto (w raporcie z minusem), artykułu i grupy.
+        String loss = insertDocument(storeId, documentImport, "PL", "PL01", "2026-09-21 10:00");
+        insertDeliveryLine(loss, 1, itm8, "-2", "-8");
+        String lossHistory = reportsUrl(storeId) + "/sales-history?from=2026-09-20&to=2026-09-22";
+        mvc.perform(get(lossHistory + "&itm8=" + itm8).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lossValue").value(8.0))
+                .andExpect(jsonPath("$.days[0].lossValue").value(0))
+                .andExpect(jsonPath("$.days[1].lossValue").value(8.0));
+        mvc.perform(get(lossHistory).cookie(owner))
+                .andExpect(jsonPath("$.lossValue").value(8.0));
+        // Artykułu nie ma w kartotece, a linia nie ma nomenklatury: strata jest „bez nomenklatury”.
+        mvc.perform(get(lossHistory + "&unassigned=true").cookie(owner))
+                .andExpect(jsonPath("$.lossValue").value(8.0));
+        mvc.perform(get(lossHistory + "&parent=01").cookie(owner))
+                .andExpect(jsonPath("$.lossValue").value(0));
+    }
+
+    @Test
     void deliCostsReplaceFifoWithRepresentationProtocols() throws Exception {
         Cookie owner = login();
         String storeId = createStore(owner);
@@ -271,6 +385,25 @@ class SalesReportIntegrationTests {
                     sale_value_gross, first_import_id, last_import_id)
                 values (?::uuid, ?, ?, ?::timestamp, 1, ?, 0, ?::uuid, ?::uuid)""",
                 storeId, type, number, date, new BigDecimal(purchaseValue), importId, importId);
+    }
+
+    private String insertDocument(String storeId, String importId, String type, String number, String date) {
+        return jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                    sale_value_gross, first_import_id, last_import_id)
+                values (?::uuid, ?, ?, ?::timestamp, 1, 0, 0, ?::uuid, ?::uuid) returning id""",
+                String.class, storeId, type, number, date, importId, importId);
+    }
+
+    private void insertDeliveryLine(String documentId, int lineNumber, String itm8, String quantity, String value) {
+        jdbc.update("""
+                insert into document_lines (document_id, line_number, itm8, quantity, purchase_price, purchase_value,
+                    supplier_code, supplier_name)
+                values (?::uuid, ?, ?, ?, ?, ?, '501', 'WASA')""",
+                documentId, lineNumber, itm8, new BigDecimal(quantity),
+                new BigDecimal(quantity).signum() == 0 ? BigDecimal.ZERO
+                        : new BigDecimal(value).divide(new BigDecimal(quantity)).abs(),
+                new BigDecimal(value));
     }
 
     private ResultActions compare(Cookie owner, String storeId, String parent) throws Exception {

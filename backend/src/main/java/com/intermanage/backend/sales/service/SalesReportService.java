@@ -1,5 +1,6 @@
 package com.intermanage.backend.sales.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -14,11 +15,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.nomenclature.mapper.NomenclatureMapper;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.repository.ProductRepository;
+import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse.Level;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
@@ -47,6 +50,9 @@ public class SalesReportService {
     /** Rozwinięta pozycja: nic (rejony sklepu), rejon, rodzina albo podrodzina. */
     private static final Pattern PARENT = Pattern.compile("([0-9]{2}){0,3}");
 
+    /** Ile ostatnich dostaw pokazuje okno artykułu. */
+    static final int DELIVERY_LIMIT = 50;
+
     /** Pozycja nomenklatury w filtrze: rejon, rodzina albo podrodzina. */
     private static final Pattern FILTER_CODE = Pattern.compile("([0-9]{2}){1,3}");
 
@@ -56,15 +62,18 @@ public class SalesReportService {
     private final NomenclatureRepository nomenclatures;
     private final SalesMapper salesMapper;
     private final NomenclatureMapper nomenclatureMapper;
+    private final DocumentLineRepository documentLines;
 
     public SalesReportService(SaleRepository sales, SalesImportRepository imports, ProductRepository products,
-            NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper) {
+            NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper,
+            DocumentLineRepository documentLines) {
         this.sales = sales;
         this.imports = imports;
         this.products = products;
         this.nomenclatures = nomenclatures;
         this.salesMapper = salesMapper;
         this.nomenclatureMapper = nomenclatureMapper;
+        this.documentLines = documentLines;
     }
 
     public SalesReportsOverview overview(UUID storeId) {
@@ -85,18 +94,23 @@ public class SalesReportService {
         String code = parentCode(parent, unassigned);
         String[] codes = filterCodes(filter);
 
+        sales.tuneForReport();
         Level level;
         List<SaleRepository.ComparisonRow> found;
-        if (unassigned || code.length() == 6) {
+        // Rozwinięta grupa czyta sprzedaż tylko swoich artykułów; cały sklep i artykuły bez nomenklatury sumują
+        // całą sprzedaż okresów.
+        if (unassigned) {
+            level = Level.PRODUCT;
+            found = sales.compareUnassignedArticles(storeId, previousFrom, previousTo, currentFrom, currentTo, codes);
+        } else if (code.length() == 6) {
             level = Level.PRODUCT;
             found = sales.compareArticles(storeId, previousFrom, previousTo, currentFrom, currentTo, code, codes);
+        } else if (code.isEmpty()) {
+            level = Level.REGION;
+            found = sales.compareByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo, 2, codes);
         } else {
-            level = switch (code.length()) {
-                case 0 -> Level.REGION;
-                case 2 -> Level.FAMILY;
-                default -> Level.SUBFAMILY;
-            };
-            found = sales.compareByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo,
+            level = code.length() == 2 ? Level.FAMILY : Level.SUBFAMILY;
+            found = sales.compareGroupByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo,
                     code.length() + 2, code, codes);
         }
 
@@ -122,10 +136,19 @@ public class SalesReportService {
     public SalesHistoryResponse history(UUID storeId, LocalDate from, LocalDate to, String itm8, String parent,
             boolean unassigned, List<String> filter) {
         checkPeriod(from, to, "Okres wykresu");
-        List<SaleRepository.DayRow> found = itm8 != null && !itm8.isBlank()
+        boolean article = itm8 != null && !itm8.isBlank();
+        String code = article ? null : parentCode(parent, unassigned);
+        String[] codes = article ? null : filterCodes(filter);
+        sales.tuneForReport();
+        List<SaleRepository.DayRow> found = article
                 ? sales.articleHistory(storeId, itm8.strip(), from, to)
-                : sales.groupHistory(storeId, parentCode(parent, unassigned), unassigned, filterCodes(filter), from,
-                        to);
+                : sales.groupHistory(storeId, code, unassigned, codes, from, to);
+        // Likwidacje mają wartość zakupu z minusem (wydanie), strata to jej przeciwność.
+        Map<LocalDate, BigDecimal> losses = new HashMap<>();
+        (article
+                ? documentLines.sumArticleLossesByDay(storeId, itm8.strip(), from, to)
+                : documentLines.sumGroupLossesByDay(storeId, code, unassigned, codes, from, to))
+                .forEach(day -> losses.put(day.getDay(), day.getPurchaseValue().negate()));
 
         Map<LocalDate, SalesFigures> byDay = new HashMap<>();
         found.forEach(row -> byDay.put(row.getSaleDate(), new SalesFigures(row.getQuantity(), row.getCostValue(),
@@ -134,10 +157,11 @@ public class SalesReportService {
         SalesFigures total = SalesFigures.ZERO;
         for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
             SalesFigures figures = byDay.getOrDefault(day, SalesFigures.ZERO);
-            days.add(new SalesHistoryDay(day, figures));
+            days.add(new SalesHistoryDay(day, figures, losses.getOrDefault(day, BigDecimal.ZERO)));
             total = total.plus(figures);
         }
-        return new SalesHistoryResponse(from, to, days, total);
+        return new SalesHistoryResponse(from, to, days, total,
+                losses.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
     }
 
     /** Artykuł z kartoteki sklepu z rejonem, rodziną i podrodziną; 404, gdy go w kartotece nie ma. */
@@ -153,6 +177,13 @@ public class SalesReportService {
                         .sorted(Comparator.comparing(NomenclatureOption::code))
                         .toList();
         return salesMapper.toArticle(product, path);
+    }
+
+    /** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej, najwyżej {@link #DELIVERY_LIMIT}. */
+    public List<ArticleDeliveryResponse> deliveries(UUID storeId, String itm8) {
+        return documentLines.findArticleDeliveries(storeId, itm8.strip(), DELIVERY_LIMIT).stream()
+                .map(salesMapper::toDelivery)
+                .toList();
     }
 
     private static String parentCode(String parent, boolean unassigned) {

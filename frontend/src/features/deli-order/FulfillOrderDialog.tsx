@@ -6,10 +6,11 @@ import { FormActions } from '@/components/form'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { PROTO_FOLDER, orderExportPath, useFulfillOrder } from '@/features/deli-order/api'
+import { orderExportPath, useFulfillOrder } from '@/features/deli-order/api'
 import { groupItems } from '@/features/deli-order/group-items'
 import { QuantityInput, formatQuantity, parseQuantity } from '@/features/deli-order/QuantityInput'
 import { ApiError, downloadFile } from '@/lib/api'
+import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveApiFileToFolder } from '@/lib/saved-folders'
 import type { DeliOrder } from '@/lib/types'
 
@@ -34,6 +35,7 @@ export function FulfillOrderDialog({ open, onOpenChange, ...props }: Props) {
 }
 
 function FulfillForm({ storeId, order, initial, onDone }: Omit<Props, 'open' | 'onOpenChange'> & { onDone: () => void }) {
+  const protoFolder = useProtoFolder(storeId)
   const fulfill = useFulfillOrder(storeId, order.id)
   const [draft, setDraft] = useState(initial)
   const [submitting, setSubmitting] = useState(false)
@@ -64,7 +66,7 @@ function FulfillForm({ storeId, order, initial, onDone }: Omit<Props, 'open' | '
     setSubmitting(true)
     try {
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
-      const folderReady = await ensureFolderAccess(PROTO_FOLDER.key)
+      const folderReady = await ensureFolderAccess(protoFolder.key)
       await fulfill.mutateAsync(order.items.map((item) => ({ id: item.id, quantity: parsed.get(item.id)!.value! })))
       onDone()
       if (!folderReady) {
@@ -73,7 +75,7 @@ function FulfillForm({ storeId, order, initial, onDone }: Omit<Props, 'open' | '
       }
       const path = orderExportPath(storeId, order.id, 'proto')
       try {
-        const fileName = await saveApiFileToFolder(PROTO_FOLDER.key, path, 'zamowienie.Traite0')
+        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'zamowienie.Traite0')
         toast.success('Zamówienie zrealizowane', { description: `Zapisano ${fileName}` })
       } catch (error) {
         toast.error('Zamówienie zrealizowane, ale pliku PROTO6 nie zapisano', {
@@ -137,7 +139,7 @@ function FulfillForm({ storeId, order, initial, onDone }: Omit<Props, 'open' | '
         ))}
       </div>
 
-      <SavedFolder folder={PROTO_FOLDER} />
+      <SavedFolder folder={protoFolder} />
 
       <FormActions>
         <Button type="button" variant="outline" size="lg" onClick={onDone}>

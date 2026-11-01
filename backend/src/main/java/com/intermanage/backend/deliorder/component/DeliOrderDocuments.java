@@ -20,7 +20,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 import com.intermanage.backend.common.component.PdfFonts;
-import com.intermanage.backend.common.component.Proto6;
+import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.deliorder.entity.OrderUnit;
 import com.lowagie.text.Document;
@@ -103,8 +103,8 @@ public class DeliOrderDocuments {
 
     /** Plik PROTO6 dla programu sklepu, w kolejności zamówienia. */
     public byte[] proto(OrderDocument order) {
-        return Proto6.content(order.orderedLines().stream()
-                .map(line -> new Proto6.Line(line.ean(), line.quantity())).toList());
+        return ProtoFile.content(order.orderedLines().stream()
+                .map(line -> new ProtoFile.Line(line.ean(), line.quantity())).toList());
     }
 
     public byte[] xlsx(OrderDocument order) {

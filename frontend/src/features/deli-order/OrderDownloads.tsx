@@ -10,8 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { PROTO_FOLDER, orderExportPath } from '@/features/deli-order/api'
+import { orderExportPath } from '@/features/deli-order/api'
 import { ApiError, downloadFile } from '@/lib/api'
+import { useProtoFolder } from '@/lib/proto-files'
 import { folderSavingSupported, saveApiFileToFolder, useSavedFolder } from '@/lib/saved-folders'
 
 type Format = 'pdf' | 'xlsx' | 'lst' | 'proto' | 'folder'
@@ -28,8 +29,9 @@ const FORMATS: { format: Exclude<Format, 'folder'>; label: string; hint: string;
  * Pliki pomijają pozycje z ilością 0.
  */
 export function OrderDownloads({ storeId, orderId, compact }: { storeId: string; orderId: string; compact?: boolean }) {
+  const protoFolder = useProtoFolder(storeId)
   const [pending, setPending] = useState<Format | null>(null)
-  const folder = useSavedFolder(PROTO_FOLDER.key)
+  const folder = useSavedFolder(protoFolder.key)
 
   const download = async (format: Exclude<Format, 'folder'>) => {
     setPending(format)
@@ -47,10 +49,10 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
     setPending('folder')
     try {
       if (!folder.name) {
-        if (PROTO_FOLDER.suggestedPath) navigator.clipboard?.writeText(PROTO_FOLDER.suggestedPath).catch(() => {})
+        if (protoFolder.suggestedPath) navigator.clipboard?.writeText(protoFolder.suggestedPath).catch(() => {})
         if (!(await folder.pick())) return
       }
-      const fileName = await saveApiFileToFolder(PROTO_FOLDER.key, orderExportPath(storeId, orderId, 'proto'), 'zamowienie.Traite0')
+      const fileName = await saveApiFileToFolder(protoFolder.key, orderExportPath(storeId, orderId, 'proto'), 'zamowienie.Traite0')
       toast.success(`Zapisano ${fileName}`)
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku')
@@ -93,7 +95,7 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
                 <span className="text-xs text-muted-foreground">
                   {folder.name
                     ? 'Folder zapamiętany w przeglądarce'
-                    : `Wybierz folder raz, np. ${PROTO_FOLDER.suggestedPath} (ścieżka w schowku)`}
+                    : `Wybierz folder raz, np. ${protoFolder.suggestedPath} (ścieżka w schowku)`}
                 </span>
               </span>
             </DropdownMenuItem>

@@ -5,6 +5,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Menu zwinięte do ikon: od md na szerokich stronach (data-wide-page), gdy menu nie jest wysunięte (data-rail). */
+@custom-variant rail {
+  @media (width >= 48rem) {
+    &:where(.app-layout:has([data-wide-page]) [data-rail], .app-layout:has([data-wide-page]) [data-rail] *) {
+      @slot;
+    }
+  }
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
@@ -53,6 +62,7 @@
 }
 
 :root {
+    color-scheme: light;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -90,40 +100,53 @@
     --brand-foreground: oklch(0.985 0 0);
 }
 
+/*
+ * Ciemny motyw: to samo co jasny, tylko warstwy idą od ciemnej podstawy w górę. Menu i nagłówek leżą najniżej,
+ * karty wyżej, a okna i listy jeszcze wyżej, bo w ciemnym głębię daje jaśniejsza powierzchnia, nie cień.
+ * Neutralne szarości jak w jasnym, czerwień marki rozjaśniona, żeby nie gasła na ciemnym tle.
+ */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    color-scheme: dark;
+    --background: oklch(0.155 0 0);
+    --foreground: oklch(0.965 0 0);
+    --card: oklch(0.2 0 0);
+    --card-foreground: oklch(0.965 0 0);
+    --popover: oklch(0.225 0 0);
+    --popover-foreground: oklch(0.965 0 0);
+    --primary: oklch(0.93 0 0);
+    --primary-foreground: oklch(0.2 0 0);
+    --secondary: oklch(0.27 0 0);
+    --secondary-foreground: oklch(0.965 0 0);
+    --muted: oklch(0.255 0 0);
+    --muted-foreground: oklch(0.72 0 0);
+    --accent: oklch(0.29 0 0);
+    --accent-foreground: oklch(0.965 0 0);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --border: oklch(1 0 0 / 11%);
+    --input: oklch(1 0 0 / 16%);
+    --ring: oklch(0.6 0 0);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
-    --brand: oklch(0.66 0.2 25);
+    --sidebar: oklch(0.155 0 0);
+    --sidebar-foreground: oklch(0.965 0 0);
+    --sidebar-primary: oklch(0.93 0 0);
+    --sidebar-primary-foreground: oklch(0.2 0 0);
+    --sidebar-accent: oklch(0.255 0 0);
+    --sidebar-accent-foreground: oklch(0.965 0 0);
+    --sidebar-border: oklch(1 0 0 / 11%);
+    --sidebar-ring: oklch(0.6 0 0);
+    --brand: oklch(0.67 0.19 25);
     --brand-foreground: oklch(0.985 0 0);
+}
+
+/* Zmiana motywu przenika (useThemeChoice w lib/theme.ts) zamiast skakać jasnością całego ekranu. */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: ease;
 }
 
 @layer base {
@@ -182,6 +205,9 @@
   }
   ::selection {
     background: color-mix(in oklch, var(--brand) 18%, transparent);
+    }
+  .dark ::selection {
+    background: color-mix(in oklch, var(--brand) 32%, transparent);
     }
   /* Liczby w tabelach i licznikach nie skaczą przy zmianie wartości. */
   table {

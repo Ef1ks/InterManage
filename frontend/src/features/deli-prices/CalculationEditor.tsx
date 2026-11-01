@@ -685,7 +685,7 @@ function NumberInput({
   return (
     <label
       className={cn(
-        'flex shrink-0 items-center border border-input bg-background transition-[border-color,box-shadow] duration-150',
+        'flex shrink-0 items-center border border-input bg-background dark:bg-input/30 transition-[border-color,box-shadow] duration-150',
         size === 'sm' ? 'h-7 w-24 rounded-lg pr-2' : 'h-10 w-32 rounded-xl pr-3',
         'focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30',
         invalid && 'border-destructive focus-within:border-destructive focus-within:ring-destructive/20',

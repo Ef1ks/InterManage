@@ -10,15 +10,20 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-/** Tabela do pliku Excel: wiersze w kolejności z ekranu; {@code suggestionId} wiąże wiersz z propozycją AI. */
+/**
+ * Tabela do pliku (XML faktury albo Excel): wiersze w kolejności z ekranu; {@code suggestionId} wiąże wiersz z
+ * propozycją AI. {@code invoiceId} to faktura z KSeF wczytana do tabeli: z niej numer, data i NIP w pliku XML.
+ */
 public record ExportRequest(
+        UUID invoiceId,
         @Size(max = 100) String invoiceNumber,
         @Size(max = 300) String sellerName,
         @NotNull @Size(max = 2000, message = "Najwyżej 2000 wierszy") List<@Valid Row> rows) {
 
     public record Row(
             UUID suggestionId,
-            @Size(max = 14) String ean,
+            // Bez EAN-u na fakturze w kolumnie jest inny kod albo nazwa pozycji.
+            @Size(max = 300) String ean,
             BigDecimal quantity,
             BigDecimal unitNet,
             @Size(max = 20) String invoiceUnit,
@@ -26,6 +31,8 @@ public record ExportRequest(
             @Size(max = 100) String brand,
             BigDecimal vatPercent,
             BigDecimal salePrice,
+            // CENA_CAD artykułu z kartoteki: jest ceną sugerowaną bez liczenia i zaokrąglania.
+            BigDecimal cadencierPrice,
             @Size(max = 6) String subfamilyCode,
             @Size(max = 4) String unit,
             BigDecimal netContent,

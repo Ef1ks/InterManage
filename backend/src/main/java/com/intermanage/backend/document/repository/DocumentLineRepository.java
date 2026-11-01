@@ -58,6 +58,80 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     List<SupplierPrice> findSupplierPrices(UUID storeId, Collection<String> supplierCodes, LocalDateTime from,
             LocalDateTime to);
 
+    /** Dostawa artykułu: przyjęcie PZ z sumą jego linii (ilość, wartość zakupu netto). */
+    interface ArticleDelivery {
+        UUID getDocumentId();
+
+        String getDocumentNumber();
+
+        LocalDateTime getDocumentDate();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        BigDecimal getQuantity();
+
+        BigDecimal getPurchaseValue();
+    }
+
+    /**
+     * Ostatnie dostawy artykułu (przyjęcia PZ z ilością > 0), od najnowszej. Linie tego samego ITM8 w jednym
+     * przyjęciu są sumowane, więc cena to wartość / ilość.
+     */
+    @Query(value = """
+            select d.id as document_id, d.number as document_number, d.document_date as document_date,
+                   max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
+                   sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type = 'PZ' and l.itm8 = :itm8 and l.quantity > 0
+            group by d.id, d.number, d.document_date
+            order by d.document_date desc, length(d.number) desc, d.number desc
+            limit :limit
+            """, nativeQuery = true)
+    List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, int limit);
+
+    /**
+     * Likwidacje (PL) artykułu dzień po dniu wg daty dokumentu, {@code from} i {@code to} włącznie: wartość zakupu
+     * netto linii (wydanie, więc z minusem). Dni bez likwidacji nie ma w wyniku.
+     */
+    @Query(value = """
+            select cast(d.document_date as date) as day, coalesce(sum(l.purchase_value), 0) as purchase_value
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type = 'PL' and l.itm8 = :itm8
+              and d.document_date >= cast(:from as timestamp)
+              and d.document_date < cast(:to as timestamp) + interval '1 day'
+            group by 1
+            order by 1
+            """, nativeQuery = true)
+    List<DocumentRepository.DayValue> sumArticleLossesByDay(UUID storeId, String itm8, LocalDate from, LocalDate to);
+
+    /**
+     * Likwidacje (PL) pozycji nomenklatury dzień po dniu, pogrupowane jak sprzedaż w raportach: po podrodzinie
+     * artykułu z kartoteki, a bez niego po nomenklaturze linii. {@code prefix} pusty = cały sklep, {@code unassigned}
+     * = linie bez nomenklatury, {@code codes} (dowolny poziom) zawęża jak filtr porównania.
+     */
+    @Query(value = """
+            select cast(d.document_date as date) as day, coalesce(sum(l.purchase_value), 0) as purchase_value
+            from document_lines l
+            join documents d on d.id = l.document_id
+            left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+            cross join lateral (select coalesce(p.subfamily_code,
+                    nullif(replace(l.nomenclature_code, ' ', ''), '')) as code) n
+            where d.store_id = :storeId and d.type = 'PL'
+              and d.document_date >= cast(:from as timestamp)
+              and d.document_date < cast(:to as timestamp) + interval '1 day'
+              and case when :unassigned then n.code is null else :prefix = '' or n.code like :prefix || '%' end
+              and (cardinality(cast(:codes as varchar[])) = 0
+                   or exists (select 1 from unnest(cast(:codes as varchar[])) c(code) where n.code like c.code || '%'))
+            group by 1
+            order by 1
+            """, nativeQuery = true)
+    List<DocumentRepository.DayValue> sumGroupLossesByDay(UUID storeId, String prefix, boolean unassigned,
+            String[] codes, LocalDate from, LocalDate to);
+
     /** Wartość zakupu linii jednego typu dokumentu w rejonie nomenklatury (pusty kod = linie bez nomenklatury). */
     interface RegionValue {
         String getRegionCode();

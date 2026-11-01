@@ -801,8 +801,11 @@ export type NomenclatureOption = {
 export type SalesHistory = {
   from: string
   to: string
-  days: { date: string; figures: SalesFigures }[]
+  /** {@code lossValue}: straty dnia, likwidacje w wartości zakupu netto (0 = bez likwidacji). */
+  days: { date: string; figures: SalesFigures; lossValue: number }[]
   total: SalesFigures
+  /** Straty okresu (likwidacje, wartość zakupu netto). */
+  lossValue: number
 }
 
 /** Artykuł z kartoteki: ceny, stan i rotacja z ostatniego raportu kartoteki, w którym był. */
@@ -823,6 +826,18 @@ export type SalesArticle = {
   reportGeneratedAt: string | null
   /** Rejon, rodzina, podrodzina (te, które są w nomenklaturze sklepu). */
   nomenclaturePath: NomenclatureOption[]
+}
+
+/** Dostawa artykułu (przyjęcie PZ, z raportu bez korekt): ilość i cena zakupu netto sztuki. */
+export type ArticleDelivery = {
+  documentId: string
+  documentNumber: string
+  documentDate: string
+  supplierCode: string | null
+  supplierName: string | null
+  quantity: number
+  purchasePrice: number | null
+  purchaseValue: number
 }
 
 /**
@@ -1316,6 +1331,31 @@ export type RegionBudget = {
   updatedAt: string | null
 }
 
+/**
+ * Marża wymagana na pozycji nomenklatury (Ustawienia sklepu): {@code marginPercent} ustawiona na niej,
+ * {@code effectivePercent} obowiązująca (własna albo z rodziny / rejonu).
+ */
+export type NomenclatureMargin = {
+  code: string
+  name: string
+  level: 'REGION' | 'FAMILY' | 'SUBFAMILY'
+  marginPercent: number | null
+  effectivePercent: number | null
+  updatedBy: string | null
+  updatedAt: string | null
+}
+
+/** Przedział cen [od, do) z końcówką zaokrąglenia ceny sugerowanej; {@code priceTo} null = bez górnej granicy. */
+export type PriceRoundingRule = {
+  priceFrom: number
+  priceTo: number | null
+  ending: number
+  createdBy: string | null
+  createdAt: string | null
+}
+
+export type NomenclatureMarginImport = { changedCount: number; withMarginCount: number }
+
 /** Status wyjaśniania przyjęcia z ceną wyższą niż baza; brak wpisu = do wyjaśnienia. */
 export type PriceCheckStatus = 'REPORTED' | 'RESOLVED'
 
@@ -1449,21 +1489,63 @@ export type CadencierOverview = {
 export type SaleUnit = 'kg' | 'L' | 'szt.'
 
 /** Artykuł z kartoteki sklepu dla EAN-u ({@code ean} bez zer wiodących); {@code salePrice} brutto sztuki. */
-export type DataEntryCatalogProduct = {
-  ean: string
+/** Artykuł z kartoteki w oknie „Lista towarów” we wprowadzaniu danych. */
+export type DataEntryCatalogListItem = {
   itm8: string
+  ean: string
   name: string | null
   brand: string | null
+  supplier: string | null
+  /** Podrodzina nomenklatury (6 cyfr) i jej nazwa. */
+  subfamilyCode: string | null
+  subfamilyName: string | null
+  /** Cena zakupu netto sztuki (przy wagowych 1 kg) z kartoteki. */
+  purchasePrice: number | null
   salePrice: number | null
+  /** Stan i rotacja z ostatniego raportu kartoteki. */
+  stock: number | null
+  rotation: number | null
+}
+
+export type DataEntryCatalogListPage = {
+  items: DataEntryCatalogListItem[]
+  hasMore: boolean
+}
+
+export type DataEntryCatalogProduct = {
+  /** EAN, którego szukano (bez zer wiodących). */
+  ean: string
+  itm8: string
+  /** Bieżący EAN artykułu w kartotece (inny niż {@code ean} np. dla kodu z etykiety wagi). */
+  catalogEan: string | null
+  name: string | null
+  brand: string | null
+  /** Cena zakupu netto sztuki (przy wagowych 1 kg) z kartoteki. */
+  purchasePrice: number | null
+  /** Stawka VAT w % z ostatniego dokumentu z tym artykułem; kartoteka ma tylko kod stawki. */
+  vatPercent: number | null
+  salePrice: number | null
+  /** Artykuł ma CENA_CAD z ostatniego raportu kartoteki. */
+  cadencier: boolean
+  /** CENA_CAD (brutto sztuki narzucona przez centralę); {@code null}, gdy jej nie ma. */
+  cadencierPrice: number | null
   unit: SaleUnit
   netContent: number
   subfamilyCode: string | null
+  /** Stan magazynowy (może być ujemny) i rotacja z ostatniego raportu kartoteki. */
+  stock: number | null
+  rotation: number | null
 }
 
 /** Pozycja faktury z KSeF; bez {@code product} to nowy artykuł, a miara jest z nazwy z faktury. */
 export type DataEntryLine = {
   number: string | null
   ean: string | null
+  /** Skąd EAN: GTIN, INDEX, EXTRA:<klucz>, NAME (przy automatycznym wyborze różne dla pozycji). */
+  eanSource: string | null
+  /** Bez EAN-u: inny kod z faktury (Indeks, dodatkowy opis) albo nazwa, i opis pola, z którego pochodzi. */
+  fallbackCode: string | null
+  fallbackSource: string | null
   quantity: number | null
   unitNet: number | null
   invoiceName: string | null
@@ -1472,6 +1554,9 @@ export type DataEntryLine = {
   product: DataEntryCatalogProduct | null
   unit: SaleUnit
   netContent: number
+  /** Pozycja wczytana z przypięcia kodu dostawcy do artykułu ({@code eanSource} = LINK). */
+  linkId: string | null
+  linkedCode: string | null
 }
 
 export type DataEntryInvoice = {
@@ -1480,11 +1565,18 @@ export type DataEntryInvoice = {
   sellerName: string | null
   sellerNip: string
   issueDate: string
+  /** Użyte źródło EAN-u (AUTO albo jedno z {@code sources}). */
+  source: string
+  sources: DataEntryCodeSource[]
   lines: DataEntryLine[]
 }
 
+/** Źródło EAN-u na fakturze: w ilu pozycjach jest kod ({@code filled}) i ile z nich jest w kartotece. */
+export type DataEntryCodeSource = { key: string; label: string; filled: number; matched: number }
+
 /** Kod 2, 4 albo 6 cyfr: rejon, rodzina, podrodzina. */
-export type NomenclatureItem = { code: string; name: string }
+/** Pozycja nomenklatury do wprowadzania danych; {@code requiredMargin} = marża wymagana, która na niej obowiązuje. */
+export type NomenclatureItem = { code: string; name: string; requiredMargin: number | null }
 
 export type SuggestionStatus = 'CERTAIN' | 'AGREED' | 'TO_CHECK'
 export type SuggestionSource = 'MODEL' | 'NAMES' | 'PRODUCER'
@@ -1508,3 +1600,15 @@ export type Suggestion = {
 
 export type SuggestionResponse = { modelUsed: boolean; message: string | null; items: Suggestion[] }
 
+
+/** Protokół z wprowadzania danych jako plik PROTO1-PROTO6 (nazwa stałej z backendu). */
+export type ProtocolKind = 'LIQUIDATION' | 'STORE_NEEDS' | 'DONATION' | 'ADVERTISING' | 'REPRESENTATION' | 'TRANSFER'
+
+/** Folder plików PROTO sklepu (ustawiony albo domyślny) i protokoły ukryte w oknie generowania. */
+export type ProtoSettings = {
+  folderPath: string
+  defaultFolder: boolean
+  hiddenProtocols: ProtocolKind[]
+  updatedBy: string | null
+  updatedAt: string | null
+}

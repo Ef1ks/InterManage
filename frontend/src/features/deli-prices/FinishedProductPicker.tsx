@@ -58,7 +58,7 @@ export function FinishedProductPicker({ storeId, calculationId, value, onChange,
           aria-invalid={invalid || undefined}
           placeholder={value ? 'Zmień wyrób: nazwa, marka, EAN' : 'Wybierz wyrób: nazwa, marka, EAN'}
           className={cn(
-            'h-11 w-full rounded-xl border border-input bg-background pr-10 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 disabled:opacity-60',
+            'h-11 w-full rounded-xl border border-input bg-background dark:bg-input/30 pr-10 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 disabled:opacity-60',
             invalid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
           )}
         />
@@ -72,7 +72,7 @@ export function FinishedProductPicker({ storeId, calculationId, value, onChange,
 
       <Combobox.Portal>
         <Combobox.Positioner sideOffset={6} align="start" className="isolate z-50">
-          <Combobox.Popup className="max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-[0_8px_24px_-8px_rgb(0_0_0/0.18)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
+          <Combobox.Popup className="max-h-(--available-height) w-max min-w-(--anchor-width) max-w-[min(var(--available-width),40rem)] origin-(--transform-origin) overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-[0_8px_24px_-8px_rgb(0_0_0/0.18)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
             <Combobox.Empty className="px-3 py-3 text-sm text-muted-foreground empty:hidden">
               {isPending
                 ? 'Wczytuję wyroby…'

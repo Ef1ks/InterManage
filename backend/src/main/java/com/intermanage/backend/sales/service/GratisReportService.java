@@ -95,6 +95,7 @@ public class GratisReportService {
                     .merge(row.getRegionCode(), sums, Sums::plus);
         });
         Map<YearMonth, Map<String, BigDecimal>> salesByMonth = new HashMap<>();
+        sales.tuneForReport();
         sales.sumGrossByMonthAndRegion(storeId, first, last).forEach(row -> salesByMonth
                 .computeIfAbsent(YearMonth.from(row.getMonth()), month -> new HashMap<>())
                 .merge(row.getRegionCode(), row.getSaleValueGross(), BigDecimal::add));

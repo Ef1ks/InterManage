@@ -20,9 +20,15 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
 
         String getItm8();
 
+        String getCatalogEan();
+
         String getName();
 
         String getBrand();
+
+        BigDecimal getPurchasePrice();
+
+        BigDecimal getVatPercent();
 
         String getUnit();
 
@@ -30,30 +36,197 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
 
         BigDecimal getSalePrice();
 
+        boolean getCadencier();
+
+        BigDecimal getCadencierPrice();
+
         String getSubfamilyCode();
+
+        BigDecimal getStock();
+
+        BigDecimal getRotation();
     }
 
     /**
      * Artykuł sklepu dla każdego EAN-u (bez zer wiodących): bieżący EAN artykułu, a gdy go nie ma, para z
      * {@code product_eans} (dawny EAN); przy kilku artykułach ten, którego to bieżący EAN, potem ostatnio zmieniany.
+     * {@code cadencier}: artykuł ma CENA_CAD z ostatniego raportu (0 = brak) i jest aktywny w cadencier, czyli na
+     * bieżącej liście {@code cadencier_items} sklepu (po ITM8).
+     * Kod z etykiety wagi sklepu (2 + cyfra 1-9, 12-13 cyfr, w cyfrach 8-12 cena albo waga) trafia w artykuł, którego
+     * EAN ma te same pierwsze 7 cyfr i zera w miejscu ceny ({@code 2404140000000}); dokładny EAN ma pierwszeństwo.
+     * {@code vatPercent}: z kodu stawki z kartoteki (1 = 23%, 2 = 8%, 6 = 5%, sprawdzone z liniami dokumentów; inne
+     * kody, np. 3, 7 kaucje, są niepewne), bez niego z najnowszej linii dokumentu sklepu z tym ITM8, a na końcu
+     * najczęstsza stawka z dokumentów artykułów tej samej podrodziny.
      */
     @Query(value = """
             with keys as (select distinct unnest(cast(:eans as varchar[])) as key),
             hits as (
-                select k.key, p.id, true as current
+                select k.key, p.id, 0 as rank
                 from keys k join products p on p.store_id = :storeId and ltrim(p.ean, '0') = k.key
                 union all
-                select k.key, p.id, false
+                select k.key, p.id, 1
                 from keys k
                 join product_eans pe on ltrim(pe.ean, '0') = k.key
                 join products p on p.id = pe.product_id and p.store_id = :storeId
+                union all
+                select k.key, p.id, 2
+                from keys k
+                join products p on p.store_id = :storeId and left(p.ean, 7) = left(k.key, 7)
+                    and p.ean ~ '^2[1-9][0-9]{5}00000[0-9]$'
+                where k.key ~ '^2[1-9][0-9]{10,11}$'
             )
-            select distinct on (h.key) h.key as key, p.itm8 as itm8, p.name as name, p.brand as brand,
+            select distinct on (h.key) h.key as key, p.itm8 as itm8, p.ean as catalogEan, p.name as name,
+                p.brand as brand, p.purchase_price as purchasePrice,
+                coalesce(
+                    case p.vat_code when 1 then 23 when 2 then 8 when 6 then 5 end,
+                    (select l.vat_rate from document_lines l join documents d on d.id = l.document_id
+                     where d.store_id = :storeId and l.itm8 = p.itm8 and l.vat_rate is not null
+                     order by d.document_date desc limit 1),
+                    (select mode() within group (order by l.vat_rate)
+                     from products q
+                     join document_lines l on l.itm8 = q.itm8
+                     join documents d on d.id = l.document_id and d.store_id = :storeId
+                     where q.store_id = :storeId and q.subfamily_code = p.subfamily_code
+                         and l.vat_rate is not null)) as vatPercent,
                 p.unit as unit, p.net_content as netContent, p.sale_price as salePrice,
-                p.subfamily_code as subfamilyCode
+                coalesce(p.cadencier_price > 0 and c.itm8 is not null, false) as cadencier,
+                case when p.cadencier_price > 0 and c.itm8 is not null then p.cadencier_price end as cadencierPrice,
+                p.subfamily_code as subfamilyCode, p.stock as stock, p.rotation as rotation
             from hits h join products p on p.id = h.id
-            order by h.key, h.current desc, p.updated_at desc""", nativeQuery = true)
+            left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
+            order by h.key, h.rank, p.updated_at desc""", nativeQuery = true)
     List<CatalogProduct> findByEans(UUID storeId, String[] eans);
+
+    interface CatalogListItem {
+        String getItm8();
+
+        String getEan();
+
+        String getName();
+
+        String getBrand();
+
+        String getSupplier();
+
+        String getSubfamilyCode();
+
+        String getSubfamilyName();
+
+        BigDecimal getPurchasePrice();
+
+        BigDecimal getSalePrice();
+
+        BigDecimal getStock();
+
+        BigDecimal getRotation();
+    }
+
+    /**
+     * Lista towarów (okno „Lista towarów”): artykuły sklepu, które pasują do każdego podanego filtra ({@code null} =
+     * bez filtra). Wzorce LIKE: nazwa, marka i dostawca bez wielkości liter i polskich znaków (wzorce przychodzą już
+     * wielkimi literami bez znaków diakrytycznych), ITM8 i EAN jako tekst. Nomenklatura: {@code nomenclatureCode} to
+     * początek kodu podrodziny, {@code nomenclatureName} wzorzec nazwy rejonu, rodziny albo podrodziny artykułu.
+     * Ceny w przedziałach z granicami włącznie. Sortowanie po kolumnie {@code sort} (itm8, ean, name, brand, supplier,
+     * nomenclature, purchase, sale, stock) w kierunku {@code direction} (asc/desc), puste na końcu, potem po nazwie;
+     * strona {@code limit}.
+     */
+    @Query(value = """
+            select p.itm8 as itm8, p.ean as ean, p.name as name, p.brand as brand, p.supplier as supplier,
+                p.subfamily_code as subfamilyCode, s.name as subfamilyName,
+                p.purchase_price as purchasePrice, p.sale_price as salePrice, p.stock as stock,
+                p.rotation as rotation
+            from products p
+            left join nomenclatures s on s.store_id = p.store_id and s.code = p.subfamily_code
+            where p.store_id = :storeId
+                and (cast(:itm8 as text) is null or p.itm8 like cast(:itm8 as text))
+                and (cast(:ean as text) is null or p.ean like cast(:ean as text))
+                and (cast(:name as text) is null
+                    or translate(upper(p.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:name as text))
+                and (cast(:brand as text) is null
+                    or translate(upper(p.brand), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:brand as text))
+                and (cast(:supplier as text) is null
+                    or translate(upper(p.supplier), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:supplier as text))
+                and (cast(:nomenclatureCode as text) is null
+                    or p.subfamily_code like cast(:nomenclatureCode as text) || '%')
+                and (cast(:nomenclatureName as text) is null or exists (
+                    select 1 from nomenclatures n
+                    where n.store_id = p.store_id and n.code in (p.region_code, p.family_code, p.subfamily_code)
+                        and translate(upper(n.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:nomenclatureName as text)))
+                and (cast(:purchaseFrom as numeric) is null or p.purchase_price >= cast(:purchaseFrom as numeric))
+                and (cast(:purchaseTo as numeric) is null or p.purchase_price <= cast(:purchaseTo as numeric))
+                and (cast(:saleFrom as numeric) is null or p.sale_price >= cast(:saleFrom as numeric))
+                and (cast(:saleTo as numeric) is null or p.sale_price <= cast(:saleTo as numeric))
+            order by
+                case when cast(:direction as text) = 'asc' then case cast(:sort as text)
+                    when 'itm8' then p.itm8 when 'ean' then p.ean when 'name' then p.name when 'brand' then p.brand
+                    when 'supplier' then p.supplier when 'nomenclature' then p.subfamily_code end end asc nulls last,
+                case when cast(:direction as text) = 'desc' then case cast(:sort as text)
+                    when 'itm8' then p.itm8 when 'ean' then p.ean when 'name' then p.name when 'brand' then p.brand
+                    when 'supplier' then p.supplier when 'nomenclature' then p.subfamily_code end end desc nulls last,
+                case when cast(:direction as text) = 'asc' then case cast(:sort as text)
+                    when 'purchase' then p.purchase_price when 'sale' then p.sale_price when 'stock' then p.stock
+                    end end asc nulls last,
+                case when cast(:direction as text) = 'desc' then case cast(:sort as text)
+                    when 'purchase' then p.purchase_price when 'sale' then p.sale_price when 'stock' then p.stock
+                    end end desc nulls last,
+                p.name, p.itm8
+            limit :limit offset :offset""", nativeQuery = true)
+    List<CatalogListItem> search(UUID storeId, String itm8, String ean, String name, String brand, String supplier,
+            String nomenclatureCode, String nomenclatureName, BigDecimal purchaseFrom, BigDecimal purchaseTo,
+            BigDecimal saleFrom, BigDecimal saleTo, String sort, String direction, int limit, int offset);
+
+    /**
+     * Propozycje artykułów do przypięcia pozycji faktury bez EAN-u ({@code text}: nazwa po normalizacji, wielkie
+     * litery bez polskich znaków). Kandydat ma nazwę podobną w pg_trgm ({@code <%} z progiem z
+     * {@link #useSimilarityThreshold()} albo {@code %}) albo słowa zaczynające się od co najmniej {@code needed}
+     * z {@code prefixes} (pierwsze litery słów z faktury: kartoteka skraca, "SZYNKA KRUCHA" to "SZY KRU", i pomija
+     * słowa). Kolejność: połowa podobieństwa trigramów, połowa udziału trafionych początków słów, premia dla towaru
+     * dostawcy o tym NIP-ie (nazwa z listy dostawców). Tylko artykuły z EAN-em.
+     * Kandydatów zawęża najpierw indeks {@code products_name_trgm}: nazwa zawiera któryś początek słowa
+     * ({@code candidatePattern}, np. {@code ([CĆ][EĘ]B|[CĆ][ZŹŻ][EĘ])}, bez wielkości liter) albo jest podobna
+     * ({@code %}); ocena liczy się tylko dla nich. Bez zawężenia zapytanie liczyło podobieństwo i wyrażenia regularne
+     * dla całej kartoteki (ok. 72 tys. artykułów, ok. 1 s; z zawężeniem ok. 45 ms). JIT tu nie pomaga: koszt planu
+     * jest poniżej {@code jit_above_cost}.
+     */
+    @Query(value = """
+            with q as (select cast(:text as text) as t),
+            candidates as (
+                select p.id, p.name
+                from products p cross join q
+                where p.store_id = :storeId and p.ean <> ''
+                    and (p.name ~* cast(:candidatePattern as text) or p.name % q.t)
+            ),
+            scored as (
+                select c.id, word_similarity(c.name, q.t) as sim,
+                    (select count(*) from unnest(cast(:prefixes as text[])) x
+                     where translate(upper(c.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') ~ ('\\m' || x)) as hits
+                from candidates c cross join q
+            )
+            select p.itm8 as itm8, p.ean as ean, p.name as name, p.brand as brand, p.supplier as supplier,
+                p.subfamily_code as subfamilyCode, n.name as subfamilyName,
+                p.purchase_price as purchasePrice, p.sale_price as salePrice, p.stock as stock,
+                p.rotation as rotation
+            from scored sc
+            join products p on p.id = sc.id
+            cross join q
+            left join nomenclatures n on n.store_id = p.store_id and n.code = p.subfamily_code
+            where sc.hits >= :needed or p.name <% q.t or p.name % q.t
+            order by sc.sim * 0.5 + sc.hits * 0.5 / greatest(cardinality(cast(:prefixes as text[])), 1)
+                + case when p.supplier in (
+                    select s.name from suppliers s
+                    where s.store_id = :storeId and regexp_replace(coalesce(s.nip, ''), '\\D', '', 'g') = :nip)
+                  then 0.15 else 0 end desc,
+                p.name
+            limit :limit""", nativeQuery = true)
+    List<CatalogListItem> findLinkCandidates(UUID storeId, String text, String[] prefixes, String candidatePattern,
+            int needed, String nip, int limit);
+
+    /**
+     * JIT wyłączony do końca transakcji: przy wielu EAN-ach szacowany koszt {@link #findByEans} przekracza
+     * {@code jit_above_cost}, a kompilacja (ok. 0,9 s) trwa dłużej niż samo zapytanie.
+     */
+    @Query(value = "select set_config('jit', 'off', true)", nativeQuery = true)
+    String disableJit();
 
     /**
      * Próg {@code <%} (word_similarity) do końca transakcji; domyślne 0,6 odrzuca za dużo, w teście dobre było 0,3.

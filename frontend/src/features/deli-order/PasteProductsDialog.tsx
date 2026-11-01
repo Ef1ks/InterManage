@@ -163,7 +163,7 @@ function PasteForm({ state, onDone }: { state: PasteDialogState; onDone: () => v
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder={'5901234567890\tkg\n5909876543210\tszt\n5900000000017'}
-        className="w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 font-mono text-sm tabular-nums transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30"
+        className="w-full resize-y rounded-xl border border-input bg-background dark:bg-input/30 px-3 py-2.5 font-mono text-sm tabular-nums transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30"
       />
 
       <div className="grid gap-2 text-sm" aria-live="polite">

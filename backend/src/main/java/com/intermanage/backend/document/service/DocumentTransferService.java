@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
-import com.intermanage.backend.common.component.Proto6;
+import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.dto.DocumentResponse;
@@ -198,9 +198,9 @@ public class DocumentTransferService {
                 .sorted(Comparator.comparingInt(DocumentLine::getLineNumber)).toList();
         String origin = document.getStore().getNumber();
         return switch (format) {
-            case "proto" -> new ExportFile(Proto6.fileName(origin, username), Proto6.CONTENT_TYPE,
-                    Proto6.content(lines.stream()
-                            .map(line -> new Proto6.Line(line.getEan(), receivedQuantity(line, received)))
+            case "proto" -> new ExportFile(ProtoFile.fileName(6, origin, username), ProtoFile.CONTENT_TYPE,
+                    ProtoFile.content(lines.stream()
+                            .map(line -> new ProtoFile.Line(line.getEan(), receivedQuantity(line, received)))
                             .toList()));
             case "xlsx" -> {
                 List<List<Object>> rows = new ArrayList<>();

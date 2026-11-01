@@ -109,9 +109,9 @@ public class DeliCostReportService {
         if (article || !(code.isEmpty() || code.equals(DELI_REGION))) {
             return new SalesHistoryResponse(from, to,
                     sales.days().stream()
-                            .map(day -> new SalesHistoryDay(day.date(), withoutCost(day.figures())))
+                            .map(day -> new SalesHistoryDay(day.date(), withoutCost(day.figures()), day.lossValue()))
                             .toList(),
-                    withoutCost(sales.total()));
+                    withoutCost(sales.total()), sales.lossValue());
         }
 
         Map<LocalDate, BigDecimal> costs = new HashMap<>();
@@ -121,9 +121,10 @@ public class DeliCostReportService {
         return new SalesHistoryResponse(from, to,
                 sales.days().stream()
                         .map(day -> new SalesHistoryDay(day.date(),
-                                withCost(day.figures(), costs.getOrDefault(day.date(), BigDecimal.ZERO))))
+                                withCost(day.figures(), costs.getOrDefault(day.date(), BigDecimal.ZERO)),
+                                day.lossValue()))
                         .toList(),
-                withCost(sales.total(), totalCost));
+                withCost(sales.total(), totalCost), sales.lossValue());
     }
 
     /** Wartość protokołów reprezentacji z okresu: wydania mają wartość z minusem, koszt to jej przeciwność. */

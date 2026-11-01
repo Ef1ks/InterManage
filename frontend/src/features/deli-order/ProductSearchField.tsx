@@ -68,7 +68,7 @@ export function ProductSearchField({
           }}
           aria-label={placeholder}
           placeholder={placeholder}
-          className="h-10 w-full rounded-xl border border-input bg-background pr-9 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 disabled:opacity-60"
+          className="h-10 w-full rounded-xl border border-input bg-background dark:bg-input/30 pr-9 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 disabled:opacity-60"
         />
         {isFetching && !tooShort && (
           <LoaderCircleIcon
@@ -80,7 +80,7 @@ export function ProductSearchField({
 
       <Combobox.Portal>
         <Combobox.Positioner sideOffset={6} align="start" className="isolate z-50">
-          <Combobox.Popup className="max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-[0_8px_24px_-8px_rgb(0_0_0/0.18)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
+          <Combobox.Popup className="max-h-(--available-height) w-max min-w-(--anchor-width) max-w-[min(var(--available-width),40rem)] origin-(--transform-origin) overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-[0_8px_24px_-8px_rgb(0_0_0/0.18)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
             <Combobox.Empty className="px-3 py-3 text-sm text-muted-foreground empty:hidden">
               {tooShort
                 ? `Wpisz co najmniej ${MIN_SEARCH_LENGTH} znaki`

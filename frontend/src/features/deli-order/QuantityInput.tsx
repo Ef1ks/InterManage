@@ -36,7 +36,7 @@ export function QuantityInput({ unit, value, onChange, label, invalid, disabled,
   return (
     <label
       className={cn(
-        'flex h-10 w-32 shrink-0 items-center rounded-xl border border-input bg-background pr-3 transition-[border-color,box-shadow] duration-150',
+        'flex h-10 w-32 shrink-0 items-center rounded-xl border border-input bg-background dark:bg-input/30 pr-3 transition-[border-color,box-shadow] duration-150',
         'focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30',
         value.trim() !== '' && !invalid && 'border-foreground/25 bg-muted/40',
         invalid && 'border-destructive focus-within:border-destructive focus-within:ring-destructive/20',

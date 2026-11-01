@@ -91,6 +91,7 @@ public class PeriodSummaryService {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
 
         Map<String, Sums> byRegion = new HashMap<>();
+        sales.tuneForReport();
         sales.sumByRegion(storeId, from, to).forEach(row -> byRegion.merge(row.getRegionCode(),
                 new Sums(row.getSaleValueNet(), row.getSaleValueGross(), row.getCostValue(), row.getMarginValue(),
                         BigDecimal.ZERO), Sums::plus));

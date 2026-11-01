@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -48,7 +49,7 @@ class ProductImportIntegrationTests {
 
     private static final String[] HEADER = {"EAN", "NAZWA", "CENA_SPRZEDAZY", "STAN", "ROTACJA", "COLI", "MARKA",
             "CENA_ZAKUPU", "ITM8", "PRIO", "NOM", "DOST", "AKTYWNY", "VAT", "JED", "WAGA", "DLV", "RP", "KAUCJA",
-            "REFERENCJA", "KASA", "TYP", "RODZ", "JMSP", "CN"};
+            "REFERENCJA", "KASA", "TYP", "RODZ", "JMSP", "CN", "CENA_CAD"};
     private static final DateTimeFormatter REPORT_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy  HH:mm:ss");
     /** Każdy import w teście ma późniejszą datę raportu niż poprzedni, bo starsze raporty są odrzucane. */
     private static final AtomicInteger REPORT_HOUR = new AtomicInteger();
@@ -103,6 +104,32 @@ class ProductImportIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.productCount").isNumber())
                 .andExpect(jsonPath("$.imports[0].unchangedCount").value(2));
+    }
+
+    @Test
+    void cadencierPriceIsOnlyFromTheLatestReport() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        String b = itm8();
+        String c = itm8();
+
+        upload(owner, report(nextReportDate(), withCadencierPrice(product(a, "8.99", "1", "A"), "8.49"),
+                withCadencierPrice(product(b, "3.49", "1", "B"), "3.29"), withCadencierPrice(product(c, "1.99", "1", "C"), "1.89")))
+                .andExpect(status().isCreated());
+
+        // A z nową ceną, B bez CENA_CAD w pliku, C nie ma w pliku: z cadencier zostaje tylko A.
+        upload(owner, report(nextReportDate(), withCadencierPrice(product(a, "8.99", "1", "A"), "8.79"),
+                product(b, "3.49", "1", "B")))
+                .andExpect(status().isCreated());
+
+        assertThat(jdbc.queryForObject("select cadencier_price from products where itm8 = ?", BigDecimal.class, a))
+                .isEqualTo(new BigDecimal("8.79"));
+        assertThat(jdbc.queryForObject("select cadencier_price from products where itm8 = ?", BigDecimal.class, b))
+                .isNull();
+        // Artykuł spoza pliku zostaje w kartotece z resztą danych, ale bez CENA_CAD.
+        Map<String, Object> productC = jdbc.queryForMap("select * from products where itm8 = ?", c);
+        assertThat(productC.get("cadencier_price")).isNull();
+        assertThat(productC.get("sale_price")).isEqualTo(new BigDecimal("1.99"));
     }
 
     @Test
@@ -272,6 +299,12 @@ class ProductImportIntegrationTests {
         return new String[] {"59" + itm8.substring(2), name, salePrice, stock, "2.125", "9", "MARKA", "5.99", itm8,
                 "Tak", "01 01 01", "SCAPR POLSKA SP.Z.O.O.", "Tak", "6", "kg", "0.15000000000000002", "144", "3", "0",
                 itm8.replaceFirst("^0+", ""), "2", "1", "Inne", "1", "19051000 ------ N"};
+    }
+
+    private static String[] withCadencierPrice(String[] product, String price) {
+        String[] row = Arrays.copyOf(product, product.length + 1);
+        row[product.length] = price;
+        return row;
     }
 
     private static String ean() {

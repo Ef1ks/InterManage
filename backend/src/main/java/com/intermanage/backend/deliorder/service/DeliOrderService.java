@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
-import com.intermanage.backend.common.component.Proto6;
+import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.deliorder.component.DeliOrderDocuments;
 import com.intermanage.backend.deliorder.dto.AddDeliOrderItemsRequest;
@@ -265,8 +265,8 @@ public class DeliOrderService {
             case "xlsx" -> new ExportFile(baseName + ".xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", documents.xlsx(document));
             case "pdf" -> new ExportFile(baseName + ".pdf", "application/pdf", documents.pdf(document));
-            case "proto" -> new ExportFile(Proto6.fileName(order.getStore().getNumber(), username),
-                    Proto6.CONTENT_TYPE, documents.proto(document));
+            case "proto" -> new ExportFile(ProtoFile.fileName(6, order.getStore().getNumber(), username),
+                    ProtoFile.CONTENT_TYPE, documents.proto(document));
             default -> throw ApiException.notFound("Nieznany format pliku: " + format);
         };
     }

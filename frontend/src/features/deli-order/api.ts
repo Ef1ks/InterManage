@@ -1,7 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { SavedFolderSpec } from '@/lib/saved-folders'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import type {
   DeliDocumentCandidate,
@@ -414,7 +413,6 @@ export function useFulfillOrder(storeId: string, orderId: string) {
  * Plik PROTO6 zrealizowanego zamówienia trafia do folderu, z którego program sklepu sam go wczytuje (za skrótem,
  * bo dysk N jest zablokowany), więc ilości nie trzeba przeklikiwać ręcznie.
  */
-export const PROTO_FOLDER: SavedFolderSpec = { key: 'deli-order-proto', label: 'Plik PROTO6', suggestedPath: 'N:\\avisoconfig' }
 
 /** Ścieżka pliku zamówienia do pobrania albo zapisu w folderze. */
 export const orderExportPath = (storeId: string, orderId: string, format: 'pdf' | 'xlsx' | 'lst' | 'proto') =>

@@ -172,6 +172,17 @@ public class Product {
         return true;
     }
 
+    /**
+     * Artykułu nie ma w kolejnym raporcie: zostaje w kartotece, ale traci CENA_CAD, bo cena z cadencier obowiązuje
+     * tylko z ostatniego raportu.
+     */
+    public void missingFrom(ProductImport productImport) {
+        if (lastSeenImport != productImport && cadencierPrice != null) {
+            cadencierPrice = null;
+            updatedAt = Instant.now();
+        }
+    }
+
     private boolean sameDataAs(ProductReportRow row) {
         return Objects.equals(ean, row.ean())
                 && Objects.equals(name, row.name())

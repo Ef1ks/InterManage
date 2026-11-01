@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { StorePartners } from '@/lib/types'
+import type { NomenclatureMargin, NomenclatureMarginImport, PriceRoundingRule, StorePartners } from '@/lib/types'
 
 /** Sklepy zaprzyjaźnione i zaproszenia wybranego sklepu (z obu stron) oraz sklepy, które można zaprosić. */
 export const partnersKey = (storeId: string) => ['stores', storeId, 'partners'] as const
@@ -38,4 +38,55 @@ export function useStorePartnerActions(storeId: string) {
       onSuccess,
     }),
   }
+}
+
+/** Marża wymagana na nomenklaturze: cała nomenklatura sklepu z marżą ustawioną i obowiązującą. */
+export const nomenclatureMarginsKey = (storeId: string) => ['stores', storeId, 'nomenclature-margins'] as const
+export const nomenclatureMarginsPath = (storeId: string) => `/stores/${storeId}/nomenclature-margins`
+
+export function useNomenclatureMargins(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: nomenclatureMarginsKey(storeId),
+    queryFn: () => api<NomenclatureMargin[]>(nomenclatureMarginsPath(storeId)),
+    enabled,
+  })
+}
+
+export function useSaveNomenclatureMargins(storeId: string) {
+  return useMutation({
+    mutationFn: (margins: { code: string; marginPercent: number | null }[]) =>
+      api<NomenclatureMargin[]>(nomenclatureMarginsPath(storeId), { method: 'PUT', json: { margins } }),
+  })
+}
+
+/** Uzupełniony plik do uzupełnienia: zastępuje wszystkie marże naraz. */
+export function useImportNomenclatureMargins(storeId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<NomenclatureMarginImport>(`${nomenclatureMarginsPath(storeId)}/import`, { method: 'POST', formData })
+    },
+  })
+}
+
+/** Przedziały zaokrąglania cen sugerowanych; ten sam klucz co we wprowadzaniu danych. */
+export const priceRoundingKey = (storeId: string) => ['stores', storeId, 'price-rounding'] as const
+
+export function usePriceRoundingRules(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: priceRoundingKey(storeId),
+    queryFn: () => api<PriceRoundingRule[]>(`/stores/${storeId}/price-rounding`),
+    enabled,
+    // Jak marża wymagana: zmiana w drugiej karcie od razu przelicza ceny sugerowane we wprowadzaniu danych.
+    refetchOnWindowFocus: 'always',
+  })
+}
+
+/** Zapis zastępuje całą listę przedziałów. */
+export function useSavePriceRounding(storeId: string) {
+  return useMutation({
+    mutationFn: (rules: { priceFrom: number; priceTo: number | null; ending: number }[]) =>
+      api<PriceRoundingRule[]>(`/stores/${storeId}/price-rounding`, { method: 'PUT', json: { rules } }),
+  })
 }

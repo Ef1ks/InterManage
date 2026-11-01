@@ -1,11 +1,13 @@
-import type { NomenclatureItem, SaleUnit } from '@/lib/types'
+import type { NomenclatureItem, PriceRoundingRule, SaleUnit } from '@/lib/types'
 
 import {
   type DataEntryRow,
+  type Pricing,
   marginPercent,
   netValue,
   normalizeBrand,
   normalizeName,
+  suggestedPrice,
   withCatalogProduct,
   withMeasure,
 } from './rows'
@@ -20,41 +22,75 @@ export type ColumnKey =
   | 'vat'
   | 'salePrice'
   | 'margin'
+  | 'suggestedPrice'
   | 'region'
   | 'family'
   | 'subfamily'
   | 'unit'
   | 'netContent'
+  | 'stock'
+  | 'rotation'
 
 /** text/number: edycja w komórce; nomenclature/unit: lista do wyboru; computed: tylko do odczytu. */
 export type ColumnKind = 'text' | 'number' | 'nomenclature' | 'unit' | 'computed'
 
-export type Column = { key: ColumnKey; header: string; width: string; align?: 'right'; kind: ColumnKind }
+export type Column = {
+  key: ColumnKey
+  header: string
+  /** Pełna nazwa kolumny, gdy nagłówek jest skrócony. */
+  title?: string
+  /** Szerokość w em czcionki tabeli: tabela zmniejsza czcionkę, żeby zmieścić się na szerokość ekranu. */
+  width: number
+  align?: 'right'
+  kind: ColumnKind
+}
 
-/** Kolumny w kolejności z pliku Excel. Szerokości w rem (klasy Tailwinda), bo interfejs rośnie z rem. */
+/** Kolumny w kolejności z pliku Excel. Nazwa mieści 30 znaków, nomenklatura skraca się (pełna w podpowiedzi). */
 export const COLUMNS: Column[] = [
-  { key: 'ean', header: 'EAN', width: 'w-44', kind: 'text' },
-  { key: 'quantity', header: 'Ilość', width: 'w-18', align: 'right', kind: 'number' },
-  { key: 'unitNet', header: 'Cena netto', width: 'w-24', align: 'right', kind: 'number' },
-  { key: 'name', header: 'Nazwa', width: 'w-76', kind: 'text' },
-  { key: 'brand', header: 'Marka', width: 'w-32', kind: 'text' },
-  { key: 'value', header: 'Wartość netto', width: 'w-28', align: 'right', kind: 'computed' },
-  { key: 'vat', header: 'VAT', width: 'w-16', align: 'right', kind: 'number' },
-  { key: 'salePrice', header: 'Cena sprzedaży', width: 'w-28', align: 'right', kind: 'number' },
-  { key: 'margin', header: 'Marża', width: 'w-20', align: 'right', kind: 'computed' },
-  { key: 'region', header: 'Rejon', width: 'w-44', kind: 'nomenclature' },
-  { key: 'family', header: 'Rodzina', width: 'w-48', kind: 'nomenclature' },
-  { key: 'subfamily', header: 'Podrodzina', width: 'w-60', kind: 'nomenclature' },
-  { key: 'unit', header: 'Rodzaj', width: 'w-20', kind: 'unit' },
-  { key: 'netContent', header: 'Waga', width: 'w-20', align: 'right', kind: 'number' },
+  { key: 'ean', header: 'EAN', width: 9, kind: 'text' },
+  { key: 'quantity', header: 'Ilość', width: 4.5, align: 'right', kind: 'number' },
+  { key: 'unitNet', header: 'Cena netto', width: 6, align: 'right', kind: 'number' },
+  { key: 'name', header: 'Nazwa', width: 21.5, kind: 'text' },
+  { key: 'brand', header: 'Marka', width: 8, kind: 'text' },
+  { key: 'value', header: 'Wartość', title: 'Wartość netto', width: 6, align: 'right', kind: 'computed' },
+  { key: 'vat', header: 'VAT', width: 3.5, align: 'right', kind: 'number' },
+  { key: 'salePrice', header: 'Cena sprz.', title: 'Cena sprzedaży brutto', width: 6, align: 'right', kind: 'number' },
+  { key: 'margin', header: 'Marża', width: 6.5, align: 'right', kind: 'computed' },
+  {
+    key: 'suggestedPrice',
+    header: 'Cena sug.',
+    title: 'Cena sugerowana: cena sprzedaży brutto, przy której artykuł osiąga marżę wymaganą na nomenklaturze',
+    width: 6,
+    align: 'right',
+    kind: 'computed',
+  },
+  { key: 'region', header: 'Rejon', width: 8, kind: 'nomenclature' },
+  { key: 'family', header: 'Rodzina', width: 9, kind: 'nomenclature' },
+  { key: 'subfamily', header: 'Podrodzina', width: 12, kind: 'nomenclature' },
+  { key: 'unit', header: 'Rodzaj', title: 'Rodzaj sprzedaży', width: 4.5, kind: 'unit' },
+  { key: 'netContent', header: 'Waga', width: 5, align: 'right', kind: 'number' },
+  // Na końcu, żeby wklejanie kolumn z Excela trafiało tam, gdzie wcześniej.
+  { key: 'stock', header: 'Stan', title: 'Stan magazynowy z ostatniego raportu kartoteki', width: 5, align: 'right', kind: 'computed' },
+  { key: 'rotation', header: 'Rotacja', title: 'Rotacja z ostatniego raportu kartoteki', width: 5, align: 'right', kind: 'computed' },
 ]
 
 export const UNITS: SaleUnit[] = ['kg', 'L', 'szt.']
 
-/** Kod nomenklatury kolumny (rejon 2, rodzina 4, podrodzina 6 cyfr) dla wiersza. */
+export type NomenclatureKey = 'region' | 'family' | 'subfamily'
+
+/** Długość kodu na poziomie: rejon 2, rodzina 4, podrodzina 6 cyfr. */
+export const LEVEL_LENGTH: Record<NomenclatureKey, number> = { region: 2, family: 4, subfamily: 6 }
+
+/** Kod nomenklatury kolumny dla wiersza: z podrodziny albo z wybranego wcześniej rejonu / rodziny. */
 export function levelCode(row: DataEntryRow, key: ColumnKey) {
-  if (row.subfamilyCode === null) return null
-  return key === 'region' ? row.subfamilyCode.slice(0, 2) : key === 'family' ? row.subfamilyCode.slice(0, 4) : row.subfamilyCode
+  const length = LEVEL_LENGTH[key as NomenclatureKey]
+  const code = row.subfamilyCode ?? row.nomenclaturePrefix ?? null
+  return code !== null && code.length >= length ? code.slice(0, length) : null
+}
+
+/** Kod wyższego poziomu, którego dzieci pokazuje lista kolumny ({@code null} = cała nomenklatura). */
+export function levelScope(row: DataEntryRow, key: NomenclatureKey) {
+  return key === 'region' ? null : levelCode(row, key === 'family' ? 'region' : 'family')
 }
 
 export type Names = Map<string, string>
@@ -63,13 +99,22 @@ export function nomenclatureNames(items: NomenclatureItem[] | undefined): Names 
   return new Map((items ?? []).map((item) => [item.code, item.name]))
 }
 
+export function pricingOf(items: NomenclatureItem[] | undefined, rounding: PriceRoundingRule[] | undefined): Pricing {
+  return {
+    required: new Map(
+      (items ?? []).flatMap((item) => (item.requiredMargin === null ? [] : [[item.code, item.requiredMargin] as const])),
+    ),
+    rounding: rounding ?? [],
+  }
+}
+
 const plainNumber = (value: number | null, digits = 4) =>
   value === null
     ? ''
     : new Intl.NumberFormat('pl-PL', { maximumFractionDigits: digits, useGrouping: false }).format(value)
 
 /** Wartość komórki jako tekst: do kopiowania (TSV dla Excela) i jako start edycji. */
-export function cellText(row: DataEntryRow, key: ColumnKey, names: Names): string {
+export function cellText(row: DataEntryRow, key: ColumnKey, names: Names, pricing: Pricing): string {
   switch (key) {
     case 'ean':
       return row.ean
@@ -91,6 +136,12 @@ export function cellText(row: DataEntryRow, key: ColumnKey, names: Names): strin
       const margin = marginPercent(row)
       return plainNumber(margin === null ? null : Math.round(margin * 10) / 10, 1)
     }
+    case 'suggestedPrice':
+      return plainNumber(suggestedPrice(row, pricing), 2)
+    case 'stock':
+      return plainNumber(row.stock ?? null, 3)
+    case 'rotation':
+      return plainNumber(row.rotation ?? null, 3)
     case 'region':
     case 'family':
     case 'subfamily': {
@@ -127,10 +178,15 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
   const trimmed = text.trim()
   switch (key) {
     case 'ean': {
+      // Kod spoza EAN-u z faktury (indeks, nazwa) zatwierdzony bez zmian zostaje, choć nie jest liczbą.
+      if (trimmed === row.ean) return { row }
       const digits = trimmed.replace(/[\s-]/g, '')
       if (digits !== '' && !/^\d{1,14}$/.test(digits)) return { error: 'EAN to do 14 cyfr' }
       if (digits === row.ean) return { row }
-      return { row: digits === '' ? withCatalogProduct({ ...row, ean: '' }, null) : { ...row, ean: digits }, eanChanged: true }
+      return {
+        row: digits === '' ? withCatalogProduct({ ...row, ean: '', eanFallback: null }, null) : { ...row, ean: digits, eanFallback: null },
+        eanChanged: true,
+      }
     }
     case 'quantity':
     case 'unitNet':
@@ -165,12 +221,19 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
     case 'family':
     case 'subfamily': {
       if (trimmed === '') return { row: withSubfamily(row, null) }
-      const code = /^\d{6}/.exec(trimmed.replace(/\s/g, ''))?.[0]
-      if (!code || !names.has(code)) return { error: 'Nieznana podrodzina: wpisz 6-cyfrowy kod' }
-      return { row: withSubfamily(row, code) }
+      const length = LEVEL_LENGTH[key]
+      const digits = /^\d+/.exec(trimmed.replace(/\s/g, ''))?.[0]
+      const code = digits && digits.length >= length ? digits.slice(0, length) : undefined
+      if (!code || !names.has(code)) {
+        return { error: `Nieznany kod: wpisz ${length} cyfry ${key === 'region' ? 'rejonu' : key === 'family' ? 'rodziny' : 'podrodziny'}` }
+      }
+      return { row: withNomenclature(row, code) }
     }
     case 'value':
     case 'margin':
+    case 'suggestedPrice':
+    case 'stock':
+    case 'rotation':
       return { row }
   }
 }
@@ -180,9 +243,20 @@ export function withSubfamily(row: DataEntryRow, code: string | null): DataEntry
   return {
     ...row,
     subfamilyCode: code,
+    nomenclaturePrefix: null,
     edited: { ...row.edited, subfamilyCode: true },
     suggestion: row.suggestion ? { ...row.suggestion, confirmed: code !== null } : null,
   }
+}
+
+/**
+ * Kod wybrany w kolumnie nomenklatury. Podrodzina jest ostateczna; rejon albo rodzina zgodne z obecną nomenklaturą
+ * niczego nie zmieniają, a inne czyszczą podrodzinę i zawężają kolejną listę.
+ */
+export function withNomenclature(row: DataEntryRow, code: string): DataEntryRow {
+  if (code.length === 6) return withSubfamily(row, code)
+  if ((row.subfamilyCode ?? row.nomenclaturePrefix ?? '').startsWith(code)) return row
+  return { ...withSubfamily(row, null), nomenclaturePrefix: code }
 }
 
 export function withUnit(row: DataEntryRow, unit: SaleUnit): DataEntryRow {
@@ -197,7 +271,7 @@ function remeasured(row: DataEntryRow): DataEntryRow {
 
 /** Czy komórkę da się wyczyścić klawiszem Delete (rodzaju, wagi i wartości liczonych nie). */
 export function clearable(key: ColumnKey) {
-  return key !== 'unit' && key !== 'netContent' && key !== 'value' && key !== 'margin'
+  return COLUMNS.find((column) => column.key === key)?.kind !== 'computed' && key !== 'unit' && key !== 'netContent'
 }
 
 // ---------- schowek: TSV jak w Excelu

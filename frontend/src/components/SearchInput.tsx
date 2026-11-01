@@ -22,7 +22,7 @@ export function SearchInput({ value, onChange, placeholder, className }: Props) 
         onKeyDown={(event) => event.key === 'Escape' && onChange('')}
         aria-label={placeholder}
         placeholder={placeholder}
-        className="h-10 w-full rounded-xl border border-input bg-background pr-9 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 [&::-webkit-search-cancel-button]:hidden"
+        className="h-10 w-full rounded-xl border border-input bg-background dark:bg-input/30 pr-9 pl-9 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button

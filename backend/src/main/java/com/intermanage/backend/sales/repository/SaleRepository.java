@@ -110,38 +110,110 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             """;
 
     /**
-     * Sprzedaż każdego artykułu (ITM8, ze wszystkich EAN-ów) w obu okresach, z produktem z kartoteki, jeśli jest.
-     * Okresy mogą na siebie nachodzić albo być daleko od siebie (rok do roku), więc każdy dzień trafia do sum okresów,
-     * w których leży. Artykuł bez sprzedaży w jednym z okresów ma tam zera. Niepuste {@code codes} zostawia tylko
-     * artykuły z wybranych pozycji nomenklatury (dowolnego poziomu), więc odpada też sprzedaż bez nomenklatury.
+     * Pełne miesiące okresów: {@code pf} (włącznie) do {@code pt} (bez) dla poprzedniego okresu, {@code cf}..{@code ct}
+     * dla aktualnego. Pierwszy pełny miesiąc to miesiąc dnia "od", gdy wypada 1., inaczej następny; koniec to
+     * pierwszy dzień miesiąca po dniu "do". Okres krótszy niż miesiąc nie ma pełnych miesięcy ({@code pf >= pt}).
      */
-    String ARTICLE_SALES = """
-            with article as (
+    String PERIOD_BOUNDS = """
+            bounds as (
+                select cast(date_trunc('month', cast(:previousFrom as timestamp) - interval '1 day')
+                           + interval '1 month' as date) as pf,
+                       cast(date_trunc('month', cast(:previousTo as timestamp) + interval '1 day') as date) as pt,
+                       cast(date_trunc('month', cast(:currentFrom as timestamp) - interval '1 day')
+                           + interval '1 month' as date) as cf,
+                       cast(date_trunc('month', cast(:currentTo as timestamp) + interval '1 day') as date) as ct
+            )
+            """;
+
+    /**
+     * Sprzedaż okresów ({@code period} p / c) z całego sklepu: pełne miesiące z {@code sales_monthly}, a dni
+     * niepełnych miesięcy na brzegach ze sprzedaży dziennej. Okresy mogą na siebie nachodzić albo być daleko od
+     * siebie (rok do roku), więc każdy ma swoje wiersze.
+     */
+    String STORE_PARTS = """
+            parts as (
+                select 'p' as period, m.itm8, m.quantity, m.cost_value, m.sale_value_gross, m.sale_value_net,
+                    m.margin_value
+                from sales_monthly m cross join bounds b
+                where m.store_id = :storeId and m.month >= b.pf and m.month < b.pt
+                union all
+                select 'p', s.itm8, s.quantity, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                from sales s cross join bounds b
+                where s.store_id = :storeId and s.sale_date between :previousFrom and :previousTo
+                    and (s.sale_date < b.pf or s.sale_date >= b.pt)
+                union all
+                select 'c' as period, m.itm8, m.quantity, m.cost_value, m.sale_value_gross, m.sale_value_net,
+                    m.margin_value
+                from sales_monthly m cross join bounds b
+                where m.store_id = :storeId and m.month >= b.cf and m.month < b.ct
+                union all
+                select 'c', s.itm8, s.quantity, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                from sales s cross join bounds b
+                where s.store_id = :storeId and s.sale_date between :currentFrom and :currentTo
+                    and (s.sale_date < b.cf or s.sale_date >= b.ct)
+            )
+            """;
+
+    /**
+     * Jak {@link #STORE_PARTS}, ale tylko artykuły z kartoteki z podrodziną zaczynającą się od {@code parent}:
+     * czytane od artykułów grupy po indeksach (sklep, ITM8, miesiąc / dzień), zamiast sumować cały sklep.
+     */
+    String GROUP_PARTS = """
+            parts as (
+                select 'p' as period, m.itm8, m.quantity, m.cost_value, m.sale_value_gross, m.sale_value_net,
+                    m.margin_value
+                from products q
+                join sales_monthly m on m.store_id = q.store_id and m.itm8 = q.itm8
+                cross join bounds b
+                where q.store_id = :storeId and q.subfamily_code like :parent || '%'
+                    and m.month >= b.pf and m.month < b.pt
+                union all
+                select 'p', s.itm8, s.quantity, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                from products q
+                join sales s on s.store_id = q.store_id and s.itm8 = q.itm8
+                    and s.sale_date between :previousFrom and :previousTo
+                cross join bounds b
+                where q.store_id = :storeId and q.subfamily_code like :parent || '%'
+                    and (s.sale_date < b.pf or s.sale_date >= b.pt)
+                union all
+                select 'c' as period, m.itm8, m.quantity, m.cost_value, m.sale_value_gross, m.sale_value_net,
+                    m.margin_value
+                from products q
+                join sales_monthly m on m.store_id = q.store_id and m.itm8 = q.itm8
+                cross join bounds b
+                where q.store_id = :storeId and q.subfamily_code like :parent || '%'
+                    and m.month >= b.cf and m.month < b.ct
+                union all
+                select 'c', s.itm8, s.quantity, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                from products q
+                join sales s on s.store_id = q.store_id and s.itm8 = q.itm8
+                    and s.sale_date between :currentFrom and :currentTo
+                cross join bounds b
+                where q.store_id = :storeId and q.subfamily_code like :parent || '%'
+                    and (s.sale_date < b.cf or s.sale_date >= b.ct)
+            )
+            """;
+
+    /** Sumy artykułu (ITM8, ze wszystkich EAN-ów) w obu okresach; artykuł bez sprzedaży w okresie ma tam zera. */
+    String ARTICLE_SUMS = """
+            article as (
                 select itm8,
-                       coalesce(sum(quantity) filter (where sale_date between :previousFrom and :previousTo), 0)
-                           as previous_quantity,
-                       coalesce(sum(cost_value) filter (where sale_date between :previousFrom and :previousTo), 0)
-                           as previous_cost_value,
-                       coalesce(sum(sale_value_gross) filter (where sale_date between :previousFrom and :previousTo), 0)
-                           as previous_sale_value_gross,
-                       coalesce(sum(sale_value_net) filter (where sale_date between :previousFrom and :previousTo), 0)
-                           as previous_sale_value_net,
-                       coalesce(sum(margin_value) filter (where sale_date between :previousFrom and :previousTo), 0)
-                           as previous_margin_value,
-                       coalesce(sum(quantity) filter (where sale_date between :currentFrom and :currentTo), 0)
-                           as current_quantity,
-                       coalesce(sum(cost_value) filter (where sale_date between :currentFrom and :currentTo), 0)
-                           as current_cost_value,
-                       coalesce(sum(sale_value_gross) filter (where sale_date between :currentFrom and :currentTo), 0)
-                           as current_sale_value_gross,
-                       coalesce(sum(sale_value_net) filter (where sale_date between :currentFrom and :currentTo), 0)
-                           as current_sale_value_net,
-                       coalesce(sum(margin_value) filter (where sale_date between :currentFrom and :currentTo), 0)
-                           as current_margin_value
-                from sales
-                where store_id = :storeId
-                  and (sale_date between :previousFrom and :previousTo or sale_date between :currentFrom and :currentTo)
+                       coalesce(sum(quantity) filter (where period = 'p'), 0) as previous_quantity,
+                       coalesce(sum(cost_value) filter (where period = 'p'), 0) as previous_cost_value,
+                       coalesce(sum(sale_value_gross) filter (where period = 'p'), 0) as previous_sale_value_gross,
+                       coalesce(sum(sale_value_net) filter (where period = 'p'), 0) as previous_sale_value_net,
+                       coalesce(sum(margin_value) filter (where period = 'p'), 0) as previous_margin_value,
+                       coalesce(sum(quantity) filter (where period = 'c'), 0) as current_quantity,
+                       coalesce(sum(cost_value) filter (where period = 'c'), 0) as current_cost_value,
+                       coalesce(sum(sale_value_gross) filter (where period = 'c'), 0) as current_sale_value_gross,
+                       coalesce(sum(sale_value_net) filter (where period = 'c'), 0) as current_sale_value_net,
+                       coalesce(sum(margin_value) filter (where period = 'c'), 0) as current_margin_value
+                from parts
                 group by itm8
+            """;
+
+    /** Artykuł z kartoteki i filtr nomenklatury dla sum {@code article}. */
+    String SOLD = """
             ), sold as (
                 select a.*, p.subfamily_code, p.name, p.ean, p.brand
                 from article a
@@ -150,13 +222,22 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             )
             """;
 
+    /**
+     * Sprzedaż każdego artykułu (ITM8, ze wszystkich EAN-ów) w obu okresach, z produktem z kartoteki, jeśli jest.
+     * Niepuste {@code codes} zostawia tylko artykuły z wybranych pozycji nomenklatury (dowolnego poziomu), więc odpada
+     * też sprzedaż bez nomenklatury. Cały sklep: rok do roku to ok. 0,5 mln wierszy miesięcznych zamiast ok. 2,6 mln
+     * dziennych.
+     */
+    String ARTICLE_SALES = "with " + PERIOD_BOUNDS + ", " + STORE_PARTS + ", " + ARTICLE_SUMS + SOLD;
 
     /**
-     * Porównanie na jednym poziomie nomenklatury: kod to pierwsze {@code codeLength} cyfr podrodziny artykułu
-     * (2 = rejony, 4 = rodziny, 6 = podrodziny), tylko w obrębie {@code parent} (pusty tekst = cały sklep).
-     * Artykuły bez podrodziny (spoza kartoteki) dają na poziomie rejonów jeden wiersz z pustym kodem, na końcu.
+     * Jak {@link #ARTICLE_SALES}, ale tylko artykuły z kartoteki z podrodziną zaczynającą się od {@code parent}
+     * ({@link #GROUP_PARTS}), zamiast sumować cały sklep i odfiltrować grupę.
      */
-    @Query(value = ARTICLE_SALES + """
+    String GROUP_ARTICLE_SALES = "with " + PERIOD_BOUNDS + ", " + GROUP_PARTS + ", " + ARTICLE_SUMS + SOLD;
+
+    /** Poziom nomenklatury z {@code sold}: kod to pierwsze {@code codeLength} cyfr podrodziny. */
+    String BY_NOMENCLATURE = """
             select g.code, n.name,
                    cast(null as varchar) as ean, cast(null as varchar) as brand,
                    g.previous_quantity, g.previous_cost_value, g.previous_sale_value_gross, g.previous_sale_value_net,
@@ -175,30 +256,60 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                        sum(current_sale_value_net) as current_sale_value_net,
                        sum(current_margin_value) as current_margin_value
                 from sold
-                where :parent = '' or subfamily_code like :parent || '%'
                 group by 1
             ) g
             left join nomenclatures n on n.store_id = :storeId and n.code = g.code
             order by g.code nulls last
-            """, nativeQuery = true)
-    List<ComparisonRow> compareByNomenclature(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
-            LocalDate currentFrom, LocalDate currentTo, int codeLength, String parent, String[] codes);
+            """;
 
-    /**
-     * Porównanie artykułów jednej podrodziny ({@code subfamily}), a przy pustym tekście artykułów bez nomenklatury
-     * (także spoza kartoteki: bez nazwy, z samym ITM8). Najpierw te, które sprzedały się najlepiej teraz.
-     */
-    @Query(value = ARTICLE_SALES + """
+    /** Artykuły z {@code sold}, najpierw te, które sprzedały się najlepiej teraz. */
+    String ARTICLES = """
             select itm8 as code, name, ean, brand,
                    previous_quantity, previous_cost_value, previous_sale_value_gross, previous_sale_value_net,
                    previous_margin_value, current_quantity, current_cost_value, current_sale_value_gross,
                    current_sale_value_net, current_margin_value
             from sold
-            where case when :subfamily = '' then subfamily_code is null else subfamily_code = :subfamily end
+            """;
+
+    /**
+     * Rejony całego sklepu ({@code codeLength} = 2). Artykuły bez podrodziny (spoza kartoteki) dają jeden wiersz
+     * z pustym kodem, na końcu.
+     */
+    @Query(value = ARTICLE_SALES + BY_NOMENCLATURE, nativeQuery = true)
+    List<ComparisonRow> compareByNomenclature(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, int codeLength, String[] codes);
+
+    /**
+     * Poziom nomenklatury w obrębie {@code parent} (kod rejonu daje rodziny, kod rodziny podrodziny): kod to pierwsze
+     * {@code codeLength} cyfr podrodziny artykułu.
+     */
+    @Query(value = GROUP_ARTICLE_SALES + BY_NOMENCLATURE, nativeQuery = true)
+    List<ComparisonRow> compareGroupByNomenclature(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, int codeLength, String parent, String[] codes);
+
+    /** Artykuły jednej podrodziny ({@code parent}, 6 cyfr), najpierw te, które sprzedały się najlepiej teraz. */
+    @Query(value = GROUP_ARTICLE_SALES + ARTICLES + """
+            where subfamily_code = :parent
             order by current_sale_value_gross desc, previous_sale_value_gross desc, itm8
             """, nativeQuery = true)
     List<ComparisonRow> compareArticles(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
-            LocalDate currentFrom, LocalDate currentTo, String subfamily, String[] codes);
+            LocalDate currentFrom, LocalDate currentTo, String parent, String[] codes);
+
+    /** Artykuły bez nomenklatury, także spoza kartoteki (bez nazwy, z samym ITM8). */
+    @Query(value = ARTICLE_SALES + ARTICLES + """
+            where subfamily_code is null
+            order by current_sale_value_gross desc, previous_sale_value_gross desc, itm8
+            """, nativeQuery = true)
+    List<ComparisonRow> compareUnassignedArticles(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, String[] codes);
+
+    /**
+     * Ustawienia zapytań raportu do końca transakcji: bez JIT (przy roku do roku kompilacja to ok. 100 ms z 800 ms
+     * i nic nie daje) i {@code work_mem} 32 MB (przy domyślnych 4 MB sumy ok. 55 tys. artykułów lądują na dysku).
+     */
+    @Query(value = "select set_config('jit', 'off', true) || set_config('work_mem', '32MB', true)",
+            nativeQuery = true)
+    String tuneForReport();
 
     /** Sprzedaż jednego dnia; dni bez sprzedaży nie ma w wyniku. */
     interface DayRow {
@@ -261,15 +372,27 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
     }
 
     /**
-     * Sprzedaż okresu po rejonach nomenklatury: najpierw suma każdego ITM8 (z klucza sklep + dzień), dopiero potem
-     * łączenie z kartoteką, żeby nie łączyć z produktami każdego wiersza dnia.
+     * Sprzedaż okresu po rejonach nomenklatury: najpierw suma każdego ITM8 (pełne miesiące z {@code sales_monthly},
+     * dni niepełnych miesięcy na brzegach ze sprzedaży dziennej), dopiero potem łączenie z kartoteką.
      */
     @Query(value = """
-            with article as (
+            with bounds as (
+                select cast(date_trunc('month', cast(:from as timestamp) - interval '1 day')
+                           + interval '1 month' as date) as f,
+                       cast(date_trunc('month', cast(:to as timestamp) + interval '1 day') as date) as t
+            ), parts as (
+                select m.itm8, m.cost_value, m.sale_value_gross, m.sale_value_net, m.margin_value
+                from sales_monthly m cross join bounds b
+                where m.store_id = :storeId and m.month >= b.f and m.month < b.t
+                union all
+                select s.itm8, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                from sales s cross join bounds b
+                where s.store_id = :storeId and s.sale_date between :from and :to
+                    and (s.sale_date < b.f or s.sale_date >= b.t)
+            ), article as (
                 select itm8, sum(cost_value) as cost_value, sum(sale_value_gross) as sale_value_gross,
                        sum(sale_value_net) as sale_value_net, sum(margin_value) as margin_value
-                from sales
-                where store_id = :storeId and sale_date between :from and :to
+                from parts
                 group by itm8
             )
             select coalesce(left(p.subfamily_code, 2), '') as region_code,
@@ -290,19 +413,16 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
         BigDecimal getSaleValueGross();
     }
 
-    /** Sprzedaż brutto po miesiącach i rejonach nomenklatury, jak {@link #sumByRegion}: najpierw suma ITM8. */
+    /**
+     * Sprzedaż brutto po miesiącach i rejonach nomenklatury z {@code sales_monthly} (raport gratisów ma zawsze pełne
+     * miesiące: {@code from} pierwszy dzień, {@code to} ostatni).
+     */
     @Query(value = """
-            with article as (
-                select cast(date_trunc('month', sale_date) as date) as month, itm8,
-                       sum(sale_value_gross) as sale_value_gross
-                from sales
-                where store_id = :storeId and sale_date between :from and :to
-                group by 1, 2
-            )
-            select a.month as month, coalesce(left(p.subfamily_code, 2), '') as region_code,
-                   sum(a.sale_value_gross) as sale_value_gross
-            from article a
-            left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+            select m.month as month, coalesce(left(p.subfamily_code, 2), '') as region_code,
+                   sum(m.sale_value_gross) as sale_value_gross
+            from sales_monthly m
+            left join products p on p.store_id = :storeId and p.itm8 = m.itm8
+            where m.store_id = :storeId and m.month between :from and :to
             group by 1, 2
             """, nativeQuery = true)
     List<MonthRegionSales> sumGrossByMonthAndRegion(UUID storeId, LocalDate from, LocalDate to);

@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
+import { ArrowUpIcon, ChartColumnIcon, ChevronDownIcon, Link2Icon, SplitIcon, TriangleAlertIcon } from 'lucide-react'
+import { Fragment, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 
-import { formatMoney, formatPrice } from '@/features/documents/format'
+import { formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { cn } from '@/lib/utils'
 import type { NomenclatureItem, SaleUnit } from '@/lib/types'
 
@@ -12,26 +13,49 @@ import {
   type ColumnKey,
   levelCode,
   type Names,
+  type NomenclatureKey,
   parseTsv,
   toTsv,
+  withNomenclature,
   withSubfamily,
   withUnit,
 } from './grid-values'
 import { NomenclaturePicker, UnitPicker } from './GridPickers'
+import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
+import { Button } from '@/components/ui/button'
+
 import {
+  belowRequiredMargin,
+  cadencierPrice,
+  canSellSmaller,
+  canSplitQuantity,
+  type CatalogField,
+  catalogChanges,
   type DataEntryRow,
+  eanError,
   emptyRow,
+  type ServiceKind,
   foreignInvoiceUnit,
+  type Pricing,
   marginPercent,
   measureMismatch,
   NAME_LIMIT,
   netValue,
   nomenclatureState,
+  requiredMargin,
+  SERVICE_LABELS,
+  serviceKind,
+  SMALLER_QUANTITIES_MARGIN,
+  suggestedPrice,
 } from './rows'
 
 export type GridHandle = {
   /** Zaznacza komórkę i przewija do niej (np. z listy problemów przed eksportem). */
   focusCell: (rowId: string, key: ColumnKey) => void
+  /** Wraca fokusem do tabeli bez zmiany zaznaczenia (np. po przycisku nad tabelą). */
+  focus: () => void
+  /** Zaznacza całą tabelę (jak Ctrl+A). */
+  selectAll: () => void
 }
 
 type Cell = { r: number; c: number }
@@ -47,10 +71,30 @@ type Props = {
   onInvalidPaste: (count: number) => void
   nomenclature: NomenclatureItem[]
   names: Names
+  pricing: Pricing
+  /** Okno ze sprzedażą i dostawami artykułu z kartoteki; bez niego (brak uprawnienia) wiersze nie mają przycisku. */
+  onShowArticle?: (row: DataEntryRow) => void
+  /** Okno przypięcia pozycji bez EAN-u (albo spoza kartoteki) do artykułu z kartoteki. */
+  onLinkArticle?: (row: DataEntryRow) => void
+  /** Okno podziału ilości (opakowanie z faktury na sztuki sprzedaży, cena przeliczona). */
+  onSplitQuantity?: (row: DataEntryRow) => void
   ref?: Ref<GridHandle>
 }
 
 const LAST = COLUMNS.length - 1
+const NO_RANGE = { top: -1, bottom: -2, left: -1, right: -2 }
+
+/** Szerokości w em czcionki tabeli: kolumna z numerem wiersza, pierwsza kolumna (EAN, przyklejona) i cała tabela. */
+const ROW_HEADER_EM = 2.5
+const STICKY_EM = ROW_HEADER_EM + COLUMNS[0].width
+const TABLE_EM = COLUMNS.reduce((sum, column) => sum + column.width, ROW_HEADER_EM)
+
+/**
+ * Czcionka tabeli dopasowana do szerokości miejsca (cqw obszaru, minus ramka i pasek przewijania), żeby na laptopie
+ * było widać wszystkie kolumny bez przewijania w bok. Nie większa niż zwykłe text-sm; poniżej dolnej granicy tabela
+ * przewija się w bok.
+ */
+const TABLE_FONT_SIZE = `clamp(0.625rem, calc((100cqw - 1.25rem) / ${TABLE_EM}), 0.875rem)`
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -67,11 +111,22 @@ export function DataEntryGrid({
   onInvalidPaste,
   nomenclature,
   names,
+  pricing,
+  onShowArticle,
+  onLinkArticle,
+  onSplitQuantity,
   ref,
 }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
-  const [activeState, setActive] = useState<Cell>({ r: 0, c: 0 })
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [activeState, setActiveState] = useState<Cell>({ r: 0, c: 0 })
   const [anchorState, setAnchor] = useState<Cell>({ r: 0, c: 0 })
+  // Klik poza tabelą chowa zaznaczenie; każda zmiana aktywnej komórki (klik, klawisz) pokazuje je z powrotem.
+  const [selectionHidden, setSelectionHidden] = useState(false)
+  const setActive = useCallback((cell: Cell) => {
+    setSelectionHidden(false)
+    setActiveState(cell)
+  }, [])
   const [editing, setEditing] = useState<Editing | null>(null)
   const [picker, setPicker] = useState<Picker | null>(null)
   const dragging = useRef(false)
@@ -81,17 +136,56 @@ export function DataEntryGrid({
   const anchor = anchorState.r > lastRow ? { ...anchorState, r: lastRow } : anchorState
 
   const range = useMemo(
-    () => ({
-      top: Math.min(anchor.r, active.r),
-      bottom: Math.max(anchor.r, active.r),
-      left: Math.min(anchor.c, active.c),
-      right: Math.max(anchor.c, active.c),
-    }),
-    [anchor.r, anchor.c, active.r, active.c],
+    () =>
+      selectionHidden
+        ? NO_RANGE
+        : {
+            top: Math.min(anchor.r, active.r),
+            bottom: Math.max(anchor.r, active.r),
+            left: Math.min(anchor.c, active.c),
+            right: Math.max(anchor.c, active.c),
+          },
+    [selectionHidden, anchor.r, anchor.c, active.r, active.c],
   )
 
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null
+      if (!target || containerRef.current?.contains(target)) return
+      // Przyciski działające na zaznaczeniu (data-keep-grid-selection), okna, listy i toasty go nie chowają.
+      if (
+        target.closest(
+          '[data-keep-grid-selection], [role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-sonner-toaster]',
+        )
+      )
+        return
+      setSelectionHidden(true)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [])
+
+  // Przewija się cała strona (jeden pasek), a nagłówek kolumn przykleja się pod nagłówkiem aplikacji. Tabela przewija się
+  // w poziomie tylko wtedy, gdy nie mieści się nawet przy najmniejszej czcionce (wtedy nagłówek klei się tylko w niej,
+  // bo przewijanie w poziomie robi z niej obszar przewijania także w pionie).
+  const [scrollsX, setScrollsX] = useState(false)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const observer = new ResizeObserver(() => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+      setScrollsX(container.clientWidth < (TABLE_EM * 0.625 + 1.25) * rem)
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
+
   const selectedIds = useMemo(
-    () => rows.slice(range.top, range.bottom + 1).map((row) => row.id).join(','),
+    () =>
+      rows
+        .slice(range.top, range.bottom + 1)
+        .map((row) => row.id)
+        .join(','),
     [rows, range.top, range.bottom],
   )
   useEffect(() => {
@@ -104,7 +198,10 @@ export function DataEntryGrid({
   )
 
   useEffect(() => {
-    cellElement({ r: active.r, c: active.c })?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    cellElement({ r: active.r, c: active.c })?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+    })
   }, [active.r, active.c, cellElement])
 
   const focusGrid = () => gridRef.current?.focus({ preventScroll: true })
@@ -115,7 +212,20 @@ export function DataEntryGrid({
     if (!extend) setAnchor(next)
   }
 
+  // Aktywna komórka zostaje na początku (jak w Excelu), bo tabela przewija się do niej; zakres i tak obejmuje całość.
+  const selectAll = () => {
+    setAnchor({ r: lastRow, c: LAST })
+    setActive({ r: 0, c: 0 })
+  }
+
   useImperativeHandle(ref, () => ({
+    focus: focusGrid,
+    selectAll: () => {
+      setEditing(null)
+      setPicker(null)
+      selectAll()
+      focusGrid()
+    },
     focusCell: (rowId, key) => {
       const r = rows.findIndex((row) => row.id === rowId)
       const c = COLUMNS.findIndex((column) => column.key === key)
@@ -162,7 +272,11 @@ export function DataEntryGrid({
       setPicker({ ...cell, query: '' })
     } else if (column.kind !== 'computed') {
       if (column.key === 'netContent' && row.unit === 'szt.') return
-      setEditing({ ...cell, mode, text: text ?? cellText(row, column.key, names) })
+      setEditing({
+        ...cell,
+        mode,
+        text: text ?? cellText(row, column.key, names, pricing),
+      })
     }
   }
 
@@ -175,7 +289,7 @@ export function DataEntryGrid({
           const key = COLUMNS[c].key
           if (!clearable(key)) continue
           if (key === 'region' || key === 'family' || key === 'subfamily') {
-            if (next.subfamilyCode !== null) next = withSubfamily(next, null)
+            if (next.subfamilyCode !== null || next.nomenclaturePrefix) next = withSubfamily(next, null)
             continue
           }
           const result = applyText(next, key, '', names)
@@ -185,7 +299,12 @@ export function DataEntryGrid({
       }),
     )
     if (range.left === 0) {
-      onEansChanged(rows.slice(range.top, range.bottom + 1).filter((row) => row.ean !== '').map((row) => row.id))
+      onEansChanged(
+        rows
+          .slice(range.top, range.bottom + 1)
+          .filter((row) => row.ean !== '')
+          .map((row) => row.id),
+      )
     }
   }
 
@@ -229,7 +348,13 @@ export function DataEntryGrid({
   const move = (dr: number, dc: number, extend: boolean, toEdge = false) => {
     const from = active
     if (toEdge) {
-      select({ r: dr === 0 ? from.r : dr < 0 ? 0 : lastRow, c: dc === 0 ? from.c : dc < 0 ? 0 : LAST }, extend)
+      select(
+        {
+          r: dr === 0 ? from.r : dr < 0 ? 0 : lastRow,
+          c: dc === 0 ? from.c : dc < 0 ? 0 : LAST,
+        },
+        extend,
+      )
     } else {
       select({ r: from.r + dr, c: from.c + dc }, extend)
     }
@@ -245,6 +370,7 @@ export function DataEntryGrid({
 
   const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (editing || picker || event.target !== gridRef.current || rows.length === 0) return
+    setSelectionHidden(false)
     const ctrl = event.ctrlKey || event.metaKey
     const handled = () => event.preventDefault()
     switch (event.key) {
@@ -285,9 +411,7 @@ export function DataEntryGrid({
     }
     if (ctrl && event.key.toLowerCase() === 'a') {
       handled()
-      setAnchor({ r: 0, c: 0 })
-      setActive({ r: lastRow, c: LAST })
-      return
+      return selectAll()
     }
     if (!ctrl && !event.altKey && event.key.length === 1) {
       handled()
@@ -301,7 +425,7 @@ export function DataEntryGrid({
     event.preventDefault()
     const cells = rows
       .slice(range.top, range.bottom + 1)
-      .map((row) => COLUMNS.slice(range.left, range.right + 1).map((column) => cellText(row, column.key, names)))
+      .map((row) => COLUMNS.slice(range.left, range.right + 1).map((column) => cellText(row, column.key, names, pricing)))
     event.clipboardData.setData('text/plain', toTsv(cells))
   }
 
@@ -355,9 +479,53 @@ export function DataEntryGrid({
     if (cell) setActive(cell)
   }
 
+  // Listy (nomenklatura, rodzaj) otwiera jedno kliknięcie w komórkę; przeciągnięcie zaznacza zakres jak zwykle.
+  const onClick = (event: React.MouseEvent) => {
+    const cell = cellFromEvent(event)
+    if (!cell || event.shiftKey || editing || picker) return
+    const kind = COLUMNS[cell.c].kind
+    if (kind !== 'nomenclature' && kind !== 'unit') return
+    if (anchor.r !== cell.r || anchor.c !== cell.c || active.r !== cell.r || active.c !== cell.c) return
+    startEdit(cell, 'edit')
+  }
+
   const onDoubleClick = (event: React.MouseEvent) => {
     const cell = cellFromEvent(event)
     if (cell) startEdit(cell, 'edit')
+  }
+
+  // ---------- skanowanie
+
+  /**
+   * Po zatwierdzeniu EAN-u (czytnik kodów kończy Enterem) kolejny wiersz: pusty następny albo nowy wstawiony pod
+   * bieżącym, od razu w edycji EAN-u, więc kolejne skany idą jeden po drugim bez dotykania myszy.
+   */
+  const nextScan = (r: number) => {
+    // Stan bieżący, nie z renderu: zatwierdzenie EAN-u mogło już dodać pusty wiersz na końcu.
+    setRows((current) => {
+      const next = current[r + 1]
+      return next && next.ean === '' && next.name === ''
+        ? current
+        : [...current.slice(0, r + 1), emptyRow(), ...current.slice(r + 1)]
+    })
+    const cell = { r: r + 1, c: 0 }
+    setActive(cell)
+    setAnchor(cell)
+    setEditing({ ...cell, mode: 'enter', text: '' })
+  }
+
+  // ---------- przewijanie
+
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled((gridRef.current?.getBoundingClientRect().top ?? 0) < -240)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  const scrollToTop = () => {
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' })
+    focusGrid()
   }
 
   // ---------- edytor w komórce
@@ -373,6 +541,11 @@ export function DataEntryGrid({
     }
     switch (event.key) {
       case 'Enter':
+        if (COLUMNS[editing.c].key === 'ean' && !event.shiftKey && editing.text.trim() !== '') {
+          event.preventDefault()
+          if (commitEdit(editing)) nextScan(editing.r)
+          return
+        }
         return after(() => move(event.shiftKey ? -1 : 1, 0, false))
       case 'Tab':
         return after(() => tab(event.shiftKey))
@@ -387,7 +560,12 @@ export function DataEntryGrid({
       case 'ArrowRight':
         // Edycja rozpoczęta pisaniem: strzałki kończą ją i przechodzą dalej (jak w Excelu); po F2 przesuwają kursor.
         if (editing.mode === 'enter') {
-          const [dr, dc] = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[event.key]
+          const [dr, dc] = {
+            ArrowUp: [-1, 0],
+            ArrowDown: [1, 0],
+            ArrowLeft: [0, -1],
+            ArrowRight: [0, 1],
+          }[event.key]
           return after(() => move(dr, dc, false))
         }
     }
@@ -398,7 +576,7 @@ export function DataEntryGrid({
       autoFocus
       value={editing.text}
       aria-invalid={editing.error ? true : undefined}
-      aria-label={COLUMNS[editing.c].header}
+      aria-label={COLUMNS[editing.c].title ?? COLUMNS[editing.c].header}
       title={editing.error}
       onChange={(event) => setEditing({ ...editing, text: event.target.value, error: undefined })}
       onKeyDown={onEditorKeyDown}
@@ -406,12 +584,18 @@ export function DataEntryGrid({
         if (!commitEdit(editing)) setEditing(null)
       }}
       className={cn(
-        'absolute inset-0 z-10 w-full bg-background px-2 text-sm outline-2 -outline-offset-2 outline-primary',
+        'absolute inset-0 z-10 w-full bg-background px-2 font-normal text-foreground outline-2 -outline-offset-2 outline-primary',
         COLUMNS[editing.c].align === 'right' && 'text-right',
         editing.error && 'outline-destructive',
       )}
     />
   ) : null
+
+  const tooLongNames = rows.filter((row) => row.name.length > NAME_LIMIT && !serviceKind(row)).length
+  const invalidEans = rows.filter((row) => eanError(row) !== null).length
+
+  // Kaucje i dostawa są zawsze na końcu (układa je strona), nad nimi nagłówek sekcji.
+  const firstService = rows.findIndex((row) => serviceKind(row) !== null)
 
   const pickerRow = picker ? rows[picker.r] : undefined
   const closePicker = () => {
@@ -420,7 +604,7 @@ export function DataEntryGrid({
   }
 
   return (
-    <>
+    <div ref={containerRef} className="@container relative flex flex-col">
       <div
         ref={gridRef}
         role="grid"
@@ -433,32 +617,65 @@ export function DataEntryGrid({
         onPaste={onPaste}
         onMouseDown={onMouseDown}
         onMouseOver={onMouseOver}
+        onClick={onClick}
         onDoubleClick={onDoubleClick}
-        className="relative max-h-[calc(100svh-19rem)] min-h-48 overflow-auto rounded-xl border bg-card outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/30"
+        className={cn(
+          'relative rounded-xl border bg-card outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/30',
+          scrollsX ? 'overflow-x-auto' : 'overflow-x-clip',
+        )}
       >
-        {/* Stały układ i szerokość 0: tabela ma dokładnie sumę szerokości kolumn, długa treść nie rozpycha kolumn. */}
-        <table className="w-0 table-fixed border-separate border-spacing-0 text-sm tabular-nums">
+        {/* Stały układ: długa treść nie rozpycha kolumn. Gdy po dojściu do pełnej czcionki zostaje miejsce, tabela
+            wypełnia całą szerokość, a nadmiar dzieli się między kolumny proporcjonalnie do ich szerokości. */}
+        <table
+          className="table-fixed border-separate border-spacing-0 tabular-nums"
+          style={
+            {
+              fontSize: TABLE_FONT_SIZE,
+              width: `max(${TABLE_EM}em, 100%)`,
+              // Przesunięcia przyklejonej kolumny EAN w em, liczone w komórce (ma czcionkę tabeli).
+              '--sticky-left': `${ROW_HEADER_EM}em`,
+              '--sticky-width': `${STICKY_EM}em`,
+              // Nagłówek kolumn klei się pod nagłówkiem aplikacji (h-14), a przy przewijaniu w poziomie u góry tabeli.
+              '--header-top': scrollsX ? '0' : '3.5rem',
+            } as React.CSSProperties
+          }
+        >
           <colgroup>
-            <col className="w-10" />
+            <col style={{ width: `${ROW_HEADER_EM}em` }} />
             {COLUMNS.map((column) => (
-              <col key={column.key} className={column.width} />
+              <col key={column.key} style={{ width: `${column.width}em` }} />
             ))}
           </colgroup>
           <thead>
             <tr>
-              <th className="sticky top-0 left-0 z-30 h-9 border-r border-b bg-muted" aria-hidden />
+              <th className="sticky top-(--header-top) left-0 z-30 h-9 border-r border-b bg-muted" aria-hidden />
               {COLUMNS.map((column, index) => (
                 <th
                   key={column.key}
                   scope="col"
+                  title={column.title}
                   className={cn(
-                    'sticky top-0 z-20 h-9 border-r border-b bg-muted px-2 text-left text-xs font-medium whitespace-nowrap text-muted-foreground',
+                    'sticky top-(--header-top) z-20 h-9 truncate border-r border-b bg-muted px-2 text-left font-medium whitespace-nowrap text-muted-foreground',
                     column.align === 'right' && 'text-right',
-                    index === 0 && 'left-10 z-30',
+                    index === 0 && 'left-(--sticky-left) z-30',
                     index >= range.left && index <= range.right && 'bg-accent text-foreground',
+                    column.key === 'name' && tooLongNames > 0 && 'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
+                    column.key === 'ean' && invalidEans > 0 && 'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
                   )}
                 >
-                  {column.header}
+                  <span className="text-[0.86em]">
+                    {column.header}
+                    {column.key === 'ean' && invalidEans > 0 && (
+                      <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
+                        błędne: {invalidEans}
+                      </span>
+                    )}
+                    {column.key === 'name' && tooLongNames > 0 && (
+                      <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
+                        za długie: {tooLongNames}
+                      </span>
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -467,33 +684,70 @@ export function DataEntryGrid({
             {rows.map((row, index) => {
               const inRows = index >= range.top && index <= range.bottom
               return (
-                <GridRow
-                  key={row.id}
-                  row={row}
-                  index={index}
-                  names={names}
-                  rangeLeft={inRows ? range.left : -1}
-                  rangeRight={inRows ? range.right : -1}
-                  activeCol={active.r === index ? active.c : -1}
-                  editorCol={editing?.r === index ? editing.c : -1}
-                  editor={editing?.r === index ? editor : null}
-                />
+                <Fragment key={row.id}>
+                  {index === firstService && (
+                    <tr aria-hidden>
+                      <td
+                        colSpan={COLUMNS.length + 1}
+                        className="h-8 border-b bg-muted px-3 text-xs font-medium text-muted-foreground"
+                      >
+                        <span className="sticky left-3">Kaucje i dostawa · nie trafiają do Excela</span>
+                      </td>
+                    </tr>
+                  )}
+                  <GridRow
+                    row={row}
+                    index={index}
+                    names={names}
+                    pricing={pricing}
+                    rangeLeft={inRows ? range.left : -1}
+                    rangeRight={inRows ? range.right : -1}
+                    activeCol={!selectionHidden && active.r === index ? active.c : -1}
+                    editorCol={editing?.r === index ? editing.c : -1}
+                    editor={editing?.r === index ? editor : null}
+                    onShowArticle={onShowArticle}
+                    onLinkArticle={onLinkArticle}
+                    onSplitQuantity={onSplitQuantity}
+                  />
+                </Fragment>
               )
             })}
           </tbody>
         </table>
       </div>
 
+      {scrolled && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={scrollToTop}
+          className="fixed right-6 bottom-6 z-40 shadow-md"
+          title="Przewiń na górę strony (Ctrl+Home przenosi też zaznaczenie)"
+        >
+          <ArrowUpIcon />
+          Na górę
+        </Button>
+      )}
+
       {picker && pickerRow && COLUMNS[picker.c].kind === 'nomenclature' && (
         <NomenclaturePicker
+          key={`${picker.r}:${picker.c}`}
           anchor={() => cellElement(picker)}
           row={pickerRow}
+          level={COLUMNS[picker.c].key as NomenclatureKey}
           initialQuery={picker.query}
           nomenclature={nomenclature}
           names={names}
           onPick={(code) => {
-            updateRow(picker.r, (row) => withSubfamily(row, code))
-            closePicker()
+            updateRow(picker.r, (row) => withNomenclature(row, code))
+            if (code.length < 6) {
+              // Od razu lista kolejnego poziomu, z dziećmi wybranego kodu.
+              const next = { r: picker.r, c: picker.c + 1 }
+              select(next)
+              setPicker({ ...next, query: '' })
+            } else {
+              closePicker()
+            }
           }}
           onClose={closePicker}
         />
@@ -509,7 +763,7 @@ export function DataEntryGrid({
           onClose={closePicker}
         />
       )}
-    </>
+    </div>
   )
 }
 
@@ -517,30 +771,68 @@ type RowProps = {
   row: DataEntryRow
   index: number
   names: Names
+  pricing: Pricing
   rangeLeft: number
   rangeRight: number
   activeCol: number
   editorCol: number
   editor: React.ReactNode
+  onShowArticle?: (row: DataEntryRow) => void
+  onLinkArticle?: (row: DataEntryRow) => void
+  onSplitQuantity?: (row: DataEntryRow) => void
 }
 
-const NOMENCLATURE_TINT: Record<string, string> = {
-  CERTAIN: 'bg-emerald-50 dark:bg-emerald-950/30',
-  AGREED: 'bg-sky-50 dark:bg-sky-950/30',
-  TO_CHECK: 'bg-amber-100/80 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100',
+/** Kolumna tabeli, w której widać zmianę pola z kartoteki. */
+const CHANGED_COLUMNS: Record<CatalogField, ColumnKey[]> = {
+  name: ['name'],
+  brand: ['brand'],
+  salePrice: ['salePrice'],
+  subfamilyCode: ['region', 'family', 'subfamily'],
+  unit: ['unit'],
+  netContent: ['netContent'],
 }
 
 /** Wiersz tabeli; odświeża się tylko, gdy zmienia się on sam albo jego część zaznaczenia. */
-const GridRow = memo(function GridRow({ row, index, names, rangeLeft, rangeRight, activeCol, editorCol, editor }: RowProps) {
+const GridRow = memo(function GridRow({
+  row,
+  index,
+  names,
+  pricing,
+  rangeLeft,
+  rangeRight,
+  activeCol,
+  editorCol,
+  editor,
+  onShowArticle,
+  onLinkArticle,
+  onSplitQuantity,
+}: RowProps) {
   const state = nomenclatureState(row)
+  const service = serviceKind(row)
+  const tooLong = !service && row.name.length > NAME_LIMIT
+  const badEan = eanError(row) !== null
+  const changes = catalogChanges(row)
+  const changedColumns = new Set(changes.flatMap((field) => CHANGED_COLUMNS[field]))
+  const filled = row.ean !== '' || row.name !== ''
+  // Szary: zapisany w kartotece; pomarańczowy: z kartoteki, ale zmieniony w tabeli; fioletowy: nowy artykuł.
+  const rowTint = service
+    ? 'bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300'
+    : row.known
+      ? changes.length > 0
+        ? ROW_TINTS.changed
+        : ROW_TINTS.known
+      : filled
+        ? ROW_TINTS.new
+        : null
   return (
     <tr aria-rowindex={index + 2}>
       <th
         scope="row"
         data-row-header={index}
         className={cn(
-          'sticky left-0 z-10 h-8 cursor-default border-r border-b bg-muted px-1 text-center text-xs font-normal text-muted-foreground',
+          'sticky left-0 z-10 h-8 cursor-default border-r border-b bg-muted px-1 text-center text-[0.86em] font-normal text-muted-foreground',
           rangeLeft >= 0 && 'bg-accent text-foreground',
+          tooLong && 'bg-destructive font-medium text-white',
         )}
       >
         {index + 1}
@@ -549,6 +841,9 @@ const GridRow = memo(function GridRow({ row, index, names, rangeLeft, rangeRight
         const selected = c >= rangeLeft && c <= rangeRight
         const isActive = c === activeCol
         const nomenclature = column.kind === 'nomenclature'
+        const list = nomenclature || column.kind === 'unit'
+        // Czerwona komórka z białym tekstem: zaznaczenie ją przyciemnia, bo jasne tło zaznaczenia schowałoby tekst.
+        const alert = (tooLong && column.key === 'name') || (badEan && column.key === 'ean')
         return (
           <td
             key={column.key}
@@ -557,17 +852,42 @@ const GridRow = memo(function GridRow({ row, index, names, rangeLeft, rangeRight
             role="gridcell"
             aria-selected={selected}
             className={cn(
-              'relative h-8 scroll-mt-9 scroll-ml-54 truncate border-r border-b px-2 whitespace-nowrap',
+              'group/cell relative h-8 scroll-mt-23 scroll-ml-(--sticky-width) truncate border-r border-b px-2 whitespace-nowrap',
               column.align === 'right' && 'text-right',
-              c === 0 && 'sticky left-10 z-[5] bg-card',
-              column.kind === 'computed' && 'text-muted-foreground',
-              nomenclature && NOMENCLATURE_TINT[state],
+              c === 0 && 'sticky left-(--sticky-left) z-[5] bg-card',
+              rowTint,
+              list && 'cursor-pointer pr-6',
+              nomenclature && NOMENCLATURE_TINTS[state],
+              changedColumns.has(column.key) && ROW_TINTS.changedCell,
+              // Za długa nazwa: cały wiersz na czerwono, a komórka nazwy najmocniej.
+              tooLong &&
+                (column.key === 'name'
+                  ? 'bg-red-500 font-medium text-white dark:bg-red-700'
+                  : 'bg-red-200 text-red-950 dark:bg-red-900 dark:text-red-50'),
+              badEan && column.key === 'ean' && 'bg-red-500 font-medium text-white dark:bg-red-700',
               // Przyklejona kolumna EAN musi mieć pełne tło, inaczej przy przewijaniu prześwitują komórki spod spodu.
-              selected && (c === 0 ? 'bg-accent' : 'bg-primary/8'),
+              selected && (alert ? 'bg-red-800 text-white dark:bg-red-950' : c === 0 ? 'bg-accent' : 'bg-primary/8'),
               isActive && 'outline-2 -outline-offset-2 outline-primary',
             )}
           >
-            <CellContent row={row} column={column.key} names={names} state={state} />
+            <CellContent
+              row={row}
+              column={column.key}
+              names={names}
+              pricing={pricing}
+              state={state}
+              service={service}
+              onShowArticle={onShowArticle}
+              onLinkArticle={onLinkArticle}
+              onSplitQuantity={onSplitQuantity}
+              active={isActive}
+            />
+            {list && !service && (
+              <ChevronDownIcon
+                aria-hidden
+                className="absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2 text-muted-foreground/70"
+              />
+            )}
             {c === editorCol && editor}
           </td>
         )
@@ -576,29 +896,107 @@ const GridRow = memo(function GridRow({ row, index, names, rangeLeft, rangeRight
   )
 })
 
-const quantityFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 3 })
-const percentFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 })
-const weightFormat = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+const quantityFormat = new Intl.NumberFormat('pl-PL', {
+  maximumFractionDigits: 3,
+})
+const percentFormat = new Intl.NumberFormat('pl-PL', {
+  maximumFractionDigits: 1,
+})
+const weightFormat = new Intl.NumberFormat('pl-PL', {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+})
 
 function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.68rem] font-medium', className)}>{children}</span>
-  )
+  return <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium', className)}>{children}</span>
 }
 
-function CellContent({ row, column, names, state }: { row: DataEntryRow; column: ColumnKey; names: Names; state: string }) {
+type CellProps = {
+  row: DataEntryRow
+  column: ColumnKey
+  names: Names
+  pricing: Pricing
+  state: string
+  service: ServiceKind | null
+  onShowArticle?: (row: DataEntryRow) => void
+  onLinkArticle?: (row: DataEntryRow) => void
+  onSplitQuantity?: (row: DataEntryRow) => void
+  active: boolean
+}
+
+function CellContent({
+  row,
+  column,
+  names,
+  pricing,
+  state,
+  service,
+  onShowArticle,
+  onLinkArticle,
+  onSplitQuantity,
+  active,
+}: CellProps) {
   switch (column) {
-    case 'ean':
+    case 'ean': {
+      const error = eanError(row)
       return (
-        <span className="flex items-center">
-          {row.ean || <span className="text-muted-foreground">brak EAN</span>}
-          {!row.known && (row.ean !== '' || row.name !== '') && (
-            <Tag className="bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-200">nowy</Tag>
+        <span className="flex items-center" title={error ?? undefined}>
+          {row.ean && row.eanFallback ? (
+            <span className="truncate italic opacity-75" title={`Brak EAN na fakturze, kod z pola: ${row.eanFallback}`}>
+              {row.ean}
+            </span>
+          ) : (
+            row.ean || <span className="text-muted-foreground">{service ? '' : 'brak EAN'}</span>
+          )}
+          {error && (
+            <span className="ml-auto shrink-0 pl-1" title={error}>
+              <TriangleAlertIcon aria-label={error} className="size-[1.1em]" />
+            </span>
+          )}
+          {service && <Tag className="bg-background text-muted-foreground ring-1 ring-border">{SERVICE_LABELS[service]}</Tag>}
+          {onLinkArticle && !service && row.ean && (row.link || !row.known) && (
+            <button
+              type="button"
+              onClick={() => onLinkArticle(row)}
+              title={
+                row.link
+                  ? `Przypięte u tego dostawcy: „${row.link.code}”. Kliknij, żeby zmienić albo odpiąć.`
+                  : 'Przypisz do artykułu z kartoteki'
+              }
+              aria-label={row.link ? `Przypięte: ${row.link.code}` : `Przypisz do artykułu: ${row.ean}`}
+              className={cn(
+                '-my-1 -mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded hover:bg-foreground/10 hover:text-foreground',
+                row.link ? 'text-sky-700 dark:text-sky-300' : 'text-muted-foreground',
+              )}
+            >
+              <Link2Icon className="size-[1.15em]" />
+            </button>
           )}
         </span>
       )
+    }
     case 'quantity':
-      return row.quantity === null ? null : quantityFormat.format(row.quantity)
+      if (row.quantity === null) return null
+      // Podział (worek 10 kg na 10 × 1 kg): przycisk przy najechaniu albo w zaznaczonej komórce, żeby nie zasłaniał liczb.
+      return onSplitQuantity && canSplitQuantity(row) ? (
+        <span className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => onSplitQuantity(row)}
+            title="Podziel ilość: opakowanie na sztuki, cena przeliczona (np. 10 × 10 kg na 100 × 1 kg)"
+            aria-label={`Podziel ilość: ${row.name || row.ean}`}
+            className={cn(
+              '-my-1 -ml-1.5 mr-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground focus-visible:opacity-100',
+              active ? 'opacity-100' : 'opacity-0 group-hover/cell:opacity-100',
+            )}
+          >
+            <SplitIcon className="size-[1.05em]" />
+          </button>
+          {quantityFormat.format(row.quantity)}
+        </span>
+      ) : (
+        quantityFormat.format(row.quantity)
+      )
     case 'unitNet':
       return formatPrice(row.unitNet)
     case 'name': {
@@ -606,38 +1004,130 @@ function CellContent({ row, column, names, state }: { row: DataEntryRow; column:
       // Plakietki zostają widoczne na końcu komórki, a długa nazwa skraca się wielokropkiem (pełna w podpowiedzi).
       return (
         <span className="flex min-w-0 items-center" title={row.nameFromInvoice ? `Z faktury: ${row.invoiceName}` : row.name}>
-          <span className={cn('truncate', row.nameFromInvoice && 'text-muted-foreground italic')}>{row.name}</span>
-          {row.nameFromInvoice && (
-            <Tag className="shrink-0 bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">do poprawy</Tag>
+          <span className={cn('truncate', row.nameFromInvoice && 'italic')}>{row.name}</span>
+          {row.nameFromInvoice && !service && (
+            <Tag className="shrink-0 bg-amber-400 text-amber-950 dark:bg-amber-600 dark:text-amber-50">do poprawy</Tag>
           )}
           {tooLong && (
-            <Tag className="shrink-0 bg-destructive/10 text-destructive">
+            <Tag className="shrink-0 bg-destructive text-white">
               {row.name.length}/{NAME_LIMIT}
             </Tag>
+          )}
+          {onShowArticle && row.known && row.itm8 && (
+            <button
+              type="button"
+              onClick={() => onShowArticle(row)}
+              title="Sprzedaż i dostawy artykułu"
+              aria-label={`Sprzedaż i dostawy: ${row.name}`}
+              className="-my-1 -mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+            >
+              <ChartColumnIcon className="size-[1.15em]" />
+            </button>
           )}
         </span>
       )
     }
     case 'brand':
-      return row.brand
+      return <span title={row.brand}>{row.brand}</span>
     case 'value':
       return formatMoney(netValue(row))
     case 'vat':
       return row.vatPercent === null ? null : `${percentFormat.format(row.vatPercent)}%`
-    case 'salePrice':
-      return formatMoney(row.salePrice)
+    case 'salePrice': {
+      // Artykuł z CENA_CAD (cadencier): cena z kartoteki niebieska i pogrubiona, dopóki nie zmieniona w tabeli.
+      const cadencier =
+        row.known && row.cadencier && row.salePrice !== null && (!row.catalog || row.catalog.salePrice === row.salePrice)
+      return cadencier ? (
+        <span className="font-bold text-blue-700 dark:text-blue-300" title="Artykuł z ceną cadencier (CENA_CAD)">
+          {formatMoney(row.salePrice)}
+        </span>
+      ) : (
+        formatMoney(row.salePrice)
+      )
+    }
     case 'margin': {
       const foreign = foreignInvoiceUnit(row)
       if (foreign) {
         return (
-          <span className="text-amber-700 dark:text-amber-300" title={`Na fakturze jednostka „${foreign}” - marża liczy się od ceny sztuki. Popraw cenę netto i ilość na sztuki.`}>
+          <span
+            className="text-amber-700 dark:text-amber-300"
+            title={`Na fakturze jednostka „${foreign}” - marża liczy się od ceny sztuki. Popraw cenę netto i ilość na sztuki.`}
+          >
             {foreign}?
           </span>
         )
       }
       const margin = marginPercent(row)
-      return margin === null ? null : (
-        <span className={cn(margin < 0 && 'font-medium text-destructive')}>{percentFormat.format(margin)}%</span>
+      if (margin === null) return null
+      // Poniżej marży wymaganej na nomenklaturze: mocna czerwień, wymagana w podpowiedzi.
+      const required = requiredMargin(row, pricing)
+      if (!service && belowRequiredMargin(row, pricing)) {
+        return (
+          <span
+            className="rounded bg-red-500 px-1 font-medium text-white dark:bg-red-700"
+            title={`Poniżej marży wymaganej ${percentFormat.format(required ?? 0)}% - cena sugerowana obok`}
+          >
+            {percentFormat.format(margin)}%
+          </span>
+        )
+      }
+      const value = (
+        <span
+          className={cn(margin < 0 && 'font-medium text-destructive')}
+          title={required !== null ? `Marża wymagana ${percentFormat.format(required)}%` : undefined}
+        >
+          {percentFormat.format(margin)}%
+        </span>
+      )
+      if (!canSellSmaller(row)) return value
+      // Owoce i warzywa z marżą od 45%: można sprzedawać w mniejszych ilościach; klik otwiera podział ilości.
+      const hint = `Marża od ${SMALLER_QUANTITIES_MARGIN}% na owocach i warzywach: artykuł może być sprzedawany na mniejsze ilości`
+      return (
+        <span className="flex items-center justify-end gap-1">
+          {onSplitQuantity && canSplitQuantity(row) ? (
+            <button
+              type="button"
+              onClick={() => onSplitQuantity(row)}
+              title={`${hint}. Kliknij, żeby podzielić ilość.`}
+              aria-label={hint}
+              className="-my-1 grid h-5 shrink-0 place-items-center rounded bg-emerald-300 px-1 text-emerald-950 hover:bg-emerald-400 dark:bg-emerald-800 dark:text-emerald-50 dark:hover:bg-emerald-700"
+            >
+              <SplitIcon className="size-[1em]" />
+            </button>
+          ) : (
+            <span
+              title={hint}
+              className="grid h-5 shrink-0 place-items-center rounded bg-emerald-300 px-1 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50"
+            >
+              <SplitIcon aria-label={hint} className="size-[1em]" />
+            </span>
+          )}
+          {value}
+        </span>
+      )
+    }
+    case 'suggestedPrice': {
+      if (service) return null
+      const price = suggestedPrice(row, pricing)
+      if (price === null) return null
+      if (cadencierPrice(row) !== null) {
+        return (
+          <span
+            className="font-bold text-blue-700 dark:text-blue-300"
+            title="CENA_CAD z kartoteki - cena narzucona przez centralę"
+          >
+            {formatMoney(price)}
+          </span>
+        )
+      }
+      const required = requiredMargin(row, pricing)
+      return (
+        <span
+          className={cn(belowRequiredMargin(row, pricing) && 'font-semibold')}
+          title={`Cena brutto dla marży wymaganej ${percentFormat.format(required ?? 0)}%`}
+        >
+          {formatMoney(price)}
+        </span>
       )
     }
     case 'region':
@@ -646,6 +1136,8 @@ function CellContent({ row, column, names, state }: { row: DataEntryRow; column:
       const code = levelCode(row, column)
       if (code === null) {
         if (column !== 'subfamily') return null
+        if (service) return null
+        if (row.nomenclaturePrefix) return <span className="text-muted-foreground">wybierz podrodzinę</span>
         if (state === 'TO_CHECK') {
           return <span className="font-medium">Wybierz z {row.suggestion?.proposals.length ?? 0} propozycji</span>
         }
@@ -653,17 +1145,22 @@ function CellContent({ row, column, names, state }: { row: DataEntryRow; column:
       }
       return (
         <span title={`${code} ${names.get(code) ?? ''}`}>
-          <span className="text-muted-foreground">{code}</span> {names.get(code)}
+          <span className="opacity-70">{code}</span> {names.get(code)}
         </span>
       )
     }
     case 'unit':
       return row.unit
+    case 'stock':
+      if (row.stock == null) return null
+      return <span className={cn(row.stock < 0 && 'font-medium text-destructive')}>{formatQuantity(row.stock)}</span>
+    case 'rotation':
+      return row.rotation == null ? null : formatQuantity(row.rotation)
     case 'netContent': {
       const mismatch = measureMismatch(row) || (row.suggestion?.unitMismatch && !row.edited.netContent)
       return (
         <span
-          className={cn(mismatch && 'rounded bg-amber-100 px-1 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200')}
+          className={cn(mismatch && 'rounded bg-amber-400 px-1 text-amber-950 dark:bg-amber-600 dark:text-amber-50')}
           title={mismatch ? 'Waga nie zgadza się z miarą w nazwie - sprawdź' : undefined}
         >
           {weightFormat.format(row.netContent)}

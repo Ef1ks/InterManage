@@ -1,12 +1,16 @@
 package com.intermanage.backend.sales.mapper;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesImportResponse;
@@ -23,6 +27,16 @@ public interface SalesMapper {
     @Mapping(target = "reportGeneratedAt", source = "product.lastSeenImport.reportGeneratedAt")
     @Mapping(target = "nomenclaturePath", source = "path")
     SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path);
+
+    @Mapping(target = "purchasePrice", expression = "java(unitPrice(delivery))")
+    ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery);
+
+    /** Cena zakupu netto sztuki (kg) z sumy linii przyjęcia, do 4 miejsc jak w raporcie. */
+    default BigDecimal unitPrice(DocumentLineRepository.ArticleDelivery delivery) {
+        BigDecimal quantity = delivery.getQuantity();
+        return quantity == null || quantity.signum() == 0 ? null
+                : delivery.getPurchaseValue().divide(quantity, 4, RoundingMode.HALF_UP);
+    }
 
     /** Budżet rejonu; {@code budget} pusty = rejon bez ustawionego budżetu. */
     @Mapping(target = "regionCode", source = "regionCode")

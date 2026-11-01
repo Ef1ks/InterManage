@@ -159,7 +159,7 @@ function AutoInvoiceMatchingContent({
       ) : (
         <div className="max-h-[60vh] overflow-auto rounded-lg border">
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableHeader className="sticky top-0 z-10 bg-popover">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10 pl-4">
                   <input

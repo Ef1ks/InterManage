@@ -27,7 +27,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
-import { PROTO_FOLDER } from '@/features/deli-order/api'
 import {
   incomingTransferExportPath,
   useIncomingTransfer,
@@ -46,6 +45,7 @@ import {
 } from '@/features/documents/format'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError, downloadFile } from '@/lib/api'
+import { useProtoFolder } from '@/lib/proto-files'
 import { folderSavingSupported, saveApiFileToFolder, useSavedFolder } from '@/lib/saved-folders'
 import { matchesSearch } from '@/lib/search'
 import type { IncomingTransfer } from '@/lib/types'
@@ -368,8 +368,9 @@ const DOWNLOADS = [
 
 /** Pobranie pliku przyjęcia w przyjętych ilościach albo zapis PROTO6 w folderze programu sklepu. */
 function TransferDownloads({ storeId, transferId }: { storeId: string; transferId: string }) {
+  const protoFolder = useProtoFolder(storeId)
   const [pending, setPending] = useState(false)
-  const folder = useSavedFolder(PROTO_FOLDER.key)
+  const folder = useSavedFolder(protoFolder.key)
 
   const run = async (action: () => Promise<void>) => {
     setPending(true)
@@ -394,11 +395,11 @@ function TransferDownloads({ storeId, transferId }: { storeId: string; transferI
   const saveToFolder = () =>
     run(async () => {
       if (!folder.name) {
-        if (PROTO_FOLDER.suggestedPath) navigator.clipboard?.writeText(PROTO_FOLDER.suggestedPath).catch(() => {})
+        if (protoFolder.suggestedPath) navigator.clipboard?.writeText(protoFolder.suggestedPath).catch(() => {})
         if (!(await folder.pick())) return
       }
       const path = incomingTransferExportPath(storeId, transferId, 'proto')
-      toast.success(`Zapisano ${await saveApiFileToFolder(PROTO_FOLDER.key, path, 'przyjecie.Traite0')}`)
+      toast.success(`Zapisano ${await saveApiFileToFolder(protoFolder.key, path, 'przyjecie.Traite0')}`)
     })
 
   return (
@@ -427,7 +428,7 @@ function TransferDownloads({ storeId, transferId }: { storeId: string; transferI
                 <span className="text-xs text-muted-foreground">
                   {folder.name
                     ? 'Folder zapamiętany w przeglądarce'
-                    : `Wybierz folder raz, np. ${PROTO_FOLDER.suggestedPath} (ścieżka w schowku)`}
+                    : `Wybierz folder raz, np. ${protoFolder.suggestedPath} (ścieżka w schowku)`}
                 </span>
               </span>
             </DropdownMenuItem>

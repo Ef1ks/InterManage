@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type { DateRange, Periods } from '@/features/sales/periods'
 import { api, ApiError, downloadFile, printFile } from '@/lib/api'
 import type {
+  ArticleDelivery,
   CadencierImport,
   CadencierOverview,
   DeliCostsOverview,
@@ -25,13 +26,20 @@ import type {
 
 /** Raporty liczą się z zapisanej sprzedaży sklepu, więc sklep jest częścią klucza. */
 export const reportsKey = (storeId: string) => ['stores', storeId, 'reports'] as const
+/**
+ * Raporty liczą się z importów sprzedaży i dokumentów; import (jak każda mutacja) unieważnia wszystkie zapytania, więc
+ * wynik może zostać świeży dłużej: powrót do raportu albo poprzedniego okresu nie liczy go od nowa w bazie.
+ */
+const REPORT_STALE_TIME = 10 * 60_000
+
 const reportsPath = (storeId: string) => `/stores/${storeId}/reports`
 
 /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport. */
-export function useSalesReportsOverview(storeId: string) {
+export function useSalesReportsOverview(storeId: string, enabled = true) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'overview'],
     queryFn: () => api<SalesReportsOverview>(reportsPath(storeId)),
+    enabled,
   })
 }
 
@@ -83,6 +91,7 @@ export function useSalesComparison(
 ) {
   return useQuery({
     queryKey: salesComparisonKey(storeId, kind, periods, filter, parent, unassigned),
+    staleTime: REPORT_STALE_TIME,
     queryFn: () => {
       const params = new URLSearchParams({
         previousFrom: periods.previous.from,
@@ -124,9 +133,12 @@ export function useSalesHistory(
   target: SalesChartTarget,
   range: DateRange,
   filter: string[],
+  enabled = true,
 ) {
   return useQuery({
+    enabled,
     queryKey: [...reportsKey(storeId), `${kind}-history`, target.kind === 'article' ? target.itm8 : target, range, filter],
+    staleTime: REPORT_STALE_TIME,
     queryFn: () => {
       const params = new URLSearchParams({ from: range.from, to: range.to })
       if (target.kind === 'article') {
@@ -139,6 +151,15 @@ export function useSalesHistory(
       return api<SalesHistory>(`${reportsPath(storeId)}/${kind}-history?${params}`)
     },
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej. */
+export function useArticleDeliveries(storeId: string, itm8: string | null) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article', itm8, 'deliveries'],
+    queryFn: () => api<ArticleDelivery[]>(`${reportsPath(storeId)}/articles/${itm8}/deliveries`),
+    enabled: itm8 != null,
   })
 }
 
@@ -162,6 +183,7 @@ export function useSalesArticle(storeId: string, itm8: string | null) {
 export function usePeriodSummary(storeId: string, range: DateRange, enabled: boolean) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'period-summary', range],
+    staleTime: REPORT_STALE_TIME,
     queryFn: () =>
       api<PeriodSummary>(`${reportsPath(storeId)}/period-summary?${new URLSearchParams({ from: range.from, to: range.to })}`),
     enabled,
@@ -193,6 +215,7 @@ export type MonthRange = { from: string; to: string }
 export function useGratisReport(storeId: string, range: MonthRange) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'gratis', range],
+    staleTime: REPORT_STALE_TIME,
     queryFn: () => api<GratisReport>(`${reportsPath(storeId)}/gratis?${new URLSearchParams(range)}`),
     placeholderData: keepPreviousData,
   })

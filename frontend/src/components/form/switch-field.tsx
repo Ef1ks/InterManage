@@ -19,7 +19,7 @@ export function SwitchField({ label, description, checked, onCheckedChange, disa
     <label
       htmlFor={id}
       className={cn(
-        'flex cursor-pointer items-center justify-between gap-4 rounded-xl border bg-background px-3 py-3 transition-colors duration-150 hover:bg-muted/50 has-disabled:cursor-not-allowed has-disabled:opacity-60',
+        'flex cursor-pointer items-center justify-between gap-4 rounded-xl border bg-background px-3 py-3 transition-colors duration-150 hover:bg-muted/50 dark:bg-input/30 dark:hover:bg-input/50 has-disabled:cursor-not-allowed has-disabled:opacity-60',
         className,
       )}
     >

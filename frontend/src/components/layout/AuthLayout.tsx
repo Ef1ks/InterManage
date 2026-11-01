@@ -15,9 +15,9 @@ export function AuthLayout({ title, description, children, footer }: Props) {
       <main className="flex flex-1 items-center justify-center py-10">
         <div className="w-full max-w-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300 sm:max-w-md motion-reduce:animate-none">
           <div className="mb-8 flex justify-center sm:mb-10">
-            <img src="/hero.webp" alt="Intermanage" className="h-12 w-auto sm:h-16" />
+            <img src="/hero.webp" alt="Intermanage" className="h-12 w-auto sm:h-16 dark:[filter:invert(1)_hue-rotate(180deg)_saturate(2.4)_brightness(0.92)]" />
           </div>
-          <div className="rounded-2xl bg-background p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.12)] ring-1 ring-foreground/6 sm:p-8">
+          <div className="rounded-2xl bg-card p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.12)] ring-1 ring-foreground/6 sm:p-8">
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
             <div className="mt-6">{children}</div>

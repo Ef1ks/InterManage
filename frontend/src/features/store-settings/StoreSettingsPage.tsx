@@ -2,8 +2,10 @@ import { useState } from 'react'
 import {
   CheckIcon,
   ChevronRightIcon,
+  FileOutputIcon,
   HandshakeIcon,
   type LucideIcon,
+  PercentIcon,
   ScaleIcon,
   StoreIcon,
   TargetIcon,
@@ -22,14 +24,18 @@ import { Card } from '@/components/ui/card'
 import { useCan } from '@/features/auth/api'
 import { countFormat } from '@/features/documents/format'
 import { useCadencier, usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
-import { useStorePartnerActions, useStorePartners } from '@/features/store-settings/api'
+import { useNomenclatureMargins, useStorePartnerActions, useStorePartners } from '@/features/store-settings/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { CadencierUpload } from '@/features/store-settings/CadencierUpload'
+import { NomenclatureMargins } from '@/features/store-settings/NomenclatureMargins'
+import { PriceRoundingRules } from '@/features/store-settings/PriceRoundingRules'
 import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCategories'
 import { PriceCheckSettingsForm } from '@/features/store-settings/PriceCheckSettingsForm'
+import { ProtoSettingsForm } from '@/features/store-settings/ProtoSettingsForm'
 import { RegionBudgets } from '@/features/store-settings/RegionBudgets'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
+import { PROTOCOLS, useProtoSettings } from '@/lib/proto-files'
 import type { StorePartner, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -41,12 +47,14 @@ const paths = storeSettingsPaths
 /**
  * Ustawienia wybranego sklepu: kafelek na każde ustawienie, samo ustawienie na osobnej podstronie. Budżet rejonów
  * do podsumowania sprzedaży i strat i minimalna marża do raportu zakupu bazowego poza bazą ({@code SALES:EDIT}) i sklepy zaprzyjaźnione do ruchów międzymagazynowych
- * ({@code DOCUMENTS:EDIT}); każde tylko z jego uprawnieniem.
+ * ({@code DOCUMENTS:EDIT}), pliki PROTO (edycja wprowadzania danych, dokumentów albo zamówień garmażu); każde tylko z jego
+ * uprawnieniem.
  */
 export function StoreSettingsPage() {
   const store = useCurrentStore()
   const canEditSales = useCan('SALES', 'EDIT')
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
+  const canEditProto = useCanEditProtoFiles()
   if (!store) {
     return (
       <>
@@ -55,11 +63,11 @@ export function StoreSettingsPage() {
       </>
     )
   }
-  if (!canEditSales && !canEditDocuments) {
+  if (!canEditSales && !canEditDocuments && !canEditProto) {
     return (
       <>
         <PageHeader title="Ustawienia sklepu" description={storeLabel(store)} />
-        <FullPageMessage title="Brak uprawnień" description="Ustawienia sklepu wymagają edycji sprzedaży albo dokumentów." inline />
+        <FullPageMessage title="Brak uprawnień" description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych albo zamówień garmażu." inline />
       </>
     )
   }
@@ -70,7 +78,13 @@ export function StoreSettingsPage() {
         <Route
           index
           element={
-            <SettingsGrid key={store.id} storeId={store.id} canEditSales={canEditSales} canEditDocuments={canEditDocuments} />
+            <SettingsGrid
+              key={store.id}
+              storeId={store.id}
+              canEditSales={canEditSales}
+              canEditDocuments={canEditDocuments}
+              canEditProto={canEditProto}
+            />
           }
         />
         {canEditSales && (
@@ -90,6 +104,31 @@ export function StoreSettingsPage() {
                 </div>
                 <div className="max-w-3xl">
                   <RegionBudgets key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
+        {canEditSales && (
+          <Route
+            path="marze"
+            element={
+              <section aria-labelledby="margins-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="margins-heading" className="text-lg font-semibold tracking-tight">
+                    Marża wymagana
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Jaką marżę (% od sprzedaży netto) chcemy osiągać na nomenklaturze: na całym rejonie albo osobno na
+                    rodzinie i podrodzinie. We wprowadzaniu danych marża artykułu poniżej progu jest czerwona, a kolumna
+                    „Cena sug.” podaje cenę sprzedaży, przy której artykuł go osiąga, zaokrągloną według przedziałów
+                    poniżej (artykuł z CENA_CAD ma w niej cenę cadencier).
+                  </p>
+                </div>
+                <div className="grid max-w-3xl gap-4">
+                  <PriceRoundingRules key={store.id} storeId={store.id} />
+                  <NomenclatureMargins key={store.id} storeId={store.id} />
                 </div>
               </section>
             }
@@ -131,10 +170,40 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        {canEditProto && (
+          <Route
+            path="pliki-proto"
+            element={
+              <section aria-labelledby="proto-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="proto-heading" className="text-lg font-semibold tracking-tight">
+                    Pliki PROTO
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Pliki, które program sklepu sam wczytuje z folderu: PROTO6 z zamówień garmażu i przyjęć MM oraz
+                    protokoły PROTO1–PROTO6 z wprowadzania danych. Protokoły, z których sklep nie korzysta, można ukryć.
+                  </p>
+                </div>
+                <div className="max-w-2xl">
+                  <ProtoSettingsForm key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         <Route path="*" element={<Navigate to={paths.overview} replace />} />
       </Routes>
     </>
   )
+}
+
+/** Pliki PROTO ustawia każdy, kto je zapisuje: wprowadzanie danych, dokumenty (przyjęcia MM) i zamówienia garmażu. */
+function useCanEditProtoFiles() {
+  const dataEntry = useCan('DATA_ENTRY', 'EDIT')
+  const documents = useCan('DOCUMENTS', 'EDIT')
+  const deliOrders = useCan('DELI_ORDERS', 'EDIT')
+  return dataEntry || documents || deliOrders
 }
 
 function BackToSettings() {
@@ -150,16 +219,22 @@ function SettingsGrid({
   storeId,
   canEditSales,
   canEditDocuments,
+  canEditProto,
 }: {
   storeId: string
   canEditSales: boolean
   canEditDocuments: boolean
+  canEditProto: boolean
 }) {
   const budgets = useRegionBudgets(storeId, canEditSales)
   const priceCheck = usePriceCheckSettings(storeId, canEditSales)
   const cadencier = useCadencier(storeId, canEditSales)
+  const margins = useNomenclatureMargins(storeId, canEditSales)
   const partners = useStorePartners(storeId, canEditDocuments)
+  const proto = useProtoSettings(storeId, canEditProto)
+  const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
   const budgeted = budgets.data?.filter((budget) => budget.marginPercent != null || budget.maxLossPercent != null).length
+  const withMargin = margins.data?.filter((item) => item.marginPercent != null).length
   const accepted = partners.data?.partners.filter((partner) => partner.acceptedAt).length
   const pending = partners.data?.partners.filter((partner) => !partner.acceptedAt && !partner.sent).length ?? 0
 
@@ -176,6 +251,21 @@ function SettingsGrid({
               ? budgeted
                 ? `Budżet ma ${budgeted} z ${budgets.data.length} rejonów`
                 : 'Budżet nie jest jeszcze ustawiony'
+              : ' '
+          }
+        />
+      )}
+      {canEditSales && (
+        <SettingsTile
+          to={paths.margins}
+          icon={PercentIcon}
+          title="Marża wymagana"
+          description="Marża do osiągnięcia na nomenklaturze i zaokrąglanie cen sugerowanych we wprowadzaniu danych."
+          status={
+            margins.data
+              ? withMargin
+                ? `Ustawiona na ${countFormat.format(withMargin)} pozycjach`
+                : 'Marże nie są jeszcze ustawione'
               : ' '
           }
         />
@@ -208,6 +298,15 @@ function SettingsGrid({
           description="Sklepy, dla których można wystawiać ruchy międzymagazynowe do wprowadzenia u nich."
           status={partners.data ? (accepted ? `Zaprzyjaźnione: ${accepted}` : 'Brak sklepów zaprzyjaźnionych') : ' '}
           alert={pending > 0 ? `Zaproszenia do akceptacji: ${pending}` : undefined}
+        />
+      )}
+      {canEditProto && (
+        <SettingsTile
+          to={paths.protoFiles}
+          icon={FileOutputIcon}
+          title="Pliki PROTO"
+          description="Folder plików dla programu sklepu i protokoły dostępne we wprowadzaniu danych."
+          status={proto.data ? `${proto.data.folderPath} · protokoły: ${visibleProtocols} z ${PROTOCOLS.length}` : ' '}
         />
       )}
     </div>

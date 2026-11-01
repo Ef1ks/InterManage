@@ -121,14 +121,20 @@ function saveBlob(blob: Blob, fileName: string) {
  * jak {@link downloadFile}.
  */
 export async function downloadPostedFile(path: string, json: unknown, fallbackName = 'plik'): Promise<void> {
+  const { fileName, blob } = await fetchPostedFile(path, json, fallbackName)
+  saveBlob(blob, fileName)
+}
+
+/** Plik z odpowiedzi na POST z JSON-em, bez zapisu (np. do zapisania w wybranym folderze). */
+export async function fetchPostedFile(
+  path: string,
+  json: unknown,
+  fallbackName = 'plik',
+): Promise<{ fileName: string; blob: Blob }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = await csrfToken()
   if (token) headers['X-XSRF-TOKEN'] = token
-  const { fileName, blob } = await namedFile(
-    await fetchFile(path, { method: 'POST', headers, body: JSON.stringify(json) }),
-    fallbackName,
-  )
-  saveBlob(blob, fileName)
+  return namedFile(await fetchFile(path, { method: 'POST', headers, body: JSON.stringify(json) }), fallbackName)
 }
 
 /** Plik z API z nazwą z nagłówka Content-Disposition (np. do zapisu w wybranym folderze). */

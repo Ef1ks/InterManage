@@ -212,6 +212,11 @@ public class ProductImportService {
             }
         }
 
+        // CENA_CAD obowiązuje tylko z bieżącego raportu: artykuły spoza pliku ją tracą.
+        for (Product product : catalog.productsByItm8.values()) {
+            product.missingFrom(productImport);
+        }
+
         products.saveAll(newProducts);
         productEans.saveAll(newPairs);
         eanChanges.saveAll(changes);

@@ -1,39 +1,57 @@
+import { ArrowLeftIcon, CheckIcon } from 'lucide-react'
 import { useState } from 'react'
 
 import { SearchInput } from '@/components/SearchInput'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatMoney } from '@/features/documents/format'
 import { type KsefFilters, useKsefInvoices, useKsefOverview } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
-import type { KsefInvoice } from '@/lib/types'
+import { ApiError } from '@/lib/api'
+import type { DataEntryInvoice, KsefInvoice } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
 
+import { useInvoiceLines } from './api'
+
 const SORT = { key: 'issueDate', direction: 'desc' } as const
 
-/** Faktury zakupowe sklepu z KSeF (bez korekt), najnowsze na górze; wyszukiwanie po numerze, dostawcy i NIP-ie. */
+/**
+ * Wczytanie faktury w dwóch krokach: wybór faktury z KSeF (bez korekt, najnowsze na górze), potem skąd wziąć EAN
+ * pozycji (GTIN, indeks dostawcy, dodatkowy opis, nazwa albo automatycznie) z podglądem, co trafi do tabeli.
+ */
 export function InvoicePickerDialog({
   storeId,
   open,
   onOpenChange,
-  onPick,
+  onConfirm,
 }: {
   storeId: string
   open: boolean
   onOpenChange: (open: boolean) => void
-  onPick: (invoice: KsefInvoice) => void
+  onConfirm: (invoice: DataEntryInvoice) => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-4 p-6 sm:max-w-2xl">
-        {open && <PickerBody storeId={storeId} onPick={onPick} />}
+      <DialogContent className="gap-4 p-6 sm:max-w-3xl">
+        {/* Kroki montowane tylko na czas otwarcia: każde otwarcie zaczyna od listy faktur. */}
+        {open && <Steps storeId={storeId} onConfirm={onConfirm} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function PickerBody({ storeId, onPick }: { storeId: string; onPick: (invoice: KsefInvoice) => void }) {
+function Steps({ storeId, onConfirm }: { storeId: string; onConfirm: (invoice: DataEntryInvoice) => void }) {
+  const [picked, setPicked] = useState<KsefInvoice | null>(null)
+  return picked ? (
+    <SourceStep storeId={storeId} invoice={picked} onBack={() => setPicked(null)} onConfirm={onConfirm} />
+  ) : (
+    <ListStep storeId={storeId} onPick={setPicked} />
+  )
+}
+
+function ListStep({ storeId, onPick }: { storeId: string; onPick: (invoice: KsefInvoice) => void }) {
   const [query, setQuery] = useState('')
   const debounced = useDebouncedValue(query.trim(), 300)
   const filters: KsefFilters = {
@@ -58,9 +76,7 @@ function PickerBody({ storeId, onPick }: { storeId: string; onPick: (invoice: Ks
     <>
       <DialogHeader>
         <DialogTitle className="text-lg">Wczytaj fakturę z KSeF</DialogTitle>
-        <DialogDescription>
-          Pozycje faktury trafią do tabeli: znane artykuły z danymi z kartoteki, nowe do uzupełnienia.
-        </DialogDescription>
+        <DialogDescription>Wybierz fakturę, a w następnym kroku pole, z którego wziąć EAN pozycji.</DialogDescription>
       </DialogHeader>
 
       <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: numer faktury, dostawca, NIP" />
@@ -111,6 +127,152 @@ function PickerBody({ storeId, onPick }: { storeId: string; onPick: (invoice: Ks
           </ul>
         )}
       </div>
+    </>
+  )
+}
+
+const positions = (count: number) =>
+  count === 1 ? 'pozycja' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'pozycje' : 'pozycji'
+
+function SourceStep({
+  storeId,
+  invoice,
+  onBack,
+  onConfirm,
+}: {
+  storeId: string
+  invoice: KsefInvoice
+  onBack: () => void
+  onConfirm: (invoice: DataEntryInvoice) => void
+}) {
+  const [source, setSource] = useState('AUTO')
+  const lines = useInvoiceLines(storeId, invoice.id, source)
+  const data = lines.data
+  const total = data?.lines.length ?? 0
+  const sourceLabels = new Map(data?.sources.map((item) => [item.key, item.label]))
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="text-lg">Faktura {invoice.invoiceNumber}</DialogTitle>
+        <DialogDescription>
+          {invoice.sellerName ?? invoice.sellerNip} · {formatDate(invoice.issueDate)}. Skąd wziąć EAN, po którym szukamy
+          artykułu w kartotece?
+        </DialogDescription>
+      </DialogHeader>
+
+      {lines.isError ? (
+        <p className="rounded-xl border px-4 py-6 text-center text-sm text-destructive">
+          {lines.error instanceof ApiError ? lines.error.message : 'Nie udało się wczytać faktury.'}
+        </p>
+      ) : !data ? (
+        <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+      ) : (
+        <>
+          <div role="radiogroup" aria-label="Źródło EAN" className="grid gap-2 sm:grid-cols-2">
+            {data.sources.map((item) => {
+              const checked = item.key === source
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onClick={() => setSource(item.key)}
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors duration-150 outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/30',
+                    checked && 'border-foreground bg-muted/60',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border',
+                      checked && 'border-foreground bg-foreground text-background',
+                    )}
+                  >
+                    {checked && <CheckIcon className="size-3" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">
+                      {item.label}
+                      {item.key === 'AUTO' && <span className="font-normal text-muted-foreground"> (zalecane)</span>}
+                    </span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">
+                      {item.key === 'AUTO'
+                        ? `Pierwszy kod znany w kartotece z dowolnego pola · ${item.matched} z ${total} w kartotece`
+                        : `Kod ma ${item.filled} z ${total} ${positions(total)} · ${item.matched} w kartotece`}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div
+            className={cn(
+              'max-h-[38svh] overflow-y-auto rounded-xl border transition-opacity duration-150',
+              lines.isPlaceholderData && 'opacity-60',
+            )}
+          >
+            <table className="w-full text-sm tabular-nums">
+              <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Pozycja z faktury</th>
+                  <th className="px-3 py-2 text-left font-medium">EAN</th>
+                  <th className="px-3 py-2 text-left font-medium">Kartoteka</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {data.lines.map((line, index) => (
+                  <tr key={index}>
+                    <td className="max-w-80 truncate px-3 py-1.5" title={line.invoiceName ?? undefined}>
+                      {line.invoiceName}
+                    </td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      {line.ean ??
+                        (line.fallbackCode ? (
+                          <span
+                            className="text-muted-foreground italic"
+                            title={`Nie EAN, kod z faktury: ${line.fallbackSource ?? ''}`}
+                          >
+                            {line.fallbackCode}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">brak</span>
+                        ))}
+                      {line.ean && data.source === 'AUTO' && line.eanSource && line.eanSource !== 'GTIN' && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          z: {sourceLabels.get(line.eanSource) ?? line.eanSource}
+                        </span>
+                      )}
+                    </td>
+                    <td className="max-w-64 truncate px-3 py-1.5 text-muted-foreground">
+                      {line.product ? (
+                        <span className="text-foreground">{line.product.name}</span>
+                      ) : line.ean || line.fallbackCode ? (
+                        'nowy artykuł'
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <DialogFooter>
+        <Button variant="ghost" onClick={onBack}>
+          <ArrowLeftIcon />
+          Inna faktura
+        </Button>
+        <Button onClick={() => data && onConfirm(data)} disabled={!data || lines.isPlaceholderData}>
+          Wczytaj do tabeli
+        </Button>
+      </DialogFooter>
     </>
   )
 }
