@@ -1,4 +1,4 @@
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
@@ -7,6 +7,14 @@ import type {
   DataEntryCatalogListPage,
   DataEntryCatalogProduct,
   DataEntryInvoice,
+  DataEntryInvoiceItem,
+  DataEntryInvoicePage,
+  DataEntrySkippedSupplier,
+  DataEntryXmlDocument,
+  DataEntryXmlExport,
+  InvoiceBulkResult,
+  InvoiceMarkKind,
+  SupplierRuleMode,
   NomenclatureItem,
   SuggestionResponse,
   SuggestionStatus,
@@ -43,6 +51,186 @@ export function useInvoiceLines(storeId: string, invoiceId: string | null, sourc
     placeholderData: (previous) => (previous?.invoiceId === invoiceId ? previous : undefined),
     staleTime: 60_000,
     retry: false,
+  })
+}
+
+/** 100 ostatnich plików XML zapisanych w sklepie przez „Zapisz XML”, od najnowszego. */
+export function useXmlHistory(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'data-entry', 'xml-history'],
+    queryFn: () => api<DataEntryXmlExport[]>(`${path(storeId)}/xml-history`),
+    enabled,
+  })
+}
+
+const temporaryKey = (storeId: string) => ['stores', storeId, 'data-entry', 'xml-temporary'] as const
+
+/** Zapisy tymczasowe sklepu (najwyżej 10), od najnowszego. */
+export function useTemporaryXml(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: temporaryKey(storeId),
+    queryFn: () => api<DataEntryXmlExport[]>(`${path(storeId)}/xml-temporary`),
+    enabled,
+  })
+}
+
+/** „Zapisz tymczasowo”: plik XML z tabeli i cała tabela (`draft`, JSON), bez zapisu na dysku. */
+export function useSaveTemporaryXml(storeId: string) {
+  return useMutation({
+    mutationFn: (body: { export: ExportPayload; draft: string }) =>
+      api<DataEntryXmlExport>(`${path(storeId)}/xml-temporary`, { method: 'POST', json: body }),
+  })
+}
+
+/** Usunięcie zapisu tymczasowego (znacznik) i „Przywróć”; obie zwracają listę po zmianie. */
+export function useTemporaryXmlChange(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, restore }: { id: string; restore: boolean }) =>
+      api<DataEntryXmlExport[]>(`${path(storeId)}/xml-temporary/${id}${restore ? '/restore' : ''}`, {
+        method: restore ? 'POST' : 'DELETE',
+      }),
+    onSuccess: (list) => queryClient.setQueryData(temporaryKey(storeId), list),
+    meta: { invalidates: false },
+  })
+}
+
+/** Plik z historii albo zapis tymczasowy jako dokument do tabeli. */
+export function fetchXmlHistoryDocument(storeId: string, id: string) {
+  return api<DataEntryXmlDocument>(`${path(storeId)}/xml-history/${id}`)
+}
+
+export const xmlHistoryFilePath = (storeId: string, id: string) => `${path(storeId)}/xml-history/${id}/file`
+
+/** Plik XML faktury z dysku jako dokument do tabeli (nic nie zapisuje). */
+export function readXmlFile(storeId: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api<DataEntryXmlDocument>(`${path(storeId)}/xml-documents`, { method: 'POST', formData })
+}
+
+/** Filtry okna wczytywania faktur (zapamiętane w przeglądarce, bez wyszukiwania). */
+export type InvoicePickerFilters = {
+  kind: 'INVOICES' | 'CORRECTIONS'
+  /** NEW: do wczytania, DONE: wczytane, pobrane i nie moje, ALL: wszystkie. */
+  status: 'NEW' | 'DONE' | 'ALL'
+  /** ALL: IDWew sklepu i bez IDWew (domyślnie), OWN: tylko IDWew sklepu, NONE: tylko bez IDWew. */
+  internalId: 'ALL' | 'OWN' | 'NONE'
+  showSkipped: boolean
+}
+
+const invoicesKey = (storeId: string) => ['stores', storeId, 'data-entry', 'invoices'] as const
+
+/** Faktury albo korekty do wczytania, strony po 100 (kolejne przy przewijaniu), najnowsze na górze. */
+export function useDataEntryInvoices(storeId: string, filters: InvoicePickerFilters, query: string) {
+  return useInfiniteQuery({
+    queryKey: [...invoicesKey(storeId), filters, query],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        page: String(pageParam),
+        kind: filters.kind,
+        status: filters.status,
+        internalId: filters.internalId,
+        showSkipped: String(filters.showSkipped),
+      })
+      if (query) params.set('query', query)
+      return api<DataEntryInvoicePage>(`${path(storeId)}/invoices?${params}`)
+    },
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Lista w oknie wczytywania po zmianie statusu faktury (znacznik, pobranie, wydruk). */
+export function useRefreshDataEntryInvoices(storeId: string) {
+  const queryClient = useQueryClient()
+  return () => queryClient.invalidateQueries({ queryKey: invoicesKey(storeId) })
+}
+
+/** Znacznik faktury (wczytana, nie moja) albo powrót na listę "Do wczytania" ({@code kind} = null). */
+export function useMarkInvoice(storeId: string) {
+  const refresh = useRefreshDataEntryInvoices(storeId)
+  return useMutation({
+    mutationFn: ({ invoiceId, kind }: { invoiceId: string; kind: InvoiceMarkKind | null }) =>
+      kind
+        ? api<DataEntryInvoiceItem>(`${path(storeId)}/invoices/${invoiceId}/marks`, { method: 'POST', json: { kind } })
+        : api<DataEntryInvoiceItem>(`${path(storeId)}/invoices/${invoiceId}/marks`, { method: 'DELETE' }),
+    onSuccess: () => refresh(),
+    meta: { invalidates: false },
+  })
+}
+
+export type InvoiceBulkAction = 'LOADED' | 'NOT_MINE' | 'RESTORE'
+
+/** Zaznaczone faktury: podane albo wszystkie pasujące do filtrów listy bez wykluczonych. */
+export type InvoiceBulkSelection =
+  | { invoiceIds: string[] }
+  | { filter: InvoicePickerFilters & { query: string }; excludeIds: string[] }
+
+/** Działanie na zaznaczonych fakturach (wczytane, nie moje, z powrotem do wczytania) i jego „Cofnij”. */
+export function useBulkInvoices(storeId: string) {
+  const refresh = useRefreshDataEntryInvoices(storeId)
+  const run = useMutation({
+    mutationFn: ({ action, selection }: { action: InvoiceBulkAction; selection: InvoiceBulkSelection }) =>
+      api<InvoiceBulkResult>(`${path(storeId)}/invoices/bulk`, { method: 'POST', json: { action, ...selection } }),
+    onSuccess: () => refresh(),
+    meta: { invalidates: false },
+  })
+  const undo = useMutation({
+    mutationFn: (result: InvoiceBulkResult) =>
+      api<void>(`${path(storeId)}/invoices/bulk/undo`, {
+        method: 'POST',
+        json: { createdMarkIds: result.createdMarkIds, deletedMarkIds: result.deletedMarkIds },
+      }),
+    onSuccess: () => refresh(),
+    meta: { invalidates: false },
+  })
+  return { run, undo }
+}
+
+/** Wydruk faktury: podstawowy (pozycje, opis, dokumenty WZ) albo pełna faktura. */
+export type InvoicePrintVariant = 'BASIC' | 'FULL'
+
+export const invoicePdfPath = (storeId: string, invoiceId: string, variant: InvoicePrintVariant) =>
+  `${path(storeId)}/invoices/${invoiceId}/pdf?variant=${variant}`
+
+const skippedKey = (storeId: string) => ['stores', storeId, 'data-entry', 'skipped-suppliers'] as const
+
+export function useSkippedSuppliers(storeId: string) {
+  return useQuery({
+    queryKey: skippedKey(storeId),
+    queryFn: () => api<DataEntrySkippedSupplier[]>(`${path(storeId)}/skipped-suppliers`),
+  })
+}
+
+/** Pomijanie dostawcy w oknie wczytywania: dodanie, usunięcie z listy (znacznik) i przywrócenie. */
+export function useSkipSupplier(storeId: string) {
+  const queryClient = useQueryClient()
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: skippedKey(storeId) }),
+      queryClient.invalidateQueries({ queryKey: invoicesKey(storeId) }),
+    ])
+  return useMutation({
+    mutationFn: (
+      action:
+        | { type: 'skip'; sellerNip: string; sellerName: string | null; mode: SupplierRuleMode }
+        | { type: 'unskip'; id: string }
+        | { type: 'restore'; id: string },
+    ) =>
+      action.type === 'skip'
+        ? api<DataEntrySkippedSupplier>(`${path(storeId)}/skipped-suppliers`, {
+            method: 'POST',
+            json: { sellerNip: action.sellerNip, sellerName: action.sellerName, mode: action.mode },
+          })
+        : action.type === 'unskip'
+          ? api<void>(`${path(storeId)}/skipped-suppliers/${action.id}`, { method: 'DELETE' }).then(() => null)
+          : api<DataEntrySkippedSupplier>(`${path(storeId)}/skipped-suppliers/${action.id}/restore`, {
+              method: 'POST',
+            }),
+    onSuccess: () => refresh(),
+    meta: { invalidates: false },
   })
 }
 
@@ -171,6 +359,9 @@ export type ExportPayload = {
   invoiceId: string | null
   invoiceNumber: string | null
   sellerName: string | null
+  /** Bez faktury z KSeF: NIP i data z dokumentu wczytanego z pliku XML. */
+  sellerNip: string | null
+  issueDate: string | null
   rows: {
     suggestionId: string | null
     ean: string | null

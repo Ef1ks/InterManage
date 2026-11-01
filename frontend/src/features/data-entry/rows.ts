@@ -448,22 +448,17 @@ export function normalizeBrand(text: string) {
 
 // ---------- marża
 
-const PIECE_UNITS = new Set(['szt', 'szt.', 'sztuka', 'sztuki', 'sz'])
 const KG_UNITS = new Set(['kg', 'kg.', 'kilogram'])
 
-/** Cena zakupu netto sprzedawanej sztuki; inna jednostka na fakturze (karton, opakowanie) = {@code null}. */
+/**
+ * Cena zakupu netto sprzedawanej sztuki. Przy kg na fakturze razy waga sztuki sprzedawanej w kg; każda inna jednostka
+ * (szt., op., pak, karton) to cena za jedną sztukę z kolumny Ilość, więc opakowanie zbiorcze rozbija się podziałem ilości.
+ */
 export function purchasePerPiece(row: DataEntryRow) {
   if (row.unitNet === null) return null
-  const unit = (row.invoiceUnit ?? 'szt.').trim().toLowerCase()
-  if (PIECE_UNITS.has(unit)) return row.unitNet
-  if (KG_UNITS.has(unit)) return row.unit === 'kg' ? row.unitNet * row.netContent : row.unitNet
-  return null
-}
-
-/** Jednostka na fakturze, przy której marży nie liczymy (np. „op.”); {@code null}, gdy jest w porządku. */
-export function foreignInvoiceUnit(row: DataEntryRow) {
-  if (row.unitNet === null || !row.invoiceUnit) return null
-  return purchasePerPiece(row) === null ? row.invoiceUnit : null
+  const unit = (row.invoiceUnit ?? '').trim().toLowerCase()
+  if (KG_UNITS.has(unit) && row.unit === 'kg') return row.unitNet * row.netContent
+  return row.unitNet
 }
 
 /** Marża % od sprzedaży netto przy obecnej cenie sprzedaży (jak w raportach sprzedaży). */
@@ -517,6 +512,17 @@ export function suggestedPrice(row: DataEntryRow, pricing: Pricing) {
   if (required === null || purchase === null || row.vatPercent === null) return null
   const gross = (purchase / (1 - required / 100)) * (1 + row.vatPercent / 100)
   return roundPrice(Math.ceil(gross * 100 - 1e-6) / 100, pricing.rounding)
+}
+
+/**
+ * Nowy artykuł po potwierdzeniu nomenklatury dostaje cenę sugerowaną jako cenę sprzedaży. Cenę wpisaną ręcznie
+ * zostawia: zmienia tylko pustą albo równą cenie sugerowanej sprzed zmiany ({@code before}).
+ */
+export function withAutoSalePrice(before: DataEntryRow, after: DataEntryRow, pricing: Pricing) {
+  if (after.known || serviceKind(after) !== null || after.subfamilyCode === null) return after
+  if (after.salePrice !== null && after.salePrice !== suggestedPrice(before, pricing)) return after
+  const price = suggestedPrice(after, pricing)
+  return price === null || price === after.salePrice ? after : { ...after, salePrice: price }
 }
 
 /** CENA_CAD artykułu z kartoteki (cena narzucona przez centralę); {@code null}, gdy jej nie ma. */

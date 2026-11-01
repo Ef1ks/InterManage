@@ -141,13 +141,15 @@ function StoreImports({ store }: { store: StoreSummary }) {
         <ReportCard
           id="supplier-report"
           title="Lista dostawców"
-          description="Dostawcy z systemu sklepu, do wyboru przy rejestrowaniu gratisów w Dokumentach."
-          generatedAt={suppliers.isPending ? undefined : (newestReport(suppliers.data?.imports) ?? null)}
+          description="Dostawcy z systemu sklepu. Wgraj ją ponownie, gdy dojdzie nowy dostawca albo zmienią się jego dane."
           meta={
             suppliers.data && (
               <>
                 W bazie {numberFormat.format(suppliers.data.supplierCount)} dostawców
                 {suppliers.data.manualCount > 0 && <>, w tym {numberFormat.format(suppliers.data.manualCount)} dodanych ręcznie</>}
+                {newestReport(suppliers.data.imports) && (
+                  <> · lista z {formatReportDate(newestReport(suppliers.data.imports)!)}</>
+                )}
               </>
             )
           }
@@ -251,8 +253,8 @@ function ReportCard({
   id: string
   title: string
   description: string
-  /** {@code undefined} w trakcie wczytywania historii. */
-  generatedAt: string | null | undefined
+  /** {@code undefined} w trakcie wczytywania historii; bez tego pola karta nie pokazuje aktualności (lista dostawców). */
+  generatedAt?: string | null
   meta?: ReactNode
   children: ReactNode
 }) {

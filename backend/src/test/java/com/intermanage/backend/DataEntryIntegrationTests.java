@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -35,6 +36,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -162,6 +164,9 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.invoiceNumber").value("FV/77/2026"))
                 .andExpect(jsonPath("$.sellerNip").value(SELLER_NIP))
+                // Bez podsumowania stawek sumy z pozycji (VAT wyliczony ze stawek), bez wiersza "przed korektą".
+                .andExpect(jsonPath("$.netTotal").value(295.00))
+                .andExpect(jsonPath("$.vatTotal").value(16.55))
                 // Wiersz "przed korektą" pominięty.
                 .andExpect(jsonPath("$.lines.length()").value(8))
                 .andExpect(jsonPath("$.source").value("AUTO"))
@@ -460,18 +465,21 @@ class DataEntryIntegrationTests {
                 values (?::uuid, '154', 'SERY', 'SERY I CHIPSY SP. Z O.O.', ?)""",
                 storeId, SELLER_NIP);
         // Nagłówek z faktury KSeF i listy dostawców; kod spoza EAN-u (zastępczy z faktury) daje 13 zer.
-        byte[] file = mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
+        String table = """
+                {"invoiceId":"%s","rows":[
+                 {"ean":"%s","quantity":12,"unitNet":2.499,"name":"CHIPSY & PAPRYKA 150G",
+                  "vatPercent":5,"known":false},
+                 {"ean":"Gratis Lipton","quantity":1,"unitNet":0.01,"name":"GRATIS","vatPercent":23,
+                  "known":false}]}""".formatted(invoiceId, CHIPS_EAN);
+        var exported = mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"invoiceId":"%s","rows":[
-                                 {"ean":"%s","quantity":12,"unitNet":2.499,"name":"CHIPSY & PAPRYKA 150G",
-                                  "vatPercent":5,"known":false},
-                                 {"ean":"Gratis Lipton","quantity":1,"unitNet":0.01,"name":"GRATIS","vatPercent":23,
-                                  "known":false}]}""".formatted(invoiceId, CHIPS_EAN)))
+                        .content(table))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         containsString("filename=\"" + number + "_154_FV_77_2026.xml\"")))
-                .andReturn().getResponse().getContentAsByteArray();
+                .andReturn().getResponse();
+        byte[] file = exported.getContentAsByteArray();
+        String exportId = exported.getHeader("X-Xml-Export-Id");
         assertThat(new String(file, Charset.forName("windows-1250"))).isEqualTo("""
                 <?xml version="1.0" encoding="windows-1250"?>
                 <DOKUMENT>
@@ -520,6 +528,116 @@ class DataEntryIntegrationTests {
                 .andExpect(header().string("Content-Disposition",
                         matchesPattern(".*filename=\"" + number + "_wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
                 .andExpect(content().string(containsString("<NR_DOKUMENTU />")));
+
+        // Do historii trafia tylko plik, którego zapis na dysku przeglądarka potwierdziła; niepotwierdzony nie istnieje.
+        mvc.perform(get(url("/xml-history")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get(url("/xml-history/" + exportId)).cookie(owner)).andExpect(status().isNotFound());
+        mvc.perform(post(url("/xml-history/" + exportId + "/saved")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(table))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(url("/xml-history")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(exportId))
+                .andExpect(jsonPath("$[0].documentNumber").value("FV/77/2026"))
+                .andExpect(jsonPath("$[0].supplierName").value("SERY I CHIPSY SP. Z O.O."))
+                .andExpect(jsonPath("$[0].lineCount").value(2))
+                .andExpect(jsonPath("$[0].netValue").value(30.01));
+        mvc.perform(get(url("/xml-history/" + exportId + "/file")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(file));
+        mvc.perform(get(url("/xml-history/" + exportId)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.otherStore").value(false))
+                .andExpect(jsonPath("$.document.invoiceId").value(invoiceId.toString()))
+                .andExpect(jsonPath("$.document.lines[0].ean").value(CHIPS_EAN))
+                .andExpect(jsonPath("$.document.lines[0].quantity").value(12))
+                .andExpect(jsonPath("$.document.lines[0].unitNet").value(2.5))
+                .andExpect(jsonPath("$.document.lines[1].ean").doesNotExist())
+                .andExpect(jsonPath("$.document.lines[1].fallbackCode").value("GRATIS"))
+                .andExpect(jsonPath("$.draft").doesNotExist());
+
+        // Zapisy tymczasowe: z tabelą z przeglądarki, najwyżej 10 (starszy dostaje znacznik), usunięcie z "Przywróć".
+        String first = null;
+        for (int i = 0; i < 11; i++) {
+            String saved = mvc.perform(post(url("/xml-temporary")).cookie(owner).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"export\":%s,\"draft\":\"{\\\"rows\\\":[%d]}\"}".formatted(table, i)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.documentNumber").value("FV/77/2026"))
+                    .andReturn().getResponse().getContentAsString();
+            if (i == 0) {
+                first = JsonPath.read(saved, "$.id");
+            }
+        }
+        String temporary = mvc.perform(get(url("/xml-temporary")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(10))
+                .andExpect(jsonPath("$[*].id", not(hasItem(first))))
+                .andReturn().getResponse().getContentAsString();
+        String newest = JsonPath.read(temporary, "$[0].id");
+        mvc.perform(get(url("/xml-history/" + newest)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draft").value("{\"rows\":[10]}"))
+                .andExpect(jsonPath("$.document.lines.length()").value(2));
+        mvc.perform(delete(url("/xml-temporary/" + newest)).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(9));
+        mvc.perform(post(url("/xml-temporary/" + newest + "/restore")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(10))
+                .andExpect(jsonPath("$[0].id").value(newest));
+        // Zapisy tymczasowe nie są w historii zapisanych na dysku.
+        mvc.perform(get(url("/xml-history")).cookie(owner)).andExpect(jsonPath("$.length()").value(1));
+
+        // Plik z dysku: faktura z KSeF po NIP-ie i numerze; plik innego sklepu jest oznaczony.
+        mvc.perform(multipart(url("/xml-documents"))
+                        .file(new MockMultipartFile("file", "faktura.xml", "application/xml", file))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileName").value("faktura.xml"))
+                .andExpect(jsonPath("$.document.invoiceId").value(invoiceId.toString()))
+                .andExpect(jsonPath("$.document.lines.length()").value(2));
+        byte[] otherStore = new String(file, Charset.forName("windows-1250"))
+                .replace("<KOD_ODBIORCY>" + number, "<KOD_ODBIORCY>39270")
+                .replace("FV/77/2026", "FS-1/26").getBytes(Charset.forName("windows-1250"));
+        mvc.perform(multipart(url("/xml-documents"))
+                        .file(new MockMultipartFile("file", "inny.xml", "application/xml", otherStore))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.otherStore").value(true))
+                .andExpect(jsonPath("$.recipientCode").value("39270"))
+                .andExpect(jsonPath("$.document.invoiceId").doesNotExist())
+                .andExpect(jsonPath("$.document.invoiceNumber").value("FS-1/26"))
+                .andExpect(jsonPath("$.document.sellerNip").value(SELLER_NIP))
+                .andExpect(jsonPath("$.document.netTotal").value(30.01));
+        mvc.perform(multipart(url("/xml-documents"))
+                        .file(new MockMultipartFile("file", "zly.xml", "application/xml",
+                                "<FAKTURA/>".getBytes(StandardCharsets.UTF_8)))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shortensTooLongNames() throws Exception {
+        when(model.available()).thenReturn(true);
+        when(model.name()).thenReturn("test-model");
+        when(model.suggest(anyString(), anyString())).thenReturn(List.of(
+                new SuggestionModel.Answer(2, "Pianki pasek pompon truskawkowo-malinowe 30g", "Wisła", "010909",
+                        List.of(), 0.6, "kg", new BigDecimal("0.03"))));
+        when(model.shorten(anyString()))
+                .thenReturn(List.of(new SuggestionModel.Shortened(0, "pianki pompon trusk-mal")));
+
+        suggest(owner, items()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[2].name").value("PIANKI POMPON TRUSK-MAL 30G"));
+
+        // Skracana tylko nazwa za długa, z limitem bez miary (30 - "30G" - spacja).
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(model).shorten(prompt.capture());
+        assertThat(prompt.getValue()).contains("obecnie: PIANKI PASEK POMPON TRUSKAWKOWO-MALINOWE (")
+                .contains("limit: 26 znaków").doesNotContain("id=1");
     }
 
     @Test
@@ -639,6 +757,137 @@ class DataEntryIntegrationTests {
                   {"key":"b","ean":"%s","invoiceName":"Chipsy paprykowe 150g/12","invoiceUnit":"szt."},
                   {"key":"c","ean":"%s","invoiceName":"Wisła Pianka Pasek Pom pon magic 30g/30","invoiceUnit":"szt."}
                  ]}""".formatted(invoiceId, SELLER_NIP, CHEESE_EAN, CHIPS_EAN, MARSHMALLOW_EAN);
+    }
+
+    @Test
+    void invoicePickerTracksStatusesOtherStoresAndSkippedSuppliers() throws Exception {
+        // Nowa faktura czeka na wczytanie; korekty to osobna kategoria.
+        mvc.perform(get(url("/invoices")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.invoices.length()").value(1))
+                .andExpect(jsonPath("$.invoices[0].invoice.id").value(invoiceId))
+                .andExpect(jsonPath("$.invoices[0].status").doesNotExist())
+                .andExpect(jsonPath("$.invoices[0].otherStores.length()").value(0));
+        mvc.perform(get(url("/invoices?kind=CORRECTIONS")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(0));
+
+        // Wczytana w innym sklepie tej samej firmy: tutaj tylko informacja, dalej do wczytania.
+        String other = createStore();
+        jdbc.update("""
+                insert into ksef_connections (store_id, nip, certificate_pem, private_key_pem, password_encrypted,
+                    certificate_subject, certificate_valid_to, updated_at)
+                select ?::uuid, nip, 'x', 'x', 'x', 'TEST', now() + interval '1 year', now()
+                from ksef_connections where store_id = ?::uuid""", other, storeId);
+        mvc.perform(post("/api/stores/" + other + "/data-entry/invoices/" + invoiceId + "/marks").with(csrf())
+                        .cookie(owner).contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"LOADED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("LOADED"));
+        mvc.perform(get(url("/invoices")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(1))
+                .andExpect(jsonPath("$.invoices[0].status").doesNotExist())
+                .andExpect(jsonPath("$.invoices[0].otherStores[0].storeId").value(other))
+                .andExpect(jsonPath("$.invoices[0].otherStores[0].kind").value("LOADED"));
+
+        // Pobrana (wydruk podstawowy) to tylko informacja: faktura dalej czeka na wczytanie.
+        mvc.perform(get(url("/invoices/" + invoiceId + "/pdf")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF));
+        mvc.perform(get(url("/invoices")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(1))
+                .andExpect(jsonPath("$.invoices[0].status").doesNotExist())
+                .andExpect(jsonPath("$.invoices[0].downloadedAt").exists());
+        mvc.perform(get(url("/invoices?status=DONE")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(0));
+
+        // Wczytana tutaj: znika z listy do wczytania, jest wśród wczytanych.
+        mark("LOADED").andExpect(jsonPath("$.status").value("LOADED"));
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        mvc.perform(get(url("/invoices?status=DONE")).cookie(owner))
+                .andExpect(jsonPath("$.invoices[0].status").value("LOADED"));
+
+        mvc.perform(get(url("/invoices/" + invoiceId + "/pdf?variant=FULL")).cookie(owner))
+                .andExpect(status().isOk());
+        mvc.perform(get(url("/invoices?status=DONE")).cookie(owner))
+                .andExpect(jsonPath("$.invoices[0].status").value("LOADED"))
+                .andExpect(jsonPath("$.invoices[0].downloadedAt").exists());
+
+        // Powrót na listę (informacja o pobraniu zostaje), potem "nie moja faktura" w worku z wczytanymi.
+        mvc.perform(delete(url("/invoices/" + invoiceId + "/marks")).with(csrf()).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.downloadedAt").exists());
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(1));
+        mark("NOT_MINE").andExpect(jsonPath("$.status").value("NOT_MINE"));
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        mvc.perform(delete(url("/invoices/" + invoiceId + "/marks")).with(csrf()).cookie(owner))
+                .andExpect(status().isOk());
+
+        // Pomijany dostawca znika z okna; usunięcie z listy (znacznik) i przywrócenie.
+        String skipped = JsonPath.read(mvc.perform(post(url("/skipped-suppliers")).with(csrf()).cookie(owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sellerNip\":\"" + SELLER_NIP + "\",\"sellerName\":\"SERY I CHIPSY SA\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        mvc.perform(get(url("/invoices?showSkipped=true")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(1));
+        mvc.perform(get(url("/skipped-suppliers")).cookie(owner))
+                .andExpect(jsonPath("$[0].sellerName").value("SERY I CHIPSY SA"));
+        mvc.perform(delete(url("/skipped-suppliers/" + skipped)).with(csrf()).cookie(owner))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(1));
+        mvc.perform(post(url("/skipped-suppliers/" + skipped + "/restore")).with(csrf()).cookie(owner))
+                .andExpect(status().isOk());
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+
+        // Odkładany dostawca: jego faktury są od razu w "Wczytane" (zmiana trybu zastępuje regułę pomijania).
+        mvc.perform(post(url("/skipped-suppliers")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sellerNip\":\"" + SELLER_NIP + "\",\"mode\":\"DONE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode").value("DONE"))
+                .andExpect(jsonPath("$.sellerName").value("SERY I CHIPSY SA"));
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        String doneRule = JsonPath.read(mvc.perform(get(url("/skipped-suppliers")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+        mvc.perform(get(url("/invoices?status=DONE")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(1))
+                .andExpect(jsonPath("$.invoices[0].supplierRule").value("DONE"))
+                .andExpect(jsonPath("$.invoices[0].status").doesNotExist());
+        mvc.perform(delete(url("/skipped-suppliers/" + doneRule)).with(csrf()).cookie(owner))
+                .andExpect(status().isNoContent());
+
+        // Zaznaczenie wszystkich wyfiltrowanych: "nie moje" zbiorczo i „Cofnij”.
+        String bulk = mvc.perform(post(url("/invoices/bulk")).with(csrf()).cookie(owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"NOT_MINE\",\"filter\":{\"kind\":\"INVOICES\",\"status\":\"NEW\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        mvc.perform(post(url("/invoices/bulk/undo")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"createdMarkIds\":[\"" + JsonPath.read(bulk, "$.createdMarkIds[0]") + "\"]}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(1));
+        // Wykluczona faktura zostaje bez zmian; podane id - tylko one.
+        mvc.perform(post(url("/invoices/bulk")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"LOADED\",\"filter\":{\"status\":\"NEW\"},\"excludeIds\":[\""
+                                + invoiceId + "\"]}"))
+                .andExpect(jsonPath("$.count").value(0));
+        mvc.perform(post(url("/invoices/bulk")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"LOADED\",\"invoiceIds\":[\"" + invoiceId + "\"]}"))
+                .andExpect(jsonPath("$.count").value(1));
+        mvc.perform(post(url("/invoices/bulk")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"RESTORE\",\"invoiceIds\":[\"" + invoiceId + "\"]}"))
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.deletedMarkIds.length()").value(1));
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(1));
+    }
+
+    private ResultActions mark(String kind) throws Exception {
+        return mvc.perform(post(url("/invoices/" + invoiceId + "/marks")).with(csrf()).cookie(owner)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"" + kind + "\"}"))
+                .andExpect(status().isOk());
     }
 
     private ResultActions suggest(Cookie user, String json) throws Exception {

@@ -104,7 +104,8 @@ export async function downloadFile(path: string, fallbackName = 'plik'): Promise
   saveBlob(blob, fileName)
 }
 
-function saveBlob(blob: Blob, fileName: string) {
+/** Zapisuje plik w przeglądarce (pobieranie) pod podaną nazwą. */
+export function saveBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -130,7 +131,7 @@ export async function fetchPostedFile(
   path: string,
   json: unknown,
   fallbackName = 'plik',
-): Promise<{ fileName: string; blob: Blob }> {
+): Promise<NamedFile> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = await csrfToken()
   if (token) headers['X-XSRF-TOKEN'] = token
@@ -142,11 +143,14 @@ export async function fetchNamedFile(path: string, fallbackName = 'plik'): Promi
   return namedFile(await fetchFile(path), fallbackName)
 }
 
-async function namedFile(response: Response, fallbackName: string): Promise<{ fileName: string; blob: Blob }> {
+/** Plik z odpowiedzi API; `headers` to nagłówki odpowiedzi (np. id wpisu, który powstał przy generowaniu). */
+export type NamedFile = { fileName: string; blob: Blob; headers: Headers }
+
+async function namedFile(response: Response, fallbackName: string): Promise<NamedFile> {
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
   const fileName = match ? decodeURIComponent(match[1] ?? match[2]) : fallbackName
-  return { fileName, blob: await response.blob() }
+  return { fileName, blob: await response.blob(), headers: response.headers }
 }
 
 /**

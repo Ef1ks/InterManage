@@ -11,6 +11,7 @@ export type PermissionCategory =
   | 'DELI_PRICES'
   | 'KSEF_INVOICES'
   | 'DATA_ENTRY'
+  | 'SUPPLIERS'
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -666,6 +667,54 @@ export type Supplier = {
   nip: string | null
   city: string | null
   manual: boolean
+  website: string | null
+  phone: string | null
+  email: string | null
+  contactCount: number
+  /** Pierwszy przedstawiciel z kartoteki dostawców. */
+  representative: SupplierContact | null
+}
+
+/** Kto to jest u dostawcy (SupplierContactKind.java). */
+export type SupplierContactKind = 'REPRESENTATIVE' | 'ORDERS' | 'ACCOUNTING' | 'COMPLAINTS' | 'OTHER'
+
+export type SupplierContact = {
+  id: string
+  kind: SupplierContactKind
+  name: string | null
+  jobTitle: string | null
+  phone: string | null
+  email: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string | null
+  updatedBy: string | null
+}
+
+/** Karta dostawcy: dane z listy z systemu sklepu (u dodanego ręcznie z aplikacji) i kontakty. */
+export type SupplierDetails = {
+  id: string
+  code: string | null
+  keyword: string | null
+  name: string
+  nip: string | null
+  address: string | null
+  postalCode: string | null
+  city: string | null
+  origin: string | null
+  manual: boolean
+  listReportGeneratedAt: string | null
+  createdAt: string
+  createdBy: string | null
+  website: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  detailsUpdatedAt: string | null
+  detailsUpdatedBy: string | null
+  contacts: SupplierContact[]
+  /** Pozostałe sklepy firmy (ten sam NIP): strona, telefon, e-mail, notatki i kontakty są z nimi wspólne. */
+  sharedWithStores: string[]
 }
 
 /** Wgranie raportu "Lista dostawców". */
@@ -1569,6 +1618,95 @@ export type DataEntryInvoice = {
   source: string
   sources: DataEntryCodeSource[]
   lines: DataEntryLine[]
+  /** Sumy netto i VAT z dokumentu (podsumowanie stawek albo pozycje); {@code null}, gdy faktura ich nie podaje. */
+  netTotal: number | null
+  vatTotal: number | null
+}
+
+/**
+ * Dokument do tabeli: faktura z KSeF albo plik XML faktury (z dysku albo z historii). Plik bez faktury z KSeF nie ma
+ * `invoiceId`, a numer, NIP i data są z pliku (mogą być puste).
+ */
+export type DataEntryDocument = Omit<DataEntryInvoice, 'invoiceId' | 'invoiceNumber' | 'sellerNip' | 'issueDate'> & {
+  invoiceId: string | null
+  invoiceNumber: string | null
+  sellerNip: string | null
+  issueDate: string | null
+}
+
+/** Plik XML faktury z historii „Zapisz XML” (100 ostatnich w sklepie). */
+export type DataEntryXmlExport = {
+  id: string
+  fileName: string
+  documentNumber: string | null
+  documentDate: string
+  supplierName: string | null
+  supplierNip: string | null
+  lineCount: number
+  netValue: number
+  createdAt: string
+  createdBy: string | null
+}
+
+/**
+ * Plik XML faktury odczytany do wczytania; `otherStore`: odbiorca w pliku to inny sklep niż wybrany. Zapis tymczasowy
+ * ma też `draft`: całą tabelę z przeglądarki (JSON) z chwili zapisu.
+ */
+export type DataEntryXmlDocument = {
+  fileName: string | null
+  recipientCode: string | null
+  otherStore: boolean
+  document: DataEntryDocument
+  draft: string | null
+}
+
+/** Co sklep zrobił z fakturą w oknie wczytywania: wczytana do tabeli, pobrana / wydrukowana, nie moja. */
+export type InvoiceMarkKind = 'LOADED' | 'DOWNLOADED' | 'NOT_MINE'
+
+/**
+ * Faktura w oknie wczytywania: status w sklepie ({@code null} = do wczytania, LOADED wczytana, NOT_MINE nie moja),
+ * kiedy sklep ją pobrał albo wydrukował (tylko informacja, pobrana dalej czeka na wczytanie) i znaczniki innych
+ * sklepów firmy (wczytana albo pobrana na innym stanowisku).
+ */
+export type DataEntryInvoiceItem = {
+  invoice: KsefInvoice
+  status: 'LOADED' | 'NOT_MINE' | null
+  statusAt: string | null
+  downloadedAt: string | null
+  /** Reguła dostawcy w tym oknie: pomijany albo odkładany do wczytanych. */
+  supplierRule: SupplierRuleMode | null
+  otherStores: {
+    storeId: string
+    store: string
+    kind: InvoiceMarkKind
+    at: string
+  }[]
+}
+
+export type DataEntryInvoicePage = {
+  invoices: DataEntryInvoiceItem[]
+  page: number
+  hasMore: boolean
+  matchingCount: number
+}
+
+/** Reguła dostawcy w oknie wczytywania: HIDDEN pomijany (faktur nie ma w oknie), DONE odkładany do „Wczytane”. */
+export type SupplierRuleMode = 'HIDDEN' | 'DONE'
+
+/** Dostawca z regułą okna wczytywania faktur (niezależnie od pomijanych w Fakturach KSeF). */
+export type DataEntrySkippedSupplier = {
+  id: string
+  sellerNip: string
+  sellerName: string | null
+  mode: SupplierRuleMode
+  createdAt: string
+}
+
+/** Wynik działania zbiorczego na fakturach: znaczniki do „Cofnij”. */
+export type InvoiceBulkResult = {
+  count: number
+  createdMarkIds: string[]
+  deletedMarkIds: string[]
 }
 
 /** Źródło EAN-u na fakturze: w ilu pozycjach jest kod ({@code filled}) i ile z nich jest w kartotece. */
@@ -1611,4 +1749,48 @@ export type ProtoSettings = {
   hiddenProtocols: ProtocolKind[]
   updatedBy: string | null
   updatedAt: string | null
+}
+
+/** Stan próby kopii zapasowej (BackupStatus z backendu). */
+export type BackupStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+
+/** Próba kopii w historii. `startedBy` puste = automatyczna. */
+export type BackupRun = {
+  id: string
+  manual: boolean
+  status: BackupStatus
+  startedAt: string
+  startedBy: string | null
+  finishedAt: string | null
+  fileName: string | null
+  sizeBytes: number | null
+  googleEmail: string | null
+  error: string | null
+  trashedAt: string | null
+}
+
+/** Ustawienia kopii zapasowej na Dysk Google z historią (tylko właściciel). */
+export type BackupSettings = {
+  googleConfigured: boolean
+  connected: boolean
+  googleEmail: string | null
+  googleConnectedAt: string | null
+  googleConnectedBy: string | null
+  enabled: boolean
+  runHour: number
+  keepCount: number
+  passwordSet: boolean
+  passwordSetAt: string | null
+  passwordSetBy: string | null
+  running: boolean
+  nextRunAt: string | null
+  runs: BackupRun[]
+}
+
+/** `password` puste = hasło bez zmian. */
+export type BackupSettingsRequest = {
+  enabled: boolean
+  runHour: number
+  keepCount: number
+  password: string | null
 }

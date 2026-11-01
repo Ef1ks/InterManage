@@ -75,12 +75,32 @@ public class GeminiSuggestionModel implements SuggestionModel {
         if (!available()) {
             throw new Unavailable("Brak klucza Gemini (GEMINI_API_KEY)");
         }
+        return answers(generate(systemInstruction, prompt, SCHEMA));
+    }
+
+    @Override
+    public List<Shortened> shorten(String prompt) {
+        if (!available()) {
+            throw new Unavailable("Brak klucza Gemini (GEMINI_API_KEY)");
+        }
+        List<Shortened> names = new ArrayList<>();
+        for (JsonNode item : generate(SuggestionPrompt.SHORTEN_INSTRUCTION, prompt, SHORTEN_SCHEMA)) {
+            String name = text(item, "name");
+            if (name != null) {
+                names.add(new Shortened(item.path("id").asInt(-1), name));
+            }
+        }
+        return names;
+    }
+
+    /** Pozycje {@code items} z odpowiedzi JSON według {@code schema}. */
+    private JsonNode generate(String systemInstruction, String prompt, Map<String, Object> schema) {
         Map<String, Object> body = Map.of(
                 "systemInstruction", Map.of("parts", List.of(Map.of("text", systemInstruction))),
                 "contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", prompt)))),
                 "generationConfig", Map.of(
                         "responseMimeType", "application/json",
-                        "responseSchema", SCHEMA,
+                        "responseSchema", schema,
                         "thinkingConfig", Map.of("thinkingLevel", thinkingLevel)));
         Instant deadline = Instant.now().plus(retryBudget);
         Duration wait = FIRST_WAIT;
@@ -91,7 +111,7 @@ public class GeminiSuggestionModel implements SuggestionModel {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(json.writeValueAsString(body))
                         .retrieve().body(JsonNode.class);
-                return answers(response);
+                return items(response);
             } catch (RestClientResponseException e) {
                 HttpStatusCode status = e.getStatusCode();
                 boolean temporary = status.value() == 429 || status.is5xxServerError();
@@ -114,7 +134,7 @@ public class GeminiSuggestionModel implements SuggestionModel {
         }
     }
 
-    private List<Answer> answers(JsonNode response) {
+    private JsonNode items(JsonNode response) {
         StringBuilder text = new StringBuilder();
         for (JsonNode part : response.path("candidates").path(0).path("content").path("parts")) {
             if (!part.path("thought").asBoolean(false) && part.has("text")) {
@@ -124,12 +144,14 @@ public class GeminiSuggestionModel implements SuggestionModel {
         if (text.isEmpty()) {
             throw new Unavailable("Model nie zwrócił odpowiedzi");
         }
-        JsonNode items;
         try {
-            items = json.readTree(text.toString()).path("items");
+            return json.readTree(text.toString()).path("items");
         } catch (RuntimeException e) {
             throw new Unavailable("Model zwrócił nieczytelną odpowiedź", e);
         }
+    }
+
+    private static List<Answer> answers(JsonNode items) {
         List<Answer> answers = new ArrayList<>();
         for (JsonNode item : items) {
             List<String> alternatives = new ArrayList<>();
@@ -188,5 +210,17 @@ public class GeminiSuggestionModel implements SuggestionModel {
                                     "net_content", Map.of("type", "NUMBER")),
                             "required", List.of("id", "name", "brand", "subfamily", "alternatives", "confidence",
                                     "unit", "net_content")))),
+            "required", List.of("items"));
+
+    private static final Map<String, Object> SHORTEN_SCHEMA = Map.of(
+            "type", "OBJECT",
+            "properties", Map.of("items", Map.of(
+                    "type", "ARRAY",
+                    "items", Map.of(
+                            "type", "OBJECT",
+                            "properties", Map.of(
+                                    "id", Map.of("type", "INTEGER"),
+                                    "name", Map.of("type", "STRING")),
+                            "required", List.of("id", "name")))),
             "required", List.of("items"));
 }

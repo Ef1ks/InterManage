@@ -3,7 +3,8 @@ package com.intermanage.backend.mail.entity;
 /** Rodzaj maila. Nazwa stałej trafia do bazy, więc istniejących nie zmieniamy. */
 public enum MailKind {
 
-    ACCOUNT_ACTIVATION(true);
+    ACCOUNT_ACTIVATION(true),
+    BACKUP_FAILED(false);
 
     private final boolean secret;
 

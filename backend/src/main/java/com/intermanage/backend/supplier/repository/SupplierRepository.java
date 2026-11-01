@@ -22,8 +22,10 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
     @Query("select s from Supplier s where s.id = :id and s.store.id = :storeId")
     Optional<Supplier> findInStore(UUID storeId, UUID id);
 
-    @Query("select count(s) > 0 from Supplier s where s.store.id = :storeId and s.code is null and lower(s.name) = lower(:name)")
-    boolean existsManualByName(UUID storeId, String name);
+    @Query("""
+            select count(s) > 0 from Supplier s where s.store.id = :storeId and s.code is null
+            and lower(s.name) = lower(:name) and (:exceptId is null or s.id <> :exceptId)""")
+    boolean existsManualByName(UUID storeId, String name, UUID exceptId);
 
     long countByStoreId(UUID storeId);
 

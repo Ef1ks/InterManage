@@ -1,6 +1,7 @@
 package com.intermanage.backend.dataentry.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,12 +13,16 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Tabela do pliku (XML faktury albo Excel): wiersze w kolejności z ekranu; {@code suggestionId} wiąże wiersz z
- * propozycją AI. {@code invoiceId} to faktura z KSeF wczytana do tabeli: z niej numer, data i NIP w pliku XML.
+ * propozycją AI. {@code invoiceId} to faktura z KSeF wczytana do tabeli: z niej numer, data i NIP w pliku XML. Bez
+ * niej numer, dostawca, NIP i data z dokumentu wczytanego z pliku XML ({@code invoiceNumber}, {@code sellerName},
+ * {@code sellerNip}, {@code issueDate}).
  */
 public record ExportRequest(
         UUID invoiceId,
         @Size(max = 100) String invoiceNumber,
         @Size(max = 300) String sellerName,
+        @Size(max = 20) String sellerNip,
+        LocalDate issueDate,
         @NotNull @Size(max = 2000, message = "Najwyżej 2000 wierszy") List<@Valid Row> rows) {
 
     public record Row(

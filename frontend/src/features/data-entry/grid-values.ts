@@ -64,9 +64,9 @@ export const COLUMNS: Column[] = [
     align: 'right',
     kind: 'computed',
   },
-  { key: 'region', header: 'Rejon', width: 8, kind: 'nomenclature' },
-  { key: 'family', header: 'Rodzina', width: 9, kind: 'nomenclature' },
-  { key: 'subfamily', header: 'Podrodzina', width: 12, kind: 'nomenclature' },
+  { key: 'region', header: 'Rejon', width: 4.5, kind: 'nomenclature' },
+  { key: 'family', header: 'Rodzina', width: 5, kind: 'nomenclature' },
+  { key: 'subfamily', header: 'Podrodz.', title: 'Podrodzina', width: 6, kind: 'nomenclature' },
   { key: 'unit', header: 'Rodzaj', title: 'Rodzaj sprzedaży', width: 4.5, kind: 'unit' },
   { key: 'netContent', header: 'Waga', width: 5, align: 'right', kind: 'number' },
   // Na końcu, żeby wklejanie kolumn z Excela trafiało tam, gdzie wcześniej.
@@ -86,6 +86,15 @@ export function levelCode(row: DataEntryRow, key: ColumnKey) {
   const length = LEVEL_LENGTH[key as NomenclatureKey]
   const code = row.subfamilyCode ?? row.nomenclaturePrefix ?? null
   return code !== null && code.length >= length ? code.slice(0, length) : null
+}
+
+/**
+ * Własne cyfry poziomu w kolumnie: rejon 66, rodzina 10, podrodzina 17 (z kodu 661017). Tylko je widać w komórce
+ * i kopiuje się je do schowka, jak w arkuszach sklepu.
+ */
+export function levelDigits(row: DataEntryRow, key: NomenclatureKey) {
+  const code = levelCode(row, key)
+  return code === null ? null : code.slice(-2)
 }
 
 /** Kod wyższego poziomu, którego dzieci pokazuje lista kolumny ({@code null} = cała nomenklatura). */
@@ -114,7 +123,7 @@ const plainNumber = (value: number | null, digits = 4) =>
     : new Intl.NumberFormat('pl-PL', { maximumFractionDigits: digits, useGrouping: false }).format(value)
 
 /** Wartość komórki jako tekst: do kopiowania (TSV dla Excela) i jako start edycji. */
-export function cellText(row: DataEntryRow, key: ColumnKey, names: Names, pricing: Pricing): string {
+export function cellText(row: DataEntryRow, key: ColumnKey, pricing: Pricing): string {
   switch (key) {
     case 'ean':
       return row.ean
@@ -145,8 +154,7 @@ export function cellText(row: DataEntryRow, key: ColumnKey, names: Names, pricin
     case 'region':
     case 'family':
     case 'subfamily': {
-      const code = levelCode(row, key)
-      return code === null ? '' : [code, names.get(code)].filter(Boolean).join(' ')
+      return levelDigits(row, key) ?? ''
     }
     case 'unit':
       return row.unit
@@ -221,11 +229,22 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
     case 'family':
     case 'subfamily': {
       if (trimmed === '') return { row: withSubfamily(row, null) }
+      // Dwie cyfry to własny numer poziomu (rodzina 10 w rejonie z wiersza); pełny kod też przechodzi. Wklejone
+      // „66 10 17” w trzy kolumny składa się po kolei: rejon, potem jego rodzina, potem jej podrodzina.
       const length = LEVEL_LENGTH[key]
       const digits = /^\d+/.exec(trimmed.replace(/\s/g, ''))?.[0]
-      const code = digits && digits.length >= length ? digits.slice(0, length) : undefined
+      const scope = levelScope(row, key)
+      if (digits?.length === 2 && key !== 'region' && scope === null) {
+        return { error: `Najpierw wybierz ${key === 'family' ? 'rejon' : 'rodzinę'}` }
+      }
+      const code =
+        digits?.length === 2 && scope !== null
+          ? scope + digits
+          : digits && digits.length >= length
+            ? digits.slice(0, length)
+            : undefined
       if (!code || !names.has(code)) {
-        return { error: `Nieznany kod: wpisz ${length} cyfry ${key === 'region' ? 'rejonu' : key === 'family' ? 'rodziny' : 'podrodziny'}` }
+        return { error: `Nieznany kod: wpisz 2 cyfry ${key === 'region' ? 'rejonu' : key === 'family' ? 'rodziny' : 'podrodziny'}` }
       }
       return { row: withNomenclature(row, code) }
     }

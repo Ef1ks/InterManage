@@ -14,9 +14,11 @@ import { SalesPage } from '@/features/sales/SalesPage'
 import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { ImportPage } from '@/features/imports/ImportPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
+import { BackupPage } from '@/features/settings/BackupPage'
 import { RolesPage } from '@/features/settings/RolesPage'
 import { StoreSettingsPage } from '@/features/store-settings/StoreSettingsPage'
 import { StoresPage } from '@/features/settings/StoresPage'
+import { SuppliersPage } from '@/features/suppliers/SuppliersPage'
 import { UsersPage } from '@/features/settings/UsersPage'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { ToolPlaceholderPage } from '@/features/tools/ToolPlaceholderPage'
@@ -32,6 +34,7 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   DELI_PRICES: <PriceCalculatorPage />,
   KSEF_INVOICES: <KsefPage />,
   DATA_ENTRY: <DataEntryPage />,
+  SUPPLIERS: <SuppliersPage />,
 }
 
 const toolRoutes = (Object.keys(TOOL_ROUTES) as PermissionCategory[]).map((category) => ({
@@ -95,6 +98,14 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth ownerOnly>
             <UsersPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: '/ustawienia/kopia-zapasowa',
+        element: (
+          <RequireAuth ownerOnly>
+            <BackupPage />
           </RequireAuth>
         ),
       },

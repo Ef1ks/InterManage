@@ -3,8 +3,21 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { DataEntryRow } from '@/features/data-entry/rows'
 import { isUuid } from '@/lib/uuid'
 
-/** Faktura, z której pochodzą wiersze (do nazwy pliku i podpowiedzi dostawcy dla AI). */
-export type DraftInvoice = { id: string; number: string; sellerName: string | null; sellerNip: string }
+/**
+ * Faktura, z której pochodzą wiersze (do nazwy pliku i podpowiedzi dostawcy dla AI). Sumy netto i VAT z dokumentu
+ * porównujemy z sumami tabeli; przy dopisaniu kolejnej faktury się sumują. Brak w starszych szkicach. Dokument
+ * wczytany z pliku XML bez faktury z KSeF ma `id` null, a numer, NIP i datę z pliku (`fromXml` = nazwa pliku).
+ */
+export type DraftInvoice = {
+  id: string | null
+  number: string | null
+  sellerName: string | null
+  sellerNip: string | null
+  issueDate?: string | null
+  fromXml?: string | null
+  netTotal?: number | null
+  vatTotal?: number | null
+}
 
 /** Tabela wprowadzania danych w jednym sklepie, zanim trafi do pliku. */
 export type DataEntryDraft = { invoice: DraftInvoice | null; rows: DataEntryRow[] }

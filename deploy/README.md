@@ -69,6 +69,25 @@ Plik `/opt/intermanage/.env` z wzoru [.env.example](.env.example), `chmod 600`. 
 4. SMTP & API → SMTP → wygeneruj klucz SMTP. Login (`…@smtp-brevo.com`) do `MAIL_USERNAME`, klucz do `MAIL_PASSWORD` w `.env`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`.
 5. `docker compose up -d`, w logach backendu: „Maile wysyłane przez SMTP smtp-relay.brevo.com …”. Sprawdź, zapraszając pracownika na swój adres.
 
+## 4a. Kopia zapasowa na Dysk Google
+
+Aplikacja robi kopię sama (Ustawienia → Kopia zapasowa, tylko właściciel), potrzebuje tylko klienta OAuth Google:
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → nowy projekt (np. „Intermanage”).
+2. APIs & Services → Library → **Google Drive API** → Enable.
+3. Google Auth Platform (OAuth consent screen): typ **External**, nazwa aplikacji, e-mail kontaktowy. W Data Access dodaj zakres `https://www.googleapis.com/auth/drive.file` (aplikacja widzi tylko pliki, które sama utworzyła). W Audience kliknij **Publish app** (w trybie Testing Google unieważnia token po 7 dniach i kopie przestają działać). Przy zakresie `drive.file` weryfikacja przez Google nie jest potrzebna; przy logowaniu Google może pokazać ostrzeżenie „aplikacja niezweryfikowana” → Zaawansowane → Przejdź.
+4. Clients → Create client → **Web application**, Authorized redirect URIs: `https://intermanage.pl/api/settings/backup/google/callback` (lokalnie dodatkowo `https://intermanage.lvh.me:5173/api/settings/backup/google/callback`).
+5. Client ID do `GOOGLE_CLIENT_ID`, Client secret do `GOOGLE_CLIENT_SECRET` w `.env`, `docker compose up -d`.
+6. W aplikacji: Ustawienia → Kopia zapasowa → Połącz z Google, ustaw hasło szyfrowania (zapisz je w bezpiecznym miejscu, bez niego kopii nie da się odtworzyć) i włącz kopie.
+
+Kopie trafiają do folderu „Intermanage - kopie zapasowe” na Dysku. **Odtworzenie** (na maszynie z `gpg` i klientem PostgreSQL 18):
+
+```bash
+gpg --decrypt intermanage_2026-11-01_0300.dump.gpg > baza.dump        # pyta o hasło kopii
+createdb -h 192.168.33.110 -U postgres intermanage_restore              # najlepiej do nowej bazy, potem podmiana
+pg_restore -h 192.168.33.110 -U postgres --no-owner --role=intermanage_prod -d intermanage_restore baza.dump
+```
+
 ## 5. Tailscale (dostęp dla GitHub Actions)
 
 1. Host `pve` udostępnia podsieć (`tailscale up --advertise-routes=192.168.33.0/24`). W Machines → pve → Edit route settings trasa `192.168.33.0/24` musi być zatwierdzona.
@@ -109,4 +128,4 @@ docker compose logs backend | grep -i owner   # hasło właściciela, jeśli OWN
 - Każdy commit na `main` wdraża się sam, tylko gdy przejdą testy backendu oraz build i lint frontu.
 - Ręczny restart: `docker compose up -d`. Bez `IMAGE_TAG` bierze `latest`, czyli ostatnie wdrożenie.
 - Powrót do starszej wersji: `IMAGE_TAG=<sha commita> docker compose up -d`.
-- Kopia bazy na LXC Postgresa: `pg_dump -U intermanage_prod intermanage_prod | gzip > backup-$(date +%F).sql.gz`, najlepiej z crona (albo backup całego LXC w Proxmoxie).
+- Kopia bazy: automatycznie na Dysk Google (sekcja 4a). Ręcznie na LXC Postgresa: `pg_dump -U intermanage_prod intermanage_prod | gzip > backup-$(date +%F).sql.gz` (albo backup całego LXC w Proxmoxie).

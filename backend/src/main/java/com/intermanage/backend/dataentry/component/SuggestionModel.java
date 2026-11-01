@@ -22,6 +22,19 @@ public interface SuggestionModel {
      */
     List<Answer> suggest(String systemInstruction, String prompt);
 
+    /**
+     * Krótsze nazwy dla pozycji z {@code prompt} ({@link SuggestionPrompt#shorten}), z {@code id} pozycji. Domyślnie
+     * żadnych: nazwy zostają takie, jak były.
+     *
+     * @throws Unavailable gdy model nie odpowiedział
+     */
+    default List<Shortened> shorten(String prompt) {
+        return List.of();
+    }
+
+    record Shortened(int id, String name) {
+    }
+
     record Answer(int id, String name, String brand, String subfamily, List<String> alternatives, Double confidence,
             String unit, BigDecimal netContent) {
     }

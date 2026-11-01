@@ -1,5 +1,6 @@
 package com.intermanage.backend.deliprice.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,7 +70,7 @@ public class PriceCalculationController {
         PriceCalculationService.ExportFile file = service.export(storeId);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(file.contentType()))
                 .body(file.content());
     }

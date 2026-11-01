@@ -64,6 +64,11 @@ public class Supplier {
     @JoinColumn(name = "last_import_id")
     private SupplierImport lastImport;
 
+    /** Wspólne dane firmy o dostawcy (moduł Dostawcy); przypięte przy pierwszej zmianie, import ich nie rusza. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profile_id")
+    private SupplierProfile profile;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
     private AppUser createdBy;
@@ -124,6 +129,23 @@ public class Supplier {
         return changed;
     }
 
+    public void linkProfile(SupplierProfile profile) {
+        this.profile = profile;
+    }
+
+    /** Nazwa, NIP i adres dostawcy dodanego ręcznie (u dostawcy z listy przychodzą z raportu). */
+    public void updateManualData(String name, String nip, String address, String postalCode, String city) {
+        if (!isManual()) {
+            throw new IllegalStateException("Dane dostawcy z listy pochodzą z raportu");
+        }
+        this.name = name;
+        this.nip = nip;
+        this.address = address;
+        this.postalCode = postalCode;
+        this.city = city;
+        updatedAt = Instant.now();
+    }
+
     public boolean isManual() {
         return code == null;
     }
@@ -170,5 +192,17 @@ public class Supplier {
 
     public SupplierImport getLastImport() {
         return lastImport;
+    }
+
+    public SupplierProfile getProfile() {
+        return profile;
+    }
+
+    public AppUser getCreatedBy() {
+        return createdBy;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 }

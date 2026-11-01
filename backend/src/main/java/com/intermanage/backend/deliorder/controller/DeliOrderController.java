@@ -1,5 +1,6 @@
 package com.intermanage.backend.deliorder.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -102,7 +103,7 @@ public class DeliOrderController {
         ExportFile file = orderService.export(storeId, orderId, format, principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(file.contentType()))
                 .body(file.content());
     }

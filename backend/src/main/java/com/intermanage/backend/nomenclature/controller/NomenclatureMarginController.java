@@ -1,5 +1,6 @@
 package com.intermanage.backend.nomenclature.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -67,7 +68,7 @@ public class NomenclatureMarginController {
         NomenclatureMarginService.ExportFile file = service.template(storeId);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(file.contentType()))
                 .body(file.content());
     }

@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -26,12 +25,10 @@ import com.intermanage.backend.common.exception.InvalidReportException;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 import com.intermanage.backend.supplier.component.SupplierReportParser;
-import com.intermanage.backend.supplier.dto.CreateSupplierRequest;
 import com.intermanage.backend.supplier.dto.ParsedSupplierReport;
 import com.intermanage.backend.supplier.dto.SupplierImportOverview;
 import com.intermanage.backend.supplier.dto.SupplierImportResponse;
 import com.intermanage.backend.supplier.dto.SupplierReportRow;
-import com.intermanage.backend.supplier.dto.SupplierResponse;
 import com.intermanage.backend.supplier.entity.Supplier;
 import com.intermanage.backend.supplier.entity.SupplierImport;
 import com.intermanage.backend.supplier.mapper.SupplierMapper;
@@ -39,8 +36,9 @@ import com.intermanage.backend.supplier.repository.SupplierImportRepository;
 import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
- * Dostawcy sklepu. Raport "Lista dostawców" jest scalany po kodzie dostawcy: nowi są dodawani, znani aktualizowani,
- * a ci, których zabrakło w pliku, zostają. Dostawców spoza systemu sklepu dodaje się ręcznie (bez kodu).
+ * Import listy dostawców sklepu. Raport "Lista dostawców" jest scalany po kodzie dostawcy: nowi są dodawani, znani
+ * aktualizowani, a ci, których zabrakło w pliku, zostają. Kartotekę (kontakty, dostawców dodanych ręcznie) prowadzi
+ * {@link SupplierDirectoryService}.
  */
 @Service
 public class SupplierService {
@@ -69,25 +67,6 @@ public class SupplierService {
         this.suppliers = suppliers;
         this.stores = stores;
         this.users = users;
-    }
-
-    /** Wszyscy dostawcy sklepu po nazwie; jest ich kilkuset, więc frontend filtruje ich sam. */
-    @Transactional(readOnly = true)
-    public List<SupplierResponse> list(UUID storeId) {
-        return suppliers.findByStore(storeId).stream().map(supplierMapper::toResponse).toList();
-    }
-
-    @Transactional
-    public SupplierResponse create(UUID storeId, CreateSupplierRequest request, UUID userId) {
-        Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
-        String name = request.name().trim().replaceAll("\\s+", " ");
-        if (suppliers.existsManualByName(storeId, name)) {
-            throw ApiException.conflict("Dostawca " + name + " jest już na liście");
-        }
-        String nip = request.nip() == null ? "" : request.nip().replaceAll("[\\s-]", "");
-        AppUser user = userId != null ? users.getReferenceById(userId) : null;
-        Supplier supplier = suppliers.save(Supplier.manual(store, name, nip.isEmpty() ? null : nip, user));
-        return supplierMapper.toResponse(supplier);
     }
 
     @Transactional(readOnly = true)

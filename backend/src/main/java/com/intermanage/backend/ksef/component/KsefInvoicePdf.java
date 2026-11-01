@@ -19,6 +19,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -110,8 +112,20 @@ public class KsefInvoicePdf {
         }
     }
 
+    /**
+     * Wariant wydruku: pełna faktura albo podstawowa do wprowadzania danych (nagłówek z numerem i sprzedawcą,
+     * korekta, pozycje, dokumenty WZ i dodatkowe opisy; bez stron, sum, płatności i reszty).
+     */
+    public enum Variant {
+        FULL, BASIC
+    }
+
     /** {@code acceptedAt}: data nadania numeru KSeF. Rzuca {@link KsefInvoiceReader.InvalidInvoiceException}. */
     public byte[] pdf(byte[] xml, String ksefNumber, String sellerNip, Instant acceptedAt) {
+        return pdf(xml, ksefNumber, sellerNip, acceptedAt, Variant.FULL);
+    }
+
+    public byte[] pdf(byte[] xml, String ksefNumber, String sellerNip, Instant acceptedAt, Variant variant) {
         Invoice invoice = reader.read(xml);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 36, 36, 36, 54);
@@ -126,6 +140,11 @@ public class KsefInvoicePdf {
 
             String qr = invoice.issueDate() != null ? verificationUrl(xml, sellerNip, invoice.issueDate()) : null;
             writeHeader(document, writer.getDirectContent(), invoice, ksefNumber, qr);
+            if (variant == Variant.BASIC) {
+                writeBasic(document, invoice);
+                document.close();
+                return out.toByteArray();
+            }
             writeDates(document, invoice, acceptedAt);
             writeParties(document, invoice);
             entries(document, "Korekta", invoice.correctionDetails());
@@ -166,6 +185,25 @@ public class KsefInvoicePdf {
             throw new IllegalStateException("Nie udało się utworzyć PDF faktury", e);
         }
         return out.toByteArray();
+    }
+
+    /** Wydruk do wprowadzania: sprzedawca i data jednym wierszem, korekta, pozycje, WZ i dodatkowe opisy. */
+    private void writeBasic(Document document, Invoice invoice) throws DocumentException {
+        List<Entry> summary = new ArrayList<>();
+        if (invoice.seller() != null) {
+            summary.add(new Entry("Sprzedawca", Stream.concat(Stream.of(invoice.seller().name()),
+                    invoice.seller().identifiers().stream()).filter(Objects::nonNull)
+                    .collect(Collectors.joining(" · "))));
+        }
+        if (invoice.issueDate() != null) {
+            summary.add(new Entry("Data wystawienia", KsefInvoiceReader.formatDate(invoice.issueDate())));
+        }
+        entries(document, "Faktura", summary);
+        entries(document, "Korekta", invoice.correctionDetails());
+        if (!invoice.lines().isEmpty()) {
+            document.add(linesTable("Pozycje", invoice.lines()));
+        }
+        entries(document, "Dokumenty WZ i opis", invoice.additional());
     }
 
     /** Rodzaj i numer faktury po lewej, kod QR weryfikacji z numerem KSeF po prawej. */

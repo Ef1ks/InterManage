@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
+  DatabaseBackupIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
@@ -235,6 +236,7 @@ function Sidebar() {
               <SidebarLink to="/ustawienia/sklepy" icon={StoreIcon} label="Sklepy" />
               <SidebarLink to="/ustawienia/role" icon={ShieldIcon} label="Role i uprawnienia" />
               <SidebarLink to="/ustawienia/uzytkownicy" icon={UserCogIcon} label="Użytkownicy" />
+              <SidebarLink to="/ustawienia/kopia-zapasowa" icon={DatabaseBackupIcon} label="Kopia zapasowa" />
             </>
           )}
         </div>

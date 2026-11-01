@@ -1,5 +1,6 @@
 package com.intermanage.backend.document.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
@@ -107,7 +108,7 @@ public class DocumentTransferController {
         ExportFile file = transferService.export(storeId, id, format, principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(file.contentType()))
                 .body(file.content());
     }

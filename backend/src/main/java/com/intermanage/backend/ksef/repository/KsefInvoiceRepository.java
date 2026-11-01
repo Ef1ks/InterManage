@@ -44,6 +44,12 @@ public interface KsefInvoiceRepository extends JpaRepository<KsefInvoice, UUID>,
 
     long countByNip(String nip);
 
+    /** Faktura firmy od sprzedawcy o tym numerze (numer wielkimi literami) - do pliku XML faktury. */
+    @Query("""
+            select i from KsefInvoice i left join fetch i.internalIds
+            where i.nip = :nip and i.sellerNip = :sellerNip and upper(i.invoiceNumber) = :number""")
+    List<KsefInvoice> findBySellerAndNumber(String nip, String sellerNip, String number);
+
     /** Korekty firmy bez odczytanych faktur korygowanych, z zapisanym już XML (odczyt bez KSeF). */
     @Query("""
             select i.id from KsefInvoice i

@@ -76,6 +76,8 @@ public class DataEntrySuggestionService {
     static final double AGREED_MIN_CONFIDENCE = 0.9;
     static final double SUPPLIER_BOOST = 10;
     static final int PROPOSALS = 5;
+    /** Najdłuższa nazwa w kartotece sklepu (dłuższą tabela pokazuje jako błąd). */
+    static final int NAME_LIMIT = 30;
 
     private final TransactionTemplate readTransaction;
     private final TransactionTemplate writeTransaction;
@@ -152,6 +154,14 @@ public class DataEntrySuggestionService {
             }
         }
 
+        Map<Integer, String> names = new HashMap<>();
+        answers.forEach((index, answer) -> {
+            if (answer.name() != null) {
+                names.put(index, Measure.normalizeName(answer.name(), measure(items.get(index), answer)));
+            }
+        });
+        shortenNames(items, answers, names);
+
         return writeTransaction.execute(status -> {
             Store store = stores.getReferenceById(storeId);
             AppUser user = userId != null ? users.getReferenceById(userId) : null;
@@ -159,7 +169,7 @@ public class DataEntrySuggestionService {
             List<SuggestionResponse.Suggestion> result = new ArrayList<>();
             for (int index = 0; index < items.size(); index++) {
                 result.add(suggestion(store, user, request, items.get(index), context, context.layers().get(index),
-                        answers.get(index), brands));
+                        answers.get(index), names.get(index), brands));
             }
             boolean modelUsed = answers.size() == items.size();
             return new SuggestionResponse(modelUsed, modelUsed ? null
@@ -307,6 +317,64 @@ public class DataEntrySuggestionService {
         }
     }
 
+    /**
+     * Nazwy dłuższe niż {@value #NAME_LIMIT} znaków model skraca drugim zapytaniem (model źle liczy znaki); krótsza
+     * zastępuje dłuższą. Gdy model nie odpowie, nazwy zostają, a tabela pokaże je jako za długie.
+     */
+    private void shortenNames(List<SuggestionRequest.Item> items, Map<Integer, SuggestionModel.Answer> answers,
+            Map<Integer, String> names) {
+        List<Integer> tooLong = names.entrySet().stream().filter(entry -> entry.getValue().length() > NAME_LIMIT)
+                .map(Map.Entry::getKey).sorted().toList();
+        if (tooLong.isEmpty()) {
+            return;
+        }
+        Map<Integer, Measure> measures = new HashMap<>();
+        Map<Integer, Future<List<SuggestionModel.Shortened>>> futures = new LinkedHashMap<>();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int start = 0; start < tooLong.size(); start += BATCH) {
+                List<Integer> batch = tooLong.subList(start, Math.min(start + BATCH, tooLong.size()));
+                List<SuggestionPrompt.ShortenItem> prompt = new ArrayList<>();
+                for (int index : batch) {
+                    Measure measure = measure(items.get(index), answers.get(index));
+                    measures.put(index, measure);
+                    String label = measure.label();
+                    String name = names.get(index);
+                    String withoutLabel = label.isEmpty() ? name : name.substring(0, name.length() - label.length())
+                            .strip();
+                    prompt.add(new SuggestionPrompt.ShortenItem(items.get(index).invoiceName().strip(), withoutLabel,
+                            label.isEmpty() ? NAME_LIMIT : NAME_LIMIT - label.length() - 1));
+                }
+                futures.put(start, executor.submit(() -> model.shorten(SuggestionPrompt.shorten(prompt))));
+            }
+        }
+        futures.forEach((start, future) -> {
+            try {
+                for (SuggestionModel.Shortened shortened : future.get()) {
+                    int position = start + shortened.id();
+                    if (shortened.id() < 0 || shortened.id() >= BATCH || position >= tooLong.size()) {
+                        continue;
+                    }
+                    int index = tooLong.get(position);
+                    String name = Measure.normalizeName(shortened.name(), measures.get(index));
+                    if (!name.isEmpty() && name.length() < names.get(index).length()) {
+                        names.put(index, name);
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException e) {
+                log.info("Model nie skrócił nazw: {}", e.getCause().getMessage());
+            }
+        });
+    }
+
+    /** Miara nowego artykułu: z faktury, bez niej od modelu, bez obu sztuki. */
+    private static Measure measure(SuggestionRequest.Item item, SuggestionModel.Answer answer) {
+        Measure parsed = Measure.fromInvoice(item.invoiceName(), item.invoiceUnit());
+        Measure fromModel = answer != null ? Measure.of(answer.unit(), answer.netContent()) : null;
+        return parsed != null ? parsed : fromModel != null ? fromModel : Measure.piece();
+    }
+
     private static SuggestionPrompt.Item promptItem(SuggestionRequest.Item item, Context context, int index) {
         Layer layer = context.layers().get(index);
         List<SuggestionPrompt.ProducerGroup> producer = new ArrayList<>();
@@ -326,7 +394,7 @@ public class DataEntrySuggestionService {
     }
 
     private SuggestionResponse.Suggestion suggestion(Store store, AppUser user, SuggestionRequest request,
-            SuggestionRequest.Item item, Context context, Layer layer, SuggestionModel.Answer answer,
+            SuggestionRequest.Item item, Context context, Layer layer, SuggestionModel.Answer answer, String name,
             BrandBook brands) {
         Set<String> subfamilies = context.nomenclature().keySet().stream().filter(code -> code.length() == 6)
                 .collect(Collectors.toSet());
@@ -389,10 +457,9 @@ public class DataEntrySuggestionService {
 
         Measure parsed = Measure.fromInvoice(item.invoiceName(), item.invoiceUnit());
         Measure fromModel = answer != null ? Measure.of(answer.unit(), answer.netContent()) : null;
-        Measure measure = parsed != null ? parsed : fromModel != null ? fromModel : Measure.piece();
+        Measure measure = measure(item, answer);
         boolean unitMismatch = parsed != null && fromModel != null && (!parsed.unit().equals(fromModel.unit())
                 || parsed.netContent().compareTo(fromModel.netContent()) != 0);
-        String name = answer != null && answer.name() != null ? Measure.normalizeName(answer.name(), measure) : null;
         String brand = answer != null ? brands.canonical(answer.brand(), layer.producer()) : null;
 
         BigDecimal modelConfidence = answer != null && answer.confidence() != null

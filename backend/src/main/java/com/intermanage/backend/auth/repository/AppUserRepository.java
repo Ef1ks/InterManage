@@ -36,6 +36,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
 
     boolean existsByRoleOwnerTrue();
 
+    /** Aktywni właściciele z adresem e-mail (powiadomienia, np. o nieudanej kopii zapasowej). */
+    @Query("select u from AppUser u where u.role.owner = true and u.enabled = true and u.email is not null")
+    List<AppUser> findActiveOwnersWithEmail();
+
     @Query("select u.role.id, count(u) from AppUser u group by u.role.id")
     List<Object[]> countUsersPerRole();
 }

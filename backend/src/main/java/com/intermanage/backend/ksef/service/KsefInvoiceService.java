@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -127,17 +128,46 @@ public class KsefInvoiceService {
     @Transactional(readOnly = true)
     public KsefInvoicePage list(UUID storeId, int page, KsefInvoiceSearch.Filter filter, String sort,
             String direction) {
+        return list(storeId, page, filter, null, sort, direction);
+    }
+
+    /**
+     * Lista z dodatkowym warunkiem innego modułu ({@code extra}, np. okno wczytywania faktur we wprowadzaniu danych:
+     * bez wczytanych i bez dostawców pomijanych tam).
+     */
+    @Transactional(readOnly = true)
+    public KsefInvoicePage list(UUID storeId, int page, KsefInvoiceSearch.Filter filter,
+            Specification<KsefInvoice> extra, String sort, String direction) {
         String nip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
         if (nip == null) {
             return new KsefInvoicePage(List.of(), 0, false, 0, BigDecimal.ZERO, BigDecimal.ZERO);
         }
         Specification<KsefInvoice> matching = KsefInvoiceSearch.matching(storeId, nip, ownInternalIds(storeId),
                 filter);
+        if (extra != null) {
+            matching = matching.and(extra);
+        }
         Page<KsefInvoice> found = invoices.findAll(matching,
                 PageRequest.of(Math.max(page, 0), PAGE_SIZE, KsefInvoiceSearch.sort(sort, direction)));
         KsefInvoiceRepository.Totals totals = invoices.totals(matching);
         return new KsefInvoicePage(summaries(storeId, found.getContent()), found.getNumber(), found.hasNext(),
                 totals.count(), totals.netAmount(), totals.grossAmount());
+    }
+
+    /** Id faktur pasujących do filtrów i warunku innego modułu (najnowsze najpierw, najwyżej {@code limit}). */
+    @Transactional(readOnly = true)
+    public List<UUID> ids(UUID storeId, KsefInvoiceSearch.Filter filter, Specification<KsefInvoice> extra, int limit) {
+        String nip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
+        if (nip == null) {
+            return List.of();
+        }
+        Specification<KsefInvoice> matching = KsefInvoiceSearch.matching(storeId, nip, ownInternalIds(storeId),
+                filter);
+        if (extra != null) {
+            matching = matching.and(extra);
+        }
+        return invoices.findAll(matching, PageRequest.of(0, limit, KsefInvoiceSearch.sort("issueDate", "desc")))
+                .map(KsefInvoice::getId).getContent();
     }
 
     /** Ręczne oznaczenie "wprowadzona" w sklepie (np. numer w PZ zapisany inaczej) albo jego cofnięcie. */
@@ -169,11 +199,17 @@ public class KsefInvoiceService {
      */
     @Transactional(noRollbackFor = ApiException.class)
     public ExportFile pdf(UUID storeId, UUID id) {
+        return pdf(storeId, id, KsefInvoicePdf.Variant.FULL);
+    }
+
+    /** PDF w wariancie: pełny albo podstawowy do wprowadzania (pozycje, opis, dokumenty WZ). */
+    @Transactional(noRollbackFor = ApiException.class)
+    public ExportFile pdf(UUID storeId, UUID id, KsefInvoicePdf.Variant variant) {
         KsefInvoice invoice = visible(storeId, id);
         byte[] content;
         try {
             content = invoicePdf.pdf(download(storeId, invoice), invoice.getKsefNumber(), invoice.getSellerNip(),
-                    invoice.getInvoicingDate());
+                    invoice.getInvoicingDate(), variant);
         } catch (KsefInvoiceReader.InvalidInvoiceException e) {
             throw ApiException.badRequest("Nie udało się odczytać faktury z KSeF: " + e.getMessage());
         }
@@ -310,6 +346,22 @@ public class KsefInvoiceService {
     @Transactional(readOnly = true)
     public KsefInvoiceSummary summary(UUID storeId, UUID id) {
         return summaries(storeId, List.of(visible(storeId, id))).getFirst();
+    }
+
+    /**
+     * Faktura sprzedawcy o tym numerze (bez względu na wielkość liter) widoczna w sklepie; brak połączenia, faktury
+     * albo faktura z cudzym IDWew = pusto.
+     */
+    @Transactional(readOnly = true)
+    public Optional<KsefInvoiceSummary> findVisible(UUID storeId, String sellerNip, String invoiceNumber) {
+        String nip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
+        if (nip == null || sellerNip == null || invoiceNumber == null) {
+            return Optional.empty();
+        }
+        Set<String> own = ownInternalIds(storeId);
+        return invoices.findBySellerAndNumber(nip, sellerNip, normalized(invoiceNumber.strip())).stream()
+                .filter(invoice -> KsefInvoiceSearch.visibleInStore(invoice, own)).findFirst()
+                .map(invoice -> summaries(storeId, List.of(invoice)).getFirst());
     }
 
     private Set<String> ownInternalIds(UUID storeId) {

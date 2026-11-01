@@ -23,8 +23,9 @@ public final class SuggestionPrompt {
               1. "ten sam producent (prefiks EAN)": inne produkty tego producenta w kartotece i ich podrodziny.
                  Producent zwykle robi jeden rodzaj towaru, ale sprawdź, czy ten produkt pasuje do tej samej grupy.
               2. "podobne nazwy w kartotece": gdzie sklep trzyma produkty o podobnej nazwie.
-            - name: nazwa artykułu dla klienta, najwyżej 30 znaków:
+            - name: nazwa artykułu dla klienta, najwyżej 30 znaków razem ze spacjami i miarą (policz je):
               * jak najbardziej czytelna: pełne słowa, skróty tylko wtedy, gdy bez nich nazwa się nie mieści;
+                wtedy skracaj słowa opisowe (CZEKOLADOWY -> CZEKOL), a rodzaj towaru i wariant (smak, kolor) zostaw;
               * WIELKIE LITERY, bez polskich znaków, bez kropek (ułamek z przecinkiem);
               * bez marki i bez producenta (marka idzie osobno), bez opisu kartonu (np. "/12", "8/");
               * na końcu miara sprzedawanej sztuki: poniżej 1 kg gramy (250G), od 1 kg kilogramy (1KG, 1,5KG),
@@ -44,6 +45,38 @@ public final class SuggestionPrompt {
 
             Drzewo nomenklatury sklepu (rejon > rodzina > podrodzina):
             """;
+
+    /** Instrukcja do skracania nazw dłuższych niż limit ({@link #shorten}). */
+    public static final String SHORTEN_INSTRUCTION = """
+            Skracasz nazwy artykułów w kartotece supermarketu, które przekraczają limit długości.
+            Dla każdej pozycji zwróć name: nazwę BEZ MIARY (miarę dopiszemy sami na końcu), która ma najwyżej
+            podaną liczbę znaków, licząc spacje. Policz znaki przed odpowiedzią.
+            - WIELKIE LITERY, bez polskich znaków, bez kropek.
+            - Zostaw rodzaj towaru i wariant (smak, kolor, odmiana), bo po nich klient rozróżnia artykuły.
+            - Najpierw pomiń słowa zbędne, potem skracaj słowa opisowe i nazwy linii produktów
+              (CZEKOLADOWY -> CZEKOL, TRUSKAWKOWY -> TRUSK, ATHLETES -> ATHL), bez kropek po skrótach.
+            - Bez marki i producenta.
+            Przykład: "ROCKY ATHLETES CREATINE MANGO" (limit 25) -> "ROCKY ATHL CREATINE MANGO".
+            Zwróć wynik dla każdej pozycji, z jej id.
+            """;
+
+    /** Nazwa do skrócenia: obecna nazwa bez miary i limit znaków dla niej. */
+    public record ShortenItem(String invoiceName, String name, int limit) {
+    }
+
+    /** Pozycje do skrócenia z numerami {@code id} od 0. */
+    public static String shorten(List<ShortenItem> items) {
+        StringBuilder text = new StringBuilder();
+        for (int id = 0; id < items.size(); id++) {
+            ShortenItem item = items.get(id);
+            text.append("### Pozycja id=").append(id).append('\n')
+                    .append("faktura: ").append(item.invoiceName()).append('\n')
+                    .append("obecnie: ").append(item.name()).append(" (").append(item.name().length())
+                    .append(" znaków)\n")
+                    .append("limit: ").append(item.limit()).append(" znaków\n");
+        }
+        return text.toString();
+    }
 
     /** Instrukcja systemowa: zasady i drzewo nomenklatury ({@code code -> name}, kody 2, 4 i 6 cyfr). */
     public static String systemInstruction(Map<String, String> nomenclature) {

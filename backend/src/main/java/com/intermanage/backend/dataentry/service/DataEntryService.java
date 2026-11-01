@@ -66,12 +66,13 @@ public class DataEntryService {
     private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final Pattern RATE = Pattern.compile("^(\\d+(?:[.,]\\d+)?)\\s*%");
-    private static final Set<String> PIECE_UNITS = Set.of("szt", "szt.", "sztuka", "sztuki", "sz");
     private static final Pattern XML_EAN = Pattern.compile("\\d{8,14}");
-    private static final Set<String> KG_UNITS =Set.of("kg", "kg.", "kilogram");
+    private static final Set<String> KG_UNITS = Set.of("kg", "kg.", "kilogram");
     static final int CATALOG_PAGE_SIZE = 100;
     /** {@code eanSource} pozycji wczytanej z przypięcia kodu dostawcy do artykułu. */
     static final String LINK_SOURCE = "LINK";
+    /** {@code eanSource} pozycji wczytanej z pliku XML faktury. */
+    static final String XML_SOURCE = "XML";
     static final Set<String> CATALOG_SORTS =
             Set.of("itm8", "ean", "name", "brand", "supplier", "nomenclature", "purchase", "sale", "stock");
 
@@ -220,7 +221,23 @@ public class DataEntryService {
                         .map(item -> new DataEntryInvoice.CodeSource(item.key(), item.label(), item.filled(),
                                 item.matched()))
                         .toList(),
-                rows);
+                rows, total(invoice, lines, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
+                total(invoice, lines, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat));
+    }
+
+    /**
+     * Suma z faktury: z podsumowania stawek (P_13_x, P_14_x), a gdy go nie ma, z pozycji bez wierszy "przed korektą".
+     * Brak kwoty w którymkolwiek wierszu daje {@code null}, bo suma byłaby niepełna.
+     */
+    private static BigDecimal total(KsefInvoiceReader.Invoice invoice, List<KsefInvoiceReader.Line> lines,
+            Function<KsefInvoiceReader.TaxRow, BigDecimal> fromTax, Function<KsefInvoiceReader.Line, BigDecimal> fromLine) {
+        List<BigDecimal> amounts = invoice.taxes().isEmpty()
+                ? lines.stream().map(fromLine).toList()
+                : invoice.taxes().stream().map(fromTax).toList();
+        if (amounts.isEmpty() || amounts.contains(null)) {
+            return null;
+        }
+        return amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** Artykuły z kartoteki dla wpisanych EAN-ów (bez zer wiodących); nieznane EAN-y pomija. */
@@ -349,25 +366,31 @@ public class DataEntryService {
         return new ExportFile(fileName, xlsxWriter.writeRows("Wprowadzanie", columns, rows));
     }
 
+    /** Plik XML z tabeli z opisem nagłówka (do historii plików). */
+    record XmlFile(String fileName, byte[] content, UUID invoiceId, String number, LocalDate date,
+            String supplierName, String supplierNip, int lineCount, BigDecimal netValue) {
+    }
+
     /**
-     * Plik XML faktury dla programu sklepu ({@link InvoiceXml}). Nagłówek z faktury KSeF wczytanej do tabeli (numer,
-     * data wystawienia, NIP sprzedawcy); dostawca to nazwa z listy dostawców sklepu po NIP-ie, bez niej nazwa
-     * sprzedawcy z faktury. Tabela bez faktury: data dzisiejsza, bez numeru i dostawcy. EAN tylko z cyfr (8-14),
-     * inny kod (np. zastępczy z faktury) daje 13 zer. Nazwa pliku: numer sklepu, kod dostawcy (albo NIP), numer
-     * faktury. Wiersze z propozycji AI zapisują wartości przy propozycji, jak przy Excelu.
+     * Plik XML faktury dla programu sklepu ({@link InvoiceXml}), bez zapisu czegokolwiek. Nagłówek z faktury KSeF
+     * wczytanej do tabeli (numer, data wystawienia, NIP sprzedawcy), a bez niej z dokumentu wczytanego z pliku XML
+     * (bez daty: dzisiaj); dostawca to nazwa z listy dostawców sklepu po NIP-ie, bez niej nazwa sprzedawcy. EAN tylko
+     * z cyfr (8-14), inny kod (np. zastępczy z faktury) daje 13 zer. Nazwa pliku: numer sklepu, kod dostawcy (albo
+     * NIP), numer faktury.
      */
-    @Transactional
-    public ExportFile exportXml(UUID storeId, ExportRequest request, UUID userId) {
+    @Transactional(readOnly = true)
+    XmlFile buildXml(UUID storeId, ExportRequest request) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
         KsefInvoiceSummary invoice = request.invoiceId() != null
                 ? ksefInvoices.summary(storeId, request.invoiceId()) : null;
-        String number = invoice != null ? invoice.invoiceNumber() : request.invoiceNumber();
-        String nip = invoice != null ? invoice.sellerNip() : null;
+        String number = invoice != null ? invoice.invoiceNumber() : blankToNull(request.invoiceNumber());
+        String nip = invoice != null ? invoice.sellerNip() : blankToNull(digits(request.sellerNip()));
         Supplier supplier = nip == null ? null : suppliers.findByStore(storeId).stream()
                 .filter(candidate -> nip.equals(digits(candidate.getNip()))).findFirst().orElse(null);
         String supplierName = supplier != null ? supplier.getName()
-                : invoice != null ? invoice.sellerName() : request.sellerName();
-        LocalDate date = invoice != null && invoice.issueDate() != null ? invoice.issueDate() : LocalDate.now(WARSAW);
+                : invoice != null ? invoice.sellerName() : blankToNull(request.sellerName());
+        LocalDate date = invoice != null && invoice.issueDate() != null ? invoice.issueDate()
+                : request.issueDate() != null ? request.issueDate() : LocalDate.now(WARSAW);
 
         List<InvoiceXml.Line> lines = request.rows().stream()
                 .map(row -> new InvoiceXml.Line(row.name(), xmlEan(row.ean()), row.unitNet(), row.vatPercent(),
@@ -375,15 +398,86 @@ public class DataEntryService {
                 .toList();
         byte[] content = InvoiceXml.write(
                 new InvoiceXml.Header(number, date, supplierName, store.getNumber(), nip), lines);
-        saveExported(storeId, request.rows(), userId);
 
         String supplierPart = supplier != null && supplier.getCode() != null ? supplier.getCode() : nip;
-        String fileName = number != null && !number.isBlank()
+        String fileName = number != null
                 ? String.join("_", store.getNumber(), supplierPart != null ? supplierPart : "", number.strip())
                 : store.getNumber() + "_wprowadzanie_"
                         + LocalDateTime.now(WARSAW).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         fileName = fileName.replaceAll("[\\\\/:*?\"<>|()\\p{Cntrl}\\s]+", "_").replaceAll("_+", "_") + ".xml";
-        return new ExportFile(fileName, content);
+        return new XmlFile(fileName, content, invoice != null ? invoice.id() : null, number, date, supplierName, nip,
+                lines.size(), InvoiceXml.netValue(lines));
+    }
+
+    /**
+     * Plik XML faktury jako dokument do tabeli: pozycje dopasowane po EAN-ie do kartoteki, a bez EAN-u (albo spoza
+     * kartoteki) z przypięciem kodu u dostawcy z NIP-u pliku; pozycja bez EAN-u ma nazwę jako kod zastępczy.
+     * {@code invoice} to faktura z KSeF, z którą plik się wiąże (z niej dostawca i sumy do porównania); bez niej
+     * dostawca i data z pliku, a suma netto z WART_NET.
+     */
+    @Transactional(readOnly = true)
+    public DataEntryInvoice fromXml(UUID storeId, InvoiceXml.Document document, KsefInvoiceSummary invoice) {
+        List<InvoiceXml.Line> lines = document.lines();
+        Map<String, CatalogProduct> known = lookupByKey(storeId, lines.stream().map(line -> key(ean(line.ean())))
+                .filter(Objects::nonNull).distinct().toList());
+        String sellerNip = DataEntryLinkService.digits(invoice != null ? invoice.sellerNip()
+                : document.header().supplierNip());
+        List<String> linkCodes = lines.stream()
+                .filter(line -> !known.containsKey(key(ean(line.ean()))))
+                .map(line -> ean(line.ean()) != null ? ean(line.ean()) : line.name())
+                .filter(Objects::nonNull).map(DataEntryLinkService::code).distinct().toList();
+        Map<String, DataEntryProductLinkRepository.ActiveLink> linked = linkCodes.isEmpty() || sellerNip.isEmpty()
+                ? Map.of()
+                : productLinks.findActive(storeId, sellerNip, linkCodes).stream()
+                        .collect(Collectors.toMap(DataEntryProductLinkRepository.ActiveLink::getCode,
+                                Function.identity(), (a, b) -> a));
+        Map<String, CatalogProduct> linkedProducts = lookupByKey(storeId, linked.values().stream()
+                .map(link -> key(link.getEan())).filter(Objects::nonNull).distinct().toList());
+
+        List<DataEntryLine> rows = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            InvoiceXml.Line line = lines.get(i);
+            String ean = ean(line.ean());
+            String name = line.name() != null ? line.name().strip() : null;
+            CatalogProduct product = ean != null ? known.get(key(ean)) : null;
+            String eanSource = XML_SOURCE;
+            DataEntryProductLinkRepository.ActiveLink link = null;
+            if (product == null) {
+                String code = ean != null ? ean : name;
+                link = code != null ? linked.get(DataEntryLinkService.code(code)) : null;
+                CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
+                if (linkedProduct != null) {
+                    product = linkedProduct;
+                    ean = linkedProduct.catalogEan();
+                    eanSource = LINK_SOURCE;
+                } else {
+                    link = null;
+                }
+            }
+            Measure measure = product != null ? Measure.of(product.unit(), product.netContent())
+                    : Measure.fromInvoice(name, null);
+            if (measure == null) {
+                measure = Measure.piece();
+            }
+            boolean fallback = ean == null && name != null;
+            rows.add(new DataEntryLine(String.valueOf(i + 1), ean, eanSource, fallback ? name : null,
+                    fallback ? "nazwa z pliku XML" : null, line.quantity(), line.unitNet(), name, null,
+                    line.vatPercent(), product, measure.unit(), measure.netContent(),
+                    link != null ? link.getId() : null, link != null ? link.getCode() : null));
+        }
+        InvoiceXml.Header header = document.header();
+        return new DataEntryInvoice(invoice != null ? invoice.id() : null,
+                invoice != null ? invoice.invoiceNumber() : header.documentNumber(),
+                invoice != null ? invoice.sellerName() : header.supplierCode(),
+                invoice != null ? invoice.sellerNip() : blankToNull(digits(header.supplierNip())),
+                invoice != null && invoice.issueDate() != null ? invoice.issueDate() : header.date(), XML_SOURCE,
+                List.of(), rows,
+                invoice != null ? invoice.netAmount() : document.netValue(),
+                invoice != null ? invoice.vatAmount() : null);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 
     private static String xmlEan(String ean) {
@@ -395,7 +489,8 @@ public class DataEntryService {
         return value == null ? null : value.replaceAll("\\D", "");
     }
 
-    private void saveExported(UUID storeId, List<ExportRequest.Row> rows, UUID userId) {
+    /** Wiersze z propozycji AI zapisują wartości z pliku przy propozycji (do mierzenia trafności). */
+    void saveExported(UUID storeId, List<ExportRequest.Row> rows, UUID userId) {
         Map<UUID, ExportRequest.Row> bySuggestion = rows.stream().filter(row -> row.suggestionId() != null)
                 .collect(Collectors.toMap(ExportRequest.Row::suggestionId, Function.identity(), (a, b) -> b));
         if (bySuggestion.isEmpty()) {
@@ -410,8 +505,8 @@ public class DataEntryService {
 
     /**
      * Marża % od sprzedaży netto: (sprzedaż netto − zakup netto sztuki) / sprzedaż netto. Zakup sztuki: cena z
-     * faktury w sztukach, a w kg razy waga sztuki sprzedawanej w kg; inna jednostka na fakturze (karton, opakowanie)
-     * nie daje marży.
+     * faktury za jedną sztukę z kolumny Ilość bez względu na jednostkę (szt., op., pak), a w kg przy sprzedaży
+     * na kg razy waga sztuki.
      */
     static BigDecimal marginPercent(ExportRequest.Row row) {
         BigDecimal purchase = purchasePerPiece(row.unitNet(), row.invoiceUnit(), row.unit(), row.netContent());
@@ -452,14 +547,10 @@ public class DataEntryService {
         if (unitNet == null) {
             return null;
         }
-        String unit = invoiceUnit == null ? "szt." : invoiceUnit.strip().toLowerCase(Locale.ROOT);
-        if (PIECE_UNITS.contains(unit)) {
-            return unitNet;
-        }
-        if (KG_UNITS.contains(unit)) {
-            return Measure.KG.equals(saleUnit) && netContent != null ? unitNet.multiply(netContent) : unitNet;
-        }
-        return null;
+        String unit = invoiceUnit == null ? "" : invoiceUnit.strip().toLowerCase(Locale.ROOT);
+        return KG_UNITS.contains(unit) && Measure.KG.equals(saleUnit) && netContent != null
+                ? unitNet.multiply(netContent)
+                : unitNet;
     }
 
     private static String level(Map<String, String> names, String subfamily, int length) {

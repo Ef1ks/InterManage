@@ -103,6 +103,147 @@ class SupplierGratisIntegrationTests {
     }
 
     @Test
+    void keepsSupplierDetailsAndContacts() throws Exception {
+        Cookie owner = login();
+        String storeNumber = storeNumber();
+        String storeId = createStore(owner, storeNumber);
+        uploadSuppliers(owner, storeId, supplierReport(storeNumber, 1,
+                supplier("214", "MAZURSKIE", "MAZURSKIE MIODY", "", "Bezpośr.")))
+                .andExpect(status().isCreated());
+        String imported = JsonPath.read(mvc.perform(get(suppliersUrl(storeId)).cookie(owner))
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+        String supplierUrl = suppliersUrl(storeId) + "/" + imported;
+
+        // Dostawca z listy: nazwa przychodzi z raportu, więc zmiana nazwy jest pomijana; strona dostaje https://.
+        send(owner, put(supplierUrl), """
+                {"name":"Inna nazwa","website":" mazurskiemiody.pl ","email":"biuro@mazurskie.pl",
+                 "phone":"89 123 45 67","notes":"Zamówienia do środy"}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("MAZURSKIE MIODY"))
+                .andExpect(jsonPath("$.website").value("https://mazurskiemiody.pl"))
+                .andExpect(jsonPath("$.listReportGeneratedAt").value("2026-10-25T12:46:21"))
+                .andExpect(jsonPath("$.detailsUpdatedBy").isNotEmpty());
+        send(owner, put(supplierUrl), "{\"email\":\"to nie mail\"}").andExpect(status().isBadRequest());
+
+        // Kontakty: przedstawiciel trafia na listę, pusty kontakt jest odrzucany.
+        send(owner, post(supplierUrl + "/contacts"), "{\"kind\":\"ACCOUNTING\",\"email\":\"faktury@mazurskie.pl\"}")
+                .andExpect(status().isCreated());
+        String contact = JsonPath.read(send(owner, post(supplierUrl + "/contacts"),
+                        "{\"kind\":\"REPRESENTATIVE\",\"name\":\"Jan Kowalski\",\"phone\":\"600 100 200\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.contacts.length()").value(2))
+                .andExpect(jsonPath("$.contacts[0].kind").value("REPRESENTATIVE"))
+                .andReturn().getResponse().getContentAsString(), "$.contacts[0].id");
+        send(owner, post(supplierUrl + "/contacts"), "{\"kind\":\"OTHER\",\"jobTitle\":\"kierowca\"}")
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(suppliersUrl(storeId)).cookie(owner))
+                .andExpect(jsonPath("$[0].contactCount").value(2))
+                .andExpect(jsonPath("$[0].representative.name").value("Jan Kowalski"));
+
+        send(owner, put(supplierUrl + "/contacts/" + contact),
+                "{\"kind\":\"REPRESENTATIVE\",\"name\":\"Jan Kowalski\",\"phone\":\"600 100 300\"}")
+                .andExpect(jsonPath("$.contacts[0].phone").value("600 100 300"))
+                .andExpect(jsonPath("$.contacts[0].updatedBy").isNotEmpty());
+        mvc.perform(delete(supplierUrl + "/contacts/" + contact).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.contacts.length()").value(1));
+        mvc.perform(get(suppliersUrl(storeId)).cookie(owner))
+                .andExpect(jsonPath("$[0].representative").value(nullValue()));
+        mvc.perform(post(supplierUrl + "/contacts/" + contact + "/restore").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.contacts.length()").value(2));
+
+        // Dostawca dodany ręcznie: nazwa, NIP i adres zmienia się w aplikacji.
+        String manual = JsonPath.read(send(owner, post(suppliersUrl(storeId)), "{\"name\":\"Piekarnia Kłos\"}")
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        send(owner, put(suppliersUrl(storeId) + "/" + manual),
+                "{\"name\":\"Piekarnia Kłos s.c.\",\"nip\":\"929-124-30-24\",\"city\":\"Olsztyn\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Piekarnia Kłos s.c."))
+                .andExpect(jsonPath("$.nip").value("9291243024"))
+                .andExpect(jsonPath("$.city").value("Olsztyn"))
+                .andExpect(jsonPath("$.manual").value(true));
+        send(owner, put(suppliersUrl(storeId) + "/" + manual), "{\"name\":\" \"}").andExpect(status().isBadRequest());
+
+        // Import kolejnej listy nie rusza kartoteki.
+        uploadSuppliers(owner, storeId, supplierReport(storeNumber, 1,
+                supplier("214", "MAZURSKIE", "MAZURSKIE MIODY SP. Z O.O.", "", "Bezpośr.")))
+                .andExpect(status().isCreated());
+        mvc.perform(get(supplierUrl).cookie(owner))
+                .andExpect(jsonPath("$.name").value("MAZURSKIE MIODY SP. Z O.O."))
+                .andExpect(jsonPath("$.website").value("https://mazurskiemiody.pl"))
+                .andExpect(jsonPath("$.contacts.length()").value(2));
+    }
+
+    @Test
+    void sharesSupplierDetailsAcrossStoresOfOneCompany() throws Exception {
+        Cookie owner = login();
+        String nip = randomNip();
+        String firstNumber = storeNumber();
+        String secondNumber = storeNumber();
+        String first = createStore(owner, firstNumber, nip);
+        String second = createStore(owner, secondNumber, nip);
+        String otherNumber = storeNumber();
+        String other = createStore(owner, otherNumber, null);
+        for (String[] store : new String[][] {{first, firstNumber}, {second, secondNumber}}) {
+            uploadSuppliers(owner, store[0], supplierReport(store[1], 1,
+                    supplier("214", "MAZURSKIE", "MAZURSKIE MIODY", "", "Bezpośr.")))
+                    .andExpect(status().isCreated());
+        }
+        String firstSupplier = JsonPath.read(mvc.perform(get(suppliersUrl(first)).cookie(owner))
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+        String secondSupplier = JsonPath.read(mvc.perform(get(suppliersUrl(second)).cookie(owner))
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+
+        // Strona i przedstawiciel wpisane w pierwszym sklepie są od razu w drugim sklepie tej firmy.
+        send(owner, put(suppliersUrl(first) + "/" + firstSupplier), "{\"website\":\"mazurskie.pl\"}")
+                .andExpect(jsonPath("$.sharedWithStores.length()").value(1));
+        send(owner, post(suppliersUrl(first) + "/" + firstSupplier + "/contacts"),
+                "{\"kind\":\"REPRESENTATIVE\",\"name\":\"Jan Kowalski\"}")
+                .andExpect(status().isCreated());
+        mvc.perform(get(suppliersUrl(second)).cookie(owner))
+                .andExpect(jsonPath("$[0].website").value("https://mazurskie.pl"))
+                .andExpect(jsonPath("$[0].representative.name").value("Jan Kowalski"));
+        String contact = JsonPath.read(mvc.perform(get(suppliersUrl(second) + "/" + secondSupplier).cookie(owner))
+                .andExpect(jsonPath("$.contacts.length()").value(1))
+                .andReturn().getResponse().getContentAsString(), "$.contacts[0].id");
+
+        // Zmiana w drugim sklepie wraca do pierwszego.
+        send(owner, put(suppliersUrl(second) + "/" + secondSupplier + "/contacts/" + contact),
+                "{\"kind\":\"REPRESENTATIVE\",\"name\":\"Jan Kowalski\",\"phone\":\"600 100 200\"}")
+                .andExpect(status().isOk());
+        mvc.perform(get(suppliersUrl(first) + "/" + firstSupplier).cookie(owner))
+                .andExpect(jsonPath("$.contacts[0].phone").value("600 100 200"));
+
+        // Sklep innej firmy (tu bez NIP-u) ma własne dane.
+        uploadSuppliers(owner, other, supplierReport(otherNumber, 1,
+                supplier("214", "MAZURSKIE", "MAZURSKIE MIODY", "", "Bezpośr.")))
+                .andExpect(status().isCreated());
+        mvc.perform(get(suppliersUrl(other)).cookie(owner))
+                .andExpect(jsonPath("$[0].website").value(nullValue()))
+                .andExpect(jsonPath("$[0].contactCount").value(0));
+    }
+
+    /** Losowy NIP z poprawną cyfrą kontrolną. */
+    private static String randomNip() {
+        int[] weights = {6, 5, 7, 2, 3, 4, 5, 6, 7};
+        while (true) {
+            String digits = String.valueOf(ThreadLocalRandom.current().nextLong(100_000_000L, 1_000_000_000L));
+            int sum = 0;
+            for (int i = 0; i < 9; i++) {
+                sum += weights[i] * (digits.charAt(i) - '0');
+            }
+            if (sum % 11 < 10) {
+                return digits + sum % 11;
+            }
+        }
+    }
+
+    private ResultActions send(Cookie owner,
+            org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request, String json)
+            throws Exception {
+        return mvc.perform(request.cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    @Test
     void registersTransferAsGratisFromChosenSupplier() throws Exception {
         Cookie owner = login();
         String storeNumber = storeNumber();
@@ -357,9 +498,14 @@ class SupplierGratisIntegrationTests {
     }
 
     private String createStore(Cookie owner, String number) throws Exception {
+        return createStore(owner, number, null);
+    }
+
+    private String createStore(Cookie owner, String number, String nip) throws Exception {
         String json = mvc.perform(post("/api/settings/stores").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"number\":\"" + number + "\",\"name\":\"Sklep gratisów\",\"active\":true}"))
+                        .content("{\"number\":\"" + number + "\",\"name\":\"Sklep gratisów\",\"active\":true"
+                                + (nip != null ? ",\"nip\":\"" + nip + "\"" : "") + "}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(json, "$.id");
