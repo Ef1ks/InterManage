@@ -50,8 +50,8 @@ type Props = {
 
 /**
  * Zapis tabeli do pliku XML faktury dla programu sklepu. Plik trafia do folderu wybranego raz w przeglądarce; bez
- * folderu (albo w przeglądarce bez tej funkcji) się pobiera. Braki tabeli i różnica sum z fakturą są nad przyciskiem,
- * ale nie blokują zapisu: przycisk pyta wtedy „Zapisz mimo …”. Nowe i zmienione artykuły trafiają po zapisie XML do
+ * folderu (albo w przeglądarce bez tej funkcji) się pobiera. Błędny EAN nowego artykułu blokuje zapis; pozostałe braki
+ * tabeli i różnica sum z fakturą są nad przyciskiem, ale nie blokują zapisu: przycisk pyta wtedy „Zapisz mimo …”. Nowe i zmienione artykuły trafiają po zapisie XML do
  * pliku CADBEZP (.xls) w osobnym folderze (ścieżka z ustawień sklepu), a zmienione ceny sprzedaży do pliku CTRLPRIX w
  * folderze plików PROTO; ich błąd nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików.
  */
@@ -184,13 +184,9 @@ export function XmlSaveDialog({
     }
   }
 
+  // Błędny EAN blokuje zapis: program sklepu założyłby artykuł z kodem, którego nie ma na towarze.
+  const invalidEan = problems.invalidEan.length > 0
   const issues = [
-    {
-      rows: problems.invalidEan,
-      text: 'Błędny EAN nowego artykułu (zła długość albo cyfra kontrolna)',
-      key: 'ean' as const,
-      show: 'Pokaż pierwszy',
-    },
     { rows: problems.tooLong, text: 'Nazwa dłuższa niż 30 znaków', key: 'name' as const, show: 'Pokaż pierwszą' },
     { rows: problems.noSubfamily, text: 'Nowy artykuł bez podrodziny', key: 'subfamily' as const, show: 'Pokaż pierwszy' },
   ].filter((issue) => issue.rows.length > 0)
@@ -222,6 +218,26 @@ export function XmlSaveDialog({
               <SumRow label="Netto" value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />
               <SumRow label="VAT" value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />
             </dl>
+          </div>
+        )}
+
+        {invalidEan && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-400 bg-red-200 px-4 py-3 text-sm text-red-950 dark:border-red-500/50 dark:bg-red-950/70 dark:text-red-50"
+          >
+            <p className="font-medium">Błędny EAN nowego artykułu: {problems.invalidEan.length}</p>
+            <p className="mt-1">
+              Zła długość albo cyfra kontrolna. Popraw EAN z towaru (albo wyczyść komórkę, gdy towar nie ma kodu), dopiero
+              wtedy plik da się zapisać.{' '}
+              <button
+                type="button"
+                className="font-medium underline underline-offset-3"
+                onClick={() => onGoTo(problems.invalidEan[0], 'ean')}
+              >
+                Pokaż pierwszy
+              </button>
+            </p>
           </div>
         )}
 
@@ -289,13 +305,15 @@ export function XmlSaveDialog({
           </div>
         )}
 
-        <Button size="xl" loading={saving} disabled={count === 0} onClick={save}>
+        <Button size="xl" loading={saving} disabled={count === 0 || invalidEan} onClick={save}>
           <FileCodeIcon />
-          {totals.mismatch
-            ? 'Zapisz mimo różnicy'
-            : issues.length > 0 || priceConflicts.length > 0
-              ? 'Zapisz mimo to'
-              : 'Zapisz plik XML'}
+          {invalidEan
+            ? 'Popraw błędne EAN-y'
+            : totals.mismatch
+              ? 'Zapisz mimo różnicy'
+              : issues.length > 0 || priceConflicts.length > 0
+                ? 'Zapisz mimo to'
+                : 'Zapisz plik XML'}
         </Button>
 
         {priceControlFiles.data && priceControlFiles.data.length > 0 && (

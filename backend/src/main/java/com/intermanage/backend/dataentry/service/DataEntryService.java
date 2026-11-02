@@ -31,6 +31,7 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.InvoiceXml;
 import com.intermanage.backend.dataentry.component.Measure;
 import com.intermanage.backend.dataentry.component.ProductCodeSources;
+import com.intermanage.backend.dataentry.component.ProductFile;
 import com.intermanage.backend.dataentry.dto.CatalogListItem;
 import com.intermanage.backend.dataentry.dto.CatalogListPage;
 import com.intermanage.backend.dataentry.dto.CatalogListRequest;
@@ -378,7 +379,7 @@ public class DataEntryService {
      * (bez daty: dzisiaj); dostawca to nazwa z listy dostawców sklepu po NIP-ie, bez niej nazwa sprzedawcy. Dostawca
      * wybrany w tabeli ({@code supplierId}) zastępuje sprzedawcę: nazwa, NIP i kod z listy, numer z tabeli. EAN tylko
      * z cyfr (8-14), inny kod (np. zastępczy z faktury) daje 13 zer. Nazwa pliku: numer sklepu, kod dostawcy (albo
-     * NIP), numer faktury.
+     * NIP), nazwa dostawcy, numer faktury.
      */
     @Transactional(readOnly = true)
     XmlFile buildXml(UUID storeId, ExportRequest request) {
@@ -407,9 +408,11 @@ public class DataEntryService {
                 new InvoiceXml.Header(number, date, supplierName, store.getNumber(), nip), lines);
 
         String supplierPart = supplier != null && supplier.getCode() != null ? supplier.getCode() : nip;
+        String supplierLabel = ProductFile.supplierPart(supplierName);
         String fileName = number != null
-                ? String.join("_", store.getNumber(), supplierPart != null ? supplierPart : "", number.strip())
-                : store.getNumber() + "_wprowadzanie_"
+                ? String.join("_", store.getNumber(), supplierPart != null ? supplierPart : "", supplierLabel,
+                        number.strip())
+                : store.getNumber() + (supplierLabel.isEmpty() ? "" : "_" + supplierLabel) + "_wprowadzanie_"
                         + LocalDateTime.now(WARSAW).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         fileName = fileName.replaceAll("[\\\\/:*?\"<>|()\\p{Cntrl}\\s]+", "_").replaceAll("_+", "_") + ".xml";
         return new XmlFile(fileName, content, invoice != null ? invoice.id() : null, number, date, supplierName, nip,

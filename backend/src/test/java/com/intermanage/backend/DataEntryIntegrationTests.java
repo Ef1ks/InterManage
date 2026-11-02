@@ -476,7 +476,7 @@ class DataEntryIntegrationTests {
                         .content(table))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
-                        containsString("filename=\"" + number + "_154_FV_77_2026.xml\"")))
+                        containsString("filename=\"" + number + "_154_SERY_I_CHIPSY_SP._Z_O.O._FV_77_2026.xml\"")))
                 .andReturn().getResponse();
         byte[] file = exported.getContentAsByteArray();
         String exportId = exported.getHeader("X-Xml-Export-Id");
@@ -529,7 +529,8 @@ class DataEntryIntegrationTests {
                         .content(table.replaceFirst("\\{", "{\"supplierId\":\"" + otherSupplier + "\",")))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
-                        matchesPattern(".*filename=\"" + number + "_wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
+                        matchesPattern(".*filename=\"" + number
+                                + "_HURTOWNIA_SP\\._Z_O\\.O\\._wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
                 .andExpect(content().string(containsString("<NR_DOKUMENTU />")))
                 .andExpect(content().string(containsString("<DATA_DOKUMENTU>2026.10.30</DATA_DOKUMENTU>")))
                 .andExpect(content().string(containsString("<KOD_DOSTAWCY>HURTOWNIA SP. Z O.O.</KOD_DOSTAWCY>")))

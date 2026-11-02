@@ -8,6 +8,8 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import com.intermanage.backend.common.component.ProtoFile;
+
 /**
  * Plik CTRLPRIX dla programu sklepu ({@code CTRLPRIX_20261102_112600_GOBARTO_<login>.traite0}; program wczytuje tylko
  * {@code .traite0}, a po wczytaniu sam zmienia końcówkę na {@code .Traite1}, 2, 3): nowe ceny sprzedaży
@@ -30,13 +32,10 @@ public final class PriceControlFile {
     private PriceControlFile() {
     }
 
+    /** Hasło dostawcy i login tylko z liter i cyfr ({@link ProtoFile#namePart}): {@code DR LEKS} → {@code DRLEKS}. */
     public static String fileName(String supplierKeyword, String username) {
-        return "CTRLPRIX_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + safe(supplierKeyword) + "_"
-                + safe(username) + ".traite0";
-    }
-
-    private static String safe(String part) {
-        return part.trim().replaceAll("[^A-Za-z0-9._-]", "_");
+        return "CTRLPRIX_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + ProtoFile.namePart(supplierKeyword)
+                + "_" + ProtoFile.loginPart(username) + ".traite0";
     }
 
     /** EAN w pliku: 8-13 cyfr dopełnione do 13, GTIN-14 z zerem na początku jako EAN-13; inne kody = {@code null}. */

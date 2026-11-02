@@ -543,6 +543,12 @@ export function DataEntryGrid({
   }
 
   const onDoubleClick = (event: React.MouseEvent) => {
+    // W trakcie pisania w komórce podwójne kliknięcie zaznacza cały wpisany tekst, a nie zaczyna edycji od nowa
+    // (to cofałoby wpisane zmiany).
+    if (event.target instanceof HTMLInputElement) {
+      event.target.select()
+      return
+    }
     const cell = cellFromEvent(event)
     if (cell) startEdit(cell, 'edit')
   }

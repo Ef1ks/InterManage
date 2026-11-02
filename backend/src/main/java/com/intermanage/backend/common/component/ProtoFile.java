@@ -39,8 +39,23 @@ public final class ProtoFile {
      * sklep, od którego przyszło zamówienie albo towar), czas to chwila wygenerowania pliku (Europe/Warsaw).
      */
     public static String fileName(int number, String storeNumber, String username) {
-        return "PROTO" + number + "_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + storeNumber + "_"
-                + username.replaceAll("[^A-Za-z0-9._-]", "_") + ".Traite0";
+        return "PROTO" + number + "_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + namePart(storeNumber) + "_"
+                + loginPart(username) + ".Traite0";
+    }
+
+    /**
+     * Część nazwy pliku dla programu sklepu: same litery i cyfry. Program dzieli nazwę po {@code _}, więc podkreślnik,
+     * spacja czy {@code &} w loginie albo haśle dostawcy ({@code pdv_10023}, {@code DR LEKS}) psują nazwę i program
+     * pliku nie wczytuje; reszta znaków jest usuwana ({@code pdv10023}, {@code DRLEKS}).
+     */
+    public static String namePart(String part) {
+        return part == null ? "" : part.replaceAll("[^A-Za-z0-9]", "");
+    }
+
+    /** Login w nazwie pliku: {@link #namePart}, a gdy nic nie zostaje, {@code user}. */
+    public static String loginPart(String username) {
+        String login = namePart(username);
+        return login.isEmpty() ? "user" : login;
     }
 
     /** Linie bez EAN-u albo z ilością 0 lub ujemną są pomijane. */

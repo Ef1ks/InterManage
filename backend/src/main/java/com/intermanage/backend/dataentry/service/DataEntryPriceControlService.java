@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.PriceControlFile;
 import com.intermanage.backend.dataentry.dto.PriceControlFileItem;
@@ -45,7 +46,7 @@ public class DataEntryPriceControlService {
             String username) {
         Supplier supplier = supplier(storeId, request);
         String keyword = supplier.getKeyword() == null ? "" : supplier.getKeyword().trim();
-        if (keyword.isEmpty()) {
+        if (ProtoFile.namePart(keyword).isEmpty()) {
             throw ApiException.badRequest("Dostawca " + supplier.getName()
                     + " nie ma hasła na liście dostawców, a plik CTRLPRIX ma je w nazwie");
         }

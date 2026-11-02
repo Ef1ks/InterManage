@@ -96,10 +96,10 @@ public final class ProductFile {
 
     /** Nazwa pliku: CADBEZP-<dostawca>[-<nr faktury>].xls, bez znaków niedozwolonych w nazwach plików. */
     public static String fileName(String supplierName, String invoiceNumber) {
-        String supplier = supplierName == null ? "" : plain(supplierName);
+        String supplier = supplierPart(supplierName);
         StringBuilder name = new StringBuilder("CADBEZP");
         if (!supplier.isEmpty()) {
-            name.append('-').append(supplier.length() > 40 ? supplier.substring(0, 40).strip() : supplier);
+            name.append('-').append(supplier);
         }
         if (invoiceNumber != null && !invoiceNumber.isBlank()) {
             name.append('-').append(invoiceNumber.strip());
@@ -108,6 +108,12 @@ public final class ProductFile {
     }
 
     /** Wielkie litery bez polskich znaków. */
+    /** Nazwa dostawcy w nazwie pliku: wielkie litery bez polskich znaków, najwyżej 40 znaków; pusta bez nazwy. */
+    public static String supplierPart(String supplierName) {
+        String supplier = supplierName == null ? "" : plain(supplierName);
+        return supplier.length() > 40 ? supplier.substring(0, 40).strip() : supplier;
+    }
+
     private static String plain(String text) {
         return Normalizer.normalize(text.strip().toUpperCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "").replace('Ł', 'L');

@@ -140,11 +140,14 @@ export function emptyRow(): DataEntryRow {
 /** Pozycja faktury jako wiersz: znany artykuł z danymi z kartoteki, nowy z tym, co wiadomo z faktury. */
 export function rowFromLine(line: DataEntryLine): DataEntryRow {
   const product = line.product
+  // Ciąg 8-14 cyfr z innego pola faktury to EAN z błędem dostawcy (np. Indeks 59010058003643 z dodatkową cyfrą):
+  // idzie do kolumny jako EAN, żeby tabela pokazała błędny EAN i nie dała zapisać pliku, zamiast zer w pliku.
+  const digitFallback = !line.ean && line.fallbackCode !== null && /^\d{8,14}$/.test(line.fallbackCode)
   const row: DataEntryRow = {
     ...emptyRow(),
     // Bez EAN-u kolumna dostaje inny kod z faktury albo nazwę, żeby pozycję dało się rozpoznać.
     ean: line.ean ?? line.fallbackCode ?? '',
-    eanFallback: line.ean ? null : line.fallbackSource,
+    eanFallback: line.ean || digitFallback ? null : line.fallbackSource,
     // Pozycje faktury backend sprawdził już w kartotece.
     eanChecked: line.ean ?? line.fallbackCode ?? '',
     supplierCode: line.supplierCode,
