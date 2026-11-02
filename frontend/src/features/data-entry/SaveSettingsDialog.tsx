@@ -23,12 +23,18 @@ export function SaveSettingsDialog({
   open,
   onOpenChange,
   missing = [],
+  withXml = true,
+  extraFolders = [],
 }: {
   storeId: string
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Foldery, których zabrakło przy ostatnim „Zapisz” (wyróżnione). */
   missing?: SavedFolderSpec[]
+  /** Folder pliku XML faktury (dostawa z bazy go nie zapisuje). */
+  withXml?: boolean
+  /** Foldery innych plików ekranu (np. „Sprawdź PLU” w dostawie z bazy), na końcu listy. */
+  extraFolders?: { folder: SavedFolderSpec; note: string }[]
 }) {
   const productFolder = useProductFileFolder(storeId)
   const protoFolder = useProtoFolder(storeId)
@@ -52,13 +58,17 @@ export function SaveSettingsDialog({
   }
 
   const folders = [
-    { folder: XML_FOLDER, note: 'Plik dokumentu dla programu sklepu.' },
+    ...(withXml ? [{ folder: XML_FOLDER, note: 'Plik dokumentu dla programu sklepu.' }] : []),
     { folder: productFolder, note: 'Nowe i zmienione artykuły, zapisywane razem z plikiem XML.' },
     {
       folder: protoFolder,
       note: 'Likwidacje, potrzeby sklepu i inne protokoły; ten sam folder co w garmażu i przyjęciach MM.',
     },
-    { folder: priceChangeFolder, note: 'Zmienione ceny sprzedaży artykułów z kartoteki, zapisywane razem z plikiem XML.' },
+    {
+      folder: priceChangeFolder,
+      note: 'Zmienione ceny sprzedaży artykułów z kartoteki, zapisywane razem z plikiem XML.',
+    },
+    ...extraFolders,
   ]
 
   return (
@@ -86,7 +96,9 @@ export function SaveSettingsDialog({
               <p className="text-sm font-medium">{folder.label}</p>
               <SavedFolder
                 folder={folder}
-                className={cn(isMissing(folder) && 'border-amber-400 bg-amber-100/60 dark:border-amber-600 dark:bg-amber-950/40')}
+                className={cn(
+                  isMissing(folder) && 'border-amber-400 bg-amber-100/60 dark:border-amber-600 dark:bg-amber-950/40',
+                )}
               />
               <p className="text-xs text-muted-foreground">{note}</p>
             </div>

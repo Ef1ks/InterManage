@@ -21,6 +21,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
     interface CatalogProduct {
         String getKey();
 
+        boolean getByItm8();
+
         String getItm8();
 
         String getCatalogEan();
@@ -62,6 +64,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * bieżącej liście {@code cadencier_items} sklepu (po ITM8).
      * Kod z etykiety wagi sklepu (2 + cyfra 1-9, 12-13 cyfr, w cyfrach 8-12 cena albo waga) trafia w artykuł, którego
      * EAN ma te same pierwsze 7 cyfr i zera w miejscu ceny ({@code 2404140000000}); dokładny EAN ma pierwszeństwo.
+     * Z {@code byItm8} (kod wpisany ręcznie) kod, który nie jest żadnym EAN-em, szuka jeszcze artykułu po ITM8, a potem
+     * po ITM8 z multikodów (artykuł z EAN-em tej pary); {@code byItm8} w wyniku mówi, że trafił ITM8.
      * {@code vatPercent}: z kodu stawki z kartoteki (1 = 23%, 2 = 8%, 6 = 5%, sprawdzone z liniami dokumentów; inne
      * kody, np. 3, 7 kaucje, są niepewne), bez niego z najnowszej linii dokumentu sklepu z tym ITM8, a na końcu
      * najczęstsza stawka z dokumentów artykułów tej samej podrodziny.
@@ -89,8 +93,19 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 join products p on p.store_id = :storeId and left(p.ean, 7) = left(k.key, 7)
                     and p.ean ~ '^2[1-9][0-9]{5}00000[0-9]$'
                 where k.key ~ '^2[1-9][0-9]{10,11}$'
+                union all
+                select k.key, p.id, 4
+                from keys k join products p on p.store_id = :storeId and p.itm8 = lpad(k.key, 13, '0')
+                where :byItm8 and length(k.key) <= 13
+                union all
+                select k.key, p.id, 5
+                from keys k
+                join product_codes c on c.store_id = :storeId and c.current and c.itm8 = lpad(k.key, 13, '0')
+                join products p on p.store_id = :storeId and ltrim(p.ean, '0') = ltrim(c.ean, '0')
+                where :byItm8 and length(k.key) <= 13
             )
-            select distinct on (h.key) h.key as key, p.itm8 as itm8, p.ean as catalogEan, p.name as name,
+            select distinct on (h.key) h.key as key, h.rank >= 4 as byItm8, p.itm8 as itm8, p.ean as catalogEan,
+                p.name as name,
                 p.brand as brand, p.purchase_price as purchasePrice,
                 coalesce(
                     case p.vat_code when 1 then 23 when 2 then 8 when 6 then 5 end,
@@ -117,7 +132,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             from hits h join products p on p.id = h.id
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
             order by h.key, h.rank, p.updated_at desc""", nativeQuery = true)
-    List<CatalogProduct> findByEans(UUID storeId, String[] eans, LocalDate today);
+    List<CatalogProduct> findByEans(UUID storeId, String[] eans, boolean byItm8, LocalDate today);
 
     interface CatalogListItem {
         String getItm8();

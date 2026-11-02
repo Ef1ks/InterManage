@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowRightIcon, CircleAlertIcon, CircleCheckIcon, XIcon } from 'lucide-react'
+import type { UseMutationResult } from '@tanstack/react-query'
+import { ArrowRightIcon, CircleAlertIcon, CircleCheckIcon, RefreshCwIcon, SettingsIcon, XIcon } from 'lucide-react'
 import { Link } from 'react-router'
+import { toast } from 'sonner'
 
 import { FileDropZone } from '@/components/FileDropZone'
 import { ImportError } from '@/components/ImportError'
@@ -12,11 +14,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useCan } from '@/features/auth/api'
+import { useCan, useMe } from '@/features/auth/api'
 import {
   useDocumentImports,
   useEanChanges,
   useImportDocuments,
+  useImportGuides,
   useImportNomenclatures,
   useImportProductCodes,
   useImportProducts,
@@ -30,13 +33,29 @@ import {
   useSalesImports,
   useSupplierImports,
 } from '@/features/imports/api'
+import { ImportSourcesDialog } from '@/features/imports/ImportSourcesDialog'
+import {
+  DAILY_REPORTS,
+  newestReportFile,
+  PDF_EXTENSIONS,
+  readMasks,
+  REPORT_TITLES,
+  sourceFolderKey,
+  XLSX_EXTENSIONS,
+  type DailyReport,
+} from '@/features/imports/import-sources'
+import { ReportHelp } from '@/features/imports/ReportHelp'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES } from '@/features/tools/categories'
+import { ApiError } from '@/lib/api'
 import { parseIsoDate } from '@/lib/dates'
 import { formatReportDate } from '@/lib/report-freshness'
+import { ensureFolderAccess, folderAccess, folderSavingSupported } from '@/lib/saved-folders'
 import type {
   DocumentImport,
   EanChange,
+  ImportGuide,
+  ImportReportKind,
   NomenclatureImport,
   ProductCodeImport,
   ProductImport,
@@ -46,14 +65,27 @@ import type {
   SupplierImport,
 } from '@/lib/types'
 
-const ACCEPTED_EXTENSIONS = ['.xlsx', '.xlsm']
-/** Lista nomenklatur i lista promocji są drukowane z systemu sklepu tylko do PDF. */
-const PDF_EXTENSIONS = ['.pdf']
-
 const numberFormat = new Intl.NumberFormat('pl-PL')
 const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
 const timeFormat = new Intl.DateTimeFormat('pl-PL', { timeStyle: 'short' })
 const dayFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
+
+/** Co jest w raporcie: pierwsza część okienka pod znakiem zapytania (resztę pisze właściciel). */
+const REPORT_DESCRIPTIONS: Record<ImportReportKind, string> = {
+  PRODUCTS: 'Kartoteka sklepu: ceny, stany, rotacja i nowe kody (np. BAZA DO STRONY.xlsx). Wgrywaj ją codziennie.',
+  PRODUCT_CODES:
+    'Wszystkie EAN-y przypisane teraz do każdego ITM8, z kodem głównym i współczynnikiem ceny (np. Multikody.xlsx). Kody, których zabraknie w nowym pliku, zostają w bazie jako historia przypisań.',
+  PROMOTIONS:
+    'Bieżące i przyszłe promocje z cenami zakupu, sprzedaży i promocyjnymi (PDF, np. Taryfy.pdf). Promocje, których zabraknie w nowym pliku, zostają w bazie.',
+  SALES:
+    'Sprzedaż po rabacie wg artykułu i dnia, z wartością FIFO, VAT i marżą (np. sprzedaz.xlsx). Zapisana sprzedaż się nie zmienia: z pliku dopisujemy tylko zakończone dni, których jeszcze nie ma.',
+  DOCUMENTS:
+    'Statystyka Wejścia/Wyjścia: przyjęcia towaru, korekty, likwidacje, zwroty, przeniesienia stanów i inne dokumenty magazynowe. Te same dokumenty można wgrywać wielokrotnie - zostaną uzupełnione.',
+  SUPPLIERS:
+    'Dostawcy z systemu sklepu. Wgraj listę ponownie, gdy dojdzie nowy dostawca albo zmienią się jego dane. Dostawcy, których zabraknie w nowym pliku, zostają w bazie.',
+  NOMENCLATURES:
+    'Rejony, rodziny i podrodziny z nazwami do raportów (PDF, np. nomenklatury.pdf). Wgraj ją ponownie, gdy w systemie sklepu zmieni się nomenklatura.',
+}
 
 /** Okres raportu albo zakres dni w bazie: "31.12.2025 – 30.06.2026". */
 function formatPeriod(from: string, to: string) {
@@ -83,14 +115,25 @@ export function ImportPage() {
 /** Data najświeższego raportu z historii (nie ostatniego wgrania - ktoś mógł wgrać starszy plik). */
 function newestReport(imports: { reportGeneratedAt: string | null }[] | undefined) {
   return imports?.reduce<string | null>(
-    (newest, item) => (item.reportGeneratedAt && (!newest || item.reportGeneratedAt > newest) ? item.reportGeneratedAt : newest),
+    (newest, item) =>
+      item.reportGeneratedAt && (!newest || item.reportGeneratedAt > newest) ? item.reportGeneratedAt : newest,
     null,
   )
 }
 
+/** Chwila ostatniego wgrania raportu; plik zmieniony wcześniej „Odśwież dane” pomija. */
+function lastImportedAt(imports: { importedAt: string }[] | undefined) {
+  return imports?.reduce((latest, item) => Math.max(latest, new Date(item.importedAt).getTime()), 0) ?? 0
+}
+
+/** Wynik „Odśwież dane” dla jednego raportu, pokazywany pod polem wgrywania. */
+type RefreshNote = { tone: 'muted' | 'warning'; text: string }
+
 function StoreImports({ store }: { store: StoreSummary }) {
   const canImport = useCan('IMPORTS', 'EDIT')
   const canViewDocuments = useCan('DOCUMENTS')
+  const isOwner = useMe().data?.owner === true
+  const guides = useImportGuides()
   const products = useProductImports(store.id)
   const documents = useDocumentImports(store.id)
   const suppliers = useSupplierImports(store.id)
@@ -98,21 +141,142 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const nomenclatures = useNomenclatureImports(store.id)
   const promotions = usePromotionImports(store.id)
   const productCodes = useProductCodeImports(store.id)
+  const uploads = {
+    PRODUCTS: useImportProducts(store.id),
+    PRODUCT_CODES: useImportProductCodes(store.id),
+    PROMOTIONS: useImportPromotions(store.id),
+    SALES: useImportSales(store.id),
+    DOCUMENTS: useImportDocuments(store.id),
+    SUPPLIERS: useImportSuppliers(store.id),
+    NOMENCLATURES: useImportNomenclatures(store.id),
+  }
   const [eanChangesOf, setEanChangesOf] = useState<ProductImport | null>(null)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState<DailyReport | 'access' | null>(null)
+  const [refreshNotes, setRefreshNotes] = useState<Partial<Record<DailyReport, RefreshNote>>>({})
   const lastProductImport = products.data?.imports[0]
+
+  const guideOf = (kind: ImportReportKind) => guides.data?.find((guide) => guide.kind === kind)
+  const lastImported: Record<DailyReport, number> = {
+    PRODUCTS: lastImportedAt(products.data?.imports),
+    PRODUCT_CODES: lastImportedAt(productCodes.data?.imports),
+    PROMOTIONS: lastImportedAt(promotions.data?.imports),
+    SALES: lastImportedAt(sales.data?.imports),
+    DOCUMENTS: lastImportedAt(documents.data),
+  }
+
+  /**
+   * Dla każdego raportu z wybranym folderem: najnowszy pasujący plik, o ile jest nowszy niż ostatnie wgranie, idzie
+   * po kolei przez to samo wgrywanie co upuszczony plik (wynik i błąd pokazuje karta raportu).
+   */
+  const refresh = async () => {
+    setRefreshing('access')
+    setRefreshNotes({})
+    const masks = readMasks(store.id)
+    const notes: Partial<Record<DailyReport, RefreshNote>> = {}
+    const ready: DailyReport[] = []
+    // Zgody najpierw, wszystkie zaraz po kliknięciu: okno zgody działa tylko bezpośrednio po geście użytkownika.
+    for (const kind of DAILY_REPORTS) {
+      const key = sourceFolderKey(store.id, kind)
+      if ((await folderAccess(key, 'read')) === 'missing') continue
+      if (await ensureFolderAccess(key, 'read')) ready.push(kind)
+      else notes[kind] = { tone: 'warning', text: 'Brak zgody na odczyt folderu. Kliknij „Odśwież dane” i zezwól.' }
+    }
+    if (ready.length === 0 && Object.keys(notes).length === 0) {
+      setRefreshing(null)
+      setSourcesOpen(true)
+      toast.info('Wskaż foldery, w których zapisujesz raporty')
+      return
+    }
+
+    let imported = 0
+    let failed = 0
+    for (const kind of ready) {
+      setRefreshing(kind)
+      try {
+        const file = await newestReportFile(store.id, kind, masks[kind] ?? '')
+        if (!file) {
+          notes[kind] = { tone: 'warning', text: 'W folderze nie ma pliku raportu pasującego do ustawień.' }
+        } else if (file.lastModified <= lastImported[kind]) {
+          notes[kind] = {
+            tone: 'muted',
+            text: `Bez nowego pliku: ${file.name} z ${dateTimeFormat.format(new Date(file.lastModified))} jest już wgrany.`,
+          }
+        } else {
+          try {
+            await uploads[kind].mutateAsync(file)
+            imported++
+          } catch {
+            failed++
+          }
+        }
+      } catch (error) {
+        notes[kind] = {
+          tone: 'warning',
+          text: error instanceof ApiError ? error.message : 'Nie udało się odczytać folderu.',
+        }
+      }
+      setRefreshNotes({ ...notes })
+    }
+    setRefreshNotes(notes)
+    setRefreshing(null)
+
+    const skipped = Object.values(notes).filter((note) => note.tone === 'warning').length
+    if (failed > 0 || skipped > 0) {
+      toast.warning(
+        `${imported > 0 ? `Wgrano raporty: ${imported}. ` : ''}Część raportów wymaga uwagi - sprawdź karty.`,
+      )
+    } else if (imported > 0) {
+      toast.success(imported === 1 ? 'Wgrano nowy raport' : `Wgrano nowe raporty: ${imported}`)
+    } else {
+      toast.success('Wszystkie raporty są już wgrane')
+    }
+  }
+
+  const cardProps = (kind: ImportReportKind) => ({
+    kind,
+    guide: guideOf(kind),
+    canEditGuide: isOwner,
+    refreshNote: kind in lastImported ? refreshNotes[kind as DailyReport] : undefined,
+    refreshing: refreshing === kind,
+  })
 
   return (
     <>
       <PageHeader
         title="Import danych"
-        description={`Raporty z systemu sklepu ${storeLabel(store)}. Wgrywaj je codziennie - dane z raportu sprzed dzisiaj są oznaczane jako nieaktualne.`}
+        description={`Raporty z systemu sklepu ${storeLabel(store)}. Bazę danych, multikody, promocje, sprzedaż i dokumenty wgrywaj codziennie, listy dostawców i nomenklatur wtedy, gdy się zmienią.`}
+        actions={
+          canImport && (
+            <>
+              {folderSavingSupported && (
+                <Button
+                  size="lg"
+                  loading={refreshing !== null}
+                  onClick={refresh}
+                  title="Wgrywa najnowsze pliki z folderów wskazanych w ustawieniach"
+                >
+                  {refreshing === null && <RefreshCwIcon data-icon="inline-start" />}
+                  {refreshing && refreshing !== 'access' ? `Wgrywanie: ${REPORT_TITLES[refreshing]}` : 'Odśwież dane'}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="icon-lg"
+                aria-label="Ustawienia importu: foldery raportów"
+                title="Ustawienia importu"
+                onClick={() => setSourcesOpen(true)}
+              >
+                <SettingsIcon />
+              </Button>
+            </>
+          )
+        }
       />
 
-      <div className="mb-10 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="mb-10 grid auto-rows-fr gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <ReportCard
-          id="product-report"
-          title="Raport produktów"
-          description="Kartoteka: ceny, stany, rotacja i nowe kody (np. BAZA DO STRONY.xlsx)."
+          {...cardProps('PRODUCTS')}
           generatedAt={products.isPending ? undefined : (newestReport(products.data?.imports) ?? null)}
           meta={
             products.data && (
@@ -123,13 +287,88 @@ function StoreImports({ store }: { store: StoreSummary }) {
             )
           }
         >
-          {canImport ? <ProductReportUpload store={store} onShowEanChanges={setEanChangesOf} /> : <ReadOnlyNote />}
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.PRODUCTS}
+              accept={XLSX_EXTENSIONS}
+              result={(result) => <ProductImportResult result={result} onShowEanChanges={setEanChangesOf} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
         </ReportCard>
 
         <ReportCard
-          id="document-report"
-          title="Raport Wejścia/Wyjścia"
-          description="Dokumenty magazynowe: przyjęcia towaru, korekty, likwidacje, zwroty, przeniesienia stanów i inne."
+          {...cardProps('PRODUCT_CODES')}
+          generatedAt={productCodes.isPending ? undefined : (newestReport(productCodes.data?.imports) ?? null)}
+          meta={
+            productCodes.data && (
+              <>
+                W bazie {numberFormat.format(productCodes.data.codeCount)} kodów dla{' '}
+                {numberFormat.format(productCodes.data.articleCount)} artykułów
+              </>
+            )
+          }
+        >
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.PRODUCT_CODES}
+              accept={XLSX_EXTENSIONS}
+              result={(result) => <ProductCodeImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
+        </ReportCard>
+
+        <ReportCard
+          {...cardProps('PROMOTIONS')}
+          generatedAt={promotions.isPending ? undefined : (newestReport(promotions.data?.imports) ?? null)}
+          meta={
+            promotions.data && (
+              <>W bazie {numberFormat.format(promotions.data.activeCount)} promocji trwających i zaplanowanych</>
+            )
+          }
+        >
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.PROMOTIONS}
+              accept={PDF_EXTENSIONS}
+              pdf
+              result={(result) => <PromotionImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
+        </ReportCard>
+
+        <ReportCard
+          {...cardProps('SALES')}
+          generatedAt={sales.isPending ? undefined : (newestReport(sales.data?.imports) ?? null)}
+          meta={
+            sales.data && (
+              <>
+                W bazie {numberFormat.format(sales.data.rowCount)} wierszy
+                {sales.data.firstSaleDate && sales.data.lastSaleDate && (
+                  <> · {formatPeriod(sales.data.firstSaleDate, sales.data.lastSaleDate)}</>
+                )}
+              </>
+            )
+          }
+        >
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.SALES}
+              accept={XLSX_EXTENSIONS}
+              result={(result) => <SalesImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
+        </ReportCard>
+
+        <ReportCard
+          {...cardProps('DOCUMENTS')}
           generatedAt={documents.isPending ? undefined : (newestReport(documents.data) ?? null)}
           meta={
             canViewDocuments && (
@@ -143,18 +382,26 @@ function StoreImports({ store }: { store: StoreSummary }) {
             )
           }
         >
-          {canImport ? <DocumentReportUpload store={store} /> : <ReadOnlyNote />}
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.DOCUMENTS}
+              accept={XLSX_EXTENSIONS}
+              result={(result) => <DocumentImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
         </ReportCard>
 
         <ReportCard
-          id="supplier-report"
-          title="Lista dostawców"
-          description="Dostawcy z systemu sklepu. Wgraj ją ponownie, gdy dojdzie nowy dostawca albo zmienią się jego dane."
+          {...cardProps('SUPPLIERS')}
           meta={
             suppliers.data && (
               <>
                 W bazie {numberFormat.format(suppliers.data.supplierCount)} dostawców
-                {suppliers.data.manualCount > 0 && <>, w tym {numberFormat.format(suppliers.data.manualCount)} dodanych ręcznie</>}
+                {suppliers.data.manualCount > 0 && (
+                  <>, w tym {numberFormat.format(suppliers.data.manualCount)} dodanych ręcznie</>
+                )}
                 {newestReport(suppliers.data.imports) && (
                   <> · lista z {formatReportDate(newestReport(suppliers.data.imports)!)}</>
                 )}
@@ -162,75 +409,42 @@ function StoreImports({ store }: { store: StoreSummary }) {
             )
           }
         >
-          {canImport ? <SupplierReportUpload store={store} /> : <ReadOnlyNote />}
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.SUPPLIERS}
+              accept={XLSX_EXTENSIONS}
+              result={(result) => <SupplierImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
         </ReportCard>
 
         <ReportCard
-          id="sales-report"
-          title="Raport sprzedaży"
-          description="Sprzedaż po rabacie wg artykułu i dnia, z wartością FIFO, VAT i marżą."
-          generatedAt={sales.isPending ? undefined : (newestReport(sales.data?.imports) ?? null)}
-          meta={
-            sales.data && (
-              <>
-                W bazie {numberFormat.format(sales.data.rowCount)} wierszy
-                {sales.data.firstSaleDate && sales.data.lastSaleDate && (
-                  <> · {formatPeriod(sales.data.firstSaleDate, sales.data.lastSaleDate)}</>
-                )}
-              </>
-            )
-          }
-        >
-          {canImport ? <SalesReportUpload store={store} /> : <ReadOnlyNote />}
-        </ReportCard>
-
-        <ReportCard
-          id="nomenclature-report"
-          title="Lista nomenklatur"
-          description="Rejony, rodziny i podrodziny z nazwami do raportów sprzedaży (PDF, np. nomenklatury.pdf)."
-          generatedAt={nomenclatures.isPending ? undefined : (newestReport(nomenclatures.data?.imports) ?? null)}
+          {...cardProps('NOMENCLATURES')}
           meta={
             nomenclatures.data && (
               <>
                 W bazie {numberFormat.format(nomenclatures.data.regionCount)} rejonów,{' '}
                 {numberFormat.format(nomenclatures.data.familyCount)} rodzin,{' '}
                 {numberFormat.format(nomenclatures.data.subfamilyCount)} podrodzin
+                {newestReport(nomenclatures.data.imports) && (
+                  <> · lista z {formatReportDate(newestReport(nomenclatures.data.imports)!)}</>
+                )}
               </>
             )
           }
         >
-          {canImport ? <NomenclatureReportUpload store={store} /> : <ReadOnlyNote />}
-        </ReportCard>
-
-        <ReportCard
-          id="promotion-report"
-          title="Lista promocji"
-          description="Bieżące i przyszłe promocje z cenami zakupu, sprzedaży i promocyjnymi (PDF, np. Taryfy.pdf)."
-          generatedAt={promotions.isPending ? undefined : (newestReport(promotions.data?.imports) ?? null)}
-          meta={
-            promotions.data && (
-              <>W bazie {numberFormat.format(promotions.data.activeCount)} promocji trwających i zaplanowanych</>
-            )
-          }
-        >
-          {canImport ? <PromotionReportUpload store={store} /> : <ReadOnlyNote />}
-        </ReportCard>
-
-        <ReportCard
-          id="product-code-report"
-          title="Multikody"
-          description="Wszystkie EAN-y przypisane teraz do każdego ITM8, z kodem głównym i ceną (np. Multikody.xlsx)."
-          generatedAt={productCodes.isPending ? undefined : (newestReport(productCodes.data?.imports) ?? null)}
-          meta={
-            productCodes.data && (
-              <>
-                W bazie {numberFormat.format(productCodes.data.codeCount)} kodów dla{' '}
-                {numberFormat.format(productCodes.data.articleCount)} artykułów
-              </>
-            )
-          }
-        >
-          {canImport ? <ProductCodeReportUpload store={store} /> : <ReadOnlyNote />}
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.NOMENCLATURES}
+              accept={PDF_EXTENSIONS}
+              pdf
+              result={(result) => <NomenclatureImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
         </ReportCard>
       </div>
 
@@ -292,40 +506,75 @@ function StoreImports({ store }: { store: StoreSummary }) {
           onClose={() => setEanChangesOf(null)}
         />
       )}
+
+      {canImport && (
+        <ImportSourcesDialog
+          open={sourcesOpen}
+          onOpenChange={setSourcesOpen}
+          storeId={store.id}
+          guides={guides.data ?? []}
+        />
+      )}
     </>
   )
 }
 
-/** Kafel jednego raportu: co to za plik, czy dane są aktualne i pole do wgrania. */
+/**
+ * Kafel jednego raportu: tytuł z okienkiem opisu (znak zapytania), aktualność danych, stan w bazie i pole do
+ * wgrania. Listy dostawców i nomenklatur wgrywa się tylko na życzenie, więc nie mają znacznika aktualności.
+ */
 function ReportCard({
-  id,
-  title,
-  description,
+  kind,
+  guide,
+  canEditGuide,
   generatedAt,
   meta,
+  refreshNote,
+  refreshing,
   children,
 }: {
-  id: string
-  title: string
-  description: string
-  /** {@code undefined} w trakcie wczytywania historii; bez tego pola karta nie pokazuje aktualności (lista dostawców). */
+  kind: ImportReportKind
+  guide: ImportGuide | undefined
+  canEditGuide: boolean
+  /** {@code undefined} w trakcie wczytywania historii i przy raportach bez znacznika aktualności. */
   generatedAt?: string | null
   meta?: ReactNode
+  refreshNote?: RefreshNote
+  refreshing: boolean
   children: ReactNode
 }) {
+  const id = `report-${kind.toLowerCase()}`
   return (
-    <Card aria-labelledby={id} className="gap-4 p-5">
-      <div className="grid gap-1.5">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+    <Card aria-labelledby={id} aria-busy={refreshing || undefined} className="gap-4 p-5">
+      <div className="grid flex-1 content-start gap-2">
+        <div className="flex items-center gap-1">
           <h2 id={id} className="text-base font-semibold">
-            {title}
+            {REPORT_TITLES[kind]}
           </h2>
-          {generatedAt !== undefined && <ReportFreshness generatedAt={generatedAt} />}
+          <ReportHelp
+            kind={kind}
+            title={REPORT_TITLES[kind]}
+            description={REPORT_DESCRIPTIONS[kind]}
+            guide={guide}
+            canEdit={canEditGuide}
+          />
         </div>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        {generatedAt !== undefined && <ReportFreshness generatedAt={generatedAt} className="justify-self-start" />}
         {meta && <p className="text-sm text-muted-foreground tabular-nums">{meta}</p>}
       </div>
       {children}
+      {refreshNote && (
+        <p
+          className={
+            refreshNote.tone === 'warning'
+              ? 'flex gap-1.5 text-sm text-amber-800 dark:text-amber-300'
+              : 'text-sm text-muted-foreground'
+          }
+        >
+          {refreshNote.tone === 'warning' && <CircleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />}
+          {refreshNote.text}
+        </p>
+      )}
     </Card>
   )
 }
@@ -350,15 +599,28 @@ function RejectedFile({ fileName, pdf }: { fileName: string; pdf?: boolean }) {
   )
 }
 
-function ProductReportUpload({ store, onShowEanChanges }: { store: StoreSummary; onShowEanChanges: ShowEanChanges }) {
-  const upload = useImportProducts(store.id)
+/**
+ * Pole wgrywania raportu z wynikiem albo błędem. Wgranie należy do strony, więc „Odśwież dane” wgrywa przez nie
+ * pliki z folderów i wynik pokazuje się tu tak samo jak po upuszczeniu pliku.
+ */
+function ReportUpload<T>({
+  upload,
+  accept,
+  pdf,
+  result,
+}: {
+  upload: UseMutationResult<T, Error, File>
+  accept: string[]
+  pdf?: boolean
+  result: (data: T) => ReactNode
+}) {
   const [rejectedFile, setRejectedFile] = useState<string | null>(null)
 
   return (
     <div className="grid gap-3">
       <FileDropZone
-        className="min-h-32 py-6"
-        accept={ACCEPTED_EXTENSIONS}
+        className="h-32 min-h-0 py-5"
+        accept={accept}
         pendingFile={upload.isPending ? upload.variables : undefined}
         onFile={(file) => {
           setRejectedFile(null)
@@ -368,20 +630,25 @@ function ProductReportUpload({ store, onShowEanChanges }: { store: StoreSummary;
           upload.reset()
           setRejectedFile(fileName)
         }}
-        title="Przeciągnij raport produktów albo kliknij"
-        hint={`Plik .xlsx lub .xlsm z systemu sklepu ${store.number}`}
+        title="Przeciągnij plik lub wybierz"
       />
 
       <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
+        {rejectedFile && <RejectedFile fileName={rejectedFile} pdf={pdf} />}
         {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <ProductImportResult result={upload.data} onShowEanChanges={onShowEanChanges} />}
+        {upload.isSuccess && result(upload.data)}
       </div>
     </div>
   )
 }
 
-function ProductImportResult({ result, onShowEanChanges }: { result: ProductImport; onShowEanChanges: ShowEanChanges }) {
+function ProductImportResult({
+  result,
+  onShowEanChanges,
+}: {
+  result: ProductImport
+  onShowEanChanges: ShowEanChanges
+}) {
   const eanChanges = result.eanChangedCount + result.eanMovedCount
 
   return (
@@ -399,45 +666,24 @@ function ProductImportResult({ result, onShowEanChanges }: { result: ProductImpo
           <ResultCount label="Brak w pliku" value={result.missingCount} />
           <ResultCount label="Zmiana EAN" value={result.eanChangedCount} />
           <ResultCount label="EAN z innego ITM8" value={result.eanMovedCount} />
+          {result.draftsMatchedCount > 0 && (
+            <ResultCount label="Nowe artykuły z CADBEZP" value={result.draftsMatchedCount} />
+          )}
+          {result.draftsRemovedCount > 0 && (
+            <ResultCount label="Usunięte z CADBEZP (brak w raporcie)" value={result.draftsRemovedCount} />
+          )}
         </dl>
         {eanChanges > 0 && (
-          <Button variant="link" className="mt-1 h-auto justify-self-start p-0" onClick={() => onShowEanChanges(result)}>
+          <Button
+            variant="link"
+            className="mt-1 h-auto justify-self-start p-0"
+            onClick={() => onShowEanChanges(result)}
+          >
             Pokaż zmiany EAN
           </Button>
         )}
       </AlertDescription>
     </Alert>
-  )
-}
-
-function DocumentReportUpload({ store }: { store: StoreSummary }) {
-  const upload = useImportDocuments(store.id)
-  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
-
-  return (
-    <div className="grid gap-3">
-      <FileDropZone
-        className="min-h-32 py-6"
-        accept={ACCEPTED_EXTENSIONS}
-        pendingFile={upload.isPending ? upload.variables : undefined}
-        onFile={(file) => {
-          setRejectedFile(null)
-          upload.mutate(file)
-        }}
-        onReject={(fileName) => {
-          upload.reset()
-          setRejectedFile(fileName)
-        }}
-        title="Przeciągnij raport Wejścia/Wyjścia albo kliknij"
-        hint="Te same dokumenty można wgrywać wielokrotnie - zostaną uzupełnione."
-      />
-
-      <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
-        {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <DocumentImportResult result={upload.data} />}
-      </div>
-    </div>
   )
 }
 
@@ -466,37 +712,6 @@ function DocumentImportResult({ result }: { result: DocumentImport }) {
   )
 }
 
-function SupplierReportUpload({ store }: { store: StoreSummary }) {
-  const upload = useImportSuppliers(store.id)
-  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
-
-  return (
-    <div className="grid gap-3">
-      <FileDropZone
-        className="min-h-32 py-6"
-        accept={ACCEPTED_EXTENSIONS}
-        pendingFile={upload.isPending ? upload.variables : undefined}
-        onFile={(file) => {
-          setRejectedFile(null)
-          upload.mutate(file)
-        }}
-        onReject={(fileName) => {
-          upload.reset()
-          setRejectedFile(fileName)
-        }}
-        title="Przeciągnij listę dostawców albo kliknij"
-        hint="Dostawcy, których zabraknie w nowym pliku, zostają w bazie."
-      />
-
-      <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
-        {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <SupplierImportResult result={upload.data} />}
-      </div>
-    </div>
-  )
-}
-
 function SupplierImportResult({ result }: { result: SupplierImport }) {
   return (
     <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
@@ -513,37 +728,6 @@ function SupplierImportResult({ result }: { result: SupplierImport }) {
         </dl>
       </AlertDescription>
     </Alert>
-  )
-}
-
-function SalesReportUpload({ store }: { store: StoreSummary }) {
-  const upload = useImportSales(store.id)
-  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
-
-  return (
-    <div className="grid gap-3">
-      <FileDropZone
-        className="min-h-32 py-6"
-        accept={ACCEPTED_EXTENSIONS}
-        pendingFile={upload.isPending ? upload.variables : undefined}
-        onFile={(file) => {
-          setRejectedFile(null)
-          upload.mutate(file)
-        }}
-        onReject={(fileName) => {
-          upload.reset()
-          setRejectedFile(fileName)
-        }}
-        title="Przeciągnij raport sprzedaży albo kliknij"
-        hint="Zapisana sprzedaż się nie zmienia: z pliku dopisujemy tylko zakończone dni, których jeszcze nie ma."
-      />
-
-      <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
-        {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <SalesImportResult result={upload.data} />}
-      </div>
-    </div>
   )
 }
 
@@ -578,37 +762,6 @@ function SalesImportResult({ result }: { result: SalesImport }) {
   )
 }
 
-function NomenclatureReportUpload({ store }: { store: StoreSummary }) {
-  const upload = useImportNomenclatures(store.id)
-  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
-
-  return (
-    <div className="grid gap-3">
-      <FileDropZone
-        className="min-h-32 py-6"
-        accept={PDF_EXTENSIONS}
-        pendingFile={upload.isPending ? upload.variables : undefined}
-        onFile={(file) => {
-          setRejectedFile(null)
-          upload.mutate(file)
-        }}
-        onReject={(fileName) => {
-          upload.reset()
-          setRejectedFile(fileName)
-        }}
-        title="Przeciągnij listę nomenklatur (PDF) albo kliknij"
-        hint="Pozycje, których zabraknie w nowym pliku, zostają w bazie."
-      />
-
-      <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} pdf />}
-        {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <NomenclatureImportResult result={upload.data} />}
-      </div>
-    </div>
-  )
-}
-
 function NomenclatureImportResult({ result }: { result: NomenclatureImport }) {
   return (
     <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
@@ -628,37 +781,6 @@ function NomenclatureImportResult({ result }: { result: NomenclatureImport }) {
   )
 }
 
-function PromotionReportUpload({ store }: { store: StoreSummary }) {
-  const upload = useImportPromotions(store.id)
-  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
-
-  return (
-    <div className="grid gap-3">
-      <FileDropZone
-        className="min-h-32 py-6"
-        accept={PDF_EXTENSIONS}
-        pendingFile={upload.isPending ? upload.variables : undefined}
-        onFile={(file) => {
-          setRejectedFile(null)
-          upload.mutate(file)
-        }}
-        onReject={(fileName) => {
-          upload.reset()
-          setRejectedFile(fileName)
-        }}
-        title="Przeciągnij listę promocji (PDF) albo kliknij"
-        hint="Promocje, których zabraknie w nowym pliku, zostają w bazie."
-      />
-
-      <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} pdf />}
-        {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <PromotionImportResult result={upload.data} />}
-      </div>
-    </div>
-  )
-}
-
 function PromotionImportResult({ result }: { result: PromotionImport }) {
   return (
     <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
@@ -675,37 +797,6 @@ function PromotionImportResult({ result }: { result: PromotionImport }) {
         </dl>
       </AlertDescription>
     </Alert>
-  )
-}
-
-function ProductCodeReportUpload({ store }: { store: StoreSummary }) {
-  const upload = useImportProductCodes(store.id)
-  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
-
-  return (
-    <div className="grid gap-3">
-      <FileDropZone
-        className="min-h-32 py-6"
-        accept={ACCEPTED_EXTENSIONS}
-        pendingFile={upload.isPending ? upload.variables : undefined}
-        onFile={(file) => {
-          setRejectedFile(null)
-          upload.mutate(file)
-        }}
-        onReject={(fileName) => {
-          upload.reset()
-          setRejectedFile(fileName)
-        }}
-        title="Przeciągnij multikody albo kliknij"
-        hint="Kody, których zabraknie w nowym pliku, zostają w bazie jako historia przypisań."
-      />
-
-      <div aria-live="polite">
-        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
-        {upload.isError && <ImportError error={upload.error} />}
-        {upload.isSuccess && <ProductCodeImportResult result={upload.data} />}
-      </div>
-    </div>
   )
 }
 
@@ -747,8 +838,8 @@ type HistoryRow =
   | { kind: 'productCodes'; importedAt: string; item: ProductCodeImport }
 
 const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
-  products: 'Produkty',
-  documents: 'Wejścia/Wyjścia',
+  products: 'Baza danych',
+  documents: 'Dokumenty',
   suppliers: 'Lista dostawców',
   sales: 'Sprzedaż',
   nomenclatures: 'Lista nomenklatur',
@@ -825,9 +916,7 @@ function ImportHistory({
                 <TableCell className="text-muted-foreground">
                   {row.item.reportGeneratedAt ? formatReportDate(row.item.reportGeneratedAt) : '—'}
                 </TableCell>
-                <TableCell className="whitespace-normal text-muted-foreground">
-                  {historySummary(row)}
-                </TableCell>
+                <TableCell className="whitespace-normal text-muted-foreground">{historySummary(row)}</TableCell>
                 <TableCell className="pr-4 text-right">
                   {row.kind === 'products' ? (
                     <EanChangesCell productImport={row.item} onShow={onShowEanChanges} />

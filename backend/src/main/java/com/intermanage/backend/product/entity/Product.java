@@ -325,6 +325,11 @@ public class Product {
         return ean;
     }
 
+    /** Kod kaucji z raportu kartoteki (KAUCJA): 60 szkło, 70 puszka, 80 PET, 1 butelka zwrotna, 0 bez kaucji. */
+    public Short getDepositCode() {
+        return depositCode;
+    }
+
     public String getName() {
         return name;
     }

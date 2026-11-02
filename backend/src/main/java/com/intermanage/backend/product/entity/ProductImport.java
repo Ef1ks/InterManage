@@ -68,6 +68,14 @@ public class ProductImport {
     @Column(name = "ean_moved_count", nullable = false)
     private int eanMovedCount;
 
+    /** Szkice artykułów z plików CADBEZP, których artykuł pojawił się w tym raporcie. */
+    @Column(name = "drafts_matched_count", nullable = false)
+    private int draftsMatchedCount;
+
+    /** Szkice artykułów usunięte, bo ten raport (pierwszy po potwierdzeniu) nie miał ich artykułu. */
+    @Column(name = "drafts_removed_count", nullable = false)
+    private int draftsRemovedCount;
+
     protected ProductImport() {
     }
 
@@ -92,6 +100,11 @@ public class ProductImport {
         this.missingCount = missing;
         this.eanChangedCount = eanChanged;
         this.eanMovedCount = eanMoved;
+    }
+
+    public void recordDrafts(int matched, int removed) {
+        this.draftsMatchedCount = matched;
+        this.draftsRemovedCount = removed;
     }
 
     public UUID getId() {
@@ -144,5 +157,13 @@ public class ProductImport {
 
     public int getEanMovedCount() {
         return eanMovedCount;
+    }
+
+    public int getDraftsMatchedCount() {
+        return draftsMatchedCount;
+    }
+
+    public int getDraftsRemovedCount() {
+        return draftsRemovedCount;
     }
 }

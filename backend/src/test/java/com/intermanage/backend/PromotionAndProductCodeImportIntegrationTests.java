@@ -245,7 +245,16 @@ class PromotionAndProductCodeImportIntegrationTests {
                         .cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].itm8").value("0000000000453"))
-                .andExpect(jsonPath("$[0].catalogEan").value("5900983014894"));
+                .andExpect(jsonPath("$[0].catalogEan").value("5900983014894"))
+                .andExpect(jsonPath("$[0].byItm8").value(false));
+        // Kolumna EAN przyjmuje też ITM8 artykułu, z zerami wiodącymi i bez.
+        mvc.perform(get("/api/stores/" + storeId + "/data-entry/products").param("ean", "453")
+                        .param("ean", "0000000000453").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].itm8").value("0000000000453"))
+                .andExpect(jsonPath("$[0].catalogEan").value("5900983014894"))
+                .andExpect(jsonPath("$[0].byItm8").value(true));
         // Lista towarów i wyszukiwarka produktów: początek EAN-u dodatkowego.
         mvc.perform(get("/api/stores/" + storeId + "/data-entry/catalog").param("ean", "1304894*").cookie(owner))
                 .andExpect(jsonPath("$.items.length()").value(1));

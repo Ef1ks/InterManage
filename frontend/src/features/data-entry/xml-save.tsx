@@ -14,6 +14,7 @@ import {
 
 import type { ExportPayload, PriceControlPayload, ProductFilePayload } from './api'
 import { savePriceControlFile } from './price-control'
+import { useProductDraftConfirm } from './product-drafts'
 
 /** Pliki XML faktur mają własny folder, wybrany raz w ustawieniach zapisu. */
 export const XML_FOLDER: SavedFolderSpec = { key: 'data-entry-xml', label: 'Plik XML faktury' }
@@ -23,13 +24,15 @@ type SavedFile = { fileName: string; downloaded: boolean }
 /**
  * Zapis tabeli: plik XML faktury do folderu z ustawień zapisu (bez obsługi folderów w przeglądarce: pobranie), potem
  * nowe i zmienione artykuły do pliku CADBEZP i zmienione ceny do pliku CTRLPRIX w folderze zmian cen; ich błąd
- * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików.
+ * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a po zapisie pliku CADBEZP
+ * pytanie, czy program sklepu go wczytał (`draftDialog` do wyrenderowania): „Tak” dodaje nowe artykuły do bazy.
  */
 export function useXmlSave(storeId: string) {
   const [saving, setSaving] = useState(false)
   const queryClient = useQueryClient()
   const productFolder = useProductFileFolder(storeId)
   const priceChangeFolder = usePriceChangeFolder(storeId)
+  const drafts = useProductDraftConfirm(storeId)
 
   /** Foldery potrzebne do zapisu, których nie wybrano w tej przeglądarce (bez obsługi folderów: żadne). */
   const missingFolders = async (productFile: ProductFilePayload | null, priceControl: PriceControlPayload | null) => {
@@ -72,7 +75,8 @@ export function useXmlSave(storeId: string) {
         }
       }
       if (!inHistory) toast.warning(`Plik ${fileName} nie trafił do historii`)
-      if (productFile) saved.push(...(await saveProductFile(productFile, productFolderReady)))
+      const productFileSaved = productFile ? await saveProductFile(productFile, productFolderReady) : null
+      if (productFileSaved) saved.push(productFileSaved)
       let supplierCode: string | null = null
       if (priceControl) {
         const result = await savePriceControl(priceControl, priceChangeFolderReady)
@@ -94,6 +98,7 @@ export function useXmlSave(storeId: string) {
         ),
         duration: 10_000,
       })
+      if (productFile && productFileSaved) drafts.ask([{ fileName: productFileSaved.fileName, payload: productFile }])
       return fileName
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku XML', {
@@ -106,7 +111,7 @@ export function useXmlSave(storeId: string) {
   }
 
   /** Plik CADBEZP po zapisanym pliku XML: błąd tylko ostrzega, plik XML zostaje. */
-  const saveProductFile = async (file: ProductFilePayload, folderReady: boolean): Promise<SavedFile[]> => {
+  const saveProductFile = async (file: ProductFilePayload, folderReady: boolean): Promise<SavedFile | null> => {
     try {
       const { fileName, blob } = await fetchPostedFile(
         `/stores/${storeId}/data-entry/export/product-file`,
@@ -115,19 +120,24 @@ export function useXmlSave(storeId: string) {
       )
       if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
       else saveBlob(blob, fileName)
-      return [{ fileName, downloaded: !folderReady }]
+      return { fileName, downloaded: !folderReady }
     } catch (error) {
       toast.error('Nie udało się zapisać pliku nowych artykułów', {
         description: `${error instanceof ApiError ? `${error.message} ` : ''}Plik XML jest zapisany.`,
       })
-      return []
+      return null
     }
   }
 
   /** Plik CTRLPRIX (zmienione ceny) w folderze zmian cen: błąd tylko ostrzega, plik XML zostaje. */
   const savePriceControl = async (file: PriceControlPayload, folderReady: boolean) => {
     try {
-      const { fileName, downloaded, supplierCode } = await savePriceControlFile(storeId, file, priceChangeFolder.key, folderReady)
+      const { fileName, downloaded, supplierCode } = await savePriceControlFile(
+        storeId,
+        file,
+        priceChangeFolder.key,
+        folderReady,
+      )
       void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-files'] })
       return { file: { fileName, downloaded }, supplierCode }
     } catch (error) {
@@ -138,5 +148,5 @@ export function useXmlSave(storeId: string) {
     }
   }
 
-  return { save, saving, missingFolders, productFolder, priceChangeFolder }
+  return { save, saving, missingFolders, productFolder, priceChangeFolder, draftDialog: drafts.dialog }
 }

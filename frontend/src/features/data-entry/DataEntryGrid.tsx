@@ -1,4 +1,5 @@
 import {
+  ArrowDownIcon,
   ArrowUpIcon,
   ChartColumnIcon,
   ChevronDownIcon,
@@ -17,6 +18,7 @@ import {
   applyText,
   cellText,
   clearable,
+  type Column,
   COLUMNS,
   type ColumnKey,
   levelCode,
@@ -41,6 +43,9 @@ import {
   type CatalogField,
   catalogChanges,
   type DataEntryRow,
+  depositError,
+  depositLabel,
+  depositNotice,
   eanError,
   emptyRow,
   type ServiceKind,
@@ -94,23 +99,27 @@ type Props = {
   onSplitQuantity?: (row: DataEntryRow) => void
   /** Gdzie przykleja się nagłówek kolumn przy przewijaniu strony (pod nagłówkiem aplikacji i paskiem nad tabelą). */
   stickyTop?: string
+  /** Kolumny tabeli (domyślnie jak we wprowadzaniu danych); pierwsza to zawsze EAN. */
+  columns?: Column[]
+  /** Dodatek w nagłówku kolumny, np. filtr jak w Excelu. */
+  headerExtra?: (column: Column) => React.ReactNode
+  /** Klik w nagłówek kolumny sortuje tabelę (sortuje strona); {@code sort} to strzałka przy sortowanej kolumnie. */
+  onSort?: (key: ColumnKey) => void
+  sort?: { key: ColumnKey; direction: 'asc' | 'desc' } | null
   ref?: Ref<GridHandle>
 }
 
-const LAST = COLUMNS.length - 1
 const NO_RANGE = { top: -1, bottom: -2, left: -1, right: -2 }
 
-/** Szerokości w em czcionki tabeli: kolumna z numerem wiersza, pierwsza kolumna (EAN, przyklejona) i cała tabela. */
+/** Szerokość kolumny z numerem wiersza w em czcionki tabeli. */
 const ROW_HEADER_EM = 2.5
-const STICKY_EM = ROW_HEADER_EM + COLUMNS[0].width
-const TABLE_EM = COLUMNS.reduce((sum, column) => sum + column.width, ROW_HEADER_EM)
 
 /**
  * Czcionka tabeli dopasowana do szerokości miejsca (cqw obszaru, minus ramka i pasek przewijania), żeby na laptopie
  * było widać wszystkie kolumny bez przewijania w bok. Nie większa niż zwykłe text-sm; poniżej dolnej granicy tabela
  * przewija się w bok.
  */
-const TABLE_FONT_SIZE = `clamp(0.625rem, calc((100cqw - 1.25rem) / ${TABLE_EM}), 0.875rem)`
+const tableFontSize = (tableEm: number) => `clamp(0.625rem, calc((100cqw - 1.25rem) / ${tableEm}), 0.875rem)`
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -119,7 +128,8 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
  * spodem: niebieskie przyciemnienie i ramka wokół całego zakresu. Niebieski różni się od kolorów wierszy, a ramka
  * odróżnia zaznaczenie także od niebieskich komórek nomenklatury. Warstwa nie łapie kliknięć (przyciski w komórkach).
  */
-const SELECTION_LAYER = 'after:pointer-events-none after:absolute after:inset-0 after:border-blue-600 dark:after:border-blue-400'
+const SELECTION_LAYER =
+  'after:pointer-events-none after:absolute after:inset-0 after:border-blue-600 dark:after:border-blue-400'
 const SELECTION_FILL = 'after:bg-blue-600/25 dark:after:bg-blue-400/30'
 /** Nagłówek wiersza albo kolumny w zaznaczeniu. */
 const SELECTED_HEADER = 'bg-blue-200 text-blue-950 dark:bg-blue-900 dark:text-blue-50'
@@ -154,8 +164,16 @@ export function DataEntryGrid({
   onLinkArticle,
   onSplitQuantity,
   stickyTop = '3.5rem',
+  columns = COLUMNS,
+  headerExtra,
+  onSort,
+  sort,
   ref,
 }: Props) {
+  const last = columns.length - 1
+  // Szerokości w em czcionki tabeli: pierwsza kolumna (EAN, przyklejona) i cała tabela.
+  const stickyEm = ROW_HEADER_EM + columns[0].width
+  const tableEm = columns.reduce((sum, column) => sum + column.width, ROW_HEADER_EM)
   const gridRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [activeState, setActiveState] = useState<Cell>({ r: 0, c: 0 })
@@ -215,11 +233,11 @@ export function DataEntryGrid({
     if (!container) return
     const observer = new ResizeObserver(() => {
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
-      setScrollsX(container.clientWidth < (TABLE_EM * 0.625 + 1.25) * rem)
+      setScrollsX(container.clientWidth < (tableEm * 0.625 + 1.25) * rem)
     })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [])
+  }, [tableEm])
 
   const selectedIds = useMemo(
     () =>
@@ -248,14 +266,14 @@ export function DataEntryGrid({
   const focusGrid = () => gridRef.current?.focus({ preventScroll: true })
 
   const select = (cell: Cell, extend = false) => {
-    const next = { r: clamp(cell.r, 0, lastRow), c: clamp(cell.c, 0, LAST) }
+    const next = { r: clamp(cell.r, 0, lastRow), c: clamp(cell.c, 0, last) }
     setActive(next)
     if (!extend) setAnchor(next)
   }
 
   // Aktywna komórka zostaje na początku (jak w Excelu), bo tabela przewija się do niej; zakres i tak obejmuje całość.
   const selectAll = () => {
-    setAnchor({ r: lastRow, c: LAST })
+    setAnchor({ r: lastRow, c: last })
     setActive({ r: 0, c: 0 })
   }
 
@@ -269,7 +287,7 @@ export function DataEntryGrid({
     },
     focusCell: (rowId, key) => {
       const r = rows.findIndex((row) => row.id === rowId)
-      const c = COLUMNS.findIndex((column) => column.key === key)
+      const c = columns.findIndex((column) => column.key === key)
       if (r < 0 || c < 0) return
       setEditing(null)
       setPicker(null)
@@ -287,7 +305,7 @@ export function DataEntryGrid({
   const commitEdit = (state: Editing): boolean => {
     const row = rows[state.r]
     if (!row) return true
-    const result = applyText(row, COLUMNS[state.c].key, state.text, names)
+    const result = applyText(row, columns[state.c].key, state.text, names)
     if ('error' in result) {
       setEditing({ ...state, error: result.error })
       return false
@@ -299,7 +317,7 @@ export function DataEntryGrid({
   }
 
   const startEdit = (cell: Cell, mode: Editing['mode'], text?: string) => {
-    const column = COLUMNS[cell.c]
+    const column = columns[cell.c]
     const row = rows[cell.r]
     if (!row) return
     if (column.kind === 'nomenclature') {
@@ -327,7 +345,7 @@ export function DataEntryGrid({
         if (index < range.top || index > range.bottom) return row
         let next = row
         for (let c = range.left; c <= range.right; c++) {
-          const key = COLUMNS[c].key
+          const key = columns[c].key
           if (!clearable(key)) continue
           if (key === 'region' || key === 'family' || key === 'subfamily') {
             if (next.subfamilyCode !== null || next.nomenclaturePrefix) next = withSubfamily(next, null)
@@ -364,10 +382,10 @@ export function DataEntryGrid({
     let invalid = 0
     for (let i = 0; i < height; i++) {
       let row = next[top + i]
-      for (let j = 0; j < width && left + j <= LAST; j++) {
+      for (let j = 0; j < width && left + j <= last; j++) {
         const value = single ? cells[0][0] : cells[i]?.[j]
         if (value === undefined) continue
-        const result = applyText(row, COLUMNS[left + j].key, value, names)
+        const result = applyText(row, columns[left + j].key, value, names)
         if ('error' in result) {
           invalid++
           continue
@@ -381,7 +399,7 @@ export function DataEntryGrid({
     if (changedEans.length > 0) onEansChanged(changedEans)
     if (invalid > 0) onInvalidPaste(invalid)
     setAnchor({ r: top, c: left })
-    setActive({ r: top + height - 1, c: Math.min(left + width - 1, LAST) })
+    setActive({ r: top + height - 1, c: Math.min(left + width - 1, last) })
   }
 
   // ---------- klawiatura i schowek
@@ -392,7 +410,7 @@ export function DataEntryGrid({
       select(
         {
           r: dr === 0 ? from.r : dr < 0 ? 0 : lastRow,
-          c: dc === 0 ? from.c : dc < 0 ? 0 : LAST,
+          c: dc === 0 ? from.c : dc < 0 ? 0 : last,
         },
         extend,
       )
@@ -403,9 +421,9 @@ export function DataEntryGrid({
 
   const tab = (back: boolean) => {
     if (back) {
-      select(active.c > 0 ? { r: active.r, c: active.c - 1 } : { r: Math.max(active.r - 1, 0), c: LAST })
+      select(active.c > 0 ? { r: active.r, c: active.c - 1 } : { r: Math.max(active.r - 1, 0), c: last })
     } else {
-      select(active.c < LAST ? { r: active.r, c: active.c + 1 } : { r: Math.min(active.r + 1, lastRow), c: 0 })
+      select(active.c < last ? { r: active.r, c: active.c + 1 } : { r: Math.min(active.r + 1, lastRow), c: 0 })
     }
   }
 
@@ -439,7 +457,7 @@ export function DataEntryGrid({
         return select({ r: ctrl ? 0 : active.r, c: 0 }, event.shiftKey)
       case 'End':
         handled()
-        return select({ r: ctrl ? lastRow : active.r, c: LAST }, event.shiftKey)
+        return select({ r: ctrl ? lastRow : active.r, c: last }, event.shiftKey)
       case 'F2':
         handled()
         return startEdit(active, 'edit')
@@ -470,7 +488,7 @@ export function DataEntryGrid({
     event.preventDefault()
     const cells = rows
       .slice(range.top, range.bottom + 1)
-      .map((row) => COLUMNS.slice(range.left, range.right + 1).map((column) => cellText(row, column.key, pricing)))
+      .map((row) => columns.slice(range.left, range.right + 1).map((column) => cellText(row, column.key, pricing)))
     event.clipboardData.setData('text/plain', toTsv(cells))
   }
 
@@ -507,10 +525,10 @@ export function DataEntryGrid({
       const r = Number(rowHeader.dataset.rowHeader)
       if (event.shiftKey) {
         setAnchor({ r: anchor.r, c: 0 })
-        setActive({ r, c: LAST })
+        setActive({ r, c: last })
       } else {
         setAnchor({ r, c: 0 })
-        setActive({ r, c: LAST })
+        setActive({ r, c: last })
       }
       focusGrid()
       return
@@ -537,7 +555,7 @@ export function DataEntryGrid({
   const onClick = (event: React.MouseEvent) => {
     const cell = cellFromEvent(event)
     if (!cell || event.shiftKey || editing || picker || !clickedActive.current) return
-    const kind = COLUMNS[cell.c].kind
+    const kind = columns[cell.c].kind
     if (kind !== 'nomenclature' && kind !== 'unit') return
     if (anchor.r !== cell.r || anchor.c !== cell.c || active.r !== cell.r || active.c !== cell.c) return
     startEdit(cell, 'edit')
@@ -571,7 +589,7 @@ export function DataEntryGrid({
     const inSelection = index >= range.top && index <= range.bottom && range.bottom < movableEnd
     const start = inSelection ? range.top : index
     const count = inSelection ? range.bottom - range.top + 1 : 1
-    const columns = inSelection ? { left: range.left, right: range.right } : { left: 0, right: LAST }
+    const span = inSelection ? { left: range.left, right: range.right } : { left: 0, right: last }
     let state: RowDrag = { start, count, to: start }
     let pointerY = 0
     let frame = 0
@@ -623,8 +641,8 @@ export function DataEntryGrid({
       if (!apply || (to >= start && to <= start + count)) return
       setRows((current) => moveRows(current, start, count, to))
       const first = to > start ? to - count : to
-      setAnchor({ r: first, c: columns.left })
-      setActive({ r: first + count - 1, c: columns.right })
+      setAnchor({ r: first, c: span.left })
+      setActive({ r: first + count - 1, c: span.right })
     }
     const onMove = (event: PointerEvent) => {
       pointerY = event.clientY
@@ -691,7 +709,7 @@ export function DataEntryGrid({
     }
     switch (event.key) {
       case 'Enter':
-        if (COLUMNS[editing.c].key === 'ean' && !event.shiftKey && editing.text.trim() !== '') {
+        if (columns[editing.c].key === 'ean' && !event.shiftKey && editing.text.trim() !== '') {
           event.preventDefault()
           if (commitEdit(editing)) nextScan(editing.r)
           return
@@ -726,7 +744,7 @@ export function DataEntryGrid({
       autoFocus
       value={editing.text}
       aria-invalid={editing.error ? true : undefined}
-      aria-label={COLUMNS[editing.c].title ?? COLUMNS[editing.c].header}
+      aria-label={columns[editing.c].title ?? columns[editing.c].header}
       title={editing.error}
       onChange={(event) => setEditing({ ...editing, text: event.target.value, error: undefined })}
       onKeyDown={onEditorKeyDown}
@@ -735,7 +753,7 @@ export function DataEntryGrid({
       }}
       className={cn(
         'absolute inset-0 z-10 w-full bg-background px-2 font-normal text-foreground outline-2 -outline-offset-2 outline-primary',
-        COLUMNS[editing.c].align === 'right' && 'text-right',
+        columns[editing.c].align === 'right' && 'text-right',
         editing.error && 'outline-destructive',
       )}
     />
@@ -743,6 +761,7 @@ export function DataEntryGrid({
 
   const tooLongNames = rows.filter((row) => row.name.length > NAME_LIMIT && !serviceKind(row)).length
   const invalidEans = rows.filter((row) => eanError(row) !== null).length
+  const depositErrors = rows.filter((row) => depositError(row) !== null).length
 
   // Kaucje i dostawa są zawsze na końcu (układa je strona), nad nimi nagłówek sekcji.
   const firstService = rows.findIndex((row) => serviceKind(row) !== null)
@@ -760,7 +779,7 @@ export function DataEntryGrid({
         role="grid"
         aria-label="Pozycje do wprowadzenia"
         aria-rowcount={rows.length + 1}
-        aria-colcount={COLUMNS.length}
+        aria-colcount={columns.length}
         tabIndex={0}
         onKeyDown={onGridKeyDown}
         onCopy={onCopy}
@@ -780,11 +799,11 @@ export function DataEntryGrid({
           className="table-fixed border-separate border-spacing-0 tabular-nums"
           style={
             {
-              fontSize: TABLE_FONT_SIZE,
-              width: `max(${TABLE_EM}em, 100%)`,
+              fontSize: tableFontSize(tableEm),
+              width: `max(${tableEm}em, 100%)`,
               // Przesunięcia przyklejonej kolumny EAN w em, liczone w komórce (ma czcionkę tabeli).
               '--sticky-left': `${ROW_HEADER_EM}em`,
-              '--sticky-width': `${STICKY_EM}em`,
+              '--sticky-width': `${stickyEm}em`,
               // Nagłówek kolumn klei się pod nagłówkiem aplikacji i paskiem nad tabelą, a przy przewijaniu w poziomie
               // u góry tabeli. Komórka przewinięta do widoku zatrzymuje się pod nagłówkiem kolumn (h-9).
               '--header-top': scrollsX ? '0' : stickyTop,
@@ -794,39 +813,80 @@ export function DataEntryGrid({
         >
           <colgroup>
             <col style={{ width: `${ROW_HEADER_EM}em` }} />
-            {COLUMNS.map((column) => (
+            {columns.map((column) => (
               <col key={column.key} style={{ width: `${column.width}em` }} />
             ))}
           </colgroup>
           <thead>
             <tr>
               <th className="sticky top-(--header-top) left-0 z-30 h-9 border-r border-b bg-muted" aria-hidden />
-              {COLUMNS.map((column, index) => (
+              {columns.map((column, index) => (
                 <th
                   key={column.key}
                   scope="col"
-                  title={column.title}
+                  title={onSort ? `${column.title ?? column.header} · kliknij, żeby posortować` : column.title}
+                  aria-sort={
+                    sort?.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined
+                  }
+                  onClick={onSort ? () => onSort(column.key) : undefined}
                   className={cn(
-                    'sticky top-(--header-top) z-20 h-9 truncate border-r border-b bg-muted px-2 text-left font-medium whitespace-nowrap text-muted-foreground',
+                    'group/th sticky top-(--header-top) z-20 h-9 truncate border-r border-b bg-muted px-2 text-left font-medium whitespace-nowrap text-muted-foreground',
+                    onSort && 'cursor-pointer hover:text-foreground',
                     column.align === 'right' && 'text-right',
                     index === 0 && 'left-(--sticky-left) z-30',
                     index >= range.left && index <= range.right && SELECTED_HEADER,
-                    column.key === 'name' && tooLongNames > 0 && 'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
-                    column.key === 'ean' && invalidEans > 0 && 'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
+                    column.key === 'name' &&
+                      tooLongNames > 0 &&
+                      'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
+                    column.key === 'ean' &&
+                      invalidEans > 0 &&
+                      'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
+                    column.key === 'deposit' &&
+                      depositErrors > 0 &&
+                      'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
                   )}
                 >
-                  <span className="text-[0.86em]">
-                    {column.header}
-                    {column.key === 'ean' && invalidEans > 0 && (
-                      <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
-                        błędne: {invalidEans}
-                      </span>
-                    )}
-                    {column.key === 'name' && tooLongNames > 0 && (
-                      <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
-                        za długie: {tooLongNames}
-                      </span>
-                    )}
+                  {/* Dodatek (np. filtr) leży nad prawym brzegiem nagłówka, żeby nie zabierał miejsca na nazwę. */}
+                  {headerExtra && (
+                    // Klik w dodatek (filtr) nie sortuje kolumny.
+                    <span
+                      className="absolute inset-y-0 right-0.5 flex items-center"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {headerExtra(column)}
+                    </span>
+                  )}
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className={cn('min-w-0 truncate text-[0.86em]', column.align === 'right' && 'ml-auto')}>
+                      {sort?.key === column.key &&
+                        (sort.direction === 'asc' ? (
+                          <ArrowUpIcon
+                            aria-hidden
+                            className="mr-0.5 inline size-[1.05em] align-[-0.15em] text-blue-700 dark:text-blue-300"
+                          />
+                        ) : (
+                          <ArrowDownIcon
+                            aria-hidden
+                            className="mr-0.5 inline size-[1.05em] align-[-0.15em] text-blue-700 dark:text-blue-300"
+                          />
+                        ))}
+                      {column.header}
+                      {column.key === 'ean' && invalidEans > 0 && (
+                        <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
+                          błędne: {invalidEans}
+                        </span>
+                      )}
+                      {column.key === 'name' && tooLongNames > 0 && (
+                        <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
+                          za długie: {tooLongNames}
+                        </span>
+                      )}
+                      {column.key === 'deposit' && depositErrors > 0 && (
+                        <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
+                          {depositErrors}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </th>
               ))}
@@ -850,7 +910,7 @@ export function DataEntryGrid({
                   {index === firstService && (
                     <tr aria-hidden>
                       <td
-                        colSpan={COLUMNS.length + 1}
+                        colSpan={columns.length + 1}
                         className="h-8 border-b bg-muted px-3 text-xs font-medium text-muted-foreground"
                       >
                         <span className="sticky left-3">Kaucje i dostawa · nie trafiają do Excela</span>
@@ -858,6 +918,7 @@ export function DataEntryGrid({
                     </tr>
                   )}
                   <GridRow
+                    columns={columns}
                     row={row}
                     index={index}
                     names={names}
@@ -897,12 +958,12 @@ export function DataEntryGrid({
         </Button>
       )}
 
-      {picker && pickerRow && COLUMNS[picker.c].kind === 'nomenclature' && (
+      {picker && pickerRow && columns[picker.c].kind === 'nomenclature' && (
         <NomenclaturePicker
           key={`${picker.r}:${picker.c}`}
           anchor={() => cellElement(picker)}
           row={pickerRow}
-          level={COLUMNS[picker.c].key as NomenclatureKey}
+          level={columns[picker.c].key as NomenclatureKey}
           initialQuery={picker.query}
           nomenclature={nomenclature}
           names={names}
@@ -920,7 +981,7 @@ export function DataEntryGrid({
           onClose={closePicker}
         />
       )}
-      {picker && pickerRow && COLUMNS[picker.c].kind === 'unit' && (
+      {picker && pickerRow && columns[picker.c].kind === 'unit' && (
         <UnitPicker
           anchor={() => cellElement(picker)}
           value={pickerRow.unit}
@@ -936,6 +997,7 @@ export function DataEntryGrid({
 }
 
 type RowProps = {
+  columns: Column[]
   row: DataEntryRow
   index: number
   names: Names
@@ -971,6 +1033,7 @@ const CHANGED_COLUMNS: Record<CatalogField, ColumnKey[]> = {
 
 /** Wiersz tabeli; odświeża się tylko, gdy zmienia się on sam albo jego część zaznaczenia. */
 const GridRow = memo(function GridRow({
+  columns,
   row,
   index,
   names,
@@ -994,6 +1057,7 @@ const GridRow = memo(function GridRow({
   const service = serviceKind(row)
   const tooLong = !service && row.name.length > NAME_LIMIT
   const badEan = eanError(row) !== null
+  const badDeposit = depositError(row) !== null
   const changes = catalogChanges(row)
   const changedColumns = new Set(changes.flatMap((field) => CHANGED_COLUMNS[field]))
   const filled = row.ean !== '' || row.name !== ''
@@ -1041,7 +1105,7 @@ const GridRow = memo(function GridRow({
           index + 1
         )}
       </th>
-      {COLUMNS.map((column, c) => {
+      {columns.map((column, c) => {
         const selected = c >= rangeLeft && c <= rangeRight
         const isActive = c === activeCol
         const nomenclature = column.kind === 'nomenclature'
@@ -1070,6 +1134,7 @@ const GridRow = memo(function GridRow({
                   ? 'bg-red-500 font-medium text-white dark:bg-red-700'
                   : 'bg-red-200 text-red-950 dark:bg-red-900 dark:text-red-50'),
               badEan && column.key === 'ean' && 'bg-red-500 font-medium text-white dark:bg-red-700',
+              badDeposit && column.key === 'deposit' && 'bg-red-500 font-medium text-white dark:bg-red-700',
               inRange && SELECTION_LAYER,
               inRange && !isActive && SELECTION_FILL,
               inRange && rangeTop && 'after:border-t-2',
@@ -1128,7 +1193,11 @@ const weightFormat = new Intl.NumberFormat('pl-PL', {
 })
 
 function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium', className)}>{children}</span>
+  return (
+    <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium', className)}>
+      {children}
+    </span>
+  )
 }
 
 type CellProps = {
@@ -1179,7 +1248,9 @@ function CellContent({
               <TriangleAlertIcon aria-label={error} className="size-[1.1em]" />
             </span>
           )}
-          {service && <Tag className="bg-background text-muted-foreground ring-1 ring-border">{SERVICE_LABELS[service]}</Tag>}
+          {service && (
+            <Tag className="bg-background text-muted-foreground ring-1 ring-border">{SERVICE_LABELS[service]}</Tag>
+          )}
           {onLinkArticle && !service && row.ean && (row.link || !row.known) && (
             <button
               type="button"
@@ -1229,7 +1300,10 @@ function CellContent({
       const tooLong = row.name.length > NAME_LIMIT
       // Plakietki zostają widoczne na końcu komórki, a długa nazwa skraca się wielokropkiem (pełna w podpowiedzi).
       return (
-        <span className="flex min-w-0 items-center" title={row.nameFromInvoice ? `Z faktury: ${row.invoiceName}` : row.name}>
+        <span
+          className="flex min-w-0 items-center"
+          title={row.nameFromInvoice ? `Z faktury: ${row.invoiceName}` : row.name}
+        >
           <span className={cn('truncate', row.nameFromInvoice && 'italic')}>{row.name}</span>
           {row.nameFromInvoice && !service && (
             <Tag className="shrink-0 bg-amber-400 text-amber-950 dark:bg-amber-600 dark:text-amber-50">do poprawy</Tag>
@@ -1274,7 +1348,10 @@ function CellContent({
       }
       // Artykuł z CENA_CAD (cadencier): cena z kartoteki niebieska i pogrubiona, dopóki nie zmieniona w tabeli.
       const cadencier =
-        row.known && row.cadencier && row.salePrice !== null && (!row.catalog || row.catalog.salePrice === row.salePrice)
+        row.known &&
+        row.cadencier &&
+        row.salePrice !== null &&
+        (!row.catalog || row.catalog.salePrice === row.salePrice)
       return cadencier ? (
         <span className="font-bold text-blue-700 dark:text-blue-300" title="Artykuł z ceną cadencier (CENA_CAD)">
           {formatMoney(row.salePrice)}
@@ -1374,7 +1451,12 @@ function CellContent({
       if (code === null) {
         if (column !== 'subfamily') return null
         if (service) return null
-        if (row.nomenclaturePrefix) return <span className="text-muted-foreground" title="Wybierz podrodzinę">wybierz</span>
+        if (row.nomenclaturePrefix)
+          return (
+            <span className="text-muted-foreground" title="Wybierz podrodzinę">
+              wybierz
+            </span>
+          )
         if (state === 'TO_CHECK') {
           return (
             <span className="font-medium" title={`Wybierz z ${row.suggestion?.proposals.length ?? 0} propozycji`}>
@@ -1389,6 +1471,42 @@ function CellContent({
     }
     case 'unit':
       return row.unit
+    case 'itm8': {
+      const itm8 = row.base?.itm8 ?? row.itm8
+      if (!itm8) return null
+      // Baza wysyła część towaru pod własnym ITM8: kartotekowy w podpowiedzi.
+      const catalog = row.itm8?.replace(/^0+/, '')
+      const other = catalog && catalog !== itm8.replace(/^0+/, '') ? catalog : null
+      return (
+        <span title={other ? `W kartotece ITM8 ${other}` : itm8} className={cn(other && 'italic')}>
+          {itm8}
+        </span>
+      )
+    }
+    case 'deposit': {
+      const error = depositError(row)
+      const notice = depositNotice(row)
+      const label = depositLabel(row.base?.deposit)
+      if (error) {
+        return (
+          <span className="flex min-w-0 items-center" title={error}>
+            <span className="truncate">{label ?? 'brak'}</span>
+            <TriangleAlertIcon aria-label={error} className="ml-auto size-[1.1em] shrink-0 pl-0.5" />
+          </span>
+        )
+      }
+      if (notice) {
+        return (
+          <span
+            className="rounded bg-amber-300 px-1 font-medium text-amber-950 dark:bg-amber-700 dark:text-amber-50"
+            title={notice}
+          >
+            {label}
+          </span>
+        )
+      }
+      return label
+    }
     case 'stock':
       if (row.stock == null) return null
       return <span className={cn(row.stock < 0 && 'font-medium text-destructive')}>{formatQuantity(row.stock)}</span>

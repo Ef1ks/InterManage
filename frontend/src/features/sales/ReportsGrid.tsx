@@ -7,6 +7,7 @@ import {
   GiftIcon,
   type LucideIcon,
   ScaleIcon,
+  TagIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -38,6 +39,13 @@ const REPORTS: Report[] = [
     title: 'Koszty garmażu',
     description: 'Sprzedaż garmażu (nomenklatura 36) z kosztem z protokołów reprezentacji zamiast zakupu FIFO.',
     icon: ChefHatIcon,
+  },
+  {
+    path: salesPaths.promotions,
+    title: 'Skuteczność promocji',
+    description:
+      'Czy promocja dała więcej marży niż sprzedaż bez niej: wzrost sprzedaży, próg opłacalności, marża FIFO.',
+    icon: TagIcon,
   },
   {
     path: salesPaths.priceCheck,

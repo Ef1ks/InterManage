@@ -4,15 +4,18 @@ import {
   CookingPotIcon,
   DatabaseBackupIcon,
   DatabaseIcon,
+  HashIcon,
   PackageIcon,
   SettingsIcon,
   ShieldIcon,
   StoreIcon,
+  TruckIcon,
   UserCogIcon,
   type LucideIcon,
 } from 'lucide-react'
 
 import { hasPermission } from '@/features/auth/api'
+import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { salesPaths } from '@/features/sales/paths'
@@ -62,6 +65,22 @@ const GROUPS: GroupSpec[] = [
       { category: 'DOCUMENTS', badge: () => <IncomingTransfersBadge /> },
       { category: 'KSEF_INVOICES' },
       { category: 'DATA_ENTRY' },
+      {
+        key: 'base-delivery',
+        path: basePath,
+        label: 'Dostawa z bazy',
+        description: 'Dokument dostawy z bazy w tabeli: nośniki, krótkie terminy, kaucje, nowe artykuły i ceny.',
+        icon: TruckIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
+      {
+        key: 'mea-codes',
+        path: meaPath,
+        label: 'Kody MEA',
+        description: 'Kody MEA z dokumentów bazy, których jeszcze nie wpisano w Mercalys.',
+        icon: HashIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
       { category: 'SUPPLIERS' },
       { category: 'MEAT_PURCHASES' },
       { category: 'ORDERS' },

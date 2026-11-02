@@ -6,6 +6,8 @@ import { api } from '@/lib/api'
 import type {
   DocumentImport,
   EanChange,
+  ImportGuide,
+  ImportReportKind,
   NomenclatureImport,
   NomenclatureImportOverview,
   ProductCodeImport,
@@ -192,6 +194,26 @@ export function useProductCodeImports(storeId: string) {
   return useQuery({
     queryKey: productCodeImportsKey(storeId),
     queryFn: () => api<ProductCodeImportOverview>(productCodeImportsPath(storeId)),
+  })
+}
+
+/** Instrukcje do raportów są wspólne dla wszystkich sklepów. */
+const importGuidesKey = ['import-guides'] as const
+
+export function useImportGuides() {
+  return useQuery({
+    queryKey: importGuidesKey,
+    queryFn: () => api<ImportGuide[]>('/import-guides'),
+  })
+}
+
+/** Zmiana instrukcji (tylko właściciel); pusta treść i ścieżka usuwają ją. */
+export function useSaveImportGuide() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ kind, ...values }: { kind: ImportReportKind; content: string; folderPath: string }) =>
+      api<ImportGuide[]>(`/settings/import-guides/${kind}`, { method: 'PUT', json: values }),
+    onSuccess: (guides) => queryClient.setQueryData(importGuidesKey, guides),
   })
 }
 

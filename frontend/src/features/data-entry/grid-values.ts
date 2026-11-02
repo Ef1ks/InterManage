@@ -3,6 +3,7 @@ import type { NomenclatureItem, PriceRoundingRule, SaleUnit } from '@/lib/types'
 import {
   type DataEntryRow,
   type Pricing,
+  depositLabel,
   marginPercent,
   netValue,
   normalizeBrand,
@@ -30,6 +31,8 @@ export type ColumnKey =
   | 'netContent'
   | 'stock'
   | 'rotation'
+  | 'itm8'
+  | 'deposit'
 
 /** text/number: edycja w komórce; nomenclature/unit: lista do wyboru; computed: tylko do odczytu. */
 export type ColumnKind = 'text' | 'number' | 'nomenclature' | 'unit' | 'computed'
@@ -77,9 +80,35 @@ export const COLUMNS: Column[] = [
   { key: 'unit', header: 'Rodzaj', title: 'Rodzaj sprzedaży', width: 4.5, kind: 'unit' },
   { key: 'netContent', header: 'Waga', width: 5, align: 'right', kind: 'number' },
   // Na końcu, żeby wklejanie kolumn z Excela trafiało tam, gdzie wcześniej.
-  { key: 'stock', header: 'Stan', title: 'Stan magazynowy z ostatniego raportu kartoteki', width: 5, align: 'right', kind: 'computed' },
-  { key: 'rotation', header: 'Rotacja', title: 'Rotacja z ostatniego raportu kartoteki', width: 5, align: 'right', kind: 'computed' },
+  {
+    key: 'stock',
+    header: 'Stan',
+    title: 'Stan magazynowy z ostatniego raportu kartoteki',
+    width: 5,
+    align: 'right',
+    kind: 'computed',
+  },
+  {
+    key: 'rotation',
+    header: 'Rotacja',
+    title: 'Rotacja z ostatniego raportu kartoteki',
+    width: 5,
+    align: 'right',
+    kind: 'computed',
+  },
 ]
+
+/**
+ * Kolumny „Dostawy z bazy”: jak we wprowadzaniu danych, a do tego ITM8 z pliku (za EAN-em) i kaucja z pliku (za
+ * VAT-em). EAN zostaje pierwszy, bo tabela przykleja pierwszą kolumnę i skanuje w niej kody.
+ */
+export const BASE_COLUMNS: Column[] = COLUMNS.flatMap((column) => {
+  if (column.key === 'ean')
+    return [column, { key: 'itm8', header: 'ITM8', title: 'ITM8 z dokumentu bazy', width: 5.5, kind: 'computed' }]
+  if (column.key === 'vat')
+    return [column, { key: 'deposit', header: 'Kaucja', title: 'Kaucja z dokumentu bazy', width: 5, kind: 'computed' }]
+  return [column]
+})
 
 export const UNITS: SaleUnit[] = ['kg', 'L', 'szt.']
 
@@ -122,7 +151,9 @@ export function pricingOf(
 ): Pricing {
   return {
     required: new Map(
-      (items ?? []).flatMap((item) => (item.requiredMargin === null ? [] : [[item.code, item.requiredMargin] as const])),
+      (items ?? []).flatMap((item) =>
+        item.requiredMargin === null ? [] : [[item.code, item.requiredMargin] as const],
+      ),
     ),
     rounding: rounding ?? [],
     supplierPrice,
@@ -163,6 +194,10 @@ export function cellText(row: DataEntryRow, key: ColumnKey, pricing: Pricing): s
       return plainNumber(row.stock ?? null, 3)
     case 'rotation':
       return plainNumber(row.rotation ?? null, 3)
+    case 'itm8':
+      return row.base?.itm8 ?? row.itm8 ?? ''
+    case 'deposit':
+      return depositLabel(row.base?.deposit) ?? ''
     case 'region':
     case 'family':
     case 'subfamily': {
@@ -171,8 +206,11 @@ export function cellText(row: DataEntryRow, key: ColumnKey, pricing: Pricing): s
     case 'unit':
       return row.unit
     case 'netContent':
-      return new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false })
-        .format(row.netContent)
+      return new Intl.NumberFormat('pl-PL', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+        useGrouping: false,
+      }).format(row.netContent)
   }
 }
 
@@ -204,7 +242,10 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
       if (digits !== '' && !/^\d{1,14}$/.test(digits)) return { error: 'EAN to do 14 cyfr' }
       if (digits === row.ean) return { row }
       return {
-        row: digits === '' ? withCatalogProduct({ ...row, ean: '', eanFallback: null }, null) : { ...row, ean: digits, eanFallback: null },
+        row:
+          digits === ''
+            ? withCatalogProduct({ ...row, ean: '', eanFallback: null }, null)
+            : { ...row, ean: digits, eanFallback: null },
         eanChanged: true,
       }
     }
@@ -256,7 +297,9 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
             ? digits.slice(0, length)
             : undefined
       if (!code || !names.has(code)) {
-        return { error: `Nieznany kod: wpisz 2 cyfry ${key === 'region' ? 'rejonu' : key === 'family' ? 'rodziny' : 'podrodziny'}` }
+        return {
+          error: `Nieznany kod: wpisz 2 cyfry ${key === 'region' ? 'rejonu' : key === 'family' ? 'rodziny' : 'podrodziny'}`,
+        }
       }
       return { row: withNomenclature(row, code) }
     }
@@ -273,6 +316,8 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
     case 'suggestedPrice':
     case 'stock':
     case 'rotation':
+    case 'itm8':
+    case 'deposit':
       return { row }
   }
 }
@@ -313,6 +358,8 @@ export function clearable(key: ColumnKey) {
   return (
     COLUMNS.find((column) => column.key === key)?.kind !== 'computed' &&
     key !== 'unit' &&
+    key !== 'itm8' &&
+    key !== 'deposit' &&
     key !== 'netContent' &&
     key !== 'value'
   )

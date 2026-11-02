@@ -107,6 +107,65 @@ class ProductImportIntegrationTests {
     }
 
     @Test
+    void confirmedProductFileDraftsAreResolvedByTheNextReport() throws Exception {
+        Cookie owner = login();
+        String known = itm8();
+        String created = itm8();
+        upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"))).andExpect(status().isCreated());
+        String knownEan = "59" + known.substring(2);
+        String createdEan = "59" + created.substring(2);
+        String missingEan = ean();
+        String draftUrl = "/api/stores/" + storeId + "/data-entry/product-drafts";
+        String body = """
+                {"fileName":"CADBEZP-IMPEK-FV_1.xls","file":{"sellerName":"Impek","invoiceNumber":"FV/1","rows":[
+                 {"ean":"%s","name":"ZNANY","unit":"szt.","netContent":1},
+                 {"ean":"%s","name":"NOWY 1","unit":"szt.","netContent":1,"purchasePrice":1.5,"salePrice":2.99},
+                 {"ean":"%s","name":"NOWY 2","unit":"kg","netContent":0.2},
+                 {"ean":"BULKA KAJZERKA","name":"BULKA KAJZERKA","unit":"szt.","netContent":1}]}}"""
+                .formatted(knownEan, createdEan, missingEan);
+
+        // Artykuł z kartoteki (w pliku jako zmieniony) i kod zastępczy nie zostają szkicami.
+        String json = mvc.perform(post(draftUrl).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdIds.length()").value(2))
+                .andExpect(jsonPath("$.knownCount").value(1))
+                .andExpect(jsonPath("$.withoutEanCount").value(1))
+                .andReturn().getResponse().getContentAsString();
+
+        // Ponowne potwierdzenie zastępuje szkice, a „Cofnij” przywraca zastąpione.
+        String again = mvc.perform(post(draftUrl).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> againIds = com.jayway.jsonpath.JsonPath.read(again, "$.createdIds");
+        mvc.perform(post(draftUrl + "/undo").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[\"" + String.join("\",\"", againIds) + "\"]}"))
+                .andExpect(status().isNoContent());
+        List<String> firstIds = com.jayway.jsonpath.JsonPath.read(json, "$.createdIds");
+        assertThat(jdbc.queryForList("""
+                select id::text from product_drafts
+                where store_id = ?::uuid and matched_at is null and removed_at is null""", String.class, storeId))
+                .containsExactlyInAnyOrderElementsOf(firstIds);
+
+        // Kolejny raport: nowy artykuł jest w kartotece, drugiego program sklepu nie założył.
+        upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"),
+                product(created, "2.99", "0", "NOWY 1")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.draftsMatchedCount").value(1))
+                .andExpect(jsonPath("$.draftsRemovedCount").value(1));
+        assertThat(jdbc.queryForObject("""
+                select p.itm8 from product_drafts d join products p on p.id = d.matched_product_id
+                where d.store_id = ?::uuid and d.ean = ? and d.matched_at is not null""", String.class, storeId,
+                createdEan.replaceFirst("^0+", ""))).isEqualTo(created);
+        assertThat(jdbc.queryForObject("""
+                select removed_reason from product_drafts
+                where store_id = ?::uuid and ean = ? and removed_import_id is not null""", String.class, storeId,
+                missingEan.replaceFirst("^0+", ""))).isEqualTo("MISSING");
+    }
+
+    @Test
     void cadencierPriceIsOnlyFromTheLatestReport() throws Exception {
         Cookie owner = login();
         String a = itm8();

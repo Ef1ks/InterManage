@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { useDispatch, useSelector } from 'react-redux'
 
+import baseDeliveryDraftReducer, { persistBaseDeliveryDrafts } from './baseDeliveryDraftSlice'
 import dataEntryDraftReducer, { persistDataEntryDrafts } from './dataEntryDraftSlice'
 import deliOrderDraftReducer, { persistDrafts } from './deliOrderDraftSlice'
 import uiReducer from './uiSlice'
@@ -10,6 +11,7 @@ export const store = configureStore({
     ui: uiReducer,
     deliOrderDraft: deliOrderDraftReducer,
     dataEntryDraft: dataEntryDraftReducer,
+    baseDeliveryDraft: baseDeliveryDraftReducer,
   },
 })
 
@@ -30,6 +32,16 @@ store.subscribe(() => {
   if (drafts !== savedDataEntry) {
     savedDataEntry = drafts
     persistDataEntryDrafts(drafts)
+  }
+})
+
+// Tabela dostawy z bazy też.
+let savedBaseDelivery = store.getState().baseDeliveryDraft
+store.subscribe(() => {
+  const drafts = store.getState().baseDeliveryDraft
+  if (drafts !== savedBaseDelivery) {
+    savedBaseDelivery = drafts
+    persistBaseDeliveryDrafts(drafts)
   }
 })
 

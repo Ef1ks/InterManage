@@ -10,4 +10,5 @@ export const salesPaths = {
   priceCheck: `${base}/zakup-bazowy-poza-baza`,
   gratis: `${base}/gratisy`,
   protocols: `${base}/protokoly`,
+  promotions: `${base}/promocje`,
 }

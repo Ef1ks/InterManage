@@ -391,14 +391,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // ---------- promocje z kasy: wiersz pamięta promocję z chwili dodania, a plik TRACEART przychodzi w ciągu dnia,
   // więc po wejściu na stronę i po każdym nowym pliku cen promocje znanych artykułów są pobierane od nowa.
 
-  const priceFiles = usePriceFileOverview(store.id).data?.latest.map((file) => file.id).join()
+  const priceFiles = usePriceFileOverview(store.id)
+    .data?.latest.map((file) => file.id)
+    .join()
   const refreshedPromos = useRef<string | null>(null)
   useEffect(() => {
     if (priceFiles === undefined) return
     const key = `${store.id}:${priceFiles}`
     if (refreshedPromos.current === key) return
     refreshedPromos.current = key
-    const eans = [...new Set(currentDraft().rows.filter((row) => row.known && row.ean !== '').map((row) => row.ean))]
+    const eans = [
+      ...new Set(
+        currentDraft()
+          .rows.filter((row) => row.known && row.ean !== '')
+          .map((row) => row.ean),
+      ),
+    ]
     if (eans.length === 0) return
     lookupProducts(store.id, eans)
       .then((products) => {
@@ -798,8 +806,13 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // Artykuły z kartoteki z ceną sprzedaży inną niż przy wczytaniu (kartoteka albo promocja z kasy) idą do CTRLPRIX.
   const priceControlRows = filled.flatMap((row) =>
-    row.known && !row.eanFallback && row.ean && row.catalog && row.salePrice !== null && row.salePrice > 0
-      && row.salePrice !== row.catalog.salePrice
+    row.known &&
+    !row.eanFallback &&
+    row.ean &&
+    row.catalog &&
+    row.salePrice !== null &&
+    row.salePrice > 0 &&
+    row.salePrice !== row.catalog.salePrice
       ? [{ ean: row.ean, salePrice: row.salePrice }]
       : [],
   )
@@ -893,10 +906,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   return (
     <>
-      <PageHeader
-        title="Wprowadzanie danych"
-        description={invoice ? documentLabel(invoice) : storeLabel(store)}
-      />
+      <PageHeader title="Wprowadzanie danych" description={invoice ? documentLabel(invoice) : storeLabel(store)} />
 
       <HowTo
         id="data-entry"
@@ -1342,6 +1352,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         missing={saveSettings.missing}
       />
 
+      {xmlSave.draftDialog}
+
       <AlertDialog open={resaveOpen} onOpenChange={setResaveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1411,7 +1423,7 @@ function documentLabel(invoice: NonNullable<DataEntryDraft['invoice']>) {
  * cała tabela). Przykleja się pod nagłówkiem aplikacji, więc przy przewijaniu długiej tabeli nie trzeba wracać na
  * górę; pod nim klei się nagłówek kolumn.
  */
-function CommandBar({
+export function CommandBar({
   onHeightChange,
   children,
 }: {
@@ -1493,7 +1505,9 @@ function SavedStatus({ state, at, fileName }: { state: 'saved' | 'changed'; at: 
       title={fileName}
     >
       <CircleCheckIcon aria-hidden className="size-4" />
-      {state === 'saved' ? `Dokument zapisany ${formatSavedAt(at)}` : `Zapisany ${formatSavedAt(at)} · zmiany po zapisie`}
+      {state === 'saved'
+        ? `Dokument zapisany ${formatSavedAt(at)}`
+        : `Zapisany ${formatSavedAt(at)} · zmiany po zapisie`}
     </span>
   )
 }
@@ -1507,7 +1521,7 @@ function formatSavedAt(iso: string) {
     : `${date.toLocaleDateString('pl-PL')} o ${time}`
 }
 
-function ToolbarDivider() {
+export function ToolbarDivider() {
   return <span aria-hidden className="mx-1 h-5 w-px bg-border" />
 }
 
@@ -1544,7 +1558,7 @@ function ComparedSum({ value, document, diff }: { value: number; document: numbe
   )
 }
 
-function Stat({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
+export function Stat({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
   return (
     <div className="flex items-baseline gap-1.5">
       <dt className="text-muted-foreground">{label}</dt>

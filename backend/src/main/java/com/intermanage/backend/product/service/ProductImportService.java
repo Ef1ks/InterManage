@@ -77,12 +77,14 @@ public class ProductImportService {
     private final AppUserRepository users;
     private final StoreRepository stores;
     private final ProductPriceChangeRepository priceChanges;
+    private final ProductDraftService drafts;
 
     public ProductImportService(TransactionTemplate transaction, ProductReportParser reportParser,
             ProductImportMapper productImportMapper, ProductImportRepository imports, ProductRepository products,
             ProductEanRepository productEans, ProductEanChangeRepository eanChanges, AppUserRepository users,
-            StoreRepository stores, ProductPriceChangeRepository priceChanges) {
+            StoreRepository stores, ProductPriceChangeRepository priceChanges, ProductDraftService drafts) {
         this.priceChanges = priceChanges;
+        this.drafts = drafts;
         this.transaction = transaction;
         this.reportParser = reportParser;
         this.productImportMapper = productImportMapper;
@@ -127,9 +129,9 @@ public class ProductImportService {
         ParsedProductReport report = parse(file);
         ProductImportResponse result = transaction.execute(status -> merge(storeId, report, fileName, userId));
         log.info("Import produktów do sklepu {} z {}: {} wierszy, nowe {}, zmienione {}, bez zmian {}, brak w pliku {}, "
-                + "zmiana EAN {}, EAN z innego ITM8 {}", storeId, fileName, result.totalRows(), result.createdCount(),
+                + "zmiana EAN {}, EAN z innego ITM8 {}, szkice dopasowane {}, usunięte {}", storeId, fileName, result.totalRows(), result.createdCount(),
                 result.updatedCount(), result.unchangedCount(), result.missingCount(), result.eanChangedCount(),
-                result.eanMovedCount());
+                result.eanMovedCount(), result.draftsMatchedCount(), result.draftsRemovedCount());
         return result;
     }
 
@@ -182,6 +184,7 @@ public class ProductImportService {
         List<ProductEan> newPairs = new ArrayList<>();
         List<ProductEanChange> changes = new ArrayList<>();
         List<ProductPriceChange> priceChangeList = new ArrayList<>();
+        Map<String, Product> reportByEan = new HashMap<>();
         int updated = 0;
         int unchanged = 0;
         int eanChanged = 0;
@@ -203,6 +206,8 @@ public class ProductImportService {
                     unchanged++;
                 }
             }
+
+            reportByEan.put(row.ean().replaceFirst("^0+", ""), product);
 
             // Porównanie ze stanem sprzed importu: nowe pary trafiają do katalogu dopiero po pętli.
             ProductEan latestOwn = catalog.latestPairOf(product);
@@ -237,6 +242,8 @@ public class ProductImportService {
         int missing = Math.toIntExact(products.countByStoreAndLastSeenImportNot(store, productImport));
 
         productImport.recordResult(newProducts.size(), updated, unchanged, missing, eanChanged, eanMoved);
+        ProductDraftService.Result draftResult = drafts.resolve(productImport, reportByEan);
+        productImport.recordDrafts(draftResult.matched(), draftResult.removed());
         return productImportMapper.toResponse(productImport);
     }
 

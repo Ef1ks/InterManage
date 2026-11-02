@@ -8,6 +8,9 @@ import { ActivationPage } from '@/features/auth/ActivationPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
+import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
+import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
+import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { DataEntryPage } from '@/features/data-entry/DataEntryPage'
 import { DeliOrderPage } from '@/features/deli-order/DeliOrderPage'
 import { ProductionPage } from '@/features/deli-production/ProductionPage'
@@ -78,6 +81,23 @@ const router = createBrowserRouter([
       // Główne kategorie z menu: kafelki narzędzi grupy (uprawnienia sprawdza każde narzędzie osobno).
       ...NAV_GROUP_PATHS.map((path) => ({ path, element: <NavGroupPage /> })),
       ...toolRoutes,
+      {
+        // Dostawa z bazy i kody MEA: kto wprowadza faktury, wprowadza też dokumenty z bazy.
+        path: `${basePath}/*`,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <BaseDeliveryPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: meaPath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <MeaCodesPage />
+          </RequireAuth>
+        ),
+      },
       {
         // Ustawienia wybranego sklepu: sekcje według uprawnień (budżet rejonów, sklepy zaprzyjaźnione).
         path: '/ustawienia-sklepu/*',

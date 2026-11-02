@@ -16,5 +16,7 @@ public record ProductImportResponse(
         int unchangedCount,
         int missingCount,
         int eanChangedCount,
-        int eanMovedCount) {
+        int eanMovedCount,
+        int draftsMatchedCount,
+        int draftsRemovedCount) {
 }

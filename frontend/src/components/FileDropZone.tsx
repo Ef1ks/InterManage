@@ -12,7 +12,7 @@ type Props = {
   /** Wybrany plik ma inne rozszerzenie. */
   onReject: (fileName: string) => void
   title: string
-  hint: ReactNode
+  hint?: ReactNode
   className?: string
 }
 
@@ -65,7 +65,10 @@ export function FileDropZone({ accept, pendingFile, onFile, onReject, title, hin
       />
       {pendingFile ? (
         <>
-          <LoaderCircleIcon aria-hidden className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" />
+          <LoaderCircleIcon
+            aria-hidden
+            className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none"
+          />
           <div>
             <p className="font-medium">Importuję {pendingFile.name}</p>
             <p className="mt-0.5 text-sm text-muted-foreground">
@@ -75,10 +78,13 @@ export function FileDropZone({ accept, pendingFile, onFile, onReject, title, hin
         </>
       ) : (
         <>
-          <FileSpreadsheetIcon aria-hidden className="size-6 text-muted-foreground transition-colors group-hover:text-foreground" />
+          <FileSpreadsheetIcon
+            aria-hidden
+            className="size-6 text-muted-foreground transition-colors group-hover:text-foreground"
+          />
           <div>
             <p className="font-medium">{dragging ? 'Upuść plik, aby zaimportować' : title}</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p>
+            {hint && <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p>}
           </div>
         </>
       )}
@@ -87,5 +93,7 @@ export function FileDropZone({ accept, pendingFile, onFile, onReject, title, hin
 }
 
 function formatFileSize(bytes: number) {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB` : `${Math.ceil(bytes / 1024)} kB`
+  return bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
+    : `${Math.ceil(bytes / 1024)} kB`
 }

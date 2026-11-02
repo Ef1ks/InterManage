@@ -223,7 +223,7 @@ export async function saveApiFileToFolder(key: string, path: string, fallbackNam
 }
 
 /** Nazwa wybranego folderu (bez pełnej ścieżki - przeglądarka jej nie zdradza) i jego zmiana. */
-export function useSavedFolder(key: string) {
+export function useSavedFolder(key: string, mode: FolderMode = 'readwrite') {
   const [name, setName] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
@@ -240,10 +240,10 @@ export function useSavedFolder(key: string) {
   }, [key])
 
   const pick = useCallback(async () => {
-    const handle = await pickFolder(key)
+    const handle = await pickFolder(key, mode)
     if (handle) setName(handle.name)
     return handle
-  }, [key])
+  }, [key, mode])
 
   return { name, loaded, pick }
 }

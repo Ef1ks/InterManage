@@ -129,6 +129,10 @@ export type ProductImport = {
   eanChangedCount: number
   /** EAN-y, które wcześniej należały do innego ITM8. */
   eanMovedCount: number
+  /** Szkice artykułów z potwierdzonych plików CADBEZP, których artykuł pojawił się w tym raporcie. */
+  draftsMatchedCount: number
+  /** Szkice artykułów usunięte, bo pierwszy raport po potwierdzeniu nie miał ich artykułu. */
+  draftsRemovedCount: number
 }
 
 /** Zmiana przypisania EAN wykryta przy imporcie. */
@@ -397,12 +401,7 @@ export type ManualInvoiceFile = {
  * {@code difference} = faktury - przyjęcie. {@code confirmedAt}: różnicę ktoś potwierdził (dla tych kwot).
  */
 export type InvoiceComparisonStatus =
-  | 'MATCH'
-  | 'PRICE'
-  | 'QUANTITY'
-  | 'MISSING_ON_INVOICE'
-  | 'MISSING_IN_DELIVERY'
-  | 'NO_CODE'
+  'MATCH' | 'PRICE' | 'QUANTITY' | 'MISSING_ON_INVOICE' | 'MISSING_IN_DELIVERY' | 'NO_CODE'
 
 /** Artykuł przyjęcia i pozycje faktur z tym samym EAN; {@code difference} = faktura - przyjęcie. */
 export type InvoiceComparisonRow = {
@@ -736,6 +735,25 @@ export type SupplierImportOverview = {
   supplierCount: number
   manualCount: number
   imports: SupplierImport[]
+}
+
+/** Raporty z Importu danych (nazwy jak w backendzie, `ImportReportKind`). */
+export type ImportReportKind =
+  | 'PRODUCTS'
+  | 'PRODUCT_CODES'
+  | 'PROMOTIONS'
+  | 'SALES'
+  | 'DOCUMENTS'
+  | 'SUPPLIERS'
+  | 'NOMENCLATURES'
+
+/** Instrukcja właściciela do raportu: jak wygenerować plik i w jakim folderze go szukać. */
+export type ImportGuide = {
+  kind: ImportReportKind
+  content: string
+  folderPath: string | null
+  createdBy: string | null
+  createdAt: string
 }
 
 /** Wgranie listy bieżących i przyszłych promocji (Taryfy.pdf); {@code missingCount}: promocje z zakresu raportu, których w nim zabrakło. */
@@ -1656,6 +1674,8 @@ export type DataEntryCatalogProduct = {
   /** Stan magazynowy (może być ujemny) i rotacja z ostatniego raportu kartoteki. */
   stock: number | null
   rotation: number | null
+  /** Szukany kod to nie EAN, tylko ITM8 artykułu (albo ITM8 z multikodów). */
+  byItm8: boolean
 }
 
 /** Pozycja faktury z KSeF; bez {@code product} to nowy artykuł, a miara jest z nazwy z faktury. */
@@ -2194,4 +2214,133 @@ export type ProductPriceChange = {
 export type ProductPriceHistory = {
   promotions: ProductPromotion[]
   changes: ProductPriceChange[]
+}
+
+/** Ocena promocji w raporcie skuteczności promocji (PromotionVerdict). */
+export type PromotionVerdict = 'PROFITABLE' | 'NO_REACTION' | 'TOO_DEEP' | 'BELOW_COST' | 'NO_BASELINE'
+
+/**
+ * Promocja w raporcie skuteczności: z listy promocji ({@code listed}) albo rozpoznana ze spadku ceny w sprzedaży.
+ * Baza to sprzedaż dzienna z dni bez promocji w 28 dniach przed nią; {@code breakEvenUplift} to próg opłacalności.
+ */
+export type PromotionReportItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  regionCode: string | null
+  regionName: string | null
+  listed: boolean
+  startDate: string
+  endDate: string
+  days: number
+  regularPrice: number | null
+  promoPrice: number | null
+  discountPercent: number | null
+  listMarginPercent: number | null
+  quantity: number
+  saleValueGross: number
+  marginValue: number
+  marginPercent: number | null
+  baseDays: number
+  baseQuantityPerDay: number | null
+  baseMarginPerDay: number | null
+  baseMarginPercent: number | null
+  quantityPerDay: number
+  uplift: number | null
+  breakEvenUplift: number | null
+  extraMargin: number | null
+  afterDays: number
+  afterRatio: number | null
+  lossValue: number
+  usualLossValue: number | null
+  verdict: PromotionVerdict
+}
+
+export type PromotionReport = {
+  from: string
+  to: string
+  lastSaleDate: string | null
+  listSince: string | null
+  noReactionUplift: number
+  baseDays: number
+  afterDays: number
+  promotions: PromotionReportItem[]
+}
+
+/** Wgrany dokument dostawy z bazy (bon z pliku .xls) na liście do otwarcia. */
+export type BaseDeliverySummary = {
+  id: string
+  number: string
+  deliveryDate: string
+  fileName: string
+  lineCount: number
+  uploadedAt: string
+  uploadedBy: string | null
+}
+
+/** Rodzaj opakowania z kaucją w pliku z bazy: NIE, PLA (PET), PUS (puszka), SZK (szkło). */
+export type BaseDeposit = 'NIE' | 'PLA' | 'PUS' | 'SZK'
+
+/**
+ * Linia dostawy z bazy z artykułem z kartoteki (szukanym po ITM8 z pliku, a bez trafienia po EAN-ie; `null` = nowy).
+ * `quantity` = przygotowane kartony × `pack`; `shortDated`: termin przed `requiredBestBefore` (dzień dostawy + dni dla
+ * sklepu). `catalogDeposit`: kod kaucji z kartoteki (60 szkło, 70 puszka, 80 PET, 1 butelka zwrotna, 0 bez).
+ */
+export type BaseDeliveryLine = {
+  id: string
+  lineNo: number
+  carrier: string
+  orderNumber: string | null
+  itm8: string
+  ean: string | null
+  name: string
+  brand: string | null
+  pack: number
+  deposit: string | null
+  bestBefore: string | null
+  daysForStore: number | null
+  requiredBestBefore: string | null
+  shortDated: boolean
+  supplierCode: string
+  meaCode: string | null
+  coliOrdered: number
+  coliPrepared: number
+  quantity: number
+  purchasePrice: number
+  retailPrice: number | null
+  vatRate: number
+  netValue: number
+  regionCode: string | null
+  familyCode: string | null
+  subfamilyCode: string | null
+  saleContent: number | null
+  saleUnit: string | null
+  cn: string | null
+  product: DataEntryCatalogProduct | null
+  catalogDeposit: number | null
+}
+
+export type BaseDelivery = {
+  id: string
+  number: string
+  deliveryDate: string
+  fileName: string
+  uploadedAt: string
+  uploadedBy: string | null
+  carriers: { number: string; lineCount: number; netValue: number }[]
+  lines: BaseDeliveryLine[]
+}
+
+/** Kody MEA: do wpisania w Mercalys (z najnowszym bonem) i ostatnie potwierdzenia wpisania. */
+export type MeaOverview = {
+  pending: { code: string; deliveryNumber: string; deliveryDate: string; deliveryCount: number }[]
+  confirmations: {
+    id: string
+    confirmedAt: string
+    confirmedBy: string | null
+    deletedAt: string | null
+    deletedBy: string | null
+    codes: string[]
+  }[]
 }

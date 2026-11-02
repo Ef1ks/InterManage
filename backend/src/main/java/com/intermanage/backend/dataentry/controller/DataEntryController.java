@@ -49,6 +49,9 @@ import com.intermanage.backend.dataentry.dto.ProductLinkRequest;
 import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionResponse;
+import com.intermanage.backend.dataentry.dto.ProductDraftRequest;
+import com.intermanage.backend.dataentry.dto.ProductDraftResult;
+import com.intermanage.backend.dataentry.dto.ProductDraftUndoRequest;
 import com.intermanage.backend.dataentry.dto.ProductFileRequest;
 import com.intermanage.backend.dataentry.dto.PriceControlFileItem;
 import com.intermanage.backend.dataentry.dto.PriceControlRequest;
@@ -218,11 +221,11 @@ public class DataEntryController {
         return service.invoice(storeId, invoiceId, source);
     }
 
-    /** Artykuły z kartoteki dla wpisanych EAN-ów ({@code ?ean=…&ean=…}). */
+    /** Artykuły z kartoteki dla wpisanych EAN-ów albo ITM8 ({@code ?ean=…&ean=…}). */
     @GetMapping("/products")
     @PreAuthorize(VIEW)
     public List<CatalogProduct> products(@PathVariable UUID storeId, @RequestParam List<String> ean) {
-        return service.lookup(storeId, ean);
+        return service.lookup(storeId, ean, true);
     }
 
     /**
@@ -318,6 +321,26 @@ public class DataEntryController {
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType("application/vnd.ms-excel"))
                 .body(file.content());
+    }
+
+    /**
+     * Program sklepu poprawnie wczytał plik CADBEZP: nowe artykuły z pliku zostają szkicami, które rozstrzyga kolejny
+     * raport kartoteki.
+     */
+    @PostMapping("/product-drafts")
+    @PreAuthorize(VIEW)
+    public ProductDraftResult confirmProductFile(@PathVariable UUID storeId,
+            @Valid @RequestBody ProductDraftRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return productFileService.confirm(storeId, request, principal.getId());
+    }
+
+    /** „Cofnij” potwierdzenia pliku CADBEZP. */
+    @PostMapping("/product-drafts/undo")
+    @PreAuthorize(VIEW)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void undoProductDrafts(@PathVariable UUID storeId, @Valid @RequestBody ProductDraftUndoRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        productFileService.undo(storeId, request.ids(), principal.getId());
     }
 
     /**

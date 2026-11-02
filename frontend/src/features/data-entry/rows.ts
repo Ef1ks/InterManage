@@ -71,9 +71,78 @@ export type DataEntryRow = {
   catalog?: CatalogSnapshot | null
   /** Pozycja przypięta do artykułu u tego dostawcy (kod z kolumny EAN, np. nazwa bez EAN-u). Brak w starszych szkicach. */
   link?: RowLink | null
+  /** Linia dokumentu dostawy z bazy, z której jest wiersz (tylko w „Dostawie z bazy”). */
+  base?: BaseLineInfo | null
 }
 
 export type RowLink = { id: string; code: string }
+
+/**
+ * Dane linii pliku z bazy przy wierszu: ITM8 z pliku (kartoteka bywa pod innym), nośnik, kartony, kaucja z pliku
+ * i z kartoteki, termin i cena sprzedaży dla klienta (C_Publi).
+ */
+export type BaseLineInfo = {
+  lineId: string
+  itm8: string
+  carrier: string
+  supplierCode: string
+  coliOrdered: number
+  coliPrepared: number
+  pack: number
+  deposit: string | null
+  catalogDeposit: number | null
+  retailPrice: number | null
+  bestBefore: string | null
+  requiredBestBefore: string | null
+  shortDated: boolean
+  regionCode: string | null
+}
+
+/** Kaucja z pliku bazy (PLA, PUS, SZK) i kody kartoteki, które jej odpowiadają (sprawdzone na kartotece 10023). */
+const DEPOSIT_CODES: Record<string, number[]> = { PLA: [80], PUS: [70], SZK: [1, 2, 60, 92] }
+const DEPOSIT_LABELS: Record<string, string> = { PLA: 'PET', PUS: 'puszka', SZK: 'szkło' }
+const CATALOG_DEPOSITS: Record<number, string> = {
+  1: 'butelka zwrotna',
+  2: 'szkło',
+  60: 'szkło',
+  70: 'puszka',
+  80: 'PET',
+  92: 'szkło',
+}
+
+/** Kaucja z pliku bazy do wyświetlenia: PET, puszka, szkło; bez kaucji pusta. */
+export function depositLabel(deposit: string | null | undefined) {
+  return deposit ? (DEPOSIT_LABELS[deposit] ?? null) : null
+}
+
+/**
+ * Kaucja z dokumentu bazy niezgodna z kartoteką: dokument ma kaucję, a artykuł w kartotece nie (albo inny rodzaj),
+ * albo kartoteka ma kaucję, a dokument nie. Poważny błąd: blokuje pliki z tabeli. Nowy artykuł z kaucją to tylko
+ * {@code depositNotice} (kaucję ustawia się przy zakładaniu).
+ */
+export function depositError(row: DataEntryRow): string | null {
+  const base = row.base
+  if (!base || !row.known) return null
+  const file = base.deposit && base.deposit !== 'NIE' ? base.deposit : null
+  const catalog = base.catalogDeposit ?? 0
+  const catalogLabel = CATALOG_DEPOSITS[catalog] ?? null
+  if (file) {
+    const expected = DEPOSIT_CODES[file]
+    if (!expected) return null
+    if (catalogLabel === null) return `Dokument: kaucja (${DEPOSIT_LABELS[file]}), w kartotece artykuł bez kaucji`
+    if (!expected.includes(catalog)) return `Dokument: kaucja (${DEPOSIT_LABELS[file]}), w kartotece: ${catalogLabel}`
+    return null
+  }
+  return catalogLabel === null ? null : `Dokument bez kaucji, w kartotece kaucja (${catalogLabel})`
+}
+
+/** Nowy artykuł z kaucją w dokumencie: przy zakładaniu trzeba ustawić kaucję w Mercalys. */
+export function depositNotice(row: DataEntryRow): string | null {
+  const base = row.base
+  if (!base || row.known || !base.deposit || base.deposit === 'NIE') return null
+  const label = depositLabel(base.deposit)
+  return label ? `Nowy artykuł z kaucją (${label}): ustaw kaucję przy zakładaniu w Mercalys` : null
+}
 
 /** Pola artykułu, które pochodzą z kartoteki (ilość, cena zakupu i VAT są z faktury). */
 const CATALOG_FIELDS = ['name', 'brand', 'salePrice', 'subfamilyCode', 'unit', 'netContent'] as const
@@ -263,6 +332,7 @@ export function eanError(row: DataEntryRow, checkedOnly = true): string | null {
  * ich nie ma, i ilość: z kodu etykiety wagi (waga w kg albo cena z etykiety / cena sprzedaży 1 kg), inaczej 1 (także
  * przy EAN-ie spoza kartoteki).
  * Kod z etykiety zamienia się na EAN artykułu z kartoteki, więc kilka etykiet jednego artykułu łączy się w pary.
+ * Wpisany ITM8 też, bo do pliku XML idzie kod kreskowy.
  */
 export function withScannedProduct(row: DataEntryRow, product: DataEntryCatalogProduct | null): DataEntryRow {
   const next = withCatalogProduct(row, product)
@@ -274,7 +344,7 @@ export function withScannedProduct(row: DataEntryRow, product: DataEntryCatalogP
   // Nowy artykuł też przyszedł w sztuce; tylko etykiety z ceną nie da się przeliczyć bez ceny 1 kg z kartoteki.
   if (!product)
     return scale?.kind === 'price' ? { ...next, eanChecked: row.ean } : { ...next, eanChecked: row.ean, quantity }
-  const ean = scale && product.catalogEan ? product.catalogEan : next.ean
+  const ean = (scale || product.byItm8) && product.catalogEan ? product.catalogEan : next.ean
   return {
     ...next,
     ean,
@@ -501,6 +571,8 @@ export type Pricing = {
   required: Map<string, number>
   rounding: PriceRoundingRule[]
   supplierPrice: number | null
+  /** Cena sugerowana wprost z dokumentu (np. cena dla klienta z pliku bazy przy warzywach); ma pierwszeństwo. */
+  rowPrice?: (row: DataEntryRow) => number | null
 }
 
 /** Stała cena dostawcy dokumentu dla artykułu (nowego i z kartoteki; bez kaucji i dostawy). */
@@ -548,6 +620,8 @@ export function roundPrice(price: number, rules: PriceRoundingRule[]) {
  * w eksporcie ({@code DataEntryService.suggestedPrice}).
  */
 export function suggestedPrice(row: DataEntryRow, pricing: Pricing) {
+  const fromDocument = pricing.rowPrice?.(row) ?? null
+  if (fromDocument !== null) return fromDocument
   const fixed = supplierPriceOf(row, pricing)
   if (fixed !== null) return fixed
   const cadencier = cadencierPrice(row)
@@ -579,8 +653,7 @@ export function withCurrentPromo(row: DataEntryRow, product: DataEntryCatalogPro
   const promoPrice = product?.promoPrice ?? null
   const promoTo = product?.promoTo ?? null
   const catalog = row.catalog
-  const salePrice =
-    product && catalog && row.salePrice === catalog.salePrice ? product.salePrice : row.salePrice
+  const salePrice = product && catalog && row.salePrice === catalog.salePrice ? product.salePrice : row.salePrice
   if (row.promoPrice === promoPrice && row.promoTo === promoTo && row.salePrice === salePrice) return row
   return {
     ...row,

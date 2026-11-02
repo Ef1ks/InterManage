@@ -18,6 +18,7 @@ import type {
   PriceCheckReview,
   PriceCheckSettings,
   PriceCheckStatus,
+  PromotionReport,
   ProtocolKind,
   ProtocolReport,
   ProtocolReportGrouping,
@@ -322,6 +323,18 @@ export function usePriceCheck(storeId: string) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'price-check', 'report'],
     queryFn: () => api<PriceCheckReport>(priceCheckPath(storeId)),
+  })
+}
+
+/** Skuteczność promocji kończących się w okresie (najwyżej 92 dni; liczy się kilka sekund). */
+export function usePromotionReport(storeId: string, range: DateRange, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'promotions', range],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () =>
+      api<PromotionReport>(`${reportsPath(storeId)}/promotions?${new URLSearchParams({ from: range.from, to: range.to })}`),
+    enabled,
+    placeholderData: keepPreviousData,
   })
 }
 

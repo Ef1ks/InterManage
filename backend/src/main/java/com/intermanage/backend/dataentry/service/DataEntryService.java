@@ -243,12 +243,22 @@ public class DataEntryService {
         return amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /** Artykuły z kartoteki dla wpisanych EAN-ów (bez zer wiodących); nieznane EAN-y pomija. */
+    /** Artykuły z kartoteki dla EAN-ów (bez zer wiodących); nieznane EAN-y pomija. */
     @Transactional(readOnly = true)
     public List<CatalogProduct> lookup(UUID storeId, Collection<String> eans) {
+        return lookup(storeId, eans, false);
+    }
+
+    /**
+     * Jak {@link #lookup(UUID, Collection)}, a z {@code byItm8} (kody wpisane w kolumnę EAN) kod, który nie jest
+     * żadnym EAN-em artykułu, szuka też po ITM8. Tylko dla kodów od człowieka: indeks dostawcy z faktury trafiałby
+     * w przypadkowe ITM8.
+     */
+    @Transactional(readOnly = true)
+    public List<CatalogProduct> lookup(UUID storeId, Collection<String> eans, boolean byItm8) {
         List<String> keys = eans.stream().map(DataEntryService::ean).map(DataEntryService::key)
                 .filter(Objects::nonNull).distinct().limit(500).toList();
-        return List.copyOf(lookupByKey(storeId, keys).values());
+        return List.copyOf(lookupByKey(storeId, keys, byItm8).values());
     }
 
     /**
@@ -574,19 +584,23 @@ public class DataEntryService {
     }
 
     private Map<String, CatalogProduct> lookupByKey(UUID storeId, List<String> keys) {
+        return lookupByKey(storeId, keys, false);
+    }
+
+    private Map<String, CatalogProduct> lookupByKey(UUID storeId, List<String> keys, boolean byItm8) {
         if (keys.isEmpty()) {
             return Map.of();
         }
         catalog.disableJit();
         Map<String, CatalogProduct> found = new HashMap<>();
         for (DataEntryCatalogRepository.CatalogProduct row : catalog.findByEans(storeId,
-                keys.stream().distinct().toArray(String[]::new), LocalDate.now(WARSAW))) {
+                keys.stream().distinct().toArray(String[]::new), byItm8, LocalDate.now(WARSAW))) {
             Measure measure = Measure.of(row.getUnit(), row.getNetContent());
             found.put(row.getKey(), new CatalogProduct(row.getKey(), row.getItm8(), row.getCatalogEan(), row.getName(),
                     row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(),
                     row.getPromoPrice(), row.getPromoTo(), measure != null ? measure.unit() : Measure.PIECE,
                     measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), row.getSubfamilyCode(),
-                    row.getStock(), row.getRotation()));
+                    row.getStock(), row.getRotation(), row.getByItm8()));
         }
         return found;
     }
