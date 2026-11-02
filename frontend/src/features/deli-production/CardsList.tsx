@@ -58,7 +58,7 @@ export function CardsList({ store, scope }: { store: StoreSummary; scope: CardSc
             <div className="flex flex-wrap items-center gap-2">
               <PdfButtons path={formPdfPath(store.id)} fileName="formularz-karty-produkcji.pdf" printLabel="Drukuj formularz" />
               {canEdit && (
-                <Button size="xl" render={<Link to={productionPaths.create} />}>
+                <Button size="xl" nativeButton={false} render={<Link to={productionPaths.create} />}>
                   <PlusIcon />
                   Nowa karta
                 </Button>

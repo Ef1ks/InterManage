@@ -67,7 +67,8 @@ public class ProductionPdf {
         "Ważność",
         "Niezgodności\ndziałania\nkorygujące",
     };
-    private static final float[] CARD_WIDTHS = {145, 50, 50, 60, 65, 40, 80, 55, 65, 70, 60};
+    /** Wąskie kolumny mieszczą najdłuższe słowo nagłówka ("Niezgodności") bez dzielenia, nazwa bierze resztę. */
+    private static final float[] CARD_WIDTHS = {110, 40, 43, 46, 46, 28, 42, 40, 46, 50, 48};
 
     private final BaseFont regular;
     private final BaseFont bold;
@@ -149,11 +150,13 @@ public class ProductionPdf {
         PdfPTable table = new PdfPTable(CARD_WIDTHS);
         table.setWidthPercentage(100);
         for (String label : CARD_HEADERS) {
-            PdfPCell cell = new PdfPCell(new Phrase(label, font(bold, 6.5f, INK)));
+            PdfPCell cell = new PdfPCell(new Phrase(label, font(bold, 5.5f, INK)));
             cell.setBorderColor(RULE);
             cell.setHorizontalAlignment(Element.ALIGN_CENTER);
             cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
-            cell.setPadding(3);
+            cell.setPadding(1.5f);
+            cell.setPaddingTop(3);
+            cell.setPaddingBottom(4);
             cell.setLeading(0, 1.15f);
             table.addCell(cell);
         }
@@ -181,10 +184,10 @@ public class ProductionPdf {
     }
 
     private PdfPCell cardCell(String text, boolean name) {
-        PdfPCell cell = new PdfPCell(new Phrase(text, font(regular, name ? 7.5f : 8, INK)));
+        PdfPCell cell = new PdfPCell(new Phrase(text, font(regular, 7.5f, INK)));
         cell.setBorderColor(RULE);
         cell.setMinimumHeight(20);
-        cell.setPadding(2.5f);
+        cell.setPadding(2);
         cell.setHorizontalAlignment(name ? Element.ALIGN_LEFT : Element.ALIGN_CENTER);
         cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
         return cell;

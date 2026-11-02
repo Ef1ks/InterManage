@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
+  CookingPotIcon,
   DatabaseBackupIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
@@ -43,6 +44,13 @@ import { THEME_LABELS, useThemeChoice, type ThemeChoice } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { closeMobileNav, toggleMobileNav } from '@/store/uiSlice'
 import { useAppDispatch, useAppSelector } from '@/store'
+
+/** Narzędzia garmażu w sekcji „Garmaż”, z krótszymi nazwami niż kategorie uprawnień. */
+const DELI_TOOLS = {
+  DELI_ORDERS: 'Zamówienia',
+  DELI_PRODUCTION: 'Karty produkcji',
+  DELI_PRICES: 'Kalkulator cen',
+} as const
 
 // Czas animacji menu, ten sam co duration-200 w klasach <aside>.
 const SIDEBAR_TRANSITION_MS = 200
@@ -167,7 +175,13 @@ function Sidebar() {
   const dispatch = useAppDispatch()
   const me = useCurrentUser()
   const { data: categories = [] } = usePermissionCategories()
-  const tools = categories.filter((category) => hasPermission(me, category.code))
+  const available = categories.filter((category) => hasPermission(me, category.code))
+  const tools = available.filter((category) => !(category.code in DELI_TOOLS))
+  // Garmaż: zamówienia, kalkulator cen i karty produkcji we własnej sekcji, w stałej kolejności.
+  const deliTools = (Object.keys(DELI_TOOLS) as (keyof typeof DELI_TOOLS)[]).filter((code) =>
+    available.some((category) => category.code === code),
+  )
+  const canDeliCosts = hasPermission(me, 'SALES')
   // Ustawienia sklepu: budżet rejonów (edycja sprzedaży) i sklepy zaprzyjaźnione (edycja dokumentów).
   const canEditDocuments = hasPermission(me, 'DOCUMENTS', 'EDIT')
   // Ustawienia sklepu: budżet i marże (sprzedaż), sklepy zaprzyjaźnione (dokumenty), pliki PROTO (też wprowadzanie
@@ -211,15 +225,25 @@ function Sidebar() {
               to={TOOL_ROUTES[category.code].path}
               icon={TOOL_ROUTES[category.code].icon}
               label={category.label}
-              badge={
-                category.code === 'DELI_ORDERS' ? (
-                  <DeliNewOrdersBadge />
-                ) : (
-                  category.code === 'DOCUMENTS' && <IncomingTransfersBadge />
-                )
-              }
+              badge={category.code === 'DOCUMENTS' && <IncomingTransfersBadge />}
             />
           ))}
+        </div>
+      )}
+
+      {deliTools.length > 0 && (
+        <div className="grid gap-1">
+          <SectionLabel>Garmaż</SectionLabel>
+          {deliTools.map((code) => (
+            <SidebarLink
+              key={code}
+              to={TOOL_ROUTES[code].path}
+              icon={TOOL_ROUTES[code].icon}
+              label={DELI_TOOLS[code]}
+              badge={code === 'DELI_ORDERS' && <DeliNewOrdersBadge />}
+            />
+          ))}
+          {canDeliCosts && <SidebarLink to="/sprzedaz/koszty-garmazu" icon={CookingPotIcon} label="Koszty garmażu" />}
         </div>
       )}
 

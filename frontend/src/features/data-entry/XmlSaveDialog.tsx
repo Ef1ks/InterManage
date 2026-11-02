@@ -15,6 +15,7 @@ import { formatDateTime } from '@/features/ksef/format'
 
 import { type ExportPayload, type PriceControlPayload, type ProductFilePayload, usePriceControlFiles } from './api'
 import { differs, type InvoiceTotals, signedMoney } from './invoice-totals'
+import { savePriceControlFile } from './price-control'
 import type { DataEntryRow } from './rows'
 
 /** Pliki XML faktur mają własny folder, wybrany raz w przeglądarce. */
@@ -149,15 +150,9 @@ export function XmlSaveDialog({
   /** Plik CTRLPRIX (zmienione ceny) w folderze plików PROTO: błąd tylko ostrzega, plik XML zostaje. */
   const savePriceControl = async (file: PriceControlPayload, folderReady: boolean) => {
     try {
-      const { fileName, blob, headers } = await fetchPostedFile(
-        `/stores/${storeId}/data-entry/export/price-control`,
-        file,
-        'CTRLPRIX.Traite1',
-      )
+      const { fileName, downloaded, supplierCode } = await savePriceControlFile(storeId, file, protoFolder.key, folderReady)
       void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-files'] })
-      if (folderReady) await saveToFolder(protoFolder.key, fileName, blob)
-      else saveBlob(blob, fileName)
-      return { file: { fileName, downloaded: !folderReady }, supplierCode: headers.get('X-Supplier-Code') || null }
+      return { file: { fileName, downloaded }, supplierCode }
     } catch (error) {
       toast.error('Nie udało się zapisać pliku zmian cen (CTRLPRIX)', {
         description: `${error instanceof ApiError ? `${error.message} ` : ''}Plik XML jest zapisany.`,

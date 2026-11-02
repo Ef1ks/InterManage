@@ -34,6 +34,7 @@ import {
   useMarkTransferEntered,
 } from '@/features/documents/api'
 import { BackToTypes } from '@/features/documents/DocumentsList'
+import { IncomingProductionCards } from '@/features/deli-production/TransferProductionCards'
 import { ReceiveTransferDialog, receivedQuantities } from '@/features/documents/ReceiveTransferDialog'
 import {
   countFormat,
@@ -287,6 +288,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
       {canEdit && (
         <ReceiveTransferDialog storeId={storeId} transfer={transfer} open={receiving} onOpenChange={setReceiving} />
       )}
+      <IncomingProductionCards storeId={storeId} transferId={transfer.id} />
 
       <SearchInput
         className="mb-3 w-full sm:w-96"

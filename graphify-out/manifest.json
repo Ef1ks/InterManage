@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "frontend/src/App.tsx": {
-    "mtime": 1793602034.7773283,
-    "seen": 1793602652.5697026,
-    "ast_hash": "8be016d2042e272eafca32e9c00af9e2",
+    "mtime": 1793619114.118715,
+    "seen": 1793619220.7322743,
+    "ast_hash": "812e9efcba89162d740b8233bc5a47ba",
     "semantic_hash": ""
   },
   "frontend/src/components/FullPageMessage.tsx": {
@@ -90,9 +90,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/layout/AppLayout.tsx": {
-    "mtime": 1793603509.9343646,
-    "seen": 1793603625.496037,
-    "ast_hash": "ecf0815be4ddcad2261ff8bdb7e2e17f",
+    "mtime": 1793619126.8657176,
+    "seen": 1793619220.7359064,
+    "ast_hash": "fd4180ab272e2f942633ad6c79cd23db",
     "semantic_hash": ""
   },
   "frontend/src/components/ui/alert-dialog.tsx": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793618907.0445063,
-    "seen": 1793618937.4527843,
-    "ast_hash": "9e4e69d1735473f3120c6d6cafbf1cbc",
+    "mtime": 1793619192.147251,
+    "seen": 1793619220.7737403,
+    "ast_hash": "e399c16272bc6edf6540fc6ebe951bf3",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1374,9 +1374,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentDetail.tsx": {
-    "mtime": 1793272682.8815482,
-    "seen": 1793272726.4298387,
-    "ast_hash": "4bdb077bda6a567a626f2410835d4ed5",
+    "mtime": 1793619165.252531,
+    "seen": 1793619220.7471037,
+    "ast_hash": "a72f3615c6a5973f8c432f4089a73c86",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentTypesGrid.tsx": {
@@ -3696,9 +3696,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/IncomingTransfers.tsx": {
-    "mtime": 1793519339.6917791,
-    "seen": 1793519530.9459648,
-    "ast_hash": "c95540c9cb4f2c7cd58ea859fb0045df",
+    "mtime": 1793619165.2514727,
+    "seen": 1793619220.7481036,
+    "ast_hash": "ec0683645c55dbb5b332d0beb3daecff",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/IncomingTransfersBadge.tsx": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1793618821.731185,
-    "seen": 1793618937.4205022,
-    "ast_hash": "d8c04e47d650cb4a4e6d2a0bace8e0a7",
+    "mtime": 1793619171.0350022,
+    "seen": 1793619220.7395372,
+    "ast_hash": "7503c501d8c85c9852f400f32663fadd",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4758,9 +4758,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/XmlSaveDialog.tsx": {
-    "mtime": 1793618862.3443117,
-    "seen": 1793618937.4215024,
-    "ast_hash": "c11b89123fe2b474f5a922ca8559df21",
+    "mtime": 1793619135.8235674,
+    "seen": 1793619220.7405744,
+    "ast_hash": "f0fc59d718442bf99260727f2390b680",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CatalogListItem.java": {
@@ -5955,6 +5955,42 @@
     "mtime": 1793618900.6346343,
     "seen": 1793618937.4265025,
     "ast_hash": "28fa180396046b166719619eda0735ca",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/data-entry/price-control.ts": {
+    "mtime": 1793619134.2368581,
+    "seen": 1793619220.7421036,
+    "ast_hash": "54da0f18237bdb7e863070e4d43191c7",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-production/BaseEditor.tsx": {
+    "mtime": 1793619114.118715,
+    "seen": 1793619220.7461038,
+    "ast_hash": "ba72bd497eaa7bb94861b94588570685",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-production/CardEditor.tsx": {
+    "mtime": 1793619022.7021313,
+    "seen": 1793619220.7461038,
+    "ast_hash": "30a678712aa70796434d0f81853d7069",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-production/CardsList.tsx": {
+    "mtime": 1793618933.0026507,
+    "seen": 1793619220.7461038,
+    "ast_hash": "958f984a1e4cfd3acce24f52bae20925",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-production/ProductionPage.tsx": {
+    "mtime": 1793618932.2126791,
+    "seen": 1793619220.7471037,
+    "ast_hash": "b91334fe8a6da72c07a3d0af2254da6a",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/deli-production/TransferProductionCards.tsx": {
+    "mtime": 1793619154.0346878,
+    "seen": 1793619220.7471037,
+    "ast_hash": "138577061c245df509b0c711be4291cc",
     "semantic_hash": ""
   }
 }

@@ -13,9 +13,11 @@ import {
   ReceiptTextIcon,
   SparklesIcon,
   Redo2Icon,
+  TagIcon,
   Trash2Icon,
   Undo2Icon,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from 'react-redux'
 import { toast } from 'sonner'
@@ -42,6 +44,8 @@ import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
+import { useProtoFolder } from '@/lib/proto-files'
+import { ensureFolderAccess } from '@/lib/saved-folders'
 import { addDays, todayIso } from '@/lib/dates'
 import type {
   DataEntryCatalogProduct,
@@ -81,6 +85,7 @@ import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { usePriceFileOverview } from './price-files'
+import { savePriceControlFile } from './price-control'
 import { PriceFileStatus } from './PriceFileStatus'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
@@ -746,7 +751,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       : [],
   )
   const priceControlPayload: PriceControlPayload | null =
-    xmlOpen && priceControlRows.length > 0
+    priceControlRows.length > 0
       ? {
           supplierId: invoice?.supplier?.id ?? null,
           sellerNip: invoice?.sellerNip ?? null,
@@ -754,6 +759,29 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           rows: priceControlRows,
         }
       : null
+
+  // „Zmień ceny”: sam plik CTRLPRIX, bez pliku XML (np. gdy dokument jest już wprowadzony).
+  const protoFolder = useProtoFolder(store.id)
+  const queryClient = useQueryClient()
+  const [savingPrices, setSavingPrices] = useState(false)
+  const savePriceChanges = async () => {
+    if (!priceControlPayload) return
+    setSavingPrices(true)
+    try {
+      // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
+      const folderReady = await ensureFolderAccess(protoFolder.key)
+      const file = await savePriceControlFile(store.id, priceControlPayload, protoFolder.key, folderReady)
+      void queryClient.invalidateQueries({ queryKey: ['stores', store.id, 'data-entry', 'price-control-files'] })
+      toast.success(`Zapisano plik zmian cen${file.supplierCode ? ` dla dostawcy ${file.supplierCode}` : ''}`, {
+        description: `${file.fileName}${file.downloaded ? ' (pobrany: folder plików PROTO nie jest wybrany w tej przeglądarce)' : ''}`,
+        duration: 10_000,
+      })
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku zmian cen (CTRLPRIX)')
+    } finally {
+      setSavingPrices(false)
+    }
+  }
 
   // Zapis tymczasowy: plik XML i cała tabela na serwerze, bez zapisu na dysku (najwyżej 10 w sklepie).
   const saveTemporaryXml = useSaveTemporaryXml(store.id)
@@ -845,6 +873,21 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 >
                   <FileClockIcon />
                   Zapisz tymczasowo
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={savePriceChanges}
+                  loading={savingPrices}
+                  disabled={priceControlRows.length === 0}
+                  title={
+                    priceControlRows.length > 0
+                      ? `Zapisuje sam plik zmian cen CTRLPRIX (${priceControlRows.length} ${pieces(priceControlRows.length)}) w folderze plików PROTO, bez pliku XML`
+                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
+                  }
+                >
+                  <TagIcon />
+                  Zmień ceny
+                  {priceControlRows.length > 0 && ` (${priceControlRows.length})`}
                 </Button>
                 <Button onClick={() => setXmlOpen(true)} disabled={filled.length === 0}>
                   <FileCodeIcon />

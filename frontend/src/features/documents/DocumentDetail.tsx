@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { deliPaths } from '@/features/deli-order/paths'
+import { DocumentProductionCards } from '@/features/deli-production/TransferProductionCards'
 import { useDocument, useDownloadDeliveryNote } from '@/features/documents/api'
 import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
@@ -204,6 +205,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
       <DeliveryCorrections storeId={storeId} document={document} />
       <DocumentGratisSection storeId={storeId} document={document} />
       <DocumentTransferTargetSection storeId={storeId} document={document} />
+      {document.type === 'MM' && <DocumentProductionCards storeId={storeId} document={document} />}
       <DocumentKsefInvoices storeId={storeId} document={document} />
 
       {document.deliOrders.length > 0 && (
