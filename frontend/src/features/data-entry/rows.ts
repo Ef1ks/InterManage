@@ -96,6 +96,14 @@ export function catalogChanges(row: DataEntryRow): CatalogField[] {
   return CATALOG_FIELDS.filter((field) => row[field] !== catalog[field])
 }
 
+/**
+ * Artykuł do pliku CADBEZP: nowy albo z kartoteki ze zmienioną nazwą, marką, nomenklaturą, rodzajem sprzedaży albo
+ * wagą. Zmieniona cena sprzedaży idzie tylko do pliku CTRLPRIX.
+ */
+export function needsProductFile(row: DataEntryRow) {
+  return !row.known || catalogChanges(row).some((field) => field !== 'salePrice')
+}
+
 export const NAME_LIMIT = 30
 
 export function newRowId() {

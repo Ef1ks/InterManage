@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
+import com.intermanage.backend.common.component.PdfBarcodes;
 import com.intermanage.backend.common.component.PdfFonts;
 import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.component.XlsxWriter;
@@ -27,13 +28,9 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
-import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.Rectangle;
-import com.lowagie.text.pdf.Barcode128;
-import com.lowagie.text.pdf.Barcode;
-import com.lowagie.text.pdf.BarcodeEAN;
 import com.lowagie.text.pdf.BaseFont;
 import com.lowagie.text.pdf.ColumnText;
 import com.lowagie.text.pdf.PdfContentByte;
@@ -221,7 +218,7 @@ public class DeliOrderDocuments {
             table.addCell(bodyCell(new Phrase(quantity(line), font(bold, 10, INK)), Element.ALIGN_CENTER));
             // Puste pole: odbierający wpisuje długopisem, ile faktycznie przyszło.
             table.addCell(bodyCell(new Phrase(" "), Element.ALIGN_CENTER));
-            PdfPCell code = new PdfPCell(barcode(canvas, line.ean()), false);
+            PdfPCell code = new PdfPCell(PdfBarcodes.image(canvas, line.ean(), 118, 34), false);
             code.setBorderColor(RULE);
             code.setPadding(4);
             code.setHorizontalAlignment(Element.ALIGN_CENTER);
@@ -264,42 +261,6 @@ public class DeliOrderDocuments {
         cell.setBorder(Rectangle.NO_BORDER);
         cell.setPadding(0);
         return cell;
-    }
-
-    /**
-     * EAN-13 / EAN-8, gdy kod ma poprawną cyfrę kontrolną - tak jak na opakowaniu. Kody wewnętrzne sklepu
-     * z błędną sumą kontrolną drukujemy jako Code 128, który czytnik odczyta dokładnie w tej postaci.
-     */
-    private static Image barcode(PdfContentByte canvas, String ean) {
-        Barcode barcode;
-        if (isValidEan(ean)) {
-            BarcodeEAN code = new BarcodeEAN();
-            code.setCodeType(ean.length() == 13 ? Barcode.EAN13 : Barcode.EAN8);
-            barcode = code;
-        } else {
-            barcode = new Barcode128();
-            barcode.setCodeType(Barcode.CODE128);
-        }
-        barcode.setCode(ean);
-        barcode.setBarHeight(22);
-        barcode.setX(0.85f);
-        barcode.setSize(7);
-        barcode.setBaseline(7);
-        Image image = barcode.createImageWithBarcode(canvas, null, null);
-        image.scaleToFit(118, 34);
-        return image;
-    }
-
-    static boolean isValidEan(String code) {
-        if (code == null || !(code.length() == 13 || code.length() == 8) || !code.chars().allMatch(Character::isDigit)) {
-            return false;
-        }
-        int sum = 0;
-        for (int i = 0; i < code.length() - 1; i++) {
-            int digit = code.charAt(code.length() - 2 - i) - '0';
-            sum += i % 2 == 0 ? digit * 3 : digit;
-        }
-        return (10 - sum % 10) % 10 == code.charAt(code.length() - 1) - '0';
     }
 
     private static String quantity(Line line) {

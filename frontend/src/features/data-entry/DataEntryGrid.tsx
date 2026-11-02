@@ -79,6 +79,8 @@ type Props = {
   /** Wiersze ze zmienionym EAN-em (wpisanym albo wklejonym) - strona szuka ich w kartotece. */
   onEansChanged: (rowIds: string[]) => void
   onSelectedRowsChange: (rowIds: string[]) => void
+  /** Ctrl+− (jak w Excelu): usuwa wiersze zaznaczenia. */
+  onDeleteRows?: (rowIds: string[]) => void
   onInvalidPaste: (count: number) => void
   nomenclature: NomenclatureItem[]
   names: Names
@@ -134,7 +136,7 @@ const AUTO_SCROLL_EDGE = 72
 
 /**
  * Tabela jak arkusz Excela: zaznaczanie komórki i zakresu (mysz, Shift+strzałki), strzałki, Tab i Enter, edycja przez
- * wpisanie albo F2/podwójne kliknięcie, Esc, Delete, Ctrl+C/Ctrl+V zakresu jako TSV (zgodne z Excelem). Nomenklatura
+ * wpisanie albo F2/podwójne kliknięcie, Esc, Delete (czyści komórki), Ctrl+− (usuwa wiersze), Ctrl+C/Ctrl+V zakresu jako TSV (zgodne z Excelem). Nomenklatura
  * i rodzaj sprzedaży wybiera się z listy. Celowo bez animacji: nawigacja klawiaturą ma być natychmiastowa.
  */
 export function DataEntryGrid({
@@ -142,6 +144,7 @@ export function DataEntryGrid({
   setRows,
   onEansChanged,
   onSelectedRowsChange,
+  onDeleteRows,
   onInvalidPaste,
   nomenclature,
   names,
@@ -449,6 +452,10 @@ export function DataEntryGrid({
     if (ctrl && event.key.toLowerCase() === 'a') {
       handled()
       return selectAll()
+    }
+    if (ctrl && (event.key === '-' || event.key === 'Subtract') && onDeleteRows && selectedIds) {
+      handled()
+      return onDeleteRows(selectedIds.split(','))
     }
     if (!ctrl && !event.altKey && event.key.length === 1) {
       handled()

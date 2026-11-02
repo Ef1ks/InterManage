@@ -9,6 +9,8 @@ import { AddSupplierForm, SupplierPicker } from '@/features/documents/SupplierPi
 import type { Supplier } from '@/lib/types'
 import type { DraftInvoice } from '@/store/dataEntryDraftSlice'
 
+import { documentSupplier } from './document-supplier'
+
 type Props = {
   storeId: string
   invoice: DraftInvoice | null
@@ -44,13 +46,7 @@ function SupplierChangeBody({
   const [adding, setAdding] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
 
-  // Obecny dostawca dokumentu: wybrany wcześniej albo sprzedawca z faktury po NIP-ie.
-  const current = useMemo(() => {
-    if (!suppliers || !invoice) return null
-    if (invoice.supplier) return suppliers.find((supplier) => supplier.id === invoice.supplier?.id) ?? null
-    const nip = invoice.sellerNip?.replace(/\D/g, '')
-    return nip ? (suppliers.find((supplier) => supplier.nip?.replace(/\D/g, '') === nip) ?? null) : null
-  }, [suppliers, invoice])
+  const current = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
   const selectedId = picked ?? current?.id ?? null
   const selected = suppliers?.find((supplier) => supplier.id === selectedId) ?? null
 

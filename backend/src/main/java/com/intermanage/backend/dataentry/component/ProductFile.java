@@ -12,19 +12,21 @@ import com.intermanage.backend.dataentry.dto.ProductFileRequest;
 
 /**
  * Plik nowych i zmienionych artykułów (CADBEZP, .xls) dla programu sklepu, w układzie z pliku wzorcowego
- * {@code CADBEZP-IMPEK.xls}: 19 kolumn danych, 5 pustych i CN (z pozycji faktury, bez niego {@value #CN}). Ref. dostawcy to EAN. Opakowanie i zamówienie minimalne 1, rabat
+ * {@code CADBEZP-IMPEK.xls}: 19 kolumn danych, Segment {@value #SEGMENT}, 4 puste i CN (z pozycji faktury, bez niego {@value #CN}). Ref. dostawcy to EAN. Opakowanie i zamówienie minimalne 1, rabat
  * 0, cena po rabacie = cena zakupu, cena sugerowana = cena sprzedaży, PKWIU 0. Marka ma najwyżej
  * {@value #BRAND_LIMIT} znaków jak we wzorze („DR PEPPE”).
  */
 public final class ProductFile {
 
     public static final String CN = "99999980";
+    /** Segment po podrodzinie: program sklepu wymaga kolumny, nie używamy segmentów. */
+    static final String SEGMENT = "0";
     static final int BRAND_LIMIT = 8;
 
     public static final List<String> HEADERS = List.of("Ref.Dostawct", "Nazwa", "Nazwa Handl.", "Kod EAN13",
             "Opak.Bazy", "Zamówienie minimalne", "Jednostka miary", "Masa/Objętość", "Marka", "CZ", "Rabat",
             "CZ po rabacie", "VAT", "CS", "CS sugerowana", "PKWIU", "Rejon", "Rodzina", "Pod - rodzina",
-            "", "", "", "", "", "CN");
+            "Segment", "", "", "", "", "CN");
 
     private ProductFile() {
     }
@@ -41,7 +43,7 @@ public final class ProductFile {
                 ean(row.ean()), text(row.name()), text(row.name()), ean(row.ean()), "1", "1", unit(row.unit()),
                 row.netContent(), brand(row.brand()), purchase, BigDecimal.ZERO, purchase, vat(row.vatPercent()),
                 sale, sale, BigDecimal.ZERO, level(subfamily, 0), level(subfamily, 2), level(subfamily, 4)));
-        cells.addAll(Arrays.asList(null, null, null, null, null, cn(row.cn())));
+        cells.addAll(Arrays.asList(SEGMENT, null, null, null, null, cn(row.cn())));
         return cells;
     }
 

@@ -152,7 +152,7 @@ export function XmlSaveDialog({
       const { fileName, blob, headers } = await fetchPostedFile(
         `/stores/${storeId}/data-entry/export/price-control`,
         file,
-        'CTRLPRIX.traite0',
+        'CTRLPRIX.Traite1',
       )
       void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-files'] })
       if (folderReady) await saveToFolder(protoFolder.key, fileName, blob)
@@ -171,10 +171,10 @@ export function XmlSaveDialog({
     const path = `/stores/${storeId}/data-entry/price-control-files/${id}/file`
     try {
       if (await ensureFolderAccess(protoFolder.key)) {
-        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.traite0')
+        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.Traite1')
         toast.success(`Zapisano ${fileName}`)
       } else {
-        await downloadFile(path, 'CTRLPRIX.traite0')
+        await downloadFile(path, 'CTRLPRIX.Traite1')
       }
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku CTRLPRIX')

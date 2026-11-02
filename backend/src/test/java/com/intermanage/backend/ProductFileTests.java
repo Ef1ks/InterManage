@@ -31,7 +31,8 @@ class ProductFileTests {
         assertThat(rows.get(0)).containsExactly("5903983402258", "WODKA DEBOWA 0,7L", "WODKA DEBOWA 0,7L",
                 "5903983402258", "1", "1", "L", new BigDecimal("0.700"), "DEBOWA P", new BigDecimal("12.35"),
                 BigDecimal.ZERO, new BigDecimal("12.35"), "23%", new BigDecimal("29.99"), new BigDecimal("29.99"),
-                BigDecimal.ZERO, "73", "05", "01", null, null, null, null, null, "22089056");
+                BigDecimal.ZERO, "73", "05", "01", "0", null, null, null, null, "22089056");
+        assertThat(ProductFile.HEADERS.get(19)).isEqualTo("Segment");
         // Kod zastępczy to brak EAN-u (też w Ref. dostawcy), kg = K, bez nomenklatury puste poziomy.
         List<Object> created = rows.get(1);
         assertThat(created.get(0)).isNull();

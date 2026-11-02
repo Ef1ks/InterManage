@@ -328,7 +328,8 @@ public class DataEntryController {
     @PreAuthorize(VIEW)
     public ResponseEntity<byte[]> exportPriceControl(@PathVariable UUID storeId,
             @Valid @RequestBody PriceControlRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
-        return priceControlFile(priceControlService.generate(storeId, request, principal.getId()));
+        return priceControlFile(priceControlService.generate(storeId, request, principal.getId(),
+                principal.getUsername()));
     }
 
     /** 10 ostatnich plików CTRLPRIX sklepu, od najnowszego. */

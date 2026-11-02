@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useCan } from '@/features/auth/api'
+import { useSuppliers } from '@/features/documents/api'
 import { formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
@@ -75,6 +76,7 @@ import {
 import { nomenclatureNames, pricingOf } from './grid-values'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
+import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
@@ -91,6 +93,7 @@ import {
   type RowLink,
   emptyRow,
   needsAi,
+  needsProductFile,
   nomenclatureState,
   purchasePerPiece,
   rowFromLine,
@@ -241,6 +244,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [xmlOpen, setXmlOpen] = useState(false)
   const [supplierOpen, setSupplierOpen] = useState(false)
+  const { data: suppliers } = useSuppliers(store.id)
+  const supplier = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
   // Wysokość przyklejonego paska nad tabelą: pod nim przykleja się nagłówek kolumn.
   const [toolbarHeight, setToolbarHeight] = useState(0)
   const suggest = useSuggest(store.id)
@@ -565,6 +570,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     toast(`Usunięto ${ids.length} ${pieces(ids.length)}`, {
       action: { label: 'Przywróć', onClick: () => setDraft(before) },
     })
+    gridRef.current?.focus()
   }
 
   // ---------- pasek nad tabelą: działania na zaznaczonych wierszach
@@ -707,8 +713,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   })
   const xmlPayload: ExportPayload | null = xmlOpen ? buildPayload() : null
 
-  // Nowe i zmienione artykuły idą razem z plikiem XML do pliku CADBEZP dla programu sklepu.
-  const productRows = filled.filter((row) => !row.known || catalogChanges(row).length > 0)
+  // Nowe i zmienione artykuły (bez samej zmiany ceny) idą razem z plikiem XML do pliku CADBEZP dla programu sklepu.
+  const productRows = filled.filter(needsProductFile)
   const productFilePayload: ProductFilePayload | null =
     xmlOpen && productRows.length > 0
       ? {
@@ -781,6 +787,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         description={
           <>
             {invoice ? documentLabel(invoice) : storeLabel(store)}
+            {supplier?.code && (
+              <>
+                {' · '}
+                <span className="font-medium text-foreground">nr dostawcy {supplier.code}</span>
+              </>
+            )}
+            {invoice && (invoice.supplier || invoice.sellerNip) && suppliers && !supplier?.code && (
+              <>
+                {' · '}
+                <span className="font-medium text-amber-700 dark:text-amber-400">
+                  {supplier ? 'dostawca bez numeru (dodany ręcznie)' : 'brak dostawcy na liście dostawców'}
+                </span>
+              </>
+            )}
             {rows.length > 0 && (
               <>
                 {' · '}
@@ -933,6 +953,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             >
               <DiffIcon />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => removeRows(selectedRows)}
+              disabled={selectedRows.length === 0}
+              aria-label="Usuń zaznaczone wiersze"
+              title={
+                selectedRows.length > 0
+                  ? `Usuń zaznaczone wiersze (${selectedRows.length}) (Ctrl+−)`
+                  : 'Usuń wiersze: zaznacz je w tabeli (klik w numer wiersza, Shift + klik)'
+              }
+            >
+              <Trash2Icon />
+            </Button>
             <ToolbarDivider />
             {invoice?.id && (
               <>
@@ -1034,6 +1068,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             setRows={setViewRows}
             onEansChanged={onEansChanged}
             onSelectedRowsChange={setSelectedRows}
+            onDeleteRows={removeRows}
             onInvalidPaste={(count) =>
               toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
             }

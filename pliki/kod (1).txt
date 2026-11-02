@@ -1,0 +1,507 @@
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Raporty CCP1')
+    .addItem('Otwórz panel boczny', 'showSidebar')
+    .addToUi();
+}
+
+function showSidebar() {
+  var html = HtmlService.createHtmlOutputFromFile('Sidebar')
+      .setTitle('Karta Produkcji CCP1')
+      .setWidth(300);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getBazaIndexes(headersBaza) {
+  // Dodano wyszukiwanie kolumny "wewnetrzna"
+  var idx = { ean: 0, nazwa: 1, tempPieczenia: 3, czasSchladzania: 4, tempSchladzania: 5, czas: 6, wewnetrzna: -1 };
+  if (!headersBaza) return idx;
+  
+  for (var i = 0; i < headersBaza.length; i++) {
+    var colName = String(headersBaza[i]).toLowerCase().trim();
+    if (colName === "ean") idx.ean = i;
+    if (colName === "nazwa") idx.nazwa = i;
+    if (colName.indexOf("temperatura pieczenia") !== -1) idx.tempPieczenia = i;
+    if (colName.indexOf("czas schładzania") !== -1 || colName.indexOf("czas schladzania") !== -1) idx.czasSchladzania = i;
+    if (colName.indexOf("temperatura schładzania") !== -1 || colName.indexOf("temperatura schladzania") !== -1) idx.tempSchladzania = i;
+    if (colName === "czas") idx.czas = i; 
+    if (colName.indexOf("wewnętrzna") !== -1 || colName.indexOf("wewnetrzna") !== -1) idx.wewnetrzna = i; 
+  }
+  return idx;
+}
+
+function calculateExpiryDate(baseDateStr, daysToAdd) {
+  if (daysToAdd === "" || daysToAdd === undefined || daysToAdd === null) return "-";
+  
+  var numStr = String(daysToAdd).replace(/\D/g, '');
+  if (numStr === "") return "-";
+  
+  var numDays = parseInt(numStr, 10);
+  var d = new Date(baseDateStr);
+  d.setDate(d.getDate() + numDays);
+  
+  var yyyy = d.getFullYear();
+  var mm = ("0" + (d.getMonth() + 1)).slice(-2);
+  var dd = ("0" + d.getDate()).slice(-2);
+  
+  return yyyy + "-" + mm + "-" + dd;
+}
+
+function getProducts() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Baza');
+  if (!sheet) return [];
+  
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  var idx = getBazaIndexes(data[0]);
+  
+  var products = [];
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][idx.nazwa]) { 
+      products.push(data[i][idx.nazwa]);
+    }
+  }
+  return products;
+}
+
+// Budowanie szablonu A4 z 11 kolumnami
+function createSheetIfNotExist(sheetName, displayDate) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.setHiddenGridlines(true);
+    
+    // --- 1. NAGŁÓWEK DOKUMENTU ---
+    sheet.getRange("A1").setValue("Pieczątka zakładu pracy:");
+    sheet.getRange("A2").setValue("TRYTOMA Sp. z o.o.");
+    sheet.getRange("A3").setValue("ul. Szosa Kisielińska 22");
+    sheet.getRange("A4").setValue("65-247 Zielona Góra");
+    sheet.getRange("A5").setValue("NIP: 781 20 22 536");
+    sheet.getRange("A1:A5").setFontSize(10).setFontWeight("bold");
+    
+    sheet.getRange("D1:I4").merge().setValue("KARTA\nPRODUKCJI")
+         .setHorizontalAlignment("center").setVerticalAlignment("middle")
+         .setFontSize(16).setFontWeight("bold");
+    
+    sheet.getRange("J4:K4").merge().setValue("Data: " + displayDate)
+         .setFontWeight("bold").setHorizontalAlignment("right");
+    
+    // --- 2. TABELA WŁAŚCIWA (11 Kolumn) ---
+    var headers = [
+      "Asortyment", 
+      "Godzina\nrozpoczęcia\nprocesu", 
+      "Godzina\nzakończenia\nprocesu", 
+      "Temperatura\nw czasie\nprocesu", 
+      "Temperatura\nwewnętrzna\npo wypieku", // NOWA KOLUMNA
+      "Ilość", 
+      "Godzina\nprzekazania\ndo schłodzenia/\ngodzina\nprzekazania\ndo lady", // ZMODYFIKOWANA KOLUMNA
+      "Czas\nschładzania", 
+      "Temperatura\nschładzania",
+      "Ważność", 
+      "Niezgodności\ndziałania\nkorygujące" 
+    ];
+    
+    sheet.getRange(7, 1, 1, headers.length).setValues([headers])
+         .setFontWeight("bold").setWrap(true)
+         .setHorizontalAlignment("center").setVerticalAlignment("middle");
+         
+    // Skalibrowane szerokości pod format A4 (łącznie ~740px)
+    sheet.setColumnWidth(1, 145); // Asortyment
+    sheet.setColumnWidth(2, 50);  // Godz rozp
+    sheet.setColumnWidth(3, 50);  // Godz zak
+    sheet.setColumnWidth(4, 60);  // Temp procesu
+    sheet.setColumnWidth(5, 65);  // Temp wewnetrzna po wypieku
+    sheet.setColumnWidth(6, 40);  // Ilość
+    sheet.setColumnWidth(7, 80);  // Godz schłodzenia/lady
+    sheet.setColumnWidth(8, 55);  // Czas schładzania
+    sheet.setColumnWidth(9, 65);  // Temp schładzania
+    sheet.setColumnWidth(10, 70); // Ważność
+    sheet.setColumnWidth(11, 60); // Niezgodności
+    
+    var maxDataRows = 27; 
+    sheet.getRange(7, 1, maxDataRows + 1, headers.length).setBorder(true, true, true, true, true, true);
+    
+    sheet.getRange(8, 2, maxDataRows, headers.length - 1).setHorizontalAlignment("center").setVerticalAlignment("middle");
+    sheet.getRange(8, 1, maxDataRows, 1).setVerticalAlignment("middle").setWrap(true);
+    
+    // --- 3. STOPKA DOKUMENTU ---
+    var footerRow = 8 + maxDataRows + 1;
+    sheet.getRange(footerRow, 1, 1, 4).merge().setValue("Rodzaj dokumentu: Załącznik GMP").setFontWeight("bold");
+    sheet.getRange(footerRow + 1, 1, 1, 7).merge().setValue("Nazwa dokumentu: Karta produkcji z czasem schładzania CCP1").setFontWeight("bold");
+    
+    sheet.getRange(footerRow + 2, 1, 1, 2).merge().setValue("Strona:1/1");
+    sheet.getRange(footerRow + 2, 3, 1, 3).merge().setValue("Data wydania: 2026-02-06");
+    sheet.getRange(footerRow + 2, 6, 1, 6).merge().setValue("Opracowanie: SCA PR Polska Sp.z o.o."); 
+    
+    // MIEJSCE NA FIZYCZNY PODPIS
+    sheet.getRange(footerRow + 4, 7, 1, 5).merge().setValue("Podpis: .........................................")
+         .setHorizontalAlignment("right").setFontWeight("bold").setFontSize(11);
+    
+    sheet.getRange(footerRow, 1, 3, headers.length).setFontSize(9);
+    
+    // --- 4. ZABEZPIECZENIE WIDOKU WYDRUKU ---
+    var maxCols = sheet.getMaxColumns();
+    if(maxCols > headers.length) {
+      sheet.deleteColumns(headers.length + 1, maxCols - headers.length);
+    }
+  }
+  return sheet;
+}
+
+function createDailySheet(dateStr) {
+  var sheet = createSheetIfNotExist(dateStr, dateStr);
+  SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(sheet);
+  return "Arkusz " + dateStr + " jest gotowy.";
+}
+
+// ---------------------------------------------------------
+// DODAWANIE RĘCZNE
+// ---------------------------------------------------------
+function addEntry(dateStr, productName, quantity) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  var bazaSheet = ss.getSheetByName('Baza');
+  var bazaData = bazaSheet.getDataRange().getValues();
+  var idx = getBazaIndexes(bazaData[0]);
+  var productData = null;
+
+  for (var i = 1; i < bazaData.length; i++) {
+    if (bazaData[i][idx.nazwa] === productName) {
+      productData = bazaData[i];
+      break;
+    }
+  }
+
+  if (!productData) {
+    return { success: false, message: "Nie znaleziono produktu w Bazie." };
+  }
+
+  var startHour = Math.floor(Math.random() * 9) + 6; 
+  var endHour = startHour + 1;
+  var tempPieczenia = (productData[idx.tempPieczenia] !== undefined && productData[idx.tempPieczenia] !== "") ? productData[idx.tempPieczenia] : "-";
+  var czasSchladzania = (productData[idx.czasSchladzania] !== undefined && productData[idx.czasSchladzania] !== "") ? productData[idx.czasSchladzania] : "-";
+  var tempSchladzania = (productData[idx.tempSchladzania] !== undefined && productData[idx.tempSchladzania] !== "") ? productData[idx.tempSchladzania] : "-";
+  var tempWewnetrzna = (idx.wewnetrzna !== -1 && productData[idx.wewnetrzna] !== undefined && productData[idx.wewnetrzna] !== "") ? productData[idx.wewnetrzna] : "-";
+  
+  var waznoscStr = calculateExpiryDate(dateStr, productData[idx.czas]);
+
+  // Tablica powiększona o 11 element
+  var rowData = [
+    productName, startHour, endHour, tempPieczenia, tempWewnetrzna, quantity, 
+    endHour, czasSchladzania, tempSchladzania, waznoscStr, "-"
+  ];
+
+  var sheetIndex = 1;
+  var sheetName = dateStr;
+  var currentSheet = ss.getSheetByName(sheetName);
+  var emptyRowIndex = -1;
+  var maxDataRows = 27;
+
+  while (true) {
+    if (!currentSheet) {
+      currentSheet = createSheetIfNotExist(sheetName, dateStr);
+    }
+    var dataRange = currentSheet.getRange(8, 1, maxDataRows, 1).getValues();
+    emptyRowIndex = -1;
+    for (var j = 0; j < dataRange.length; j++) {
+      if (dataRange[j][0] === "") {
+        emptyRowIndex = 8 + j;
+        break;
+      }
+    }
+    if (emptyRowIndex !== -1) break; 
+    sheetIndex++;
+    sheetName = dateStr + " nr " + sheetIndex;
+    currentSheet = ss.getSheetByName(sheetName);
+  }
+
+  currentSheet.getRange(emptyRowIndex, 1, 1, rowData.length).setValues([rowData]);
+  ss.setActiveSheet(currentSheet);
+  return { success: true, message: "Pomyślnie dodano: " + productName };
+}
+
+// ---------------------------------------------------------
+// DODAWANIE MASOWE Z ARKUSZA "FORMULARZ"
+// ---------------------------------------------------------
+function importFromFormularz(dateStr) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  var formSheet = ss.getSheetByName('Formularz');
+  if (!formSheet) return { success: false, message: "Brak arkusza o nazwie 'Formularz'!" };
+  
+  var bazaSheet = ss.getSheetByName('Baza');
+  if (!bazaSheet) return { success: false, message: "Brak arkusza o nazwie 'Baza'!" };
+  
+  var bazaData = bazaSheet.getDataRange().getValues();
+  var formData = formSheet.getDataRange().getValues();
+  var idx = getBazaIndexes(bazaData[0]);
+  
+  var mapEan = {};
+  var mapNazwa = {};
+  for (var i = 1; i < bazaData.length; i++) {
+    var ean = String(bazaData[i][idx.ean]).trim();
+    var nazwa = String(bazaData[i][idx.nazwa]).trim();
+    if (ean) mapEan[ean] = bazaData[i];
+    if (nazwa) mapNazwa[nazwa.toLowerCase()] = bazaData[i];
+  }
+  
+  var entriesToAdd = [];
+  var notFoundCount = 0;
+  
+  for (var r = 1; r < formData.length; r++) {
+    var row = formData[r];
+    var eanForm = String(row[1] || "").trim();               
+    var nazwaForm = String(row[2] || "").trim().toLowerCase(); 
+    var qtyForm = parseFloat(row[5]);                        
+    
+    if (isNaN(qtyForm) || qtyForm <= 0) qtyForm = 1; 
+    if (!eanForm && !nazwaForm) continue; 
+    
+    var productData = null;
+    
+    if (eanForm && mapEan[eanForm]) {
+      productData = mapEan[eanForm];
+    } else if (nazwaForm && mapNazwa[nazwaForm]) {
+      productData = mapNazwa[nazwaForm];
+    }
+    
+    if (productData) {
+      var startHour = Math.floor(Math.random() * 9) + 6; 
+      var endHour = startHour + 1;
+      var tempPieczenia = (productData[idx.tempPieczenia] !== undefined && productData[idx.tempPieczenia] !== "") ? productData[idx.tempPieczenia] : "-";
+      var czasSchladzania = (productData[idx.czasSchladzania] !== undefined && productData[idx.czasSchladzania] !== "") ? productData[idx.czasSchladzania] : "-";
+      var tempSchladzania = (productData[idx.tempSchladzania] !== undefined && productData[idx.tempSchladzania] !== "") ? productData[idx.tempSchladzania] : "-";
+      var tempWewnetrzna = (idx.wewnetrzna !== -1 && productData[idx.wewnetrzna] !== undefined && productData[idx.wewnetrzna] !== "") ? productData[idx.wewnetrzna] : "-";
+      
+      var waznoscStr = calculateExpiryDate(dateStr, productData[idx.czas]);
+
+      entriesToAdd.push([
+        productData[idx.nazwa], 
+        startHour, endHour, tempPieczenia, tempWewnetrzna, qtyForm, 
+        endHour, czasSchladzania, tempSchladzania, waznoscStr, "-"
+      ]);
+    } else {
+      notFoundCount++;
+    }
+  }
+  
+  if (entriesToAdd.length === 0) {
+    return { success: false, message: "Nie znaleziono asortymentu do dodania (zły kod EAN lub Nazwa)." };
+  }
+  
+  var maxDataRows = 27;
+  var currentSheetIndex = 1;
+  var sheetName = dateStr;
+  var currentSheet = ss.getSheetByName(sheetName);
+  var addedCount = 0;
+  
+  for (var k = 0; k < entriesToAdd.length; k++) {
+    var rowData = entriesToAdd[k];
+    var emptyRowIndex = -1;
+    
+    while (true) {
+      if (!currentSheet) currentSheet = createSheetIfNotExist(sheetName, dateStr);
+      var dataRange = currentSheet.getRange(8, 1, maxDataRows, 1).getValues();
+      emptyRowIndex = -1;
+      
+      for (var j = 0; j < dataRange.length; j++) {
+        if (dataRange[j][0] === "") {
+          emptyRowIndex = 8 + j;
+          break;
+        }
+      }
+      if (emptyRowIndex !== -1) break;
+      currentSheetIndex++;
+      sheetName = dateStr + " nr " + currentSheetIndex;
+      currentSheet = ss.getSheetByName(sheetName);
+    }
+    
+    currentSheet.getRange(emptyRowIndex, 1, 1, rowData.length).setValues([rowData]);
+    addedCount++;
+  }
+  
+  ss.setActiveSheet(currentSheet);
+  
+  var finalMsg = "Zakończono. Pomyślnie dodano wpisów: " + addedCount;
+  if (notFoundCount > 0) finalMsg += "\n(Brak asortymentu w Bazie: " + notFoundCount + ")";
+  
+  return { success: true, message: finalMsg };
+}
+
+function undoLastEntry(dateStr) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var maxDataRows = 27;
+  
+  var maxIdx = 1;
+  while(ss.getSheetByName(dateStr + " nr " + (maxIdx + 1))) {
+    maxIdx++;
+  }
+  
+  for (var i = maxIdx; i >= 1; i--) {
+    var sheetName = (i === 1) ? dateStr : dateStr + " nr " + i;
+    var sheet = ss.getSheetByName(sheetName);
+    if(!sheet) continue;
+    
+    var dataRange = sheet.getRange(8, 1, maxDataRows, 1).getValues();
+    
+    for (var r = maxDataRows - 1; r >= 0; r--) {
+      if (dataRange[r][0] !== "") {
+        // Czyszczenie 11 kolumn
+        var emptyRow = [["", "", "", "", "", "", "", "", "", "", ""]];
+        sheet.getRange(8 + r, 1, 1, 11).setValues(emptyRow);
+        return { success: true, message: "Cofnięto najświeższy wpis z arkusza " + sheetName };
+      }
+    }
+  }
+  return { success: false, message: "Brak wpisów do cofnięcia w wybranym dniu." };
+}
+
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: Arial, sans-serif; padding: 15px; font-size: 14px; background-color: #f8f9fa; }
+      .form-group { margin-bottom: 20px; background: white; padding: 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+      label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; font-size: 0.9em; }
+      input, button { width: 100%; padding: 10px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; }
+      button { color: white; border: none; cursor: pointer; font-weight: bold; margin-top: 5px; transition: 0.2s; }
+      
+      .btn-primary { background-color: #1a73e8; }
+      .btn-primary:hover { background-color: #1557b0; }
+      
+      .btn-secondary { background-color: #34a853; }
+      .btn-secondary:hover { background-color: #2b8c44; }
+      
+      .btn-import { background-color: #673ab7; margin-top: 5px; }
+      .btn-import:hover { background-color: #5e35b1; }
+      
+      .btn-undo { background-color: #d93025; margin-top: 20px; }
+      .btn-undo:hover { background-color: #a50e0e; }
+      
+      .message { margin-top: 15px; font-size: 0.95em; color: green; font-weight: bold; text-align: center; white-space: pre-wrap; }
+      .error { color: red; }
+      h3 { margin: 0 0 10px 0; font-size: 14px; color: #5f6368; }
+    </style>
+  </head>
+  <body>
+    
+    <div class="form-group">
+      <h3>KROK 1: Wybierz Datę</h3>
+      <input type="date" id="datePicker">
+      <button class="btn-secondary" onclick="createSheet()">Stwórz / Przejdź do arkusza</button>
+    </div>
+
+    <div class="form-group">
+      <h3>KROK 2: Dodaj ręcznie asortyment</h3>
+      <label for="productInput">Nazwa asortymentu z Bazy:</label>
+      <input list="products" id="productInput" placeholder="Zacznij wpisywać...">
+      <datalist id="products"></datalist>
+      
+      <label for="quantity" style="margin-top: 8px;">Ilość (szt/kg):</label>
+      <input type="number" id="quantity" min="1" placeholder="Wpisz ilość">
+      
+      <button class="btn-primary" onclick="addEntry()">DODAJ RĘCZNIE</button>
+    </div>
+
+    <div class="form-group">
+      <h3>ALBO KROK 2: Dodaj masowo</h3>
+      <label style="font-weight: normal; color: #555;">Pobiera zawartość wszystkich produktów wpisanych w arkusz 'Formularz'.</label>
+      <button class="btn-import" onclick="importForm()">DODAJ Z ARKUSZA FORMULARZ</button>
+    </div>
+    
+    <button class="btn-undo" onclick="undoEntry()">COFNIJ OSTATNI WPIS</button>
+    
+    <div id="statusMessage" class="message"></div>
+
+    <script>
+      // Ustaw dzisiejszą datę
+      document.getElementById('datePicker').valueAsDate = new Date();
+
+      // Załaduj opcje z bazy do wyszukiwarki ręcznej
+      google.script.run.withSuccessHandler(function(products) {
+        var datalist = document.getElementById('products');
+        products.forEach(function(p) {
+          var option = document.createElement('option');
+          option.value = p;
+          datalist.appendChild(option);
+        });
+      }).getProducts();
+
+      function showMessage(msg, isError) {
+        var el = document.getElementById('statusMessage');
+        el.textContent = msg;
+        el.className = isError ? 'message error' : 'message';
+        setTimeout(function() { el.textContent = ''; }, 6000);
+      }
+
+      function createSheet() {
+        var date = document.getElementById('datePicker').value;
+        if (!date) return showMessage('Wybierz datę z kalendarza!', true);
+        
+        showMessage('Przygotowuję...', false);
+        google.script.run.withSuccessHandler(function(res) {
+          showMessage(res, false);
+        }).createDailySheet(date);
+      }
+
+      function addEntry() {
+        var date = document.getElementById('datePicker').value;
+        var product = document.getElementById('productInput').value;
+        var qty = document.getElementById('quantity').value;
+        
+        if (!date || !product || !qty) {
+          return showMessage('Proszę wypełnić wszystkie pola do dodania ręcznego!', true);
+        }
+
+        showMessage('Dodaję wpis...', false);
+        google.script.run.withSuccessHandler(function(res) {
+          showMessage(res.message, !res.success);
+          if (res.success) {
+            document.getElementById('productInput').value = '';
+            // Czyszczenie pola ilości po udanym dodaniu wpisu
+            document.getElementById('quantity').value = ''; 
+            document.getElementById('productInput').focus();
+          }
+        }).addEntry(date, product, qty);
+      }
+      
+      function importForm() {
+        var date = document.getElementById('datePicker').value;
+        if (!date) return showMessage('Wybierz datę z kalendarza na górze!', true);
+        
+        showMessage('Pobieram dane z Formularza...', false);
+        google.script.run.withSuccessHandler(function(res) {
+          showMessage(res.message, !res.success);
+        }).importFromFormularz(date);
+      }
+      
+      function undoEntry() {
+        var date = document.getElementById('datePicker').value;
+        if (!date) return showMessage('Wybierz datę z kalendarza!', true);
+        if (!confirm('Na pewno chcesz usunąć najświeższy wpis z wybranego dnia?')) return;
+        
+        showMessage('Cofanie...', false);
+        google.script.run.withSuccessHandler(function(res) {
+          showMessage(res.message, !res.success);
+        }).undoLastEntry(date);
+      }
+
+      // --- NOWE: Obsługa klawisza Enter ---
+      function handleEnter(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault(); // Zapobiega ewentualnym domyślnym akcjom przeglądarki
+          addEntry();
+        }
+      }
+
+      // Podpięcie nasłuchiwania na wciśnięcie klawisza w polach tekstowych
+      document.getElementById('productInput').addEventListener('keypress', handleEnter);
+      document.getElementById('quantity').addEventListener('keypress', handleEnter);
+    </script>
+  </body>
+</html>
+

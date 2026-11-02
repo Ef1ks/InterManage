@@ -17,7 +17,8 @@ public enum PermissionCategory {
     KSEF_INVOICES("Faktury KSeF", "Faktury zakupowe z Krajowego Systemu e-Faktur i połączenie sklepu z KSeF"),
     DATA_ENTRY("Wprowadzanie danych", "Nowe artykuły z faktur KSeF: tabela jak w Excelu, propozycje AI, eksport"),
     SUPPLIERS("Dostawcy", "Kartoteka dostawców: strona internetowa, przedstawiciele i kontakty"),
-    MEAT_PURCHASES("Zakup mięsa", "Ceny zakupu mięsa z dokumentów WZ (skan odczytuje AI) i porównanie sklepów");
+    MEAT_PURCHASES("Zakup mięsa", "Ceny zakupu mięsa z dokumentów WZ (skan odczytuje AI) i porównanie sklepów"),
+    DELI_PRODUCTION("Karty produkcji", "Karty produkcji garmażu (CCP1): formularz do wydruku, ilości ze skanera, baza artykułów");
 
     private final String label;
     private final String description;

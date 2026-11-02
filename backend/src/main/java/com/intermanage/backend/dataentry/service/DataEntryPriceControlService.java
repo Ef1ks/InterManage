@@ -41,7 +41,8 @@ public class DataEntryPriceControlService {
     }
 
     @Transactional
-    public DataEntryPriceControlFile generate(UUID storeId, PriceControlRequest request, UUID userId) {
+    public DataEntryPriceControlFile generate(UUID storeId, PriceControlRequest request, UUID userId,
+            String username) {
         Supplier supplier = supplier(storeId, request);
         String keyword = supplier.getKeyword() == null ? "" : supplier.getKeyword().trim();
         if (keyword.isEmpty()) {
@@ -55,7 +56,7 @@ public class DataEntryPriceControlService {
             throw ApiException.badRequest("Żaden artykuł ze zmienioną ceną nie ma EAN-u i ceny sprzedaży");
         }
         return files.save(new DataEntryPriceControlFile(storeId, supplier.getId(), supplier.getCode(), keyword,
-                supplier.getName(), request.invoiceNumber(), PriceControlFile.fileName(keyword), lines.size(),
+                supplier.getName(), request.invoiceNumber(), PriceControlFile.fileName(keyword, username), lines.size(),
                 PriceControlFile.content(lines), userId != null ? users.getReferenceById(userId) : null));
     }
 

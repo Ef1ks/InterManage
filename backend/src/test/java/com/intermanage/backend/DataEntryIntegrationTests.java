@@ -719,7 +719,7 @@ class DataEntryIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
-                        matchesPattern(".*filename=\"CTRLPRIX_\\d{8}_\\d{6}_GOBARTO_ImpEk\\.traite0\".*")))
+                        matchesPattern(".*filename=\"CTRLPRIX_\\d{8}_\\d{6}_GOBARTO_wlasciciel\\.Traite1\".*")))
                 .andExpect(header().string("X-Supplier-Code", "98"))
                 .andReturn().getResponse().getContentAsByteArray();
         assertThat(new String(file, StandardCharsets.US_ASCII)).isEqualTo("""

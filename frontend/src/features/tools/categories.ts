@@ -5,6 +5,7 @@ import {
   BoxesIcon,
   CalculatorIcon,
   ChartColumnIcon,
+  ClipboardCheckIcon,
   ClipboardListIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
@@ -35,6 +36,7 @@ export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: Lucid
   DATA_ENTRY: { path: '/wprowadzanie-danych', icon: SheetIcon },
   SUPPLIERS: { path: '/dostawcy', icon: BookUserIcon },
   MEAT_PURCHASES: { path: '/zakup-miesa', icon: BeefIcon },
+  DELI_PRODUCTION: { path: '/karty-produkcji', icon: ClipboardCheckIcon },
 }
 
 export function usePermissionCategories() {

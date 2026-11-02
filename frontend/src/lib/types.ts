@@ -13,6 +13,7 @@ export type PermissionCategory =
   | 'DATA_ENTRY'
   | 'SUPPLIERS'
   | 'MEAT_PURCHASES'
+  | 'DELI_PRODUCTION'
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -2010,4 +2011,77 @@ export type PriceFileOverview = {
 export type PriceFileUploadResult = {
   imported: PriceFileImport[]
   skipped: string[]
+}
+
+/** Schemat parametrów procesu na karcie produkcji; null = na karcie "-". */
+export type ProductionSchema = {
+  id: string
+  name: string
+  bakingTemperature: number | null
+  internalTemperature: number | null
+  coolingTime: number | null
+  coolingTemperature: number | null
+  shelfLifeDays: number | null
+  articleCount: number
+}
+
+export type ProductionArticle = {
+  id: string
+  code: string | null
+  name: string
+  nomenclature: string | null
+  schemaId: string
+}
+
+export type ProductionBase = {
+  schemas: ProductionSchema[]
+  articles: ProductionArticle[]
+  stamp: string
+  customStamp: boolean
+}
+
+export type ProductionImportResult = { added: number; updated: number; unchanged: number; schemasCreated: number }
+
+export type ProductionCardSummary = {
+  id: string
+  storeId: string
+  storeNumber: string
+  storeName: string
+  productionDate: string
+  lineCount: number
+  totalQuantity: number
+  createdBy: string | null
+  createdAt: string
+}
+
+export type ProductionCardLine = {
+  id: string
+  articleId: string
+  code: string | null
+  name: string
+  quantity: number
+  startHour: number
+  endHour: number
+  bakingTemperature: number | null
+  internalTemperature: number | null
+  coolingTime: number | null
+  coolingTemperature: number | null
+  shelfLifeDays: number | null
+  expiryDate: string | null
+}
+
+export type ProductionCard = {
+  id: string
+  storeId: string
+  storeNumber: string
+  storeName: string
+  productionDate: string
+  lines: ProductionCardLine[]
+  createdBy: string | null
+  createdAt: string
+  updatedBy: string | null
+  updatedAt: string
+  deletedAt: string | null
+  /** Karta bieżącego sklepu; karty sklepów zaprzyjaźnionych są tylko do podglądu i wydruku. */
+  editable: boolean
 }
