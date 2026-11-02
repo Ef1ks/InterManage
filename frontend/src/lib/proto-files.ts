@@ -12,7 +12,8 @@ import type { ProtocolKind, ProtoSettings } from '@/lib/types'
 
 /** Klucz zostaje po PROTO6 garmażu, żeby folder wybrany wcześniej dalej działał. */
 const PROTO_FOLDER_KEY = 'deli-order-proto'
-const DEFAULT_FOLDER = 'N:\\avisoconfig'
+/** Domyślna ścieżka u każdego użytkownika: protokoły, zmiana cen i pliki śledzenia cen (TRACEART). */
+export const DEFAULT_FOLDER = 'N:\\AVISOCONFIG\\BACKUP'
 
 /** Protokoły z wprowadzania danych w kolejności z okna; numer to numer pliku PROTO. */
 export const PROTOCOLS: { kind: ProtocolKind; number: number; label: string }[] = [
@@ -53,7 +54,16 @@ export function useSaveProtoSettings(storeId: string) {
 /** Folder plików PROTO z podpowiedzią ścieżki z ustawień sklepu. */
 export function useProtoFolder(storeId: string): SavedFolderSpec {
   const { data } = useProtoSettings(storeId)
-  return { key: PROTO_FOLDER_KEY, label: 'Plik PROTO', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
+  return { key: PROTO_FOLDER_KEY, label: 'Protokół', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
+}
+
+/**
+ * Folder pliku zmian cen (CTRLPRIX) z wprowadzania danych. Pracownik wybiera go osobno („Zmiana cen”), choć program
+ * sklepu wczytuje go zwykle z tego samego folderu co protokoły, więc podpowiadamy tę samą ścieżkę.
+ */
+export function usePriceChangeFolder(storeId: string): SavedFolderSpec {
+  const { data } = useProtoSettings(storeId)
+  return { key: 'data-entry-price-control', label: 'Zmiana cen', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
 }
 
 /**

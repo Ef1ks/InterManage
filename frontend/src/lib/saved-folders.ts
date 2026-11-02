@@ -75,7 +75,10 @@ async function readFolder(key: string): Promise<DirectoryHandle | null> {
  * folder za skrótem (np. N:\avisoconfig na zablokowanym dysku N) wybiera się, wklejając ścieżkę w pasek adresu okna.
  * `null`, gdy użytkownik zamknął okno.
  */
-export async function pickFolder(key: string, mode: FolderMode = 'readwrite'): Promise<FileSystemDirectoryHandle | null> {
+export async function pickFolder(
+  key: string,
+  mode: FolderMode = 'readwrite',
+): Promise<FileSystemDirectoryHandle | null> {
   if (!window.showDirectoryPicker) {
     throw new ApiError(0, 'Ta przeglądarka nie zapisuje do wybranego folderu. Użyj Chrome albo Edge.')
   }
@@ -121,24 +124,75 @@ export async function folderAccess(key: string, folderMode: FolderMode): Promise
   }
 }
 
-/** Pliki bezpośrednio w folderze klucza (bez podfolderów), których nazwa pasuje do `match`. Wymaga zgody na odczyt. */
-export async function listFolderFiles(key: string, match: (name: string) => boolean): Promise<File[]> {
+/**
+ * Prosi o zgodę na wszystkie zapamiętane foldery, których klucz zaczyna się od `prefix` (np. przy logowaniu, bo to
+ * kliknięcie). Folder ze zgodą „przy każdej wizycie” przechodzi bez okna. `true`, gdy którykolwiek ma zgodę.
+ */
+export async function requestStoredFolderAccess(prefix: string, folderMode: FolderMode): Promise<boolean> {
+  let keys: IDBValidKey[]
+  try {
+    keys = await transaction('readonly', (store) => store.getAllKeys())
+  } catch {
+    return false
+  }
+  let granted = false
+  for (const key of keys) {
+    if (typeof key === 'string' && key.startsWith(prefix) && (await ensureFolderAccess(key, folderMode))) granted = true
+  }
+  return granted
+}
+
+/**
+ * Uchwyty plików w folderze klucza, których nazwa pasuje do `match`, bez czytania ich treści. Z podfolderów tylko
+ * `subfolder` (bez względu na wielkość liter) razem z całą jego zawartością, np. BACKUP z plikami z poprzednich dni.
+ * Wymaga zgody na odczyt.
+ */
+export async function listFolderFiles(
+  key: string,
+  match: (name: string) => boolean,
+  subfolder?: string,
+): Promise<FileSystemFileHandle[]> {
   const handle = await readFolder(key)
   if (!handle) throw new ApiError(0, 'Nie wybrano folderu.')
-  const files: File[] = []
+  const files: FileSystemFileHandle[] = []
   try {
-    for await (const entry of handle.values()) {
-      if (entry.kind === 'file' && match(entry.name)) files.push(await (entry as FileSystemFileHandle).getFile())
-    }
+    await collectFiles(
+      handle,
+      match,
+      files,
+      (name) => subfolder !== undefined && name.toUpperCase() === subfolder.toUpperCase(),
+    )
   } catch (error) {
     if (error instanceof DOMException && error.name === 'NotFoundError') {
       throw new ApiError(0, `Folderu ${handle.name} już nie ma (albo dysk jest odłączony). Wybierz go ponownie.`)
     }
-    // Plik przeniesiony do podfolderu w trakcie czytania: reszta pójdzie przy kolejnym sprawdzeniu.
-    if (error instanceof DOMException && error.name === 'NotReadableError') return files
     throw new ApiError(0, `Nie udało się odczytać folderu ${handle.name}.`)
   }
   return files
+}
+
+const MAX_SUBFOLDER_DEPTH = 3
+
+async function collectFiles(
+  folder: DirectoryHandle,
+  match: (name: string) => boolean,
+  files: FileSystemFileHandle[],
+  enter: (name: string) => boolean,
+  depth = 0,
+): Promise<void> {
+  try {
+    for await (const entry of folder.values()) {
+      if (entry.kind === 'file') {
+        if (match(entry.name)) files.push(entry as FileSystemFileHandle)
+      } else if (depth < MAX_SUBFOLDER_DEPTH && enter(entry.name)) {
+        // W podfolderze wchodzimy już wszędzie (np. BACKUP/<dzień>/…); błąd podfolderu nie psuje reszty.
+        await collectFiles(entry as DirectoryHandle, match, files, () => true, depth + 1).catch(() => {})
+      }
+    }
+  } catch (error) {
+    // Plik przeniesiony do podfolderu w trakcie czytania: reszta pójdzie przy kolejnym sprawdzeniu.
+    if (depth === 0 && !(error instanceof DOMException && error.name === 'NotReadableError')) throw error
+  }
 }
 
 /** Zapisuje plik w folderze klucza, nadpisując plik o tej samej nazwie. */

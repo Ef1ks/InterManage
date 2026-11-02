@@ -43,7 +43,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
     /**
      * Ceny zakupu z linii przyjęć PZ od dostawców (kod z linii) z dokumentów z datą w [from, to), od najstarszego
-     * (weryfikacja cen: ostatnia cena z bazy przed dostawą od innego dostawcy).
+     * (weryfikacja cen: ostatnia cena z bazy przed dostawą od innego dostawcy). Tylko artykuły o podanych ITM8 albo
+     * EAN-ach ({@code eans} bez zer wiodących), bo dostaw z bazy z roku są dziesiątki tysięcy.
      */
     @Query(value = """
             select l.itm8 as itm8, l.ean as ean, d.id as document_id, d.number as document_number,
@@ -53,10 +54,12 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             where d.store_id = :storeId and d.type = 'PZ' and l.supplier_code in (:supplierCodes)
               and l.purchase_price > 0 and l.quantity > 0
               and d.document_date >= :from and d.document_date < :to
+              and (l.itm8 = any(cast(:itm8s as varchar[]))
+                   or ltrim(btrim(l.ean), '0') = any(cast(:eans as varchar[])))
             order by d.document_date, d.number, l.line_number
             """, nativeQuery = true)
     List<SupplierPrice> findSupplierPrices(UUID storeId, Collection<String> supplierCodes, LocalDateTime from,
-            LocalDateTime to);
+            LocalDateTime to, String[] itm8s, String[] eans);
 
     /** Dostawa artykułu: przyjęcie PZ z sumą jego linii (ilość, wartość zakupu netto). */
     interface ArticleDelivery {
@@ -222,4 +225,89 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<RecentSupplier> findRecentSuppliers(UUID storeId, Collection<String> itm8s,
             Collection<String> brandSuppliers, int limit);
+
+    /** Linie protokołów artykułu w okresie raportu i w okresie porównywanym. */
+    interface ProtocolArticle {
+        String getItm8();
+
+        String getName();
+
+        String getEan();
+
+        String getBrand();
+
+        String getNomenclatureCode();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        BigDecimal getCurrentQuantity();
+
+        BigDecimal getCurrentPurchaseValue();
+
+        BigDecimal getCurrentSaleValueGross();
+
+        BigDecimal getPreviousQuantity();
+
+        BigDecimal getPreviousPurchaseValue();
+
+        BigDecimal getPreviousSaleValueGross();
+    }
+
+    /**
+     * Linie dokumentów jednego typu po artykułach (wg daty dokumentu, oba końce włącznie) w okresie {@code current…}
+     * i, przy {@code withPrevious}, w okresie {@code previous…} (okresy mogą na siebie nachodzić). Wartość zakupu bez
+     * minusa: protokoły to wydania z magazynu. Nazwa, EAN, marka, nomenklatura (bez spacji) i dostawca z linii.
+     */
+    @Query(value = """
+            with lines as (
+                select l.*,
+                       d.document_date >= cast(:currentFrom as timestamp)
+                           and d.document_date < cast(:currentTo as timestamp) + interval '1 day' as in_current,
+                       :withPrevious and d.document_date >= cast(:previousFrom as timestamp)
+                           and d.document_date < cast(:previousTo as timestamp) + interval '1 day' as in_previous
+                from document_lines l
+                join documents d on d.id = l.document_id
+                where d.store_id = :storeId and d.type = :type
+                  and ((d.document_date >= cast(:currentFrom as timestamp)
+                          and d.document_date < cast(:currentTo as timestamp) + interval '1 day')
+                       or (:withPrevious and d.document_date >= cast(:previousFrom as timestamp)
+                          and d.document_date < cast(:previousTo as timestamp) + interval '1 day'))
+            )
+            select itm8, max(name) as name, max(ean) as ean, max(nullif(trim(brand), '')) as brand,
+                   max(nullif(replace(nomenclature_code, ' ', ''), '')) as nomenclature_code,
+                   max(supplier_code) as supplier_code, max(supplier_name) as supplier_name,
+                   coalesce(sum(quantity) filter (where in_current), 0) as current_quantity,
+                   coalesce(-sum(purchase_value) filter (where in_current), 0) as current_purchase_value,
+                   coalesce(sum(sale_value_gross) filter (where in_current), 0) as current_sale_value_gross,
+                   coalesce(sum(quantity) filter (where in_previous), 0) as previous_quantity,
+                   coalesce(-sum(purchase_value) filter (where in_previous), 0) as previous_purchase_value,
+                   coalesce(sum(sale_value_gross) filter (where in_previous), 0) as previous_sale_value_gross
+            from lines
+            group by itm8
+            """, nativeQuery = true)
+    List<ProtocolArticle> sumProtocolArticles(UUID storeId, String type, LocalDate currentFrom, LocalDate currentTo,
+            boolean withPrevious, LocalDate previousFrom, LocalDate previousTo);
+
+    /** Ostatni dostawca artykułu: z najnowszego przyjęcia PZ z ilością > 0. */
+    interface LastSupplier {
+        String getItm8();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+    }
+
+    /** Ostatni dostawca każdego z podanych artykułów z przyjęć PZ (artykułów bez przyjęcia nie ma w wyniku). */
+    @Query(value = """
+            select distinct on (l.itm8) l.itm8 as itm8, l.supplier_code as supplier_code,
+                   l.supplier_name as supplier_name
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.itm8 in (:itm8s)
+              and l.supplier_code is not null
+            order by l.itm8, d.document_date desc, d.number desc
+            """, nativeQuery = true)
+    List<LastSupplier> findLastSuppliers(UUID storeId, Collection<String> itm8s);
 }

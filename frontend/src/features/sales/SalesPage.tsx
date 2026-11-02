@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { GratisReport } from '@/features/sales/GratisReport'
 import { PeriodSummaryReport } from '@/features/sales/PeriodSummaryReport'
 import { PriceCheckReport } from '@/features/sales/PriceCheckReport'
+import { ProtocolReport } from '@/features/sales/ProtocolReport'
 import { ReportsGrid } from '@/features/sales/ReportsGrid'
 import { SalesComparisonReport } from '@/features/sales/SalesComparisonReport'
 import { salesPaths } from '@/features/sales/paths'
@@ -36,6 +37,7 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="koszty-garmazu" element={<SalesComparisonReport key="deli" storeId={store.id} kind="deli" />} />
         <Route path="zakup-bazowy-poza-baza" element={<PriceCheckReport storeId={store.id} />} />
         <Route path="gratisy" element={<GratisReport storeId={store.id} />} />
+        <Route path="protokoly" element={<ProtocolReport storeId={store.id} />} />
         <Route path="*" element={<Navigate to={salesPaths.overview} replace />} />
       </Routes>
     </>

@@ -5,6 +5,7 @@ import { Form, SwitchField, TextField } from '@/components/form'
 import { AuthLayout } from '@/components/layout/AuthLayout'
 import { Button } from '@/components/ui/button'
 import { useLogin, useMe } from '@/features/auth/api'
+import { requestPriceFolderAccess } from '@/features/data-entry/price-files'
 import { ApiError } from '@/lib/api'
 
 type LoginForm = {
@@ -31,11 +32,13 @@ export function LoginPage() {
     return <Navigate to={me.passwordChangeRequired ? '/ustaw-haslo' : from} replace />
   }
 
-  const onSubmit = handleSubmit((values) =>
+  const onSubmit = handleSubmit((values) => {
+    // Kliknięcie „Zaloguj” to gest, więc od razu zgoda na folder z plikami cen z kasy (na komputerze, gdzie go wybrano).
+    requestPriceFolderAccess()
     login.mutate(values, {
       onSuccess: (user) => navigate(user.passwordChangeRequired ? '/ustaw-haslo' : from, { replace: true }),
-    }),
-  )
+    })
+  })
 
   const errorMessage =
     login.error instanceof ApiError ? login.error.message : login.error ? 'Nie udało się połączyć z serwerem.' : null

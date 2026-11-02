@@ -2,6 +2,8 @@ package com.intermanage.backend.dataentry.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -145,10 +147,12 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * Lista towarów (okno „Lista towarów”): artykuły sklepu, które pasują do każdego podanego filtra ({@code null} =
      * bez filtra). Wzorce LIKE: nazwa, marka i dostawca bez wielkości liter i polskich znaków (wzorce przychodzą już
      * wielkimi literami bez znaków diakrytycznych), ITM8 i EAN jako tekst (EAN: główny albo każdy obowiązujący
-     * z multikodów). Nomenklatura: {@code nomenclatureCode} to
+     * z multikodów). Dostawca to nie pole z kartoteki (często błędne), tylko przyjęcia PZ od {@code deliveredSince}
+     * z ilością > 0: dostawca linii o kodzie równym {@code supplierCode} albo nazwie pasującej do {@code supplier}
+     * (indeks {@code documents_store_type_date_idx}, potem linie po dokumencie). Nomenklatura: {@code nomenclatureCode} to
      * początek kodu podrodziny, {@code nomenclatureName} wzorzec nazwy rejonu, rodziny albo podrodziny artykułu.
-     * Ceny w przedziałach z granicami włącznie. Sortowanie po kolumnie {@code sort} (itm8, ean, name, brand, supplier,
-     * nomenclature, purchase, sale, stock) w kierunku {@code direction} (asc/desc), puste na końcu, potem po nazwie;
+     * Ceny w przedziałach z granicami włącznie. Sortowanie po kolumnie {@code sort} (itm8, ean, name, brand,
+     * nomenclature, purchase, sale, stock, rotation) w kierunku {@code direction} (asc/desc), puste na końcu, potem po nazwie;
      * strona {@code limit}.
      */
     @Query(value = """
@@ -167,8 +171,12 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                     or translate(upper(p.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:name as text))
                 and (cast(:brand as text) is null
                     or translate(upper(p.brand), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:brand as text))
-                and (cast(:supplier as text) is null
-                    or translate(upper(p.supplier), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:supplier as text))
+                and (cast(:supplier as text) is null or p.itm8 in (
+                    select l.itm8 from documents d join document_lines l on l.document_id = d.id
+                    where d.store_id = :storeId and d.type = 'PZ' and d.document_date >= cast(:deliveredSince as timestamp)
+                        and l.quantity > 0
+                        and (l.supplier_code = cast(:supplierCode as text)
+                            or translate(upper(l.supplier_name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:supplier as text))))
                 and (cast(:nomenclatureCode as text) is null
                     or p.subfamily_code like cast(:nomenclatureCode as text) || '%')
                 and (cast(:nomenclatureName as text) is null or exists (
@@ -182,21 +190,44 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             order by
                 case when cast(:direction as text) = 'asc' then case cast(:sort as text)
                     when 'itm8' then p.itm8 when 'ean' then p.ean when 'name' then p.name when 'brand' then p.brand
-                    when 'supplier' then p.supplier when 'nomenclature' then p.subfamily_code end end asc nulls last,
+                    when 'nomenclature' then p.subfamily_code end end asc nulls last,
                 case when cast(:direction as text) = 'desc' then case cast(:sort as text)
                     when 'itm8' then p.itm8 when 'ean' then p.ean when 'name' then p.name when 'brand' then p.brand
-                    when 'supplier' then p.supplier when 'nomenclature' then p.subfamily_code end end desc nulls last,
+                    when 'nomenclature' then p.subfamily_code end end desc nulls last,
                 case when cast(:direction as text) = 'asc' then case cast(:sort as text)
                     when 'purchase' then p.purchase_price when 'sale' then p.sale_price when 'stock' then p.stock
-                    end end asc nulls last,
+                    when 'rotation' then p.rotation end end asc nulls last,
                 case when cast(:direction as text) = 'desc' then case cast(:sort as text)
                     when 'purchase' then p.purchase_price when 'sale' then p.sale_price when 'stock' then p.stock
-                    end end desc nulls last,
+                    when 'rotation' then p.rotation end end desc nulls last,
                 p.name, p.itm8
             limit :limit offset :offset""", nativeQuery = true)
     List<CatalogListItem> search(UUID storeId, String itm8, String ean, String name, String brand, String supplier,
-            String nomenclatureCode, String nomenclatureName, BigDecimal purchaseFrom, BigDecimal purchaseTo,
+            String supplierCode, LocalDate deliveredSince, String nomenclatureCode, String nomenclatureName, BigDecimal purchaseFrom, BigDecimal purchaseTo,
             BigDecimal saleFrom, BigDecimal saleTo, String sort, String direction, int limit, int offset);
+
+    interface LastDelivery {
+        String getItm8();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        LocalDateTime getDocumentDate();
+    }
+
+    /**
+     * Ostatnie przyjęcie PZ z ilością > 0 każdego z {@code itm8s} (dostawca linii i data dokumentu), do kolumny
+     * „Ostatnia dostawa” listy towarów; liczone tylko dla strony listy (indeks linii po ITM8).
+     */
+    @Query(value = """
+            select distinct on (l.itm8) l.itm8 as itm8, l.supplier_code as supplierCode,
+                l.supplier_name as supplierName, d.document_date as documentDate
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where l.itm8 in (:itm8s) and d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
+            order by l.itm8, d.document_date desc, d.number desc""", nativeQuery = true)
+    List<LastDelivery> findLastDeliveries(UUID storeId, Collection<String> itm8s);
 
     /**
      * Propozycje artykułów do przypięcia pozycji faktury bez EAN-u ({@code text}: nazwa po normalizacji, wielkie

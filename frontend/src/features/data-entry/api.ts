@@ -244,7 +244,8 @@ export function lookupProducts(storeId: string, eans: string[]) {
 
 /**
  * Filtry nad kolumnami listy towarów: w tekstach `*` = dowolny ciąg znaków, `?` = jeden znak; nomenklatura to kod
- * (początek kodu podrodziny) albo nazwa poziomu; ceny od-do jak wpisane (błędna liczba jest pomijana).
+ * (początek kodu podrodziny) albo nazwa poziomu; dostawca to kod albo fragment nazwy dostawcy z przyjęć PZ z ostatnich
+ * 6 miesięcy; ceny od-do jak wpisane (błędna liczba jest pomijana).
  */
 export type CatalogListFilters = {
   itm8: string
@@ -267,11 +268,11 @@ export type CatalogSortKey =
   | 'ean'
   | 'name'
   | 'brand'
-  | 'supplier'
   | 'nomenclature'
   | 'purchase'
   | 'sale'
   | 'stock'
+  | 'rotation'
 
 /** Lista towarów z kartoteki, strony po 100 (kolejne przy przewijaniu), posortowana w bazie (puste na końcu). */
 export function useCatalogList(
@@ -282,25 +283,33 @@ export function useCatalogList(
 ) {
   return useInfiniteQuery({
     queryKey: ['stores', storeId, 'data-entry', 'catalog', filters, sort],
-    queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams({ page: String(pageParam) })
-      Object.entries(filters).forEach(([key, value]) => {
-        if (!PRICE_FILTERS.has(key)) {
-          if (value.trim()) params.set(key, value.trim())
-          return
-        }
-        const price = parseNumber(value)
-        if (price !== null && price !== undefined) params.set(key, String(price))
-      })
-      params.set('sort', sort.key)
-      params.set('direction', sort.direction)
-      return api<DataEntryCatalogListPage>(`${path(storeId)}/catalog?${params}`)
-    },
+    queryFn: ({ pageParam }) => fetchCatalogPage(storeId, filters, sort, pageParam),
     initialPageParam: 0,
     getNextPageParam: (last, pages) => (last.hasMore ? pages.length : undefined),
     placeholderData: keepPreviousData,
     enabled,
   })
+}
+
+/** Jedna strona listy towarów (100 artykułów); też do pobrania wszystkich wyfiltrowanych naraz. */
+export function fetchCatalogPage(
+  storeId: string,
+  filters: CatalogListFilters,
+  sort: SortState<CatalogSortKey>,
+  page: number,
+) {
+  const params = new URLSearchParams({ page: String(page) })
+  Object.entries(filters).forEach(([key, value]) => {
+    if (!PRICE_FILTERS.has(key)) {
+      if (value.trim()) params.set(key, value.trim())
+      return
+    }
+    const price = parseNumber(value)
+    if (price !== null && price !== undefined) params.set(key, String(price))
+  })
+  params.set('sort', sort.key)
+  params.set('direction', sort.direction)
+  return api<DataEntryCatalogListPage>(`${path(storeId)}/catalog?${params}`)
 }
 
 /**

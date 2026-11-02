@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -139,24 +140,17 @@ public class PriceCheckService {
         Map<UUID, List<PriceCheckReview>> reviewsByDelivery = reviews.findActive(storeId).stream()
                 .collect(Collectors.groupingBy(review -> review.getDocument().getId(), LinkedHashMap::new,
                         Collectors.toList()));
-        Map<String, BigDecimal> cadencierPrices = products.findCadencierPrices(storeId).stream()
-                .collect(Collectors.toMap(CadencierPrice::getItm8, CadencierPrice::getCadencierPrice));
-        List<Document> deliveries = new ArrayList<>(
-                documents.findWithLinesBetween(storeId, DocumentType.PZ, start, end).stream()
-                        .filter(delivery -> reviewsByDelivery.containsKey(delivery.getId())
-                                || hasCadencierLineFromOtherSupplier(delivery, cadencier))
-                        .toList());
-        Set<UUID> inPeriod = deliveries.stream().map(Document::getId).collect(Collectors.toSet());
-        List<UUID> reviewedEarlier = reviewsByDelivery.keySet().stream().filter(id -> !inPeriod.contains(id)).toList();
-        if (!reviewedEarlier.isEmpty()) {
-            documents.findWithLines(storeId, reviewedEarlier).stream()
-                    .filter(delivery -> delivery.getType() == DocumentType.PZ)
-                    .forEach(deliveries::add);
-        }
+        // Linie wczytujemy tylko dla przyjęć, które odsiała baza, i dla przyjęć ze statusem (także starszych).
+        Set<UUID> ids = new LinkedHashSet<>(cadencierImport == null ? List.of()
+                : cadencierImports.findDeliveriesWithCadencierLines(storeId, BASE_SUPPLIER_CODES, start, end));
+        ids.addAll(reviewsByDelivery.keySet());
+        List<Document> deliveries = ids.isEmpty() ? List.of() : documents.findWithLines(storeId, ids).stream()
+                .filter(delivery -> delivery.getType() == DocumentType.PZ)
+                .filter(delivery -> reviewsByDelivery.containsKey(delivery.getId())
+                        || hasCadencierLineFromOtherSupplier(delivery, cadencier))
+                .toList();
         LocalDateTime oldest = deliveries.stream().map(Document::getDocumentDate).min(Comparator.naturalOrder())
                 .orElse(start);
-        BasePrices basePrices = BasePrices.of(documentLines.findSupplierPrices(storeId, BASE_SUPPLIER_CODES,
-                oldest.toLocalDate().atStartOfDay().minusDays(BASE_LOOKBACK_DAYS), end));
         Incidents incidentIndex = Incidents.of(
                 incidents.findSince(storeId, oldest.toLocalDate().minusDays(INCIDENT_DAYS)));
         Map<UUID, List<DeliveryCorrection>> links = corrections.correctionsOf(deliveries);
@@ -165,12 +159,43 @@ public class PriceCheckService {
                 .stream().filter(Objects::nonNull)
                 .collect(Collectors.toMap(Document::getId, Function.identity()));
 
-        List<Delivery> result = new ArrayList<>();
+        Map<UUID, List<Document>> correctionsByDelivery = new HashMap<>();
+        Map<UUID, CorrectedDelivery> correctedByDelivery = new HashMap<>();
+        Set<String> itm8Keys = new HashSet<>();
+        Set<String> eanKeys = new HashSet<>();
         for (Document delivery : deliveries) {
             List<Document> ofDelivery = links.getOrDefault(delivery.getId(), List.of()).stream()
                     .map(link -> correctionDocuments.get(link.getCorrection().getId()))
                     .filter(Objects::nonNull).toList();
             CorrectedDelivery corrected = corrections.corrected(delivery, ofDelivery);
+            correctionsByDelivery.put(delivery.getId(), ofDelivery);
+            correctedByDelivery.put(delivery.getId(), corrected);
+            for (CorrectedLine line : corrected.lines()) {
+                String cadencierItm8 = cadencier.itm8Of(line.itm8(), line.ean());
+                if (cadencierItm8 != null) {
+                    itm8Keys.add(cadencierItm8);
+                    itm8Keys.add(line.itm8());
+                    String eanKey = eanKey(line.ean());
+                    if (eanKey != null) {
+                        eanKeys.add(eanKey);
+                    }
+                }
+            }
+        }
+        // Ceny z bazy i CENA_CAD tylko artykułów z raportu.
+        String[] itm8Array = itm8Keys.toArray(String[]::new);
+        Map<String, BigDecimal> cadencierPrices = itm8Keys.isEmpty() ? Map.of()
+                : products.findCadencierPrices(storeId, itm8Array).stream()
+                        .collect(Collectors.toMap(CadencierPrice::getItm8, CadencierPrice::getCadencierPrice));
+        BasePrices basePrices = BasePrices.of(itm8Keys.isEmpty() ? List.of()
+                : documentLines.findSupplierPrices(storeId, BASE_SUPPLIER_CODES,
+                        oldest.toLocalDate().atStartOfDay().minusDays(BASE_LOOKBACK_DAYS), end, itm8Array,
+                        eanKeys.toArray(String[]::new)));
+
+        List<Delivery> result = new ArrayList<>();
+        for (Document delivery : deliveries) {
+            List<Document> ofDelivery = correctionsByDelivery.get(delivery.getId());
+            CorrectedDelivery corrected = correctedByDelivery.get(delivery.getId());
             List<Line> lines = flaggedLines(delivery, corrected, minMargin, cadencier, cadencierPrices, basePrices,
                     incidentIndex);
             List<PriceCheckReview> history = reviewsByDelivery.getOrDefault(delivery.getId(), List.of());

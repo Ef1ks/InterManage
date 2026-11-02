@@ -18,6 +18,10 @@ import type {
   PriceCheckReview,
   PriceCheckSettings,
   PriceCheckStatus,
+  ProtocolKind,
+  ProtocolReport,
+  ProtocolReportGrouping,
+  ProtocolReportsOverview,
   RegionBudget,
   SalesArticle,
   SalesComparison,
@@ -187,6 +191,42 @@ export function usePeriodSummary(storeId: string, range: DateRange, enabled: boo
     staleTime: REPORT_STALE_TIME,
     queryFn: () =>
       api<PeriodSummary>(`${reportsPath(storeId)}/period-summary?${new URLSearchParams({ from: range.from, to: range.to })}`),
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Protokoły do raportu protokołów (bez wyłączonych w Ustawieniach sklepu) i do kiedy są wgrane dokumenty. */
+export function useProtocolReportsOverview(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'protocols'],
+    queryFn: () => api<ProtocolReportsOverview>(`${reportsPath(storeId)}/protocols`),
+  })
+}
+
+export type ProtocolReportQuery = {
+  protocol: ProtocolKind
+  grouping: ProtocolReportGrouping
+  level: 'REGION' | 'FAMILY' | 'SUBFAMILY'
+  range: DateRange
+  /** {@code null} = bez porównania. */
+  previous: DateRange | null
+}
+
+/** Protokół za okres (opcjonalnie z okresem porównywanym), po artykule, marce, ostatnim dostawcy albo nomenklaturze. */
+export function useProtocolReport(storeId: string, query: ProtocolReportQuery, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'protocols', query],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => {
+      const params = new URLSearchParams({ grouping: query.grouping, from: query.range.from, to: query.range.to })
+      if (query.grouping === 'NOMENCLATURE') params.set('level', query.level)
+      if (query.previous) {
+        params.set('previousFrom', query.previous.from)
+        params.set('previousTo', query.previous.to)
+      }
+      return api<ProtocolReport>(`${reportsPath(storeId)}/protocols/${query.protocol}?${params}`)
+    },
     enabled,
     placeholderData: keepPreviousData,
   })

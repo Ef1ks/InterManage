@@ -25,7 +25,14 @@ export type DraftInvoice = {
 /** Tabela wprowadzania danych w jednym sklepie, zanim trafi do pliku. */
 export type DataEntryDraft = { invoice: DraftInvoice | null; rows: DataEntryRow[] }
 
-type DraftState = { drafts: Record<string, DataEntryDraft> }
+/**
+ * Ostatni zapis pliku XML tabeli w sklepie: kiedy, nazwa pliku i `signature` (pozycje i nagłówek pliku jako JSON),
+ * po którym widać zmiany po zapisie. Osobno od szkicu, żeby cofanie zmian (Ctrl+Z) nie gubiło informacji o zapisie;
+ * znika po wczytaniu innego dokumentu albo wyczyszczeniu tabeli.
+ */
+export type SavedXml = { at: string; fileName: string; signature: string }
+
+type DraftState = { drafts: Record<string, DataEntryDraft>; saved: Record<string, SavedXml> }
 
 export const EMPTY_DATA_ENTRY: DataEntryDraft = { invoice: null, rows: [] }
 
@@ -39,19 +46,25 @@ function readStored(): DraftState {
         drafts: Object.fromEntries(
           Object.entries(value.drafts).filter(([store, draft]) => isUuid(store) && Array.isArray(draft?.rows)),
         ),
+        saved: Object.fromEntries(
+          Object.entries(value.saved ?? {}).filter(
+            ([store, saved]) => isUuid(store) && typeof saved?.signature === 'string' && typeof saved.at === 'string',
+          ),
+        ),
       }
     }
   } catch {
     // Brak localStorage albo zepsuty JSON.
   }
-  return { drafts: {} }
+  return { drafts: {}, saved: {} }
 }
 
 /** Kopia w przeglądarce, bez pustych tabel. */
 export function persistDataEntryDrafts(state: DraftState) {
   const drafts = Object.fromEntries(Object.entries(state.drafts).filter(([, draft]) => draft.rows.length > 0))
+  const saved = Object.fromEntries(Object.entries(state.saved).filter(([store]) => store in drafts))
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ drafts }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ drafts, saved }))
   } catch {
     // Tryb prywatny albo pełny dysk: tabela działa do odświeżenia strony.
   }
@@ -68,8 +81,12 @@ const dataEntryDraftSlice = createSlice({
     setDataEntryDraft(state, action: PayloadAction<{ storeId: string; draft: DataEntryDraft }>) {
       state.drafts[action.payload.storeId] = action.payload.draft
     },
+    setDataEntrySaved(state, action: PayloadAction<{ storeId: string; saved: SavedXml | null }>) {
+      if (action.payload.saved) state.saved[action.payload.storeId] = action.payload.saved
+      else delete state.saved[action.payload.storeId]
+    },
   },
 })
 
-export const { setDataEntryDraft } = dataEntryDraftSlice.actions
+export const { setDataEntryDraft, setDataEntrySaved } = dataEntryDraftSlice.actions
 export default dataEntryDraftSlice.reducer

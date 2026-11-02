@@ -1,5 +1,6 @@
 package com.intermanage.backend.product.repository;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -10,9 +11,12 @@ import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import com.intermanage.backend.pricecheck.entity.CadencierItem;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.entity.ProductCode;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -77,5 +81,56 @@ public final class ProductSearch {
             }
             return cb.and(all.toArray(Predicate[]::new));
         };
+    }
+
+    /** Stan w przedziale (granice włącznie, pusta = bez granicy) i znak stanu: POSITIVE, ZERO albo NEGATIVE. */
+    public static Specification<Product> withStock(String sign, BigDecimal from, BigDecimal to) {
+        return (root, query, cb) -> {
+            Path<BigDecimal> stock = root.get("stock");
+            List<Predicate> all = new ArrayList<>(between(cb, stock, from, to));
+            if ("POSITIVE".equals(sign)) {
+                all.add(cb.greaterThan(stock, BigDecimal.ZERO));
+            } else if ("ZERO".equals(sign)) {
+                all.add(cb.or(cb.isNull(stock), cb.equal(stock, BigDecimal.ZERO)));
+            } else if ("NEGATIVE".equals(sign)) {
+                all.add(cb.lessThan(stock, BigDecimal.ZERO));
+            }
+            return cb.and(all.toArray(Predicate[]::new));
+        };
+    }
+
+    public static Specification<Product> withRotation(BigDecimal from, BigDecimal to) {
+        return (root, query, cb) -> cb.and(between(cb, root.get("rotation"), from, to).toArray(Predicate[]::new));
+    }
+
+    /** Podrodzina artykułu zaczyna się od któregoś kodu (rejon "01", rodzina "0101", podrodzina "010101"). */
+    public static Specification<Product> inNomenclatures(List<String> codes) {
+        return (root, query, cb) -> cb.or(codes.stream()
+                .map(code -> cb.like(root.get("subfamilyCode"), code + "%"))
+                .toArray(Predicate[]::new));
+    }
+
+    /** Artykuł na bieżącej liście cadencier sklepu ({@code present}) albo poza nią. */
+    public static Specification<Product> inCadencier(UUID storeId, boolean present) {
+        return (root, query, cb) -> {
+            Subquery<Integer> item = query.subquery(Integer.class);
+            Root<CadencierItem> c = item.from(CadencierItem.class);
+            item.select(cb.literal(1)).where(
+                    cb.equal(c.get("storeId"), storeId),
+                    cb.equal(c.get("itm8"), root.get("itm8")));
+            return present ? cb.exists(item) : cb.not(cb.exists(item));
+        };
+    }
+
+    private static List<Predicate> between(CriteriaBuilder cb, Path<BigDecimal> value, BigDecimal from,
+            BigDecimal to) {
+        List<Predicate> all = new ArrayList<>();
+        if (from != null) {
+            all.add(cb.greaterThanOrEqualTo(value, from));
+        }
+        if (to != null) {
+            all.add(cb.lessThanOrEqualTo(value, to));
+        }
+        return all;
     }
 }

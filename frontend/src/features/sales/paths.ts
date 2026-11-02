@@ -9,4 +9,5 @@ export const salesPaths = {
   periodSummary: `${base}/podsumowanie`,
   priceCheck: `${base}/zakup-bazowy-poza-baza`,
   gratis: `${base}/gratisy`,
+  protocols: `${base}/protokoly`,
 }

@@ -27,6 +27,13 @@ import com.intermanage.backend.sales.service.SalesReportService;
 @RequestMapping("/api/stores/{storeId}/reports")
 public class SalesReportController {
 
+    /**
+     * Zakres sprzedaży, nomenklaturę do filtra i dane artykułu widzi też Magazyn i produkty; wykres sprzedaży z tym
+     * uprawnieniem tylko dla artykułu, nie dla nomenklatury i całego sklepu.
+     */
+    private static final String ARTICLE_VIEW = "(hasAuthority('SALES:VIEW') or hasAuthority('INVENTORY:VIEW')) "
+            + "and @storeAccess.canAccess(authentication, #storeId)";
+
     private final SalesReportService salesReportService;
     private final DeliCostReportService deliCostReportService;
 
@@ -38,7 +45,7 @@ public class SalesReportController {
 
     /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport. */
     @GetMapping
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize(ARTICLE_VIEW)
     public SalesReportsOverview overview(@PathVariable UUID storeId) {
         return salesReportService.overview(storeId);
     }
@@ -64,7 +71,7 @@ public class SalesReportController {
 
     /** Nomenklatura sklepu do filtra raportów. */
     @GetMapping("/nomenclatures")
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize(ARTICLE_VIEW)
     public List<NomenclatureOption> nomenclatures(@PathVariable UUID storeId) {
         return salesReportService.nomenclatures(storeId);
     }
@@ -74,7 +81,8 @@ public class SalesReportController {
      * cały sklep, {@code unassigned=true} = bez nomenklatury), z tym samym filtrem {@code nomenclatures} co porównanie.
      */
     @GetMapping("/sales-history")
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize("(hasAuthority('SALES:VIEW') or (hasAuthority('INVENTORY:VIEW') and #itm8 != null)) "
+            + "and @storeAccess.canAccess(authentication, #storeId)")
     public SalesHistoryResponse salesHistory(@PathVariable UUID storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -87,14 +95,14 @@ public class SalesReportController {
 
     /** Artykuł z kartoteki: dane, ceny, stan i rotacja z ostatniego raportu kartoteki. */
     @GetMapping("/articles/{itm8}")
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize(ARTICLE_VIEW)
     public SalesArticleResponse article(@PathVariable UUID storeId, @PathVariable String itm8) {
         return salesReportService.article(storeId, itm8);
     }
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ): ilość i cena zakupu, od najnowszej. */
     @GetMapping("/articles/{itm8}/deliveries")
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize(ARTICLE_VIEW)
     public List<ArticleDeliveryResponse> articleDeliveries(@PathVariable UUID storeId, @PathVariable String itm8) {
         return salesReportService.deliveries(storeId, itm8);
     }

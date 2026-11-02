@@ -1,25 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
-  CookingPotIcon,
-  DatabaseBackupIcon,
+  ChevronRightIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
   MonitorIcon,
   MoonIcon,
-  SettingsIcon,
-  ShieldIcon,
-  StoreIcon,
   SunIcon,
-  UserCogIcon,
   UserIcon,
 } from 'lucide-react'
-import { NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
+import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { BrandMark } from '@/components/BrandMark'
+import { groupTarget, locate, useNavGroups } from '@/components/layout/navigation'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -32,25 +28,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { hasPermission, useCurrentUser, useLogout } from '@/features/auth/api'
+import { useCurrentUser, useLogout } from '@/features/auth/api'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
-import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
-import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
-import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
-import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
 import { THEME_LABELS, useThemeChoice, type ThemeChoice } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { closeMobileNav, toggleMobileNav } from '@/store/uiSlice'
 import { useAppDispatch, useAppSelector } from '@/store'
-
-/** Narzędzia garmażu w sekcji „Garmaż”, z krótszymi nazwami niż kategorie uprawnień. */
-const DELI_TOOLS = {
-  DELI_ORDERS: 'Zamówienia',
-  DELI_PRODUCTION: 'Karty produkcji',
-  DELI_PRICES: 'Kalkulator cen',
-} as const
 
 // Czas animacji menu, ten sam co duration-200 w klasach <aside>.
 const SIDEBAR_TRANSITION_MS = 200
@@ -154,7 +139,8 @@ export function AppLayout() {
             <MenuIcon />
           </Button>
           <BackButton />
-          <div className="ml-auto">
+          <GroupTabs />
+          <div className="ml-auto shrink-0">
             <UserMenu />
           </div>
         </header>
@@ -171,26 +157,13 @@ export function AppLayout() {
   )
 }
 
+/** Menu boczne: tylko główne kategorie; ich narzędzia są w zakładkach nad stroną i na stronie kategorii. */
 function Sidebar() {
   const dispatch = useAppDispatch()
   const me = useCurrentUser()
-  const { data: categories = [] } = usePermissionCategories()
-  const available = categories.filter((category) => hasPermission(me, category.code))
-  const tools = available.filter((category) => !(category.code in DELI_TOOLS))
-  // Garmaż: zamówienia, kalkulator cen i karty produkcji we własnej sekcji, w stałej kolejności.
-  const deliTools = (Object.keys(DELI_TOOLS) as (keyof typeof DELI_TOOLS)[]).filter((code) =>
-    available.some((category) => category.code === code),
-  )
-  const canDeliCosts = hasPermission(me, 'SALES')
-  // Ustawienia sklepu: budżet rejonów (edycja sprzedaży) i sklepy zaprzyjaźnione (edycja dokumentów).
-  const canEditDocuments = hasPermission(me, 'DOCUMENTS', 'EDIT')
-  // Ustawienia sklepu: budżet i marże (sprzedaż), sklepy zaprzyjaźnione (dokumenty), pliki PROTO (też wprowadzanie
-  // danych i garmaż).
-  const canStoreSettings =
-    canEditDocuments ||
-    hasPermission(me, 'SALES', 'EDIT') ||
-    hasPermission(me, 'DATA_ENTRY', 'EDIT') ||
-    hasPermission(me, 'DELI_ORDERS', 'EDIT')
+  const { pathname } = useLocation()
+  const groups = useNavGroups(me)
+  const current = locate(groups, pathname)?.group
 
   return (
     // Minimalna szerokość: przy rozszerzaniu paska treść od razu ma docelowy układ i odsłania się, zamiast się ściskać.
@@ -213,61 +186,70 @@ function Sidebar() {
       </div>
 
       <div className="grid gap-1">
-        <SidebarLink to="/" icon={LayoutDashboardIcon} label="Pulpit" end />
+        <SidebarLink to="/" icon={LayoutDashboardIcon} label="Pulpit" active={pathname === '/'} />
+        {groups.map((group) => {
+          const target = groupTarget(group)
+          return (
+            <SidebarLink
+              key={group.key}
+              to={target.path}
+              icon={target.icon}
+              label={target.label}
+              active={group === current}
+              badge={group.items.map((item) => item.badge && <Fragment key={item.key}>{item.badge}</Fragment>)}
+            />
+          )
+        })}
       </div>
+    </nav>
+  )
+}
 
-      {tools.length > 0 && (
-        <div className="grid gap-1">
-          <SectionLabel>Narzędzia</SectionLabel>
-          {tools.map((category) => (
-            <SidebarLink
-              key={category.code}
-              to={TOOL_ROUTES[category.code].path}
-              icon={TOOL_ROUTES[category.code].icon}
-              label={category.label}
-              badge={category.code === 'DOCUMENTS' && <IncomingTransfersBadge />}
-            />
-          ))}
-        </div>
-      )}
+/**
+ * Narzędzia bieżącej kategorii w nagłówku (jak zakładki), żeby przejść obok bez wracania do menu. Nagłówek ma stałą
+ * wysokość, więc przyklejone paski stron (`top-14`) zostają na miejscu; nadmiar przewija się w bok.
+ */
+function GroupTabs() {
+  const me = useCurrentUser()
+  const { pathname } = useLocation()
+  const located = locate(useNavGroups(me), pathname)
+  if (!located || located.group.items.length < 2) return null
+  const { group, item: active } = located
 
-      {deliTools.length > 0 && (
-        <div className="grid gap-1">
-          <SectionLabel>Garmaż</SectionLabel>
-          {deliTools.map((code) => (
-            <SidebarLink
-              key={code}
-              to={TOOL_ROUTES[code].path}
-              icon={TOOL_ROUTES[code].icon}
-              label={DELI_TOOLS[code]}
-              badge={code === 'DELI_ORDERS' && <DeliNewOrdersBadge />}
-            />
-          ))}
-          {canDeliCosts && <SidebarLink to="/sprzedaz/koszty-garmazu" icon={CookingPotIcon} label="Koszty garmażu" />}
-        </div>
-      )}
-
-      {(me.owner || canStoreSettings) && (
-        <div className="grid gap-1">
-          <SectionLabel>Ustawienia</SectionLabel>
-          {canStoreSettings && (
-            <SidebarLink
-              to="/ustawienia-sklepu"
-              icon={SettingsIcon}
-              label="Ustawienia sklepu"
-              badge={canEditDocuments && <PartnerInvitationsBadge />}
-            />
+  return (
+    <nav
+      aria-label={group.label}
+      className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      <NavLink
+        to={group.path}
+        end
+        title={group.label}
+        className={cn(
+          'flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted',
+          active === null && 'bg-muted',
+        )}
+      >
+        <group.icon className="size-4 text-muted-foreground" />
+        <span className="hidden lg:inline">{group.label}</span>
+      </NavLink>
+      <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-muted-foreground/60" />
+      {group.items.map((item) => (
+        <Link
+          key={item.key}
+          to={item.path}
+          title={item.label}
+          aria-current={item === active ? 'page' : undefined}
+          className={cn(
+            'flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
+            item === active && 'bg-muted font-medium text-foreground',
           )}
-          {me.owner && (
-            <>
-              <SidebarLink to="/ustawienia/sklepy" icon={StoreIcon} label="Sklepy" />
-              <SidebarLink to="/ustawienia/role" icon={ShieldIcon} label="Role i uprawnienia" />
-              <SidebarLink to="/ustawienia/uzytkownicy" icon={UserCogIcon} label="Użytkownicy" />
-              <SidebarLink to="/ustawienia/kopia-zapasowa" icon={DatabaseBackupIcon} label="Kopia zapasowa" />
-            </>
-          )}
-        </div>
-      )}
+        >
+          <item.icon className={cn('size-4', item === active && 'text-brand')} />
+          <span className="whitespace-nowrap">{item.label}</span>
+          {item.badge}
+        </Link>
+      ))}
     </nav>
   )
 }
@@ -297,52 +279,36 @@ function BackButton() {
   )
 }
 
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <>
-      <div className="px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase rail:hidden">
-        {children}
-      </div>
-      <div className="hidden h-px bg-border rail:mb-1 rail:block" />
-    </>
-  )
-}
-
 function SidebarLink({
   to,
   icon: Icon,
   label,
-  end,
+  active,
   badge,
 }: {
   to: string
   icon: React.ComponentType<{ className?: string }>
   label: string
-  end?: boolean
+  /** Kategoria jest aktywna na stronie kategorii i na stronach każdego jej narzędzia. */
+  active: boolean
   /** Np. licznik nowych zamówień, wyrównany do prawej. */
   badge?: React.ReactNode
 }) {
   return (
-    <NavLink
+    <Link
       to={to}
-      end={end}
       title={label}
-      className={({ isActive }) =>
-        cn(
-          'group/link relative flex items-center gap-2.5 rounded-lg px-2 py-2 rail:size-10 rail:justify-center rail:p-0 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
-          isActive && 'bg-muted font-medium text-foreground',
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          <Icon className={cn('size-4 transition-colors duration-150', isActive && 'text-brand')} />
-          <span className="min-w-0 flex-1 truncate rail:hidden">{label}</span>
-          {/* W pasku z ikonami licznik siedzi w rogu ikony. */}
-          {badge && <span className="contents rail:absolute rail:-top-1 rail:-right-1 rail:block">{badge}</span>}
-        </>
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'group/link relative flex items-center gap-2.5 rounded-lg px-2 py-2 rail:size-10 rail:justify-center rail:p-0 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
+        active && 'bg-muted font-medium text-foreground',
       )}
-    </NavLink>
+    >
+      <Icon className={cn('size-4 transition-colors duration-150', active && 'text-brand')} />
+      <span className="min-w-0 flex-1 truncate rail:hidden">{label}</span>
+      {/* W pasku z ikonami licznik siedzi w rogu ikony. */}
+      {badge && <span className="flex gap-1 rail:absolute rail:-top-1 rail:-right-1">{badge}</span>}
+    </Link>
   )
 }
 

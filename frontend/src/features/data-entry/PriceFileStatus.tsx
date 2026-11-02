@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ApiError } from '@/lib/api'
+import { DEFAULT_FOLDER } from '@/lib/proto-files'
 import { ensureFolderAccess, folderSavingSupported, pickFolder } from '@/lib/saved-folders'
 import { formatReportDate } from '@/lib/report-freshness'
 import { cn } from '@/lib/utils'
@@ -24,7 +25,7 @@ import { checkPriceFiles, priceFolderKey, usePriceFileOverview, usePriceFileWatc
  * Stan śledzenia cen z kasy (pliki TRACEART) w nagłówku wprowadzania danych: wybór folderu, zgoda na odczyt po
  * ponownym otwarciu przeglądarki, ostatni wczytany plik i ręczne sprawdzenie.
  */
-export function PriceFileStatus({ storeId }: { storeId: string }) {
+export function PriceFileStatus({ storeId, size }: { storeId: string; size?: 'sm' }) {
   const watch = usePriceFileWatch()
   const overview = usePriceFileOverview(storeId)
   const queryClient = useQueryClient()
@@ -48,7 +49,11 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
   }
 
   // Okno wyboru i okno zgody działają tylko zaraz po kliknięciu, więc najpierw one, potem sprawdzenie.
-  const choose = () => withBusy(async () => (await pickFolder(key, 'read')) !== null)
+  const choose = () => {
+    // Domyślna ścieżka do schowka (bez await, żeby nie zużyć gestu kliknięcia): wkleja się ją w pasek adresu okna.
+    navigator.clipboard?.writeText(DEFAULT_FOLDER).catch(() => {})
+    return withBusy(async () => (await pickFolder(key, 'read')) !== null)
+  }
   const allow = () => withBusy(() => ensureFolderAccess(key, 'read'))
   const checkNow = () => withBusy(async () => true)
 
@@ -56,6 +61,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
     return (
       <Button
         variant="outline"
+        size={size}
         onClick={choose}
         loading={busy}
         title="Folder, w którym system sklepu zapisuje pliki TRACEART ze zmianami cen na kasie"
@@ -69,6 +75,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
     return (
       <Button
         variant="outline"
+        size={size}
         onClick={allow}
         loading={busy}
         className="border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-100"
@@ -87,6 +94,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
         render={
           <Button
             variant="outline"
+            size={size}
             loading={busy || (watch.checking && access === 'unknown')}
             className={cn(
               failing &&
@@ -99,7 +107,13 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
         <TagIcon />
         Ceny z kasy
         <span className={cn('text-muted-foreground', failing && 'text-current')}>
-          {failing ? 'błąd' : latest ? formatReportDate(latest.fileTime) : 'brak plików'}
+          {failing
+            ? 'błąd'
+            : watch.progress
+              ? `historia ${watch.progress.done} / ${watch.progress.total}`
+              : latest
+                ? formatReportDate(latest.fileTime)
+                : 'brak plików'}
         </span>
         <ChevronDownIcon />
       </DropdownMenuTrigger>
@@ -120,7 +134,8 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
               <p>Artykuły w promocji z kasy: {overview.data.activePromotions}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              Folder sprawdzamy co 10 minut, gdy aplikacja jest otwarta. Cena z pliku nowszego niż raport kartoteki
+              Folder i jego podfolder BACKUP sprawdzamy od razu po wejściu i co 10 minut, gdy aplikacja jest otwarta;
+              pliki z dni bez aplikacji wczytują się same, od najstarszego. Cena z pliku nowszego niż raport kartoteki
               zastępuje cenę sprzedaży; w trakcie promocji cena sprzedaży to cena promocyjna, na pomarańczowo.
             </p>
           </div>

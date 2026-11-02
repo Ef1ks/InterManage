@@ -147,6 +147,7 @@ public class KsefInvoiceService {
         if (extra != null) {
             matching = matching.and(extra);
         }
+        invoices.disableJit();
         Page<KsefInvoice> found = invoices.findAll(matching,
                 PageRequest.of(Math.max(page, 0), PAGE_SIZE, KsefInvoiceSearch.sort(sort, direction)));
         KsefInvoiceRepository.Totals totals = invoices.totals(matching);
@@ -166,6 +167,7 @@ public class KsefInvoiceService {
         if (extra != null) {
             matching = matching.and(extra);
         }
+        invoices.disableJit();
         return invoices.findAll(matching, PageRequest.of(0, limit, KsefInvoiceSearch.sort("issueDate", "desc")))
                 .map(KsefInvoice::getId).getContent();
     }

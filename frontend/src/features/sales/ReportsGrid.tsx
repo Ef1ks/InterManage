@@ -3,6 +3,7 @@ import {
   ChefHatIcon,
   ChevronRightIcon,
   ClipboardListIcon,
+  FileStackIcon,
   GiftIcon,
   type LucideIcon,
   ScaleIcon,
@@ -28,7 +29,8 @@ const REPORTS: Report[] = [
   {
     path: salesPaths.comparison,
     title: 'Porównanie sprzedaży',
-    description: 'Dzień, tydzień, miesiąc albo własny okres z poprzednim: ilość, zakup, sprzedaż i marża wg nomenklatury.',
+    description:
+      'Dzień, tydzień, miesiąc albo własny okres z poprzednim: ilość, zakup, sprzedaż i marża wg nomenklatury.',
     icon: ArrowLeftRightIcon,
   },
   {
@@ -40,16 +42,26 @@ const REPORTS: Report[] = [
   {
     path: salesPaths.priceCheck,
     title: 'Zakup bazowy poza bazą',
-    description: 'Artykuły z cadencier kupione u innego dostawcy niż baza w ostatnich 30 dniach. Do wyjaśnienia z dostawcą.',
+    description:
+      'Artykuły z cadencier kupione u innego dostawcy niż baza w ostatnich 30 dniach. Do wyjaśnienia z dostawcą.',
     icon: ScaleIcon,
     fromDocuments: 'Z przyjęć PZ i ich korekt',
   },
   {
     path: salesPaths.gratis,
     title: 'Przyjęte gratisy',
-    description: 'Gratisy od dostawców po miesiącach i rejonach: za handel i ekspozycję, za straty i ich udział w obrocie.',
+    description:
+      'Gratisy od dostawców po miesiącach i rejonach: za handel i ekspozycję, za straty i ich udział w obrocie.',
     icon: GiftIcon,
     fromDocuments: 'Z przeniesień stanów zarejestrowanych jako gratis',
+  },
+  {
+    path: salesPaths.protocols,
+    title: 'Raport protokołów',
+    description:
+      'Likwidacje, potrzeby sklepu, reprezentacja i inne protokoły po artykule, marce, dostawcy albo nomenklaturze.',
+    icon: FileStackIcon,
+    fromDocuments: 'Z protokołów w raporcie Wejścia/Wyjścia',
   },
 ]
 
@@ -85,9 +97,7 @@ export function ReportsGrid({ storeId }: { storeId: string }) {
             <h2 className="font-semibold">{report.title}</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">{report.description}</p>
           </div>
-          <p className="mt-auto text-sm text-muted-foreground tabular-nums">
-            {report.fromDocuments ?? coverage}
-          </p>
+          <p className="mt-auto text-sm text-muted-foreground tabular-nums">{report.fromDocuments ?? coverage}</p>
         </Link>
       ))}
     </div>

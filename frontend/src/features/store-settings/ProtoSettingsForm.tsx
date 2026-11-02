@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import {
   PROTOCOLS,
+  usePriceChangeFolder,
   useProductFileFolder,
   useProtoFolder,
   useProtoSettings,
@@ -18,7 +19,7 @@ import {
 import type { ProtocolKind, ProtoSettings } from '@/lib/types'
 
 /** Folder domyślny z backendu (StoreProtoSettingsService.DEFAULT_FOLDER). */
-const DEFAULT_FOLDER = 'N:\\avisoconfig'
+const DEFAULT_FOLDER = 'N:\\AVISOCONFIG\\BACKUP'
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
 /**
@@ -49,6 +50,7 @@ type Values = { folderPath: string; productFileFolderPath: string; hidden: Proto
 function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoSettings }) {
   const save = useSaveProtoSettings(storeId)
   const folder = useProtoFolder(storeId)
+  const priceChangeFolder = usePriceChangeFolder(storeId)
   const productFolder = useProductFileFolder(storeId)
   const [formError, setFormError] = useState<string | null>(null)
   const {
@@ -75,7 +77,7 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
         hiddenProtocols: hidden,
         productFileFolderPath: productFileFolderPath.trim() || null,
       })
-      toast.success('Zapisano ustawienia plików PROTO')
+      toast.success('Zapisano ustawienia protokołów i zmiany cen')
     } catch (error) {
       if (error instanceof ApiError) {
         setFormError(applyServerErrors(error, setError, ['folderPath', 'productFileFolderPath']))
@@ -92,10 +94,10 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
     <Card className="p-4">
       <Form onSubmit={submit} error={formError}>
         <TextField
-          label="Folder plików PROTO"
+          label="Folder protokołów i zmiany cen"
           autoComplete="off"
           error={errors.folderPath?.message}
-          hint={`Folder, z którego program sklepu wczytuje pliki: PROTO6 garmażu i przyjęć MM oraz protokoły z wprowadzania danych. Puste pole = ${DEFAULT_FOLDER}.`}
+          hint={`Folder, z którego program sklepu wczytuje pliki: zamówienia garmażu, przyjęcia MM, protokoły i zmiany cen. Podpowiadany przy wyborze folderu w przeglądarce. Puste pole = ${DEFAULT_FOLDER}.`}
           {...register('folderPath', { maxLength: { value: 300, message: 'Najwyżej 300 znaków' } })}
         />
         <div className="grid gap-2">
@@ -104,7 +106,6 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
             <SwitchField
               key={protocol.kind}
               label={protocol.label}
-              description={`Plik PROTO${protocol.number}`}
               checked={!hidden.includes(protocol.kind)}
               onCheckedChange={(visible) => toggle(protocol.kind, visible)}
             />
@@ -114,7 +115,7 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
           label="Folder pliku nowych artykułów"
           autoComplete="off"
           error={errors.productFileFolderPath?.message}
-          hint="Przy zapisie pliku XML we wprowadzaniu danych nowe i zmienione artykuły trafiają tu do pliku CADBEZP (.xls) dla programu sklepu."
+          hint="Przy zapisie pliku XML we wprowadzaniu danych nowe i zmienione artykuły trafiają tu do pliku (.xls) dla programu sklepu."
           {...register('productFileFolderPath', { maxLength: { value: 300, message: 'Najwyżej 300 znaków' } })}
         />
         {settings.updatedAt && (
@@ -135,6 +136,7 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
           Przeglądarka nie zapisze pliku pod ścieżką podaną w aplikacji: folder trzeba wskazać raz na każdym komputerze.
         </p>
         <SavedFolder folder={folder} />
+        <SavedFolder folder={priceChangeFolder} />
         <SavedFolder folder={productFolder} />
       </div>
     </Card>

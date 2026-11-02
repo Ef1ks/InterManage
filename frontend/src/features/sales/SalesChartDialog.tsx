@@ -73,7 +73,8 @@ type Series = {
 }
 
 /** Średnia cena brutto sztuki (kg), jak cena na półce; dzień bez sprzedaży jej nie ma. */
-const averagePrice = (figures: SalesFigures) => (figures.quantity > 0 ? figures.saleValueGross / figures.quantity : null)
+const averagePrice = (figures: SalesFigures) =>
+  figures.quantity > 0 ? figures.saleValueGross / figures.quantity : null
 
 const marginPercent = (figures: SalesFigures) =>
   figures.marginValue != null && figures.saleValueNet !== 0 ? (figures.marginValue / figures.saleValueNet) * 100 : null
@@ -124,6 +125,33 @@ export function SalesChartDialog({
   )
 }
 
+/**
+ * Ta sama treść co okno wykresu, ale na stronie (karta artykułu w Magazynie i produktach): dane z kartoteki, wykres
+ * sprzedaży i dostawy. Sprzedaż brutto, bez filtra nomenklatury.
+ */
+export function ArticleSalesPanel({
+  storeId,
+  target,
+  lastSaleDate,
+}: {
+  storeId: string
+  target: Extract<SalesChartTarget, { kind: 'article' }>
+  lastSaleDate: string
+}) {
+  return (
+    <ChartContent
+      key={chartKey(target)}
+      storeId={storeId}
+      kind="sales"
+      target={target}
+      filter={NO_FILTER}
+      basis="gross"
+      lastSaleDate={lastSaleDate}
+      inline
+    />
+  )
+}
+
 const chartKey = (target: SalesChartTarget) =>
   target.kind === 'article' ? `a:${target.itm8}` : `g:${target.unassigned ? 'brak' : target.code}`
 
@@ -134,6 +162,7 @@ function ChartContent({
   filter,
   basis,
   lastSaleDate,
+  inline = false,
 }: {
   storeId: string
   kind: ReportKind
@@ -141,6 +170,8 @@ function ChartContent({
   filter: string[]
   basis: SaleBasis
   lastSaleDate: string
+  /** Na stronie zamiast w oknie: nagłówek bez elementów okna (te wymagają otwartego Dialog). */
+  inline?: boolean
 }) {
   const metrics = metricsFor(kind, target)
   const [rangeKey, setRangeKey] = useState<ChartRange>('month')
@@ -187,10 +218,17 @@ function ChartContent({
 
   return (
     <>
-      <DialogHeader className="pr-8">
-        <DialogTitle className="text-lg leading-snug">{title(target, article.data)}</DialogTitle>
-        <DialogDescription>{subtitle(target, article.data)}</DialogDescription>
-      </DialogHeader>
+      {inline ? (
+        <div className="grid gap-1">
+          <h2 className="text-lg leading-snug font-semibold">{title(target, article.data)}</h2>
+          <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
+        </div>
+      ) : (
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-lg leading-snug">{title(target, article.data)}</DialogTitle>
+          <DialogDescription>{subtitle(target, article.data)}</DialogDescription>
+        </DialogHeader>
+      )}
 
       {target.kind === 'article' && (
         <ArticleFacts
@@ -220,7 +258,9 @@ function ChartContent({
         />
       </div>
 
-      <div className={cn('grid min-w-0 gap-4 transition-opacity duration-150', history.isPlaceholderData && 'opacity-60')}>
+      <div
+        className={cn('grid min-w-0 gap-4 transition-opacity duration-150', history.isPlaceholderData && 'opacity-60')}
+      >
         <div className="grid gap-2">
           {zoomed ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -406,7 +446,8 @@ function ArticleFacts({
   rangeLabel: string
 }) {
   const cover = useStockCover(storeId, target, lastSaleDate, history, rangeLabel)
-  if (isPending) return <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+  if (isPending)
+    return <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
   if (!article) {
     return (
       <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
@@ -437,7 +478,9 @@ function ArticleFacts({
         </Fact>
         <Fact label="Rotacja">{article.rotation == null ? '—' : formatQuantity(article.rotation)}</Fact>
         <Fact label="Cena sprzedaży">{article.salePrice == null ? '—' : `${formatMoney(article.salePrice)} zł`}</Fact>
-        <Fact label="Cena zakupu">{article.purchasePrice == null ? '—' : `${formatPrice(article.purchasePrice)} zł`}</Fact>
+        <Fact label="Cena zakupu">
+          {article.purchasePrice == null ? '—' : `${formatPrice(article.purchasePrice)} zł`}
+        </Fact>
       </div>
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
         {article.supplier && <Detail label="Dostawca">{article.supplier}</Detail>}
@@ -468,7 +511,8 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
         </h3>
         {list && list.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            {list.length === 50 ? 'ostatnie 50 przyjęć' : `przyjęcia: ${list.length}`}, od najnowszej · cena zakupu netto
+            {list.length === 50 ? 'ostatnie 50 przyjęć' : `przyjęcia: ${list.length}`}, od najnowszej · cena zakupu
+            netto
           </p>
         )}
       </div>
@@ -1084,7 +1128,10 @@ function BarDetails({
   if (price != null) rows.push(['Średnia cena brutto', formatZloty(price)])
   if (figures.costValue != null && showMargin) rows.push(['Koszt', formatZloty(figures.costValue)])
   if (showMargin && figures.marginValue != null) {
-    rows.push(['Marża', `${formatZloty(figures.marginValue)}${margin == null ? '' : ` · ${formatPercentValue(margin)}`}`])
+    rows.push([
+      'Marża',
+      `${formatZloty(figures.marginValue)}${margin == null ? '' : ` · ${formatPercentValue(margin)}`}`,
+    ])
   }
   if (lossValue > 0) rows.push(['Straty (zakup netto)', formatZloty(lossValue)])
   return (
@@ -1171,4 +1218,9 @@ const axisDate = new Intl.DateTimeFormat('pl-PL', {
   month: 'short',
 })
 const mondayDate = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' })
-const tooltipDate = new Intl.DateTimeFormat('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const tooltipDate = new Intl.DateTimeFormat('pl-PL', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+})

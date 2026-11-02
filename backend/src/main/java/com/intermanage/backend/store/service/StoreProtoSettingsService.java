@@ -18,7 +18,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
 public class StoreProtoSettingsService {
 
     /** Folder, z którego program sklepu wczytuje pliki, gdy sklep nie ustawił innego (skrót na dysku N). */
-    public static final String DEFAULT_FOLDER = "N:\\avisoconfig";
+    public static final String DEFAULT_FOLDER = "N:\\AVISOCONFIG\\BACKUP";
 
     private final StoreProtoSettingsRepository settings;
     private final StoreRepository stores;

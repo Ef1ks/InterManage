@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { NomenclatureMargin, NomenclatureMarginImport, PriceRoundingRule, StorePartners } from '@/lib/types'
+import type {
+  NomenclatureMargin,
+  NomenclatureMarginImport,
+  PriceRoundingRule,
+  StorePartners,
+  SupplierSalePrice,
+} from '@/lib/types'
 
 /** Sklepy zaprzyjaźnione i zaproszenia wybranego sklepu (z obu stron) oraz sklepy, które można zaprosić. */
 export const partnersKey = (storeId: string) => ['stores', storeId, 'partners'] as const
@@ -89,4 +95,39 @@ export function useSavePriceRounding(storeId: string) {
     mutationFn: (rules: { priceFrom: number; priceTo: number | null; ending: number }[]) =>
       api<PriceRoundingRule[]>(`/stores/${storeId}/price-rounding`, { method: 'PUT', json: { rules } }),
   })
+}
+
+/** Stałe ceny sprzedaży dostawców; ten sam klucz co we wprowadzaniu danych. */
+export const supplierSalePricesKey = (storeId: string) => ['stores', storeId, 'supplier-sale-prices'] as const
+const supplierSalePricesPath = (storeId: string) => `/stores/${storeId}/supplier-sale-prices`
+
+export function useSupplierSalePrices(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: supplierSalePricesKey(storeId),
+    queryFn: () => api<SupplierSalePrice[]>(supplierSalePricesPath(storeId)),
+    enabled,
+    // Jak zaokrąglanie: zmiana w drugiej karcie od razu zmienia ceny sugerowane we wprowadzaniu danych.
+    refetchOnWindowFocus: 'always',
+  })
+}
+
+/** Każda zmiana zwraca całą listę, którą od razu podmieniamy. */
+export function useSupplierSalePriceActions(storeId: string) {
+  const queryClient = useQueryClient()
+  const onSuccess = (prices: SupplierSalePrice[]) => queryClient.setQueryData(supplierSalePricesKey(storeId), prices)
+  return {
+    save: useMutation({
+      mutationFn: ({ supplierId, salePrice }: { supplierId: string; salePrice: number }) =>
+        api<SupplierSalePrice[]>(`${supplierSalePricesPath(storeId)}/${supplierId}`, {
+          method: 'PUT',
+          json: { salePrice },
+        }),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: (supplierId: string) =>
+        api<SupplierSalePrice[]>(`${supplierSalePricesPath(storeId)}/${supplierId}`, { method: 'DELETE' }),
+      onSuccess,
+    }),
+  }
 }

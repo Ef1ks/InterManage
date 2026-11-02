@@ -68,14 +68,15 @@ public class DataEntryService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final Pattern RATE = Pattern.compile("^(\\d+(?:[.,]\\d+)?)\\s*%");
     private static final Pattern XML_EAN = Pattern.compile("\\d{8,14}");
-    private static final Set<String> KG_UNITS = Set.of("kg", "kg.", "kilogram");
     static final int CATALOG_PAGE_SIZE = 100;
     /** {@code eanSource} pozycji wczytanej z przypięcia kodu dostawcy do artykułu. */
     static final String LINK_SOURCE = "LINK";
     /** {@code eanSource} pozycji wczytanej z pliku XML faktury. */
     static final String XML_SOURCE = "XML";
     static final Set<String> CATALOG_SORTS =
-            Set.of("itm8", "ean", "name", "brand", "supplier", "nomenclature", "purchase", "sale", "stock");
+            Set.of("itm8", "ean", "name", "brand", "nomenclature", "purchase", "sale", "stock", "rotation");
+    /** Filtr dostawcy listy towarów: artykuły z przyjęć PZ od tego dostawcy z tylu ostatnich miesięcy. */
+    static final int CATALOG_SUPPLIER_MONTHS = 6;
 
     private final KsefInvoiceService ksefInvoices;
     private final KsefInvoiceReader reader;
@@ -254,7 +255,10 @@ public class DataEntryService {
      * Lista towarów z kartoteki z filtrem nad każdą kolumną; każde pole tekstowe to fragment, a {@code *} w nim
      * zastępuje dowolny ciąg znaków ({@code excel*o} pasuje do „EXCELLENT MLEKO”), {@code ?} jeden znak. Nomenklatura
      * z samych cyfr (spacje i kropki pomijane) to początek kodu podrodziny, inny tekst to nazwa któregoś poziomu.
-     * Sortowanie po dowolnej kolumnie ({@link #CATALOG_SORTS}, domyślnie po nazwie), strony po {@link #CATALOG_PAGE_SIZE}.
+     * Dostawca: kod albo fragment nazwy z linii przyjęć PZ z ostatnich {@link #CATALOG_SUPPLIER_MONTHS} miesięcy, bo
+     * dostawca z kartoteki bywa błędny; przy każdym artykule strony jego ostatnia dostawa (drugie zapytanie, tylko dla
+     * strony). Sortowanie po dowolnej kolumnie ({@link #CATALOG_SORTS}, domyślnie po nazwie), strony po
+     * {@link #CATALOG_PAGE_SIZE}.
      */
     @Transactional(readOnly = true)
     public CatalogListPage catalogList(UUID storeId, CatalogListRequest request) {
@@ -262,18 +266,27 @@ public class DataEntryService {
         String nomenclature = request.nomenclature() != null ? request.nomenclature().strip() : "";
         String code = nomenclature.replaceAll("[\\s.]", "");
         boolean byCode = code.matches("\\d{1,6}");
+        String supplier = likePattern(request.supplier(), true);
         String sort = request.sort() != null && CATALOG_SORTS.contains(request.sort()) ? request.sort() : "name";
         String direction = "desc".equals(request.direction()) ? "desc" : "asc";
         List<DataEntryCatalogRepository.CatalogListItem> found = catalog.search(storeId,
                 likePattern(request.itm8(), false), likePattern(request.ean(), false),
                 likePattern(request.name(), true), likePattern(request.brand(), true),
-                likePattern(request.supplier(), true), byCode ? code : null,
+                supplier, supplier != null ? request.supplier().strip() : null,
+                LocalDate.now(WARSAW).minusMonths(CATALOG_SUPPLIER_MONTHS), byCode ? code : null,
                 byCode ? null : likePattern(nomenclature, true), request.purchaseFrom(), request.purchaseTo(),
                 request.saleFrom(), request.saleTo(), sort, direction, CATALOG_PAGE_SIZE + 1, offset);
-        List<CatalogListItem> items = found.stream().limit(CATALOG_PAGE_SIZE)
+        List<DataEntryCatalogRepository.CatalogListItem> page = found.stream().limit(CATALOG_PAGE_SIZE).toList();
+        Map<String, CatalogListItem.LastDelivery> deliveries = page.isEmpty() ? Map.of()
+                : catalog.findLastDeliveries(storeId,
+                        page.stream().map(DataEntryCatalogRepository.CatalogListItem::getItm8).toList())
+                        .stream().collect(Collectors.toMap(DataEntryCatalogRepository.LastDelivery::getItm8,
+                                row -> new CatalogListItem.LastDelivery(row.getSupplierCode(), row.getSupplierName(),
+                                        row.getDocumentDate().toLocalDate())));
+        List<CatalogListItem> items = page.stream()
                 .map(row -> new CatalogListItem(row.getItm8(), row.getEan(), row.getName(), row.getBrand(),
                         row.getSupplier(), row.getSubfamilyCode(), row.getSubfamilyName(), row.getPurchasePrice(),
-                        row.getSalePrice(), row.getStock(), row.getRotation()))
+                        row.getSalePrice(), row.getStock(), row.getRotation(), deliveries.get(row.getItm8())))
                 .toList();
         return new CatalogListPage(items, found.size() > CATALOG_PAGE_SIZE);
     }
@@ -515,11 +528,10 @@ public class DataEntryService {
 
     /**
      * Marża % od sprzedaży netto: (sprzedaż netto − zakup netto sztuki) / sprzedaż netto. Zakup sztuki: cena z
-     * faktury za jedną sztukę z kolumny Ilość bez względu na jednostkę (szt., op., pak), a w kg przy sprzedaży
-     * na kg razy waga sztuki.
+     * faktury za jedną sztukę z kolumny Ilość bez względu na jednostkę (szt., op., pak, kg); waga nie zmienia marży.
      */
     static BigDecimal marginPercent(ExportRequest.Row row) {
-        BigDecimal purchase = purchasePerPiece(row.unitNet(), row.invoiceUnit(), row.unit(), row.netContent());
+        BigDecimal purchase = row.unitNet();
         if (purchase == null || row.salePrice() == null || row.salePrice().signum() <= 0 || row.vatPercent() == null) {
             return null;
         }
@@ -543,24 +555,13 @@ public class DataEntryService {
     }
 
     static BigDecimal suggestedPrice(ExportRequest.Row row, BigDecimal requiredMargin) {
-        BigDecimal purchase = purchasePerPiece(row.unitNet(), row.invoiceUnit(), row.unit(), row.netContent());
+        BigDecimal purchase = row.unitNet();
         if (requiredMargin == null || purchase == null || row.vatPercent() == null) {
             return null;
         }
         // Jedno dzielenie na końcu: pośrednie zaokrąglenie podbijałoby cenę o grosz (2,50 przy 30% i VAT 5% = 3,75).
         return purchase.multiply(HUNDRED).multiply(HUNDRED.add(row.vatPercent()))
                 .divide(HUNDRED.subtract(requiredMargin).multiply(HUNDRED), 2, RoundingMode.CEILING);
-    }
-
-    static BigDecimal purchasePerPiece(BigDecimal unitNet, String invoiceUnit, String saleUnit,
-            BigDecimal netContent) {
-        if (unitNet == null) {
-            return null;
-        }
-        String unit = invoiceUnit == null ? "" : invoiceUnit.strip().toLowerCase(Locale.ROOT);
-        return KG_UNITS.contains(unit) && Measure.KG.equals(saleUnit) && netContent != null
-                ? unitNet.multiply(netContent)
-                : unitNet;
     }
 
     private static String level(Map<String, String> names, String subfamily, int length) {

@@ -19,7 +19,8 @@ public enum DocumentType {
     ZW("Zwroty do dostawcy", "Zwrot do dostawcy", "Towar oddany dostawcy, np. niesprzedana prasa"),
     MM("Ruchy międzymagazynowe", "Ruch międzymagazynowy", "Towar wysłany do innego sklepu"),
     RWPO("Potrzeby sklepu", "Wydanie na potrzeby sklepu", "Towar zużyty na własne potrzeby sklepu"),
-    RWREP("Reprezentacja", "Wydanie na reprezentację", "Towar wydany na cele reprezentacyjne");
+    RWREP("Reprezentacja", "Wydanie na reprezentację", "Towar wydany na cele reprezentacyjne"),
+    RWDA("Darowizny", "Wydanie na darowiznę", "Towar przekazany jako darowizna");
 
     private final String label;
     private final String singular;

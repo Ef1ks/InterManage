@@ -1,5 +1,7 @@
 package com.intermanage.backend.pricecheck.repository;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -82,4 +84,35 @@ public interface CadencierImportRepository extends JpaRepository<CadencierImport
             where c.store_id = :storeId
             """, nativeQuery = true)
     List<CadencierEan> findCurrentEans(UUID storeId);
+
+    /**
+     * Przyjęcia PZ sklepu z datą w [from, to) z linią od dostawcy spoza {@code baseSupplierCodes} (kod z linii, bez
+     * niego z nagłówka) z artykułem z cadencier po ITM8 albo po EAN-ie (jak {@link #findCurrentEans}, bez zer
+     * wiodących, od 8 cyfr). Odsiew w bazie, żeby raport nie wczytywał linii wszystkich przyjęć z okresu.
+     */
+    @Query(value = """
+            with lines as (
+                select d.id as document_id, l.itm8, ltrim(btrim(l.ean), '0') as ean
+                from documents d join document_lines l on l.document_id = d.id
+                where d.store_id = :storeId and d.type = 'PZ' and d.document_date >= :from and d.document_date < :to
+                  and (coalesce(l.supplier_code, d.supplier_code) is null
+                       or coalesce(l.supplier_code, d.supplier_code) not in (:baseSupplierCodes))
+            ), cadencier as (
+                select c.itm8, c.ean from cadencier_items c where c.store_id = :storeId
+            ), cadencier_eans as (
+                select ltrim(btrim(c.ean), '0') as ean from cadencier c where c.ean is not null
+                union
+                select ltrim(btrim(pe.ean), '0') from cadencier c
+                join products p on p.store_id = :storeId and p.itm8 = c.itm8
+                join product_eans pe on pe.product_id = p.id
+                union
+                select ltrim(btrim(pc.ean), '0') from cadencier c
+                join product_codes pc on pc.store_id = :storeId and pc.itm8 = c.itm8 and pc.current
+            )
+            select l.document_id from lines l join cadencier c on c.itm8 = l.itm8
+            union
+            select l.document_id from lines l join cadencier_eans e on e.ean = l.ean where length(l.ean) >= 8
+            """, nativeQuery = true)
+    List<UUID> findDeliveriesWithCadencierLines(UUID storeId, Collection<String> baseSupplierCodes,
+            LocalDateTime from, LocalDateTime to);
 }

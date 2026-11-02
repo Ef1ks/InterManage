@@ -1,6 +1,7 @@
 import {
   BadgePercentIcon,
   CheckCheckIcon,
+  CircleCheckIcon,
   CombineIcon,
   DiffIcon,
   FileCodeIcon,
@@ -13,6 +14,7 @@ import {
   ReceiptTextIcon,
   SparklesIcon,
   Redo2Icon,
+  SettingsIcon,
   TagIcon,
   Trash2Icon,
   Undo2Icon,
@@ -41,11 +43,12 @@ import { useSuppliers } from '@/features/documents/api'
 import { formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
-import { usePriceRoundingRules } from '@/features/store-settings/api'
+import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
-import { useProtoFolder } from '@/lib/proto-files'
-import { ensureFolderAccess } from '@/lib/saved-folders'
+import { cn } from '@/lib/utils'
+import { usePriceChangeFolder } from '@/lib/proto-files'
+import { ensureFolderAccess, type SavedFolderSpec } from '@/lib/saved-folders'
 import { addDays, todayIso } from '@/lib/dates'
 import type {
   DataEntryCatalogProduct,
@@ -55,7 +58,12 @@ import type {
   Supplier,
 } from '@/lib/types'
 import { type RootState, useAppDispatch, useAppSelector } from '@/store'
-import { type DataEntryDraft, EMPTY_DATA_ENTRY, setDataEntryDraft } from '@/store/dataEntryDraftSlice'
+import {
+  type DataEntryDraft,
+  EMPTY_DATA_ENTRY,
+  setDataEntryDraft,
+  setDataEntrySaved,
+} from '@/store/dataEntryDraftSlice'
 
 import {
   type ExportPayload,
@@ -88,6 +96,7 @@ import { usePriceFileOverview } from './price-files'
 import { savePriceControlFile } from './price-control'
 import { PriceFileStatus } from './PriceFileStatus'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
+import { SaveSettingsDialog } from './SaveSettingsDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
 import { SupplierChangeDialog } from './SupplierChangeDialog'
 import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
@@ -114,12 +123,14 @@ import {
   withLinkedProduct,
   withScannedProduct,
   withServicesLast,
+  withSupplierPrice,
   withSuggestion,
   withTrailingEmptyRow,
 } from './rows'
 import { useUndoHistory, useUndoShortcuts } from './undo-history'
 import { XmlOpenDialog } from './XmlOpenDialog'
 import { XmlSaveDialog } from './XmlSaveDialog'
+import { useXmlSave } from './xml-save'
 
 /**
  * Wprowadzanie danych (wersja testowa): faktura z KSeF w tabeli jak w Excelu, propozycje AI dla nowych artykułów
@@ -219,7 +230,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const { data: nomenclature = [] } = useDataEntryNomenclature(store.id)
   const names = useMemo(() => nomenclatureNames(nomenclature), [nomenclature])
   const { data: rounding } = usePriceRoundingRules(store.id)
-  const pricing = useMemo(() => pricingOf(nomenclature, rounding), [nomenclature, rounding])
   const gridRef = useRef<GridHandle>(null)
 
   // Okno sprzedaży i dostaw artykułu jak w raportach; wymaga dostępu do raportów sprzedaży.
@@ -247,10 +257,31 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [protocolOpen, setProtocolOpen] = useState(false)
-  const [xmlOpen, setXmlOpen] = useState(false)
+  const [checkOpen, setCheckOpen] = useState(false)
+  const [resaveOpen, setResaveOpen] = useState(false)
+  const [saveSettings, setSaveSettings] = useState<{ open: boolean; missing: SavedFolderSpec[] }>({
+    open: false,
+    missing: [],
+  })
+  const saved = useAppSelector((state) => state.dataEntryDraft.saved[store.id]) ?? null
+  const forgetSaved = useCallback(
+    () => dispatch(setDataEntrySaved({ storeId: store.id, saved: null })),
+    [dispatch, store.id],
+  )
   const [supplierOpen, setSupplierOpen] = useState(false)
   const { data: suppliers } = useSuppliers(store.id)
   const supplier = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
+  const { data: supplierPrices } = useSupplierSalePrices(store.id)
+  // Stała cena sprzedaży dostawcy (Ustawienia sklepu): cena sugerowana wszystkich artykułów dokumentu.
+  const supplierPriceFor = useCallback(
+    (supplierId: string | null | undefined) =>
+      supplierPrices?.find((price) => price.supplierId === supplierId)?.salePrice ?? null,
+    [supplierPrices],
+  )
+  const pricing = useMemo(
+    () => pricingOf(nomenclature, rounding, supplierPriceFor(supplier?.id)),
+    [nomenclature, rounding, supplierPriceFor, supplier],
+  )
   // Wysokość przyklejonego paska nad tabelą: pod nim przykleja się nagłówek kolumn.
   const [toolbarHeight, setToolbarHeight] = useState(0)
   const suggest = useSuggest(store.id)
@@ -266,19 +297,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     const base = mode === 'append' ? currentDraft().rows.filter((row) => row.ean !== '' || row.name !== '') : []
     // Dopisana faktura: tabela porównuje się z sumą obu dokumentów.
     const previous = mode === 'append' ? currentDraft().invoice : null
-    setDraft({
-      invoice: {
-        id: data.invoiceId,
-        number: data.invoiceNumber,
-        sellerName: data.sellerName,
-        sellerNip: data.sellerNip,
-        issueDate: data.issueDate,
-        fromXml,
-        netTotal: previous ? addTotals(previous.netTotal, data.netTotal) : data.netTotal,
-        vatTotal: previous ? addTotals(previous.vatTotal, data.vatTotal) : data.vatTotal,
-      },
-      rows: [...base, ...loaded],
-    })
+    forgetSaved()
+    const nextInvoice = {
+      id: data.invoiceId,
+      number: data.invoiceNumber,
+      sellerName: data.sellerName,
+      sellerNip: data.sellerNip,
+      issueDate: data.issueDate,
+      fromXml,
+      netTotal: previous ? addTotals(previous.netTotal, data.netTotal) : data.netTotal,
+      vatTotal: previous ? addTotals(previous.vatTotal, data.vatTotal) : data.vatTotal,
+    }
+    // Dostawca ze stałą ceną (Ustawienia sklepu): wczytane artykuły dostają ją od razu jako cenę sprzedaży.
+    const fixedPrice = supplierPriceFor(documentSupplier(suppliers, nextInvoice)?.id)
+    setDraft({ invoice: nextInvoice, rows: [...base, ...withSupplierPrice(loaded, fixedPrice)] })
     // Status "wczytana": faktura znika z listy do wczytania (także informacja dla innych sklepów firmy). Plik XML
     // z historii był już wczytany, gdy go zapisywano.
     if (data.invoiceId && !fromXml)
@@ -292,7 +324,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     toast.success(fromXml ? `Wczytano plik ${fromXml}` : `Wczytano fakturę ${data.invoiceNumber}`, {
       description:
         `${articles} ${pieces(articles)}, ${fresh === 0 ? 'wszystkie są w kartotece' : `nowych: ${fresh}`}` +
-        (services > 0 ? `; kaucje i dostawa (${services}) na dole, bez zapisu do pliku XML.` : '.'),
+        (services > 0 ? `; kaucje i dostawa (${services}) na dole, bez zapisu do pliku XML.` : '.') +
+        (fixedPrice !== null ? ` Stała cena dostawcy: ${formatMoney(fixedPrice)}.` : ''),
     })
   }
 
@@ -307,11 +340,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const confirmXml = (xml: DataEntryXmlDocument) => {
     // Zapis tymczasowy oddaje całą tabelę taką, jaka była (nazwy, nomenklatura, propozycje AI); plik XML tylko gdy
     // tabeli z zapisu nie da się odczytać.
-    const saved = parseDraft(xml.draft)
-    if (saved) {
+    const draft = parseDraft(xml.draft)
+    if (draft) {
       const before = currentDraft()
       setXmlOpenOpen(false)
-      setDraft(saved)
+      forgetSaved()
+      setDraft(draft)
       const replaced = before.rows.some((row) => row.ean !== '' || row.name !== '')
       toast.success(`Wczytano zapis tymczasowy ${xml.document.invoiceNumber ?? ''}`.trim(), {
         description: replaced ? 'Zastąpił tabelę.' : undefined,
@@ -390,22 +424,31 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const tableEans = useMemo(() => new Set(rows.map((row) => row.ean.replace(/^0+/, '')).filter(Boolean)), [rows])
 
-  const addFromCatalog = async ({ item, quantity, unitNet }: CatalogAddition) => {
+  const addFromCatalog = async (additions: CatalogAddition[]) => {
     // Dane wiersza jak po wpisaniu EAN-u (VAT, cena sprzedaży, nomenklatura); ilość i cena z okna mają pierwszeństwo.
-    const key = item.ean.replace(/^0+/, '')
-    const products = await lookupProducts(store.id, [item.ean])
-    const scanned = withScannedProduct(
-      { ...emptyRow(), ean: item.ean, quantity, unitNet },
-      products.find((product) => product.ean === key) ?? null,
+    // EAN-y idą paczkami, bo „Dodaj wszystkie wyfiltrowane” wysyła ich setki w adresie zapytania.
+    const eans = additions.map(({ item }) => item.ean)
+    const chunks = Array.from({ length: Math.ceil(eans.length / 100) }, (_, index) =>
+      eans.slice(index * 100, index * 100 + 100),
     )
-    setRows((current) =>
-      withAddedRow(current, {
-        ...scanned,
-        quantity,
-        unitNet: unitNet ?? scanned.unitNet,
-      }),
-    )
-    toast.success(`Dodano do tabeli: ${item.name ?? item.ean}`)
+    const products = (await Promise.all(chunks.map((chunk) => lookupProducts(store.id, chunk)))).flat()
+    const byKey = new Map(products.map((product) => [product.ean, product]))
+    const added = additions.map(({ item, quantity, unitNet }) => {
+      const scanned = withScannedProduct(
+        { ...emptyRow(), ean: item.ean, quantity, unitNet },
+        byKey.get(item.ean.replace(/^0+/, '')) ?? null,
+      )
+      return { ...scanned, quantity, unitNet: unitNet ?? scanned.unitNet }
+    })
+    const before = currentDraft()
+    setRows((current) => added.reduce(withAddedRow, current))
+    if (additions.length === 1) {
+      toast.success(`Dodano do tabeli: ${additions[0].item.name ?? additions[0].item.ean}`)
+    } else {
+      toast.success(`Dodano do tabeli artykuły: ${additions.length}`, {
+        action: { label: 'Przywróć', onClick: () => setDraft(before) },
+      })
+    }
   }
 
   // ---------- podział ilości (opakowanie z faktury na sztuki sprzedaży)
@@ -662,6 +705,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const clearAll = () => {
     const before = currentDraft()
+    forgetSaved()
     setDraft(EMPTY_DATA_ENTRY)
     toast('Wyczyszczono tabelę', {
       action: { label: 'Przywróć', onClick: () => setDraft(before) },
@@ -674,6 +718,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const changeSupplier = (supplier: Supplier) => {
     setSupplierOpen(false)
     const before = currentDraft()
+    const fixedPrice = supplierPriceFor(supplier.id)
     setDraft({
       ...before,
       invoice: {
@@ -681,9 +726,14 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         number: null,
         supplier: { id: supplier.id, name: supplier.name, nip: supplier.nip },
       },
+      rows: withSupplierPrice(before.rows, fixedPrice),
     })
+    const notes = [
+      before.invoice?.number && `Usunięto numer faktury ${before.invoice.number}`,
+      fixedPrice !== null && `Stała cena dostawcy ${formatMoney(fixedPrice)} wpisana w artykułach`,
+    ].filter(Boolean)
     toast(`Dostawca dokumentu: ${supplier.name}`, {
-      description: before.invoice?.number ? `Usunięto numer faktury ${before.invoice.number}` : undefined,
+      description: notes.length ? `${notes.join('. ')}.` : undefined,
       action: { label: 'Cofnij', onClick: () => setDraft(before) },
     })
   }
@@ -716,12 +766,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       known: row.known,
     })),
   })
-  const xmlPayload: ExportPayload | null = xmlOpen ? buildPayload() : null
+  const payload = buildPayload()
+  // Po tym widać, czy tabela zmieniła się od ostatniego zapisu pliku XML.
+  const signature = JSON.stringify(payload)
+  const savedState = saved ? (saved.signature === signature ? 'saved' : 'changed') : null
 
   // Nowe i zmienione artykuły (bez samej zmiany ceny) idą razem z plikiem XML do pliku CADBEZP dla programu sklepu.
   const productRows = filled.filter(needsProductFile)
   const productFilePayload: ProductFilePayload | null =
-    xmlOpen && productRows.length > 0
+    productRows.length > 0
       ? {
           supplierId: invoice?.supplier?.id ?? null,
           sellerNip: invoice?.sellerNip ?? null,
@@ -761,7 +814,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       : null
 
   // „Zmień ceny”: sam plik CTRLPRIX, bez pliku XML (np. gdy dokument jest już wprowadzony).
-  const protoFolder = useProtoFolder(store.id)
+  const priceChangeFolder = usePriceChangeFolder(store.id)
   const queryClient = useQueryClient()
   const [savingPrices, setSavingPrices] = useState(false)
   const savePriceChanges = async () => {
@@ -769,15 +822,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     setSavingPrices(true)
     try {
       // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
-      const folderReady = await ensureFolderAccess(protoFolder.key)
-      const file = await savePriceControlFile(store.id, priceControlPayload, protoFolder.key, folderReady)
+      const folderReady = await ensureFolderAccess(priceChangeFolder.key)
+      const file = await savePriceControlFile(store.id, priceControlPayload, priceChangeFolder.key, folderReady)
       void queryClient.invalidateQueries({ queryKey: ['stores', store.id, 'data-entry', 'price-control-files'] })
       toast.success(`Zapisano plik zmian cen${file.supplierCode ? ` dla dostawcy ${file.supplierCode}` : ''}`, {
-        description: `${file.fileName}${file.downloaded ? ' (pobrany: folder plików PROTO nie jest wybrany w tej przeglądarce)' : ''}`,
+        description: `${file.fileName}${file.downloaded ? ' (pobrany: folder zmiany cen nie jest wybrany w tej przeglądarce)' : ''}`,
         duration: 10_000,
       })
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku zmian cen (CTRLPRIX)')
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku zmiany cen')
     } finally {
       setSavingPrices(false)
     }
@@ -797,13 +850,43 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       },
     )
   const xmlProblems = {
-    invalidEan: xmlOpen ? filled.filter((row) => rowProblems(row).includes('invalid-ean')) : [],
-    tooLong: xmlOpen ? filled.filter((row) => rowProblems(row).includes('name-too-long')) : [],
-    noSubfamily: xmlOpen ? filled.filter((row) => rowProblems(row).includes('no-subfamily')) : [],
+    invalidEan: filled.filter((row) => rowProblems(row).includes('invalid-ean')),
+    tooLong: filled.filter((row) => rowProblems(row).includes('name-too-long')),
+    noSubfamily: filled.filter((row) => rowProblems(row).includes('no-subfamily')),
+  }
+  const hasProblems =
+    totals.mismatch ||
+    conflicts.length > 0 ||
+    xmlProblems.invalidEan.length > 0 ||
+    xmlProblems.tooLong.length > 0 ||
+    xmlProblems.noSubfamily.length > 0
+
+  // „Zapisz”: bez braków zapisuje od razu do folderów z ustawień zapisu; z brakami najpierw okno sprawdzenia, a gdy
+  // dokument jest już zapisany, pyta o ponowny zapis.
+  const xmlSave = useXmlSave(store.id)
+  const runSave = async () => {
+    const missing = await xmlSave.missingFolders(productFilePayload, priceControlPayload)
+    if (missing.length > 0) {
+      setCheckOpen(false)
+      setSaveSettings({ open: true, missing })
+      return
+    }
+    const fileName = await xmlSave.save(payload, productFilePayload, priceControlPayload)
+    if (!fileName) return
+    setCheckOpen(false)
+    dispatch(setDataEntrySaved({ storeId: store.id, saved: { at: nowIso(), fileName, signature } }))
+  }
+  const checkAndSave = () => {
+    if (hasProblems) setCheckOpen(true)
+    else void runSave()
+  }
+  const onSaveClick = () => {
+    if (saved) setResaveOpen(true)
+    else checkAndSave()
   }
 
   const goTo = (row: DataEntryRow, key: 'ean' | 'name' | 'subfamily') => {
-    setXmlOpen(false)
+    setCheckOpen(false)
     // Fokus wraca do tabeli dopiero po zamknięciu okna.
     setTimeout(() => gridRef.current?.focusCell(row.id, key), 0)
   }
@@ -812,91 +895,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     <>
       <PageHeader
         title="Wprowadzanie danych"
-        description={
-          <>
-            {invoice ? documentLabel(invoice) : storeLabel(store)}
-            {supplier?.code && (
-              <>
-                {' · '}
-                <span className="font-medium text-foreground">nr dostawcy {supplier.code}</span>
-              </>
-            )}
-            {invoice && (invoice.supplier || invoice.sellerNip) && suppliers && !supplier?.code && (
-              <>
-                {' · '}
-                <span className="font-medium text-amber-700 dark:text-amber-400">
-                  {supplier ? 'dostawca bez numeru (dodany ręcznie)' : 'brak dostawcy na liście dostawców'}
-                </span>
-              </>
-            )}
-            {rows.length > 0 && (
-              <>
-                {' · '}
-                <Button variant="link" className="h-auto p-0 text-sm" onClick={() => setSupplierOpen(true)}>
-                  {invoice?.supplier || invoice?.sellerName || invoice?.sellerNip ? 'Zmień dostawcę' : 'Wybierz dostawcę'}
-                </Button>
-              </>
-            )}
-          </>
-        }
-        actions={
-          <>
-            {/* Z tabelą lista towarów jest w pasku nad nią (przykleja się przy przewijaniu). */}
-            {rows.length === 0 && (
-              <Button variant="outline" onClick={() => setCatalogOpen(true)}>
-                <PackageSearchIcon />
-                Lista towarów
-              </Button>
-            )}
-            <Button
-              variant={rows.length > 0 ? 'outline' : 'default'}
-              onClick={() => setPickerOpen(true)}
-              disabled={!canLoadInvoices}
-              title={canLoadInvoices ? undefined : 'Wczytanie faktury wymaga dostępu do faktur KSeF'}
-            >
-              <ReceiptTextIcon />
-              Wczytaj fakturę z KSeF
-            </Button>
-            <PriceFileStatus storeId={store.id} />
-            <Button variant="outline" onClick={() => setXmlOpenOpen(true)}>
-              <FileInputIcon />
-              Wczytaj z XML
-            </Button>
-            {rows.length > 0 && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={saveTemporary}
-                  loading={saveTemporaryXml.isPending}
-                  disabled={filled.length === 0}
-                  title="Zapisuje tabelę na serwerze bez pliku na dysku; wczytasz ją w „Wczytaj z XML” (10 ostatnich)"
-                >
-                  <FileClockIcon />
-                  Zapisz tymczasowo
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={savePriceChanges}
-                  loading={savingPrices}
-                  disabled={priceControlRows.length === 0}
-                  title={
-                    priceControlRows.length > 0
-                      ? `Zapisuje sam plik zmian cen CTRLPRIX (${priceControlRows.length} ${pieces(priceControlRows.length)}) w folderze plików PROTO, bez pliku XML`
-                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
-                  }
-                >
-                  <TagIcon />
-                  Zmień ceny
-                  {priceControlRows.length > 0 && ` (${priceControlRows.length})`}
-                </Button>
-                <Button onClick={() => setXmlOpen(true)} disabled={filled.length === 0}>
-                  <FileCodeIcon />
-                  Zapisz XML
-                </Button>
-              </>
-            )}
-          </>
-        }
+        description={invoice ? documentLabel(invoice) : storeLabel(store)}
       />
 
       <HowTo
@@ -908,9 +907,272 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           'Kliknij „Uzupełnij z AI”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów.',
           'Skanujesz ręcznie? Wpisz albo zeskanuj EAN i Enter: od razu powstaje kolejny wiersz na następny kod.',
           'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Żółte komórki wymagają wyboru.',
-          'Zapisz XML (przycisk u góry): plik trafia do folderu wybranego raz w przeglądarce. Niedokończoną tabelę zapisz tymczasowo i wczytaj później w „Wczytaj z XML”.',
+          'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później w „Wczytaj z XML”.',
         ]}
       />
+
+      <CommandBar onHeightChange={setToolbarHeight}>
+        {(invoice || rows.length > 0) && (
+          <SupplierNumber
+            code={supplier?.code ?? null}
+            name={supplier?.name ?? invoice?.supplier?.name ?? invoice?.sellerName ?? null}
+            problem={
+              supplier?.code || !suppliers
+                ? null
+                : supplier
+                  ? 'dostawca bez numeru (dodany ręcznie)'
+                  : invoice?.supplier || invoice?.sellerNip
+                    ? 'brak dostawcy na liście dostawców'
+                    : 'nie wybrano dostawcy'
+            }
+            changeLabel={
+              rows.length === 0
+                ? null
+                : invoice?.supplier || invoice?.sellerName || invoice?.sellerNip
+                  ? 'Zmień dostawcę'
+                  : 'Wybierz dostawcę'
+            }
+            onChange={() => setSupplierOpen(true)}
+          />
+        )}
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
+            <Button
+              variant={rows.length > 0 ? 'outline' : 'default'}
+              size="sm"
+              onClick={() => setPickerOpen(true)}
+              disabled={!canLoadInvoices}
+              title={canLoadInvoices ? undefined : 'Wczytanie faktury wymaga dostępu do faktur KSeF'}
+            >
+              <ReceiptTextIcon />
+              Wczytaj fakturę z KSeF
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setXmlOpenOpen(true)}>
+              <FileInputIcon />
+              Wczytaj z XML
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCatalogOpen(true)}>
+              <PackageSearchIcon />
+              Lista towarów
+            </Button>
+            <PriceFileStatus storeId={store.id} size="sm" />
+            {rows.length > 0 && (
+              <>
+                <ToolbarDivider />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={saveTemporary}
+                  loading={saveTemporaryXml.isPending}
+                  disabled={filled.length === 0}
+                  title="Zapisuje tabelę na serwerze bez pliku na dysku; wczytasz ją w „Wczytaj z XML” (10 ostatnich)"
+                >
+                  <FileClockIcon />
+                  Zapisz tymczasowo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={savePriceChanges}
+                  loading={savingPrices}
+                  disabled={priceControlRows.length === 0}
+                  title={
+                    priceControlRows.length > 0
+                      ? `Zapisuje samą zmianę cen (${priceControlRows.length} ${pieces(priceControlRows.length)}) w folderze zmiany cen, bez pliku XML`
+                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
+                  }
+                >
+                  <TagIcon />
+                  Zmień ceny
+                  {priceControlRows.length > 0 && ` (${priceControlRows.length})`}
+                </Button>
+              </>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {saved && savedState && <SavedStatus state={savedState} at={saved.at} fileName={saved.fileName} />}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSaveSettings({ open: true, missing: [] })}
+                aria-label="Ustawienia zapisu"
+                title="Ustawienia zapisu: foldery na plik XML, nowe artykuły, protokoły i zmianę cen"
+              >
+                <SettingsIcon />
+              </Button>
+              {rows.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={onSaveClick}
+                  loading={xmlSave.saving}
+                  disabled={filled.length === 0}
+                  title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
+                >
+                  <FileCodeIcon />
+                  Zapisz
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {rows.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Tabela">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => gridRef.current?.selectAll()}
+                aria-label="Zaznacz wszystkie"
+                title="Zaznacz wszystkie pozycje (Ctrl+A)"
+              >
+                <CheckCheckIcon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={flipQuantities}
+                disabled={signTargets.length === 0}
+                aria-label="Zmień znak ilości"
+                title={
+                  selectedArticles.length > 0
+                    ? `Zmień znak ilości w zaznaczonych artykułach (${signTargets.length}): + na −, − na +`
+                    : 'Zmień znak ilości we wszystkich artykułach (bez kaucji i dostawy): + na −, − na +'
+                }
+              >
+                <DiffIcon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => removeRows(selectedRows)}
+                disabled={selectedRows.length === 0}
+                aria-label="Usuń zaznaczone wiersze"
+                title={
+                  selectedRows.length > 0
+                    ? `Usuń zaznaczone wiersze (${selectedRows.length}) (Ctrl+−)`
+                    : 'Usuń wiersze: zaznacz je w tabeli (klik w numer wiersza, Shift + klik)'
+                }
+              >
+                <Trash2Icon />
+              </Button>
+              <ToolbarDivider />
+              {invoice?.id && (
+                <>
+                  <InvoiceFileActions storeId={store.id} invoiceId={invoice.id} />
+                  <ToolbarDivider />
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setProtocolOpen(true)}
+                disabled={protocolLines.length === 0}
+              >
+                <FileOutputIcon />
+                Wygeneruj protokół
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={applySuggestedPrices}
+                disabled={priceChanges.size === 0}
+                title={
+                  priceChanges.size > 0
+                    ? 'Wpisuje cenę sugerowaną jako cenę sprzedaży w zaznaczonych wierszach'
+                    : selectedArticles.length === 0
+                      ? 'Zaznacz wiersze w tabeli (Shift + klik, Ctrl+A)'
+                      : 'Zaznaczone wiersze mają już cenę sugerowaną albo nie da się jej policzyć'
+                }
+              >
+                <BadgePercentIcon />
+                Ustaw ceny sugerowane
+                {priceChanges.size > 0 && ` (${priceChanges.size})`}
+              </Button>
+              <ToolbarDivider />
+              <div className="flex items-center gap-1" role="group" aria-label="Ilość we wszystkich artykułach">
+                <span className="mr-1 text-sm text-muted-foreground">Ilość:</span>
+                {[0, 1].map((quantity) => (
+                  <Button
+                    key={quantity}
+                    variant="outline"
+                    size="sm"
+                    className="min-w-8 tabular-nums"
+                    onClick={() => setAllQuantities(quantity)}
+                    disabled={filled.length === 0}
+                    title={`Ustawia ilość ${quantity} we wszystkich artykułach (bez kaucji i dostawy)`}
+                  >
+                    {quantity}
+                  </Button>
+                ))}
+              </div>
+              {conflicts.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={averagePrices}
+                  title="Ten sam EAN jest na fakturze w różnych cenach: wpisuje w nich cenę średnią ważoną ilością"
+                >
+                  <ScaleIcon />
+                  Uśrednij ceny ({conflicts.length})
+                </Button>
+              )}
+              {duplicates.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={mergeDuplicates}
+                  title="Łączy wiersze z tym samym EAN-em w jeden: ilości zsumowane, cena średnia"
+                >
+                  <CombineIcon />
+                  Połącz te same ({duplicates.length})
+                </Button>
+              )}
+              {(agreed.length > 0 || canUseAi) && <ToolbarDivider />}
+              {agreed.length > 0 && (
+                <Button variant="outline" size="sm" onClick={confirmAgreed}>
+                  Zatwierdź zgodne ({agreed.length})
+                </Button>
+              )}
+              {canUseAi && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fillWithAi}
+                  loading={suggest.isPending}
+                  disabled={forAi.length === 0}
+                >
+                  <SparklesIcon />
+                  Uzupełnij z AI
+                  {forAi.length > 0 && ` (${forAi.length} ${forAi.length === 1 ? 'nowy' : 'nowych'})`}
+                </Button>
+              )}
+              <div className="ml-auto flex items-center gap-1" role="group" aria-label="Historia zmian">
+                <Button variant="ghost" size="sm" onClick={clearAll}>
+                  Wyczyść
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={history.undo}
+                  disabled={!history.canUndo}
+                  aria-label="Cofnij"
+                  title="Cofnij ostatnią zmianę (Ctrl+Z)"
+                >
+                  <Undo2Icon />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={history.redo}
+                  disabled={!history.canRedo}
+                  aria-label="Ponów"
+                  title="Ponów cofniętą zmianę (Ctrl+Y)"
+                >
+                  <Redo2Icon />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </CommandBar>
 
       {rows.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center">
@@ -936,174 +1198,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         </div>
       ) : (
         <>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-              <Stat label="Pozycje" value={filled.length} />
-              <Stat
-                label="Suma netto"
-                value={<ComparedSum value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />}
-              />
-              <Stat
-                label="VAT"
-                value={<ComparedSum value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />}
-              />
-              <Stat label="Nowe" value={newCount} />
-              {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
-              <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
-            </dl>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={clearAll}>
-                Wyczyść
-              </Button>
-              {agreed.length > 0 && (
-                <Button variant="outline" onClick={confirmAgreed}>
-                  Zatwierdź zgodne ({agreed.length})
-                </Button>
-              )}
-              {canUseAi && (
-                <Button onClick={fillWithAi} loading={suggest.isPending} disabled={forAi.length === 0}>
-                  <SparklesIcon />
-                  Uzupełnij z AI
-                  {forAi.length > 0 && ` (${forAi.length} ${forAi.length === 1 ? 'nowy' : 'nowych'})`}
-                </Button>
-              )}
-            </div>
-          </div>
+          <dl className="mb-2 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
+            <Stat label="Pozycje" value={filled.length} />
+            <Stat
+              label="Suma netto"
+              value={<ComparedSum value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />}
+            />
+            <Stat
+              label="VAT"
+              value={<ComparedSum value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />}
+            />
+            <Stat label="Nowe" value={newCount} />
+            {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
+            <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
+          </dl>
 
           <Legend />
-
-          <GridToolbar onHeightChange={setToolbarHeight}>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => gridRef.current?.selectAll()}
-              aria-label="Zaznacz wszystkie"
-              title="Zaznacz wszystkie pozycje (Ctrl+A)"
-            >
-              <CheckCheckIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={flipQuantities}
-              disabled={signTargets.length === 0}
-              aria-label="Zmień znak ilości"
-              title={
-                selectedArticles.length > 0
-                  ? `Zmień znak ilości w zaznaczonych artykułach (${signTargets.length}): + na −, − na +`
-                  : 'Zmień znak ilości we wszystkich artykułach (bez kaucji i dostawy): + na −, − na +'
-              }
-            >
-              <DiffIcon />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => removeRows(selectedRows)}
-              disabled={selectedRows.length === 0}
-              aria-label="Usuń zaznaczone wiersze"
-              title={
-                selectedRows.length > 0
-                  ? `Usuń zaznaczone wiersze (${selectedRows.length}) (Ctrl+−)`
-                  : 'Usuń wiersze: zaznacz je w tabeli (klik w numer wiersza, Shift + klik)'
-              }
-            >
-              <Trash2Icon />
-            </Button>
-            <ToolbarDivider />
-            {invoice?.id && (
-              <>
-                <InvoiceFileActions storeId={store.id} invoiceId={invoice.id} />
-                <ToolbarDivider />
-              </>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setCatalogOpen(true)}>
-              <PackageSearchIcon />
-              Lista towarów
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setProtocolOpen(true)} disabled={protocolLines.length === 0}>
-              <FileOutputIcon />
-              Wygeneruj protokół
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={applySuggestedPrices}
-              disabled={priceChanges.size === 0}
-              title={
-                priceChanges.size > 0
-                  ? 'Wpisuje cenę sugerowaną jako cenę sprzedaży w zaznaczonych wierszach'
-                  : selectedArticles.length === 0
-                    ? 'Zaznacz wiersze w tabeli (Shift + klik, Ctrl+A)'
-                    : 'Zaznaczone wiersze mają już cenę sugerowaną albo nie da się jej policzyć'
-              }
-            >
-              <BadgePercentIcon />
-              Ustaw ceny sugerowane
-              {priceChanges.size > 0 && ` (${priceChanges.size})`}
-            </Button>
-            <ToolbarDivider />
-            <div className="flex items-center gap-1" role="group" aria-label="Ilość we wszystkich artykułach">
-              <span className="mr-1 text-sm text-muted-foreground">Ilość:</span>
-              {[0, 1].map((quantity) => (
-                <Button
-                  key={quantity}
-                  variant="outline"
-                  size="sm"
-                  className="min-w-8 tabular-nums"
-                  onClick={() => setAllQuantities(quantity)}
-                  disabled={filled.length === 0}
-                  title={`Ustawia ilość ${quantity} we wszystkich artykułach (bez kaucji i dostawy)`}
-                >
-                  {quantity}
-                </Button>
-              ))}
-            </div>
-            {conflicts.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={averagePrices}
-                title="Ten sam EAN jest na fakturze w różnych cenach: wpisuje w nich cenę średnią ważoną ilością"
-              >
-                <ScaleIcon />
-                Uśrednij ceny ({conflicts.length})
-              </Button>
-            )}
-            {duplicates.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={mergeDuplicates}
-                title="Łączy wiersze z tym samym EAN-em w jeden: ilości zsumowane, cena średnia"
-              >
-                <CombineIcon />
-                Połącz te same ({duplicates.length})
-              </Button>
-            )}
-            <div className="ml-auto flex items-center gap-1" role="group" aria-label="Historia zmian">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={history.undo}
-                disabled={!history.canUndo}
-                aria-label="Cofnij"
-                title="Cofnij ostatnią zmianę (Ctrl+Z)"
-              >
-                <Undo2Icon />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={history.redo}
-                disabled={!history.canRedo}
-                aria-label="Ponów"
-                title="Ponów cofniętą zmianę (Ctrl+Y)"
-              >
-                <Redo2Icon />
-              </Button>
-            </div>
-          </GridToolbar>
 
           <DataEntryGrid
             ref={gridRef}
@@ -1213,18 +1323,49 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       </AlertDialog>
 
       <XmlSaveDialog
-        storeId={store.id}
-        payload={xmlPayload}
-        productFile={productFilePayload}
-        priceControl={priceControlPayload}
+        count={filled.length}
         problems={xmlProblems}
         totals={totals}
         priceConflicts={conflicts}
         onMergeDuplicates={mergeDuplicates}
-        open={xmlOpen}
-        onOpenChange={setXmlOpen}
+        open={checkOpen}
+        onOpenChange={setCheckOpen}
         onGoTo={goTo}
+        onSave={() => void runSave()}
+        saving={xmlSave.saving}
       />
+
+      <SaveSettingsDialog
+        storeId={store.id}
+        open={saveSettings.open}
+        onOpenChange={(open) => setSaveSettings((current) => ({ ...current, open }))}
+        missing={saveSettings.missing}
+      />
+
+      <AlertDialog open={resaveOpen} onOpenChange={setResaveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dokument jest już zapisany</AlertDialogTitle>
+            <AlertDialogDescription>
+              {saved
+                ? `Plik ${saved.fileName} zapisano ${formatSavedAt(saved.at)}${savedState === 'changed' ? ', a tabela zmieniła się od tego czasu' : ''}. `
+                : ''}
+              Czy na pewno chcesz zapisać go ponownie? Plik o tej samej nazwie zostanie nadpisany.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setResaveOpen(false)
+                checkAndSave()
+              }}
+            >
+              Zapisz ponownie
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <SupplierChangeDialog
         storeId={store.id}
@@ -1238,6 +1379,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 }
 
 const NO_FILTER: string[] = []
+
+/** Chwila zapisu pliku (poza komponentem: woła ją tylko obsługa kliknięcia). */
+const nowIso = () => new Date().toISOString()
 
 /** Tabela z zapisu tymczasowego; zepsuty albo obcy JSON = null (wtedy wczytuje się sam plik XML). */
 function parseDraft(json: string | null): DataEntryDraft | null {
@@ -1263,10 +1407,11 @@ function documentLabel(invoice: NonNullable<DataEntryDraft['invoice']>) {
 }
 
 /**
- * Pasek nad tabelą z podstawowymi działaniami (zaznaczone wiersze i cała tabela). Przykleja się pod nagłówkiem
- * aplikacji, więc przy przewijaniu długiej tabeli nie trzeba wracać na górę; pod nim klei się nagłówek kolumn.
+ * Przypięty pasek ze wszystkimi działaniami: numer dostawcy, dokument (wczytanie, zapis) i tabela (zaznaczone wiersze,
+ * cała tabela). Przykleja się pod nagłówkiem aplikacji, więc przy przewijaniu długiej tabeli nie trzeba wracać na
+ * górę; pod nim klei się nagłówek kolumn.
  */
-function GridToolbar({
+function CommandBar({
   onHeightChange,
   children,
 }: {
@@ -1285,11 +1430,81 @@ function GridToolbar({
     <div
       ref={ref}
       data-keep-grid-selection
-      className="sticky top-14 z-[15] mb-2 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border bg-muted px-2 py-1 shadow-xs"
+      className="sticky top-14 z-[15] mb-3 flex shrink-0 items-stretch gap-3 rounded-lg border bg-muted p-1.5 shadow-xs"
     >
       {children}
     </div>
   )
+}
+
+/**
+ * Numer dostawcy dokumentu w dużym kwadracie (trafia do pliku XML i do programu sklepu), pod nim nazwa i zmiana
+ * dostawcy. Bez numeru bursztynowy z powodem.
+ */
+function SupplierNumber({
+  code,
+  name,
+  problem,
+  changeLabel,
+  onChange,
+}: {
+  code: string | null
+  name: string | null
+  problem: string | null
+  changeLabel: string | null
+  onChange: () => void
+}) {
+  return (
+    <div
+      className={cn(
+        'flex w-36 shrink-0 flex-col items-center justify-center rounded-md border-2 px-2 py-1.5 text-center',
+        code
+          ? 'border-foreground/20 bg-card'
+          : 'border-amber-400 bg-amber-200 text-amber-950 dark:border-amber-600 dark:bg-amber-900 dark:text-amber-50',
+      )}
+      title={name ?? undefined}
+    >
+      <span className={cn('text-xs', code ? 'text-muted-foreground' : 'font-medium')}>Nr dostawcy</span>
+      {code ? (
+        <span className="text-4xl leading-tight font-bold tracking-tight tabular-nums">{code}</span>
+      ) : (
+        <span className="my-1 text-sm leading-tight font-semibold">{problem ?? 'Sprawdzanie…'}</span>
+      )}
+      {name && <span className="w-full truncate text-xs">{name}</span>}
+      {changeLabel && (
+        <Button variant="link" className="h-auto p-0 text-xs" onClick={onChange}>
+          {changeLabel}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/** Informacja o zapisie pliku XML: zielona, gdy tabela jest taka jak przy zapisie, bursztynowa po zmianach. */
+function SavedStatus({ state, at, fileName }: { state: 'saved' | 'changed'; at: string; fileName: string }) {
+  return (
+    <span
+      className={cn(
+        'flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium',
+        state === 'saved'
+          ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50'
+          : 'bg-amber-200 text-amber-950 dark:bg-amber-900 dark:text-amber-50',
+      )}
+      title={fileName}
+    >
+      <CircleCheckIcon aria-hidden className="size-4" />
+      {state === 'saved' ? `Dokument zapisany ${formatSavedAt(at)}` : `Zapisany ${formatSavedAt(at)} · zmiany po zapisie`}
+    </span>
+  )
+}
+
+/** Godzina zapisu, a z innego dnia data i godzina. */
+function formatSavedAt(iso: string) {
+  const date = new Date(iso)
+  const time = date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+  return date.toDateString() === new Date().toDateString()
+    ? `o ${time}`
+    : `${date.toLocaleDateString('pl-PL')} o ${time}`
 }
 
 function ToolbarDivider() {

@@ -13,7 +13,7 @@ import {
   UserXIcon,
   XIcon,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { SearchInput } from '@/components/SearchInput'
@@ -78,8 +78,9 @@ export function InvoicePickerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-4 p-6 sm:max-w-4xl">
-        {/* Kroki montowane tylko na czas otwarcia: każde otwarcie zaczyna od listy faktur. */}
-        {open && <Steps storeId={storeId} onConfirm={onConfirm} />}
+        {/* Okno odmontowuje treść dopiero po animacji zamknięcia, więc każde otwarcie zaczyna od listy faktur, a przy
+            zamykaniu treść nie znika przed oknem (zostawało puste okno). */}
+        <Steps storeId={storeId} onConfirm={onConfirm} />
       </DialogContent>
     </Dialog>
   )
@@ -87,10 +88,14 @@ export function InvoicePickerDialog({
 
 function Steps({ storeId, onConfirm }: { storeId: string; onConfirm: (invoice: DataEntryInvoice) => void }) {
   const [picked, setPicked] = useState<KsefInvoice | null>(null)
-  return picked ? (
-    <SourceStep storeId={storeId} invoice={picked} onBack={() => setPicked(null)} onConfirm={onConfirm} />
-  ) : (
-    <ListStep storeId={storeId} onPick={setPicked} />
+  // Lista zostaje zamontowana pod drugim krokiem: „Wstecz” wraca do tego samego wyszukiwania, zaznaczenia i miejsca.
+  return (
+    <>
+      <div hidden={picked !== null} className={cn(picked === null && 'contents')}>
+        <ListStep storeId={storeId} visible={picked === null} onPick={setPicked} />
+      </div>
+      {picked && <SourceStep storeId={storeId} invoice={picked} onBack={() => setPicked(null)} onConfirm={onConfirm} />}
+    </>
   )
 }
 
@@ -179,7 +184,15 @@ function Segmented<T extends string>({
   )
 }
 
-function ListStep({ storeId, onPick }: { storeId: string; onPick: (invoice: KsefInvoice) => void }) {
+function ListStep({
+  storeId,
+  visible,
+  onPick: pick,
+}: {
+  storeId: string
+  visible: boolean
+  onPick: (invoice: KsefInvoice) => void
+}) {
   const [query, setQuery] = useState('')
   const debounced = useDebouncedValue(query.trim(), 300)
   const [filters, setFilters] = useState<InvoicePickerFilters>(storedFilters)
@@ -202,6 +215,17 @@ function ListStep({ storeId, onPick }: { storeId: string; onPick: (invoice: Ksef
   const matching = invoices.data?.pages[0]?.matchingCount ?? 0
   // Lista przewija się we własnym obszarze okna: doczytywanie liczy zapas do jego dołu.
   const listRef = useRef<HTMLDivElement>(null)
+  // Schowana lista (drugi krok) może zgubić przewinięcie, więc po powrocie wraca do zapamiętanego miejsca.
+  const savedScroll = useRef(0)
+  const onPick = (invoice: KsefInvoice) => {
+    savedScroll.current = listRef.current?.scrollTop ?? 0
+    pick(invoice)
+  }
+  useLayoutEffect(() => {
+    if (visible && listRef.current) {
+      listRef.current.scrollTop = savedScroll.current
+    }
+  }, [visible])
   const loadMoreRef = useLoadMore<HTMLLIElement>(
     () => invoices.fetchNextPage(),
     Boolean(invoices.hasNextPage) && !invoices.isFetchingNextPage,
@@ -375,47 +399,55 @@ function ListStep({ storeId, onPick }: { storeId: string; onPick: (invoice: Ksef
         </div>
       </div>
 
-      {list.length > 0 && (
-        <div className="-mb-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1.5 px-1">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              ref={allBox}
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={current.all && current.excluded.size === 0}
-              onChange={toggleAll}
-            />
-            Zaznacz wszystkie wyfiltrowane ({matching})
-          </label>
-          {selectedCount > 0 && (
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-sm text-muted-foreground tabular-nums">Zaznaczone: {selectedCount}</span>
-              <Button size="sm" variant="outline" onClick={() => runBulk('NOT_MINE')} loading={bulk.run.isPending}>
-                <EyeOffIcon />
-                Nie moje
+      {/* Przy pustej liście pasek jest tylko niewidoczny, żeby okno nie skakało przy filtrowaniu. */}
+      <div
+        aria-hidden={list.length === 0 || undefined}
+        className={cn(
+          '-mb-2 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1.5 px-1',
+          list.length === 0 && 'invisible',
+        )}
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            ref={allBox}
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={current.all && current.excluded.size === 0}
+            onChange={toggleAll}
+          />
+          Zaznacz wszystkie wyfiltrowane ({matching})
+        </label>
+        {selectedCount > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-sm text-muted-foreground tabular-nums">Zaznaczone: {selectedCount}</span>
+            <Button size="sm" variant="outline" onClick={() => runBulk('NOT_MINE')} loading={bulk.run.isPending}>
+              <EyeOffIcon />
+              Nie moje
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => runBulk('LOADED')} loading={bulk.run.isPending}>
+              <ArchiveIcon />
+              Oznacz jako wczytane
+            </Button>
+            {filters.status !== 'NEW' && (
+              <Button size="sm" variant="outline" onClick={() => runBulk('RESTORE')} loading={bulk.run.isPending}>
+                <Undo2Icon />
+                Przywróć do wczytania
               </Button>
-              <Button size="sm" variant="outline" onClick={() => runBulk('LOADED')} loading={bulk.run.isPending}>
-                <ArchiveIcon />
-                Oznacz jako wczytane
-              </Button>
-              {filters.status !== 'NEW' && (
-                <Button size="sm" variant="outline" onClick={() => runBulk('RESTORE')} loading={bulk.run.isPending}>
-                  <Undo2Icon />
-                  Przywróć do wczytania
-                </Button>
-              )}
-              <Button size="icon-sm" variant="ghost" onClick={clearSelection} aria-label="Odznacz wszystkie">
-                <XIcon />
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+            <Button size="icon-sm" variant="ghost" onClick={clearSelection} aria-label="Odznacz wszystkie">
+              <XIcon />
+            </Button>
+          </div>
+        )}
+      </div>
 
+      {/* W trakcie wczytywania wyników nowych filtrów stara lista jest tylko podglądem: klik trafiłby w inną fakturę. */}
       <div
         ref={listRef}
+        inert={invoices.isPlaceholderData}
+        aria-busy={invoices.isPlaceholderData}
         className={cn(
-          'max-h-[55svh] min-h-32 overflow-y-auto rounded-xl border transition-opacity duration-150',
+          'h-[55svh] min-h-32 overflow-y-auto rounded-xl border transition-opacity duration-150',
           invoices.isPlaceholderData && 'opacity-60',
         )}
       >

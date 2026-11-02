@@ -3,6 +3,7 @@ import {
   FilePenLineIcon,
   FileTextIcon,
   GiftIcon,
+  HandHeartIcon,
   PackageCheckIcon,
   PackageXIcon,
   StoreIcon,
@@ -23,6 +24,7 @@ export const DOCUMENT_ICONS: Partial<Record<string, LucideIcon>> = {
   MM: TruckIcon,
   RWPO: StoreIcon,
   RWREP: GiftIcon,
+  RWDA: HandHeartIcon,
 }
 
 export const FALLBACK_ICON = FileTextIcon

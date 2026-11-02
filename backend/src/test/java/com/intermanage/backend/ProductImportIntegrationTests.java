@@ -353,6 +353,51 @@ class ProductImportIntegrationTests {
     }
 
     @Test
+    void priceChangesFromTillAndReportAreKeptAsArticleHistory() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        LocalDateTime reportDate = nextReportDate();
+        upload(owner, report(reportDate, product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        uploadPriceFiles(owner, priceFile(reportDate.plusMinutes(10),
+                priceLine(a, "59" + a.substring(2), "7.99", "9.49", "10126", "311230")))
+                .andExpect(jsonPath("$.imported[0].updatedCount").value(1));
+        upload(owner, report(nextReportDate(), product(a, "8.79", "1", "A"))).andExpect(status().isCreated());
+
+        mvc.perform(get("/api/stores/" + storeId + "/products").param("query", a).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].itm8").value(a))
+                .andExpect(jsonPath("$.items[0].salePrice").value(8.79))
+                .andExpect(jsonPath("$.items[0].promoPrice").value(7.99));
+        // Filtry: artykułu nie ma na liście cadencier, a stan ujemny go wyklucza (raport testowy ma stan dodatni).
+        mvc.perform(get("/api/stores/" + storeId + "/products").param("query", a).param("cadencier", "WITHOUT")
+                        .param("stock", "POSITIVE").param("sort", "stock").param("direction", "desc").cookie(owner))
+                .andExpect(jsonPath("$.total").value(1));
+        mvc.perform(get("/api/stores/" + storeId + "/products").param("query", a).param("cadencier", "WITH")
+                        .cookie(owner))
+                .andExpect(jsonPath("$.total").value(0));
+        mvc.perform(get("/api/stores/" + storeId + "/products").param("query", a).param("stock", "NEGATIVE")
+                        .param("nomenclatures", "99").param("rotationFrom", "0").cookie(owner))
+                .andExpect(jsonPath("$.total").value(0));
+
+        mvc.perform(get("/api/stores/" + storeId + "/products/" + a + "/prices").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes.length()").value(2))
+                .andExpect(jsonPath("$.changes[0].source").value("REPORT"))
+                .andExpect(jsonPath("$.changes[0].previousSalePrice").value(9.49))
+                .andExpect(jsonPath("$.changes[0].salePrice").value(8.79))
+                .andExpect(jsonPath("$.changes[1].source").value("TILL"))
+                .andExpect(jsonPath("$.changes[1].previousSalePrice").value(8.99))
+                .andExpect(jsonPath("$.changes[1].salePrice").value(9.49))
+                .andExpect(jsonPath("$.changes[1].promoPrice").value(7.99))
+                .andExpect(jsonPath("$.changes[1].promoTo").value("2030-12-31"))
+                .andExpect(jsonPath("$.promotions.length()").value(0));
+
+        mvc.perform(get("/api/stores/" + storeId + "/products/9999999999999/prices").cookie(owner))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void notAPriceFileIsRejected() throws Exception {
         uploadPriceFiles(login(), new MockMultipartFile("files", "PROTO6_20261102.Traite0", "application/octet-stream",
                 new byte[] {1}))

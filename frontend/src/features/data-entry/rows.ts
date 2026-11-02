@@ -474,16 +474,12 @@ export function normalizeBrand(text: string) {
 
 // ---------- marża
 
-const KG_UNITS = new Set(['kg', 'kg.', 'kilogram'])
-
 /**
- * Cena zakupu netto sprzedawanej sztuki. Przy kg na fakturze razy waga sztuki sprzedawanej w kg; każda inna jednostka
- * (szt., op., pak, karton) to cena za jedną sztukę z kolumny Ilość, więc opakowanie zbiorcze rozbija się podziałem ilości.
+ * Cena zakupu netto sprzedawanej sztuki: cena za jedną sztukę z kolumny Ilość bez względu na jednostkę na fakturze
+ * (szt., op., pak, karton, kg), więc opakowanie zbiorcze rozbija się podziałem ilości. Waga (miara) nie zmienia ceny
+ * zakupu, marży ani ceny sugerowanej.
  */
 export function purchasePerPiece(row: DataEntryRow) {
-  if (row.unitNet === null) return null
-  const unit = (row.invoiceUnit ?? '').trim().toLowerCase()
-  if (KG_UNITS.has(unit) && row.unit === 'kg') return row.unitNet * row.netContent
   return row.unitNet
 }
 
@@ -499,11 +495,32 @@ export function marginPercent(row: DataEntryRow) {
 
 /**
  * Ustawienia cen sugerowanych: kod nomenklatury -> marża wymagana, która na nim obowiązuje (serwer liczy ją już
- * z rodziny i rejonu), i przedziały zaokrąglania.
+ * z rodziny i rejonu), przedziały zaokrąglania i stała cena sprzedaży dostawcy dokumentu (Ustawienia sklepu).
  */
 export type Pricing = {
   required: Map<string, number>
   rounding: PriceRoundingRule[]
+  supplierPrice: number | null
+}
+
+/** Stała cena dostawcy dokumentu dla artykułu (nowego i z kartoteki; bez kaucji i dostawy). */
+export function supplierPriceOf(row: DataEntryRow, pricing: Pricing) {
+  return pricing.supplierPrice !== null && serviceKind(row) === null ? pricing.supplierPrice : null
+}
+
+/**
+ * Artykuły (bez kaucji, dostawy i pustych wierszy) ze stałą ceną dostawcy jako ceną sprzedaży. Te same wiersze,
+ * gdy nic się nie zmienia.
+ */
+export function withSupplierPrice(rows: DataEntryRow[], price: number | null) {
+  if (price === null) return rows
+  let changed = false
+  const next = rows.map((row) => {
+    if ((row.ean === '' && row.name === '') || serviceKind(row) !== null || row.salePrice === price) return row
+    changed = true
+    return { ...row, salePrice: price }
+  })
+  return changed ? next : rows
 }
 
 /** Marża wymagana na nomenklaturze wiersza: podrodzina albo wybrany dopiero rejon / rodzina. */
@@ -526,11 +543,13 @@ export function roundPrice(price: number, rules: PriceRoundingRule[]) {
 }
 
 /**
- * Cena sugerowana: artykuł z CENA_CAD ma ją bez liczenia. Inaczej cena brutto, przy której artykuł osiąga marżę
+ * Cena sugerowana: stała cena dostawcy dokumentu, jeśli ją ma; artykuł z CENA_CAD ma ją bez liczenia. Inaczej cena brutto, przy której artykuł osiąga marżę
  * wymaganą (% od sprzedaży netto), w górę do grosza, potem do końcówki z przedziałów zaokrąglania; ten sam wzór
  * w eksporcie ({@code DataEntryService.suggestedPrice}).
  */
 export function suggestedPrice(row: DataEntryRow, pricing: Pricing) {
+  const fixed = supplierPriceOf(row, pricing)
+  if (fixed !== null) return fixed
   const cadencier = cadencierPrice(row)
   if (cadencier !== null) return cadencier
   const required = requiredMargin(row, pricing)

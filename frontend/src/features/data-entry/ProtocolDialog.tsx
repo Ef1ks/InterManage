@@ -45,11 +45,11 @@ export function ProtocolDialog({ storeId, lines, skipped, open, onOpenChange }: 
       const fallbackName = `PROTO${number}.Traite0`
       if (!folderReady) {
         await downloadPostedFile(path, { lines }, fallbackName)
-        toast.success(`Pobrano plik PROTO${number}`, { description: 'Folder plików PROTO nie jest wybrany w tej przeglądarce.' })
+        toast.success('Pobrano protokół', { description: 'Folder protokołów nie jest wybrany w tej przeglądarce.' })
       } else {
         const { fileName, blob } = await fetchPostedFile(path, { lines }, fallbackName)
         await saveToFolder(folder.key, fileName, blob)
-        toast.success(`Zapisano ${fileName}`)
+        toast.success('Zapisano protokół', { description: fileName })
       }
       onOpenChange(false)
     } catch (error) {
@@ -79,7 +79,7 @@ export function ProtocolDialog({ storeId, lines, skipped, open, onOpenChange }: 
                 key={protocol.kind}
                 variant="outline"
                 size="xl"
-                className="h-auto justify-between gap-3 py-3"
+                className="h-auto justify-start gap-3 py-3"
                 loading={pending === protocol.kind}
                 disabled={pending !== null || lines.length === 0}
                 onClick={() => generate(protocol.kind, protocol.number)}
@@ -88,7 +88,6 @@ export function ProtocolDialog({ storeId, lines, skipped, open, onOpenChange }: 
                   <FileOutputIcon aria-hidden />
                   {protocol.label}
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">PROTO{protocol.number}</span>
               </Button>
             ))}
           </div>

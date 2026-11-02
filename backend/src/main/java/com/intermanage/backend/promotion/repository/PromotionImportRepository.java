@@ -90,4 +90,39 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
     @Query(value = "select count(*) from promotions p where p.store_id = :storeId and p.end_date >= :today",
             nativeQuery = true)
     long countActive(UUID storeId, LocalDate today);
+
+    interface ArticlePromotion {
+        LocalDate getStartDate();
+
+        LocalDate getEndDate();
+
+        BigDecimal getCatalogPurchasePrice();
+
+        BigDecimal getRegularSalePrice();
+
+        BigDecimal getPromoPrice();
+
+        BigDecimal getMarginPercent();
+
+        boolean getCancelled();
+    }
+
+    /**
+     * Promocje artykułu z listy promocji, od najpóźniej kończącej się. {@code cancelled}: promocji zabrakło
+     * w nowszym raporcie, którego zakres dat końca ją obejmuje (odwołana).
+     */
+    @Query(value = """
+            select p.start_date as startDate, p.end_date as endDate,
+                   p.catalog_purchase_price as catalogPurchasePrice, p.regular_sale_price as regularSalePrice,
+                   p.promo_price as promoPrice, p.margin_percent as marginPercent,
+                   exists (select 1 from promotion_imports n
+                           join promotion_imports l on l.id = p.last_import_id
+                           where n.store_id = p.store_id and n.imported_at > l.imported_at
+                             and n.end_from <= p.end_date and p.end_date <= n.end_to) as cancelled
+            from promotions p
+            where p.store_id = :storeId and p.itm8 = :itm8
+            order by p.end_date desc, p.start_date desc
+            limit 200
+            """, nativeQuery = true)
+    List<ArticlePromotion> findByArticle(UUID storeId, String itm8);
 }

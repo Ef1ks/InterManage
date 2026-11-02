@@ -8,6 +8,7 @@ import {
   PercentIcon,
   ScaleIcon,
   StoreIcon,
+  TagIcon,
   TargetIcon,
 } from 'lucide-react'
 import { Link, Navigate, Route, Routes } from 'react-router'
@@ -24,7 +25,12 @@ import { Card } from '@/components/ui/card'
 import { useCan } from '@/features/auth/api'
 import { countFormat } from '@/features/documents/format'
 import { useCadencier, usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
-import { useNomenclatureMargins, useStorePartnerActions, useStorePartners } from '@/features/store-settings/api'
+import {
+  useNomenclatureMargins,
+  useStorePartnerActions,
+  useStorePartners,
+  useSupplierSalePrices,
+} from '@/features/store-settings/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { CadencierUpload } from '@/features/store-settings/CadencierUpload'
 import { NomenclatureMargins } from '@/features/store-settings/NomenclatureMargins'
@@ -33,6 +39,7 @@ import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCatego
 import { PriceCheckSettingsForm } from '@/features/store-settings/PriceCheckSettingsForm'
 import { ProtoSettingsForm } from '@/features/store-settings/ProtoSettingsForm'
 import { RegionBudgets } from '@/features/store-settings/RegionBudgets'
+import { SupplierSalePrices } from '@/features/store-settings/SupplierSalePrices'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { PROTOCOLS, useProtoSettings } from '@/lib/proto-files'
@@ -55,6 +62,7 @@ export function StoreSettingsPage() {
   const canEditSales = useCan('SALES', 'EDIT')
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
   const canEditProto = useCanEditProtoFiles()
+  const canEditDataEntry = useCan('DATA_ENTRY', 'EDIT')
   if (!store) {
     return (
       <>
@@ -84,6 +92,7 @@ export function StoreSettingsPage() {
               canEditSales={canEditSales}
               canEditDocuments={canEditDocuments}
               canEditProto={canEditProto}
+              canEditDataEntry={canEditDataEntry}
             />
           }
         />
@@ -134,6 +143,30 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        {canEditDataEntry && (
+          <Route
+            path="ceny-dostawcow"
+            element={
+              <section aria-labelledby="supplier-prices-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="supplier-prices-heading" className="text-lg font-semibold tracking-tight">
+                    Stałe ceny dostawców
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Dostawcy, których wszystkie artykuły sprzedajecie za jedną cenę. We wprowadzaniu danych ta cena
+                    jest ceną sugerowaną każdego artykułu z dokumentu dostawcy (nowego i z kartoteki) i wpisuje się
+                    sama jako cena sprzedaży przy wczytaniu faktury i zmianie dostawcy. Zmieniona cena artykułu
+                    z kartoteki trafia przy zapisie do zmiany cen.
+                  </p>
+                </div>
+                <div className="max-w-2xl">
+                  <SupplierSalePrices key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         {canEditSales && (
           <Route
             path="weryfikacja-cen"
@@ -178,11 +211,11 @@ export function StoreSettingsPage() {
                 <BackToSettings />
                 <div>
                   <h2 id="proto-heading" className="text-lg font-semibold tracking-tight">
-                    Pliki PROTO
+                    Protokoły i zmiana cen
                   </h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Pliki, które program sklepu sam wczytuje z folderu: PROTO6 z zamówień garmażu i przyjęć MM oraz
-                    protokoły PROTO1–PROTO6 z wprowadzania danych. Protokoły, z których sklep nie korzysta, można ukryć.
+                    Pliki, które program sklepu sam wczytuje z folderu: zamówienia garmażu, przyjęcia MM oraz protokoły
+                    i zmiany cen z wprowadzania danych. Protokoły, z których sklep nie korzysta, można ukryć.
                   </p>
                 </div>
                 <div className="max-w-2xl">
@@ -220,11 +253,13 @@ function SettingsGrid({
   canEditSales,
   canEditDocuments,
   canEditProto,
+  canEditDataEntry,
 }: {
   storeId: string
   canEditSales: boolean
   canEditDocuments: boolean
   canEditProto: boolean
+  canEditDataEntry: boolean
 }) {
   const budgets = useRegionBudgets(storeId, canEditSales)
   const priceCheck = usePriceCheckSettings(storeId, canEditSales)
@@ -232,6 +267,7 @@ function SettingsGrid({
   const margins = useNomenclatureMargins(storeId, canEditSales)
   const partners = useStorePartners(storeId, canEditDocuments)
   const proto = useProtoSettings(storeId, canEditProto)
+  const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
   const budgeted = budgets.data?.filter((budget) => budget.marginPercent != null || budget.maxLossPercent != null).length
   const withMargin = margins.data?.filter((item) => item.marginPercent != null).length
@@ -270,6 +306,21 @@ function SettingsGrid({
           }
         />
       )}
+      {canEditDataEntry && (
+        <SettingsTile
+          to={paths.supplierPrices}
+          icon={TagIcon}
+          title="Stałe ceny dostawców"
+          description="Jedna cena sprzedaży dla wszystkich artykułów dostawcy, wpisywana sama we wprowadzaniu danych."
+          status={
+            supplierPrices.data
+              ? supplierPrices.data.length
+                ? `Ustawiona u ${countFormat.format(supplierPrices.data.length)} ${supplierPrices.data.length === 1 ? 'dostawcy' : 'dostawców'}`
+                : 'Żaden dostawca nie ma stałej ceny'
+              : ' '
+          }
+        />
+      )}
       {canEditSales && (
         <SettingsTile
           to={paths.priceCheck}
@@ -304,8 +355,8 @@ function SettingsGrid({
         <SettingsTile
           to={paths.protoFiles}
           icon={FileOutputIcon}
-          title="Pliki PROTO"
-          description="Folder plików dla programu sklepu i protokoły dostępne we wprowadzaniu danych."
+          title="Protokoły i zmiana cen"
+          description="Folder, z którego program sklepu wczytuje protokoły i zmiany cen, oraz protokoły dostępne we wprowadzaniu danych."
           status={proto.data ? `${proto.data.folderPath} · protokoły: ${visibleProtocols} z ${PROTOCOLS.length}` : ' '}
         />
       )}

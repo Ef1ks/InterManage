@@ -31,10 +31,14 @@ import com.lowagie.text.pdf.PdfWriter;
 /**
  * Wydruki kart produkcji (A4 pionowo):
  * <ul>
- * <li>karta produkcji z czasem schładzania CCP1 w układzie dawnego arkusza: pieczątka, tytuł, data, tabela
- * 11 kolumn po {@link #CARD_ROWS} wierszy na stronie (puste wiersze do końca strony) i stopka dokumentu GMP z podpisem;
- * każda strona ma pełny nagłówek i stopkę, jak kolejne arkusze "nr 2" w pliku Google;</li>
- * <li>formularz do uzupełnienia: artykuły bazy alfabetycznie w dwóch tabelach obok siebie (nazwa, puste pole na
+ * <li>karta produkcji z czasem schładzania CCP1 w układzie dawnego arkusza:
+ * pieczątka, tytuł, data, tabela
+ * 11 kolumn po {@link #CARD_ROWS} wierszy na stronie (puste wiersze do końca
+ * strony) i stopka dokumentu GMP z podpisem;
+ * każda strona ma pełny nagłówek i stopkę, jak kolejne arkusze "nr 2" w pliku
+ * Google;</li>
+ * <li>formularz do uzupełnienia: artykuły bazy alfabetycznie w dwóch tabelach
+ * obok siebie (nazwa, puste pole na
  * ilość, kod kreskowy do zeskanowania).</li>
  * </ul>
  */
@@ -55,20 +59,23 @@ public class ProductionPdf {
     private static final Color BAND = new Color(244, 244, 245);
 
     private static final String[] CARD_HEADERS = {
-        "Asortyment",
-        "Godzina\nrozpoczęcia\nprocesu",
-        "Godzina\nzakończenia\nprocesu",
-        "Temperatura\nw czasie\nprocesu",
-        "Temperatura\nwewnętrzna\npo wypieku",
-        "Ilość",
-        "Godzina\nprzekazania\ndo schłodzenia/\ngodzina\nprzekazania\ndo lady",
-        "Czas\nschładzania",
-        "Temperatura\nschładzania",
-        "Ważność",
-        "Niezgodności\ndziałania\nkorygujące",
+            "Asortyment",
+            "Godzina\nrozpoczęcia\nprocesu",
+            "Godzina\nzakończenia\nprocesu",
+            "Temperatura\nw czasie\nprocesu",
+            "Temperatura\nwewnętrzna\npo wypieku",
+            "Ilość",
+            "Godzina\nprzekazania\ndo schłodzenia/\ngodzina\nprzekazania\ndo lady",
+            "Czas\nschładzania",
+            "Temperatura\nschładzania",
+            "Ważność",
+            "Niezgodności\ndziałania\nkorygujące",
     };
-    /** Wąskie kolumny mieszczą najdłuższe słowo nagłówka ("Niezgodności") bez dzielenia, nazwa bierze resztę. */
-    private static final float[] CARD_WIDTHS = {110, 40, 43, 46, 46, 28, 42, 40, 46, 50, 48};
+    /**
+     * Wąskie kolumny mieszczą najdłuższe słowo nagłówka ("Niezgodności") bez
+     * dzielenia, nazwa bierze resztę.
+     */
+    private static final float[] CARD_WIDTHS = { 110, 40, 43, 46, 46, 28, 42, 40, 46, 50, 48 };
 
     private final BaseFont regular;
     private final BaseFont bold;
@@ -120,7 +127,7 @@ public class ProductionPdf {
     }
 
     private PdfPTable cardHeader(Card card) {
-        PdfPTable header = new PdfPTable(new float[] {3, 4, 3});
+        PdfPTable header = new PdfPTable(new float[] { 3, 4, 3 });
         header.setWidthPercentage(100);
         header.setSpacingAfter(12);
 
@@ -194,7 +201,7 @@ public class ProductionPdf {
     }
 
     private PdfPTable cardFooter(int page, int pages) {
-        PdfPTable footer = new PdfPTable(new float[] {2, 3, 5});
+        PdfPTable footer = new PdfPTable(new float[] { 2, 3, 5 });
         footer.setWidthPercentage(100);
         footer.setSpacingBefore(8);
         footer.setKeepTogether(true);
@@ -202,9 +209,10 @@ public class ProductionPdf {
         footer.addCell(wide(new Phrase("Rodzaj dokumentu: Załącznik GMP", small), 3));
         footer.addCell(wide(new Phrase("Nazwa dokumentu: Karta produkcji z czasem schładzania CCP1", small), 3));
         footer.addCell(plain(new Phrase("Strona: " + page + "/" + pages, font(regular, 8, INK))));
-        footer.addCell(plain(new Phrase("Data wydania: 2026-02-06", font(regular, 8, INK))));
-        footer.addCell(plain(new Phrase("Opracowanie: SCA PR Polska Sp.z o.o.", font(regular, 8, INK))));
-        PdfPCell signature = wide(new Phrase("Podpis: .........................................", font(bold, 10, INK)), 3);
+        footer.addCell(plain(new Phrase("Data wydania: 2026-11-01", font(regular, 8, INK))));
+        footer.addCell(plain(new Phrase("Opracowanie: ITEntertaiment", font(regular, 8, INK))));
+        PdfPCell signature = wide(new Phrase("Podpis: .........................................", font(bold, 10, INK)),
+                3);
         signature.setHorizontalAlignment(Element.ALIGN_RIGHT);
         signature.setPaddingTop(22);
         footer.addCell(signature);
@@ -217,7 +225,8 @@ public class ProductionPdf {
         try {
             PdfWriter writer = PdfWriter.getInstance(document, out);
             writer.setPageEvent(new PdfPageFooter(font(regular, 7, MUTED),
-                    "Formularz karty produkcji · " + form.storeLabel() + " · wydruk " + PRINTED.format(LocalDate.now())));
+                    "Formularz karty produkcji · " + form.storeLabel() + " · wydruk "
+                            + PRINTED.format(LocalDate.now())));
             document.addTitle("Formularz karty produkcji");
             document.open();
             int perPage = FORM_ROWS * 2;
@@ -230,11 +239,12 @@ public class ProductionPdf {
                 int from = page * perPage;
                 List<FormLine> left = slice(form.lines(), from, FORM_ROWS);
                 List<FormLine> right = slice(form.lines(), from + FORM_ROWS, FORM_ROWS);
-                PdfPTable columns = new PdfPTable(new float[] {1, 0.05f, 1});
+                PdfPTable columns = new PdfPTable(new float[] { 1, 0.05f, 1 });
                 columns.setWidthPercentage(100);
                 columns.addCell(nested(formColumn(writer.getDirectContent(), left)));
                 columns.addCell(plain(new Phrase(" ")));
-                columns.addCell(nested(right.isEmpty() ? new PdfPTable(1) : formColumn(writer.getDirectContent(), right)));
+                columns.addCell(
+                        nested(right.isEmpty() ? new PdfPTable(1) : formColumn(writer.getDirectContent(), right)));
                 document.add(columns);
             }
             document.close();
@@ -245,12 +255,13 @@ public class ProductionPdf {
     }
 
     private PdfPTable formHeader(Form form) {
-        PdfPTable header = new PdfPTable(new float[] {3, 2});
+        PdfPTable header = new PdfPTable(new float[] { 3, 2 });
         header.setWidthPercentage(100);
         header.setSpacingAfter(10);
         Phrase title = new Phrase();
         title.add(new Phrase("Karta produkcji - formularz\n", font(bold, 14, INK)));
-        title.add(new Phrase(form.storeLabel() + " · wpisz ilość przy wyprodukowanych artykułach", font(regular, 8, MUTED)));
+        title.add(new Phrase(form.storeLabel() + " · wpisz ilość przy wyprodukowanych artykułach",
+                font(regular, 8, MUTED)));
         PdfPCell titleCell = plain(title);
         titleCell.setLeading(0, 1.3f);
         header.addCell(titleCell);
@@ -262,7 +273,7 @@ public class ProductionPdf {
     }
 
     private PdfPTable formColumn(PdfContentByte canvas, List<FormLine> lines) {
-        PdfPTable table = new PdfPTable(new float[] {120, 40, 102});
+        PdfPTable table = new PdfPTable(new float[] { 120, 40, 102 });
         table.setWidthPercentage(100);
         for (String label : List.of("Nazwa", "Ilość", "Kod")) {
             PdfPCell cell = new PdfPCell(new Phrase(label, font(bold, 7.5f, MUTED)));

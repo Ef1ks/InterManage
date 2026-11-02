@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 
 import { AppLayout } from '@/components/layout/AppLayout'
+import { NAV_GROUP_PATHS } from '@/components/layout/navigation'
 import { AccountPage } from '@/features/auth/AccountPage'
 import { ActivationPage } from '@/features/auth/ActivationPage'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -14,6 +15,7 @@ import { PriceCalculatorPage } from '@/features/deli-prices/PriceCalculatorPage'
 import { SalesPage } from '@/features/sales/SalesPage'
 import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { ImportPage } from '@/features/imports/ImportPage'
+import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
 import { MeatPurchasesPage } from '@/features/meat/MeatPurchasesPage'
 import { BackupPage } from '@/features/settings/BackupPage'
@@ -23,6 +25,7 @@ import { StoresPage } from '@/features/settings/StoresPage'
 import { SuppliersPage } from '@/features/suppliers/SuppliersPage'
 import { UsersPage } from '@/features/settings/UsersPage'
 import { TOOL_ROUTES } from '@/features/tools/categories'
+import { NavGroupPage } from '@/features/tools/NavGroupPage'
 import { ToolPlaceholderPage } from '@/features/tools/ToolPlaceholderPage'
 import type { PermissionCategory } from '@/lib/types'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -31,6 +34,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   SALES: <SalesPage />,
   IMPORTS: <ImportPage />,
+  INVENTORY: <InventoryPage />,
   DELI_ORDERS: <DeliOrderPage />,
   DOCUMENTS: <DocumentsPage />,
   DELI_PRICES: <PriceCalculatorPage />,
@@ -71,6 +75,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: '/konto', element: <AccountPage /> },
+      // Główne kategorie z menu: kafelki narzędzi grupy (uprawnienia sprawdza każde narzędzie osobno).
+      ...NAV_GROUP_PATHS.map((path) => ({ path, element: <NavGroupPage /> })),
       ...toolRoutes,
       {
         // Ustawienia wybranego sklepu: sekcje według uprawnień (budżet rejonów, sklepy zaprzyjaźnione).

@@ -55,6 +55,7 @@ import {
   serviceKind,
   SMALLER_QUANTITIES_MARGIN,
   suggestedPrice,
+  supplierPriceOf,
   withAutoSalePrice,
 } from './rows'
 
@@ -543,12 +544,9 @@ export function DataEntryGrid({
   }
 
   const onDoubleClick = (event: React.MouseEvent) => {
-    // W trakcie pisania w komórce podwójne kliknięcie zaznacza cały wpisany tekst, a nie zaczyna edycji od nowa
-    // (to cofałoby wpisane zmiany).
-    if (event.target instanceof HTMLInputElement) {
-      event.target.select()
-      return
-    }
+    // W trakcie pisania w komórce podwójne kliknięcie działa jak w zwykłym polu (zaznacza słowo), a nie zaczyna
+    // edycji od nowa (to cofałoby wpisane zmiany).
+    if (event.target instanceof HTMLInputElement) return
     const cell = cellFromEvent(event)
     if (cell) startEdit(cell, 'edit')
   }
@@ -1339,6 +1337,16 @@ function CellContent({
       if (service) return null
       const price = suggestedPrice(row, pricing)
       if (price === null) return null
+      if (supplierPriceOf(row, pricing) !== null) {
+        return (
+          <span
+            className="font-bold text-cyan-800 dark:text-cyan-300"
+            title="Stała cena dostawcy z Ustawień sklepu: wszystkie jego artykuły sprzedajemy za tę cenę"
+          >
+            {formatMoney(price)}
+          </span>
+        )
+      }
       if (cadencierPrice(row) !== null) {
         return (
           <span

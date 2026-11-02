@@ -25,6 +25,14 @@ public interface KsefInvoiceRepository extends JpaRepository<KsefInvoice, UUID>,
         long getInvoiceCount();
     }
 
+    /**
+     * Bez JIT do końca transakcji: podzapytania filtrów (wprowadzone, znaczniki, reguły dostawców) podnoszą koszt planu
+     * ponad {@code jit_above_cost}, a kompilacja to ok. 600 ms przy ok. 13 ms samego zapytania (produkcja, 20 tys.
+     * faktur), przy każdym z trzech zapytań listy (strona, liczba, sumy).
+     */
+    @Query(value = "select set_config('jit', 'off', true)", nativeQuery = true)
+    String disableJit();
+
     @Query("""
             select r.internalId as internalId, max(r.name) as name, count(i) as invoiceCount
             from KsefInvoice i join i.internalIds r where i.nip = :nip

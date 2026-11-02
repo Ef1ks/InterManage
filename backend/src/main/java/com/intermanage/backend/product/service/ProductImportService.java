@@ -1,6 +1,7 @@
 package com.intermanage.backend.product.service;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -35,10 +36,12 @@ import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.entity.ProductEan;
 import com.intermanage.backend.product.entity.ProductEanChange;
 import com.intermanage.backend.product.entity.ProductImport;
+import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.ProductImportMapper;
 import com.intermanage.backend.product.repository.ProductEanChangeRepository;
 import com.intermanage.backend.product.repository.ProductEanRepository;
 import com.intermanage.backend.product.repository.ProductImportRepository;
+import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -73,11 +76,13 @@ public class ProductImportService {
     private final ProductEanChangeRepository eanChanges;
     private final AppUserRepository users;
     private final StoreRepository stores;
+    private final ProductPriceChangeRepository priceChanges;
 
     public ProductImportService(TransactionTemplate transaction, ProductReportParser reportParser,
             ProductImportMapper productImportMapper, ProductImportRepository imports, ProductRepository products,
             ProductEanRepository productEans, ProductEanChangeRepository eanChanges, AppUserRepository users,
-            StoreRepository stores) {
+            StoreRepository stores, ProductPriceChangeRepository priceChanges) {
+        this.priceChanges = priceChanges;
         this.transaction = transaction;
         this.reportParser = reportParser;
         this.productImportMapper = productImportMapper;
@@ -176,6 +181,7 @@ public class ProductImportService {
         List<Product> newProducts = new ArrayList<>();
         List<ProductEan> newPairs = new ArrayList<>();
         List<ProductEanChange> changes = new ArrayList<>();
+        List<ProductPriceChange> priceChangeList = new ArrayList<>();
         int updated = 0;
         int unchanged = 0;
         int eanChanged = 0;
@@ -186,10 +192,16 @@ public class ProductImportService {
             if (product == null) {
                 product = new Product(row, productImport);
                 newProducts.add(product);
-            } else if (product.seenIn(row, productImport)) {
-                updated++;
             } else {
-                unchanged++;
+                BigDecimal previousSalePrice = product.getSalePrice();
+                if (product.seenIn(row, productImport)) {
+                    updated++;
+                    if (!sameNumber(previousSalePrice, product.getSalePrice())) {
+                        priceChangeList.add(ProductPriceChange.fromReport(product, productImport, previousSalePrice));
+                    }
+                } else {
+                    unchanged++;
+                }
             }
 
             // Porównanie ze stanem sprzed importu: nowe pary trafiają do katalogu dopiero po pętli.
@@ -220,6 +232,7 @@ public class ProductImportService {
         products.saveAll(newProducts);
         productEans.saveAll(newPairs);
         eanChanges.saveAll(changes);
+        priceChanges.saveAll(priceChangeList);
         // Zapytanie wymusza zapis zmian z pętli, więc liczy już po aktualizacji last_seen_import_id.
         int missing = Math.toIntExact(products.countByStoreAndLastSeenImportNot(store, productImport));
 
@@ -277,5 +290,9 @@ public class ProductImportService {
             }
             return latest;
         }
+    }
+
+    private static boolean sameNumber(BigDecimal a, BigDecimal b) {
+        return a == null ? b == null : b != null && a.compareTo(b) == 0;
     }
 }

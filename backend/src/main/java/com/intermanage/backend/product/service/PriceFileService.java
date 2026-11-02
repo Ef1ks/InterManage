@@ -35,8 +35,10 @@ import com.intermanage.backend.product.dto.PriceFileOverview;
 import com.intermanage.backend.product.dto.PriceFileUploadResponse;
 import com.intermanage.backend.product.entity.PriceFileImport;
 import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.PriceFileMapper;
 import com.intermanage.backend.product.repository.PriceFileImportRepository;
+import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -64,15 +66,18 @@ public class PriceFileService {
     private final ProductRepository products;
     private final StoreRepository stores;
     private final AppUserRepository users;
+    private final ProductPriceChangeRepository priceChanges;
 
     public PriceFileService(PriceFileParser parser, PriceFileMapper mapper, PriceFileImportRepository imports,
-            ProductRepository products, StoreRepository stores, AppUserRepository users) {
+            ProductRepository products, StoreRepository stores, AppUserRepository users,
+            ProductPriceChangeRepository priceChanges) {
         this.parser = parser;
         this.mapper = mapper;
         this.imports = imports;
         this.products = products;
         this.stores = stores;
         this.users = users;
+        this.priceChanges = priceChanges;
     }
 
     @Transactional(readOnly = true)
@@ -155,19 +160,27 @@ public class PriceFileService {
         int updated = 0;
         int older = 0;
         int unknown = 0;
+        List<ProductPriceChange> changes = new ArrayList<>();
         for (Map.Entry<String, List<PriceFileLine>> entry : byItm8.entrySet()) {
             Product product = catalog.get(entry.getKey());
             if (product == null) {
                 unknown++;
                 continue;
             }
+            BigDecimal previousSalePrice = product.getSalePrice();
+            BigDecimal previousPromoPrice = product.getPromoPrice();
             switch (product.applyPriceFile(articleLine(product, entry.getValue()), priceFile)) {
-                case UPDATED -> updated++;
+                case UPDATED -> {
+                    updated++;
+                    changes.add(ProductPriceChange.fromPriceFile(product, priceFile, previousSalePrice,
+                            previousPromoPrice));
+                }
                 case OLDER -> older++;
                 case UNCHANGED -> {
                 }
             }
         }
+        priceChanges.saveAll(changes);
         priceFile.recordResult(byItm8.size(), updated, older, unknown);
         return priceFile;
     }

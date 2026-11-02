@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -244,8 +245,30 @@ class DataEntryIntegrationTests {
 
     @Test
     void catalogListFiltersEachColumnWithWildcards() throws Exception {
-        jdbc.update("update products set supplier = 'MLECZARNIA ŁAKA' where store_id = ?::uuid and brand = 'LAKA'",
+        // Dostawca z kartoteki bywa błędny, więc filtr idzie po przyjęciach PZ z 6 miesięcy.
+        jdbc.update("update products set supplier = 'INNY DOSTAWCA' where store_id = ?::uuid and brand = 'LAKA'",
                 storeId);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
+                    updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', 3, 3, 3, 0, 0) returning id""", String.class, storeId);
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Europe/Warsaw"));
+        // Masło: dawno od innego dostawcy, niedawno od Łąki. Mleko od Łąki tylko ponad 6 miesięcy temu (i zero sztuk).
+        for (String[] doc : new String[][] {
+                {"10", today.minusMonths(8).toString(), "0000000000103", "11", "STARY DOSTAWCA", "5"},
+                {"20", today.minusDays(3).toString(), "0000000000103", "4321", "MLECZARNIA ŁAKA", "10"},
+                {"30", today.minusMonths(7).toString(), "0000000000101", "4321", "MLECZARNIA ŁAKA", "10"},
+                {"40", today.minusDays(1).toString(), "0000000000101", "4321", "MLECZARNIA ŁAKA", "0"}}) {
+            String documentId = jdbc.queryForObject("""
+                    insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                        sale_value_gross, first_import_id, last_import_id)
+                    values (?::uuid, 'PZ', ?, ?::timestamp, 1, 0, 0, ?::uuid, ?::uuid) returning id""",
+                    String.class, storeId, doc[0], doc[1], documentImport, documentImport);
+            jdbc.update("""
+                    insert into document_lines (document_id, line_number, itm8, quantity, supplier_code, supplier_name)
+                    values (?::uuid, 1, ?, ?::numeric, ?, ?)""", UUID.fromString(documentId), doc[2], doc[5], doc[3],
+                    doc[4]);
+        }
 
         // Gwiazdka = dowolny ciąg między członami, bez wielkości liter.
         mvc.perform(get(url("/catalog?name=ser*plas")).cookie(owner))
@@ -253,12 +276,20 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.items[*].name").value(
                         contains("SER EDAMSKI PLASTRY 150G", "SER GOUDA PLASTRY 150G", "SER LILIPUT PLASTRY 150G")))
                 .andExpect(jsonPath("$.hasMore").value(false));
-        // Kilka kolumn naraz; dostawca bez polskich znaków, ITM8 i EAN jako fragment.
+        // Kilka kolumn naraz; dostawca z przyjęć bez polskich znaków, ITM8 i EAN jako fragment.
         mvc.perform(get(url("/catalog?supplier=laka&ean=0000004&itm8=103")).cookie(owner))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].name").value("MASLO EKSTRA 200G"))
-                .andExpect(jsonPath("$.items[0].supplier").value("MLECZARNIA ŁAKA"))
+                .andExpect(jsonPath("$.items[0].lastDelivery.supplierName").value("MLECZARNIA ŁAKA"))
+                .andExpect(jsonPath("$.items[0].lastDelivery.date").value(today.minusDays(3).toString()))
                 .andExpect(jsonPath("$.items[0].subfamilyName").value("MLEKO UHT"));
+        // Po kodzie dostawcy; mleko przyjechało od niego ponad 6 miesięcy temu, a niedawno tylko za 0 sztuk.
+        mvc.perform(get(url("/catalog?supplier=4321")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("MASLO EKSTRA 200G")));
+        mvc.perform(get(url("/catalog?supplier=stary")).cookie(owner))
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get(url("/catalog")).param("name", "mleko 3").cookie(owner))
+                .andExpect(jsonPath("$.items[0].lastDelivery.date").value(today.minusMonths(7).toString()));
         // Znaki specjalne LIKE są dosłowne.
         mvc.perform(get(url("/catalog")).param("name", "3,2%").cookie(owner))
                 .andExpect(jsonPath("$.items[*].name").value(contains("MLEKO 3,2% 1L")));
@@ -759,7 +790,7 @@ class DataEntryIntegrationTests {
         // Bez zapisanych ustawień: domyślny folder i wszystkie protokoły widoczne.
         mvc.perform(get(settings).cookie(owner))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.folderPath").value("N:\\avisoconfig"))
+                .andExpect(jsonPath("$.folderPath").value("N:\\AVISOCONFIG\\BACKUP"))
                 .andExpect(jsonPath("$.defaultFolder").value(true))
                 .andExpect(jsonPath("$.hiddenProtocols.length()").value(0))
                 .andExpect(jsonPath("$.productFileFolderPath").doesNotExist());

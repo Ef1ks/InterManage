@@ -3,6 +3,7 @@ import { PencilIcon, PlusIcon } from 'lucide-react'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
 import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,11 +11,16 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useStores } from '@/features/settings/api'
 import { StoreFormDialog } from '@/features/settings/StoreFormDialog'
+import { matchesSearch } from '@/lib/search'
 import type { Store } from '@/lib/types'
 
 export function StoresPage() {
   const { data: stores, isPending, isError, refetch } = useStores()
   const [editor, setEditor] = useState<{ open: boolean; store?: Store }>({ open: false })
+  const [query, setQuery] = useState('')
+  const visible = (stores ?? []).filter((store) =>
+    matchesSearch([store.name, store.number, store.address, store.nip], query),
+  )
 
   return (
     <>
@@ -47,62 +53,76 @@ export function StoresPage() {
           </Button>
         </Card>
       ) : (
-        <Card className="py-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">Sklep</TableHead>
-                <TableHead>Numer</TableHead>
-                <TableHead className="text-right">Pracownicy</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-16 pr-4">
-                  <span className="sr-only">Akcje</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isPending ? (
-                <TableSkeletonRows columns={5} />
-              ) : (
-                stores.map((store) => (
-                  <TableRow key={store.id}>
-                    <TableCell className="py-3 pl-4">
-                      <div className="font-medium">{store.name}</div>
-                      {(store.address || store.nip) && (
-                        <div className="text-xs text-muted-foreground">
-                          {[store.address, store.nip && `NIP ${store.nip}`].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="tabular-nums">{store.number}</TableCell>
-                    <TableCell className="text-right tabular-nums">{store.userCount}</TableCell>
-                    <TableCell>
-                      {store.active ? (
-                        <Badge variant="outline" className="gap-1.5">
-                          <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
-                          Aktywny
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Wyłączony</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="pr-4 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Edytuj sklep ${store.name}`}
-                        title="Edytuj"
-                        onClick={() => setEditor({ open: true, store })}
-                      >
-                        <PencilIcon />
-                      </Button>
+        <>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Szukaj po nazwie, numerze, adresie albo NIP-ie"
+            className="mb-4 max-w-md"
+          />
+          <Card className="py-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4">Sklep</TableHead>
+                  <TableHead>Numer</TableHead>
+                  <TableHead className="text-right">Pracownicy</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-16 pr-4">
+                    <span className="sr-only">Akcje</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isPending ? (
+                  <TableSkeletonRows columns={5} />
+                ) : visible.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      Nie znaleziono sklepu.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                ) : (
+                  visible.map((store) => (
+                    <TableRow key={store.id}>
+                      <TableCell className="py-3 pl-4">
+                        <div className="font-medium">{store.name}</div>
+                        {(store.address || store.nip) && (
+                          <div className="text-xs text-muted-foreground">
+                            {[store.address, store.nip && `NIP ${store.nip}`].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{store.number}</TableCell>
+                      <TableCell className="text-right tabular-nums">{store.userCount}</TableCell>
+                      <TableCell>
+                        {store.active ? (
+                          <Badge variant="outline" className="gap-1.5">
+                            <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
+                            Aktywny
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Wyłączony</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="pr-4 text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edytuj sklep ${store.name}`}
+                          title="Edytuj"
+                          onClick={() => setEditor({ open: true, store })}
+                        >
+                          <PencilIcon />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
       )}
 
       <StoreFormDialog

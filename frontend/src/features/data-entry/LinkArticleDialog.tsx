@@ -133,12 +133,27 @@ function LinkContent({
       <DialogHeader>
         <DialogTitle className="text-lg">Przypisz do artykułu</DialogTitle>
         <DialogDescription>
-          Pozycja z faktury: <span className="font-medium text-foreground">{code}</span>
           {sellerNip
-            ? `. Przypięcie zostanie zapamiętane: kolejne faktury ${sellerName ?? 'tego dostawcy'} wczytają ten artykuł od razu.`
-            : '. Bez faktury z KSeF przypisanie dotyczy tylko tej tabeli (nie zostanie zapamiętane).'}
+            ? `Przypięcie zostanie zapamiętane: kolejne faktury ${sellerName ?? 'tego dostawcy'} wczytają ten artykuł od razu.`
+            : 'Bez faktury z KSeF przypisanie dotyczy tylko tej tabeli (nie zostanie zapamiętane).'}
         </DialogDescription>
       </DialogHeader>
+
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-xl border bg-muted px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Pozycja z faktury</p>
+          <p className="text-base font-semibold break-words">{row.invoiceName || row.name || code}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">Cena zakupu netto z faktury</p>
+          <p className="text-base font-semibold tabular-nums">
+            {row.unitNet === null ? '–' : `${formatPrice(row.unitNet)} zł`}
+            {row.unitNet !== null && row.invoiceUnit && (
+              <span className="font-normal text-muted-foreground"> / {row.invoiceUnit}</span>
+            )}
+          </p>
+        </div>
+      </div>
 
       {row.link && (
         <div className="flex items-center gap-3 rounded-xl bg-sky-200 px-3.5 py-2.5 text-sm text-sky-950 dark:bg-sky-900 dark:text-sky-50">

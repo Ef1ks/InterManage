@@ -39,9 +39,12 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
         BigDecimal getCadencierPrice();
     }
 
-    @Query("select p.itm8 as itm8, p.cadencierPrice as cadencierPrice from Product p "
-            + "where p.store.id = :storeId and p.cadencierPrice > 0")
-    List<CadencierPrice> findCadencierPrices(UUID storeId);
+    /** CENA_CAD podanych artykułów (tablica, bo ITM8 bywa kilka tysięcy). */
+    @Query(value = """
+            select p.itm8 as itm8, p.cadencier_price as cadencier_price from products p
+            where p.store_id = :storeId and p.cadencier_price > 0 and p.itm8 = any(cast(:itm8s as varchar[]))
+            """, nativeQuery = true)
+    List<CadencierPrice> findCadencierPrices(UUID storeId, String[] itm8s);
 
     /** Produkty sklepu, których nie było w danym imporcie (zostają w bazie z danymi z wcześniejszego). */
     long countByStoreAndLastSeenImportNot(Store store, ProductImport productImport);
@@ -52,4 +55,13 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
      */
     @Query(value = "select 1 from (select pg_advisory_xact_lock(hashtextextended(:key, 0))) l", nativeQuery = true)
     int lockForImport(String key);
+
+    /** Wszystkie EAN-y artykułu: bieżący, dawne pary ITM8 + EAN i obowiązujące multikody. */
+    @Query(value = """
+            select p.ean from products p where p.id = :productId
+            union select e.ean from product_eans e where e.product_id = :productId
+            union select c.ean from product_codes c
+                  where c.store_id = :storeId and c.itm8 = :itm8 and c.current
+            """, nativeQuery = true)
+    List<String> findAllEans(UUID storeId, UUID productId, String itm8);
 }

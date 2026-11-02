@@ -82,7 +82,7 @@ class DocumentImportIntegrationTests {
 
         mvc.perform(get(url("")).cookie(owner))
                 .andExpect(jsonPath("$.lastReportGeneratedAt").value("2026-10-24T16:10:50"))
-                .andExpect(jsonPath("$.types.length()").value(9))
+                .andExpect(jsonPath("$.types.length()").value(10))
                 .andExpect(jsonPath("$.types[0].code").value("PZ"))
                 .andExpect(jsonPath("$.types[0].label").value("Przyjęcia towaru"))
                 .andExpect(jsonPath("$.types[0].documentCount").value(2))

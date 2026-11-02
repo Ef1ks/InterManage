@@ -13,10 +13,20 @@ type Props<K extends string> = {
   /** Kolumny z liczbami wyrównujemy do prawej. */
   align?: 'left' | 'right'
   className?: string
+  /** Dodatkowe przyciski obok nazwy kolumny (np. ukrycie kolumny). */
+  actions?: ReactNode
 }
 
 /** Nagłówek kolumny, który sortuje tabelę po kliknięciu; strzałka pokazuje bieżący kierunek. */
-export function SortableHead<K extends string>({ column, sort, onSort, children, align = 'left', className }: Props<K>) {
+export function SortableHead<K extends string>({
+  column,
+  sort,
+  onSort,
+  children,
+  align = 'left',
+  className,
+  actions,
+}: Props<K>) {
   const active = sort.key === column
   const Icon = !active ? ChevronsUpDownIcon : sort.direction === 'asc' ? ArrowUpIcon : ArrowDownIcon
   return (
@@ -36,6 +46,7 @@ export function SortableHead<K extends string>({ column, sort, onSort, children,
         {children}
         <Icon aria-hidden className={cn('size-3.5 shrink-0', !active && 'opacity-50')} />
       </button>
+      {actions}
     </TableHead>
   )
 }

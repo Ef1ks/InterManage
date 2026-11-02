@@ -1460,6 +1460,16 @@ export type PriceRoundingRule = {
   createdAt: string | null
 }
 
+/** Stała cena sprzedaży brutto wszystkich artykułów dostawcy (Ustawienia sklepu, cena sugerowana we wprowadzaniu danych). */
+export type SupplierSalePrice = {
+  supplierId: string
+  supplierName: string
+  supplierCode: string | null
+  salePrice: number
+  createdBy: string | null
+  createdAt: string | null
+}
+
 export type NomenclatureMarginImport = { changedCount: number; withMarginCount: number }
 
 /** Status wyjaśniania przyjęcia z ceną wyższą niż baza; brak wpisu = do wyjaśnienia. */
@@ -1611,6 +1621,8 @@ export type DataEntryCatalogListItem = {
   /** Stan i rotacja z ostatniego raportu kartoteki. */
   stock: number | null
   rotation: number | null
+  /** Ostatnie przyjęcie PZ (dostawca z linii dokumentu, nie z kartoteki); tylko w liście towarów. */
+  lastDelivery: { supplierCode: string | null; supplierName: string | null; date: string } | null
 }
 
 export type DataEntryCatalogListPage = {
@@ -1801,9 +1813,54 @@ export type Suggestion = {
 
 export type SuggestionResponse = { modelUsed: boolean; message: string | null; items: Suggestion[] }
 
-
 /** Protokół z wprowadzania danych jako plik PROTO1-PROTO6 (nazwa stałej z backendu). */
 export type ProtocolKind = 'LIQUIDATION' | 'STORE_NEEDS' | 'DONATION' | 'ADVERTISING' | 'REPRESENTATION' | 'TRANSFER'
+
+/** Po czym raport protokołów grupuje artykuły (ProtocolReportGrouping.java). */
+export type ProtocolReportGrouping = 'ARTICLE' | 'BRAND' | 'SUPPLIER' | 'NOMENCLATURE'
+
+/** Protokoły do raportu (bez wyłączonych w Ustawieniach sklepu); {@code documentType} pusty = system sklepu jeszcze go nie miał. */
+export type ProtocolReportsOverview = {
+  protocols: { kind: ProtocolKind; number: number; label: string; documentType: string | null }[]
+  documentsCoveredUntil: string | null
+  documentsReportGeneratedAt: string | null
+}
+
+/** Wartość zakupu netto bez minusa wydania i wartość w cenach sprzedaży brutto. */
+export type ProtocolFigures = { quantity: number; purchaseValue: number; saleValueGross: number }
+
+export type ProtocolReportArticle = {
+  itm8: string
+  name: string | null
+  ean: string | null
+  brand: string | null
+  current: ProtocolFigures
+  previous: ProtocolFigures | null
+}
+
+export type ProtocolReportGroup = {
+  key: string
+  code: string | null
+  name: string | null
+  current: ProtocolFigures
+  previous: ProtocolFigures | null
+  articles: ProtocolReportArticle[]
+}
+
+/** Bez porównania {@code previousFrom}, {@code previousTo}, {@code previousTotal} i {@code previous} są puste. */
+export type ProtocolReport = {
+  protocol: ProtocolKind
+  grouping: ProtocolReportGrouping
+  level: 'REGION' | 'FAMILY' | 'SUBFAMILY' | null
+  from: string
+  to: string
+  previousFrom: string | null
+  previousTo: string | null
+  documentsCoveredUntil: string | null
+  total: ProtocolFigures
+  previousTotal: ProtocolFigures | null
+  groups: ProtocolReportGroup[]
+}
 
 /** Folder plików PROTO sklepu (ustawiony albo domyślny) i protokoły ukryte w oknie generowania. */
 export type ProtoSettings = {
@@ -2084,4 +2141,57 @@ export type ProductionCard = {
   deletedAt: string | null
   /** Karta bieżącego sklepu; karty sklepów zaprzyjaźnionych są tylko do podglądu i wydruku. */
   editable: boolean
+}
+
+/** Artykuł na liście Magazynu i produktów; {@code promoPrice}: cena trwającej promocji z kasy. */
+export type ProductListItem = {
+  itm8: string
+  ean: string
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  stock: number | null
+  rotation: number | null
+  salePrice: number | null
+  promoPrice: number | null
+  active: boolean | null
+}
+
+export type ProductListPage = {
+  items: ProductListItem[]
+  total: number
+  hasMore: boolean
+}
+
+/** Promocja z listy promocji; {@code cancelled}: zabrakło jej w nowszym raporcie. */
+export type ProductPromotion = {
+  startDate: string
+  endDate: string
+  regularSalePrice: number | null
+  promoPrice: number | null
+  catalogPurchasePrice: number | null
+  marginPercent: number | null
+  cancelled: boolean
+}
+
+/**
+ * Zmiana ceny sprzedaży: TILL plik z kasy, REPORT import kartoteki, DATA_ENTRY plik zmiany cen z wprowadzania danych
+ * (bez ceny poprzedniej, z dostawcą i fakturą w {@code description}).
+ */
+export type ProductPriceChange = {
+  changedAt: string | null
+  source: 'TILL' | 'REPORT' | 'DATA_ENTRY'
+  previousSalePrice: number | null
+  salePrice: number | null
+  previousPromoPrice: number | null
+  promoPrice: number | null
+  promoFrom: string | null
+  promoTo: string | null
+  description: string | null
+  user: string | null
+}
+
+export type ProductPriceHistory = {
+  promotions: ProductPromotion[]
+  changes: ProductPriceChange[]
 }

@@ -52,7 +52,14 @@ export const COLUMNS: Column[] = [
   { key: 'unitNet', header: 'Cena netto', width: 6, align: 'right', kind: 'number' },
   { key: 'name', header: 'Nazwa', width: 21.5, kind: 'text' },
   { key: 'brand', header: 'Marka', width: 8, kind: 'text' },
-  { key: 'value', header: 'Wartość', title: 'Wartość netto', width: 6, align: 'right', kind: 'computed' },
+  {
+    key: 'value',
+    header: 'Wartość',
+    title: 'Wartość netto: wpisana zmienia cenę netto (wartość / ilość)',
+    width: 6,
+    align: 'right',
+    kind: 'number',
+  },
   { key: 'vat', header: 'VAT', width: 3.5, align: 'right', kind: 'number' },
   { key: 'salePrice', header: 'Cena sprz.', title: 'Cena sprzedaży brutto', width: 6, align: 'right', kind: 'number' },
   { key: 'margin', header: 'Marża', width: 6.5, align: 'right', kind: 'computed' },
@@ -108,12 +115,17 @@ export function nomenclatureNames(items: NomenclatureItem[] | undefined): Names 
   return new Map((items ?? []).map((item) => [item.code, item.name]))
 }
 
-export function pricingOf(items: NomenclatureItem[] | undefined, rounding: PriceRoundingRule[] | undefined): Pricing {
+export function pricingOf(
+  items: NomenclatureItem[] | undefined,
+  rounding: PriceRoundingRule[] | undefined,
+  supplierPrice: number | null = null,
+): Pricing {
   return {
     required: new Map(
       (items ?? []).flatMap((item) => (item.requiredMargin === null ? [] : [[item.code, item.requiredMargin] as const])),
     ),
     rounding: rounding ?? [],
+    supplierPrice,
   }
 }
 
@@ -248,7 +260,15 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
       }
       return { row: withNomenclature(row, code) }
     }
-    case 'value':
+    case 'value': {
+      // Wartość z faktury przepisana wprost: cena netto = wartość / ilość, do 4 miejsc (jak przy podziale ilości).
+      const value = parseNumber(trimmed)
+      if (value === undefined || value === null) return { error: 'Wpisz liczbę' }
+      if (row.quantity === null || row.quantity === 0) return { error: 'Najpierw wpisz ilość' }
+      const unitNet = Math.round((value / row.quantity) * 10000) / 10000
+      if (unitNet < 0) return { error: 'Wartość musi mieć ten sam znak co ilość' }
+      return { row: { ...row, unitNet } }
+    }
     case 'margin':
     case 'suggestedPrice':
     case 'stock':
@@ -288,9 +308,14 @@ function remeasured(row: DataEntryRow): DataEntryRow {
   return row.known || row.name === '' ? row : { ...row, name: withMeasure(row.name, row.unit, row.netContent) }
 }
 
-/** Czy komórkę da się wyczyścić klawiszem Delete (rodzaju, wagi i wartości liczonych nie). */
+/** Czy komórkę da się wyczyścić klawiszem Delete (rodzaju, wagi, wartości netto i wartości liczonych nie). */
 export function clearable(key: ColumnKey) {
-  return COLUMNS.find((column) => column.key === key)?.kind !== 'computed' && key !== 'unit' && key !== 'netContent'
+  return (
+    COLUMNS.find((column) => column.key === key)?.kind !== 'computed' &&
+    key !== 'unit' &&
+    key !== 'netContent' &&
+    key !== 'value'
+  )
 }
 
 // ---------- schowek: TSV jak w Excelu

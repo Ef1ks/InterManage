@@ -28,7 +28,7 @@ const percent = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
  * Potrzeby sklepu, likwidacje, reprezentacja i przeniesienia stanów: dostawca jest tylko przy liniach (linie mają
  * różnych dostawców), więc lista i nagłówek dokumentu go nie pokazują.
  */
-const WITHOUT_SUPPLIER_TYPES = new Set(['RWPO', 'PL', 'RWREP', 'PPP'])
+const WITHOUT_SUPPLIER_TYPES = new Set(['RWPO', 'PL', 'RWREP', 'RWDA', 'PPP'])
 
 /** Czy lista i nagłówek dokumentu tego typu pokazują dostawcę i nr dok. dostawcy. */
 export function showsSupplier(typeCode: string) {
