@@ -1219,6 +1219,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         priceControl={priceControlPayload}
         problems={xmlProblems}
         totals={totals}
+        priceConflicts={conflicts}
+        onMergeDuplicates={mergeDuplicates}
         open={xmlOpen}
         onOpenChange={setXmlOpen}
         onGoTo={goTo}

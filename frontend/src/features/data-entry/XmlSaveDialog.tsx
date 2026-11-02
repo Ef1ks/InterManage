@@ -37,6 +37,12 @@ type Props = {
   problems: XmlProblems
   /** Sumy tabeli i faktury: różnica wymaga potwierdzenia zapisu, ale go nie blokuje. */
   totals: InvoiceTotals
+  /**
+   * Ten sam EAN w kilku wierszach z różnymi cenami. Program sklepu łączy pozycje pliku z jednym EAN-em: sumuje ilości
+   * i bierze cenę pierwszej (21 × 13,29 i 9 × 0,03 przyjął jako 30 × 13,29), więc przed zapisem trzeba je połączyć.
+   */
+  priceConflicts: DataEntryRow[][]
+  onMergeDuplicates: () => void
   open: boolean
   onOpenChange: (open: boolean) => void
   onGoTo: (row: DataEntryRow, key: 'ean' | 'name' | 'subfamily') => void
@@ -56,6 +62,8 @@ export function XmlSaveDialog({
   priceControl,
   problems,
   totals,
+  priceConflicts,
+  onMergeDuplicates,
   open,
   onOpenChange,
   onGoTo,
@@ -217,6 +225,30 @@ export function XmlSaveDialog({
           </div>
         )}
 
+        {priceConflicts.length > 0 && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-400 bg-red-200 px-4 py-3 text-sm text-red-950 dark:border-red-500/50 dark:bg-red-950/70 dark:text-red-50"
+          >
+            <p className="font-medium">Ten sam artykuł w kilku cenach</p>
+            <p className="mt-1">
+              Program sklepu łączy pozycje z tym samym EAN-em: sumuje ilości i bierze cenę z pierwszej. Połącz je w
+              jeden wiersz ze średnią ceną, inaczej przyjęcie będzie miało złą wartość.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {priceConflicts.map((group) => (
+                <li key={group[0].id} className="tabular-nums">
+                  <span className="font-medium">{group[0].name || group[0].ean}</span>:{' '}
+                  {group.map((row) => `${formatQuantity(row.quantity)} × ${formatPrice(row.unitNet)}`).join(', ')}
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" size="sm" className="mt-3" onClick={onMergeDuplicates}>
+              Połącz w jeden wiersz
+            </Button>
+          </div>
+        )}
+
         {issues.length > 0 && (
           <div className="rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-100">
             <p className="font-medium">Tabela ma braki</p>
@@ -259,7 +291,11 @@ export function XmlSaveDialog({
 
         <Button size="xl" loading={saving} disabled={count === 0} onClick={save}>
           <FileCodeIcon />
-          {totals.mismatch ? 'Zapisz mimo różnicy' : issues.length > 0 ? 'Zapisz mimo to' : 'Zapisz plik XML'}
+          {totals.mismatch
+            ? 'Zapisz mimo różnicy'
+            : issues.length > 0 || priceConflicts.length > 0
+              ? 'Zapisz mimo to'
+              : 'Zapisz plik XML'}
         </Button>
 
         {priceControlFiles.data && priceControlFiles.data.length > 0 && (
@@ -295,6 +331,14 @@ export function XmlSaveDialog({
 }
 
 type SavedFile = { fileName: string; downloaded: boolean }
+
+function formatQuantity(quantity: number | null) {
+  return quantity === null ? '–' : quantity.toLocaleString('pl-PL', { maximumFractionDigits: 3 })
+}
+
+function formatPrice(price: number | null) {
+  return price === null ? '–' : `${formatMoney(price)} zł`
+}
 
 function SumRow({
   label,

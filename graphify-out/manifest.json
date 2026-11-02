@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793620613.0049467,
-    "seen": 1793620703.6517212,
-    "ast_hash": "d5d05c4af357d1627723af34cf335d6b",
+    "mtime": 1793621040.5908103,
+    "seen": 1793621082.752691,
+    "ast_hash": "ebfb0d168bffde51253a08196392b15e",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1793619171.0350022,
-    "seen": 1793619220.7395372,
-    "ast_hash": "7503c501d8c85c9852f400f32663fadd",
+    "mtime": 1793620982.3135388,
+    "seen": 1793621082.7173169,
+    "ast_hash": "fc19e3387fe86543a3496f8fb7e2a54f",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4758,9 +4758,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/XmlSaveDialog.tsx": {
-    "mtime": 1793620607.6050882,
-    "seen": 1793620703.618678,
-    "ast_hash": "772f8ec3c0d889a07e039ae0fec039a4",
+    "mtime": 1793621034.2962685,
+    "seen": 1793621082.7183168,
+    "ast_hash": "9e8a6257712d628933b0ae7ae593dccb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CatalogListItem.java": {
