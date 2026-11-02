@@ -9,7 +9,7 @@ import java.time.LocalDate;
  * wagowych 1 kg) z kartoteki, {@code vatPercent} stawka z ostatniego dokumentu z tym artykułem. {@code unit} to rodzaj
  * sprzedaży (kg, L, szt.), {@code salePrice} cena sprzedaży brutto sztuki,
  * {@code cadencier} = artykuł ma CENA_CAD, {@code cadencierPrice} to ta cena (brutto sztuki narzucona przez centralę),
- * {@code promoPrice} trwająca promocja z pliku TRACEART (cena brutto na kasie, {@code salePrice} jest wtedy regularna) do
+ * {@code promoPrice} trwająca promocja z pliku TRACEART (cena brutto na kasie, jest wtedy też {@code salePrice}) do
  * {@code promoTo}, {@code stock} i {@code rotation} to stan magazynowy i rotacja z ostatniego raportu kartoteki.
  */
 public record CatalogProduct(String ean, String itm8, String catalogEan, String name, String brand,

@@ -63,7 +63,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * {@code vatPercent}: z kodu stawki z kartoteki (1 = 23%, 2 = 8%, 6 = 5%, sprawdzone z liniami dokumentów; inne
      * kody, np. 3, 7 kaucje, są niepewne), bez niego z najnowszej linii dokumentu sklepu z tym ITM8, a na końcu
      * najczęstsza stawka z dokumentów artykułów tej samej podrodziny.
-     * {@code promoPrice}/{@code promoTo}: trwająca w dniu {@code today} promocja z pliku TRACEART.
+     * {@code promoPrice}/{@code promoTo}: trwająca w dniu {@code today} promocja z pliku TRACEART; jej cena jest wtedy
+     * też {@code salePrice} (aktualna cena na kasie).
      */
     @Query(value = """
             with keys as (select distinct unnest(cast(:eans as varchar[])) as key),
@@ -100,7 +101,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                      join documents d on d.id = l.document_id and d.store_id = :storeId
                      where q.store_id = :storeId and q.subfamily_code = p.subfamily_code
                          and l.vat_rate is not null)) as vatPercent,
-                p.unit as unit, p.net_content as netContent, p.sale_price as salePrice,
+                p.unit as unit, p.net_content as netContent,
+                case when p.promo_price is not null and p.promo_to >= cast(:today as date)
+                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_price
+                    else p.sale_price end as salePrice,
                 coalesce(p.cadencier_price > 0 and c.itm8 is not null, false) as cadencier,
                 case when p.cadencier_price > 0 and c.itm8 is not null then p.cadencier_price end as cadencierPrice,
                 case when p.promo_price is not null and p.promo_to >= cast(:today as date)

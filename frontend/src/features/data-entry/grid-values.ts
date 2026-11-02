@@ -3,7 +3,6 @@ import type { NomenclatureItem, PriceRoundingRule, SaleUnit } from '@/lib/types'
 import {
   type DataEntryRow,
   type Pricing,
-  activePromoPrice,
   marginPercent,
   netValue,
   normalizeBrand,
@@ -31,7 +30,6 @@ export type ColumnKey =
   | 'netContent'
   | 'stock'
   | 'rotation'
-  | 'promoPrice'
 
 /** text/number: edycja w komórce; nomenclature/unit: lista do wyboru; computed: tylko do odczytu. */
 export type ColumnKind = 'text' | 'number' | 'nomenclature' | 'unit' | 'computed'
@@ -74,14 +72,6 @@ export const COLUMNS: Column[] = [
   // Na końcu, żeby wklejanie kolumn z Excela trafiało tam, gdzie wcześniej.
   { key: 'stock', header: 'Stan', title: 'Stan magazynowy z ostatniego raportu kartoteki', width: 5, align: 'right', kind: 'computed' },
   { key: 'rotation', header: 'Rotacja', title: 'Rotacja z ostatniego raportu kartoteki', width: 5, align: 'right', kind: 'computed' },
-  {
-    key: 'promoPrice',
-    header: 'Cena promo.',
-    title: 'Cena promocyjna brutto z kasy (pliki TRACEART); cena sprzedaży obok to wtedy cena regularna',
-    width: 6,
-    align: 'right',
-    kind: 'computed',
-  },
 ]
 
 export const UNITS: SaleUnit[] = ['kg', 'L', 'szt.']
@@ -161,8 +151,6 @@ export function cellText(row: DataEntryRow, key: ColumnKey, pricing: Pricing): s
       return plainNumber(row.stock ?? null, 3)
     case 'rotation':
       return plainNumber(row.rotation ?? null, 3)
-    case 'promoPrice':
-      return plainNumber(activePromoPrice(row), 2)
     case 'region':
     case 'family':
     case 'subfamily': {
@@ -265,7 +253,6 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
     case 'suggestedPrice':
     case 'stock':
     case 'rotation':
-    case 'promoPrice':
       return { row }
   }
 }

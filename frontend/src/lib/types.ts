@@ -1665,6 +1665,9 @@ export type DataEntryLine = {
   /** Pozycja wczytana z przypięcia kodu dostawcy do artykułu ({@code eanSource} = LINK). */
   linkId: string | null
   linkedCode: string | null
+  /** Indeks dostawcy i kod CN z pozycji faktury (do pliku CADBEZP). */
+  supplierCode: string | null
+  cn: string | null
 }
 
 export type DataEntryInvoice = {
@@ -1984,6 +1987,18 @@ export type PriceFileImport = {
   olderCount: number
   /** ITM8 spoza kartoteki sklepu. */
   unknownCount: number
+}
+
+/** Plik CTRLPRIX z wprowadzania danych (zmienione ceny sprzedaży) w historii. */
+export type PriceControlFileItem = {
+  id: string
+  fileName: string
+  supplierCode: string | null
+  supplierName: string | null
+  invoiceNumber: string | null
+  lineCount: number
+  createdAt: string
+  createdBy: string | null
 }
 
 export type PriceFileOverview = {

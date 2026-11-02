@@ -18,6 +18,8 @@ type Props<T> = {
   placeholder: string
   emptyText: string
   invalid?: boolean
+  /** `lg` = wysokość pól formularza z pływającą etykietą (h-12), gdy wyszukiwarka stoi obok nich. */
+  size?: 'default' | 'lg'
   className?: string
 }
 
@@ -37,6 +39,7 @@ export function SearchPicker<T>({
   placeholder,
   emptyText,
   invalid,
+  size = 'default',
   className,
 }: Props<T>) {
   const [query, setQuery] = useState('')
@@ -75,20 +78,24 @@ export function SearchPicker<T>({
       <div className={cn('relative', className)}>
         <SearchIcon
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          className={cn(
+            'pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground',
+            size === 'lg' ? 'left-3' : 'left-2.5',
+          )}
         />
         <Combobox.Input
           aria-label={label}
           aria-invalid={invalid || undefined}
           placeholder={open && value ? itemLabel(value) : placeholder}
           className={cn(
-            'h-10 w-full rounded-lg border border-input bg-background pr-9 pl-8 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 dark:bg-input/30',
+            size === 'lg' ? 'h-12 rounded-xl pl-9' : 'h-10 rounded-lg pl-8',
+            'w-full border border-input bg-background pr-10 text-sm transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-3 focus:ring-ring/30 dark:bg-input/30',
             invalid && 'border-amber-500 focus:border-amber-500 focus:ring-amber-500/20',
           )}
         />
         <Combobox.Trigger
           aria-label={`Pokaż: ${label}`}
-          className="absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40"
+          className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40"
         >
           <ChevronDownIcon className="size-4" />
         </Combobox.Trigger>

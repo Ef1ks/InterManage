@@ -1,18 +1,19 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { FileCodeIcon } from 'lucide-react'
+import { FileCodeIcon, RotateCcwIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ApiError, api, fetchPostedFile, saveBlob } from '@/lib/api'
-import { useProductFileFolder } from '@/lib/proto-files'
-import { ensureFolderAccess, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
+import { ApiError, api, downloadFile, fetchPostedFile, saveBlob } from '@/lib/api'
+import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
+import { ensureFolderAccess, type SavedFolderSpec, saveApiFileToFolder, saveToFolder } from '@/lib/saved-folders'
 
 import { formatMoney } from '@/features/documents/format'
+import { formatDateTime } from '@/features/ksef/format'
 
-import type { ExportPayload, ProductFilePayload } from './api'
+import { type ExportPayload, type PriceControlPayload, type ProductFilePayload, usePriceControlFiles } from './api'
 import { differs, type InvoiceTotals, signedMoney } from './invoice-totals'
 import type { DataEntryRow } from './rows'
 
@@ -30,6 +31,8 @@ type Props = {
   payload: ExportPayload | null
   /** Nowe i zmienione artykuły do pliku CADBEZP; {@code null}, gdy takich nie ma. */
   productFile: ProductFilePayload | null
+  /** Artykuły z kartoteki ze zmienioną ceną sprzedaży do pliku CTRLPRIX; {@code null}, gdy takich nie ma. */
+  priceControl: PriceControlPayload | null
   problems: XmlProblems
   /** Sumy tabeli i faktury: różnica wymaga potwierdzenia zapisu, ale go nie blokuje. */
   totals: InvoiceTotals
@@ -42,12 +45,25 @@ type Props = {
  * Zapis tabeli do pliku XML faktury dla programu sklepu. Plik trafia do folderu wybranego raz w przeglądarce; bez
  * folderu (albo w przeglądarce bez tej funkcji) się pobiera. Braki tabeli i różnica sum z fakturą są nad przyciskiem,
  * ale nie blokują zapisu: przycisk pyta wtedy „Zapisz mimo …”. Nowe i zmienione artykuły trafiają po zapisie XML do
- * pliku CADBEZP (.xls) w osobnym folderze (ścieżka z ustawień sklepu); jego błąd nie cofa zapisanego pliku XML.
+ * pliku CADBEZP (.xls) w osobnym folderze (ścieżka z ustawień sklepu), a zmienione ceny sprzedaży do pliku CTRLPRIX w
+ * folderze plików PROTO; ich błąd nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików.
  */
-export function XmlSaveDialog({ storeId, payload, productFile, problems, totals, open, onOpenChange, onGoTo }: Props) {
+export function XmlSaveDialog({
+  storeId,
+  payload,
+  productFile,
+  priceControl,
+  problems,
+  totals,
+  open,
+  onOpenChange,
+  onGoTo,
+}: Props) {
   const [saving, setSaving] = useState(false)
   const queryClient = useQueryClient()
   const productFolder = useProductFileFolder(storeId)
+  const protoFolder = useProtoFolder(storeId)
+  const priceControlFiles = usePriceControlFiles(storeId, open)
   const count = payload?.rows.length ?? 0
 
   const save = async () => {
@@ -57,6 +73,7 @@ export function XmlSaveDialog({ storeId, payload, productFile, problems, totals,
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
       const folderReady = await ensureFolderAccess(XML_FOLDER.key)
       const productFolderReady = productFile ? await ensureFolderAccess(productFolder.key) : false
+      const protoFolderReady = priceControl ? await ensureFolderAccess(protoFolder.key) : false
       const { fileName, blob, headers } = await fetchPostedFile(
         `/stores/${storeId}/data-entry/export/xml`,
         payload,
@@ -65,6 +82,7 @@ export function XmlSaveDialog({ storeId, payload, productFile, problems, totals,
       // Zapis na dysku przed historią: nieudany zapis kończy się tutaj i plik nie trafia do historii.
       if (folderReady) await saveToFolder(XML_FOLDER.key, fileName, blob)
       else saveBlob(blob, fileName)
+      const saved: SavedFile[] = [{ fileName, downloaded: !folderReady }]
       const exportId = headers.get('X-Xml-Export-Id')
       let inHistory = false
       if (exportId) {
@@ -76,11 +94,29 @@ export function XmlSaveDialog({ storeId, payload, productFile, problems, totals,
           // Plik jest już na dysku; brak wpisu w historii nie cofa zapisu.
         }
       }
-      if (!inHistory)
-        toast.warning(`${folderReady ? 'Zapisano' : 'Pobrano'} ${fileName}, ale plik nie trafił do historii`)
-      else if (folderReady) toast.success(`Zapisano ${fileName}`)
-      else toast.success('Pobrano plik XML', { description: 'Folder na pliki XML nie jest wybrany w tej przeglądarce.' })
-      if (productFile) await saveProductFile(productFile, productFolderReady)
+      if (!inHistory) toast.warning(`Plik ${fileName} nie trafił do historii`)
+      if (productFile) saved.push(...(await saveProductFile(productFile, productFolderReady)))
+      let supplierCode: string | null = null
+      if (priceControl) {
+        const result = await savePriceControl(priceControl, protoFolderReady)
+        if (result) {
+          saved.push(result.file)
+          supplierCode = result.supplierCode
+        }
+      }
+      toast.success(`Zapisano pliki${supplierCode ? ` dla dostawcy ${supplierCode}` : ''}`, {
+        description: (
+          <span className="grid gap-0.5">
+            {saved.map((file) => (
+              <span key={file.fileName} className="break-all">
+                {file.fileName}
+                {file.downloaded ? ' (pobrany: folder nie jest wybrany w tej przeglądarce)' : ''}
+              </span>
+            ))}
+          </span>
+        ),
+        duration: 10_000,
+      })
       onOpenChange(false)
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku XML', {
@@ -92,7 +128,7 @@ export function XmlSaveDialog({ storeId, payload, productFile, problems, totals,
   }
 
   /** Plik CADBEZP po zapisanym pliku XML: błąd tylko ostrzega, plik XML zostaje. */
-  const saveProductFile = async (file: ProductFilePayload, folderReady: boolean) => {
+  const saveProductFile = async (file: ProductFilePayload, folderReady: boolean): Promise<SavedFile[]> => {
     try {
       const { fileName, blob } = await fetchPostedFile(
         `/stores/${storeId}/data-entry/export/product-file`,
@@ -101,13 +137,47 @@ export function XmlSaveDialog({ storeId, payload, productFile, problems, totals,
       )
       if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
       else saveBlob(blob, fileName)
-      toast.success(`${folderReady ? 'Zapisano' : 'Pobrano'} ${fileName}`, {
-        description: `Nowe i zmienione artykuły: ${file.rows.length}.`,
-      })
+      return [{ fileName, downloaded: !folderReady }]
     } catch (error) {
       toast.error('Nie udało się zapisać pliku nowych artykułów', {
         description: `${error instanceof ApiError ? `${error.message} ` : ''}Plik XML jest zapisany.`,
       })
+      return []
+    }
+  }
+
+  /** Plik CTRLPRIX (zmienione ceny) w folderze plików PROTO: błąd tylko ostrzega, plik XML zostaje. */
+  const savePriceControl = async (file: PriceControlPayload, folderReady: boolean) => {
+    try {
+      const { fileName, blob, headers } = await fetchPostedFile(
+        `/stores/${storeId}/data-entry/export/price-control`,
+        file,
+        'CTRLPRIX.traite0',
+      )
+      void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-files'] })
+      if (folderReady) await saveToFolder(protoFolder.key, fileName, blob)
+      else saveBlob(blob, fileName)
+      return { file: { fileName, downloaded: !folderReady }, supplierCode: headers.get('X-Supplier-Code') || null }
+    } catch (error) {
+      toast.error('Nie udało się zapisać pliku zmian cen (CTRLPRIX)', {
+        description: `${error instanceof ApiError ? `${error.message} ` : ''}Plik XML jest zapisany.`,
+      })
+      return null
+    }
+  }
+
+  /** Ponowny zapis pliku CTRLPRIX z historii w folderze plików PROTO (bez folderu: pobranie). */
+  const saveAgain = async (id: string) => {
+    const path = `/stores/${storeId}/data-entry/price-control-files/${id}/file`
+    try {
+      if (await ensureFolderAccess(protoFolder.key)) {
+        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.traite0')
+        toast.success(`Zapisano ${fileName}`)
+      } else {
+        await downloadFile(path, 'CTRLPRIX.traite0')
+      }
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku CTRLPRIX')
     }
   }
 
@@ -183,14 +253,53 @@ export function XmlSaveDialog({ storeId, payload, productFile, problems, totals,
           </div>
         )}
 
+        {priceControl && (
+          <div className="grid gap-2">
+            <p className="text-sm">
+              Zmienione ceny sprzedaży ({priceControl.rows.length}) trafią do pliku CTRLPRIX w folderze plików PROTO.
+            </p>
+            <SavedFolder folder={protoFolder} />
+          </div>
+        )}
+
         <Button size="xl" loading={saving} disabled={count === 0} onClick={save}>
           <FileCodeIcon />
           {totals.mismatch ? 'Zapisz mimo różnicy' : issues.length > 0 ? 'Zapisz mimo to' : 'Zapisz plik XML'}
         </Button>
+
+        {priceControlFiles.data && priceControlFiles.data.length > 0 && (
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground">
+              Ostatnie pliki CTRLPRIX ({priceControlFiles.data.length})
+            </summary>
+            <ul className="mt-2 divide-y rounded-lg border">
+              {priceControlFiles.data.map((file) => (
+                <li key={file.id} className="flex items-center gap-3 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">
+                      {file.supplierName ?? file.supplierCode ?? 'Dostawca'}
+                      {file.invoiceNumber ? ` · ${file.invoiceNumber}` : ''}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {formatDateTime(file.createdAt)} · cen: {file.lineCount}
+                      {file.createdBy ? ` · ${file.createdBy}` : ''}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => saveAgain(file.id)} title={file.fileName}>
+                    <RotateCcwIcon />
+                    Zapisz ponownie
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </DialogContent>
     </Dialog>
   )
 }
+
+type SavedFile = { fileName: string; downloaded: boolean }
 
 function SumRow({
   label,

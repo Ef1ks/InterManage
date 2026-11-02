@@ -121,7 +121,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
             )}
             <p className="text-xs text-muted-foreground">
               Folder sprawdzamy co 10 minut, gdy aplikacja jest otwarta. Cena z pliku nowszego niż raport kartoteki
-              zastępuje cenę sprzedaży; promocja trafia do kolumny „Cena promo.”.
+              zastępuje cenę sprzedaży; w trakcie promocji cena sprzedaży to cena promocyjna, na pomarańczowo.
             </p>
           </div>
         </DropdownMenuGroup>

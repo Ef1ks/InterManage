@@ -15,6 +15,12 @@ graphify-out/.graphify_labels.pending.json
 graphify-out/cost.json
 graphify-out/20*/
 
+# Pliki z systemu sklepu i wygenerowane przez aplikację (raporty, skany, PROTO, CTRLPRIX, TRACEART)
+*.[xX][lL][sS]
+*.[xX][lL][sS][xX]
+*.[pP][dD][fF]
+*.[tT][rR][aA][iI][tT][eE]0
+
 # System
 .DS_Store
 Thumbs.db

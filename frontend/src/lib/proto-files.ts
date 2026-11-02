@@ -18,8 +18,8 @@ const DEFAULT_FOLDER = 'N:\\avisoconfig'
 export const PROTOCOLS: { kind: ProtocolKind; number: number; label: string }[] = [
   { kind: 'LIQUIDATION', number: 1, label: 'Likwidacje' },
   { kind: 'STORE_NEEDS', number: 2, label: 'Potrzeby sklepu' },
-  { kind: 'DONATION', number: 3, label: 'Darowizna' },
-  { kind: 'ADVERTISING', number: 4, label: 'Reklama' },
+  { kind: 'ADVERTISING', number: 3, label: 'Reklama' },
+  { kind: 'DONATION', number: 4, label: 'Darowizna' },
   { kind: 'REPRESENTATION', number: 5, label: 'Reprezentacja' },
   { kind: 'TRANSFER', number: 6, label: 'MM' },
 ]

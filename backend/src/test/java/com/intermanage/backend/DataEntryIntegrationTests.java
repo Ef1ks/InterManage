@@ -704,6 +704,55 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void priceControlFile() throws Exception {
+        String supplierId = jdbc.queryForObject("""
+                insert into suppliers (store_id, code, keyword, name, nip)
+                values (?::uuid, '98', 'GOBARTO', 'GOBARTO S.A.', '6991781489') returning id::text""",
+                String.class, storeId);
+        // Dostawca po NIP-ie sprzedawcy; EAN-8 dopełniony do 13 cyfr, kod zastępczy i cena 0 pominięte.
+        String body = """
+                {"sellerNip":"699-178-14-89","invoiceNumber":"FV/9","rows":[
+                 {"ean":"2432710000000","salePrice":7.99},{"ean":"5904634010327","salePrice":4.99},
+                 {"ean":"12345670","salePrice":23.49},{"ean":"SZYNKA","salePrice":1},
+                 {"ean":"5900000000012","salePrice":0}]}""";
+        byte[] file = mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(".*filename=\"CTRLPRIX_\\d{8}_\\d{6}_GOBARTO_ImpEk\\.traite0\".*")))
+                .andExpect(header().string("X-Supplier-Code", "98"))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(file, StandardCharsets.US_ASCII)).isEqualTo("""
+                243271000000000000000000000000799\r
+                590463401032700000000000000000499\r
+                000001234567000000000000000002349\r
+                """);
+
+        // Historia: plik da się zapisać ponownie z tą samą nazwą i treścią.
+        String id = jdbc.queryForObject(
+                "select id::text from data_entry_price_control_files where store_id = ?::uuid", String.class, storeId);
+        mvc.perform(get(url("/price-control-files")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(id))
+                .andExpect(jsonPath("$[0].supplierCode").value("98"))
+                .andExpect(jsonPath("$[0].invoiceNumber").value("FV/9"))
+                .andExpect(jsonPath("$[0].lineCount").value(3));
+        assertThat(mvc.perform(get(url("/price-control-files/" + id + "/file")).cookie(owner))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray()).isEqualTo(file);
+
+        // Dostawca bez hasła i dostawca spoza listy: brak pliku.
+        jdbc.update("update suppliers set keyword = null where id = ?::uuid", supplierId);
+        mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sellerNip\":\"5260250995\",\"rows\":[{\"ean\":\"5904634010327\",\"salePrice\":4.99}]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void protocolFiles() throws Exception {
         String settings = "/api/stores/" + storeId + "/proto-settings";
         // Bez zapisanych ustawień: domyślny folder i wszystkie protokoły widoczne.

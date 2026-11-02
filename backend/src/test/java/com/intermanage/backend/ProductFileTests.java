@@ -23,15 +23,15 @@ class ProductFileTests {
         List<List<Object>> rows = ProductFile.rows(List.of(
                 new ProductFileRequest.Row("5903983402258", "WODKA DEBOWA 0,7L",
                         "Dębowa Polska", "L", new BigDecimal("0.700"), new BigDecimal("12.3456"),
-                        new BigDecimal("23.00"), new BigDecimal("29.99"), "730501"),
+                        new BigDecimal("23.00"), new BigDecimal("29.99"), "730501", "61658344", "2208 90 56"),
                 new ProductFileRequest.Row("CHLEB WIEJSKI", "CHLEB WIEJSKI 500G", null, "kg",
-                        new BigDecimal("0.500"), new BigDecimal("3.2"), new BigDecimal("5"), null, null)));
+                        new BigDecimal("0.500"), new BigDecimal("3.2"), new BigDecimal("5"), null, null, null, null)));
 
         assertThat(ProductFile.HEADERS).hasSize(25);
         assertThat(rows.get(0)).containsExactly("5903983402258", "WODKA DEBOWA 0,7L", "WODKA DEBOWA 0,7L",
                 "5903983402258", "1", "1", "L", new BigDecimal("0.700"), "DEBOWA P", new BigDecimal("12.35"),
                 BigDecimal.ZERO, new BigDecimal("12.35"), "23%", new BigDecimal("29.99"), new BigDecimal("29.99"),
-                BigDecimal.ZERO, "73", "05", "01", null, null, null, null, null, "99999980");
+                BigDecimal.ZERO, "73", "05", "01", null, null, null, null, null, "22089056");
         // Kod zastępczy to brak EAN-u (też w Ref. dostawcy), kg = K, bez nomenklatury puste poziomy.
         List<Object> created = rows.get(1);
         assertThat(created.get(0)).isNull();

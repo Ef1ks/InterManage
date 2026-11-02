@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 
 import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
-import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Button } from '@/components/ui/button'
+import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useMe } from '@/features/auth/api'
 import { useMeatReport } from '@/features/meat/api'
@@ -25,8 +26,10 @@ export function MeatReportView({ store }: { store: StoreSummary }) {
   const { data: me } = useMe()
   const [params, setParams] = useSearchParams()
   const today = todayIso()
-  const from = params.get('od') ?? addDays(today, -6)
-  const to = params.get('do') ?? today
+  // Sprzedaż jest wgrywana do wczoraj, więc domyślnie porównujemy wczorajszy dzień.
+  const yesterday = addDays(today, -1)
+  const from = params.get('od') ?? yesterday
+  const to = params.get('do') ?? yesterday
   const mode: MeatReportMode = params.get('tryb') === 'srednia' ? 'AVERAGE' : 'SPLIT'
   const accessible = me?.stores ?? []
   const chosen = params.getAll('sklep').filter((id) => accessible.some((item) => item.id === id))
@@ -47,34 +50,60 @@ export function MeatReportView({ store }: { store: StoreSummary }) {
       { replace: true },
     )
 
+  // Każdy skrót kończy się wczoraj: dzień = wczoraj, tydzień = 7 dni, miesiąc = 30 dni.
   const shortcuts = [
-    { label: 'Dziś', from: today, to: today },
-    { label: 'Wczoraj', from: addDays(today, -1), to: addDays(today, -1) },
-    { label: '7 dni', from: addDays(today, -6), to: today },
-    { label: '30 dni', from: addDays(today, -29), to: today },
+    { label: 'Dzień', from: yesterday, to: yesterday },
+    { label: 'Tydzień', from: addDays(yesterday, -6), to: yesterday },
+    { label: 'Miesiąc', from: addDays(yesterday, -29), to: yesterday },
   ]
+  // Strzałki przesuwają okres o jego długość (dzień o dzień, tydzień o tydzień), nie dalej niż do dziś.
+  const length = daysBetween(from, to) + 1
+  const shift = (direction: -1 | 1) =>
+    update({ od: addDays(from, direction * length), do: addDays(to, direction * length) })
+  const canGoForward = addDays(to, length) <= today
 
   return (
     <div data-wide-page className="space-y-5">
-      <div className="flex flex-wrap items-end gap-3">
-        <DateField label="Od" value={from} onChange={(value) => update({ od: value })} max={to} className="w-48" />
-        <DateField label="Do" value={to} onChange={(value) => update({ do: value })} min={from} className="w-48" />
-        <div className="flex flex-wrap gap-1">
-          {shortcuts.map((shortcut) => (
-            <Button
-              key={shortcut.label}
-              variant={shortcut.from === from && shortcut.to === to ? 'secondary' : 'ghost'}
-              onClick={() => update({ od: shortcut.from, do: shortcut.to })}
-            >
-              {shortcut.label}
-            </Button>
-          ))}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" aria-label="Poprzedni okres" onClick={() => shift(-1)}>
+            <ChevronLeftIcon />
+          </Button>
+          <SegmentedField
+            label="Okres"
+            options={shortcuts.map((shortcut) => ({ value: shortcut.label, label: shortcut.label }))}
+            value={shortcuts.find((shortcut) => shortcut.from === from && shortcut.to === to)?.label ?? ''}
+            onChange={(label) => {
+              const shortcut = shortcuts.find((item) => item.label === label)
+              if (shortcut) update({ od: shortcut.from, do: shortcut.to })
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Następny okres"
+            onClick={() => shift(1)}
+            disabled={!canGoForward}
+          >
+            <ChevronRightIcon />
+          </Button>
+        </div>
+        <div className="grid w-full gap-2 sm:flex sm:w-auto">
+          <DateField
+            label="Od"
+            value={from}
+            onChange={(value) => update({ od: value })}
+            max={to}
+            className="sm:w-64"
+          />
+          <DateField label="Do" value={to} onChange={(value) => update({ do: value })} min={from} className="sm:w-64" />
         </div>
         <SegmentedField
           label="Sposób liczenia"
           options={MODES}
           value={mode}
           onChange={(value) => update({ tryb: value === 'AVERAGE' ? 'srednia' : null })}
+          className="lg:ml-auto"
         />
       </div>
       {accessible.length > 1 && (
@@ -97,6 +126,11 @@ export function MeatReportView({ store }: { store: StoreSummary }) {
       {report.data && report.data.rows.length > 0 && <ReportTables report={report.data} />}
     </div>
   )
+}
+
+/** Liczba dni od `from` do `to` (RRRR-MM-DD); daty bez godziny, więc liczymy w UTC, bez zmiany czasu. */
+function daysBetween(from: string, to: string) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 }
 
 function ReportSkeleton() {

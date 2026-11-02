@@ -214,7 +214,8 @@ public class DataEntryService {
                     fallback != null ? fallback.code() : null, fallback != null ? fallback.source() : null,
                     line.quantity(), unitNet(line, vat),
                     line.name() != null ? line.name().strip() : null, line.unit(), vat, product, measure.unit(),
-                    measure.netContent(), link != null ? link.getId() : null, link != null ? link.getCode() : null));
+                    measure.netContent(), link != null ? link.getId() : null, link != null ? link.getCode() : null,
+                    lineCodes.get(i).index(), lineCodes.get(i).cn()));
         }
         return new DataEntryInvoice(summary.id(), summary.invoiceNumber(), summary.sellerName(), summary.sellerNip(),
                 summary.issueDate(), chosen, ProductCodeSources.sources(lineCodes, inCatalog).stream()
@@ -469,7 +470,7 @@ public class DataEntryService {
             rows.add(new DataEntryLine(String.valueOf(i + 1), ean, eanSource, fallback ? name : null,
                     fallback ? "nazwa z pliku XML" : null, line.quantity(), line.unitNet(), name, null,
                     line.vatPercent(), product, measure.unit(), measure.netContent(),
-                    link != null ? link.getId() : null, link != null ? link.getCode() : null));
+                    link != null ? link.getId() : null, link != null ? link.getCode() : null, null, null));
         }
         InvoiceXml.Header header = document.header();
         return new DataEntryInvoice(invoice != null ? invoice.id() : null,

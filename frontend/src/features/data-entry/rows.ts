@@ -33,6 +33,9 @@ export type DataEntryRow = {
   eanFallback?: string | null
   /** EAN, dla którego skończyło się szukanie w kartotece (do tego czasu błędny EAN nie jest oznaczany). Brak w starszych szkicach. */
   eanChecked?: string | null
+  /** Indeks dostawcy i kod CN z pozycji faktury (do pliku CADBEZP). Brak w starszych szkicach i wierszach ręcznych. */
+  supplierCode?: string | null
+  cn?: string | null
   quantity: number | null
   unitNet: number | null
   name: string
@@ -136,6 +139,8 @@ export function rowFromLine(line: DataEntryLine): DataEntryRow {
     eanFallback: line.ean ? null : line.fallbackSource,
     // Pozycje faktury backend sprawdził już w kartotece.
     eanChecked: line.ean ?? line.fallbackCode ?? '',
+    supplierCode: line.supplierCode,
+    cn: line.cn,
     quantity: line.quantity,
     unitNet: line.unitNet,
     name: product?.name ?? line.invoiceName ?? '',
@@ -536,6 +541,26 @@ export function withAutoSalePrice(before: DataEntryRow, after: DataEntryRow, pri
 }
 
 /** CENA_CAD artykułu z kartoteki (cena narzucona przez centralę); {@code null}, gdy jej nie ma. */
+/**
+ * Cena z kasy z bieżącej kartoteki: plik TRACEART wczytany po dodaniu wiersza zmienia promocję i cenę sprzedaży
+ * (w promocji to cena promocyjna), cenę zmienioną w tabeli zostawia. Ten sam wiersz, gdy nic się nie zmieniło.
+ */
+export function withCurrentPromo(row: DataEntryRow, product: DataEntryCatalogProduct | null): DataEntryRow {
+  const promoPrice = product?.promoPrice ?? null
+  const promoTo = product?.promoTo ?? null
+  const catalog = row.catalog
+  const salePrice =
+    product && catalog && row.salePrice === catalog.salePrice ? product.salePrice : row.salePrice
+  if (row.promoPrice === promoPrice && row.promoTo === promoTo && row.salePrice === salePrice) return row
+  return {
+    ...row,
+    promoPrice,
+    promoTo,
+    salePrice,
+    catalog: catalog && salePrice !== row.salePrice ? { ...catalog, salePrice } : catalog,
+  }
+}
+
 /** Cena promocyjna z kasy, póki promocja trwa (szkic z localStorage bywa z poprzednich dni). */
 export function activePromoPrice(row: DataEntryRow) {
   if (!row.known || row.promoPrice == null || !row.promoTo || row.promoTo < todayIso()) return null

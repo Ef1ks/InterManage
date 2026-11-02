@@ -14,8 +14,8 @@ import type {
 const base = TOOL_ROUTES.MEAT_PURCHASES.path
 
 export const meatPaths = {
-  report: base,
-  deliveries: `${base}/wz`,
+  deliveries: base,
+  report: `${base}/porownanie`,
   create: `${base}/wz/nowy`,
   fromScan: (scanId: string) => `${base}/wz/nowy?skan=${scanId}`,
   delivery: (id: string) => `${base}/wz/${id}`,

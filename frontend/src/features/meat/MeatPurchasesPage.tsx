@@ -39,15 +39,15 @@ function StoreMeatPurchases({ store }: { store: StoreSummary }) {
           <>
             <PageHeader title="Zakup mięsa" description={storeLabel(store)} />
             <nav aria-label="Zakup mięsa" className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:w-fit">
-              <SubNavLink to={meatPaths.report} end>
-                Porównanie cen
+              <SubNavLink to={meatPaths.deliveries} end>
+                Dokumenty WZ
               </SubNavLink>
-              <SubNavLink to={meatPaths.deliveries}>Dokumenty WZ</SubNavLink>
+              <SubNavLink to={meatPaths.report}>Porównanie cen</SubNavLink>
             </nav>
             <Routes>
-              <Route index element={<MeatReportView store={store} />} />
-              <Route path="wz" element={<DeliveriesList store={store} />} />
-              <Route path="*" element={<Navigate to={meatPaths.report} replace />} />
+              <Route index element={<DeliveriesList store={store} />} />
+              <Route path="porownanie" element={<MeatReportView store={store} />} />
+              <Route path="*" element={<Navigate to={meatPaths.deliveries} replace />} />
             </Routes>
           </>
         }

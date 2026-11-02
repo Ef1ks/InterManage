@@ -282,10 +282,11 @@ class ProductImportIntegrationTests {
         assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
                 .isEqualTo(new BigDecimal("3.79"));
 
+        // We wprowadzaniu danych cena sprzedaży to w promocji cena z kasy.
         mvc.perform(get("/api/stores/" + storeId + "/data-entry/products").param("ean", "59" + a.substring(2))
                         .cookie(owner))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].salePrice").value(9.49))
+                .andExpect(jsonPath("$[0].salePrice").value(7.99))
                 .andExpect(jsonPath("$[0].promoPrice").value(7.99))
                 .andExpect(jsonPath("$[0].promoTo").value("2030-12-31"));
 
@@ -295,6 +296,19 @@ class ProductImportIntegrationTests {
                 .andExpect(jsonPath("$.imported[0].olderCount").value(1));
         assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
                 .isEqualTo(new BigDecimal("3.79"));
+
+        // Nowszy plik bez promocji kończy ją przed datą końca; wprowadzanie danych dostaje znów cenę regularną.
+        uploadPriceFiles(owner, priceFile(reportDate.plusMinutes(20),
+                priceLine(a, "59" + a.substring(2), "9.49", null, null, null)))
+                .andExpect(jsonPath("$.imported[0].updatedCount").value(1));
+        Map<String, Object> promoEnded = jdbc.queryForMap("select * from products where itm8 = ?", a);
+        assertThat(promoEnded.get("sale_price")).isEqualTo(new BigDecimal("9.49"));
+        assertThat(promoEnded.get("promo_price")).isNull();
+        assertThat(promoEnded.get("promo_to")).isNull();
+        mvc.perform(get("/api/stores/" + storeId + "/data-entry/products").param("ean", "59" + a.substring(2))
+                        .cookie(owner))
+                .andExpect(jsonPath("$[0].salePrice").value(9.49))
+                .andExpect(jsonPath("$[0].promoPrice").doesNotExist());
 
         // Raport wygenerowany przed plikiem (wgrany później) nie cofa ceny z pliku, nowszy już tak.
         upload(owner, report(reportDate.plusMinutes(1), product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))

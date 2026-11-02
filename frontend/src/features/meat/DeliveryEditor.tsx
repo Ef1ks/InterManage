@@ -70,6 +70,16 @@ type Draft = {
   lines: EditorLine[]
 }
 
+/** Kolumny pozycji: artykuł | cena | usuń. Ten sam podział w nagłówku sekcji, żeby kolumny trzymały linię. */
+const LINE_GRID = 'grid grid-cols-[minmax(0,1fr)_6.5rem_2.25rem] gap-x-2 sm:grid-cols-[minmax(0,1fr)_8rem_2.25rem]'
+
+/**
+ * Układ wiersza pozycji: nazwa z dokumentu nad wyszukiwarką artykułu, cena obok artykułu, którego dotyczy.
+ * Na telefonie artykuł dostaje całą szerokość, a cena schodzi obok plakietek.
+ */
+const LINE_AREAS =
+  "[grid-template-areas:'name_name_remove'_'article_article_article'_'badges_price_price'] sm:[grid-template-areas:'name_name_name'_'article_price_remove'_'badges_badges_badges']"
+
 const priceText = (value: number) => String(value).replace('.', ',')
 
 function fromScan(scan: MeatScanResult): Draft {
@@ -292,8 +302,8 @@ function Editor({ store, initial, saved }: { store: StoreSummary; initial: Draft
         {draft.scanId && <ScanPreview storeId={store.id} scanId={draft.scanId} contentType={draft.scanContentType} />}
 
         <div className="min-w-0 space-y-5">
-          <section className="space-y-3 rounded-xl border bg-card p-4">
-            <h2 className="text-sm font-semibold">Dostawca i dokument</h2>
+          <section className="space-y-3 rounded-xl border bg-card p-5">
+            <h2 className="text-base font-semibold">Dostawca i dokument</h2>
             <SupplierField
               suppliers={suppliers}
               supplier={supplier}
@@ -328,14 +338,26 @@ function Editor({ store, initial, saved }: { store: StoreSummary; initial: Draft
             )}
           </section>
 
-          <section className="space-y-3 rounded-xl border bg-card p-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-sm font-semibold">Pozycje · cena netto za kg</h2>
+          <section className="rounded-xl border bg-card p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h2 className="text-base font-semibold">
+                Pozycje <span className="font-normal text-muted-foreground tabular-nums">{draft.lines.length}</span>
+              </h2>
               {undecided > 0 && (
                 <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                   {undecided === 1 ? '1 pozycja' : `${undecided} pozycje`} bez wybranego artykułu
                 </p>
               )}
+            </div>
+            <div
+              aria-hidden
+              className={cn(
+                LINE_GRID,
+                'mt-3 mb-3 hidden border-b pb-2 text-xs font-medium text-muted-foreground sm:grid',
+              )}
+            >
+              <span>Nazwa z dokumentu · artykuł z kartoteki</span>
+              <span className="pr-2.5 text-right">Cena netto</span>
             </div>
             <ul className="divide-y">
               {draft.lines.map((line) => (
@@ -361,6 +383,7 @@ function Editor({ store, initial, saved }: { store: StoreSummary; initial: Draft
             {!readOnly && (
               <Button
                 variant="outline"
+                className="mt-4"
                 onClick={() => edit((current) => ({ ...current, lines: [...current.lines, emptyLine()] }))}
               >
                 <PlusIcon />
@@ -384,16 +407,16 @@ function Editor({ store, initial, saved }: { store: StoreSummary; initial: Draft
           )}
 
           {!readOnly && (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Button size="xl" loading={save.isPending} onClick={submit}>
-                {saved ? 'Zapisz zmiany' : 'Zapisz dokument'}
-              </Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
               {saved && (
-                <Button variant="ghost" loading={remove.isPending} onClick={deleteDelivery}>
+                <Button variant="ghost" loading={remove.isPending} onClick={deleteDelivery} className="sm:mr-auto">
                   <Trash2Icon />
                   Usuń dokument
                 </Button>
               )}
+              <Button size="xl" loading={save.isPending} onClick={submit}>
+                {saved ? 'Zapisz zmiany' : 'Zapisz dokument'}
+              </Button>
             </div>
           )}
         </div>
@@ -495,6 +518,7 @@ function SupplierField({
           )}
           placeholder="Dostawca mięsa (nie SCA PR): nazwa, kod, NIP"
           emptyText="Nie ma takiego dostawcy na liście sklepu"
+          size="lg"
           invalid={invalid || (info != null && !supplier)}
         />
       )}
@@ -537,26 +561,61 @@ function LineRow({
   const priceInvalid = showErrors && parsePrice(line.price) == null
   const nameInvalid = showErrors && !line.documentName.trim()
   return (
-    <li className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-start">
-      <div className="min-w-0 space-y-2">
-        {readOnly ? (
-          <p className="text-sm font-medium">{line.documentName}</p>
-        ) : (
-          <input
-            aria-label="Nazwa z dokumentu"
-            value={line.documentName}
-            onChange={(event) => onChange({ documentName: event.target.value })}
-            placeholder="Nazwa z dokumentu"
-            className={cn(
-              'h-9 w-full rounded-lg border border-transparent bg-transparent px-2 -mx-2 text-sm font-medium outline-none hover:border-input focus:border-ring focus:ring-3 focus:ring-ring/30 dark:focus:bg-input/30',
-              nameInvalid && 'border-destructive',
-            )}
-          />
-        )}
+    <li className={cn(LINE_GRID, LINE_AREAS, 'items-center gap-y-2 py-3.5 first:pt-0 last:pb-0')}>
+      {readOnly ? (
+        <p className="min-w-0 text-sm font-medium [grid-area:name]">{line.documentName}</p>
+      ) : (
+        <input
+          aria-label="Nazwa z dokumentu"
+          aria-invalid={nameInvalid || undefined}
+          value={line.documentName}
+          onChange={(event) => onChange({ documentName: event.target.value })}
+          placeholder="Nazwa z dokumentu"
+          className={cn(
+            // Wygląda jak tekst, dopóki się go nie edytuje; -ml-2 trzyma tekst w linii z wyszukiwarką pod spodem.
+            '-ml-2 h-10 w-[calc(100%+0.5rem)] [grid-area:name] min-w-0 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium transition-[border-color,box-shadow] duration-150 outline-none placeholder:font-normal placeholder:text-muted-foreground hover:border-input focus:border-ring focus:ring-3 focus:ring-ring/30 dark:focus:bg-input/30',
+            nameInvalid && 'border-destructive hover:border-destructive',
+          )}
+        />
+      )}
+      <label className="relative block [grid-area:price]">
+        <span className="sr-only">Cena netto za kg</span>
+        <input
+          inputMode="decimal"
+          value={line.price}
+          readOnly={readOnly}
+          onChange={(event) => onChange({ price: event.target.value })}
+          aria-invalid={priceInvalid || undefined}
+          className={cn(
+            'h-10 w-full rounded-lg border border-input bg-background pr-11 pl-2.5 text-right text-sm font-semibold tabular-nums transition-[border-color,box-shadow] duration-150 outline-none focus:border-ring focus:ring-3 focus:ring-ring/30 dark:bg-input/30',
+            priceInvalid && 'border-destructive',
+            readOnly && 'border-transparent bg-transparent dark:bg-transparent',
+          )}
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground"
+        >
+          zł/kg
+        </span>
+      </label>
+      {onRemove && !readOnly ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Usuń pozycję"
+          onClick={onRemove}
+          className="justify-self-end [grid-area:remove]"
+        >
+          <XIcon />
+        </Button>
+      ) : null}
+
+      <div className="min-w-0 [grid-area:article]">
         {readOnly ? (
           <p className="text-sm text-muted-foreground">
             {line.article && line.article !== NO_ARTICLE
-              ? `${line.article.name} · ${line.article.brand ?? ''}`
+              ? [line.article.name, line.article.brand].filter(Boolean).join(' · ')
               : 'Bez artykułu – sam zakup'}
           </p>
         ) : (
@@ -586,31 +645,8 @@ function LineRow({
             invalid={line.article == null}
           />
         )}
-        <LineBadges line={line} />
       </div>
-      <div className="flex items-start gap-1">
-        <label className="flex-1">
-          <span className="sr-only">Cena netto za kg</span>
-          <input
-            inputMode="decimal"
-            value={line.price}
-            readOnly={readOnly}
-            onChange={(event) => onChange({ price: event.target.value })}
-            aria-invalid={priceInvalid || undefined}
-            className={cn(
-              'h-10 w-full rounded-lg border border-input bg-background px-2.5 text-right text-sm font-medium tabular-nums outline-none focus:border-ring focus:ring-3 focus:ring-ring/30 dark:bg-input/30',
-              priceInvalid && 'border-destructive',
-              readOnly && 'border-transparent bg-transparent',
-            )}
-          />
-          <span className="mt-0.5 block text-right text-xs text-muted-foreground">zł/kg netto</span>
-        </label>
-        {onRemove && !readOnly && (
-          <Button variant="ghost" size="icon" aria-label="Usuń pozycję" onClick={onRemove} className="mt-1">
-            <XIcon />
-          </Button>
-        )}
-      </div>
+      <LineBadges line={line} />
     </li>
   )
 }
@@ -638,9 +674,9 @@ function LineBadges({ line }: { line: EditorLine }) {
   }
   if (badges.length === 0 && !line.note) return null
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="-mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 [grid-area:badges]">
       {badges.map((badge) => (
-        <span key={badge.text} title={badge.title} className={cn('rounded-md px-1.5 py-0.5 text-xs font-medium', badge.className)}>
+        <span key={badge.text} title={badge.title} className={cn('rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap', badge.className)}>
           {badge.text}
         </span>
       ))}

@@ -40,66 +40,74 @@ export function DeliveriesList({ store }: { store: StoreSummary }) {
 
       {canEdit && <ScanButtons storeId={store.id} />}
 
-      <div className="flex flex-wrap items-end gap-3">
-        <DateField label="Od" value={from} onChange={setFrom} max={to} className="w-48" />
-        <DateField label="Do" value={to} onChange={setTo} min={from} className="w-48" />
-      </div>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-base font-semibold">
+            Wprowadzone dokumenty{' '}
+            {deliveries && <span className="font-normal text-muted-foreground tabular-nums">{deliveries.length}</span>}
+          </h2>
+          <div className="grid w-full gap-2 sm:flex sm:w-auto">
+            <DateField label="Od" value={from} onChange={setFrom} max={to} className="sm:w-64" />
+            <DateField label="Do" value={to} onChange={setTo} min={from} className="sm:w-64" />
+          </div>
+        </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-32">Data dostawy</TableHead>
-              <TableHead>Dostawca</TableHead>
-              <TableHead>Numer dokumentu</TableHead>
-              <TableHead className="text-right">Pozycje</TableHead>
-              <TableHead className="w-10">
-                <span className="sr-only">Skan</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isPending && <TableSkeletonRows columns={5} />}
-            {isError && (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                  Nie udało się wczytać dokumentów.{' '}
-                  <Button variant="link" className="h-auto p-0" onClick={() => refetch()}>
-                    Spróbuj ponownie
-                  </Button>
-                </TableCell>
+                <TableHead className="w-32">Data dostawy</TableHead>
+                <TableHead>Dostawca</TableHead>
+                <TableHead>Numer dokumentu</TableHead>
+                <TableHead className="text-right">Pozycje</TableHead>
+                <TableHead className="w-10">
+                  <span className="sr-only">Skan</span>
+                </TableHead>
               </TableRow>
-            )}
-            {deliveries?.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                  W tym okresie nie wprowadzono dokumentów WZ.
-                </TableCell>
-              </TableRow>
-            )}
-            {deliveries?.map((delivery) => (
-              <TableRow key={delivery.id} className="relative cursor-pointer hover:bg-muted/50">
-                <TableCell className="tabular-nums">{formatShortDate(delivery.deliveryDate)}</TableCell>
-                <TableCell className="font-medium">
-                  <Link
-                    to={meatPaths.delivery(delivery.id)}
-                    className="outline-none after:absolute after:inset-0 focus-visible:underline"
-                  >
-                    {delivery.supplier.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="tabular-nums">{delivery.documentNumber}</TableCell>
-                <TableCell className="text-right tabular-nums">{delivery.lineCount}</TableCell>
-                <TableCell>
-                  {delivery.hasScan && (
-                    <ImageIcon aria-label="Ze skanem" className="size-4 text-muted-foreground" />
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {isPending && <TableSkeletonRows columns={5} />}
+              {isError && (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    Nie udało się wczytać dokumentów.{' '}
+                    <Button variant="link" className="h-auto p-0" onClick={() => refetch()}>
+                      Spróbuj ponownie
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )}
+              {deliveries?.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    W tym okresie nie wprowadzono dokumentów WZ.
+                  </TableCell>
+                </TableRow>
+              )}
+              {deliveries?.map((delivery) => (
+                <TableRow key={delivery.id} className="relative cursor-pointer hover:bg-muted/50">
+                  <TableCell className="tabular-nums">{formatShortDate(delivery.deliveryDate)}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to={meatPaths.delivery(delivery.id)}
+                      className="outline-none after:absolute after:inset-0 focus-visible:underline"
+                    >
+                      {delivery.supplier.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="tabular-nums">{delivery.documentNumber}</TableCell>
+                  <TableCell className="text-right tabular-nums">{delivery.lineCount}</TableCell>
+                  <TableCell>
+                    {delivery.hasScan && (
+                      <ImageIcon aria-label="Ze skanem" className="size-4 text-muted-foreground" />
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
     </div>
   )
 }
@@ -129,20 +137,26 @@ function ScanButtons({ storeId }: { storeId: string }) {
   const busy = preparing || scan.isPending
 
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="xl" onClick={() => cameraInput.current?.click()} disabled={busy}>
-          <CameraIcon />
-          Zrób zdjęcie WZ
-        </Button>
-        <Button size="xl" variant="outline" onClick={() => fileInput.current?.click()} disabled={busy}>
-          <FileUpIcon />
-          Wgraj skan
-        </Button>
-        <Button size="xl" variant="ghost" nativeButton={false} render={<Link to={meatPaths.create} />} disabled={busy}>
-          <PencilLineIcon />
-          Wpisz ręcznie
-        </Button>
+    <section className="rounded-xl border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">Nowy dokument WZ</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Zdjęcie albo skan: AI odczyta dostawcę i ceny netto za kg.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="xl" onClick={() => cameraInput.current?.click()} disabled={busy}>
+            <CameraIcon />
+            Zrób zdjęcie WZ
+          </Button>
+          <Button size="xl" variant="outline" onClick={() => fileInput.current?.click()} disabled={busy}>
+            <FileUpIcon />
+            Wgraj skan
+          </Button>
+          <Button size="xl" variant="ghost" nativeButton={false} render={<Link to={meatPaths.create} />} disabled={busy}>
+            <PencilLineIcon />
+            Wpisz ręcznie
+          </Button>
+        </div>
       </div>
       {busy && (
         <p role="status" className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
@@ -173,6 +187,6 @@ function ScanButtons({ storeId }: { storeId: string }) {
           event.target.value = ''
         }}
       />
-    </div>
+    </section>
   )
 }

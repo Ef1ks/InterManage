@@ -16,5 +16,5 @@ import java.util.UUID;
 public record DataEntryLine(String number, String ean, String eanSource, String fallbackCode, String fallbackSource,
         BigDecimal quantity, BigDecimal unitNet, String invoiceName,
         String invoiceUnit, BigDecimal vatPercent, CatalogProduct product, String unit, BigDecimal netContent,
-        UUID linkId, String linkedCode) {
+        UUID linkId, String linkedCode, String supplierCode, String cn) {
 }

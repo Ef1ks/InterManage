@@ -29,6 +29,8 @@ public record ProductFileRequest(
             BigDecimal purchasePrice,
             BigDecimal vatPercent,
             BigDecimal salePrice,
-            @Size(max = 6) String subfamilyCode) {
+            @Size(max = 6) String subfamilyCode,
+            @Size(max = 50) String supplierCode,
+            @Size(max = 20) String cn) {
     }
 }

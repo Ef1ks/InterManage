@@ -16,6 +16,7 @@ import type {
   InvoiceMarkKind,
   SupplierRuleMode,
   NomenclatureItem,
+  PriceControlFileItem,
   SuggestionResponse,
   SuggestionStatus,
 } from '@/lib/types'
@@ -387,6 +388,25 @@ export type ExportPayload = {
  * Nowe i zmienione artykuły do pliku CADBEZP (.xls) dla programu sklepu, zapisywanego razem z plikiem XML. Dostawca
  * i numer tylko do nazwy pliku; {@code purchasePrice} to cena zakupu netto sztuki sprzedaży.
  */
+/** Artykuły z kartoteki ze zmienioną w tabeli ceną sprzedaży do pliku CTRLPRIX (dostawca jak w pliku XML). */
+export type PriceControlPayload = {
+  supplierId: string | null
+  sellerNip: string | null
+  invoiceNumber: string | null
+  rows: { ean: string; salePrice: number }[]
+}
+
+const priceControlKey = (storeId: string) => ['stores', storeId, 'data-entry', 'price-control-files'] as const
+
+/** 10 ostatnich plików CTRLPRIX sklepu (do ponownego zapisu). */
+export function usePriceControlFiles(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: priceControlKey(storeId),
+    queryFn: () => api<PriceControlFileItem[]>(`${path(storeId)}/price-control-files`),
+    enabled,
+  })
+}
+
 export type ProductFilePayload = {
   supplierId: string | null
   sellerNip: string | null
@@ -402,5 +422,7 @@ export type ProductFilePayload = {
     vatPercent: number | null
     salePrice: number | null
     subfamilyCode: string | null
+    supplierCode: string | null
+    cn: string | null
   }[]
 }

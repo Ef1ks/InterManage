@@ -28,6 +28,7 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.InvoiceXml;
+import com.intermanage.backend.dataentry.component.PriceControlFile;
 import com.intermanage.backend.dataentry.dto.CatalogListItem;
 import com.intermanage.backend.dataentry.dto.CatalogListPage;
 import com.intermanage.backend.dataentry.dto.CatalogListRequest;
@@ -49,15 +50,19 @@ import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionResponse;
 import com.intermanage.backend.dataentry.dto.ProductFileRequest;
+import com.intermanage.backend.dataentry.dto.PriceControlFileItem;
+import com.intermanage.backend.dataentry.dto.PriceControlRequest;
 import com.intermanage.backend.dataentry.dto.TemporaryXmlRequest;
 import com.intermanage.backend.dataentry.dto.XmlDocument;
 import com.intermanage.backend.dataentry.dto.XmlExportItem;
+import com.intermanage.backend.dataentry.entity.DataEntryPriceControlFile;
 import com.intermanage.backend.dataentry.entity.DataEntryXmlExport;
 import com.intermanage.backend.dataentry.service.DataEntryInvoiceService;
 import com.intermanage.backend.dataentry.service.DataEntryLinkService;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService;
 import com.intermanage.backend.dataentry.service.DataEntryService;
 import com.intermanage.backend.dataentry.service.DataEntrySuggestionService;
+import com.intermanage.backend.dataentry.service.DataEntryPriceControlService;
 import com.intermanage.backend.dataentry.service.DataEntryProductFileService;
 import com.intermanage.backend.dataentry.service.DataEntryXmlService;
 import com.intermanage.backend.ksef.component.KsefInvoicePdf;
@@ -87,11 +92,12 @@ public class DataEntryController {
     private final DataEntryInvoiceService invoiceService;
     private final DataEntryXmlService xmlService;
     private final DataEntryProductFileService productFileService;
+    private final DataEntryPriceControlService priceControlService;
 
     public DataEntryController(DataEntryService service, DataEntrySuggestionService suggestionService,
             DataEntryProtocolService protocolService, DataEntryLinkService linkService,
             DataEntryInvoiceService invoiceService, DataEntryXmlService xmlService,
-            DataEntryProductFileService productFileService) {
+            DataEntryProductFileService productFileService, DataEntryPriceControlService priceControlService) {
         this.service = service;
         this.suggestionService = suggestionService;
         this.protocolService = protocolService;
@@ -99,6 +105,7 @@ public class DataEntryController {
         this.invoiceService = invoiceService;
         this.xmlService = xmlService;
         this.productFileService = productFileService;
+        this.priceControlService = priceControlService;
     }
 
     private static final String INVOICES = VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')";
@@ -312,6 +319,43 @@ public class DataEntryController {
                 .contentType(MediaType.parseMediaType("application/vnd.ms-excel"))
                 .body(file.content());
     }
+
+    /**
+     * Plik CTRLPRIX (zmienione ceny sprzedaży) zapisywany razem z plikiem XML w folderze plików PROTO; od razu trafia do
+     * historii. W nagłówku kod dostawcy do komunikatu.
+     */
+    @PostMapping("/export/price-control")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> exportPriceControl(@PathVariable UUID storeId,
+            @Valid @RequestBody PriceControlRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return priceControlFile(priceControlService.generate(storeId, request, principal.getId()));
+    }
+
+    /** 10 ostatnich plików CTRLPRIX sklepu, od najnowszego. */
+    @GetMapping("/price-control-files")
+    @PreAuthorize(VIEW)
+    public List<PriceControlFileItem> priceControlFiles(@PathVariable UUID storeId) {
+        return priceControlService.history(storeId);
+    }
+
+    /** Plik CTRLPRIX z historii, z tą samą nazwą i treścią. */
+    @GetMapping("/price-control-files/{id}/file")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> priceControlFile(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return priceControlFile(priceControlService.file(storeId, id));
+    }
+
+    private static ResponseEntity<byte[]> priceControlFile(DataEntryPriceControlFile file) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.getFileName(), StandardCharsets.UTF_8).build().toString())
+                .header(SUPPLIER_CODE, file.getSupplierCode() != null ? file.getSupplierCode() : "")
+                .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, SUPPLIER_CODE)
+                .contentType(MediaType.parseMediaType(PriceControlFile.CONTENT_TYPE))
+                .body(file.getContent());
+    }
+
+    private static final String SUPPLIER_CODE = "X-Supplier-Code";
 
     /** Przeglądarka zapisała plik na dysku: od teraz jest w historii. Ta sama tabela co przy generowaniu pliku. */
     @PostMapping("/xml-history/{id}/saved")

@@ -211,9 +211,10 @@ public class KsefInvoiceReader {
     /**
      * Pola pozycji, w których dostawcy podają kod towaru: {@code GTIN}, {@code Indeks} (kod dostawcy, czasem EAN),
      * nazwa i wpisy {@code DodatkowyOpis} z numerem tej pozycji ({@code extras}: klucz → wartość, np. "EAN").
+     * {@code cn} to kod Nomenklatury Scalonej pozycji (do pliku CADBEZP).
      */
     public record LineCodes(String number, boolean beforeCorrection, String gtin, String index, String name,
-            Map<String, String> extras) {
+            Map<String, String> extras, String cn) {
     }
 
     /** Kody pozycji faktury w kolejności {@code FaWiersz}, tej samej co {@link Invoice#lines()}. */
@@ -236,7 +237,8 @@ public class KsefInvoiceReader {
         return fa.children("FaWiersz").stream().map(row -> {
             String number = row.text("NrWierszaFa");
             return new LineCodes(number, "1".equals(row.text("StanPrzed")), row.text("GTIN"), row.text("Indeks"),
-                    row.text("P_7"), number != null ? extras.getOrDefault(number.strip(), Map.of()) : Map.of());
+                    row.text("P_7"), number != null ? extras.getOrDefault(number.strip(), Map.of()) : Map.of(),
+                    row.text("CN"));
         }).toList();
     }
 

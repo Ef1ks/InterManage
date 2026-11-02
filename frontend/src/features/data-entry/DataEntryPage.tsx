@@ -54,6 +54,7 @@ import { type DataEntryDraft, EMPTY_DATA_ENTRY, setDataEntryDraft } from '@/stor
 
 import {
   type ExportPayload,
+  type PriceControlPayload,
   type ProductFilePayload,
   lookupProducts,
   useDataEntryNomenclature,
@@ -77,6 +78,7 @@ import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
+import { usePriceFileOverview } from './price-files'
 import { PriceFileStatus } from './PriceFileStatus'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
@@ -100,6 +102,7 @@ import {
   withSplitQuantity,
   type QuantitySplit,
   withCatalogProduct,
+  withCurrentPromo,
   withLinkedProduct,
   withScannedProduct,
   withServicesLast,
@@ -340,6 +343,38 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     },
     [currentDraft, setRows, store.id],
   )
+
+  // ---------- promocje z kasy: wiersz pamięta promocję z chwili dodania, a plik TRACEART przychodzi w ciągu dnia,
+  // więc po wejściu na stronę i po każdym nowym pliku cen promocje znanych artykułów są pobierane od nowa.
+
+  const priceFiles = usePriceFileOverview(store.id).data?.latest.map((file) => file.id).join()
+  const refreshedPromos = useRef<string | null>(null)
+  useEffect(() => {
+    if (priceFiles === undefined) return
+    const key = `${store.id}:${priceFiles}`
+    if (refreshedPromos.current === key) return
+    refreshedPromos.current = key
+    const eans = [...new Set(currentDraft().rows.filter((row) => row.known && row.ean !== '').map((row) => row.ean))]
+    if (eans.length === 0) return
+    lookupProducts(store.id, eans)
+      .then((products) => {
+        const byKey = new Map(products.map((product) => [product.ean, product]))
+        setRows(
+          (current) => {
+            const next = current.map((row) =>
+              row.known && eans.includes(row.ean)
+                ? withCurrentPromo(row, byKey.get(row.ean.replace(/^0+/, '')) ?? null)
+                : row,
+            )
+            return next.some((row, index) => row !== current[index]) ? next : current
+          },
+          { record: false },
+        )
+      })
+      .catch(() => {
+        // Promocja to tylko podpowiedź; przy błędzie zostaje ta z wiersza.
+      })
+  }, [currentDraft, priceFiles, setRows, store.id])
 
   // ---------- lista towarów: artykuł z kartoteki z ilością i ceną zakupu z okna
 
@@ -691,7 +726,26 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             vatPercent: row.vatPercent,
             salePrice: row.salePrice,
             subfamilyCode: row.subfamilyCode,
+            supplierCode: row.supplierCode ?? null,
+            cn: row.cn ?? null,
           })),
+        }
+      : null
+
+  // Artykuły z kartoteki z ceną sprzedaży inną niż przy wczytaniu (kartoteka albo promocja z kasy) idą do CTRLPRIX.
+  const priceControlRows = filled.flatMap((row) =>
+    row.known && !row.eanFallback && row.ean && row.catalog && row.salePrice !== null && row.salePrice > 0
+      && row.salePrice !== row.catalog.salePrice
+      ? [{ ean: row.ean, salePrice: row.salePrice }]
+      : [],
+  )
+  const priceControlPayload: PriceControlPayload | null =
+    xmlOpen && priceControlRows.length > 0
+      ? {
+          supplierId: invoice?.supplier?.id ?? null,
+          sellerNip: invoice?.sellerNip ?? null,
+          invoiceNumber: invoice?.number ?? null,
+          rows: priceControlRows,
         }
       : null
 
@@ -1084,6 +1138,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         storeId={store.id}
         payload={xmlPayload}
         productFile={productFilePayload}
+        priceControl={priceControlPayload}
         problems={xmlProblems}
         totals={totals}
         open={xmlOpen}

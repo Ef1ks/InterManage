@@ -12,7 +12,7 @@ import com.intermanage.backend.dataentry.dto.ProductFileRequest;
 
 /**
  * Plik nowych i zmienionych artykułów (CADBEZP, .xls) dla programu sklepu, w układzie z pliku wzorcowego
- * {@code CADBEZP-IMPEK.xls}: 19 kolumn danych, 5 pustych i CN (zawsze {@value #CN}). Ref. dostawcy to EAN. Opakowanie i zamówienie minimalne 1, rabat
+ * {@code CADBEZP-IMPEK.xls}: 19 kolumn danych, 5 pustych i CN (z pozycji faktury, bez niego {@value #CN}). Ref. dostawcy to EAN. Opakowanie i zamówienie minimalne 1, rabat
  * 0, cena po rabacie = cena zakupu, cena sugerowana = cena sprzedaży, PKWIU 0. Marka ma najwyżej
  * {@value #BRAND_LIMIT} znaków jak we wzorze („DR PEPPE”).
  */
@@ -41,8 +41,14 @@ public final class ProductFile {
                 ean(row.ean()), text(row.name()), text(row.name()), ean(row.ean()), "1", "1", unit(row.unit()),
                 row.netContent(), brand(row.brand()), purchase, BigDecimal.ZERO, purchase, vat(row.vatPercent()),
                 sale, sale, BigDecimal.ZERO, level(subfamily, 0), level(subfamily, 2), level(subfamily, 4)));
-        cells.addAll(Arrays.asList(null, null, null, null, null, CN));
+        cells.addAll(Arrays.asList(null, null, null, null, null, cn(row.cn())));
         return cells;
+    }
+
+    /** Kod CN z pozycji faktury (same cyfry), bez niego {@value #CN}. */
+    private static String cn(String cn) {
+        String digits = cn == null ? "" : cn.replaceAll("\\s", "");
+        return digits.matches("\\d{2,10}") ? digits : CN;
     }
 
     /** Tylko kod z cyfr; kod zastępczy (nazwa, indeks) to brak EAN-u. */

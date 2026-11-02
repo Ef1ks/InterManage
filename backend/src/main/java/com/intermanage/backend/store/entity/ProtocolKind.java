@@ -8,8 +8,8 @@ public enum ProtocolKind {
 
     LIQUIDATION(1, "Likwidacje"),
     STORE_NEEDS(2, "Potrzeby sklepu"),
-    DONATION(3, "Darowizna"),
-    ADVERTISING(4, "Reklama"),
+    ADVERTISING(3, "Reklama"),
+    DONATION(4, "Darowizna"),
     REPRESENTATION(5, "Reprezentacja"),
     TRANSFER(6, "MM");
 

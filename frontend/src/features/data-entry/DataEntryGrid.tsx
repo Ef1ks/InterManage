@@ -1249,6 +1249,18 @@ function CellContent({
     case 'vat':
       return row.vatPercent === null ? null : `${percentFormat.format(row.vatPercent)}%`
     case 'salePrice': {
+      // Trwająca promocja z kasy (pliki TRACEART): kartoteka podaje wtedy cenę promocyjną jako cenę sprzedaży.
+      const promo = activePromoPrice(row)
+      if (promo !== null && row.salePrice === promo) {
+        return (
+          <span
+            className="font-bold text-orange-600 dark:text-orange-400"
+            title={`Cena promocyjna na kasie do ${formatDocumentDate(row.promoTo ?? '')}`}
+          >
+            {formatMoney(row.salePrice)}
+          </span>
+        )
+      }
       // Artykuł z CENA_CAD (cadencier): cena z kartoteki niebieska i pogrubiona, dopóki nie zmieniona w tabeli.
       const cadencier =
         row.known && row.cadencier && row.salePrice !== null && (!row.catalog || row.catalog.salePrice === row.salePrice)
@@ -1361,18 +1373,6 @@ function CellContent({
       return <span className={cn(row.stock < 0 && 'font-medium text-destructive')}>{formatQuantity(row.stock)}</span>
     case 'rotation':
       return row.rotation == null ? null : formatQuantity(row.rotation)
-    case 'promoPrice': {
-      const promo = activePromoPrice(row)
-      if (promo === null) return null
-      return (
-        <span
-          className="font-bold text-orange-600 dark:text-orange-400"
-          title={`Promocja na kasie do ${formatDocumentDate(row.promoTo ?? '')}; cena regularna ${formatMoney(row.salePrice)}`}
-        >
-          {formatMoney(promo)}
-        </span>
-      )
-    }
     case 'netContent': {
       const mismatch = measureMismatch(row) || (row.suggestion?.unitMismatch && !row.edited.netContent)
       return (

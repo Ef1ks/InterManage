@@ -1,6 +1,7 @@
 HELP.md
 target/
 target-cli/
+target-ui/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
