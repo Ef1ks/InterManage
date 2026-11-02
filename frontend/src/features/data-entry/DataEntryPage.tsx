@@ -42,7 +42,13 @@ import { usePriceRoundingRules } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
-import type { DataEntryCatalogProduct, DataEntryDocument, DataEntryXmlDocument, StoreSummary } from '@/lib/types'
+import type {
+  DataEntryCatalogProduct,
+  DataEntryDocument,
+  DataEntryXmlDocument,
+  StoreSummary,
+  Supplier,
+} from '@/lib/types'
 import { type RootState, useAppDispatch, useAppSelector } from '@/store'
 import { type DataEntryDraft, EMPTY_DATA_ENTRY, setDataEntryDraft } from '@/store/dataEntryDraftSlice'
 
@@ -72,6 +78,7 @@ import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
+import { SupplierChangeDialog } from './SupplierChangeDialog'
 import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
 import {
   cadencierPrice,
@@ -227,6 +234,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [xmlOpen, setXmlOpen] = useState(false)
+  const [supplierOpen, setSupplierOpen] = useState(false)
   // Wysokość przyklejonego paska nad tabelą: pod nim przykleja się nagłówek kolumn.
   const [toolbarHeight, setToolbarHeight] = useState(0)
   const suggest = useSuggest(store.id)
@@ -611,6 +619,26 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     })
   }
 
+  // ---------- dostawca dokumentu
+
+  // Dokument dla innego dostawcy niż sprzedawca z faktury: numer faktury znika z nagłówka pliku.
+  const changeSupplier = (supplier: Supplier) => {
+    setSupplierOpen(false)
+    const before = currentDraft()
+    setDraft({
+      ...before,
+      invoice: {
+        ...(before.invoice ?? { id: null, sellerName: null, sellerNip: null }),
+        number: null,
+        supplier: { id: supplier.id, name: supplier.name, nip: supplier.nip },
+      },
+    })
+    toast(`Dostawca dokumentu: ${supplier.name}`, {
+      description: before.invoice?.number ? `Usunięto numer faktury ${before.invoice.number}` : undefined,
+      action: { label: 'Cofnij', onClick: () => setDraft(before) },
+    })
+  }
+
   // ---------- plik XML
 
   const buildPayload = (): ExportPayload => ({
@@ -619,6 +647,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     sellerName: invoice?.sellerName ?? null,
     sellerNip: invoice?.sellerNip ?? null,
     issueDate: invoice?.issueDate ?? null,
+    supplierId: invoice?.supplier?.id ?? null,
     rows: filled.map((row) => ({
       suggestionId: row.suggestion?.id ?? null,
       // Kod zastępczy z faktury (inny kod albo nazwa) nie jest EAN-em: w pliku idą zera.
@@ -669,7 +698,19 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     <>
       <PageHeader
         title="Wprowadzanie danych"
-        description={invoice ? documentLabel(invoice) : storeLabel(store)}
+        description={
+          <>
+            {invoice ? documentLabel(invoice) : storeLabel(store)}
+            {rows.length > 0 && (
+              <>
+                {' · '}
+                <Button variant="link" className="h-auto p-0 text-sm" onClick={() => setSupplierOpen(true)}>
+                  {invoice?.supplier || invoice?.sellerName || invoice?.sellerNip ? 'Zmień dostawcę' : 'Wybierz dostawcę'}
+                </Button>
+              </>
+            )}
+          </>
+        }
         actions={
           <>
             {/* Z tabelą lista towarów jest w pasku nad nią (przykleja się przy przewijaniu). */}
@@ -1021,6 +1062,14 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onOpenChange={setXmlOpen}
         onGoTo={goTo}
       />
+
+      <SupplierChangeDialog
+        storeId={store.id}
+        invoice={invoice}
+        open={supplierOpen}
+        onOpenChange={setSupplierOpen}
+        onChange={changeSupplier}
+      />
     </>
   )
 }
@@ -1043,7 +1092,7 @@ function parseDraft(json: string | null): DataEntryDraft | null {
 type PendingDocument = { data: DataEntryDocument; fromXml?: string }
 
 function documentLabel(invoice: NonNullable<DataEntryDraft['invoice']>) {
-  const seller = invoice.sellerName ?? invoice.sellerNip
+  const seller = invoice.supplier ? `dla ${invoice.supplier.name}` : (invoice.sellerName ?? invoice.sellerNip)
   const what = invoice.number ? `${invoice.id ? 'Faktura' : 'Dokument'} ${invoice.number}` : 'Dokument bez numeru'
   return [what, seller, invoice.fromXml && !invoice.id ? `z pliku ${invoice.fromXml}` : null]
     .filter(Boolean)

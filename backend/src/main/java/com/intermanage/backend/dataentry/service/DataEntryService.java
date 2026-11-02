@@ -374,7 +374,8 @@ public class DataEntryService {
     /**
      * Plik XML faktury dla programu sklepu ({@link InvoiceXml}), bez zapisu czegokolwiek. Nagłówek z faktury KSeF
      * wczytanej do tabeli (numer, data wystawienia, NIP sprzedawcy), a bez niej z dokumentu wczytanego z pliku XML
-     * (bez daty: dzisiaj); dostawca to nazwa z listy dostawców sklepu po NIP-ie, bez niej nazwa sprzedawcy. EAN tylko
+     * (bez daty: dzisiaj); dostawca to nazwa z listy dostawców sklepu po NIP-ie, bez niej nazwa sprzedawcy. Dostawca
+     * wybrany w tabeli ({@code supplierId}) zastępuje sprzedawcę: nazwa, NIP i kod z listy, numer z tabeli. EAN tylko
      * z cyfr (8-14), inny kod (np. zastępczy z faktury) daje 13 zer. Nazwa pliku: numer sklepu, kod dostawcy (albo
      * NIP), numer faktury.
      */
@@ -383,9 +384,14 @@ public class DataEntryService {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
         KsefInvoiceSummary invoice = request.invoiceId() != null
                 ? ksefInvoices.summary(storeId, request.invoiceId()) : null;
-        String number = invoice != null ? invoice.invoiceNumber() : blankToNull(request.invoiceNumber());
-        String nip = invoice != null ? invoice.sellerNip() : blankToNull(digits(request.sellerNip()));
-        Supplier supplier = nip == null ? null : suppliers.findByStore(storeId).stream()
+        Supplier chosen = request.supplierId() == null ? null : suppliers.findById(request.supplierId())
+                .filter(candidate -> candidate.getStore().getId().equals(storeId))
+                .orElseThrow(() -> ApiException.badRequest("Nie znaleziono dostawcy w tym sklepie"));
+        String number = invoice != null && chosen == null ? invoice.invoiceNumber()
+                : blankToNull(request.invoiceNumber());
+        String nip = chosen != null ? blankToNull(digits(chosen.getNip()))
+                : invoice != null ? invoice.sellerNip() : blankToNull(digits(request.sellerNip()));
+        Supplier supplier = chosen != null ? chosen : nip == null ? null : suppliers.findByStore(storeId).stream()
                 .filter(candidate -> nip.equals(digits(candidate.getNip()))).findFirst().orElse(null);
         String supplierName = supplier != null ? supplier.getName()
                 : invoice != null ? invoice.sellerName() : blankToNull(request.sellerName());

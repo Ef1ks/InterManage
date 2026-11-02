@@ -7,6 +7,8 @@ import { isUuid } from '@/lib/uuid'
  * Faktura, z której pochodzą wiersze (do nazwy pliku i podpowiedzi dostawcy dla AI). Sumy netto i VAT z dokumentu
  * porównujemy z sumami tabeli; przy dopisaniu kolejnej faktury się sumują. Brak w starszych szkicach. Dokument
  * wczytany z pliku XML bez faktury z KSeF ma `id` null, a numer, NIP i datę z pliku (`fromXml` = nazwa pliku).
+ * `supplier` to dostawca z listy sklepu wybrany zamiast sprzedawcy: idzie do pliku XML, a numer faktury jest wtedy
+ * pusty; `sellerNip` zostaje NIP-em sprzedawcy z faktury (przypięcia kodów pozycji są u niego).
  */
 export type DraftInvoice = {
   id: string | null
@@ -17,6 +19,7 @@ export type DraftInvoice = {
   fromXml?: string | null
   netTotal?: number | null
   vatTotal?: number | null
+  supplier?: { id: string; name: string; nip: string | null } | null
 }
 
 /** Tabela wprowadzania danych w jednym sklepie, zanim trafi do pliku. */

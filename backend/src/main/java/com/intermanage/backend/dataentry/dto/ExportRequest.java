@@ -15,7 +15,9 @@ import jakarta.validation.constraints.Size;
  * Tabela do pliku (XML faktury albo Excel): wiersze w kolejności z ekranu; {@code suggestionId} wiąże wiersz z
  * propozycją AI. {@code invoiceId} to faktura z KSeF wczytana do tabeli: z niej numer, data i NIP w pliku XML. Bez
  * niej numer, dostawca, NIP i data z dokumentu wczytanego z pliku XML ({@code invoiceNumber}, {@code sellerName},
- * {@code sellerNip}, {@code issueDate}).
+ * {@code sellerNip}, {@code issueDate}). {@code supplierId} to dostawca z listy sklepu wybrany zamiast sprzedawcy z
+ * dokumentu: z niego nazwa, NIP i kod w pliku, a numer dokumentu idzie wtedy z {@code invoiceNumber} (zmiana dostawcy
+ * go czyści), także przy fakturze z KSeF.
  */
 public record ExportRequest(
         UUID invoiceId,
@@ -23,6 +25,7 @@ public record ExportRequest(
         @Size(max = 300) String sellerName,
         @Size(max = 20) String sellerNip,
         LocalDate issueDate,
+        UUID supplierId,
         @NotNull @Size(max = 2000, message = "Najwyżej 2000 wierszy") List<@Valid Row> rows) {
 
     public record Row(

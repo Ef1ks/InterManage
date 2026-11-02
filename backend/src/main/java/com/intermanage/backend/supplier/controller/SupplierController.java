@@ -28,7 +28,7 @@ import jakarta.validation.Valid;
 
 /**
  * Dostawcy sklepu: z listy z systemu sklepu ({@link SupplierImportController}) i dodani ręcznie. Lista służy też do
- * wyboru dostawcy w Dokumentach (gratisy, faktury spoza KSeF), a karta dostawcy z kontaktami to moduł Dostawcy.
+ * wyboru dostawcy w Dokumentach (gratisy, faktury spoza KSeF) i we wprowadzaniu danych (dostawca dokumentu), a karta dostawcy z kontaktami to moduł Dostawcy.
  */
 @RestController
 @RequestMapping("/api/stores/{storeId}/suppliers")
@@ -45,7 +45,7 @@ public class SupplierController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('SUPPLIERS:VIEW', 'DOCUMENTS:VIEW')" + STORE)
+    @PreAuthorize("hasAnyAuthority('SUPPLIERS:VIEW', 'DOCUMENTS:VIEW', 'DATA_ENTRY:VIEW')" + STORE)
     public List<SupplierResponse> list(@PathVariable UUID storeId) {
         return directory.list(storeId);
     }

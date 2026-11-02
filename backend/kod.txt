@@ -1,0 +1,1450 @@
+// =========================================================================
+// PLIK: Kod.gs
+// GŁÓWNY SILNIK DANYCH - OBSŁUGA PANELU BOCZNEGO I OKNA MODALNEGO
+// =========================================================================
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Zarządzanie')
+    .addItem('1. Panel Boczny (Sidebar)', 'showInputSidebar')
+    .addItem('2. Okno Główne (Modal - Wprowadzanie)', 'showInputModal')
+    .addSeparator()
+    .addItem('3. Sprawdź / Utwórz Rejestr', 'ensureSystemReady')
+    .addToUi();
+}
+
+// Otwieranie w bocznym panelu (300px)
+function showInputSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('SidebarInput')
+      .setTitle('Panel Sklepów')
+      .setWidth(500); 
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+// Otwieranie w dużym oknie na środku ekranu (Modal)
+function showInputModal() {
+  const html = HtmlService.createHtmlOutputFromFile('SidebarInput')
+      .setWidth(960)
+      .setHeight(680);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Panel Wprowadzania Danych i Raportów');
+}
+
+const STORE_KEYS = ['Szosa', 'Makowa', 'Batorego', 'Leszno', 'Poznan'];
+
+// ==========================================
+// FUNKCJE POMOCNICZE / PARSERY
+// ==========================================
+function safeParsePrice(val) {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return val;
+  const str = val.toString().replace(/\s/g, '').replace(/zł/gi, '').replace(/PLN/gi, '').replace(/,/g, '.');
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+function cleanText(val) {
+  if (!val) return "";
+  return val.toString().replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// ==========================================
+// INICJALIZACJA ARKUSZA REJESTR
+// ==========================================
+function ensureSystemReady() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let rejestrSheet = ss.getSheetByName('Rejestr');
+  
+  if (!rejestrSheet) {
+    rejestrSheet = ss.insertSheet('Rejestr');
+    const headers = [["Timestamp", "Data", "Sklep", "Nazwa", "Gatunek", "Ilość", "Cena zakupu", "Cena sprzedaży", "Marża"]];
+    rejestrSheet.getRange("A1:I1").setValues(headers)
+      .setBackground("#1e293b")
+      .setFontColor("#ffffff")
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center");
+      
+    rejestrSheet.setFrozenRows(1);
+    rejestrSheet.setColumnWidth(1, 140);
+    rejestrSheet.setColumnWidth(2, 90);
+    rejestrSheet.setColumnWidth(3, 110);
+    rejestrSheet.setColumnWidth(4, 250);
+    rejestrSheet.setColumnWidth(5, 120);
+    rejestrSheet.getRange("G:H").setNumberFormat("#,##0.00 zł");
+    rejestrSheet.getRange("I:I").setNumberFormat("0.00%");
+  }
+  return true;
+}
+
+// ==========================================
+// CZYTANIE ARKUSZA "BAZA"
+// ==========================================
+function getBazaItemList() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const bazaSheet = ss.getSheetByName('Baza');
+  if (!bazaSheet) return [];
+  
+  const bazaData = bazaSheet.getDataRange().getValues();
+  if (bazaData.length === 0) return [];
+
+  let nIdx = -1, mIdx = -1;
+  let pIdxMap = { 'Szosa': -1, 'Makowa': -1, 'Batorego': -1, 'Leszno': -1, 'Poznan': -1, 'General': -1 };
+
+  for (let j = 0; j < bazaData[0].length; j++) {
+    const val = cleanText(bazaData[0][j]).toUpperCase();
+    if (val === "NAZWA" || val === "NAZWY") nIdx = j;
+    else if (val === "GATUNEK" || val === "MARKA" || val === "MARKI") mIdx = j;
+    else if (val.includes("CENA") && val.includes("SZOS")) pIdxMap['Szosa'] = j;
+    else if (val.includes("CENA") && val.includes("MAKOW")) pIdxMap['Makowa'] = j;
+    else if (val.includes("CENA") && val.includes("BATOR")) pIdxMap['Batorego'] = j;
+    else if (val.includes("CENA") && val.includes("LESZN")) pIdxMap['Leszno'] = j;
+    else if (val.includes("CENA") && (val.includes("POZNA") || val.includes("POZNAŃ"))) pIdxMap['Poznan'] = j;
+    else if (val === "CENA" || val === "CENY") pIdxMap['General'] = j;
+  }
+
+  for (let key in pIdxMap) {
+    if (pIdxMap[key] === -1 && pIdxMap['General'] !== -1 && key !== 'General') {
+      pIdxMap[key] = pIdxMap['General'];
+    }
+  }
+
+  const items = [];
+  if (nIdx !== -1) {
+    for (let i = 1; i < bazaData.length; i++) {
+      const n = cleanText(bazaData[i][nIdx]);
+      if (!n) continue;
+      const b = mIdx !== -1 ? cleanText(bazaData[i][mIdx]) : "";
+      
+      items.push({
+        name: n,
+        brand: b,
+        prices: {
+          'Szosa': safeParsePrice(bazaData[i][pIdxMap['Szosa']]),
+          'Makowa': safeParsePrice(bazaData[i][pIdxMap['Makowa']]),
+          'Batorego': safeParsePrice(bazaData[i][pIdxMap['Batorego']]),
+          'Leszno': safeParsePrice(bazaData[i][pIdxMap['Leszno']]),
+          'Poznan': safeParsePrice(bazaData[i][pIdxMap['Poznan']])
+        }
+      });
+    }
+  }
+  return items;
+}
+
+function getProductsAndBrandsList() {
+  const bazaItems = getBazaItemList();
+  const brands = new Set();
+  const products = [];
+
+  bazaItems.forEach(item => {
+    const displayStr = item.brand ? `${item.name} [${item.brand}]` : item.name;
+    products.push({ name: item.name, brand: item.brand, display: displayStr, prices: item.prices });
+    if (item.brand) brands.add(item.brand);
+  });
+
+  return {
+    brands: Array.from(brands).sort(),
+    products: products.sort((a,b) => a.name.localeCompare(b.name))
+  };
+}
+
+// ==========================================
+// WYSZUKIWANIE CEN W HISTORII REJESTRU
+// ==========================================
+function getExistingSalePrice(storeKey, productName, brandName) {
+  if (!storeKey || !productName) return null;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rejestrSheet = ss.getSheetByName('Rejestr');
+  if (!rejestrSheet) return null;
+
+  const data = rejestrSheet.getDataRange().getValues();
+  const pNameUpper = cleanText(productName).toUpperCase();
+  const bNameUpper = cleanText(brandName).toUpperCase();
+
+  let latestPrice = 0;
+  let latestDate = "";
+
+  for (let i = data.length - 1; i > 0; i--) {
+    if (data[i][2] === storeKey) {
+      const checkName = cleanText(data[i][3]).toUpperCase() === pNameUpper;
+      const checkBrand = (bNameUpper === "" || bNameUpper === "-") ? true : (cleanText(data[i][4]).toUpperCase() === bNameUpper);
+      
+      if (checkName && checkBrand) {
+        const price = safeParsePrice(data[i][7]);
+        if (price > 0) {
+          latestPrice = price;
+          latestDate = data[i][1]; 
+          break;
+        }
+      }
+    }
+  }
+  return latestPrice > 0 ? { price: latestPrice, date: latestDate } : null;
+}
+
+function buildHistoryCache(storeKey) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rejestrSheet = ss.getSheetByName('Rejestr');
+  const cache = {};
+  if (!rejestrSheet) return cache;
+
+  const data = rejestrSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][2] === storeKey) {
+      const nazwa = cleanText(data[i][3]).toUpperCase();
+      const marka = cleanText(data[i][4]).toUpperCase();
+      const cena = safeParsePrice(data[i][7]);
+      if (cena > 0) cache[`${nazwa}|||${marka}`] = cena;
+    }
+  }
+  return cache;
+}
+
+// ==========================================
+// ZAPIS RĘCZNY
+// ==========================================
+function addManualEntry(storeKey, productName, brandName, qty, buyPrice, sellPrice, customDateStr) {
+  ensureSystemReady();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rejestrSheet = ss.getSheetByName('Rejestr');
+  
+  const ilosc = safeParsePrice(qty) || 1;
+  const cenaZakupu = safeParsePrice(buyPrice);
+  const cenaSprzedazy = safeParsePrice(sellPrice);
+  
+  if (!productName) throw new Error("Nazwa produktu jest wymagana.");
+  if (cenaZakupu <= 0) throw new Error("Cena zakupu musi być większa od zera.");
+  if (cenaSprzedazy <= 0) throw new Error("Cena sprzedaży musi być większa od zera.");
+
+  let finalBrand = (brandName && cleanText(brandName) !== "") ? cleanText(brandName) : "-";
+  let finalName = cleanText(productName);
+  let marza = (cenaSprzedazy > 0) ? (cenaSprzedazy - cenaZakupu) / cenaSprzedazy : 0;
+
+  // Formatowanie daty wpisu
+  let dataWpisu = "";
+  if (customDateStr && customDateStr.includes("-")) {
+    const parts = customDateStr.split("-"); // YYYY-MM-DD
+    dataWpisu = `${parts[2]}.${parts[1]}.${parts[0]}`; // DD.MM.YYYY
+  } else {
+    dataWpisu = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy");
+  }
+
+  const timestamp = new Date();
+
+  const newRow = [timestamp, dataWpisu, storeKey, finalName, finalBrand, ilosc, cenaZakupu, cenaSprzedazy, marza];
+  rejestrSheet.appendRow(newRow);
+
+  const lastRow = rejestrSheet.getLastRow();
+  PropertiesService.getDocumentProperties().setProperty('lastUndoBatch', JSON.stringify({ startRow: lastRow, numRows: 1 }));
+
+  return `Dodano: ${finalName} [${finalBrand}] (${dataWpisu})`;
+}
+
+// ==========================================
+// ZAPIS MASOWY (Z FORMULARZA)
+// ==========================================
+function pasteDataToDailyReport(storeKey, customDateStr) {
+  ensureSystemReady();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const formSheet = ss.getSheetByName('Formularz');
+  const rejestrSheet = ss.getSheetByName('Rejestr');
+
+  if (!formSheet) throw new Error("Brak arkusza 'Formularz'.");
+
+  const formData = formSheet.getDataRange().getValues();
+  const validFormData = formData.filter(row => row[2] && cleanText(row[2]) !== "");
+  if (validFormData.length === 0) throw new Error("Brak danych w kolumnie C (Nazwa).");
+
+  // Formatowanie daty wpisu
+  let dataWpisu = "";
+  if (customDateStr && customDateStr.includes("-")) {
+    const parts = customDateStr.split("-"); // YYYY-MM-DD
+    dataWpisu = `${parts[2]}.${parts[1]}.${parts[0]}`; // DD.MM.YYYY
+  } else {
+    dataWpisu = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy");
+  }
+
+  // Hash uwzględnia sklep i datę
+  const currentDataHash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(validFormData) + storeKey + dataWpisu));
+  const props = PropertiesService.getDocumentProperties();
+  if (currentDataHash === props.getProperty('lastPasteHash')) {
+    throw new Error(`Duplikat. Te same dane zostały już wklejone dla sklepu ${storeKey} na dzień ${dataWpisu}.`);
+  }
+
+  const bazaItems = getBazaItemList();
+  const bazaMap = {};
+  bazaItems.forEach(item => {
+    bazaMap[`${item.name.toUpperCase()}|||${item.brand.toUpperCase()}`] = item;
+  });
+
+  let historyCache = null; 
+  const rowsToAppend = [];
+  const timestamp = new Date();
+  
+  for (const row of validFormData) {
+    const ilosc = safeParsePrice(row[0]); 
+    const cenaZakupu = safeParsePrice(row[1]); 
+    const oryginalnaNazwa = cleanText(row[2]); 
+    let cenaSprzedazy = safeParsePrice(row[6]); 
+    
+    let markaZFormularza = (row.length > 12 && row[12]) ? cleanText(row[12]) : "";
+    const searchKey = `${oryginalnaNazwa.toUpperCase()}|||${markaZFormularza.toUpperCase()}`;
+    const bazaInfo = bazaMap[searchKey] || { brand: markaZFormularza || "-", prices: {} };
+    const marka = markaZFormularza !== "" ? markaZFormularza : (bazaInfo.brand || "-");
+
+    if (cenaSprzedazy === 0) {
+      if (bazaInfo.prices && bazaInfo.prices[storeKey] > 0) {
+        cenaSprzedazy = bazaInfo.prices[storeKey];
+      } else {
+        if (!historyCache) historyCache = buildHistoryCache(storeKey);
+        const cacheKey = `${oryginalnaNazwa.toUpperCase()}|||${marka.toUpperCase()}`;
+        if (historyCache[cacheKey] > 0) cenaSprzedazy = historyCache[cacheKey];
+      }
+    }
+
+    let marzaProcRaw = safeParsePrice(row[7]);
+    if (marzaProcRaw > 1 && marzaProcRaw <= 100) marzaProcRaw = marzaProcRaw / 100;
+    if (cenaSprzedazy > 0 && safeParsePrice(row[6]) === 0) {
+      marzaProcRaw = (cenaSprzedazy - cenaZakupu) / cenaSprzedazy;
+    }
+
+    rowsToAppend.push([timestamp, dataWpisu, storeKey, oryginalnaNazwa, marka, ilosc, cenaZakupu, cenaSprzedazy, marzaProcRaw]);
+  }
+
+  if (rowsToAppend.length > 0) {
+    const startRow = rejestrSheet.getLastRow() + 1;
+    rejestrSheet.getRange(startRow, 1, rowsToAppend.length, 9).setValues(rowsToAppend);
+    
+    props.setProperty('lastPasteHash', currentDataHash);
+    props.setProperty('lastUndoBatch', JSON.stringify({ startRow: startRow, numRows: rowsToAppend.length }));
+  }
+
+  return `Zaimportowano: ${rowsToAppend.length} wierszy (${storeKey} - ${dataWpisu}).`;
+}
+
+// ==========================================
+// FUNKCJE COFANIA I CZYSZCZENIA
+// ==========================================
+function undoLastAction() {
+  const props = PropertiesService.getDocumentProperties();
+  const undoDataStr = props.getProperty('lastUndoBatch');
+  if (!undoDataStr) throw new Error("Brak operacji do cofnięcia.");
+
+  const batch = JSON.parse(undoDataStr);
+  const rejestrSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Rejestr');
+  
+  if (rejestrSheet.getLastRow() !== (batch.startRow + batch.numRows - 1)) {
+    throw new Error("Błąd: po tej akcji zostały dodane inne wiersze. Cofnięcie zablokowane.");
+  }
+
+  rejestrSheet.deleteRows(batch.startRow, batch.numRows);
+  props.deleteProperty('lastUndoBatch');
+  props.deleteProperty('lastPasteHash');
+
+  return "Pomyślnie cofnięto ostatni zapis.";
+}
+
+function clearFormSheet() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Formularz');
+  if (sheet) sheet.clearContents();
+  return "Formularz wyczyszczony.";
+}
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      :root {
+        --slate-50: #f8fafc;
+        --slate-100: #f1f5f9;
+        --slate-200: #e2e8f0;
+        --slate-300: #cbd5e1;
+        --slate-600: #475569;
+        --slate-800: #1e293b;
+        --blue-600: #2563eb;
+        --blue-700: #1d4ed8;
+        --emerald-600: #059669;
+        --emerald-700: #047857;
+        --amber-500: #f59e0b;
+        --amber-600: #d97706;
+        --rose-600: #e11d48;
+        --rose-700: #be123c;
+        --indigo-600: #4f46e5;
+        --indigo-700: #4338ca;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background-color: var(--slate-50);
+        padding: 10px;
+        color: var(--slate-800);
+        font-size: 13px;
+        margin: 0;
+      }
+
+      .header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid var(--slate-200);
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+      }
+
+      .header-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--slate-800);
+      }
+
+      .price-indicator {
+        font-size: 11px;
+        font-weight: 600;
+        text-align: right;
+        max-width: 50%;
+        line-height: 1.1;
+      }
+      .text-emerald { color: var(--emerald-600); }
+      .text-slate { color: var(--slate-600); }
+
+      select, input {
+        width: 100%;
+        height: 38px;
+        padding: 6px 12px;
+        font-size: 13px;
+        border-radius: 5px;
+        border: 1px solid var(--slate-300);
+        background-color: #fff;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        margin-bottom: 10px;
+      }
+      input:focus, select:focus {
+        outline: none;
+        border-color: var(--blue-600);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+      }
+
+      label {
+        font-weight: 700;
+        display: block;
+        margin-bottom: 3px;
+        font-size: 11px;
+        color: var(--slate-600);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      .section {
+        background: #fff;
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid var(--slate-200);
+        margin-bottom: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      }
+      .section.accent-green { border-left: 4px solid var(--emerald-600); }
+      .section.accent-indigo { border-left: 4px solid var(--indigo-600); }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: var(--slate-800);
+        text-transform: uppercase;
+      }
+
+      .grid-responsive-top { display: block; }
+      .grid-responsive-store { display: block; }
+      .grid-responsive-fields { display: block; }
+      .grid-responsive-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+
+      .btn {
+        color: white;
+        border: none;
+        height: 38px;
+        padding: 0 14px;
+        font-size: 13px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: 700;
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.15s, transform 0.05s;
+        margin-bottom: 6px;
+      }
+      .btn:active { transform: translateY(1px); }
+      
+      .btn-primary { background-color: var(--blue-600); }
+      .btn-primary:hover { background-color: var(--blue-700); }
+      
+      .btn-success { background-color: var(--emerald-600); height: 42px; font-size: 14px; margin-top: 4px; }
+      .btn-success:hover { background-color: var(--emerald-700); }
+      
+      .btn-warn { background-color: var(--amber-500); }
+      .btn-warn:hover { background-color: var(--amber-600); }
+      
+      .btn-danger { background-color: var(--rose-600); }
+      .btn-danger:hover { background-color: var(--rose-700); }
+      
+      .btn-indigo { background-color: var(--indigo-600); height: 40px; }
+      .btn-indigo:hover { background-color: var(--indigo-700); }
+
+      .btn:disabled {
+        background-color: var(--slate-300) !important;
+        color: var(--slate-600) !important;
+        cursor: not-allowed !important;
+        transform: none !important;
+        opacity: 0.7;
+      }
+
+      #status {
+        font-size: 12px;
+        padding: 10px;
+        border-radius: 5px;
+        display: none;
+        margin-bottom: 12px;
+        line-height: 1.4;
+      }
+      .alert-ok { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; display: block !important; }
+      .alert-err { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; display: block !important; }
+      .loader { text-align: center; color: var(--blue-600); font-weight: bold; padding: 30px 0; font-size: 14px; }
+
+      .tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid var(--slate-200);
+      }
+      .tab {
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--slate-600);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+      }
+      .tab.active {
+        color: var(--blue-600);
+        border-bottom: 2px solid var(--blue-600);
+      }
+      .tab-content { display: none; }
+      .tab-content.active { display: block; }
+
+      .legend-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--slate-600);
+      }
+      .c-green { color: var(--emerald-600); font-weight: bold; }
+      .c-red { color: var(--rose-600); font-weight: bold; }
+      .c-bold { font-weight: bold; color: #000; }
+      .c-gray { color: var(--slate-400); font-weight: normal; }
+
+      @media (min-width: 600px) {
+        body {
+          padding: 20px 24px;
+          font-size: 14px;
+        }
+        .header-bar {
+          padding-bottom: 12px;
+          margin-bottom: 18px;
+        }
+        .header-title {
+          font-size: 20px;
+        }
+        .price-indicator {
+          font-size: 13px;
+        }
+        select, input {
+          height: 42px;
+          padding: 8px 14px;
+          font-size: 14px;
+          margin-bottom: 14px;
+        }
+        label {
+          margin-bottom: 6px;
+          font-size: 12px;
+        }
+        .section {
+          padding: 20px;
+          margin-bottom: 18px;
+          border-radius: 8px;
+        }
+        .section.accent-green { border-left-width: 5px; }
+        .section.accent-indigo { border-left-width: 5px; }
+        .section-title {
+          font-size: 14px;
+          margin-bottom: 16px;
+        }
+
+        .grid-responsive-top {
+          display: grid;
+          grid-template-columns: 1.2fr 1fr 1fr;
+          gap: 16px;
+        }
+        .grid-responsive-fields {
+          display: grid;
+          grid-template-columns: 2fr 1fr 1fr;
+          gap: 16px;
+        }
+        .grid-responsive-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .grid-responsive-actions .btn {
+          flex: 1;
+          margin-bottom: 0;
+        }
+
+        .btn {
+          height: 44px;
+          font-size: 14px;
+          margin-bottom: 0;
+        }
+        .btn-success { height: 44px; font-size: 15px; margin-top: 6px; }
+        .btn-indigo { height: 44px; font-size: 15px; }
+        
+        .tabs {
+          gap: 12px;
+          margin-bottom: 18px;
+        }
+        .tab {
+          padding: 10px 24px;
+          font-size: 14px;
+          border-bottom-width: 3px;
+        }
+        .tab.active {
+          border-bottom-width: 3px;
+        }
+        .legend-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header-bar">
+      <div class="header-title">Panel Sklepów</div>
+      <div id="priceStatus" class="price-indicator"></div>
+    </div>
+    
+    <div id="loader" class="loader">Ładowanie systemu...</div>
+    
+    <div id="ui-container" style="display: none;">
+      
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('tab-wprowadzanie', this)">Wprowadzanie danych</div>
+        <div class="tab" onclick="switchTab('tab-raporty', this)">Raporty</div>
+      </div>
+
+      <!-- ZAKŁADKA 1: WPROWADZANIE -->
+      <div id="tab-wprowadzanie" class="tab-content active">
+        
+        <div class="section accent-green">
+          <div class="section-title">Dodaj pozycję do Rejestru</div>
+          
+          <div id="entryForm">
+            <div class="grid-responsive-top">
+              <div>
+                <label>Data wpisu / dostawy</label>
+                <input type="date" id="entryDate" style="font-weight: 600;">
+              </div>
+              <div>
+                <label>Sklep docelowy</label>
+                <select id="storeSelect" onchange="handleStoreChange()" style="font-weight: bold; border: 2px solid var(--blue-600);">
+                  <option value="Szosa">Szosa Kisielińska</option>
+                  <option value="Makowa">Makowa</option>
+                  <option value="Batorego">Batorego</option>
+                  <option value="Leszno">Leszno</option>
+                  <option value="Poznan">Poznań</option>
+                </select>
+              </div>
+              <div>
+                <label>Gatunek</label>
+                <select id="mBrand" tabindex="2" onchange="filterProducts()">
+                  <option value="">Wszystkie</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-responsive-fields">
+              <div>
+                <label>Nazwa produktu</label>
+                <input list="productList" id="mProduct" placeholder="Wpisz lub wybierz..." tabindex="1" onchange="onProductChange()">
+                <datalist id="productList"></datalist>
+              </div>
+              <div>
+                <label>Cena zakupu (zł)</label>
+                <input type="number" id="mBuy" placeholder="0.00" step="0.01" tabindex="3">
+              </div>
+              <div>
+                <label>Cena sprzedaży (zł)</label>
+                <input type="number" id="mSell" placeholder="0.00" step="0.01" tabindex="4">
+              </div>
+            </div>
+
+            <button id="addBtn" class="btn btn-success" onclick="runAdd()" tabindex="5">Zapisz pozycję (Enter)</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Operacje masowe i cofanie</div>
+          <div class="grid-responsive-actions">
+            <button id="pasteBtn" class="btn btn-primary" onclick="runPaste()">Wklej z Formularza</button>
+            <button id="clearBtn" class="btn btn-warn" onclick="runClear()">Wyczyść Formularz</button>
+            <button id="undoBtn" class="btn btn-danger" onclick="runUndo()">Cofnij ostatni zapis</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZAKŁADKA 2: RAPORTY -->
+      <div id="tab-raporty" class="tab-content">
+        <div class="section accent-indigo">
+          <div class="section-title">Generowanie Raportu</div>
+          
+          <div class="grid-responsive-store">
+            <div>
+              <label>Zakres</label>
+              <select id="reportType" onchange="toggleDateInputs()">
+                <option value="today">Raport Dzienny (Dzisiaj)</option>
+                <option value="custom">Własny zakres dat</option>
+              </select>
+            </div>
+            <div>
+              <label>Metoda obliczeń</label>
+              <select id="calcMethod" style="border-color: var(--indigo-600);">
+                <option value="split">Rozdziel dostawy po dacie (Osobne wiersze)</option>
+                <option value="avg">Uśrednij ceny (Jeden wiersz w okresie)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="customDateBlock" style="display:none; margin-top: 4px;">
+            <div class="grid-responsive-store">
+              <div>
+                <label>Data od</label>
+                <input type="date" id="dateStart">
+              </div>
+              <div>
+                <label>Data do</label>
+                <input type="date" id="dateEnd">
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 12px;">
+            <button id="generateBtn" class="btn btn-indigo" style="width: 100%;" onclick="runReport()">Generuj Raport w Dashboard_Raport</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="status"></div>
+
+    </div>
+
+    <script>
+      let globalDb = null;
+
+      document.addEventListener("DOMContentLoaded", function() {
+        const saved = localStorage.getItem('activeStore');
+        if (saved) document.getElementById('storeSelect').value = saved;
+
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('entryDate').value = today;
+        document.getElementById('dateStart').value = today;
+        document.getElementById('dateEnd').value = today;
+        
+        google.script.run
+          .withSuccessHandler(initApp)
+          .withFailureHandler(err => alertMsg("Błąd połączenia: " + err.message, true))
+          .getProductsAndBrandsList();
+
+        document.getElementById('entryForm').addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); runAdd(); }
+        });
+      });
+
+      function switchTab(tabId, el) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        el.classList.add('active');
+      }
+
+      function toggleDateInputs() {
+        const t = document.getElementById('reportType').value;
+        document.getElementById('customDateBlock').style.display = (t === 'custom') ? 'block' : 'none';
+      }
+
+      function initApp(data) {
+        globalDb = data;
+        const brandSel = document.getElementById('mBrand');
+        data.brands.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b; opt.text = b; brandSel.appendChild(opt);
+        });
+        updateDataList(data.products);
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('ui-container').style.display = 'block';
+        document.getElementById('mProduct').focus();
+      }
+
+      function filterProducts() {
+        if (!globalDb) return;
+        const brand = document.getElementById('mBrand').value.trim();
+        const pInput = document.getElementById('mProduct');
+        if (pInput.value !== '') {
+          pInput.value = ''; document.getElementById('mSell').value = ''; document.getElementById('priceStatus').innerHTML = '';
+        }
+        const filtered = brand ? globalDb.products.filter(p => p.brand === brand) : globalDb.products;
+        updateDataList(filtered);
+      }
+
+      function updateDataList(arr) {
+        const dl = document.getElementById('productList');
+        dl.innerHTML = ''; 
+        arr.forEach(p => { const opt = document.createElement('option'); opt.value = p.display; dl.appendChild(opt); });
+      }
+
+      function onProductChange() {
+        const inputVal = document.getElementById('mProduct').value.trim();
+        const store = document.getElementById('storeSelect').value;
+        if (!inputVal) return;
+
+        let realName = inputVal;
+        let basePrice = 0;
+        if (globalDb && globalDb.products) {
+          const match = globalDb.products.find(p => p.display === inputVal);
+          if (match) {
+            realName = match.name;
+            if (match.brand) document.getElementById('mBrand').value = match.brand;
+            if (match.prices && match.prices[store] > 0) basePrice = match.prices[store];
+          }
+        }
+        checkSalePrice(realName, basePrice);
+      }
+
+      function checkSalePrice(productName, basePrice = 0) {
+        const store = document.getElementById('storeSelect').value;
+        const brand = document.getElementById('mBrand').value;
+        const pStatus = document.getElementById('priceStatus');
+        
+        if (basePrice > 0) {
+          document.getElementById('mSell').value = basePrice;
+          pStatus.innerHTML = '<span class="text-emerald">Cena z Bazy</span>';
+          return; 
+        }
+        
+        pStatus.innerHTML = '<span class="text-slate">Szukanie w historii...</span>';
+        google.script.run.withSuccessHandler(res => {
+          if (res && res.price > 0) {
+            document.getElementById('mSell').value = res.price;
+            pStatus.innerHTML = `<span style="color:var(--blue-600); font-weight:bold;">Raport: ${res.date}</span>`;
+          } else {
+            pStatus.innerHTML = '<span class="text-slate">Brak ceny</span>';
+          }
+        }).getExistingSalePrice(store, productName, brand);
+      }
+
+      function handleStoreChange() {
+        localStorage.setItem('activeStore', document.getElementById('storeSelect').value);
+        onProductChange(); 
+      }
+
+      function toggleUI(disabled, msg) {
+        document.querySelectorAll('.btn').forEach(b => { b.disabled = disabled; });
+        const st = document.getElementById('status');
+        if (msg) {
+          st.innerHTML = (disabled ? '⏳ ' : '') + msg;
+          st.className = disabled ? 'alert-ok' : ''; 
+        } else if (!disabled && !st.classList.contains('alert-err')) {
+          st.style.display = 'none';
+        }
+      }
+
+      function alertMsg(msg, isError) {
+        toggleUI(false);
+        const st = document.getElementById('status');
+        st.innerHTML = (isError ? '❌ ' : '✅ ') + msg;
+        st.className = isError ? 'alert-err' : 'alert-ok';
+        if (!isError) { setTimeout(() => { st.style.display = 'none'; }, 3000); }
+      }
+
+      function safeParseVal(val) {
+        if (!val) return 0;
+        const str = val.toString().replace(/\s/g, '').replace(/,/g, '.');
+        const num = parseFloat(str);
+        return isNaN(num) ? 0 : num;
+      }
+
+      function runAdd() {
+        const customDate = document.getElementById('entryDate').value;
+        const store = document.getElementById('storeSelect').value;
+        const rawName = document.getElementById('mProduct').value;
+        const brand = document.getElementById('mBrand').value;
+        const qty = 1;
+        const buyRaw = document.getElementById('mBuy').value;
+        const sellRaw = document.getElementById('mSell').value;
+        
+        const buy = safeParseVal(buyRaw);
+        const sell = safeParseVal(sellRaw);
+
+        if (!customDate) {
+          alertMsg('Wybierz datę dostawy / wpisu!', true);
+          document.getElementById('entryDate').focus();
+          return;
+        }
+
+        if (!rawName) {
+          alertMsg('Wpisz nazwę produktu!', true);
+          document.getElementById('mProduct').focus();
+          return;
+        }
+
+        if (buy <= 0) {
+          alertMsg('Podaj poprawną cenę zakupu (większą od 0)!', true);
+          document.getElementById('mBuy').focus();
+          return;
+        }
+
+        if (sell <= 0) {
+          alertMsg('Podaj poprawną cenę sprzedaży (większą od 0)!', true);
+          document.getElementById('mSell').focus();
+          return;
+        }
+
+        let finalName = rawName;
+        if (globalDb) {
+          const match = globalDb.products.find(p => p.display === rawName);
+          if (match) finalName = match.name;
+        }
+        
+        toggleUI(true, 'Zapisywanie w Rejestrze...');
+        google.script.run
+          .withSuccessHandler(res => {
+             alertMsg(res, false);
+             document.getElementById('mProduct').value = '';
+             document.getElementById('mBuy').value = '';
+             document.getElementById('mSell').value = '';
+             document.getElementById('priceStatus').innerHTML = '';
+             document.getElementById('mProduct').focus();
+          })
+          .withFailureHandler(err => alertMsg(err.message, true))
+          .addManualEntry(store, finalName, brand, qty, buy, sell, customDate);
+      }
+
+      function runPaste() {
+        const customDate = document.getElementById('entryDate').value;
+        const store = document.getElementById('storeSelect').value;
+
+        if (!customDate) {
+          alertMsg('Wybierz datę dostawy / wpisu!', true);
+          document.getElementById('entryDate').focus();
+          return;
+        }
+
+        toggleUI(true, 'Wklejanie z formularza...');
+        google.script.run
+          .withSuccessHandler(res => alertMsg(res, false))
+          .withFailureHandler(err => alertMsg(err.message, true))
+          .pasteDataToDailyReport(store, customDate);
+      }
+
+      function runUndo() {
+        toggleUI(true, 'Cofanie ostatniego zapisu...');
+        google.script.run
+          .withSuccessHandler(res => alertMsg(res, false))
+          .withFailureHandler(err => alertMsg(err.message, true))
+          .undoLastAction();
+      }
+      
+      function runClear() {
+        toggleUI(true, 'Czyszczenie formularza...');
+        google.script.run
+          .withSuccessHandler(res => alertMsg(res, false))
+          .withFailureHandler(err => alertMsg(err.message, true))
+          .clearFormSheet();
+      }
+
+      function runReport() {
+        const type = document.getElementById('reportType').value;
+        const dStart = document.getElementById('dateStart').value;
+        const dEnd = document.getElementById('dateEnd').value;
+        const calcMethod = document.getElementById('calcMethod').value;
+
+        if (type === 'custom' && (!dStart || !dEnd)) {
+          alertMsg("Wybierz zakres dat (Od - Do)!", true); return;
+        }
+
+        toggleUI(true, 'Generowanie raportu...');
+        google.script.run
+          .withSuccessHandler(res => alertMsg(res, false))
+          .withFailureHandler(err => alertMsg(err.message, true))
+          .generateMatrixReport(type, dStart, dEnd, calcMethod);
+      }
+    </script>
+  </body>
+</html>
+
+// =========================================================================
+// PLIK: Raporty.gs
+// SILNIK RAPORTÓW - DYNAMICZNE DODAWANIE/UKYWANIE KOLUMNY Z DATĄ
+// =========================================================================
+
+const STORES = ['Szosa', 'Makowa', 'Batorego', 'Leszno', 'Poznan'];
+const REPORT_SHEET_NAME = 'Dashboard_Raport';
+
+// Paleta o wysokim kontraście do druku
+const COLOR_RED = '#b91c1c';     
+const COLOR_GREEN = '#15803d';   
+const COLOR_GRAY = '#64748b';    
+const COLOR_BLACK = '#000000';   
+
+function generateMatrixReport(dateRangeType, startDateStr, endDateStr, calcMethod) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureSystemReady();
+  
+  const rejestrSheet = ss.getSheetByName('Rejestr');
+  if (!rejestrSheet) throw new Error("Brak arkusza 'Rejestr'.");
+
+  const isSplit = (calcMethod === 'split');
+
+  // 1. Zakres dat
+  const tz = Session.getScriptTimeZone();
+  const now = new Date();
+  const dzisiajStr = Utilities.formatDate(now, tz, "dd.MM.yyyy");
+  
+  let dStart = null;
+  let dEnd = null;
+  let labelZakres = "";
+
+  if (dateRangeType === 'today') {
+    dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    dEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    labelZakres = `RAPORT DZIENNY: ${dzisiajStr}`;
+  } else if (dateRangeType === 'custom') {
+    if (!startDateStr || !endDateStr) throw new Error("Podaj prawidłowy zakres dat.");
+    dStart = parseDate(startDateStr);
+    dEnd = parseDate(endDateStr);
+    dEnd.setHours(23, 59, 59, 999);
+    labelZakres = `ZAKRES: ${Utilities.formatDate(dStart, tz, "dd.MM.yyyy")} - ${Utilities.formatDate(dEnd, tz, "dd.MM.yyyy")}`;
+  } else {
+    throw new Error("Nieobsługiwany typ raportu.");
+  }
+
+  // 2. Wczytanie Bazy 
+  const bazaItems = getBazaItemList();
+  const bazaMap = {};
+  bazaItems.forEach(bInfo => {
+    bazaMap[`${bInfo.name.toUpperCase()}|||${bInfo.brand.toUpperCase()}`] = bInfo;
+  });
+
+  const productMap = {};
+
+  // 3. Skanowanie Rejestru
+  const rawData = rejestrSheet.getDataRange().getValues();
+
+  for (let i = 1; i < rawData.length; i++) {
+    const rawCellDate = rawData[i][1];
+    if (!rawCellDate) continue;
+    
+    const rDate = parseDate(rawCellDate);
+    if (!rDate || isNaN(rDate.getTime())) continue;
+    if (rDate > dEnd) continue;
+
+    const sklep = cleanText(rawData[i][2]);
+    const nazwa = cleanText(rawData[i][3]).toUpperCase();
+    const marka = cleanText(rawData[i][4]).toUpperCase();
+    const ilosc = safeParsePrice(rawData[i][5]);
+    const zakup = safeParsePrice(rawData[i][6]);
+    const sprzedaz = safeParsePrice(rawData[i][7]);
+
+    if (!nazwa || !STORES.includes(sklep)) continue;
+
+    const dateStr = Utilities.formatDate(rDate, tz, "dd.MM.yyyy");
+    const itemKey = isSplit ? `${nazwa}|||${marka}|||${dateStr}` : `${nazwa}|||${marka}`;
+
+    if (!productMap[itemKey]) {
+      productMap[itemKey] = {
+        name: cleanText(rawData[i][3]),
+        brand: marka || "-",
+        dateLabel: isSplit ? dateStr : "",
+        sortKey: isSplit ? rDate.getTime() : 0,
+        hasAnyPurchaseInPeriod: false,
+        stores: {}
+      };
+      
+      const bInfo = bazaMap[`${nazwa}|||${marka}`];
+      STORES.forEach(s => {
+        productMap[itemKey].stores[s] = { 
+          bazaPrice: (bInfo && bInfo.prices && bInfo.prices[s] > 0) ? bInfo.prices[s] : null, 
+          histSprzedaz: null, 
+          zakupList: [], 
+          sprzedazList: [],
+          zakup: null, 
+          sprzedaz: null, 
+          ilosc: 0, 
+          bylZakup: false 
+        };
+      });
+    }
+
+    if (sprzedaz > 0) {
+      productMap[itemKey].stores[sklep].histSprzedaz = sprzedaz;
+    }
+
+    if (rDate >= dStart && rDate <= dEnd) {
+      if (zakup > 0) {
+        productMap[itemKey].stores[sklep].zakupList.push(zakup);
+        productMap[itemKey].stores[sklep].ilosc += ilosc;
+        productMap[itemKey].stores[sklep].bylZakup = true;
+        productMap[itemKey].hasAnyPurchaseInPeriod = true;
+      }
+      if (sprzedaz > 0) {
+        productMap[itemKey].stores[sklep].sprzedazList.push(sprzedaz);
+      }
+    }
+  }
+
+  // Obliczenie cen
+  for (let key in productMap) {
+    STORES.forEach(s => {
+      const sData = productMap[key].stores[s];
+      if (sData.zakupList.length > 0) {
+        sData.zakup = sData.zakupList.reduce((a, b) => a + b, 0) / sData.zakupList.length;
+      }
+      if (sData.sprzedazList.length > 0) {
+        sData.sprzedaz = sData.sprzedazList.reduce((a, b) => a + b, 0) / sData.sprzedazList.length;
+      }
+    });
+  }
+
+  // 4. Filtr pozycji
+  const productsList = Object.keys(productMap)
+    .filter(k => productMap[k].hasAnyPurchaseInPeriod === true)
+    .map(k => ({ nazwa: productMap[k].name, brand: productMap[k].brand, data: productMap[k] }));
+
+  if (productsList.length === 0) {
+    throw new Error("W wybranym okresie nie odnotowano zakupu w żadnym ze sklepów.");
+  }
+
+  // Sortowanie: Gatunek -> Nazwa -> Data
+  productsList.sort((a, b) => a.brand.localeCompare(b.brand) || a.nazwa.localeCompare(b.nazwa) || (a.data.sortKey - b.data.sortKey));
+
+  // 5. Przygotowanie arkusza
+  let rSheet = ss.getSheetByName(REPORT_SHEET_NAME);
+  if (rSheet) {
+    rSheet.clear();
+  } else {
+    rSheet = ss.insertSheet(REPORT_SHEET_NAME);
+  }
+
+  rSheet.setHiddenGridlines(true);
+  rSheet.getRange("A:AZ").setFontFamily("Arial").setVerticalAlignment("middle");
+
+  const tableColCount = isSplit ? 8 : 7;
+  const totalSheetCols = (tableColCount * 3) + 2; // 3 tabele + 2 separatory
+
+  // Nagłówek główny
+  rSheet.getRange(1, 1, 1, totalSheetCols).merge()
+        .setValue("PORÓWNANIE SKLEPÓW: ZAKUP / SPRZEDAŻ / MARŻA")
+        .setBackground("#0f172a").setFontColor("#ffffff")
+        .setFontWeight("bold").setFontSize(14).setHorizontalAlignment("center");
+  rSheet.setRowHeight(1, 30);
+
+  const wygenerowanoStr = Utilities.formatDate(now, tz, "dd.MM.yyyy HH:mm:ss");
+  const trybStr = isSplit ? "Rozdzielone po dacie" : "Średnia z okresu";
+  rSheet.getRange(2, 1, 1, totalSheetCols).merge()
+        .setValue(`${labelZakres}  |  Tryb: ${trybStr}  |  Wygenerowano: ${wygenerowanoStr}`)
+        .setBackground("#1e293b").setFontColor("#cbd5e1")
+        .setFontSize(10).setHorizontalAlignment("center");
+  rSheet.setRowHeight(2, 20);
+
+  // 6. Generowanie 3 tabel obok siebie
+  const startRow = 4;
+  rSheet.setRowHeight(startRow, 26);     // Tytuł
+  rSheet.setRowHeight(startRow + 1, 22); // Ściąga linia 1
+  rSheet.setRowHeight(startRow + 2, 20); // Ściąga linia 2
+  rSheet.setRowHeight(startRow + 3, 24); // Nagłówki kolumn
+
+  const totalTableRows = productsList.length + 1;
+  for (let r = 0; r < totalTableRows; r++) {
+    rSheet.setRowHeight(startRow + 4 + r, 24);
+  }
+
+  const colT1 = 1;
+  const colT2 = colT1 + tableColCount + 1;
+  const colT3 = colT2 + tableColCount + 1;
+  const sep1 = colT1 + tableColCount;
+  const sep2 = colT2 + tableColCount;
+
+  renderTableSection(rSheet, startRow, colT1, "I. CENA ZAKUPU", "zakup", productsList, isSplit);
+  renderTableSection(rSheet, startRow, colT2, "II. CENA SPRZEDAŻY", "sprzedaz", productsList, isSplit);
+  renderTableSection(rSheet, startRow, colT3, "III. MARŻA", "marza", productsList, isSplit);
+
+  // Dopasowanie szerokości kolumn pod format A4
+  if (isSplit) {
+    [colT1, colT2, colT3].forEach(c => rSheet.setColumnWidth(c, 170));     // Nazwa
+    [colT1+1, colT2+1, colT3+1].forEach(c => rSheet.setColumnWidth(c, 90)); // Gatunek
+    [colT1+2, colT2+2, colT3+2].forEach(c => rSheet.setColumnWidth(c, 75)); // Data
+    for (let s = 3; s <= 7; s++) {
+      [colT1+s, colT2+s, colT3+s].forEach(c => rSheet.setColumnWidth(c, 82)); // Sklepy
+    }
+  } else {
+    [colT1, colT2, colT3].forEach(c => rSheet.setColumnWidth(c, 210));     // Nazwa
+    [colT1+1, colT2+1, colT3+1].forEach(c => rSheet.setColumnWidth(c, 110)); // Gatunek
+    for (let s = 2; s <= 6; s++) {
+      [colT1+s, colT2+s, colT3+s].forEach(c => rSheet.setColumnWidth(c, 85)); // Sklepy
+    }
+  }
+
+  rSheet.setColumnWidth(sep1, 15);
+  rSheet.setColumnWidth(sep2, 15);
+
+  ss.setActiveSheet(rSheet);
+  return `Wygenerowano raport (Tryb: ${trybStr}).`;
+}
+
+function renderTableSection(sheet, startRow, startCol, title, tableType, productsList, isSplit) {
+  const numRows = productsList.length;
+  const colCount = isSplit ? 8 : 7;
+
+  // 1. Tytuł tabeli
+  sheet.getRange(startRow, startCol, 1, colCount).merge()
+       .setValue(title)
+       .setBackground("#0f172a").setFontColor("#38bdf8")
+       .setFontWeight("bold").setFontSize(13).setHorizontalAlignment("left");
+
+  // 2. Badge i opisy
+  const leftSpan = 4;
+  const rightSpan = colCount - leftSpan;
+  const badgeLeft = sheet.getRange(startRow + 1, startCol, 1, leftSpan).merge();
+  const badgeRight = sheet.getRange(startRow + 1, startCol + leftSpan, 1, rightSpan).merge();
+  const infoRow = sheet.getRange(startRow + 2, startCol, 1, colCount).merge();
+
+  badgeLeft.setHorizontalAlignment("center").setVerticalAlignment("middle").setFontWeight("bold").setFontSize(10);
+  badgeRight.setHorizontalAlignment("center").setVerticalAlignment("middle").setFontWeight("bold").setFontSize(10);
+  infoRow.setHorizontalAlignment("center").setVerticalAlignment("middle").setFontSize(9).setBackground("#f8fafc");
+
+  if (tableType === "zakup") {
+    badgeLeft.setValue("ZIELONY: Najtańszy zakup").setBackground("#ecfdf5").setFontColor(COLOR_GREEN);
+    badgeRight.setValue("CZERWONY: Najdroższy zakup").setBackground("#fef2f2").setFontColor(COLOR_RED);
+    infoRow.setValue("Puste pole = Ten sklep dzisiaj tego nie kupił").setFontColor("#64748b");
+
+  } else if (tableType === "sprzedaz") {
+    badgeLeft.setValue("ZIELONY: Najtaniej").setBackground("#ecfdf5").setFontColor(COLOR_GREEN);
+    badgeRight.setValue("CZERWONY: Najdrożej").setBackground("#fef2f2").setFontColor(COLOR_RED);
+    infoRow.setValue("POGRUBIONY = Kupione dzisiaj  |  SZARY = Stara cena (brak zakupu)").setFontColor(COLOR_BLACK).setFontWeight("bold");
+
+  } else if (tableType === "marza") {
+    badgeLeft.setValue("ZIELONY: Najniższa marża").setBackground("#ecfdf5").setFontColor(COLOR_GREEN);
+    badgeRight.setValue("CZERWONY: Najwyższa marża").setBackground("#fef2f2").setFontColor(COLOR_RED);
+    infoRow.setValue("Puste pole = Brak zakupu").setFontColor("#64748b");
+  }
+
+  sheet.getRange(startRow + 1, startCol, 2, colCount)
+       .setBorder(true, true, true, true, false, false, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+
+  // 3. Nagłówki kolumn
+  const baseHeaders = isSplit ? ["Nazwa", "Gatunek", "Data"] : ["Nazwa", "Gatunek"];
+  const headers = [baseHeaders.concat(STORES)];
+  sheet.getRange(startRow + 3, startCol, 1, colCount).setValues(headers)
+       .setBackground("#334155").setFontColor("#ffffff")
+       .setFontWeight("bold").setFontSize(12).setHorizontalAlignment("center");
+
+  const values2D = [];
+  const fontsColor2D = [];
+  const fontsWeight2D = [];
+  const backgrounds2D = [];
+
+  const storeTotals = STORES.map(() => ({ sumVal: 0, count: 0, totalSpend: 0, totalIncome: 0 }));
+
+  for (let r = 0; r < productsList.length; r++) {
+    const prod = productsList[r];
+    const rowValues = isSplit ? [prod.nazwa, prod.brand, prod.data.dateLabel] : [prod.nazwa, prod.brand];
+    const rowColors = isSplit ? [COLOR_BLACK, COLOR_BLACK, COLOR_GRAY] : [COLOR_BLACK, COLOR_BLACK];
+    const rowWeights = isSplit ? ["bold", "normal", "bold"] : ["bold", "normal"];
+    const rowBgs = isSplit 
+      ? (r % 2 === 0 ? ["#f8fafc", "#f8fafc", "#f8fafc"] : ["#ffffff", "#ffffff", "#ffffff"])
+      : (r % 2 === 0 ? ["#f8fafc", "#f8fafc"] : ["#ffffff", "#ffffff"]);
+
+    const tempStoreVals = [];
+    const isGrayFlags = [];
+
+    STORES.forEach((s, sIdx) => {
+      const sData = prod.data.stores[s];
+      let val = null;
+      let isGray = false;
+
+      if (tableType === "zakup") {
+        if (sData.bylZakup && sData.zakup !== null) {
+          val = sData.zakup;
+          storeTotals[sIdx].sumVal += val;
+          storeTotals[sIdx].count += 1;
+        }
+      } else if (tableType === "sprzedaz") {
+        if (sData.bylZakup && sData.sprzedaz !== null) {
+          val = sData.sprzedaz;
+          isGray = false;
+          storeTotals[sIdx].sumVal += val;
+          storeTotals[sIdx].count += 1;
+        } else {
+          const fallback = sData.histSprzedaz || sData.bazaPrice;
+          if (fallback !== null) {
+            val = fallback;
+            isGray = true;
+          }
+        }
+      } else if (tableType === "marza") {
+        if (sData.bylZakup && sData.zakup !== null && sData.sprzedaz !== null && sData.sprzedaz > 0) {
+          val = (sData.sprzedaz - sData.zakup) / sData.sprzedaz;
+          const qty = sData.ilosc > 0 ? sData.ilosc : 1;
+          storeTotals[sIdx].totalSpend += (sData.zakup * qty);
+          storeTotals[sIdx].totalIncome += (sData.sprzedaz * qty);
+          storeTotals[sIdx].count += 1;
+        }
+      }
+
+      tempStoreVals.push(val);
+      isGrayFlags.push(isGray);
+    });
+
+    const validForCompare = tempStoreVals.filter((v, idx) => v !== null && !isGrayFlags[idx]);
+    const minVal = validForCompare.length > 1 ? Math.min(...validForCompare) : null;
+    const maxVal = validForCompare.length > 1 ? Math.max(...validForCompare) : null;
+
+    for (let c = 0; c < STORES.length; c++) {
+      const val = tempStoreVals[c];
+      const isGray = isGrayFlags[c];
+
+      let cellValue = (val !== null) ? val : "";
+      let cellColor = COLOR_BLACK;
+      let cellWeight = "normal";
+
+      if (tableType === "zakup") {
+        if (val !== null) {
+          if (maxVal !== null && val === maxVal && maxVal > minVal) {
+            cellColor = COLOR_RED;
+            cellWeight = "bold";
+          } else if (minVal !== null && val === minVal && maxVal > minVal) {
+            cellColor = COLOR_GREEN;
+            cellWeight = "bold";
+          }
+        }
+      } else if (tableType === "sprzedaz") {
+        if (val !== null) {
+          if (isGray) {
+            cellColor = COLOR_GRAY;
+            cellWeight = "normal";
+          } else {
+            cellWeight = "bold";
+            if (maxVal !== null && val === maxVal && maxVal > minVal) cellColor = COLOR_RED;
+            else if (minVal !== null && val === minVal && maxVal > minVal) cellColor = COLOR_GREEN;
+          }
+        }
+      } else if (tableType === "marza") {
+        if (val !== null) {
+          cellWeight = "bold";
+          if (maxVal !== null && val === maxVal && maxVal > minVal) cellColor = COLOR_RED;
+          else if (minVal !== null && val === minVal && maxVal > minVal) cellColor = COLOR_GREEN;
+        }
+      }
+
+      rowValues.push(cellValue);
+      rowColors.push(cellColor);
+      rowWeights.push(cellWeight);
+      rowBgs.push((r % 2 === 0) ? "#f8fafc" : "#ffffff");
+    }
+
+    values2D.push(rowValues);
+    fontsColor2D.push(rowColors);
+    fontsWeight2D.push(rowWeights);
+    backgrounds2D.push(rowBgs);
+  }
+
+  // --- PODSUMOWANIE ---
+  let summaryLabel = "ŚREDNIA";
+  if (tableType === "zakup") summaryLabel = "ŚREDNI ZAKUP";
+  else if (tableType === "sprzedaz") summaryLabel = "ŚREDNIA SPRZEDAŻ";
+  else if (tableType === "marza") summaryLabel = "ŚREDNIA MARŻA";
+
+  const prefixCount = isSplit ? 3 : 2;
+  const summaryRowValues = isSplit ? [summaryLabel, "", ""] : [summaryLabel, ""];
+  const summaryRowColors = isSplit ? [COLOR_BLACK, COLOR_BLACK, COLOR_BLACK] : [COLOR_BLACK, COLOR_BLACK];
+  const summaryRowWeights = isSplit ? ["bold", "bold", "bold"] : ["bold", "bold"];
+  const summaryRowBgs = isSplit ? ["#e2e8f0", "#e2e8f0", "#e2e8f0"] : ["#e2e8f0", "#e2e8f0"];
+
+  STORES.forEach((s, sIdx) => {
+    const tot = storeTotals[sIdx];
+    let avgVal = "";
+    if (tableType === "marza") {
+      if (tot.totalIncome > 0) {
+        avgVal = (tot.totalIncome - tot.totalSpend) / tot.totalIncome;
+      }
+    } else {
+      if (tot.count > 0) {
+        avgVal = tot.sumVal / tot.count;
+      }
+    }
+    summaryRowValues.push(avgVal);
+    summaryRowColors.push(COLOR_BLACK);
+    summaryRowWeights.push("bold");
+    summaryRowBgs.push("#e2e8f0");
+  });
+
+  values2D.push(summaryRowValues);
+  fontsColor2D.push(summaryRowColors);
+  fontsWeight2D.push(summaryRowWeights);
+  backgrounds2D.push(summaryRowBgs);
+
+  const totalRowsInTable = numRows + 1; 
+  const bodyRange = sheet.getRange(startRow + 4, startCol, totalRowsInTable, colCount);
+  bodyRange.setValues(values2D);
+  bodyRange.setFontColors(fontsColor2D);
+  bodyRange.setFontWeights(fontsWeight2D);
+  bodyRange.setBackgrounds(backgrounds2D);
+  bodyRange.setFontSize(11);
+
+  // Scalenie prefiksu wiersza podsumowania
+  sheet.getRange(startRow + 4 + numRows, startCol, 1, prefixCount).merge().setHorizontalAlignment("left");
+  
+  sheet.getRange(startRow, startCol, totalRowsInTable + 4, colCount)
+       .setBorder(true, true, true, true, true, true, "#64748b", SpreadsheetApp.BorderStyle.SOLID);
+
+  const dataRange = sheet.getRange(startRow + 4, startCol + prefixCount, totalRowsInTable, STORES.length);
+  dataRange.setHorizontalAlignment("center");
+  if (tableType === "marza") {
+    dataRange.setNumberFormat("0.00%");
+  } else {
+    dataRange.setNumberFormat("#,##0.00 zł");
+  }
+
+  if (isSplit) {
+    sheet.getRange(startRow + 4, startCol + 2, numRows, 1).setHorizontalAlignment("center");
+  }
+
+  return startRow + totalRowsInTable + 4;
+}
+
+function parseDate(input) {
+  if (!input) return null;
+  if (input instanceof Date) return new Date(input.getFullYear(), input.getMonth(), input.getDate(), 0, 0, 0);
+  const str = input.toString().trim();
+  if (str.includes(".")) {
+    const parts = str.split(".");
+    if (parts.length === 3) return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 0, 0, 0);
+  } else if (str.includes("-")) {
+    const parts = str.split("-");
+    if (parts.length === 3) return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0);
+  }
+  const fallback = new Date(str);
+  return isNaN(fallback.getTime()) ? null : new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate(), 0, 0, 0);
+}

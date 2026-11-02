@@ -362,6 +362,8 @@ export type ExportPayload = {
   /** Bez faktury z KSeF: NIP i data z dokumentu wczytanego z pliku XML. */
   sellerNip: string | null
   issueDate: string | null
+  /** Dostawca z listy sklepu wybrany zamiast sprzedawcy z dokumentu. */
+  supplierId: string | null
   rows: {
     suggestionId: string | null
     ean: string | null

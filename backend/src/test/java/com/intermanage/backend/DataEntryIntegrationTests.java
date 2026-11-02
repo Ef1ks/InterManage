@@ -519,6 +519,22 @@ class DataEntryIntegrationTests {
                 </DOKUMENT>
                 """.formatted(number, SELLER_NIP, CHIPS_EAN).replace("\n", "\r\n"));
 
+        // Inny dostawca niż sprzedawca z faktury: nazwa i NIP z listy dostawców, numer faktury znika, data zostaje.
+        String otherSupplier = jdbc.queryForObject("""
+                insert into suppliers (store_id, code, keyword, name, nip)
+                values (?::uuid, '771', 'HURT', 'HURTOWNIA SP. Z O.O.', '5260250995') returning id::text""",
+                String.class, storeId);
+        mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(table.replaceFirst("\\{", "{\"supplierId\":\"" + otherSupplier + "\",")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(".*filename=\"" + number + "_wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
+                .andExpect(content().string(containsString("<NR_DOKUMENTU />")))
+                .andExpect(content().string(containsString("<DATA_DOKUMENTU>2026.10.30</DATA_DOKUMENTU>")))
+                .andExpect(content().string(containsString("<KOD_DOSTAWCY>HURTOWNIA SP. Z O.O.</KOD_DOSTAWCY>")))
+                .andExpect(content().string(containsString("<NIP_DOSTAWCY>5260250995</NIP_DOSTAWCY>")));
+
         // Tabela bez faktury: bez numeru i dostawcy, nazwa pliku z datą.
         mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
