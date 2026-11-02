@@ -1,6 +1,7 @@
 package com.intermanage.backend.dataentry.repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,6 +41,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
 
         BigDecimal getCadencierPrice();
 
+        BigDecimal getPromoPrice();
+
+        LocalDate getPromoTo();
+
         String getSubfamilyCode();
 
         BigDecimal getStock();
@@ -48,8 +53,9 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
     }
 
     /**
-     * Artykuł sklepu dla każdego EAN-u (bez zer wiodących): bieżący EAN artykułu, a gdy go nie ma, para z
-     * {@code product_eans} (dawny EAN); przy kilku artykułach ten, którego to bieżący EAN, potem ostatnio zmieniany.
+     * Artykuł sklepu dla każdego EAN-u (bez zer wiodących): bieżący EAN artykułu, potem każdy obowiązujący kod
+     * z multikodów ({@code product_codes}), a gdy go nie ma, para z {@code product_eans} (dawny EAN); przy kilku
+     * artykułach ten z lepszego źródła, potem ostatnio zmieniany.
      * {@code cadencier}: artykuł ma CENA_CAD z ostatniego raportu (0 = brak) i jest aktywny w cadencier, czyli na
      * bieżącej liście {@code cadencier_items} sklepu (po ITM8).
      * Kod z etykiety wagi sklepu (2 + cyfra 1-9, 12-13 cyfr, w cyfrach 8-12 cena albo waga) trafia w artykuł, którego
@@ -57,6 +63,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * {@code vatPercent}: z kodu stawki z kartoteki (1 = 23%, 2 = 8%, 6 = 5%, sprawdzone z liniami dokumentów; inne
      * kody, np. 3, 7 kaucje, są niepewne), bez niego z najnowszej linii dokumentu sklepu z tym ITM8, a na końcu
      * najczęstsza stawka z dokumentów artykułów tej samej podrodziny.
+     * {@code promoPrice}/{@code promoTo}: trwająca w dniu {@code today} promocja z pliku TRACEART.
      */
     @Query(value = """
             with keys as (select distinct unnest(cast(:eans as varchar[])) as key),
@@ -66,10 +73,15 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 union all
                 select k.key, p.id, 1
                 from keys k
+                join product_codes c on c.store_id = :storeId and c.current and ltrim(c.ean, '0') = k.key
+                join products p on p.store_id = :storeId and p.itm8 = c.itm8
+                union all
+                select k.key, p.id, 2
+                from keys k
                 join product_eans pe on ltrim(pe.ean, '0') = k.key
                 join products p on p.id = pe.product_id and p.store_id = :storeId
                 union all
-                select k.key, p.id, 2
+                select k.key, p.id, 3
                 from keys k
                 join products p on p.store_id = :storeId and left(p.ean, 7) = left(k.key, 7)
                     and p.ean ~ '^2[1-9][0-9]{5}00000[0-9]$'
@@ -91,11 +103,15 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 p.unit as unit, p.net_content as netContent, p.sale_price as salePrice,
                 coalesce(p.cadencier_price > 0 and c.itm8 is not null, false) as cadencier,
                 case when p.cadencier_price > 0 and c.itm8 is not null then p.cadencier_price end as cadencierPrice,
+                case when p.promo_price is not null and p.promo_to >= cast(:today as date)
+                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_price end as promoPrice,
+                case when p.promo_price is not null and p.promo_to >= cast(:today as date)
+                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_to end as promoTo,
                 p.subfamily_code as subfamilyCode, p.stock as stock, p.rotation as rotation
             from hits h join products p on p.id = h.id
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
             order by h.key, h.rank, p.updated_at desc""", nativeQuery = true)
-    List<CatalogProduct> findByEans(UUID storeId, String[] eans);
+    List<CatalogProduct> findByEans(UUID storeId, String[] eans, LocalDate today);
 
     interface CatalogListItem {
         String getItm8();
@@ -124,7 +140,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
     /**
      * Lista towarów (okno „Lista towarów”): artykuły sklepu, które pasują do każdego podanego filtra ({@code null} =
      * bez filtra). Wzorce LIKE: nazwa, marka i dostawca bez wielkości liter i polskich znaków (wzorce przychodzą już
-     * wielkimi literami bez znaków diakrytycznych), ITM8 i EAN jako tekst. Nomenklatura: {@code nomenclatureCode} to
+     * wielkimi literami bez znaków diakrytycznych), ITM8 i EAN jako tekst (EAN: główny albo każdy obowiązujący
+     * z multikodów). Nomenklatura: {@code nomenclatureCode} to
      * początek kodu podrodziny, {@code nomenclatureName} wzorzec nazwy rejonu, rodziny albo podrodziny artykułu.
      * Ceny w przedziałach z granicami włącznie. Sortowanie po kolumnie {@code sort} (itm8, ean, name, brand, supplier,
      * nomenclature, purchase, sale, stock) w kierunku {@code direction} (asc/desc), puste na końcu, potem po nazwie;
@@ -139,7 +156,9 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             left join nomenclatures s on s.store_id = p.store_id and s.code = p.subfamily_code
             where p.store_id = :storeId
                 and (cast(:itm8 as text) is null or p.itm8 like cast(:itm8 as text))
-                and (cast(:ean as text) is null or p.ean like cast(:ean as text))
+                and (cast(:ean as text) is null or p.ean like cast(:ean as text)
+                    or p.itm8 in (select c.itm8 from product_codes c
+                                  where c.store_id = :storeId and c.current and c.ean like cast(:ean as text)))
                 and (cast(:name as text) is null
                     or translate(upper(p.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:name as text))
                 and (cast(:brand as text) is null

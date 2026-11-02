@@ -575,10 +575,11 @@ public class DataEntryService {
         catalog.disableJit();
         Map<String, CatalogProduct> found = new HashMap<>();
         for (DataEntryCatalogRepository.CatalogProduct row : catalog.findByEans(storeId,
-                keys.stream().distinct().toArray(String[]::new))) {
+                keys.stream().distinct().toArray(String[]::new), LocalDate.now(WARSAW))) {
             Measure measure = Measure.of(row.getUnit(), row.getNetContent());
             found.put(row.getKey(), new CatalogProduct(row.getKey(), row.getItm8(), row.getCatalogEan(), row.getName(),
-                    row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(), measure != null ? measure.unit() : Measure.PIECE,
+                    row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(),
+                    row.getPromoPrice(), row.getPromoTo(), measure != null ? measure.unit() : Measure.PIECE,
                     measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), row.getSubfamilyCode(),
                     row.getStock(), row.getRotation()));
         }

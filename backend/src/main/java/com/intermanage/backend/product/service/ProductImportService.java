@@ -61,7 +61,7 @@ public class ProductImportService {
 
     private static final int HISTORY_SIZE = 30;
     /** Klucz blokady to ten przedrostek + id sklepu: importy do różnych sklepów nie czekają na siebie. */
-    private static final String IMPORT_LOCK_PREFIX = "product-import:";
+    static final String IMPORT_LOCK_PREFIX = "product-import:";
     private static final DateTimeFormatter REPORT_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     private final TransactionTemplate transaction;

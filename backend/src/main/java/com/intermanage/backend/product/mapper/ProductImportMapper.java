@@ -4,7 +4,9 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.intermanage.backend.product.dto.EanChangeResponse;
+import com.intermanage.backend.product.dto.ProductCodeImportResponse;
 import com.intermanage.backend.product.dto.ProductImportResponse;
+import com.intermanage.backend.product.entity.ProductCodeImport;
 import com.intermanage.backend.product.entity.ProductEanChange;
 import com.intermanage.backend.product.entity.ProductImport;
 
@@ -14,6 +16,9 @@ public interface ProductImportMapper {
     /** {@code importedBy} jest pusty, gdy konto osoby importującej zostało usunięte. */
     @Mapping(target = "importedBy", source = "importedBy.displayName")
     ProductImportResponse toResponse(ProductImport productImport);
+
+    @Mapping(target = "importedBy", source = "importedBy.displayName")
+    ProductCodeImportResponse toResponse(ProductCodeImport productCodeImport);
 
     @Mapping(target = "itm8", source = "product.itm8")
     @Mapping(target = "name", source = "product.name")

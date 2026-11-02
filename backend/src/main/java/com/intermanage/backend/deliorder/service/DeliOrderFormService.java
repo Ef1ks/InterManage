@@ -24,6 +24,8 @@ import com.intermanage.backend.deliorder.repository.OrderCategoryRepository;
 import com.intermanage.backend.deliorder.repository.OrderSectionRepository;
 import com.intermanage.backend.product.dto.ProductSearchResponse;
 import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.entity.ProductCode;
+import com.intermanage.backend.product.repository.ProductCodeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.product.repository.ProductSearch;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -43,16 +45,18 @@ public class DeliOrderFormService {
     private final OrderCategoryRepository categories;
     private final OrderCategoryProductRepository categoryProducts;
     private final ProductRepository products;
+    private final ProductCodeRepository productCodes;
     private final StoreRepository stores;
     private final OrderFormMapper orderFormMapper;
 
     public DeliOrderFormService(OrderSectionRepository sections, OrderCategoryRepository categories,
-            OrderCategoryProductRepository categoryProducts, ProductRepository products, StoreRepository stores,
-            OrderFormMapper orderFormMapper) {
+            OrderCategoryProductRepository categoryProducts, ProductRepository products,
+            ProductCodeRepository productCodes, StoreRepository stores, OrderFormMapper orderFormMapper) {
         this.sections = sections;
         this.categories = categories;
         this.categoryProducts = categoryProducts;
         this.products = products;
+        this.productCodes = productCodes;
         this.stores = stores;
         this.orderFormMapper = orderFormMapper;
     }
@@ -153,7 +157,8 @@ public class DeliOrderFormService {
     }
 
     /**
-     * Dodaje produkty wklejone z Excela po bieżącym EAN-ie z kartoteki sklepu, w kolejności wklejenia. Produkt, który
+     * Dodaje produkty wklejone z Excela po EAN-ie, w kolejności wklejenia: bieżącym z kartoteki sklepu albo każdym
+     * obowiązującym z multikodów. Produkt, który
      * już jest w kategorii, zostaje na swoim miejscu i dostaje wklejoną jednostkę. Nieznane EAN-y nie blokują reszty,
      * wracają w odpowiedzi.
      */
@@ -167,6 +172,20 @@ public class DeliOrderFormService {
         for (Product product : products.findByStoreIdAndEanIn(storeId, eans)) {
             byEan.merge(product.getEan(), product,
                     (current, other) -> Boolean.TRUE.equals(current.getActive()) ? current : other);
+        }
+        List<ProductCode> codes = productCodes.findCurrentByEans(storeId,
+                eans.stream().filter(ean -> !byEan.containsKey(ean)).distinct().toList());
+        if (!codes.isEmpty()) {
+            Map<String, Product> byItm8 = new HashMap<>();
+            products.findByStoreIdAndItm8In(storeId, codes.stream().map(ProductCode::getItm8).distinct().toList())
+                    .forEach(product -> byItm8.put(product.getItm8(), product));
+            for (ProductCode code : codes) {
+                Product product = byItm8.get(code.getItm8());
+                if (product != null) {
+                    byEan.merge(code.getEan(), product,
+                            (current, other) -> Boolean.TRUE.equals(current.getActive()) ? current : other);
+                }
+            }
         }
 
         int added = 0;

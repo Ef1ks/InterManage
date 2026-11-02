@@ -48,6 +48,7 @@ import com.intermanage.backend.dataentry.dto.ProductLinkRequest;
 import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionResponse;
+import com.intermanage.backend.dataentry.dto.ProductFileRequest;
 import com.intermanage.backend.dataentry.dto.TemporaryXmlRequest;
 import com.intermanage.backend.dataentry.dto.XmlDocument;
 import com.intermanage.backend.dataentry.dto.XmlExportItem;
@@ -57,6 +58,7 @@ import com.intermanage.backend.dataentry.service.DataEntryLinkService;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService;
 import com.intermanage.backend.dataentry.service.DataEntryService;
 import com.intermanage.backend.dataentry.service.DataEntrySuggestionService;
+import com.intermanage.backend.dataentry.service.DataEntryProductFileService;
 import com.intermanage.backend.dataentry.service.DataEntryXmlService;
 import com.intermanage.backend.ksef.component.KsefInvoicePdf;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
@@ -84,16 +86,19 @@ public class DataEntryController {
     private final DataEntryLinkService linkService;
     private final DataEntryInvoiceService invoiceService;
     private final DataEntryXmlService xmlService;
+    private final DataEntryProductFileService productFileService;
 
     public DataEntryController(DataEntryService service, DataEntrySuggestionService suggestionService,
             DataEntryProtocolService protocolService, DataEntryLinkService linkService,
-            DataEntryInvoiceService invoiceService, DataEntryXmlService xmlService) {
+            DataEntryInvoiceService invoiceService, DataEntryXmlService xmlService,
+            DataEntryProductFileService productFileService) {
         this.service = service;
         this.suggestionService = suggestionService;
         this.protocolService = protocolService;
         this.linkService = linkService;
         this.invoiceService = invoiceService;
         this.xmlService = xmlService;
+        this.productFileService = productFileService;
     }
 
     private static final String INVOICES = VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')";
@@ -294,6 +299,19 @@ public class DataEntryController {
     }
 
     private static final String XML_EXPORT_ID = "X-Xml-Export-Id";
+
+    /** Plik nowych i zmienionych artykułów (CADBEZP, .xls) dla programu sklepu, zapisywany razem z plikiem XML. */
+    @PostMapping("/export/product-file")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> exportProductFile(@PathVariable UUID storeId,
+            @Valid @RequestBody ProductFileRequest request) {
+        DataEntryService.ExportFile file = productFileService.file(storeId, request);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType("application/vnd.ms-excel"))
+                .body(file.content());
+    }
 
     /** Przeglądarka zapisała plik na dysku: od teraz jest w historii. Ta sama tabela co przy generowaniu pliku. */
     @PostMapping("/xml-history/{id}/saved")

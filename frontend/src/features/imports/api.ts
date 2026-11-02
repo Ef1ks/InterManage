@@ -8,8 +8,12 @@ import type {
   EanChange,
   NomenclatureImport,
   NomenclatureImportOverview,
+  ProductCodeImport,
+  ProductCodeImportOverview,
   ProductImport,
   ProductImportOverview,
+  PromotionImport,
+  PromotionImportOverview,
   SalesImport,
   SalesImportOverview,
   SupplierImport,
@@ -153,5 +157,53 @@ export function useImportNomenclatures(storeId: string) {
       queryClient.invalidateQueries({ queryKey: nomenclatureImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: reportsKey(storeId) })
     },
+  })
+}
+
+const promotionImportsKey = (storeId: string) => ['stores', storeId, 'imports', 'promotions'] as const
+const promotionImportsPath = (storeId: string) => `/stores/${storeId}/imports/promotions`
+
+/** Ile promocji trwa albo się zacznie i historia wgrań listy promocji (Taryfy.pdf). */
+export function usePromotionImports(storeId: string) {
+  return useQuery({
+    queryKey: promotionImportsKey(storeId),
+    queryFn: () => api<PromotionImportOverview>(promotionImportsPath(storeId)),
+  })
+}
+
+/** Wgranie listy bieżących i przyszłych promocji (PDF, ok. 60 stron czyta się kilka sekund). */
+export function useImportPromotions(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<PromotionImport>(promotionImportsPath(storeId), { method: 'POST', formData })
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: promotionImportsKey(storeId) }),
+  })
+}
+
+const productCodeImportsKey = (storeId: string) => ['stores', storeId, 'imports', 'product-codes'] as const
+const productCodeImportsPath = (storeId: string) => `/stores/${storeId}/imports/product-codes`
+
+/** Ile kodów i artykułów jest w najnowszych multikodach i historia ich wgrań. */
+export function useProductCodeImports(storeId: string) {
+  return useQuery({
+    queryKey: productCodeImportsKey(storeId),
+    queryFn: () => api<ProductCodeImportOverview>(productCodeImportsPath(storeId)),
+  })
+}
+
+/** Wgranie multikodów (wszystkie EAN-y przypisane teraz do każdego ITM8). */
+export function useImportProductCodes(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<ProductCodeImport>(productCodeImportsPath(storeId), { method: 'POST', formData })
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: productCodeImportsKey(storeId) }),
   })
 }

@@ -30,6 +30,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     /** Produkty sklepu po bieżącym EAN-ie (np. lista wklejona z Excela). */
     List<Product> findByStoreIdAndEanIn(UUID storeId, Collection<String> eans);
 
+    List<Product> findByStoreIdAndItm8In(UUID storeId, Collection<String> itm8s);
+
     /** Artykuł z ceną sprzedaży narzuconą przez centralę (CENA_CAD). */
     interface CadencierPrice {
         String getItm8();

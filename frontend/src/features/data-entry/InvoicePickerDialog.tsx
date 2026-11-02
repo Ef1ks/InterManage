@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { formatMoney } from '@/features/documents/format'
+import { bonNumber, formatMoney } from '@/features/documents/format'
 import { useKsefOverview } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
@@ -485,6 +485,11 @@ function InvoiceRow({
   const mark = useMarkInvoice(storeId)
   const skip = useSkipSupplier(storeId)
   const supplier = invoice.sellerName ?? invoice.sellerNip
+  // Dokument z raportu w sklepie firmy (przyjęcie z jej numerem albo przypięty): faktura jest wczytana z automatu.
+  const documents = invoice.deliveries
+  const documentTitle = documents
+    .map((document) => `${document.typeSingular} ${bonNumber(document.number)} (sklep ${document.store})`)
+    .join(', ')
   const failed = (error: unknown) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać zmiany')
 
   const setMark = (kind: InvoiceMarkKind | null, message: string, undo: InvoiceMarkKind | null) =>
@@ -571,6 +576,13 @@ function InvoiceRow({
             <span className="truncate">{invoice.invoiceNumber}</span>
             {item.status && (
               <Badge className={STATUS_BADGES[item.status].className}>{STATUS_BADGES[item.status].label}</Badge>
+            )}
+            {!item.status && documents.length > 0 && (
+              <Badge className={STATUS_BADGES.LOADED.className} title={`Wczytana z automatu: ${documentTitle}`}>
+                wczytana · {documents[0].type === 'PZ' ? 'w PZ' : documents[0].typeSingular.toLowerCase()}{' '}
+                {bonNumber(documents[0].number)}
+                {documents.length > 1 && ` +${documents.length - 1}`}
+              </Badge>
             )}
             {item.downloadedAt && (
               <Badge

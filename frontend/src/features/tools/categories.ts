@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import {
+  BeefIcon,
   BookUserIcon,
   BoxesIcon,
   CalculatorIcon,
@@ -33,6 +34,7 @@ export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: Lucid
   KSEF_INVOICES: { path: '/faktury-ksef', icon: ReceiptTextIcon },
   DATA_ENTRY: { path: '/wprowadzanie-danych', icon: SheetIcon },
   SUPPLIERS: { path: '/dostawcy', icon: BookUserIcon },
+  MEAT_PURCHASES: { path: '/zakup-miesa', icon: BeefIcon },
 }
 
 export function usePermissionCategories() {

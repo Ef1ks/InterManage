@@ -29,6 +29,8 @@ services:
       # Kopia zapasowa bazy na Dysk Google; puste = połączenie z Google niedostępne.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Automatyczne kopie robi tylko ten backend (lokalnie harmonogram jest wyłączony).
+      BACKUP_SCHEDULE_ENABLED: "true"
       FRONTEND_URL: https://intermanage.pl
       AUTH_COOKIE_SECURE: "true"
       # nginx podaje X-Forwarded-Proto, więc Spring wie, że żądanie przyszło po HTTPS.

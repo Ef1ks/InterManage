@@ -14,6 +14,7 @@ import { SalesPage } from '@/features/sales/SalesPage'
 import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { ImportPage } from '@/features/imports/ImportPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
+import { MeatPurchasesPage } from '@/features/meat/MeatPurchasesPage'
 import { BackupPage } from '@/features/settings/BackupPage'
 import { RolesPage } from '@/features/settings/RolesPage'
 import { StoreSettingsPage } from '@/features/store-settings/StoreSettingsPage'
@@ -35,6 +36,7 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   KSEF_INVOICES: <KsefPage />,
   DATA_ENTRY: <DataEntryPage />,
   SUPPLIERS: <SuppliersPage />,
+  MEAT_PURCHASES: <MeatPurchasesPage />,
 }
 
 const toolRoutes = (Object.keys(TOOL_ROUTES) as PermissionCategory[]).map((category) => ({

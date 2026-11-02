@@ -17,17 +17,21 @@ export type SavedFolderSpec = {
   suggestedPath?: string
 }
 
-type PermissionMode = { mode: 'readwrite' }
+/** Zapis plików do folderu albo samo czytanie (pliki z systemu sklepu, np. TRACEART). */
+export type FolderMode = 'read' | 'readwrite'
+
+type PermissionMode = { mode: FolderMode }
 
 /** Metody spoza typów TypeScriptu (dostępne w Chrome i Edge). */
 type DirectoryHandle = FileSystemDirectoryHandle & {
   queryPermission(options: PermissionMode): Promise<PermissionState>
   requestPermission(options: PermissionMode): Promise<PermissionState>
+  values(): AsyncIterable<FileSystemHandle>
 }
 
 declare global {
   interface Window {
-    showDirectoryPicker?: (options?: { id?: string; mode?: 'readwrite' }) => Promise<FileSystemDirectoryHandle>
+    showDirectoryPicker?: (options?: { id?: string; mode?: FolderMode }) => Promise<FileSystemDirectoryHandle>
   }
 }
 
@@ -71,13 +75,13 @@ async function readFolder(key: string): Promise<DirectoryHandle | null> {
  * folder za skrótem (np. N:\avisoconfig na zablokowanym dysku N) wybiera się, wklejając ścieżkę w pasek adresu okna.
  * `null`, gdy użytkownik zamknął okno.
  */
-export async function pickFolder(key: string): Promise<FileSystemDirectoryHandle | null> {
+export async function pickFolder(key: string, mode: FolderMode = 'readwrite'): Promise<FileSystemDirectoryHandle | null> {
   if (!window.showDirectoryPicker) {
     throw new ApiError(0, 'Ta przeglądarka nie zapisuje do wybranego folderu. Użyj Chrome albo Edge.')
   }
   let handle: FileSystemDirectoryHandle
   try {
-    handle = await window.showDirectoryPicker({ id: key.replace(/[^\w-]/g, '').slice(0, 32), mode: 'readwrite' })
+    handle = await window.showDirectoryPicker({ id: key.replace(/[^\w-]/g, '').slice(0, 32), mode })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return null
     throw new ApiError(0, 'Nie można użyć tego folderu. Przeglądarka nie pozwala zapisywać w folderach systemowych.')
@@ -91,16 +95,50 @@ export async function pickFolder(key: string): Promise<FileSystemDirectoryHandle
  * „Zezwalaj przy każdej wizycie”). Wywołuj od razu po kliknięciu, zanim cokolwiek pójdzie do serwera: okno zgody
  * działa tylko bezpośrednio po geście użytkownika.
  */
-export async function ensureFolderAccess(key: string): Promise<boolean> {
+export async function ensureFolderAccess(key: string, folderMode: FolderMode = 'readwrite'): Promise<boolean> {
   const handle = await readFolder(key)
   if (!handle) return false
-  const mode: PermissionMode = { mode: 'readwrite' }
+  const mode: PermissionMode = { mode: folderMode }
   if ((await handle.queryPermission(mode)) === 'granted') return true
   try {
     return (await handle.requestPermission(mode)) === 'granted'
   } catch {
     return false
   }
+}
+
+/**
+ * Stan folderu bez pytania o zgodę (do pracy w tle): `missing` = nie wybrano, `prompt` = przeglądarka zapyta przy
+ * kolejnym kliknięciu ({@link ensureFolderAccess}).
+ */
+export async function folderAccess(key: string, folderMode: FolderMode): Promise<PermissionState | 'missing'> {
+  const handle = await readFolder(key)
+  if (!handle) return 'missing'
+  try {
+    return await handle.queryPermission({ mode: folderMode })
+  } catch {
+    return 'prompt'
+  }
+}
+
+/** Pliki bezpośrednio w folderze klucza (bez podfolderów), których nazwa pasuje do `match`. Wymaga zgody na odczyt. */
+export async function listFolderFiles(key: string, match: (name: string) => boolean): Promise<File[]> {
+  const handle = await readFolder(key)
+  if (!handle) throw new ApiError(0, 'Nie wybrano folderu.')
+  const files: File[] = []
+  try {
+    for await (const entry of handle.values()) {
+      if (entry.kind === 'file' && match(entry.name)) files.push(await (entry as FileSystemFileHandle).getFile())
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'NotFoundError') {
+      throw new ApiError(0, `Folderu ${handle.name} już nie ma (albo dysk jest odłączony). Wybierz go ponownie.`)
+    }
+    // Plik przeniesiony do podfolderu w trakcie czytania: reszta pójdzie przy kolejnym sprawdzeniu.
+    if (error instanceof DOMException && error.name === 'NotReadableError') return files
+    throw new ApiError(0, `Nie udało się odczytać folderu ${handle.name}.`)
+  }
+  return files
 }
 
 /** Zapisuje plik w folderze klucza, nadpisując plik o tej samej nazwie. */

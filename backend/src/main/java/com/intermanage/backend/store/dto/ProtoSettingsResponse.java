@@ -5,7 +5,10 @@ import java.util.List;
 
 import com.intermanage.backend.store.entity.ProtocolKind;
 
-/** Folder plików PROTO (zawsze podany: ustawiony albo domyślny) i ukryte protokoły. */
+/**
+ * Folder plików PROTO (zawsze podany: ustawiony albo domyślny), ukryte protokoły i folder pliku nowych artykułów
+ * ({@code null} = bez podpowiedzi).
+ */
 public record ProtoSettingsResponse(String folderPath, boolean defaultFolder, List<ProtocolKind> hiddenProtocols,
-        String updatedBy, Instant updatedAt) {
+        String productFileFolderPath, String updatedBy, Instant updatedAt) {
 }

@@ -3,12 +3,15 @@ package com.intermanage.backend.product.entity;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
 import org.hibernate.annotations.UuidGenerator;
 
 import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.product.dto.PriceFileLine;
 import com.intermanage.backend.product.dto.ProductReportRow;
 import com.intermanage.backend.store.entity.Store;
 
@@ -137,6 +140,27 @@ public class Product {
     @Column(name = "piece_weight_set_at")
     private Instant pieceWeightSetAt;
 
+    /**
+     * Czas pliku TRACEART, z którego jest {@link #salePrice}; {@code null} = cena z raportu kartoteki. Raport nadpisuje
+     * cenę tylko wtedy, gdy jest nowszy niż ten plik.
+     */
+    @Column(name = "sale_price_at")
+    private LocalDateTime salePriceAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "price_file_id")
+    private PriceFileImport priceFile;
+
+    /** Cena promocyjna brutto z pliku TRACEART w okresie {@link #promoFrom}-{@link #promoTo}; cena sprzedaży to wtedy regularna. */
+    @Column(name = "promo_price", precision = 12, scale = 2)
+    private BigDecimal promoPrice;
+
+    @Column(name = "promo_from")
+    private LocalDate promoFrom;
+
+    @Column(name = "promo_to")
+    private LocalDate promoTo;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -164,6 +188,11 @@ public class Product {
     /** Wiersz z kolejnego raportu. Zwraca {@code true}, gdy zmieniło się którekolwiek pole z pliku. */
     public boolean seenIn(ProductReportRow row, ProductImport productImport) {
         lastSeenImport = productImport;
+        if (salePriceAt != null && !priceFileNewerThan(productImport.getReportGeneratedAt())) {
+            // Raport jest nowszy niż ostatni plik TRACEART: od teraz obowiązuje jego cena.
+            salePriceAt = null;
+            priceFile = null;
+        }
         if (sameDataAs(row)) {
             return false;
         }
@@ -189,7 +218,7 @@ public class Product {
                 && Objects.equals(brand, row.brand())
                 && Objects.equals(supplier, row.supplier())
                 && Objects.equals(nomenclature, row.nomenclature())
-                && sameNumber(salePrice, row.salePrice())
+                && sameNumber(salePrice, reportSalePrice(row))
                 && sameNumber(purchasePrice, row.purchasePrice())
                 && sameNumber(stock, row.stock())
                 && sameNumber(rotation, row.rotation())
@@ -211,6 +240,46 @@ public class Product {
                 && sameNumber(cadencierPrice, row.cadencierPrice());
     }
 
+    /** Cena z pliku TRACEART nowszego niż raport zostaje, inaczej cena z raportu. */
+    private BigDecimal reportSalePrice(ProductReportRow row) {
+        return salePriceAt != null ? salePrice : row.salePrice();
+    }
+
+    private boolean priceFileNewerThan(LocalDateTime reportGeneratedAt) {
+        return reportGeneratedAt == null || salePriceAt.isAfter(reportGeneratedAt);
+    }
+
+    /** Co linia pliku TRACEART zrobiła z ceną artykułu. */
+    public enum PriceFileResult {
+        UPDATED, UNCHANGED, OLDER
+    }
+
+    /**
+     * Cena z pliku TRACEART: obowiązuje, gdy plik nie jest starszy niż raport kartoteki, z którego jest bieżąca cena,
+     * ani niż poprzedni plik. Linia bez promocji kończy wcześniejszą promocję.
+     */
+    public PriceFileResult applyPriceFile(PriceFileLine line, PriceFileImport file) {
+        LocalDateTime current = salePriceAt != null ? salePriceAt : lastSeenImport.getReportGeneratedAt();
+        if (current != null && file.getFileTime().isBefore(current)) {
+            return PriceFileResult.OLDER;
+        }
+        boolean same = sameNumber(salePrice, line.salePrice())
+                && sameNumber(promoPrice, line.promoPrice())
+                && Objects.equals(promoFrom, line.promoFrom())
+                && Objects.equals(promoTo, line.promoTo());
+        salePriceAt = file.getFileTime();
+        priceFile = file;
+        if (same) {
+            return PriceFileResult.UNCHANGED;
+        }
+        salePrice = line.salePrice();
+        promoPrice = line.promoPrice();
+        promoFrom = line.promoFrom();
+        promoTo = line.promoTo();
+        updatedAt = Instant.now();
+        return PriceFileResult.UPDATED;
+    }
+
     /** {@link BigDecimal#equals} rozróżnia 1.0 i 1.00, a liczy się wartość. */
     private static boolean sameNumber(BigDecimal a, BigDecimal b) {
         return a == null ? b == null : b != null && a.compareTo(b) == 0;
@@ -222,7 +291,7 @@ public class Product {
         brand = row.brand();
         supplier = row.supplier();
         nomenclature = row.nomenclature();
-        salePrice = row.salePrice();
+        salePrice = reportSalePrice(row);
         purchasePrice = row.purchasePrice();
         stock = row.stock();
         rotation = row.rotation();
@@ -352,6 +421,22 @@ public class Product {
     }
 
     /** CENA_CAD z raportu kartoteki; {@code null}, gdy centrala nie narzuca ceny. */
+    public LocalDateTime getSalePriceAt() {
+        return salePriceAt;
+    }
+
+    public BigDecimal getPromoPrice() {
+        return promoPrice;
+    }
+
+    public LocalDate getPromoFrom() {
+        return promoFrom;
+    }
+
+    public LocalDate getPromoTo() {
+        return promoTo;
+    }
+
     public BigDecimal getCadencierPrice() {
         return cadencierPrice;
     }

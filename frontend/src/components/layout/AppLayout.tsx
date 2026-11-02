@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { hasPermission, useCurrentUser, useLogout } from '@/features/auth/api'
+import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
@@ -47,6 +48,8 @@ import { useAppDispatch, useAppSelector } from '@/store'
 const SIDEBAR_TRANSITION_MS = 200
 
 export function AppLayout() {
+  // Ceny z kasy (pliki TRACEART) sprawdzane w tle na każdej stronie aplikacji.
+  usePriceFileWatcher()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)
   const dispatch = useAppDispatch()
   const location = useLocation()

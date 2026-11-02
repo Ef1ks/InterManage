@@ -39,7 +39,11 @@ export function useProtoSettings(storeId: string, enabled = true) {
 export function useSaveProtoSettings(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (settings: { folderPath: string | null; hiddenProtocols: ProtocolKind[] }) =>
+    mutationFn: (settings: {
+      folderPath: string | null
+      hiddenProtocols: ProtocolKind[]
+      productFileFolderPath: string | null
+    }) =>
       api<ProtoSettings>(settingsPath(storeId), { method: 'PUT', json: settings }),
     onSuccess: (saved) => queryClient.setQueryData(settingsKey(storeId), saved),
     meta: { invalidates: false },
@@ -50,4 +54,17 @@ export function useSaveProtoSettings(storeId: string) {
 export function useProtoFolder(storeId: string): SavedFolderSpec {
   const { data } = useProtoSettings(storeId)
   return { key: PROTO_FOLDER_KEY, label: 'Plik PROTO', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
+}
+
+/**
+ * Folder pliku nowych i zmienionych artykułów (CADBEZP) z wprowadzania danych: inny program niż pliki PROTO, więc
+ * własny folder. Ścieżka z ustawień sklepu to tylko podpowiedź przy wyborze.
+ */
+export function useProductFileFolder(storeId: string): SavedFolderSpec {
+  const { data } = useProtoSettings(storeId)
+  return {
+    key: 'data-entry-product-file',
+    label: 'Plik nowych artykułów',
+    suggestedPath: data?.productFileFolderPath ?? undefined,
+  }
 }

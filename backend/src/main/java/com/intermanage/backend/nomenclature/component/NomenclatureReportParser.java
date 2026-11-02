@@ -1,13 +1,11 @@
 package com.intermanage.backend.nomenclature.component;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -21,26 +19,20 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
+import com.intermanage.backend.common.component.PdfCells;
+import com.intermanage.backend.common.component.PdfCells.Cell;
 import com.intermanage.backend.common.component.ReportText;
 import com.intermanage.backend.common.exception.InvalidReportException;
 import com.intermanage.backend.nomenclature.dto.NomenclatureReportRow;
 import com.intermanage.backend.nomenclature.dto.ParsedNomenclatureReport;
 import com.intermanage.backend.product.component.ProductReportParser;
-import com.lowagie.text.pdf.PdfReader;
-import com.lowagie.text.pdf.parser.FinalText;
-import com.lowagie.text.pdf.parser.ParsedText;
-import com.lowagie.text.pdf.parser.ParsedTextImpl;
-import com.lowagie.text.pdf.parser.PdfTextExtractor;
-import com.lowagie.text.pdf.parser.TextAssembler;
-import com.lowagie.text.pdf.parser.Word;
 
 /**
  * Czyta raport "LISTA NOMENKLATUR" z systemu sklepu (PDF, np. nomenklatury.pdf, ok. 50 stron). Na każdej stronie:
  * data ("lun. 26/10/2026 - 14:43:41"), "TRYTOMA Sp. z o.o. : 10023", wiersz nagłówków (Kod Nomenklatury, Nazwa
  * Nomenklatury, Kod VAT...) i wiersze tabeli; na ostatniej stronie "2358 linie".
  * <p>
- * Każda komórka tabeli to w PDF-ie osobny napis z własną pozycją, ale zwykły odczyt tekstu skleja sąsiednie komórki
- * ("PIECZYWO CHRUPKIE1kg143"). Dlatego zbieramy napisy z pozycjami, wiersz to napisy na jednej wysokości, a komórka
+ * Napisy z pozycjami daje {@link PdfCells}: wiersz to napisy na jednej wysokości, a komórka
  * trafia do kolumny, której nagłówek stoi najbliżej. Strony są obrócone, więc która współrzędna jest wierszem,
  * rozpoznajemy po nagłówkach (stoją w jednym wierszu). Jeden błędny wiersz odrzuca cały plik.
  */
@@ -55,7 +47,6 @@ public class NomenclatureReportParser {
     private static final Pattern STORE_NUMBER = Pattern.compile("sp z o o (\\d{3,})$");
     /** "2358 linie" po normalizacji. */
     private static final Pattern DECLARED_ROWS = Pattern.compile("^(\\d+) lini[ae]$");
-    private static final byte[] PDF_SIGNATURE = {'%', 'P', 'D', 'F'};
 
     /** Kolumny po początku znormalizowanej nazwy nagłówka. */
     private enum Column {
@@ -86,98 +77,18 @@ public class NomenclatureReportParser {
     }
 
     public ParsedNomenclatureReport parse(Path file) throws IOException, InvalidReportException {
-        byte[] start = new byte[PDF_SIGNATURE.length];
-        try (var input = Files.newInputStream(file)) {
-            if (input.readNBytes(start, 0, start.length) != start.length || !Arrays.equals(start, PDF_SIGNATURE)) {
-                throw new InvalidReportException("To nie jest plik PDF. Wgraj raport Lista nomenklatur zapisany jako PDF.");
-            }
+        if (!PdfCells.isPdf(file)) {
+            throw new InvalidReportException("To nie jest plik PDF. Wgraj raport Lista nomenklatur zapisany jako PDF.");
         }
-        PdfReader reader;
+        ReportReader report = new ReportReader();
         try {
-            reader = new PdfReader(file.toString());
-        } catch (IOException | RuntimeException e) {
+            PdfCells.read(file, (page, pageCount, cells) -> report.onPage(page, cells));
+        } catch (IOException e) {
             throw new InvalidReportException("Nie udało się odczytać pliku PDF. Sprawdź, czy nie jest uszkodzony.");
-        }
-        try {
-            CellCollector collector = new CellCollector();
-            PdfTextExtractor extractor = new PdfTextExtractor(reader, collector);
-            ReportReader report = new ReportReader();
-            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
-                collector.cells.clear();
-                extractor.getTextFromPage(page);
-                report.onPage(page, collector.cells);
-            }
-            return report.finish();
         } catch (RuntimeException e) {
             throw new InvalidReportException("Nie udało się odczytać tekstu z pliku PDF. Czy to raport Lista nomenklatur?");
-        } finally {
-            reader.close();
         }
-    }
-
-    /** Napis z PDF-u (jedna komórka) i jego pozycja na stronie: dwie współrzędne, bez założeń o obrocie strony. */
-    private record Cell(float a, float b, String text) {
-    }
-
-    /**
-     * Zbiera napisy strony z pozycjami. Napis dekodujemy przez słowa ({@link ParsedText#getAsPartialWords}), bo tak
-     * robi to sam OpenPDF; {@link ParsedText#getText} nie radzi sobie z fontami Identity-H z tego raportu.
-     */
-    private static final class CellCollector implements TextAssembler {
-
-        private final List<Cell> cells = new ArrayList<>();
-
-        @Override
-        public void process(ParsedText text, String contextName) {
-            List<Word> words = text.getAsPartialWords();
-            if (words.isEmpty()) {
-                return;
-            }
-            String joined = clean(words.stream().map(Word::getText).collect(Collectors.joining()));
-            if (!joined.isEmpty()) {
-                var startPoint = words.getFirst().getStartPoint();
-                cells.add(new Cell(startPoint.get(0), startPoint.get(1), joined));
-            }
-        }
-
-        @Override
-        public void process(Word word, String contextName) {
-        }
-
-        @Override
-        public void process(FinalText text, String contextName) {
-        }
-
-        @Override
-        public void renderText(FinalText text) {
-        }
-
-        @Override
-        public void renderText(ParsedTextImpl text) {
-        }
-
-        @Override
-        public FinalText endParsingContext(String contextName) {
-            return new FinalText("");
-        }
-
-        @Override
-        public String getWordId() {
-            return "word";
-        }
-
-        @Override
-        public void setPage(int page) {
-        }
-
-        @Override
-        public void reset() {
-        }
-
-        /** Data w nagłówku ma przed sobą znacznik BOM zapisany jako zwykłe znaki ("ï»¿"). */
-        private static String clean(String value) {
-            return value.replaceAll("[\\uFEFF\\u00EF\\u00BB\\u00BF]", "").replaceAll("\\s+", " ").trim();
-        }
+        return report.finish();
     }
 
     /** Stan czytania jednego pliku; bean parsera jest współdzielony, więc każdy import dostaje własny. */

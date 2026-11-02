@@ -24,7 +24,8 @@ import jakarta.persistence.Table;
 
 /**
  * Pliki PROTO sklepu: folder, do którego program sklepu wczytuje pliki (podpowiedź przy wyborze folderu w przeglądarce,
- * wspólna dla wszystkich plików PROTO), i protokoły ukryte w oknie generowania.
+ * wspólna dla wszystkich plików PROTO), i protokoły ukryte w oknie generowania. Do tego folder pliku nowych i
+ * zmienionych artykułów (CADBEZP) z wprowadzania danych, też tylko jako podpowiedź.
  */
 @Entity
 @Table(name = "store_proto_settings")
@@ -40,6 +41,9 @@ public class StoreProtoSettings {
 
     @Column(name = "folder_path")
     private String folderPath;
+
+    @Column(name = "product_file_folder")
+    private String productFileFolder;
 
     /** Nazwy stałych {@link ProtocolKind}. */
     @JdbcTypeCode(SqlTypes.ARRAY)
@@ -67,12 +71,14 @@ public class StoreProtoSettings {
     }
 
     /** Zmienia ustawienia; zwraca, czy coś się zmieniło (bez zmian nie nadpisujemy autora). */
-    public boolean update(String folderPath, List<ProtocolKind> hidden, AppUser by) {
+    public boolean update(String folderPath, String productFileFolder, List<ProtocolKind> hidden, AppUser by) {
         List<String> names = hidden.stream().distinct().sorted().map(Enum::name).toList();
-        if (Objects.equals(this.folderPath, folderPath) && names.equals(hiddenProtocols)) {
+        if (Objects.equals(this.folderPath, folderPath) && Objects.equals(this.productFileFolder, productFileFolder)
+                && names.equals(hiddenProtocols)) {
             return false;
         }
         this.folderPath = folderPath;
+        this.productFileFolder = productFileFolder;
         this.hiddenProtocols = new ArrayList<>(names);
         this.updatedBy = by;
         return true;
@@ -80,6 +86,10 @@ public class StoreProtoSettings {
 
     public String getFolderPath() {
         return folderPath;
+    }
+
+    public String getProductFileFolder() {
+        return productFileFolder;
     }
 
     public List<ProtocolKind> getHiddenProtocols() {

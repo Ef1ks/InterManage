@@ -99,8 +99,7 @@ public final class KsefInvoiceSearch {
             }
             if (filter.entered() != Entered.ALL) {
                 Predicate entered = cb.or(cb.exists(manualEntry(root, query, cb, nip)),
-                        cb.exists(delivery(root, query, cb, nip)),
-                        cb.exists(linkedDocument(root, query, cb, nip)));
+                        hasDocument(root, query, cb, nip));
                 all.add(filter.entered() == Entered.ENTERED ? entered : cb.not(entered));
             }
             for (String word : DocumentSearch.words(filter.query())) {
@@ -165,6 +164,15 @@ public final class KsefInvoiceSearch {
                 cb.equal(skipped.get("nip"), root.get("sellerNip")),
                 cb.isNull(skipped.get("removedAt")));
         return subquery;
+    }
+
+    /**
+     * Faktura ma dokument z raportu w którymś sklepie firmy: przyjęcie PZ z jej numerem albo przypięty dokument
+     * (przyjęcie, korekta od dostawcy). Ręczne oznaczenie "wprowadzona" się tu nie liczy.
+     */
+    public static Predicate hasDocument(Root<KsefInvoice> root, CriteriaQuery<?> query, CriteriaBuilder cb,
+            String nip) {
+        return cb.or(cb.exists(delivery(root, query, cb, nip)), cb.exists(linkedDocument(root, query, cb, nip)));
     }
 
     /** Sklepy firmy: z połączeniem KSeF z tym NIP-em. */

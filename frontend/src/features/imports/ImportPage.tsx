@@ -18,11 +18,15 @@ import {
   useEanChanges,
   useImportDocuments,
   useImportNomenclatures,
+  useImportProductCodes,
   useImportProducts,
+  useImportPromotions,
   useImportSales,
   useImportSuppliers,
   useNomenclatureImports,
+  useProductCodeImports,
   useProductImports,
+  usePromotionImports,
   useSalesImports,
   useSupplierImports,
 } from '@/features/imports/api'
@@ -34,14 +38,16 @@ import type {
   DocumentImport,
   EanChange,
   NomenclatureImport,
+  ProductCodeImport,
   ProductImport,
+  PromotionImport,
   SalesImport,
   StoreSummary,
   SupplierImport,
 } from '@/lib/types'
 
 const ACCEPTED_EXTENSIONS = ['.xlsx', '.xlsm']
-/** Lista nomenklatur jest drukowana z systemu sklepu tylko do PDF. */
+/** Lista nomenklatur i lista promocji są drukowane z systemu sklepu tylko do PDF. */
 const PDF_EXTENSIONS = ['.pdf']
 
 const numberFormat = new Intl.NumberFormat('pl-PL')
@@ -90,6 +96,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const suppliers = useSupplierImports(store.id)
   const sales = useSalesImports(store.id)
   const nomenclatures = useNomenclatureImports(store.id)
+  const promotions = usePromotionImports(store.id)
+  const productCodes = useProductCodeImports(store.id)
   const [eanChangesOf, setEanChangesOf] = useState<ProductImport | null>(null)
   const lastProductImport = products.data?.imports[0]
 
@@ -193,13 +201,50 @@ function StoreImports({ store }: { store: StoreSummary }) {
         >
           {canImport ? <NomenclatureReportUpload store={store} /> : <ReadOnlyNote />}
         </ReportCard>
+
+        <ReportCard
+          id="promotion-report"
+          title="Lista promocji"
+          description="Bieżące i przyszłe promocje z cenami zakupu, sprzedaży i promocyjnymi (PDF, np. Taryfy.pdf)."
+          generatedAt={promotions.isPending ? undefined : (newestReport(promotions.data?.imports) ?? null)}
+          meta={
+            promotions.data && (
+              <>W bazie {numberFormat.format(promotions.data.activeCount)} promocji trwających i zaplanowanych</>
+            )
+          }
+        >
+          {canImport ? <PromotionReportUpload store={store} /> : <ReadOnlyNote />}
+        </ReportCard>
+
+        <ReportCard
+          id="product-code-report"
+          title="Multikody"
+          description="Wszystkie EAN-y przypisane teraz do każdego ITM8, z kodem głównym i ceną (np. Multikody.xlsx)."
+          generatedAt={productCodes.isPending ? undefined : (newestReport(productCodes.data?.imports) ?? null)}
+          meta={
+            productCodes.data && (
+              <>
+                W bazie {numberFormat.format(productCodes.data.codeCount)} kodów dla{' '}
+                {numberFormat.format(productCodes.data.articleCount)} artykułów
+              </>
+            )
+          }
+        >
+          {canImport ? <ProductCodeReportUpload store={store} /> : <ReadOnlyNote />}
+        </ReportCard>
       </div>
 
       <section aria-labelledby="import-history">
         <h2 id="import-history" className="mb-3 text-base font-semibold">
           Historia importów
         </h2>
-        {products.isError && documents.isError && suppliers.isError && sales.isError && nomenclatures.isError ? (
+        {products.isError &&
+        documents.isError &&
+        suppliers.isError &&
+        sales.isError &&
+        nomenclatures.isError &&
+        promotions.isError &&
+        productCodes.isError ? (
           <FullPageMessage
             title="Nie udało się wczytać historii importów"
             action={{
@@ -210,6 +255,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
                 suppliers.refetch()
                 sales.refetch()
                 nomenclatures.refetch()
+                promotions.refetch()
+                productCodes.refetch()
               },
             }}
             inline
@@ -221,8 +268,16 @@ function StoreImports({ store }: { store: StoreSummary }) {
             suppliers={suppliers.data?.imports}
             sales={sales.data?.imports}
             nomenclatures={nomenclatures.data?.imports}
+            promotions={promotions.data?.imports}
+            productCodes={productCodes.data?.imports}
             loading={
-              products.isPending || documents.isPending || suppliers.isPending || sales.isPending || nomenclatures.isPending
+              products.isPending ||
+              documents.isPending ||
+              suppliers.isPending ||
+              sales.isPending ||
+              nomenclatures.isPending ||
+              promotions.isPending ||
+              productCodes.isPending
             }
             onShowEanChanges={setEanChangesOf}
           />
@@ -288,7 +343,7 @@ function RejectedFile({ fileName, pdf }: { fileName: string; pdf?: boolean }) {
       <AlertTitle>Tego pliku nie zaimportujemy</AlertTitle>
       <AlertDescription>
         {pdf
-          ? `${fileName} nie jest plikiem PDF. Wydrukuj listę nomenklatur z systemu sklepu do PDF.`
+          ? `${fileName} nie jest plikiem PDF. Wydrukuj raport z systemu sklepu do PDF.`
           : `${fileName} nie jest plikiem .xlsx ani .xlsm. Plik .xls otwórz w Excelu i zapisz jako .xlsx.`}
       </AlertDescription>
     </Alert>
@@ -573,6 +628,106 @@ function NomenclatureImportResult({ result }: { result: NomenclatureImport }) {
   )
 }
 
+function PromotionReportUpload({ store }: { store: StoreSummary }) {
+  const upload = useImportPromotions(store.id)
+  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
+
+  return (
+    <div className="grid gap-3">
+      <FileDropZone
+        className="min-h-32 py-6"
+        accept={PDF_EXTENSIONS}
+        pendingFile={upload.isPending ? upload.variables : undefined}
+        onFile={(file) => {
+          setRejectedFile(null)
+          upload.mutate(file)
+        }}
+        onReject={(fileName) => {
+          upload.reset()
+          setRejectedFile(fileName)
+        }}
+        title="Przeciągnij listę promocji (PDF) albo kliknij"
+        hint="Promocje, których zabraknie w nowym pliku, zostają w bazie."
+      />
+
+      <div aria-live="polite">
+        {rejectedFile && <RejectedFile fileName={rejectedFile} pdf />}
+        {upload.isError && <ImportError error={upload.error} />}
+        {upload.isSuccess && <PromotionImportResult result={upload.data} />}
+      </div>
+    </div>
+  )
+}
+
+function PromotionImportResult({ result }: { result: PromotionImport }) {
+  return (
+    <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <CircleCheckIcon className="text-emerald-600 dark:text-emerald-400" />
+      <AlertTitle>
+        Zaimportowano {numberFormat.format(result.totalRows)} promocji
+        {result.reportGeneratedAt && <> z raportu {formatReportDate(result.reportGeneratedAt)}</>}
+      </AlertTitle>
+      <AlertDescription>
+        <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
+          <ResultCount label="Nowe" value={result.createdCount} />
+          <ResultCount label="Zmienione" value={result.updatedCount} />
+          <ResultCount label="Brak w pliku" value={result.missingCount} />
+        </dl>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function ProductCodeReportUpload({ store }: { store: StoreSummary }) {
+  const upload = useImportProductCodes(store.id)
+  const [rejectedFile, setRejectedFile] = useState<string | null>(null)
+
+  return (
+    <div className="grid gap-3">
+      <FileDropZone
+        className="min-h-32 py-6"
+        accept={ACCEPTED_EXTENSIONS}
+        pendingFile={upload.isPending ? upload.variables : undefined}
+        onFile={(file) => {
+          setRejectedFile(null)
+          upload.mutate(file)
+        }}
+        onReject={(fileName) => {
+          upload.reset()
+          setRejectedFile(fileName)
+        }}
+        title="Przeciągnij multikody albo kliknij"
+        hint="Kody, których zabraknie w nowym pliku, zostają w bazie jako historia przypisań."
+      />
+
+      <div aria-live="polite">
+        {rejectedFile && <RejectedFile fileName={rejectedFile} />}
+        {upload.isError && <ImportError error={upload.error} />}
+        {upload.isSuccess && <ProductCodeImportResult result={upload.data} />}
+      </div>
+    </div>
+  )
+}
+
+function ProductCodeImportResult({ result }: { result: ProductCodeImport }) {
+  return (
+    <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <CircleCheckIcon className="text-emerald-600 dark:text-emerald-400" />
+      <AlertTitle>
+        Zaimportowano {numberFormat.format(result.totalRows)} kodów
+        {result.reportGeneratedAt && <> z raportu {formatReportDate(result.reportGeneratedAt)}</>}
+      </AlertTitle>
+      <AlertDescription>
+        <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
+          <ResultCount label="Nowe" value={result.createdCount} />
+          <ResultCount label="Zmienione" value={result.updatedCount} />
+          <ResultCount label="Brak w pliku" value={result.missingCount} />
+        </dl>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function ResultCount({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex gap-1.5">
@@ -588,6 +743,8 @@ type HistoryRow =
   | { kind: 'suppliers'; importedAt: string; item: SupplierImport }
   | { kind: 'sales'; importedAt: string; item: SalesImport }
   | { kind: 'nomenclatures'; importedAt: string; item: NomenclatureImport }
+  | { kind: 'promotions'; importedAt: string; item: PromotionImport }
+  | { kind: 'productCodes'; importedAt: string; item: ProductCodeImport }
 
 const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   products: 'Produkty',
@@ -595,6 +752,8 @@ const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   suppliers: 'Lista dostawców',
   sales: 'Sprzedaż',
   nomenclatures: 'Lista nomenklatur',
+  promotions: 'Lista promocji',
+  productCodes: 'Multikody',
 }
 
 /** Wszystkie wgrania raportów razem, od najnowszego. */
@@ -604,6 +763,8 @@ function ImportHistory({
   suppliers,
   sales,
   nomenclatures,
+  promotions,
+  productCodes,
   loading,
   onShowEanChanges,
 }: {
@@ -612,6 +773,8 @@ function ImportHistory({
   suppliers?: SupplierImport[]
   sales?: SalesImport[]
   nomenclatures?: NomenclatureImport[]
+  promotions?: PromotionImport[]
+  productCodes?: ProductCodeImport[]
   loading: boolean
   onShowEanChanges: ShowEanChanges
 }) {
@@ -621,6 +784,8 @@ function ImportHistory({
     ...(suppliers ?? []).map((item) => ({ kind: 'suppliers' as const, importedAt: item.importedAt, item })),
     ...(sales ?? []).map((item) => ({ kind: 'sales' as const, importedAt: item.importedAt, item })),
     ...(nomenclatures ?? []).map((item) => ({ kind: 'nomenclatures' as const, importedAt: item.importedAt, item })),
+    ...(promotions ?? []).map((item) => ({ kind: 'promotions' as const, importedAt: item.importedAt, item })),
+    ...(productCodes ?? []).map((item) => ({ kind: 'productCodes' as const, importedAt: item.importedAt, item })),
   ].sort((a, b) => b.importedAt.localeCompare(a.importedAt))
 
   if (!loading && rows.length === 0) {
@@ -661,15 +826,7 @@ function ImportHistory({
                   {row.item.reportGeneratedAt ? formatReportDate(row.item.reportGeneratedAt) : '—'}
                 </TableCell>
                 <TableCell className="whitespace-normal text-muted-foreground">
-                  {row.kind === 'products'
-                    ? productSummary(row.item)
-                    : row.kind === 'documents'
-                      ? documentSummary(row.item)
-                      : row.kind === 'suppliers'
-                        ? supplierSummary(row.item)
-                        : row.kind === 'nomenclatures'
-                          ? nomenclatureSummary(row.item)
-                          : salesSummary(row.item)}
+                  {historySummary(row)}
                 </TableCell>
                 <TableCell className="pr-4 text-right">
                   {row.kind === 'products' ? (
@@ -685,6 +842,35 @@ function ImportHistory({
       </Table>
     </Card>
   )
+}
+
+function historySummary(row: HistoryRow) {
+  switch (row.kind) {
+    case 'products':
+      return productSummary(row.item)
+    case 'documents':
+      return documentSummary(row.item)
+    case 'suppliers':
+      return supplierSummary(row.item)
+    case 'nomenclatures':
+      return nomenclatureSummary(row.item)
+    case 'promotions':
+      return mergeSummary(row.item, 'promocji')
+    case 'productCodes':
+      return mergeSummary(row.item, 'kodów')
+    case 'sales':
+      return salesSummary(row.item)
+  }
+}
+
+/** Import scalany z bazą: ile pozycji w pliku, nowych, zmienionych i brakujących. */
+function mergeSummary(item: PromotionImport | ProductCodeImport, unit: string) {
+  return [
+    `${numberFormat.format(item.totalRows)} ${unit}`,
+    `${numberFormat.format(item.createdCount)} nowych`,
+    `${numberFormat.format(item.updatedCount)} zmienionych`,
+    `${numberFormat.format(item.missingCount)} brak w pliku`,
+  ].join(' · ')
 }
 
 function productSummary(item: ProductImport) {

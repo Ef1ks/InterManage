@@ -45,7 +45,8 @@ public class SupplierController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('SUPPLIERS:VIEW', 'DOCUMENTS:VIEW', 'DATA_ENTRY:VIEW')" + STORE)
+    @PreAuthorize("hasAnyAuthority('SUPPLIERS:VIEW', 'DOCUMENTS:VIEW', 'DATA_ENTRY:VIEW', 'MEAT_PURCHASES:VIEW')"
+            + STORE)
     public List<SupplierResponse> list(@PathVariable UUID storeId) {
         return directory.list(storeId);
     }

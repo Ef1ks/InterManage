@@ -255,6 +255,139 @@ class ProductImportIntegrationTests {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void priceFileNewerThanTheReportOverridesThePriceUntilANewerReport() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        String b = itm8();
+        LocalDateTime reportDate = nextReportDate();
+        upload(owner, report(reportDate, product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))
+                .andExpect(status().isCreated());
+
+        // A w promocji (na kasie 7.99, regularna 9.49), B z nową ceną; kod A z etykiety obniżki jest tańszy.
+        uploadPriceFiles(owner, priceFile(reportDate.plusMinutes(10),
+                priceLine(a, "59" + a.substring(2), "7.99", "9.49", "10126", "311230"),
+                priceLine(a, "1305771000006", "2.40", "2.85", "10126", "311230"),
+                priceLine(b, "59" + b.substring(2), "3.79", null, null, null),
+                priceLine(itm8(), "5900000000001", "1.00", null, null, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported[0].articleCount").value(3))
+                .andExpect(jsonPath("$.imported[0].updatedCount").value(2))
+                .andExpect(jsonPath("$.imported[0].unknownCount").value(1));
+
+        Map<String, Object> productA = jdbc.queryForMap("select * from products where itm8 = ?", a);
+        assertThat(productA.get("sale_price")).isEqualTo(new BigDecimal("9.49"));
+        assertThat(productA.get("promo_price")).isEqualTo(new BigDecimal("7.99"));
+        assertThat(productA.get("promo_to").toString()).isEqualTo("2030-12-31");
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
+                .isEqualTo(new BigDecimal("3.79"));
+
+        mvc.perform(get("/api/stores/" + storeId + "/data-entry/products").param("ean", "59" + a.substring(2))
+                        .cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].salePrice").value(9.49))
+                .andExpect(jsonPath("$[0].promoPrice").value(7.99))
+                .andExpect(jsonPath("$[0].promoTo").value("2030-12-31"));
+
+        // Plik starszy niż ostatni dla artykułu nic nie zmienia.
+        uploadPriceFiles(owner, priceFile(reportDate.plusMinutes(5),
+                priceLine(b, "59" + b.substring(2), "3.19", null, null, null)))
+                .andExpect(jsonPath("$.imported[0].olderCount").value(1));
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
+                .isEqualTo(new BigDecimal("3.79"));
+
+        // Raport wygenerowany przed plikiem (wgrany później) nie cofa ceny z pliku, nowszy już tak.
+        upload(owner, report(reportDate.plusMinutes(1), product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))
+                .andExpect(status().isCreated());
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
+                .isEqualTo(new BigDecimal("3.79"));
+        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))
+                .andExpect(status().isCreated());
+        Map<String, Object> productB = jdbc.queryForMap("select * from products where itm8 = ?", b);
+        assertThat(productB.get("sale_price")).isEqualTo(new BigDecimal("3.49"));
+        assertThat(productB.get("sale_price_at")).isNull();
+    }
+
+    @Test
+    void priceFileIsImportedOnce() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        MockMultipartFile file = priceFile(LocalDateTime.of(2099, 1, 1, 7, 43, 34),
+                priceLine(a, "59" + a.substring(2), "9.99", null, null, null));
+        String pending = "{\"fileNames\":[\"" + file.getOriginalFilename() + "\",\"PROTO6_x.Traite0\"]}";
+
+        mvc.perform(post(priceFilesUrl() + "/pending").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(pending))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileNames.length()").value(1))
+                .andExpect(jsonPath("$.fileNames[0]").value(file.getOriginalFilename()));
+
+        uploadPriceFiles(owner, file).andExpect(jsonPath("$.imported.length()").value(1));
+        uploadPriceFiles(owner, file)
+                .andExpect(jsonPath("$.imported.length()").value(0))
+                .andExpect(jsonPath("$.skipped[0]").value(file.getOriginalFilename()));
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, a))
+                .isEqualTo(new BigDecimal("9.99"));
+
+        mvc.perform(post(priceFilesUrl() + "/pending").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(pending))
+                .andExpect(jsonPath("$.fileNames.length()").value(0));
+        mvc.perform(get(priceFilesUrl()).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latest[0].fileName").value(file.getOriginalFilename()));
+    }
+
+    @Test
+    void notAPriceFileIsRejected() throws Exception {
+        uploadPriceFiles(login(), new MockMultipartFile("files", "PROTO6_20261102.Traite0", "application/octet-stream",
+                new byte[] {1}))
+                .andExpect(status().isBadRequest());
+    }
+
+    private ResultActions uploadPriceFiles(Cookie owner, MockMultipartFile... files) throws Exception {
+        var request = multipart(priceFilesUrl());
+        for (MockMultipartFile file : files) {
+            request.file(file);
+        }
+        return mvc.perform(request.cookie(owner).with(csrf()));
+    }
+
+    private String priceFilesUrl() {
+        return "/api/stores/" + storeId + "/imports/price-files";
+    }
+
+    private static MockMultipartFile priceFile(LocalDateTime time, String... lines) {
+        String name = "TRACEART_" + DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").format(time)
+                + "_SR0AF901_UT0AF907.Traite0";
+        return new MockMultipartFile("files", name, "application/octet-stream",
+                (String.join("\r\n", lines) + "\r\n").getBytes(StandardCharsets.ISO_8859_1));
+    }
+
+    /**
+     * Linia pliku TRACEART (360 znaków) z polami, które czyta parser; daty DMMRR, {@code regular} i daty tylko
+     * w promocji.
+     */
+    private static String priceLine(String itm8, String ean, String tillPrice, String regular, String promoFrom,
+            String promoTo) {
+        char[] line = new char[360];
+        Arrays.fill(line, ' ');
+        put(line, 0, "%13s".formatted(ean).replace(' ', '0'));
+        line[13] = '\0';
+        put(line, 14, "ARTYKUL TESTOWY");
+        put(line, 39, "6");
+        put(line, 41, "%9s".formatted(tillPrice).replace(' ', '0'));
+        put(line, 120, "%6s".formatted(promoFrom != null ? promoFrom : "10125"));
+        put(line, 126, "%6s".formatted(promoTo != null ? promoTo : "0"));
+        put(line, 133, itm8);
+        put(line, 306, "%9s".formatted(regular != null ? regular : "999999.99"));
+        return new String(line);
+    }
+
+    private static void put(char[] line, int at, String value) {
+        value.getChars(0, value.length(), line, at);
+    }
+
     private ResultActions upload(Cookie owner, byte[] file) throws Exception {
         return mvc.perform(multipart(importsUrl())
                 .file(new MockMultipartFile("file", "BAZA DO STRONY.xlsx", "application/octet-stream", file))

@@ -1,3 +1,4 @@
+import { todayIso } from '@/lib/dates'
 import type {
   DataEntryCatalogProduct,
   DataEntryLine,
@@ -52,6 +53,9 @@ export type DataEntryRow = {
   cadencier?: boolean
   /** CENA_CAD z kartoteki: cena sugerowana bez liczenia. Brak w starszych szkicach. */
   cadencierPrice?: number | null
+  /** Promocja z kasy (plik TRACEART) w chwili wczytania: cena brutto i ostatni dzień. Brak w starszych szkicach. */
+  promoPrice?: number | null
+  promoTo?: string | null
   itm8: string | null
   /** Stan i rotacja z kartoteki w chwili wczytania. Brak w starszych szkicach. */
   stock?: number | null
@@ -146,6 +150,8 @@ export function rowFromLine(line: DataEntryLine): DataEntryRow {
     known: product !== null,
     cadencier: product?.cadencier ?? false,
     cadencierPrice: product?.cadencierPrice ?? null,
+    promoPrice: product?.promoPrice ?? null,
+    promoTo: product?.promoTo ?? null,
     itm8: product?.itm8 ?? null,
     stock: product?.stock ?? null,
     rotation: product?.rotation ?? null,
@@ -163,6 +169,8 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
       known: false,
       cadencier: false,
       cadencierPrice: null,
+      promoPrice: null,
+      promoTo: null,
       itm8: null,
       stock: null,
       rotation: null,
@@ -174,6 +182,8 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
     known: true,
     cadencier: product.cadencier,
     cadencierPrice: product.cadencierPrice,
+    promoPrice: product.promoPrice,
+    promoTo: product.promoTo,
     itm8: product.itm8,
     stock: product.stock,
     rotation: product.rotation,
@@ -526,6 +536,12 @@ export function withAutoSalePrice(before: DataEntryRow, after: DataEntryRow, pri
 }
 
 /** CENA_CAD artykułu z kartoteki (cena narzucona przez centralę); {@code null}, gdy jej nie ma. */
+/** Cena promocyjna z kasy, póki promocja trwa (szkic z localStorage bywa z poprzednich dni). */
+export function activePromoPrice(row: DataEntryRow) {
+  if (!row.known || row.promoPrice == null || !row.promoTo || row.promoTo < todayIso()) return null
+  return row.promoPrice
+}
+
 export function cadencierPrice(row: DataEntryRow) {
   return row.known && row.cadencierPrice != null && row.cadencierPrice > 0 ? row.cadencierPrice : null
 }

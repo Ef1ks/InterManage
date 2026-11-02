@@ -13,7 +13,7 @@ import com.intermanage.backend.store.mapper.StoreMapper;
 import com.intermanage.backend.store.repository.StoreProtoSettingsRepository;
 import com.intermanage.backend.store.repository.StoreRepository;
 
-/** Folder plików PROTO sklepu i protokoły ukryte w oknie generowania. */
+/** Folder plików PROTO sklepu, protokoły ukryte w oknie generowania i folder pliku nowych artykułów. */
 @Service
 public class StoreProtoSettingsService {
 
@@ -47,11 +47,15 @@ public class StoreProtoSettingsService {
     @Transactional
     public ProtoSettingsResponse save(UUID storeId, ProtoSettingsRequest request, UUID userId) {
         StoreProtoSettings saved = find(storeId);
-        String path = request.folderPath() == null || request.folderPath().isBlank() ? null : request.folderPath().trim();
-        if (saved.update(path, request.hiddenProtocols(), users.getReferenceById(userId))) {
+        if (saved.update(trimToNull(request.folderPath()), trimToNull(request.productFileFolderPath()),
+                request.hiddenProtocols(), users.getReferenceById(userId))) {
             settings.saveAndFlush(saved);
         }
         return get(storeId);
+    }
+
+    private static String trimToNull(String path) {
+        return path == null || path.isBlank() ? null : path.trim();
     }
 
     private ProtoSettingsResponse toResponse(StoreProtoSettings value) {

@@ -34,7 +34,9 @@ import com.intermanage.backend.dataentry.repository.DataEntrySkippedSupplierRepo
 import com.intermanage.backend.ksef.component.KsefInvoicePdf;
 import com.intermanage.backend.ksef.dto.KsefInvoicePage;
 import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
+import com.intermanage.backend.ksef.entity.KsefConnection;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
+import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
 import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
 import com.intermanage.backend.store.entity.Store;
@@ -69,11 +71,13 @@ public class DataEntryInvoiceService {
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final DataEntryInvoiceMapper mapper;
+    private final KsefConnectionRepository connections;
 
     public DataEntryInvoiceService(KsefInvoiceService ksefInvoices, DataEntryInvoiceMarkRepository marks,
             DataEntrySkippedSupplierRepository skipped, StoreRepository stores, AppUserRepository users,
-            DataEntryInvoiceMapper mapper) {
+            DataEntryInvoiceMapper mapper, KsefConnectionRepository connections) {
         this.ksefInvoices = ksefInvoices;
+        this.connections = connections;
         this.marks = marks;
         this.skipped = skipped;
         this.stores = stores;
@@ -102,13 +106,19 @@ public class DataEntryInvoiceService {
     }
 
     /**
-     * Do wczytania: bez znacznika "wczytana" / "nie moja" sklepu (pobranie się nie liczy) i nie od odkładanego
-     * dostawcy; obsłużone: odwrotnie. Faktury pomijanych dostawców tylko z {@code showSkipped}.
+     * Do wczytania: bez znacznika "wczytana" / "nie moja" sklepu (pobranie się nie liczy), bez dokumentu z raportu
+     * w sklepie firmy (przyjęcie PZ z jej numerem albo przypięty dokument: faktura jest już w systemie sklepu, więc
+     * wczytana z automatu) i nie od odkładanego dostawcy; obsłużone: odwrotnie. Faktury pomijanych dostawców tylko
+     * z {@code showSkipped}.
      */
-    private static Specification<KsefInvoice> extra(UUID storeId, ListStatus status, boolean showSkipped) {
+    private Specification<KsefInvoice> extra(UUID storeId, ListStatus status, boolean showSkipped) {
+        String nip = connections.findById(storeId).map(KsefConnection::getNip).orElse(null);
         return (root, query, cb) -> {
             Predicate handled = cb.or(cb.exists(handledMark(root, query, cb, storeId)),
                     cb.exists(rule(root, query, cb, storeId, SupplierRuleMode.DONE)));
+            if (nip != null) {
+                handled = cb.or(handled, KsefInvoiceSearch.hasDocument(root, query, cb, nip));
+            }
             Predicate all = cb.conjunction();
             if (!showSkipped) {
                 all = cb.and(all, cb.not(cb.exists(rule(root, query, cb, storeId, SupplierRuleMode.HIDDEN))));

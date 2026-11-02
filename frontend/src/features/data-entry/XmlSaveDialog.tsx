@@ -7,11 +7,12 @@ import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ApiError, api, fetchPostedFile, saveBlob } from '@/lib/api'
+import { useProductFileFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
 
 import { formatMoney } from '@/features/documents/format'
 
-import type { ExportPayload } from './api'
+import type { ExportPayload, ProductFilePayload } from './api'
 import { differs, type InvoiceTotals, signedMoney } from './invoice-totals'
 import type { DataEntryRow } from './rows'
 
@@ -27,6 +28,8 @@ export type XmlProblems = {
 type Props = {
   storeId: string
   payload: ExportPayload | null
+  /** Nowe i zmienione artykuły do pliku CADBEZP; {@code null}, gdy takich nie ma. */
+  productFile: ProductFilePayload | null
   problems: XmlProblems
   /** Sumy tabeli i faktury: różnica wymaga potwierdzenia zapisu, ale go nie blokuje. */
   totals: InvoiceTotals
@@ -38,11 +41,13 @@ type Props = {
 /**
  * Zapis tabeli do pliku XML faktury dla programu sklepu. Plik trafia do folderu wybranego raz w przeglądarce; bez
  * folderu (albo w przeglądarce bez tej funkcji) się pobiera. Braki tabeli i różnica sum z fakturą są nad przyciskiem,
- * ale nie blokują zapisu: przycisk pyta wtedy „Zapisz mimo …”.
+ * ale nie blokują zapisu: przycisk pyta wtedy „Zapisz mimo …”. Nowe i zmienione artykuły trafiają po zapisie XML do
+ * pliku CADBEZP (.xls) w osobnym folderze (ścieżka z ustawień sklepu); jego błąd nie cofa zapisanego pliku XML.
  */
-export function XmlSaveDialog({ storeId, payload, problems, totals, open, onOpenChange, onGoTo }: Props) {
+export function XmlSaveDialog({ storeId, payload, productFile, problems, totals, open, onOpenChange, onGoTo }: Props) {
   const [saving, setSaving] = useState(false)
   const queryClient = useQueryClient()
+  const productFolder = useProductFileFolder(storeId)
   const count = payload?.rows.length ?? 0
 
   const save = async () => {
@@ -51,6 +56,7 @@ export function XmlSaveDialog({ storeId, payload, problems, totals, open, onOpen
     try {
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
       const folderReady = await ensureFolderAccess(XML_FOLDER.key)
+      const productFolderReady = productFile ? await ensureFolderAccess(productFolder.key) : false
       const { fileName, blob, headers } = await fetchPostedFile(
         `/stores/${storeId}/data-entry/export/xml`,
         payload,
@@ -74,6 +80,7 @@ export function XmlSaveDialog({ storeId, payload, problems, totals, open, onOpen
         toast.warning(`${folderReady ? 'Zapisano' : 'Pobrano'} ${fileName}, ale plik nie trafił do historii`)
       else if (folderReady) toast.success(`Zapisano ${fileName}`)
       else toast.success('Pobrano plik XML', { description: 'Folder na pliki XML nie jest wybrany w tej przeglądarce.' })
+      if (productFile) await saveProductFile(productFile, productFolderReady)
       onOpenChange(false)
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku XML', {
@@ -81,6 +88,26 @@ export function XmlSaveDialog({ storeId, payload, problems, totals, open, onOpen
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** Plik CADBEZP po zapisanym pliku XML: błąd tylko ostrzega, plik XML zostaje. */
+  const saveProductFile = async (file: ProductFilePayload, folderReady: boolean) => {
+    try {
+      const { fileName, blob } = await fetchPostedFile(
+        `/stores/${storeId}/data-entry/export/product-file`,
+        file,
+        'CADBEZP.xls',
+      )
+      if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
+      else saveBlob(blob, fileName)
+      toast.success(`${folderReady ? 'Zapisano' : 'Pobrano'} ${fileName}`, {
+        description: `Nowe i zmienione artykuły: ${file.rows.length}.`,
+      })
+    } catch (error) {
+      toast.error('Nie udało się zapisać pliku nowych artykułów', {
+        description: `${error instanceof ApiError ? `${error.message} ` : ''}Plik XML jest zapisany.`,
+      })
     }
   }
 
@@ -146,6 +173,15 @@ export function XmlSaveDialog({ storeId, payload, problems, totals, open, onOpen
         )}
 
         <SavedFolder folder={XML_FOLDER} />
+
+        {productFile && (
+          <div className="grid gap-2">
+            <p className="text-sm">
+              Nowe i zmienione artykuły ({productFile.rows.length}) trafią też do pliku CADBEZP dla programu sklepu.
+            </p>
+            <SavedFolder folder={productFolder} />
+          </div>
+        )}
 
         <Button size="xl" loading={saving} disabled={count === 0} onClick={save}>
           <FileCodeIcon />

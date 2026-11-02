@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { Fragment, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 
-import { formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { formatDocumentDate, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { cn } from '@/lib/utils'
 import type { NomenclatureItem, SaleUnit } from '@/lib/types'
 
@@ -33,6 +33,7 @@ import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
 import { Button } from '@/components/ui/button'
 
 import {
+  activePromoPrice,
   belowRequiredMargin,
   cadencierPrice,
   canSellSmaller,
@@ -1360,6 +1361,18 @@ function CellContent({
       return <span className={cn(row.stock < 0 && 'font-medium text-destructive')}>{formatQuantity(row.stock)}</span>
     case 'rotation':
       return row.rotation == null ? null : formatQuantity(row.rotation)
+    case 'promoPrice': {
+      const promo = activePromoPrice(row)
+      if (promo === null) return null
+      return (
+        <span
+          className="font-bold text-orange-600 dark:text-orange-400"
+          title={`Promocja na kasie do ${formatDocumentDate(row.promoTo ?? '')}; cena regularna ${formatMoney(row.salePrice)}`}
+        >
+          {formatMoney(promo)}
+        </span>
+      )
+    }
     case 'netContent': {
       const mismatch = measureMismatch(row) || (row.suggestion?.unitMismatch && !row.edited.netContent)
       return (

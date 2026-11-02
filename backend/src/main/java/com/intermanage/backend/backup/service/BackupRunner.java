@@ -90,6 +90,9 @@ public class BackupRunner {
     /** Proces kopii nie przeżywa restartu: próby, które zostały „w trakcie”, oznacza jako nieudane. */
     @EventListener(ApplicationReadyEvent.class)
     public void failInterrupted() {
+        if (!scheduleEnabled) {
+            return;
+        }
         Integer count = transaction.execute(status ->
                 runs.failRunning(Instant.now(), "Przerwana: serwer został uruchomiony ponownie w trakcie kopii"));
         if (count != null && count > 0) {

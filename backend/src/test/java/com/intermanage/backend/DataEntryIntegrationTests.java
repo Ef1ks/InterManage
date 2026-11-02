@@ -711,7 +711,24 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.folderPath").value("N:\\avisoconfig"))
                 .andExpect(jsonPath("$.defaultFolder").value(true))
-                .andExpect(jsonPath("$.hiddenProtocols.length()").value(0));
+                .andExpect(jsonPath("$.hiddenProtocols.length()").value(0))
+                .andExpect(jsonPath("$.productFileFolderPath").doesNotExist());
+
+        // Plik nowych i zmienionych artykułów (CADBEZP): stary Excel, nazwa z dostawcy i numeru faktury.
+        byte[] products = mvc.perform(post(url("/export/product-file")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sellerName":"Impek","invoiceNumber":"FV/1","rows":[{
+                                 "ean":"5901414299422","name":"ST.STAND CIAHIT+HIT MINIS","brand":"HIT","unit":"szt.",
+                                 "netContent":1,"purchasePrice":0.01,"vatPercent":5,"salePrice":0.02,
+                                 "subfamilyCode":"010205"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("CADBEZP-IMPEK-FV_1.xls")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(products).startsWith((byte) 0xD0, (byte) 0xCF, (byte) 0x11, (byte) 0xE0);
+        mvc.perform(post(url("/export/product-file")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"rows\":[]}"))
+                .andExpect(status().isBadRequest());
 
         // Plik PROTO1 (likwidacje): ilości ze znakiem, 0 pominięte, w nazwie numer sklepu i login.
         String number = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class, storeId);
@@ -735,9 +752,11 @@ class DataEntryIntegrationTests {
         // Ukryty protokół nie powstaje; folder sklepu wraca w ustawieniach.
         mvc.perform(put(settings).cookie(owner)
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"folderPath\":\" D:\\\\proto \",\"hiddenProtocols\":[\"DONATION\",\"ADVERTISING\"]}"))
+                        .content("{\"folderPath\":\" D:\\\\proto \",\"hiddenProtocols\":[\"DONATION\",\"ADVERTISING\"],"
+                                + "\"productFileFolderPath\":\"N:\\\\cadbezp\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.folderPath").value("D:\\proto"))
+                .andExpect(jsonPath("$.productFileFolderPath").value("N:\\cadbezp"))
                 .andExpect(jsonPath("$.defaultFolder").value(false))
                 .andExpect(jsonPath("$.hiddenProtocols", hasItem("DONATION")))
                 .andExpect(jsonPath("$.updatedBy").isNotEmpty());

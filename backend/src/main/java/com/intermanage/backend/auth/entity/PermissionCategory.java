@@ -16,7 +16,8 @@ public enum PermissionCategory {
     DELI_PRICES("Kalkulator cen garmażu", "Koszt wyrobów na kg z przepisów i cen zakupu z kartoteki"),
     KSEF_INVOICES("Faktury KSeF", "Faktury zakupowe z Krajowego Systemu e-Faktur i połączenie sklepu z KSeF"),
     DATA_ENTRY("Wprowadzanie danych", "Nowe artykuły z faktur KSeF: tabela jak w Excelu, propozycje AI, eksport"),
-    SUPPLIERS("Dostawcy", "Kartoteka dostawców: strona internetowa, przedstawiciele i kontakty");
+    SUPPLIERS("Dostawcy", "Kartoteka dostawców: strona internetowa, przedstawiciele i kontakty"),
+    MEAT_PURCHASES("Zakup mięsa", "Ceny zakupu mięsa z dokumentów WZ (skan odczytuje AI) i porównanie sklepów");
 
     private final String label;
     private final String description;

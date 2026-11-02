@@ -12,6 +12,7 @@ export type PermissionCategory =
   | 'KSEF_INVOICES'
   | 'DATA_ENTRY'
   | 'SUPPLIERS'
+  | 'MEAT_PURCHASES'
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -734,6 +735,48 @@ export type SupplierImportOverview = {
   supplierCount: number
   manualCount: number
   imports: SupplierImport[]
+}
+
+/** Wgranie listy bieżących i przyszłych promocji (Taryfy.pdf); {@code missingCount}: promocje z zakresu raportu, których w nim zabrakło. */
+export type PromotionImport = {
+  id: string
+  fileName: string
+  reportGeneratedAt: string | null
+  /** RRRR-MM-DD: zakres dat końca promocji objęty raportem. */
+  endFrom: string | null
+  endTo: string | null
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  createdCount: number
+  updatedCount: number
+  missingCount: number
+}
+
+export type PromotionImportOverview = {
+  /** Promocje, które trwają albo dopiero się zaczną. */
+  activeCount: number
+  imports: PromotionImport[]
+}
+
+/** Wgranie multikodów: pary ITM8 + EAN; {@code missingCount}: pary sklepu, których nie było w pliku. */
+export type ProductCodeImport = {
+  id: string
+  fileName: string
+  reportGeneratedAt: string | null
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  createdCount: number
+  updatedCount: number
+  missingCount: number
+}
+
+export type ProductCodeImportOverview = {
+  /** Pary i artykuły z najnowszych multikodów. */
+  codeCount: number
+  articleCount: number
+  imports: ProductCodeImport[]
 }
 
 /**
@@ -1578,6 +1621,9 @@ export type DataEntryCatalogProduct = {
   cadencier: boolean
   /** CENA_CAD (brutto sztuki narzucona przez centralę); {@code null}, gdy jej nie ma. */
   cadencierPrice: number | null
+  /** Trwająca promocja z pliku TRACEART: cena brutto na kasie ({@code salePrice} jest wtedy regularna) i ostatni dzień. */
+  promoPrice: number | null
+  promoTo: string | null
   unit: SaleUnit
   netContent: number
   subfamilyCode: string | null
@@ -1747,6 +1793,8 @@ export type ProtoSettings = {
   folderPath: string
   defaultFolder: boolean
   hiddenProtocols: ProtocolKind[]
+  /** Folder pliku nowych i zmienionych artykułów (CADBEZP); {@code null} = bez podpowiedzi. */
+  productFileFolderPath: string | null
   updatedBy: string | null
   updatedAt: string | null
 }
@@ -1793,4 +1841,145 @@ export type BackupSettingsRequest = {
   runHour: number
   keepCount: number
   password: string | null
+}
+
+/** Mięso z kartoteki sklepu do wyboru przy pozycji WZ (rejony 24 i 46). */
+export type MeatArticle = {
+  id: string
+  itm8: string
+  ean: string
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  salePrice: number | null
+}
+
+export type MeatSupplier = { id: string; code: string | null; name: string; nip: string | null }
+
+/** Skąd przypisanie pozycji: zapamiętane u dostawcy, propozycja AI albo brak. */
+export type MeatLineMatch = 'LINK' | 'MODEL' | 'NONE'
+
+export type MeatScanLine = {
+  documentName: string
+  documentCode: string | null
+  unitPrice: number
+  handwrittenCorrection: boolean
+  note: string | null
+  article: MeatArticle | null
+  match: MeatLineMatch
+  /** Zapamiętane jako pozycja bez artykułu (sam zakup). */
+  noArticle: boolean
+}
+
+/** Odczyt skanu WZ do sprawdzenia przed zapisem. */
+export type MeatScanResult = {
+  scanId: string
+  contentType: string
+  supplier: MeatSupplier | null
+  /** MARK: zapamiętany numer weterynaryjny / BDO / NIP, NIP: NIP z dokumentu, MODEL: wybór AI. */
+  supplierMatch: 'MARK' | 'NIP' | 'MODEL' | null
+  readSupplierName: string | null
+  readNip: string | null
+  readBdo: string | null
+  readVetNumber: string | null
+  documentNumber: string | null
+  deliveryDate: string
+  duplicateId: string | null
+  lines: MeatScanLine[]
+}
+
+export type MeatDeliveryLine = {
+  id: string
+  documentName: string
+  documentCode: string | null
+  unitPrice: number
+  article: MeatArticle | null
+  handwrittenCorrection: boolean
+  note: string | null
+}
+
+export type MeatDelivery = {
+  id: string
+  deliveryDate: string
+  supplier: MeatSupplier
+  documentNumber: string
+  scanId: string | null
+  scanContentType: string | null
+  lines: MeatDeliveryLine[]
+  createdBy: string | null
+  createdAt: string
+  updatedBy: string | null
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type MeatDeliverySummary = {
+  id: string
+  deliveryDate: string
+  supplier: MeatSupplier
+  documentNumber: string
+  lineCount: number
+  hasScan: boolean
+  createdBy: string | null
+  createdAt: string
+}
+
+export type MeatReportMode = 'SPLIT' | 'AVERAGE'
+
+export type MeatReportCell = {
+  storeId: string
+  /** Średnia cena zakupu netto za kg; null = sklep nie kupił. */
+  purchasePrice: number | null
+  purchaseCount: number
+  /** Cena sprzedaży brutto za kg z dnia dostawy, a przy saleFallback ostatnia znana (z dnia saleDate). */
+  salePrice: number | null
+  saleDate: string | null
+  saleFallback: boolean
+}
+
+export type MeatReportRow = {
+  key: string
+  /** null = pozycja bez artykułu (sam zakup). */
+  itm8: string | null
+  name: string | null
+  brand: string | null
+  date: string | null
+  vatPercent: number
+  cells: MeatReportCell[]
+}
+
+export type MeatReport = {
+  from: string
+  to: string
+  mode: MeatReportMode
+  stores: { id: string; number: string; name: string }[]
+  rows: MeatReportRow[]
+}
+
+/** Wczytany plik TRACEART (zmiany cen na kasie). {@code fileTime}: czas z nazwy pliku, lokalny. */
+export type PriceFileImport = {
+  id: string
+  fileName: string
+  fileTime: string
+  importedBy: string | null
+  importedAt: string
+  totalLines: number
+  articleCount: number
+  /** Artykuły ze zmienioną ceną albo promocją. */
+  updatedCount: number
+  /** Artykuły z nowszą ceną (z raportu albo późniejszego pliku), których plik nie ruszył. */
+  olderCount: number
+  /** ITM8 spoza kartoteki sklepu. */
+  unknownCount: number
+}
+
+export type PriceFileOverview = {
+  /** Ostatnie pliki, od najnowszego. */
+  latest: PriceFileImport[]
+  activePromotions: number
+}
+
+export type PriceFileUploadResult = {
+  imported: PriceFileImport[]
+  skipped: string[]
 }

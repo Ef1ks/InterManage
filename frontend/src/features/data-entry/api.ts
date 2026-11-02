@@ -382,3 +382,25 @@ export type ExportPayload = {
     known: boolean
   }[]
 }
+
+/**
+ * Nowe i zmienione artykuły do pliku CADBEZP (.xls) dla programu sklepu, zapisywanego razem z plikiem XML. Dostawca
+ * i numer tylko do nazwy pliku; {@code purchasePrice} to cena zakupu netto sztuki sprzedaży.
+ */
+export type ProductFilePayload = {
+  supplierId: string | null
+  sellerNip: string | null
+  sellerName: string | null
+  invoiceNumber: string | null
+  rows: {
+    ean: string | null
+    name: string
+    brand: string | null
+    unit: string
+    netContent: number
+    purchasePrice: number | null
+    vatPercent: number | null
+    salePrice: number | null
+    subfamilyCode: string | null
+  }[]
+}

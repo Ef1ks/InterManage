@@ -54,6 +54,7 @@ import { type DataEntryDraft, EMPTY_DATA_ENTRY, setDataEntryDraft } from '@/stor
 
 import {
   type ExportPayload,
+  type ProductFilePayload,
   lookupProducts,
   useDataEntryNomenclature,
   useLinkProduct,
@@ -76,6 +77,7 @@ import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
+import { PriceFileStatus } from './PriceFileStatus'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
 import { SupplierChangeDialog } from './SupplierChangeDialog'
@@ -88,6 +90,7 @@ import {
   emptyRow,
   needsAi,
   nomenclatureState,
+  purchasePerPiece,
   rowFromLine,
   rowProblems,
   serviceKind,
@@ -669,6 +672,29 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   })
   const xmlPayload: ExportPayload | null = xmlOpen ? buildPayload() : null
 
+  // Nowe i zmienione artykuły idą razem z plikiem XML do pliku CADBEZP dla programu sklepu.
+  const productRows = filled.filter((row) => !row.known || catalogChanges(row).length > 0)
+  const productFilePayload: ProductFilePayload | null =
+    xmlOpen && productRows.length > 0
+      ? {
+          supplierId: invoice?.supplier?.id ?? null,
+          sellerNip: invoice?.sellerNip ?? null,
+          sellerName: invoice?.supplier?.name ?? invoice?.sellerName ?? null,
+          invoiceNumber: invoice?.number ?? null,
+          rows: productRows.map((row) => ({
+            ean: (!row.eanFallback && row.ean) || null,
+            name: row.name,
+            brand: row.brand || null,
+            unit: row.unit,
+            netContent: row.netContent,
+            purchasePrice: purchasePerPiece(row),
+            vatPercent: row.vatPercent,
+            salePrice: row.salePrice,
+            subfamilyCode: row.subfamilyCode,
+          })),
+        }
+      : null
+
   // Zapis tymczasowy: plik XML i cała tabela na serwerze, bez zapisu na dysku (najwyżej 10 w sklepie).
   const saveTemporaryXml = useSaveTemporaryXml(store.id)
   const saveTemporary = () =>
@@ -729,6 +755,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <ReceiptTextIcon />
               Wczytaj fakturę z KSeF
             </Button>
+            <PriceFileStatus storeId={store.id} />
             <Button variant="outline" onClick={() => setXmlOpenOpen(true)}>
               <FileInputIcon />
               Wczytaj z XML
@@ -1056,6 +1083,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       <XmlSaveDialog
         storeId={store.id}
         payload={xmlPayload}
+        productFile={productFilePayload}
         problems={xmlProblems}
         totals={totals}
         open={xmlOpen}

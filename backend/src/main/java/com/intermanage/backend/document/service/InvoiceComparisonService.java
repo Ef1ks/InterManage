@@ -34,6 +34,7 @@ import com.intermanage.backend.document.repository.DocumentRepository;
 import com.intermanage.backend.document.repository.InvoiceComparisonMatchRepository;
 import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
+import com.intermanage.backend.product.repository.ProductCodeRepository;
 import com.intermanage.backend.product.repository.ProductEanRepository;
 
 /**
@@ -59,6 +60,7 @@ public class InvoiceComparisonService {
     private final DeliveryCorrectionService corrections;
     private final DocumentKsefLinkService ksefLinks;
     private final ProductEanRepository productEans;
+    private final ProductCodeRepository productCodes;
     private final KsefInvoiceService ksefInvoices;
     private final KsefInvoiceReader reader;
     private final InvoiceComparisonMatchRepository matches;
@@ -66,14 +68,15 @@ public class InvoiceComparisonService {
 
     public InvoiceComparisonService(PlatformTransactionManager transactionManager, DocumentRepository documents,
             DeliveryCorrectionService corrections, DocumentKsefLinkService ksefLinks,
-            ProductEanRepository productEans, KsefInvoiceService ksefInvoices, KsefInvoiceReader reader,
-            InvoiceComparisonMatchRepository matches, AppUserRepository users) {
+            ProductEanRepository productEans, ProductCodeRepository productCodes, KsefInvoiceService ksefInvoices,
+            KsefInvoiceReader reader, InvoiceComparisonMatchRepository matches, AppUserRepository users) {
         this.readOnly = new TransactionTemplate(transactionManager);
         this.readOnly.setReadOnly(true);
         this.documents = documents;
         this.corrections = corrections;
         this.ksefLinks = ksefLinks;
         this.productEans = productEans;
+        this.productCodes = productCodes;
         this.ksefInvoices = ksefInvoices;
         this.reader = reader;
         this.matches = matches;
@@ -185,6 +188,9 @@ public class InvoiceComparisonService {
         List<String> itm8s = corrected.lines().stream().map(CorrectedLine::itm8).distinct().toList();
         if (!itm8s.isEmpty()) {
             productEans.findEans(storeId, itm8s).forEach(pair -> itm8ByEan.put(code(pair.getEan()), pair.getItm8()));
+            // Obowiązujące kody z multikodów mają pierwszeństwo przed dawnymi parami z kartoteki.
+            productCodes.findCurrentByItm8s(storeId, itm8s)
+                    .forEach(pair -> itm8ByEan.put(code(pair.getEan()), pair.getItm8()));
         }
         // EAN z linii przyjęcia ma pierwszeństwo przed kartoteką.
         corrected.lines().stream().filter(line -> line.ean() != null)
