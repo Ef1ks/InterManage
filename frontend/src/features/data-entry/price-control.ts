@@ -16,7 +16,7 @@ export async function savePriceControlFile(
   const { fileName, blob, headers } = await fetchPostedFile(
     `/stores/${storeId}/data-entry/export/price-control`,
     payload,
-    'CTRLPRIX.Traite1',
+    'CTRLPRIX.traite0',
   )
   if (folderReady) await saveToFolder(folderKey, fileName, blob)
   else saveBlob(blob, fileName)

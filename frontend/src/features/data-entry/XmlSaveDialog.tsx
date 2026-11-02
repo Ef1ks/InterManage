@@ -166,10 +166,10 @@ export function XmlSaveDialog({
     const path = `/stores/${storeId}/data-entry/price-control-files/${id}/file`
     try {
       if (await ensureFolderAccess(protoFolder.key)) {
-        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.Traite1')
+        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.traite0')
         toast.success(`Zapisano ${fileName}`)
       } else {
-        await downloadFile(path, 'CTRLPRIX.Traite1')
+        await downloadFile(path, 'CTRLPRIX.traite0')
       }
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku CTRLPRIX')

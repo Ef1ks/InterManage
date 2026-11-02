@@ -9,7 +9,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Plik CTRLPRIX dla programu sklepu ({@code CTRLPRIX_20261102_112600_GOBARTO_<login>.Traite1}): nowe ceny sprzedaży
+ * Plik CTRLPRIX dla programu sklepu ({@code CTRLPRIX_20261102_112600_GOBARTO_<login>.traite0}; program wczytuje tylko
+ * {@code .traite0}, a po wczytaniu sam zmienia końcówkę na {@code .Traite1}, 2, 3): nowe ceny sprzedaży
  * artykułów z dokumentu dostawcy. W linii EAN na 13 znakach (krótszy dopełniony zerami z lewej) i zaraz za nim cena
  * brutto w groszach na 20 cyfrach (7,99 zł = {@code 00000000000000000799}), CRLF. W nazwie czas zapisu
  * (Europe/Warsaw), hasło dostawcy z listy dostawców i login osoby, która zapisuje (w pliku z programu sklepu
@@ -31,7 +32,7 @@ public final class PriceControlFile {
 
     public static String fileName(String supplierKeyword, String username) {
         return "CTRLPRIX_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + safe(supplierKeyword) + "_"
-                + safe(username) + ".Traite1";
+                + safe(username) + ".traite0";
     }
 
     private static String safe(String part) {

@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793619192.147251,
-    "seen": 1793619220.7737403,
-    "ast_hash": "e399c16272bc6edf6540fc6ebe951bf3",
+    "mtime": 1793620613.0049467,
+    "seen": 1793620703.6517212,
+    "ast_hash": "d5d05c4af357d1627723af34cf335d6b",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4470,9 +4470,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1793618862.3485086,
-    "seen": 1793618937.4086819,
-    "ast_hash": "6dd0c968d899c79d1919f3c2a028b535",
+    "mtime": 1793620612.9641685,
+    "seen": 1793620703.6047304,
+    "ast_hash": "a7fd35a62b6284ed6b45ff364b310a85",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -4758,9 +4758,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/XmlSaveDialog.tsx": {
-    "mtime": 1793619135.8235674,
-    "seen": 1793619220.7405744,
-    "ast_hash": "f0fc59d718442bf99260727f2390b680",
+    "mtime": 1793620607.6050882,
+    "seen": 1793620703.618678,
+    "ast_hash": "772f8ec3c0d889a07e039ae0fec039a4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CatalogListItem.java": {
@@ -5694,9 +5694,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/PriceControlFile.java": {
-    "mtime": 1793618862.3427353,
-    "seen": 1793618937.326145,
-    "ast_hash": "6a7534d3f920d058c60aa95ff9317048",
+    "mtime": 1793620605.2925858,
+    "seen": 1793620703.5225356,
+    "ast_hash": "f9ca1fdeccb8522153b7b5ed92644a64",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/PriceControlFileItem.java": {
@@ -5754,9 +5754,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliproduction/component/ProductionPdf.java": {
-    "mtime": 1793618471.2725935,
-    "seen": 1793618498.9932888,
-    "ast_hash": "3f7526123d6b66610a7525f1f27badec",
+    "mtime": 1793619494.0724373,
+    "seen": 1793619606.9226196,
+    "ast_hash": "905bbe102cc310d7269f7b5949ce0df6",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliproduction/dto/ArticleSchemaRequest.java": {
@@ -5958,9 +5958,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/price-control.ts": {
-    "mtime": 1793619134.2368581,
-    "seen": 1793619220.7421036,
-    "ast_hash": "54da0f18237bdb7e863070e4d43191c7",
+    "mtime": 1793620607.6015818,
+    "seen": 1793620703.6197357,
+    "ast_hash": "9a26e4e6c2b9036ddcfca28854fa258c",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-production/BaseEditor.tsx": {
@@ -5970,15 +5970,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-production/CardEditor.tsx": {
-    "mtime": 1793619022.7021313,
-    "seen": 1793619220.7461038,
-    "ast_hash": "30a678712aa70796434d0f81853d7069",
+    "mtime": 1793619499.4877596,
+    "seen": 1793619607.0411706,
+    "ast_hash": "cc96e9df29a88642b00751a181ef0f5c",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-production/CardsList.tsx": {
-    "mtime": 1793618933.0026507,
-    "seen": 1793619220.7461038,
-    "ast_hash": "958f984a1e4cfd3acce24f52bae20925",
+    "mtime": 1793619306.7870464,
+    "seen": 1793619607.0411706,
+    "ast_hash": "f9d851e2cfc0dca637192c5014b67d07",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-production/ProductionPage.tsx": {
