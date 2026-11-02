@@ -1364,6 +1364,19 @@ export type PeriodSummaryLine = {
   maxLossPercent: number | null
 }
 
+/** Rozwinięty wiersz podsumowania: rodziny, podrodziny albo artykuły (udział pusty, liczy go przeglądarka). */
+export type PeriodSummaryLevel = {
+  level: SalesComparisonLevel
+  rows: {
+    /** Kod nomenklatury albo ITM8 artykułu. */
+    code: string
+    name: string | null
+    ean: string | null
+    brand: string | null
+    figures: PeriodSummaryFigures
+  }[]
+}
+
 export type PeriodSummary = {
   storeNumber: string
   storeName: string

@@ -157,6 +157,40 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<RegionValue> sumByRegion(UUID storeId, Collection<String> types, LocalDate from, LocalDate to);
 
+    /** Wartość zakupu linii artykułu w podrodzinie nomenklatury linii (kod bez spacji, pusty = bez nomenklatury). */
+    interface ArticleValue {
+        String getItm8();
+
+        String getNomenclatureCode();
+
+        String getName();
+
+        String getEan();
+
+        String getBrand();
+
+        BigDecimal getPurchaseValue();
+    }
+
+    /**
+     * Jak {@link #sumByRegion}, ale po artykułach: linie dokumentów jednego typu, których nomenklatura linii zaczyna
+     * się od {@code prefix}, a przy {@code unassigned} linie bez nomenklatury. Nazwa, EAN i marka z linii.
+     */
+    @Query(value = """
+            select l.itm8 as itm8, n.code as nomenclature_code, max(l.name) as name, max(l.ean) as ean,
+                   max(l.brand) as brand, coalesce(sum(l.purchase_value), 0) as purchase_value
+            from document_lines l
+            join documents d on d.id = l.document_id
+            cross join lateral (select coalesce(replace(l.nomenclature_code, ' ', ''), '') as code) n
+            where d.store_id = :storeId and d.type = :type
+              and d.document_date >= cast(:from as timestamp)
+              and d.document_date < cast(:to as timestamp) + interval '1 day'
+              and case when :unassigned then left(n.code, 2) = '' else n.code like :prefix || '%' end
+            group by 1, 2
+            """, nativeQuery = true)
+    List<ArticleValue> sumGroupArticles(UUID storeId, String type, String prefix, boolean unassigned, LocalDate from,
+            LocalDate to);
+
     /** Dostawca (przy bazie z marką) artykułów z przyjęć PZ: kiedy ostatnio przywiózł i ile z podanych artykułów. */
     interface RecentSupplier {
         String getSupplierCode();

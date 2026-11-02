@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.sales.dto.PeriodSummaryLevelResponse;
 import com.intermanage.backend.sales.dto.PeriodSummaryResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetsRequest;
@@ -53,6 +54,16 @@ public class PeriodSummaryController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return summaryService.summary(storeId, from, to);
+    }
+
+    /** Rozwinięty wiersz: rodziny rejonu, podrodziny rodziny, artykuły podrodziny albo artykuły bez nomenklatury. */
+    @GetMapping("/period-summary/children")
+    @PreAuthorize(VIEW)
+    public PeriodSummaryLevelResponse summaryChildren(@PathVariable UUID storeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "") String parent, @RequestParam(defaultValue = "false") boolean unassigned) {
+        return summaryService.children(storeId, from, to, parent, unassigned);
     }
 
     /** Wydruk podsumowania (PDF). */

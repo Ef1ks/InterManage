@@ -371,30 +371,68 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
         BigDecimal getMarginValue();
     }
 
-    /**
-     * Sprzedaż okresu po rejonach nomenklatury: najpierw suma każdego ITM8 (pełne miesiące z {@code sales_monthly},
-     * dni niepełnych miesięcy na brzegach ze sprzedaży dziennej), dopiero potem łączenie z kartoteką.
-     */
-    @Query(value = """
+    /** Pełne miesiące okresu {@code from}..{@code to}: {@code f} (włącznie) do {@code t} (bez), jak {@link #PERIOD_BOUNDS}. */
+    String MONTH_BOUNDS = """
             with bounds as (
                 select cast(date_trunc('month', cast(:from as timestamp) - interval '1 day')
                            + interval '1 month' as date) as f,
                        cast(date_trunc('month', cast(:to as timestamp) + interval '1 day') as date) as t
-            ), parts as (
-                select m.itm8, m.cost_value, m.sale_value_gross, m.sale_value_net, m.margin_value
+            )
+            """;
+
+    /** Sumy ITM8 całego sklepu w okresie. */
+    String STORE_PERIOD_ARTICLES = MONTH_BOUNDS + """
+            , parts as (
+                select m.itm8, m.quantity, m.cost_value, m.sale_value_gross, m.sale_value_net, m.margin_value
                 from sales_monthly m cross join bounds b
                 where m.store_id = :storeId and m.month >= b.f and m.month < b.t
                 union all
-                select s.itm8, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                select s.itm8, s.quantity, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
                 from sales s cross join bounds b
                 where s.store_id = :storeId and s.sale_date between :from and :to
                     and (s.sale_date < b.f or s.sale_date >= b.t)
             ), article as (
-                select itm8, sum(cost_value) as cost_value, sum(sale_value_gross) as sale_value_gross,
-                       sum(sale_value_net) as sale_value_net, sum(margin_value) as margin_value
+                select itm8, sum(quantity) as quantity, sum(cost_value) as cost_value,
+                       sum(sale_value_gross) as sale_value_gross, sum(sale_value_net) as sale_value_net,
+                       sum(margin_value) as margin_value
                 from parts
                 group by itm8
             )
+            """;
+
+    /**
+     * Sumy ITM8 w okresie tylko dla artykułów z kartoteki z podrodziną zaczynającą się od {@code parent}: czytane od
+     * artykułów grupy po indeksach (sklep, ITM8, miesiąc / dzień), jak {@link #GROUP_PARTS}.
+     */
+    String GROUP_PERIOD_ARTICLES = MONTH_BOUNDS + """
+            , parts as (
+                select m.itm8, m.quantity, m.cost_value, m.sale_value_gross, m.sale_value_net, m.margin_value
+                from products q
+                join sales_monthly m on m.store_id = q.store_id and m.itm8 = q.itm8
+                cross join bounds b
+                where q.store_id = :storeId and q.subfamily_code like :parent || '%'
+                    and m.month >= b.f and m.month < b.t
+                union all
+                select s.itm8, s.quantity, s.cost_value, s.sale_value_gross, s.sale_value_net, s.margin_value
+                from products q
+                join sales s on s.store_id = q.store_id and s.itm8 = q.itm8 and s.sale_date between :from and :to
+                cross join bounds b
+                where q.store_id = :storeId and q.subfamily_code like :parent || '%'
+                    and (s.sale_date < b.f or s.sale_date >= b.t)
+            ), article as (
+                select itm8, sum(quantity) as quantity, sum(cost_value) as cost_value,
+                       sum(sale_value_gross) as sale_value_gross, sum(sale_value_net) as sale_value_net,
+                       sum(margin_value) as margin_value
+                from parts
+                group by itm8
+            )
+            """;
+
+    /**
+     * Sprzedaż okresu po rejonach nomenklatury: najpierw suma każdego ITM8 (pełne miesiące z {@code sales_monthly},
+     * dni niepełnych miesięcy na brzegach ze sprzedaży dziennej), dopiero potem łączenie z kartoteką.
+     */
+    @Query(value = STORE_PERIOD_ARTICLES + """
             select coalesce(left(p.subfamily_code, 2), '') as region_code,
                    sum(a.cost_value) as cost_value, sum(a.sale_value_gross) as sale_value_gross,
                    sum(a.sale_value_net) as sale_value_net, sum(a.margin_value) as margin_value
@@ -403,6 +441,46 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             group by 1
             """, nativeQuery = true)
     List<RegionSales> sumByRegion(UUID storeId, LocalDate from, LocalDate to);
+
+    /** Sprzedaż artykułu w okresie z danymi z kartoteki (podrodzina pusta = spoza kartoteki albo bez nomenklatury). */
+    interface ArticleSales {
+        String getItm8();
+
+        String getSubfamilyCode();
+
+        String getName();
+
+        String getEan();
+
+        String getBrand();
+
+        BigDecimal getQuantity();
+
+        BigDecimal getCostValue();
+
+        BigDecimal getSaleValueGross();
+
+        BigDecimal getSaleValueNet();
+
+        BigDecimal getMarginValue();
+    }
+
+    String PERIOD_ARTICLE_ROWS = """
+            select a.itm8, p.subfamily_code, p.name, p.ean, p.brand, a.quantity, a.cost_value, a.sale_value_gross,
+                   a.sale_value_net, a.margin_value
+            from article a
+            left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+            """;
+
+    /** Sprzedaż w okresie artykułów, których podrodzina zaczyna się od {@code parent} (rozwinięty wiersz podsumowania). */
+    @Query(value = GROUP_PERIOD_ARTICLES + PERIOD_ARTICLE_ROWS, nativeQuery = true)
+    List<ArticleSales> sumGroupArticles(UUID storeId, LocalDate from, LocalDate to, String parent);
+
+    /** Sprzedaż w okresie artykułów bez nomenklatury, także spoza kartoteki. */
+    @Query(value = STORE_PERIOD_ARTICLES + PERIOD_ARTICLE_ROWS + """
+            where p.subfamily_code is null
+            """, nativeQuery = true)
+    List<ArticleSales> sumUnassignedArticles(UUID storeId, LocalDate from, LocalDate to);
 
     /** Sprzedaż brutto rejonu w miesiącu (pierwszy dzień); pusty kod = artykuły bez nomenklatury. */
     interface MonthRegionSales {

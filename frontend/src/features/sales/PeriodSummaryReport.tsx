@@ -1,4 +1,5 @@
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
+import { createContext, Fragment, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+import { ChartColumnIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -10,8 +11,16 @@ import { Card } from '@/components/ui/card'
 import { TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
 import { formatMoney } from '@/features/documents/format'
-import { usePeriodSummary, usePeriodSummaryPdf, useSalesReportsOverview } from '@/features/sales/api'
+import {
+  type SalesChartTarget,
+  usePeriodSummary,
+  usePeriodSummaryChildren,
+  usePeriodSummaryPdf,
+  useSalesReportsOverview,
+} from '@/features/sales/api'
+import { barClass, displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
+import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import {
   canShiftForward,
   currentPeriod,
@@ -211,16 +220,43 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
         <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
       ) : (
         <div className={cn('transition-opacity duration-150', summary.isPlaceholderData && 'opacity-60')}>
-          <Summary summary={summary.data} />
+          <Summary storeId={storeId} summary={summary.data} />
         </div>
       )}
     </>
   )
 }
 
-function Summary({ summary }: { summary: PeriodSummary }) {
+function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary }) {
   const canEditBudgets = useCan('SALES', 'EDIT')
   const total = summary.total
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const [chart, setChart] = useState<SalesChartTarget | null>(null)
+  const toggle = useCallback(
+    (key: string) =>
+      setExpanded((current) => {
+        const next = new Set(current)
+        if (next.has(key)) {
+          // Zwinięcie zwija też poziomy pod spodem.
+          for (const item of current) if (item === key || (key !== UNASSIGNED_KEY && item.startsWith(key))) next.delete(item)
+        } else {
+          next.add(key)
+        }
+        return next
+      }),
+    [],
+  )
+  const tree = useMemo<Tree>(
+    () => ({
+      storeId,
+      range: { from: summary.from, to: summary.to },
+      storeGross: total.saleValueGross,
+      expanded,
+      toggle,
+      openChart: setChart,
+    }),
+    [storeId, summary.from, summary.to, total.saleValueGross, expanded, toggle],
+  )
   const warnings = [
     (!summary.lastSaleDate || summary.to > summary.lastSaleDate) &&
       `Sprzedaż jest wgrana ${summary.lastSaleDate ? `do ${formatRange({ from: summary.lastSaleDate, to: summary.lastSaleDate })}` : 'w ogóle nie jest wgrana'}, okres jest niepełny.`,
@@ -276,10 +312,13 @@ function Summary({ summary }: { summary: PeriodSummary }) {
           <p className="max-w-sm text-sm text-muted-foreground">Wybierz inny okres albo wgraj raport sprzedaży w Imporcie danych.</p>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
-          <div className="max-h-[80svh] overflow-auto overscroll-contain">
+        // Jeden pasek przewijania (strony): nagłówek kolumn klei się pod nagłówkiem aplikacji, „Razem” do dołu okna.
+        // overflow-clip zamiast hidden, bo hidden robi z karty obszar przewijania i sticky przestaje działać. Na wąskim
+        // ekranie tabela przewija się w bok we własnym obszarze (wtedy nagłówek klei się w nim).
+        <Card className="overflow-clip py-0">
+          <div className="max-lg:overflow-x-auto">
             <table className="w-full text-sm tabular-nums">
-              <TableHeader className="sticky top-0 z-20 bg-card shadow-[0_1px_0_var(--border)]">
+              <TableHeader className="sticky top-0 z-20 bg-card shadow-[0_1px_0_var(--border)] lg:top-14">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="sticky left-0 z-10 min-w-56 bg-card pl-4">Rejon</TableHead>
                   <NumberHead>Sprzedaż netto</NumberHead>
@@ -294,9 +333,11 @@ function Summary({ summary }: { summary: PeriodSummary }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {summary.lines.map((line, index) => (
-                  <SummaryRow key={index} line={line} />
-                ))}
+                <TreeContext.Provider value={tree}>
+                  {summary.lines.map((line, index) => (
+                    <SummaryRow key={index} line={line} />
+                  ))}
+                </TreeContext.Provider>
               </TableBody>
               <TableFooter className="sticky bottom-0 z-20 bg-foreground text-background shadow-[0_-1px_0_var(--border)]">
                 <TableRow className="hover:bg-foreground">
@@ -311,8 +352,20 @@ function Summary({ summary }: { summary: PeriodSummary }) {
 
       <p className="mt-3 max-w-4xl text-xs leading-relaxed text-muted-foreground">
         Marża w % od sprzedaży netto. Straty to likwidacje w cenach zakupu, w % od sprzedaży brutto. Marża po stratach =
-        marża − straty, w % od sprzedaży netto. Budżet marży i max strat ustawia się w Ustawieniach sklepu.
+        marża − straty, w % od sprzedaży netto. Budżet marży i max strat ustawia się w Ustawieniach sklepu. Rejon
+        rozwija się do rodzin, podrodzin i artykułów: sprzedaż według nomenklatury artykułu z kartoteki, straty według
+        nomenklatury linii likwidacji.
       </p>
+
+      <SalesChartDialog
+        storeId={storeId}
+        kind="sales"
+        target={chart}
+        filter={NO_FILTER}
+        basis="gross"
+        lastSaleDate={summary.lastSaleDate ?? summary.to}
+        onClose={() => setChart(null)}
+      />
     </>
   )
 }
@@ -346,31 +399,256 @@ function SummaryRow({ line }: { line: PeriodSummaryLine }) {
       </TableRow>
     )
   }
-  const subtotal = line.kind === 'SUBTOTAL'
+  if (line.kind === 'REGION' && line.code != null) return <RegionRow line={line} code={line.code} />
   return (
-    <TableRow className={cn(subtotal ? 'border-t-2 border-t-foreground/15 bg-muted/50 font-semibold hover:bg-muted/50' : 'hover:bg-muted/40')}>
-      <TableCell
-        className={cn('sticky left-0 z-10 py-2.5 pr-4 whitespace-normal', subtotal ? 'bg-muted' : 'bg-card')}
-        style={{ paddingLeft: indent(line.depth) }}
-      >
-        {subtotal ? (
-          line.name
-        ) : line.code ? (
-          <span className="flex items-baseline gap-2">
-            <span className="shrink-0 text-xs text-muted-foreground">{line.code}</span>
-            <span className={cn(!line.name && 'text-muted-foreground')}>{line.name ?? 'Brak nazwy w nomenklaturze'}</span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">{line.name}</span>
-        )}
+    <TableRow className="border-t-2 border-t-foreground/15 bg-muted/50 font-semibold hover:bg-muted/50">
+      <TableCell className="sticky left-0 z-10 bg-muted py-2.5 pr-4 whitespace-normal" style={{ paddingLeft: indent(line.depth) }}>
+        {line.name}
       </TableCell>
-      <FigureCells
-        figures={line.figures!}
-        marginBudget={line.marginBudgetPercent}
-        maxLoss={line.maxLossPercent}
-        variant={subtotal ? 'subtotal' : 'region'}
-      />
+      <FigureCells figures={line.figures!} variant="subtotal" />
     </TableRow>
+  )
+}
+
+/** Klucz rozwiniętego wiersza: kod nomenklatury (unikalny na wszystkich poziomach), a sprzedaż bez nomenklatury - "brak". */
+const UNASSIGNED_KEY = 'brak'
+const NO_FILTER: string[] = []
+
+type Tree = {
+  storeId: string
+  range: DateRange
+  /** Sprzedaż brutto sklepu, od której liczy się udział rozwiniętych pozycji. */
+  storeGross: number
+  expanded: ReadonlySet<string>
+  toggle: (key: string) => void
+  openChart: (target: SalesChartTarget) => void
+}
+
+const TreeContext = createContext<Tree | null>(null)
+
+function useTree() {
+  const tree = useContext(TreeContext)
+  if (!tree) throw new Error('Wiersze podsumowania poza tabelą')
+  return tree
+}
+
+/** Rejon z budżetem; rozwija się do rodzin (a „Bez nomenklatury” do artykułów), jak w porównaniu sprzedaży. */
+function RegionRow({ line, code }: { line: PeriodSummaryLine; code: string }) {
+  const { expanded, toggle, openChart } = useTree()
+  const key = code === '' ? UNASSIGNED_KEY : code
+  const open = expanded.has(key)
+  const name = code === '' ? 'Bez nomenklatury' : (line.name ?? 'Brak nazwy w nomenklaturze')
+  return (
+    <>
+      <TableRow
+        className={cn('cursor-pointer', open ? LEVEL_STYLES.REGION.open : 'bg-card hover:bg-muted')}
+        onClick={() => toggle(key)}
+      >
+        <TableCell
+          className={cn('sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal', open && [barClass, LEVEL_STYLES.REGION.bar])}
+          style={{ paddingLeft: indent(line.depth) }}
+        >
+          <div className="flex items-start gap-1">
+            <ExpandButton open={open} onToggle={() => toggle(key)}>
+              {code ? (
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="shrink-0 text-xs text-muted-foreground">{code}</span>
+                  <span className={cn(open && 'font-semibold', !line.name && 'text-muted-foreground')}>{name}</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">{line.name}</span>
+              )}
+            </ExpandButton>
+            <ChartButton
+              onClick={() =>
+                openChart(
+                  code === ''
+                    ? { kind: 'group', code: '', unassigned: true, name, levelLabel: 'Artykuły spoza kartoteki' }
+                    : { kind: 'group', code, unassigned: false, name, levelLabel: `Rejon ${code}` },
+                )
+              }
+            />
+          </div>
+        </TableCell>
+        <FigureCells figures={line.figures!} marginBudget={line.marginBudgetPercent} maxLoss={line.maxLossPercent} variant="region" />
+      </TableRow>
+      {open && <LevelRows parent={code} unassigned={code === ''} depth={line.depth + 1} ancestors={[key]} />}
+    </>
+  )
+}
+
+/** Wiersze jednego poziomu pod rozwiniętym wierszem; rozwinięty wstawia pod sobą kolejny poziom. */
+function LevelRows({
+  parent,
+  unassigned,
+  depth,
+  ancestors,
+}: {
+  parent: string
+  unassigned: boolean
+  depth: number
+  /** Klucze rozwiniętych wierszy nad tym poziomem, od rejonu (linie prowadzące). */
+  ancestors: string[]
+}) {
+  const { storeId, range, storeGross, expanded, toggle, openChart } = useTree()
+  const { data, isPending, isError, refetch } = usePeriodSummaryChildren(storeId, range, parent, unassigned)
+  const baseDepth = depth - ancestors.length
+
+  if (isPending) {
+    return Array.from({ length: 2 }, (_, row) => (
+      <TableRow key={row} className="hover:bg-transparent" aria-hidden>
+        <TableCell className="py-3.5" style={{ paddingLeft: indent(depth) }}>
+          <div className="h-3.5 w-40 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+        </TableCell>
+        {Array.from({ length: NUMBER_COLUMNS }, (_, column) => (
+          <TableCell key={column}>
+            <div className="ml-auto h-3.5 w-14 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+          </TableCell>
+        ))}
+      </TableRow>
+    ))
+  }
+  if (isError && !data) {
+    return (
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={1 + NUMBER_COLUMNS} className="py-3 text-sm text-muted-foreground" style={{ paddingLeft: indent(depth) }}>
+          Nie udało się wczytać.{' '}
+          <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => refetch()}>
+            Spróbuj ponownie
+          </button>
+        </TableCell>
+      </TableRow>
+    )
+  }
+  if (data.rows.length === 0) {
+    return (
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={1 + NUMBER_COLUMNS} className="py-3 text-sm text-muted-foreground" style={{ paddingLeft: indent(depth) }}>
+          Brak sprzedaży i strat w tym okresie.
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  const level = data.level
+  return data.rows.map((row) => {
+    const style = level === 'PRODUCT' ? null : LEVEL_STYLES[level]
+    const open = style != null && expanded.has(row.code)
+    const name = row.name?.replace(/^\d+_/, '') ?? null
+    const figures = {
+      ...row.figures,
+      sharePercent: storeGross ? (row.figures.saleValueGross * 100) / storeGross : null,
+    }
+    const label =
+      style == null ? (
+        <span className="min-w-0">
+          <span className={cn('block', !row.name && 'text-muted-foreground')}>{row.name ?? 'Brak w kartotece'}</span>
+          <span className="block text-xs text-muted-foreground">
+            {[`ITM8 ${row.code}`, row.ean && `EAN ${row.ean}`, row.brand].filter(Boolean).join(' · ')}
+          </span>
+        </span>
+      ) : (
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="shrink-0 text-xs text-muted-foreground">{displayCode(row.code)}</span>
+          <span className={cn(level === 'FAMILY' && 'font-medium', !name && 'text-muted-foreground')}>
+            {name ?? 'Brak nazwy w nomenklaturze'}
+          </span>
+        </span>
+      )
+    return (
+      <Fragment key={row.code}>
+        <TableRow
+          className={cn(style ? ['cursor-pointer', open ? style.open : style.row] : 'bg-card hover:bg-muted')}
+          onClick={style ? () => toggle(row.code) : undefined}
+        >
+          <TableCell
+            className={cn('sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal', style && [barClass, style.bar])}
+            style={{ paddingLeft: indent(depth) }}
+          >
+            {/* Linie prowadzące: każdy poziom wyżej ma swoją pionową kreskę pod strzałką rodzica. */}
+            {ancestors.map((ancestor, index) => (
+              <span
+                key={ancestor}
+                aria-hidden
+                className="absolute inset-y-0 w-px bg-foreground/15"
+                style={{ left: `calc(${indent(baseDepth + index)} + 0.5rem)` }}
+              />
+            ))}
+            <div className="flex items-start gap-1">
+              {style ? (
+                <ExpandButton open={open} onToggle={() => toggle(row.code)}>
+                  {label}
+                </ExpandButton>
+              ) : (
+                <div className="min-w-0 flex-1 pl-5.5">{label}</div>
+              )}
+              <ChartButton
+                onClick={() =>
+                  openChart(
+                    style
+                      ? {
+                          kind: 'group',
+                          code: row.code,
+                          unassigned: false,
+                          name: name ?? 'Brak nazwy w nomenklaturze',
+                          levelLabel: `${style.label} ${displayCode(row.code)}`,
+                        }
+                      : { kind: 'article', itm8: row.code, name: row.name, ean: row.ean, brand: row.brand },
+                  )
+                }
+              />
+            </div>
+          </TableCell>
+          <FigureCells figures={figures} variant="region" />
+        </TableRow>
+        {open && <LevelRows parent={row.code} unassigned={false} depth={depth + 1} ancestors={[...ancestors, row.code]} />}
+      </Fragment>
+    )
+  })
+}
+
+/** Liczba kolumn z liczbami (bez nazwy). */
+const NUMBER_COLUMNS = 7
+
+function ExpandButton({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle()
+      }}
+      className="flex min-w-0 flex-1 items-start gap-1.5 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <ChevronRightIcon
+        aria-hidden
+        className={cn(
+          'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none',
+          open && 'rotate-90 text-foreground',
+        )}
+      />
+      {children}
+    </button>
+  )
+}
+
+/** Ikonka wykresu przy nazwie wiersza; nie rozwija wiersza. */
+function ChartButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      aria-label="Wykres sprzedaży"
+      title="Wykres sprzedaży"
+      className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+    >
+      <ChartColumnIcon />
+    </Button>
   )
 }
 

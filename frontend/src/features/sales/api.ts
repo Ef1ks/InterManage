@@ -12,6 +12,7 @@ import type {
   IncidentOverview,
   NomenclatureOption,
   PeriodSummary,
+  PeriodSummaryLevel,
   PriceCheckCategory,
   PriceCheckReport,
   PriceCheckReview,
@@ -191,7 +192,24 @@ export function usePeriodSummary(storeId: string, range: DateRange, enabled: boo
   })
 }
 
-const summaryPdfPath = (storeId: string, range: DateRange) =>
+/** Rozwinięty wiersz podsumowania: `parent` = kod rejonu, rodziny albo podrodziny; `unassigned` = bez nomenklatury. */
+export function usePeriodSummaryChildren(storeId: string, range: DateRange, parent: string, unassigned: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'period-summary', range, 'children', parent, unassigned],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () =>
+      api<PeriodSummaryLevel>(
+        `${reportsPath(storeId)}/period-summary/children?${new URLSearchParams({
+          from: range.from,
+          to: range.to,
+          parent,
+          unassigned: String(unassigned),
+        })}`,
+      ),
+  })
+}
+
+const summaryPdfPath =(storeId: string, range: DateRange) =>
   `${reportsPath(storeId)}/period-summary/pdf?${new URLSearchParams({ from: range.from, to: range.to })}`
 
 /** Wydruk podsumowania: PDF od razu w oknie drukowania albo zapis pliku. */

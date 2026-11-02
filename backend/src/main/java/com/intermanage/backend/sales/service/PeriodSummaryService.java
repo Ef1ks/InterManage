@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,12 +29,14 @@ import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.sales.component.PeriodSummaryPdf;
 import com.intermanage.backend.sales.component.RegionGroups;
 import com.intermanage.backend.sales.component.RegionGroups.Group;
+import com.intermanage.backend.sales.dto.PeriodSummaryLevelResponse;
 import com.intermanage.backend.sales.dto.PeriodSummaryResponse;
 import com.intermanage.backend.sales.dto.PeriodSummaryResponse.Figures;
 import com.intermanage.backend.sales.dto.PeriodSummaryResponse.Kind;
 import com.intermanage.backend.sales.dto.PeriodSummaryResponse.Line;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetsRequest;
+import com.intermanage.backend.sales.dto.SalesComparisonResponse.Level;
 import com.intermanage.backend.sales.entity.RegionBudget;
 import com.intermanage.backend.sales.mapper.SalesMapper;
 import com.intermanage.backend.sales.repository.RegionBudgetRepository;
@@ -82,12 +85,7 @@ public class PeriodSummaryService {
 
     /** Wiersze w kolejności wydruku; rejony bez sprzedaży i strat (i puste grupy) są pomijane. */
     public PeriodSummaryResponse summary(UUID storeId, LocalDate from, LocalDate to) {
-        if (from.isAfter(to)) {
-            throw ApiException.badRequest("Data początkowa jest późniejsza niż końcowa");
-        }
-        if (ChronoUnit.DAYS.between(from, to) + 1 > SalesReportService.MAX_PERIOD_DAYS) {
-            throw ApiException.badRequest("Okres może mieć najwyżej " + SalesReportService.MAX_PERIOD_DAYS + " dni");
-        }
+        checkPeriod(from, to);
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
 
         Map<String, Sums> byRegion = new HashMap<>();
@@ -117,6 +115,83 @@ public class PeriodSummaryService {
                 budgetByRegion.values().stream()
                         .anyMatch(budget -> budget.getMarginPercent() != null || budget.getMaxLossPercent() != null),
                 builder.lines, builder.figures(total));
+    }
+
+    /**
+     * Rozwinięty wiersz podsumowania, jak w porównaniu sprzedaży: kod rejonu daje rodziny, kod rodziny podrodziny,
+     * kod podrodziny artykuły, a {@code unassigned} artykuły bez nomenklatury. Sprzedaż po podrodzinie artykułu
+     * z kartoteki, straty po nomenklaturze linii likwidacji, jak w wierszach rejonów, więc pozycje sumują się do
+     * rozwiniętego wiersza.
+     */
+    public PeriodSummaryLevelResponse children(UUID storeId, LocalDate from, LocalDate to, String parent,
+            boolean unassigned) {
+        checkPeriod(from, to);
+        String prefix = unassigned || parent == null ? "" : parent.strip();
+        if (!unassigned && !prefix.matches("\\d{2}|\\d{4}|\\d{6}")) {
+            throw ApiException.badRequest("Podaj kod rejonu, rodziny albo podrodziny");
+        }
+        boolean articles = unassigned || prefix.length() == 6;
+        int codeLength = prefix.length() + 2;
+        Function<String, String> groupOf = code -> code == null || code.length() < codeLength ? code
+                : code.substring(0, codeLength);
+
+        Map<String, Sums> sums = new HashMap<>();
+        Map<String, ArticleDetails> details = new HashMap<>();
+        sales.tuneForReport();
+        List<SaleRepository.ArticleSales> sold = unassigned ? sales.sumUnassignedArticles(storeId, from, to)
+                : sales.sumGroupArticles(storeId, from, to, prefix);
+        for (SaleRepository.ArticleSales row : sold) {
+            String key = articles ? row.getItm8() : groupOf.apply(row.getSubfamilyCode());
+            sums.merge(key, new Sums(row.getSaleValueNet(), row.getSaleValueGross(), row.getCostValue(),
+                    row.getMarginValue(), BigDecimal.ZERO), Sums::plus);
+            details.putIfAbsent(key, new ArticleDetails(row.getName(), row.getEan(), row.getBrand()));
+        }
+        // Likwidacje to wydania z magazynu, z wartością z minusem; strata to jej przeciwność.
+        for (DocumentLineRepository.ArticleValue row : documentLines.sumGroupArticles(storeId,
+                DocumentType.PL.name(), prefix, unassigned, from, to)) {
+            String key = articles ? row.getItm8() : groupOf.apply(row.getNomenclatureCode());
+            sums.merge(key, new Sums(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    row.getPurchaseValue().negate()), Sums::plus);
+            details.putIfAbsent(key, new ArticleDetails(row.getName(), row.getEan(), row.getBrand()));
+        }
+        sums.values().removeIf(Sums::empty);
+
+        Map<String, String> names = new HashMap<>();
+        if (!articles) {
+            nomenclatures.findByStoreIdAndCodeIn(storeId, sums.keySet())
+                    .forEach(item -> names.put(item.getCode(), item.getName().replaceFirst("^\\d+_", "").strip()));
+        }
+        // Artykuły od najlepiej sprzedających się (potem od największych strat), pozycje nomenklatury kodami.
+        Comparator<Map.Entry<String, Sums>> order = articles
+                ? Comparator.<Map.Entry<String, Sums>, BigDecimal>comparing(entry -> entry.getValue().saleGross())
+                        .thenComparing(entry -> entry.getValue().loss()).reversed()
+                        .thenComparing(Map.Entry::getKey)
+                : Map.Entry.comparingByKey();
+        List<PeriodSummaryLevelResponse.Row> rows = sums.entrySet().stream()
+                .sorted(order)
+                .map(entry -> {
+                    ArticleDetails article = details.get(entry.getKey());
+                    return articles
+                            ? new PeriodSummaryLevelResponse.Row(entry.getKey(), article.name(), article.ean(),
+                                    article.brand(), figures(entry.getValue(), BigDecimal.ZERO))
+                            : new PeriodSummaryLevelResponse.Row(entry.getKey(), names.get(entry.getKey()), null,
+                                    null, figures(entry.getValue(), BigDecimal.ZERO));
+                })
+                .toList();
+        return new PeriodSummaryLevelResponse(
+                articles ? Level.PRODUCT : codeLength == 4 ? Level.FAMILY : Level.SUBFAMILY, rows);
+    }
+
+    private record ArticleDetails(String name, String ean, String brand) {
+    }
+
+    private static void checkPeriod(LocalDate from, LocalDate to) {
+        if (from.isAfter(to)) {
+            throw ApiException.badRequest("Data początkowa jest późniejsza niż końcowa");
+        }
+        if (ChronoUnit.DAYS.between(from, to) + 1 > SalesReportService.MAX_PERIOD_DAYS) {
+            throw ApiException.badRequest("Okres może mieć najwyżej " + SalesReportService.MAX_PERIOD_DAYS + " dni");
+        }
     }
 
     /** Wydruk podsumowania (PDF, A4 poziomo). */
@@ -246,16 +321,20 @@ public class PeriodSummaryService {
         }
 
         Figures figures(Sums sums) {
-            BigDecimal afterLosses = sums.margin().subtract(sums.loss());
-            return new Figures(sums.saleNet(), sums.saleGross(), sums.cost(), sums.margin(),
-                    percent(sums.margin(), sums.saleNet()), sums.loss(), percent(sums.loss(), sums.saleGross()),
-                    afterLosses, percent(afterLosses, sums.saleNet()),
-                    percent(sums.saleGross(), storeGross));
+            return PeriodSummaryService.figures(sums, storeGross);
         }
+    }
 
-        private static BigDecimal percent(BigDecimal value, BigDecimal base) {
-            return base.signum() == 0 ? null : value.multiply(HUNDRED).divide(base, 2, RoundingMode.HALF_UP);
-        }
+    /** Liczby wiersza; udział w sprzedaży sklepu pusty, gdy {@code storeGross} = 0. */
+    private static Figures figures(Sums sums, BigDecimal storeGross) {
+        BigDecimal afterLosses = sums.margin().subtract(sums.loss());
+        return new Figures(sums.saleNet(), sums.saleGross(), sums.cost(), sums.margin(),
+                percent(sums.margin(), sums.saleNet()), sums.loss(), percent(sums.loss(), sums.saleGross()),
+                afterLosses, percent(afterLosses, sums.saleNet()), percent(sums.saleGross(), storeGross));
+    }
+
+    private static BigDecimal percent(BigDecimal value, BigDecimal base) {
+        return base.signum() == 0 ? null : value.multiply(HUNDRED).divide(base, 2, RoundingMode.HALF_UP);
     }
 
     private record Sums(BigDecimal saleNet, BigDecimal saleGross, BigDecimal cost, BigDecimal margin,

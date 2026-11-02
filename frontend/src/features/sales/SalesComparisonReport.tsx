@@ -26,6 +26,7 @@ import {
   useSalesNomenclatures,
   useSalesReportsOverview,
 } from '@/features/sales/api'
+import { barClass, displayCode, LEVEL_STYLES, type NomenclatureLevel } from '@/features/sales/nomenclature-levels'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { salesPaths } from '@/features/sales/paths'
 import {
@@ -443,39 +444,7 @@ const rowKey = (row: SalesComparisonRow, level: SalesComparisonLevel) =>
 const parentOf = (key: string) => (key === UNASSIGNED_KEY || key.length === 2 ? '' : key.slice(0, -2))
 const depthOf = (key: string) => (key === UNASSIGNED_KEY ? 0 : key.length / 2 - 1)
 
-type NomenclatureLevel = Exclude<SalesComparisonLevel, 'PRODUCT'>
 const LEVELS: NomenclatureLevel[] = ['REGION', 'FAMILY', 'SUBFAMILY']
-
-/**
- * Kolor poziomu nomenklatury: pasek przy nazwie i tło wiersza (mocniejsze, gdy grupa jest otwarta). Tła są pełne,
- * bo przyklejona kolumna nazwy przykrywa przewijane w bok liczby. Czerwień zostaje dla spadków.
- */
-const LEVEL_STYLES: Record<NomenclatureLevel, { label: string; row: string; open: string; bar: string; dot: string }> = {
-  REGION: {
-    label: 'Rejon',
-    row: 'bg-sky-50 hover:bg-sky-100 dark:bg-sky-950 dark:hover:bg-sky-900',
-    open: 'bg-sky-100 hover:bg-sky-100 dark:bg-sky-900 dark:hover:bg-sky-900',
-    bar: 'before:bg-sky-500',
-    dot: 'bg-sky-500',
-  },
-  FAMILY: {
-    label: 'Rodzina',
-    row: 'bg-violet-50 hover:bg-violet-100 dark:bg-violet-950 dark:hover:bg-violet-900',
-    open: 'bg-violet-100 hover:bg-violet-100 dark:bg-violet-900 dark:hover:bg-violet-900',
-    bar: 'before:bg-violet-500',
-    dot: 'bg-violet-500',
-  },
-  SUBFAMILY: {
-    label: 'Podrodzina',
-    row: 'bg-teal-50 hover:bg-teal-100 dark:bg-teal-950 dark:hover:bg-teal-900',
-    open: 'bg-teal-100 hover:bg-teal-100 dark:bg-teal-900 dark:hover:bg-teal-900',
-    bar: 'before:bg-teal-500',
-    dot: 'bg-teal-500',
-  },
-}
-
-/** Pasek koloru poziomu przy lewej krawędzi komórki nazwy. */
-const barClass = 'before:absolute before:inset-y-0 before:left-0 before:w-1'
 
 type Tree = {
   storeId: string
@@ -1092,7 +1061,6 @@ const indent = (depth: number) => `${1 + depth * 1.25}rem`
 
 /** Nazwa bez kodu z systemu sklepu: rejony mają nazwy z kodem ("01_DELIKATESY"), a kod i tak stoi obok. */
 const displayName = (row: SalesComparisonRow) => row.name?.replace(/^\d+_/, '') ?? null
-const displayCode = (code: string) => code.match(/\d{2}/g)?.join(' ') ?? code
 
 function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesComparisonLevel }) {
   if (level === 'PRODUCT') {

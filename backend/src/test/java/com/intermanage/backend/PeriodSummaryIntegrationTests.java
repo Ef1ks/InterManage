@@ -134,6 +134,34 @@ class PeriodSummaryIntegrationTests {
                 .andExpect(jsonPath("$.lines[11].figures.lossValue").value(2.0))
                 .andExpect(jsonPath("$.lines[11].figures.lossPercent").value(nullValue()));
 
+        // Rozwinięcie rejonu: rodziny, podrodziny i artykuły; straty po nomenklaturze linii likwidacji.
+        String childrenUrl = reportsUrl(storeId) + "/period-summary/children?from=2026-09-21&to=2026-09-27";
+        mvc.perform(get(childrenUrl + "&parent=14").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.level").value("FAMILY"))
+                .andExpect(jsonPath("$.rows.length()").value(1))
+                .andExpect(jsonPath("$.rows[0].code").value("1401"))
+                .andExpect(jsonPath("$.rows[0].figures.saleValueGross").value(105.0))
+                .andExpect(jsonPath("$.rows[0].figures.lossValue").value(10.5))
+                .andExpect(jsonPath("$.rows[0].figures.sharePercent").value(nullValue()));
+        mvc.perform(get(childrenUrl + "&parent=1401").cookie(owner))
+                .andExpect(jsonPath("$.level").value("SUBFAMILY"))
+                .andExpect(jsonPath("$.rows[0].code").value("140101"));
+        mvc.perform(get(childrenUrl + "&parent=140101").cookie(owner))
+                .andExpect(jsonPath("$.level").value("PRODUCT"))
+                .andExpect(jsonPath("$.rows.length()").value(2))
+                .andExpect(jsonPath("$.rows[0].code").value(apple))
+                .andExpect(jsonPath("$.rows[0].name").value("JABŁKO"))
+                .andExpect(jsonPath("$.rows[0].figures.marginValue").value(20.0))
+                .andExpect(jsonPath("$.rows[1].code").value("0000000000001"))
+                .andExpect(jsonPath("$.rows[1].figures.lossValue").value(10.5));
+        mvc.perform(get(childrenUrl + "&unassigned=true").cookie(owner))
+                .andExpect(jsonPath("$.level").value("PRODUCT"))
+                .andExpect(jsonPath("$.rows.length()").value(1))
+                .andExpect(jsonPath("$.rows[0].figures.lossValue").value(2.0));
+        mvc.perform(get(childrenUrl + "&parent=1").cookie(owner))
+                .andExpect(status().isBadRequest());
+
         byte[] pdf = mvc.perform(get(reportsUrl(storeId) + "/period-summary/pdf?from=2026-09-21&to=2026-09-27")
                         .cookie(owner))
                 .andExpect(status().isOk())
