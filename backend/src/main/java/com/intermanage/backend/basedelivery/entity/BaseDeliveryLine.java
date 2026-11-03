@@ -77,6 +77,9 @@ public class BaseDeliveryLine {
     @Column(name = "coli_prepared", nullable = false, precision = 12, scale = 3, updatable = false)
     private BigDecimal coliPrepared;
 
+    @Column(precision = 12, scale = 3, updatable = false)
+    private BigDecimal weight;
+
     @Column(name = "purchase_price", nullable = false, precision = 12, scale = 4, updatable = false)
     private BigDecimal purchasePrice;
 
@@ -137,6 +140,7 @@ public class BaseDeliveryLine {
         this.meaCode = row.meaCode();
         this.coliOrdered = row.coliOrdered();
         this.coliPrepared = row.coliPrepared();
+        this.weight = row.weight();
         this.purchasePrice = row.purchasePrice();
         this.retailPrice = row.retailPrice();
         this.vatRate = row.vatRate();
@@ -152,9 +156,12 @@ public class BaseDeliveryLine {
         this.gtu = row.gtu();
     }
 
-    /** Ilość przyjęta w sztukach: przygotowane kartony × sztuk w kartonie. */
+    /**
+     * Ilość przyjęta: przy towarze na wagę faktyczna waga w kg (Ciezar_REEL, z niej baza liczy wartość linii), inaczej
+     * sztuki = przygotowane kartony × sztuk w kartonie.
+     */
     public BigDecimal getQuantity() {
-        return coliPrepared.multiply(pack);
+        return weight != null && weight.signum() > 0 ? weight : coliPrepared.multiply(pack);
     }
 
     /**

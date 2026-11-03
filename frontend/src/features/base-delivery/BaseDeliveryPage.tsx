@@ -394,10 +394,14 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const openDelivery = (loaded: BaseDelivery) => {
     queryClient.setQueryData(['stores', store.id, 'base-deliveries', loaded.id], loaded)
     setPickerOpen(false)
-    showCarriers(loaded)
+    loadCarriers(
+      loaded,
+      loaded.carriers.map((carrier) => carrier.number),
+    )
   }
 
-  // „Wczytaj dokument z bazy” od razu otwiera wybór pliku; wgrany dokument przechodzi do wyboru nośników.
+  // „Wczytaj dokument z bazy” od razu otwiera wybór pliku; wgrany dokument trafia do tabeli ze wszystkimi nośnikami
+  // (zawęzić je można później przyciskiem „Nośniki”).
   const fileInput = useRef<HTMLInputElement>(null)
   const upload = useUploadBaseDelivery(store.id)
   const uploadFile = (file: File) =>
@@ -421,9 +425,11 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     })
 
   const chooseCarriers = (carriers: string[]) => {
-    const loaded = carrierFor
     setCarrierOpen(false)
-    if (!loaded) return
+    if (carrierFor) loadCarriers(carrierFor, carriers)
+  }
+
+  function loadCarriers(loaded: BaseDelivery, carriers: string[]) {
     const before = currentDraft()
     const next = viewRows(loaded, 'carriers', carriers)
     resetView()

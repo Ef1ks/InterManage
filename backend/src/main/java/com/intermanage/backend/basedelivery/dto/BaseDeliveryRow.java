@@ -23,6 +23,7 @@ public record BaseDeliveryRow(
         String meaCode,
         BigDecimal coliOrdered,
         BigDecimal coliPrepared,
+        BigDecimal weight,
         BigDecimal purchasePrice,
         BigDecimal retailPrice,
         BigDecimal vatRate,

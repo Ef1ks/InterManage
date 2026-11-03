@@ -59,6 +59,8 @@ public class BaseDeliveryService {
     private static final Logger log = LoggerFactory.getLogger(BaseDeliveryService.class);
     private static final long MAX_FILE_BYTES = 20L * 1024 * 1024;
     private static final int ITM8_LENGTH = 13;
+    /** Tyle kodów {@link DataEntryService#lookup} przyjmuje w jednym wywołaniu. */
+    private static final int LOOKUP_BATCH = 500;
     /** Kontener OLE starego Excela (.xls). */
     private static final byte[] OLE_SIGNATURE = {(byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0, (byte) 0xA1,
             (byte) 0xB1, 0x1A, (byte) 0xE1};
@@ -178,8 +180,13 @@ public class BaseDeliveryService {
                 keys.put(line.getId(), key);
             }
         }
-        Map<String, CatalogProduct> catalog = dataEntry.lookup(storeId, Set.copyOf(keys.values())).stream()
-                .collect(Collectors.toMap(CatalogProduct::ean, Function.identity(), (first, second) -> first));
+        // lookup bierze najwyżej LOOKUP_BATCH kodów naraz, a bon ma ich ponad tysiąc.
+        List<String> eans = keys.values().stream().distinct().toList();
+        Map<String, CatalogProduct> catalog = new HashMap<>();
+        for (int from = 0; from < eans.size(); from += LOOKUP_BATCH) {
+            dataEntry.lookup(storeId, eans.subList(from, Math.min(from + LOOKUP_BATCH, eans.size())))
+                    .forEach(product -> catalog.putIfAbsent(product.ean(), product));
+        }
         Set<String> catalogItm8s = catalog.values().stream().map(CatalogProduct::itm8).filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         Map<String, Short> deposits = new HashMap<>();

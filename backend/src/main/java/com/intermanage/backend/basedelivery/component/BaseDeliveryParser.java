@@ -209,6 +209,12 @@ public class BaseDeliveryParser {
             return digits.length() == 1 ? "0" + digits : digits;
         }
 
+        /** Ciezar_REEL: faktyczna waga towaru na wagę; 0 albo brak = towar na sztuki. */
+        BigDecimal weight() {
+            BigDecimal weight = number("ciezar_reel");
+            return weight == null || weight.signum() <= 0 ? null : weight;
+        }
+
         BaseDeliveryRow row() {
             String itm8 = required("itm8").replaceAll("\\.0+$", "");
             if (!itm8.matches("\\d{1,13}")) {
@@ -225,6 +231,9 @@ public class BaseDeliveryParser {
                 }
                 if (ean.matches("0+")) {
                     ean = null;
+                } else if (ean.length() < 13) {
+                    // Krótsze kody system sklepu trzyma z zerami z przodu: 80053828 = 0000080053828.
+                    ean = "0".repeat(13 - ean.length()) + ean;
                 }
             }
             String bestBefore = code("data_dlv");
@@ -247,6 +256,7 @@ public class BaseDeliveryParser {
                     code("kod_mea"),
                     number("coli_do_przyg") != null ? number("coli_do_przyg") : requiredNumber("coli_przyg"),
                     requiredNumber("coli_przyg"),
+                    weight(),
                     requiredNumber("c_cesja"),
                     number("c_publi"),
                     requiredNumber("vat"),

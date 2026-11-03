@@ -149,6 +149,12 @@ class BaseDeliveryIntegrationTests {
         }).toList();
         // Pod liniami stopka z podsumowaniem stawek VAT, jak w pliku zapisanym przez Excela.
         List<List<Object>> rows = new ArrayList<>(rowsOf(storeNumber));
+        // Śliwka na wagę: 3 kartony po 6 kg, a przyjechało 18 kg (Ciezar REEL), wartość = waga × cena; EAN-8.
+        List<Object> plum = line(storeNumber, "42765167", "03295200", "SLIWKA LUZ", "", "1", "NIE", "0000-00-00", "0",
+                "80053828", null, "3", "3", "6.50", "9.99", "5", "14", "03", "01", "6", "K");
+        plum.set(18, new BigDecimal("18.000"));
+        plum.set(23, new BigDecimal("117.00"));
+        rows.add(plum);
         rows.add(Arrays.asList((Object) null));
         rows.add(List.of("RAZEM", "VAT", "WART.NETT", "WART.VAT", "WART.BRUTT"));
         rows.add(Arrays.asList(null, "23", "115141.12", "26482.24", "141623.47"));
@@ -159,8 +165,10 @@ class BaseDeliveryIntegrationTests {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.number").value("09516050082"))
                 .andExpect(jsonPath("$.carriers", hasSize(2)))
-                .andExpect(jsonPath("$.lines", hasSize(4)))
-                .andExpect(jsonPath("$.lines[0].supplierCode").value("538"));
+                .andExpect(jsonPath("$.lines", hasSize(5)))
+                .andExpect(jsonPath("$.lines[0].supplierCode").value("538"))
+                .andExpect(jsonPath("$.lines[4].ean").value("0000080053828"))
+                .andExpect(jsonPath("$.lines[4].quantity").value(18));
     }
 
     /** System bazy zapisuje bon jako tabelę HTML z końcówką .xls (Excel ostrzega o innym formacie). */
