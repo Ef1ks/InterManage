@@ -5,10 +5,11 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -57,6 +58,11 @@ public class BaseDeliveryService {
     private static final Logger log = LoggerFactory.getLogger(BaseDeliveryService.class);
     private static final long MAX_FILE_BYTES = 20L * 1024 * 1024;
     private static final int ITM8_LENGTH = 13;
+    /** Kontener OLE starego Excela (.xls). */
+    private static final byte[] OLE_SIGNATURE = {(byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0, (byte) 0xA1,
+            (byte) 0xB1, 0x1A, (byte) 0xE1};
+    /** Zip (.xlsx, .xlsm). */
+    private static final byte[] ZIP_SIGNATURE = {0x50, 0x4B, 0x03, 0x04};
 
     private final BaseDeliveryRepository deliveries;
     private final StoreRepository stores;
@@ -211,16 +217,26 @@ public class BaseDeliveryService {
         return storeNumber != null && fileStore.replaceFirst("^0+", "").equals(storeNumber.replaceFirst("^0+", ""));
     }
 
+    /**
+     * Format rozpoznajemy po pierwszych bajtach, nie po nazwie: plik z końcówką .xls bywa w środku .xlsx (zip), a
+     * Windows podaje typ (application/vnd.ms-excel) tylko po końcówce.
+     */
     private BaseDeliveryParser.Parsed parse(MultipartFile file, String fileName) {
-        String lowerName = fileName.toLowerCase(Locale.ROOT);
         try {
-            if (lowerName.endsWith(".xls")) {
-                return parser.parse(xlsReader.readFirstSheet(file.getBytes()));
+            byte[] bytes = file.getBytes();
+            if (startsWith(bytes, OLE_SIGNATURE)) {
+                return parser.parse(xlsReader.readFirstSheet(bytes));
             }
-            if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xlsm")) {
+            if (startsWith(bytes, ZIP_SIGNATURE)) {
                 return parser.parse(readXlsx(file));
             }
-            throw ApiException.badRequest("Wgraj plik dostawy z bazy (.xls albo .xlsx)");
+            log.warn("Nieznany format pliku dostawy z bazy {}: {}", fileName, HexFormat.of().formatHex(bytes, 0,
+                    Math.min(bytes.length, 16)));
+            throw ApiException.badRequest(looksLikeText(bytes)
+                    ? "Plik " + fileName + " to nie Excel, tylko tekst (np. strona HTML zapisana jako .xls). "
+                            + "Otwórz go w Excelu i zapisz jako skoroszyt .xlsx albo .xls."
+                    : "Plik " + fileName + " to nie Excel (.xls ani .xlsx). Otwórz go w Excelu i zapisz jako "
+                            + "skoroszyt .xlsx albo .xls.");
         } catch (InvalidReportException e) {
             throw ApiException.badRequest(e.getMessage())
                     .withProperty("rowErrors", e.errors())
@@ -231,6 +247,22 @@ public class BaseDeliveryService {
             log.warn("Nie udało się odczytać pliku dostawy z bazy", e);
             throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
         }
+    }
+
+    private static boolean startsWith(byte[] bytes, byte[] prefix) {
+        return bytes.length >= prefix.length && Arrays.equals(bytes, 0, prefix.length, prefix, 0, prefix.length);
+    }
+
+    /** Początek pliku bez bajtów sterujących poza tabulatorem i końcem linii (HTML, CSV, tekst z tabulatorami). */
+    private static boolean looksLikeText(byte[] bytes) {
+        int length = Math.min(bytes.length, 512);
+        for (int i = 0; i < length; i++) {
+            int b = bytes[i] & 0xFF;
+            if (b < 0x09 || (b > 0x0D && b < 0x20)) {
+                return false;
+            }
+        }
+        return length > 0;
     }
 
     private List<List<String>> readXlsx(MultipartFile file) throws IOException, InvalidWorkbookException {
