@@ -15,7 +15,7 @@ export const MACRO_CONFIG = {
   eanField: { x: 331, y: 140, sleep: 150 },
   afterEan: 300,
   itm8Tab: { x: 254, y: 117, sleep: 200 },
-  itm8Field: { x: 340, y: 570, sleep: 150 },
+  itm8Field: { x: 345, y: 545, sleep: 150 },
   /** Po Enterze w kolejnych polach karty (ITM8, pusty Enter, dostawca, pusty Enter, ITM8 ponownie). */
   afterField: 200,
   /** Między pierwszym a drugim wpisaniem ilości w opakowaniu. */
