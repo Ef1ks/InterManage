@@ -106,6 +106,17 @@ export function negativeMargin(row: DataEntryRow) {
   return margin !== null && margin < 0
 }
 
+/**
+ * Nowy artykuł do założenia w kartotece: nie ma go w kartotece i ma prawdziwy EAN. Kod wewnętrzny sklepu (EAN-13
+ * zaczynający się od 2: towar ważony, etykiety z wagi) i linia bez EAN-u (stojaki, same zera) nie są nowymi
+ * artykułami, tak jak w zestawieniu z Impeka.
+ */
+export function isNewArticle(row: DataEntryRow) {
+  if (row.known) return false
+  const ean = row.ean.replace(/\D/g, '')
+  return ean.replace(/^0+/, '') !== '' && !(ean.length === 13 && ean.startsWith('2'))
+}
+
 /** Towar nie przyjechał: zamówione kartony, 0 przygotowanych. */
 export function notDelivered(row: DataEntryRow) {
   return row.base !== null && row.base !== undefined && row.base.coliPrepared === 0
@@ -126,7 +137,7 @@ export function newArticlesBySupplier(delivery: BaseDelivery, tableRows: DataEnt
     if (line.product || seen.has(line.itm8)) continue
     seen.add(line.itm8)
     const row = fromTable.get(line.id) ?? rowFromBaseLine(line)
-    if (row.known) continue
+    if (!isNewArticle(row)) continue
     const key = supplierKey(line.supplierCode)
     groups.set(key, [...(groups.get(key) ?? []), row])
   }

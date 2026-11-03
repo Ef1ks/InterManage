@@ -88,6 +88,7 @@ import {
   type ColumnFilters,
   documentPrice,
   EMPTY_VALUE,
+  isNewArticle,
   negativeMargin,
   newArticlesBySupplier,
   notDelivered,
@@ -161,7 +162,7 @@ type QuickFilter = 'negative' | 'new' | 'missing' | 'short' | 'deposit'
 
 const QUICK_FILTERS: Record<QuickFilter, (row: DataEntryRow) => boolean> = {
   negative: negativeMargin,
-  new: (row) => !row.known,
+  new: isNewArticle,
   missing: notDelivered,
   short: (row) => row.base?.shortDated === true,
   deposit: (row) => depositError(row) !== null,
@@ -440,7 +441,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
       rows: next,
       previous: null,
     })
-    const fresh = next.filter((row) => !row.known).length
+    const fresh = next.filter(isNewArticle).length
     toast.success(`Nośniki w tabeli: ${carriers.length}`, {
       description: `${next.length} ${pieces(next.length)}, ${fresh === 0 ? 'wszystkie są w kartotece' : `nowych: ${fresh}`}`,
       action: before.rows.length > 0 ? { label: 'Przywróć', onClick: () => setDraft(before) } : undefined,

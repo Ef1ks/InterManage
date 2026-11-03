@@ -15,8 +15,8 @@ export const MACRO_CONFIG = {
   eanField: { x: 331, y: 140, sleep: 150 },
   afterEan: 300,
   itm8Tab: { x: 254, y: 117, sleep: 200 },
-  itm8Field: { x: 326, y: 549, sleep: 150 },
-  /** Po Enterze w kolejnych polach karty (ITM8, dostawca, pusty Enter, ITM8 ponownie). */
+  itm8Field: { x: 340, y: 570, sleep: 150 },
+  /** Po Enterze w kolejnych polach karty (ITM8, pusty Enter, dostawca, pusty Enter, ITM8 ponownie). */
   afterField: 200,
   /** Między pierwszym a drugim wpisaniem ilości w opakowaniu. */
   betweenPack: 150,
@@ -124,6 +124,7 @@ export function buildMacro(items: MacroItem[]) {
     click(c.itm8Tab)
     click(c.itm8Field)
     enter(item.itm8, c.afterField)
+    out.push('KEY|{Enter}', `SLEEP|${c.afterField}`)
     enter(item.supplierCode, c.afterField)
     out.push('KEY|{Enter}', `SLEEP|${c.afterField}`)
     enter(item.itm8, c.afterField)
