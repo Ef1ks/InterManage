@@ -11,7 +11,8 @@ import jakarta.validation.constraints.Size;
 /**
  * Nowe i zmienione artykuły z tabeli do pliku CADBEZP dla programu sklepu. Dostawca i numer idą tylko do nazwy pliku:
  * dostawca wybrany w tabeli ({@code supplierId}), dostawca z listy sklepu po {@code sellerNip}, a bez nich
- * {@code sellerName}. W wierszu {@code purchasePrice} to cena zakupu netto sztuki sprzedaży.
+ * {@code sellerName}. W wierszu {@code purchasePrice} to cena zakupu netto sztuki sprzedaży, a {@code pack} sztuk
+ * w kartonie (PAK z dokumentu dostawy z bazy) do Opak.Bazy i Zamówienia minimalnego; bez niego 1.
  */
 public record ProductFileRequest(
         UUID supplierId,
@@ -31,6 +32,7 @@ public record ProductFileRequest(
             BigDecimal salePrice,
             @Size(max = 6) String subfamilyCode,
             @Size(max = 50) String supplierCode,
-            @Size(max = 20) String cn) {
+            @Size(max = 20) String cn,
+            BigDecimal pack) {
     }
 }

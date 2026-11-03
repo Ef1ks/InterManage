@@ -433,5 +433,7 @@ export type ProductFilePayload = {
     subfamilyCode: string | null
     supplierCode: string | null
     cn: string | null
+    /** Sztuk w kartonie (PAK z dostawy z bazy) do Opak.Bazy i Zamówienia minimalnego; bez niego 1. */
+    pack?: number | null
   }[]
 }

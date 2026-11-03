@@ -657,6 +657,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
             subfamilyCode: row.subfamilyCode,
             supplierCode: row.supplierCode ?? null,
             cn: row.cn ?? null,
+            pack: row.base?.pack ?? null,
           })),
         }
         const { fileName, blob } = await fetchPostedFile(

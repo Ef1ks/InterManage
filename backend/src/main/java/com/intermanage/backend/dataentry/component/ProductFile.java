@@ -37,12 +37,18 @@ public final class ProductFile {
         String subfamily = row.subfamilyCode() != null ? row.subfamilyCode().strip() : "";
         BigDecimal purchase = money(row.purchasePrice());
         BigDecimal sale = money(row.salePrice());
+        String pack = pack(row.pack());
         List<Object> cells = new ArrayList<>(Arrays.asList(
-                ean(row.ean()), text(row.name()), text(row.name()), ean(row.ean()), "1", "1", unit(row.unit()),
+                ean(row.ean()), text(row.name()), text(row.name()), ean(row.ean()), pack, pack, unit(row.unit()),
                 row.netContent(), brand(row.brand()), purchase, BigDecimal.ZERO, purchase, vat(row.vatPercent()),
                 sale, sale, BigDecimal.ZERO, level(subfamily, 0), level(subfamily, 2), level(subfamily, 4)));
         cells.addAll(Arrays.asList(null, null, null, null, null, cn(row.cn())));
         return cells;
+    }
+
+    /** Opak.Bazy i Zamówienie minimalne: sztuk w kartonie z dostawy z bazy, bez niego (faktura) 1. */
+    private static String pack(BigDecimal pack) {
+        return pack != null && pack.signum() > 0 ? pack.stripTrailingZeros().toPlainString() : "1";
     }
 
     /** Kod CN z pozycji faktury (same cyfry), bez niego {@value #CN}. */

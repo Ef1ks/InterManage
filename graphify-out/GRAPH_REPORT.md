@@ -1,7 +1,7 @@
 # Graph Report - intermanage  (2026-11-03)
 
 ## Corpus Check
-- 1161 files · ~1,031,595 words
+- 1161 files · ~1,031,671 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 28 file(s) not represented in the graph (top: (none) 11, .css 4, .properties 3)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e763890c`
+- Built from commit: `5acb5e1f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1434,16 +1434,16 @@ Nodes (6): clip-path for Animation, Comparison sliders, Hold-to-delete pattern, 
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CSP detection (first-time only)` connect `.headers` to `live.md`?**
-  _High betweenness centrality (0.410) - this node is a cross-community bridge._
+  _High betweenness centrality (0.408) - this node is a cross-community bridge._
 - **What connects `com.trytoma:backend`, `SALES`, `INVENTORY` to the rest of the system?**
   _181 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `org.springframework.security.access.prepost.PreAuthorize` be split into smaller, more focused modules?**
   _Cohesion score 0.04341981449119505 - nodes in this community are weakly interconnected._
 - **Why does `Document` connect `Document` to `DeliveryReportService`, `uuid`, `list`, `DocumentManualInvoiceService.java`, `org.springframework.web.bind.annotation.PutMapping`, `Store`, `DocumentTotalsRepositoryImpl.java`, `org.springframework.transaction.annotation.Transactional`, `ProductionCard`, `XlsxReader`, `DocumentGratis`, `.headers`, `.close`, `BaseDeliveryService`, `DeliveryNotePdf`, `PriceCalculation`, `PriceCheckReview`, `DocumentImport`, `org.mapstruct.Mapping`, `KsefInvoicePdf.java`, `KsefInvoice`, `DocumentLine`, `AppUser`?**
-  _High betweenness centrality (0.276) - this node is a cross-community bridge._
+  _High betweenness centrality (0.272) - this node is a cross-community bridge._
 - **Should `BackupSettings` be split into smaller, more focused modules?**
   _Cohesion score 0.043740573152337855 - nodes in this community are weakly interconnected._
 - **Why does `clamp()` connect `Layout` to `adapt.md`, `DataEntryGrid.tsx`?**
-  _High betweenness centrality (0.230) - this node is a cross-community bridge._
+  _High betweenness centrality (0.226) - this node is a cross-community bridge._
 - **Should `ImportPage.tsx` be split into smaller, more focused modules?**
   _Cohesion score 0.035668321382607095 - nodes in this community are weakly interconnected._

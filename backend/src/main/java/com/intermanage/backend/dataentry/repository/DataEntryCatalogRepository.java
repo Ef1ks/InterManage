@@ -63,7 +63,9 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * {@code cadencier}: artykuł ma CENA_CAD z ostatniego raportu (0 = brak) i jest aktywny w cadencier, czyli na
      * bieżącej liście {@code cadencier_items} sklepu (po ITM8).
      * Kod z etykiety wagi sklepu (2 + cyfra 1-9, 12-13 cyfr, w cyfrach 8-12 cena albo waga) trafia w artykuł, którego
-     * EAN ma te same pierwsze 7 cyfr i zera w miejscu ceny ({@code 2404140000000}); dokładny EAN ma pierwszeństwo.
+     * EAN ma te same pierwsze 7 cyfr i zera w miejscu ceny ({@code 2404140000000}), w kartotece albo w multikodach
+     * (towar na wagę z krótkim EAN-em w kartotece: IMBIR LUZ {@code 0000000219285}, multikod {@code 2192850000000},
+     * w dostawie z bazy {@code 2192850000007}); dokładny EAN ma pierwszeństwo.
      * Z {@code byItm8} (kod wpisany ręcznie) kod, który nie jest żadnym EAN-em, szuka jeszcze artykułu po ITM8, a potem
      * po ITM8 z multikodów (artykuł z EAN-em tej pary); {@code byItm8} w wyniku mówi, że trafił ITM8.
      * {@code vatPercent}: z kodu stawki z kartoteki (1 = 23%, 2 = 8%, 6 = 5%, sprawdzone z liniami dokumentów; inne
@@ -94,6 +96,13 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 from keys k
                 join products p on p.store_id = :storeId and left(p.ean, 7) = left(k.key, 7)
                     and p.ean ~ '^2[1-9][0-9]{5}00000[0-9]$'
+                where k.key ~ '^2[1-9][0-9]{10,11}$'
+                union all
+                select k.key, p.id, 3
+                from keys k
+                join product_codes c on c.store_id = :storeId and c.current and left(c.ean, 7) = left(k.key, 7)
+                    and c.ean ~ '^2[1-9][0-9]{5}00000[0-9]$'
+                join products p on p.store_id = :storeId and p.itm8 = c.itm8
                 where k.key ~ '^2[1-9][0-9]{10,11}$'
                 union all
                 select k.key, p.id, 4
