@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
+import com.intermanage.backend.common.component.XlsWriter;
 import com.intermanage.backend.dataentry.dto.ProductFileRequest;
 
 /**
@@ -24,31 +25,39 @@ public final class ProductFile {
     public static final List<String> HEADERS = List.of("Ref.Dostawct", "Nazwa", "Nazwa Handl.", "Kod EAN13",
             "Opak.Bazy", "Zamówienie minimalne", "Jednostka miary", "Masa/Objętość", "Marka", "CZ", "Rabat",
             "CZ po rabacie", "VAT", "CS", "CS sugerowana", "PKWIU", "Rejon", "Rodzina", "Pod - rodzina",
-            "", "", "", "", "", "CN");
+            "Segment", "", "", "", "", "CN");
 
     private ProductFile() {
     }
 
+    /**
+     * Wiersze 1:1 jak w pliku CADBEZP z Impeka, który program sklepu wczytuje; Segment jak u nich: 0 w pierwszym
+     * wierszu, w kolejnych pusty tekst.
+     */
     public static List<List<Object>> rows(List<ProductFileRequest.Row> rows) {
-        return rows.stream().map(ProductFile::row).toList();
+        return java.util.stream.IntStream.range(0, rows.size())
+                .mapToObj(i -> row(rows.get(i), i == 0 ? (Object) BigDecimal.ZERO : XlsWriter.EMPTY_TEXT)).toList();
     }
 
-    private static List<Object> row(ProductFileRequest.Row row) {
+    private static List<Object> row(ProductFileRequest.Row row, Object segment) {
         String subfamily = row.subfamilyCode() != null ? row.subfamilyCode().strip() : "";
         BigDecimal purchase = money(row.purchasePrice());
         BigDecimal sale = money(row.salePrice());
-        String pack = pack(row.pack());
+        BigDecimal pack = pack(row.pack());
         List<Object> cells = new ArrayList<>(Arrays.asList(
                 ean(row.ean()), text(row.name()), text(row.name()), ean(row.ean()), pack, pack, unit(row.unit()),
                 row.netContent(), brand(row.brand()), purchase, BigDecimal.ZERO, purchase, vat(row.vatPercent()),
                 sale, sale, BigDecimal.ZERO, level(subfamily, 0), level(subfamily, 2), level(subfamily, 4)));
-        cells.addAll(Arrays.asList(null, null, null, null, null, cn(row.cn())));
+        cells.addAll(Arrays.asList(segment, null, null, null, null, cn(row.cn())));
         return cells;
     }
 
-    /** Opak.Bazy i Zamówienie minimalne: sztuk w kartonie z dostawy z bazy, bez niego (faktura) 1. */
-    private static String pack(BigDecimal pack) {
-        return pack != null && pack.signum() > 0 ? pack.stripTrailingZeros().toPlainString() : "1";
+    /**
+     * Opak.Bazy i Zamówienie minimalne: sztuk w kartonie z dostawy z bazy, bez niego (faktura) 1. Liczba, nie tekst,
+     * jak w pliku CADBEZP z Impeka, który program sklepu wczytuje.
+     */
+    private static BigDecimal pack(BigDecimal pack) {
+        return pack != null && pack.signum() > 0 ? pack.stripTrailingZeros() : BigDecimal.ONE;
     }
 
     /** Kod CN z pozycji faktury (same cyfry), bez niego {@value #CN}. */

@@ -27,6 +27,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class XlsWriter {
 
+    /**
+     * Komórka z pustym tekstem (rekord tekstu „”), jak kolumna Segment w pliku CADBEZP z Impeka; zwykły {@code ""}
+     * i {@code null} to komórka bez rekordu.
+     */
+    public static final Object EMPTY_TEXT = new Object() {
+        @Override
+        public String toString() {
+            return "";
+        }
+    };
+
     private static final int SECTOR = 512;
     /** Strumień krótszy niż 4096 bajtów musiałby iść do mini strumienia; dopełniamy go zerami (jak xlwt). */
     private static final int MIN_STREAM = 4096;
@@ -39,8 +50,8 @@ public class XlsWriter {
     private static final int MAX_RECORD = 8224;
     private static final int ROWS_PER_BLOCK = 32;
     private static final int ROW_RECORD = 20;
-    /** Wysokość wiersza w 1/20 punktu, jak w pliku zapisanym przez Excela (i DEFAULTROWHEIGHT wzoru). */
-    private static final int ROW_HEIGHT = 255;
+    /** Wysokość wiersza w 1/20 punktu, jak w pliku CADBEZP z Impeka (i DEFAULTROWHEIGHT wzoru). */
+    private static final int ROW_HEIGHT = 300;
 
     public byte[] write(String sheetName, List<String> headers, List<List<Object>> rows) {
         if (rows.size() + 1 > 65_536 || headers.size() > 256) {
@@ -57,8 +68,12 @@ public class XlsWriter {
             blocks.add(rowBlock(all, first, Math.min(first + ROWS_PER_BLOCK, all.size()), strings));
         }
 
-        Records globals = globals(sheetName, strings);
-        int sheetStart = globals.size();
+        // Skoroszyt jak plik CADBEZP z Impeka: nasz arkusz z danymi i dwa puste („Arkusz2”, „Arkusz3”).
+        List<byte[]> names = List.of(shortString(sheetName), shortString("Arkusz2"), shortString("Arkusz3"));
+        int boundSheets = names.stream().mapToInt(name -> 4 + 6 + name.length).sum();
+        int sstAt = GLOBALS_HEAD.length + boundSheets + GLOBALS_MID.length;
+        Records sst = strings.records(sstAt);
+        int sheetStart = sstAt + sst.size() + GLOBALS_TAIL.length + 4; // + EOF
 
         // Arkusz: BOF, INDEX (pozycje DBCELL w strumieniu), ustawienia arkusza ze wzoru, DEFCOLWIDTH, DIMENSIONS,
         // bloki wierszy, zakończenie ze wzoru (WINDOW2, PLV, SELECTION, FEATHDR), EOF.
@@ -85,34 +100,41 @@ public class XlsWriter {
         sheet.raw(SHEET_END);
         sheet.add(0x000A, new byte[0]);
 
-        ByteArrayOutputStream workbook = new ByteArrayOutputStream();
-        workbook.writeBytes(globals.bytes());
-        workbook.writeBytes(sheet.bytes());
-        return compoundFile(workbook.toByteArray());
-    }
-
-    /**
-     * Skoroszyt ze wzoru (rekordy pliku CADBEZP zapisanego przez Excela 2010, {@code resources/xls}: od BOF po
-     * USESELFS, potem MTRSETTINGS…RECALCID i BOOKEXT…COMPAT12), a między nimi nasz BOUNDSHEET i tablica tekstów.
-     * Program sklepu przyjmował tylko plik zapisany przez Excela, więc niczego tu nie składamy sami.
-     */
-    private static Records globals(String sheetName, SharedStrings strings) {
+        int[] offsets = {sheetStart, sheetStart + sheet.size(), sheetStart + sheet.size() + EMPTY_SHEET.length};
         Records globals = new Records();
         globals.raw(GLOBALS_HEAD);
-        byte[] name = shortString(sheetName);
-        int boundSheetSize = 4 + 4 + 2 + name.length;
-        int sstAt = globals.size() + boundSheetSize + GLOBALS_MID.length;
-        Records sst = strings.records(sstAt);
-        int sheetOffset = sstAt + sst.size() + GLOBALS_TAIL.length + 4; // + EOF
-        globals.add(0x0085, ByteBuffer.allocate(6 + name.length).order(ByteOrder.LITTLE_ENDIAN)
-                .putInt(sheetOffset).put((byte) 0).put((byte) 0).put(name).array());
+        for (int i = 0; i < names.size(); i++) {
+            byte[] name = names.get(i);
+            globals.add(0x0085, ByteBuffer.allocate(6 + name.length).order(ByteOrder.LITTLE_ENDIAN)
+                    .putInt(offsets[i]).put((byte) 0).put((byte) 0).put(name).array());
+        }
         globals.raw(GLOBALS_MID);
         globals.raw(sst.bytes());
         globals.raw(GLOBALS_TAIL);
         globals.add(0x000A, new byte[0]);
-        return globals;
+
+        ByteArrayOutputStream workbook = new ByteArrayOutputStream();
+        workbook.writeBytes(globals.bytes());
+        workbook.writeBytes(sheet.bytes());
+        workbook.writeBytes(emptySheet(offsets[1]));
+        workbook.writeBytes(emptySheet(offsets[2]));
+        return compoundFile(workbook.toByteArray());
     }
 
+    /** Pusty arkusz ze wzoru; INDEX wskazuje DEFCOLWIDTH bezwzględną pozycją w strumieniu, więc ją przesuwamy. */
+    private static byte[] emptySheet(int start) {
+        byte[] sheet = EMPTY_SHEET.clone();
+        ByteBuffer.wrap(sheet).order(ByteOrder.LITTLE_ENDIAN).putInt(EMPTY_SHEET_INDEX_DEFCOLWIDTH,
+                start + EMPTY_SHEET_DEFCOLWIDTH);
+        return sheet;
+    }
+
+    /*
+     * Wzór: plik CADBEZP z Impeka (zapisany przez Excela 2010), który program sklepu wczytuje ({@code resources/xls}):
+     * skoroszyt od BOF po USESELFS, MTRSETTINGS…RECALCID i BOOKEXT…COMPAT12 (między nimi nasze BOUNDSHEET i SST),
+     * BOF i ustawienia arkusza, jego zakończenie i pusty arkusz. Program przyjmował tylko taki plik, więc poza danymi
+     * niczego nie składamy sami.
+     */
     private static final byte[] GLOBALS_HEAD = template("globals-head.bin");
     private static final byte[] GLOBALS_MID = template("globals-mid.bin");
     private static final byte[] GLOBALS_TAIL = template("globals-tail.bin");
@@ -121,6 +143,11 @@ public class XlsWriter {
     private static final byte[] SHEET_SETTINGS = template("sheet-settings.bin");
     /** WINDOW2, PLV, SELECTION, FEATHDR. */
     private static final byte[] SHEET_END = template("sheet-end.bin");
+    /** Pusty arkusz (BOF…EOF) jak „Arkusz2” i „Arkusz3” w pliku Impeka. */
+    private static final byte[] EMPTY_SHEET = template("empty-sheet.bin");
+    /** Pole INDEX z pozycją DEFCOLWIDTH (BOF 20 bajtów + nagłówek INDEX 4 + 12) i pozycja DEFCOLWIDTH w arkuszu. */
+    private static final int EMPTY_SHEET_INDEX_DEFCOLWIDTH = 36;
+    private static final int EMPTY_SHEET_DEFCOLWIDTH = 274;
 
     private static byte[] template(String name) {
         try (var in = XlsWriter.class.getResourceAsStream("/xls/" + name)) {
@@ -143,6 +170,16 @@ public class XlsWriter {
         List<byte[]> cells = new ArrayList<>();
         for (int row = first; row < last; row++) {
             List<Object> values = all.get(row);
+            // Jak w pliku z Impeka: tekst z ostatniej kolumny wiersza trafia do tablicy SST przed resztą wiersza.
+            for (int col = values.size() - 1; col >= 0; col--) {
+                Object value = values.get(col);
+                if (value != null && !(value instanceof Number)) {
+                    if (!value.toString().isEmpty() || value == EMPTY_TEXT) {
+                        strings.reserve(text(value));
+                    }
+                    break;
+                }
+            }
             Records rowCells = new Records();
             int firstCol = -1;
             int lastCol = -1;
@@ -231,27 +268,27 @@ public class XlsWriter {
             return true;
         }
         String text = value.toString();
-        if (text.isEmpty()) {
+        if (text.isEmpty() && value != EMPTY_TEXT) {
             return false;
         }
-        if (text.length() > 255) {
-            text = text.substring(0, 255);
-        }
         sheet.add(0x00FD, buffer(10).putShort((short) row).putShort((short) col).putShort((short) CELL_XF)
-                .putInt(strings.index(text)).array());
+                .putInt(strings.index(text(value))).array());
         return true;
     }
 
+    /** Tekst komórki, najwyżej 255 znaków. */
+    private static String text(Object value) {
+        String text = value.toString();
+        return text.length() > 255 ? text.substring(0, 255) : text;
+    }
+
     /**
-     * Liczba jako RK tak, jak zapisuje ją Excel (sprawdzone na wszystkich 777 liczbach pliku CADBEZP przed i po zapisie
-     * w Excelu): całkowita jako całkowite RK (1 → {@code 0x6}), inna jako górne 32 bity double'a, a gdy dolne bity nie
-     * są zerowe, double setek z flagą „÷100” (0,15 → 15,0, 5,90 → 590,0). Całkowitego RK z flagą „÷100” Excel nie
-     * zapisuje. Inaczej {@code null} i rekord NUMBER (9,95; 16,99).
+     * Liczba jako RK tak, jak w plikach CADBEZP z Impeka (sprawdzone na wszystkich 114 liczbach dwóch plików): zawsze
+     * górne 32 bity double'a (1 → {@code 0x3FF00000}, 0 → {@code 0}), a gdy dolne bity nie są zerowe, double setek
+     * z flagą „÷100”, ale tylko gdy mnożenie przez 100 daje dokładnie liczbę całkowitą (0,15 → 15,0, 5,90 → 590,0).
+     * Bez całkowitego RK. Inaczej {@code null} i rekord NUMBER (9,95; 16,99).
      */
     static Integer rk(double value) {
-        if (value == Math.rint(value) && Math.abs(value) < 1 << 29) {
-            return (int) value << 2 | 0x2;
-        }
         Integer plain = floatRk(value);
         if (plain != null) {
             return plain;
@@ -306,6 +343,11 @@ public class XlsWriter {
         int index(String text) {
             references++;
             return indexes.computeIfAbsent(text, t -> indexes.size());
+        }
+
+        /** Dopisuje tekst do tablicy bez odwołania z komórki (ustala tylko kolejność). */
+        void reserve(String text) {
+            indexes.computeIfAbsent(text, t -> indexes.size());
         }
 
         /**
@@ -365,8 +407,9 @@ public class XlsWriter {
 
     /** CLSID skoroszytu Excela 97-2003 (00020820-0000-0000-C000-000000000046) przy katalogu głównym, jak w Excelu. */
     private static final String EXCEL_CLSID = "2008020000000000c000000000000046";
-    private static final String SUMMARY_FMTID = "e0859ff2f94f6810ab9108002b27b3d9";
-    private static final String DOCUMENT_SUMMARY_FMTID = "02d5cdd59c2e1b10939708002b2cf9ae";
+    /** Właściwości dokumentu ze wzoru (autor „***”, strona kodowa 1250, arkusz „Arkusz1”), jak zapisał je Excel. */
+    private static final byte[] SUMMARY_INFORMATION = template("summary-information.bin");
+    private static final byte[] DOCUMENT_SUMMARY_INFORMATION = template("document-summary-information.bin");
 
     /**
      * Kontener OLE (Compound File v3, sektory po 512 bajtów) jak z Excela: strumienie „Workbook”,
@@ -374,7 +417,7 @@ public class XlsWriter {
      * strumienia), sektor katalogu i tablica FAT.
      */
     private static byte[] compoundFile(byte[] workbook) {
-        List<byte[]> streams = List.of(workbook, propertySet(SUMMARY_FMTID), propertySet(DOCUMENT_SUMMARY_FMTID));
+        List<byte[]> streams = List.of(workbook, SUMMARY_INFORMATION, DOCUMENT_SUMMARY_INFORMATION);
         int[] sizes = streams.stream().mapToInt(stream -> Math.max(stream.length, MIN_STREAM)).toArray();
         int[] starts = new int[streams.size()];
         int sectors = 0;
@@ -390,8 +433,9 @@ public class XlsWriter {
         if (fatSectors > 109) {
             throw new IllegalArgumentException("Plik .xls jest za duży");
         }
-        int directorySector = streamSectors;
-        int firstFat = streamSectors + 1;
+        // Jak w pliku z Impeka: po strumieniach sektory FAT, za nimi katalog.
+        int firstFat = streamSectors;
+        int directorySector = streamSectors + fatSectors;
 
         ByteBuffer file = buffer(SECTOR * (1 + streamSectors + 1 + fatSectors));
         file.putLong(0xE11AB1A1E011CFD0L).put(new byte[16]).putShort((short) 0x003E).putShort((short) 0x0003)
@@ -425,24 +469,16 @@ public class XlsWriter {
                     last |= sector == starts[i] + (sizes[i] + SECTOR - 1) / SECTOR - 1;
                 }
                 next = last ? END_OF_CHAIN : sector + 1;
-            } else if (sector == directorySector) {
-                next = END_OF_CHAIN;
             } else if (sector < firstFat + fatSectors) {
                 next = FAT_SECTOR;
+            } else if (sector == directorySector) {
+                next = END_OF_CHAIN;
             } else {
                 next = FREE;
             }
             file.putInt(next);
         }
         return file.array();
-    }
-
-    /** Zbiór właściwości dokumentu z jedną właściwością: strona kodowa 1200 (UTF-16), jak w plikach Excela. */
-    private static byte[] propertySet(String fmtid) {
-        return buffer(48 + 24).putShort((short) 0xFFFE).putShort((short) 0).putInt(0x00020006).put(new byte[16])
-                .putInt(1).put(hex(fmtid)).putInt(48)
-                .putInt(24).putInt(1).putInt(1).putInt(16).putShort((short) 2).putShort((short) 0)
-                .putShort((short) 1200).putShort((short) 0).array();
     }
 
     private static byte[] directoryEntry(String name, int type, int left, int right, int child, byte[] clsid,

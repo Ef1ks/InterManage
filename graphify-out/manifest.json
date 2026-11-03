@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793705645.390317,
-    "seen": 1793705687.8920372,
-    "ast_hash": "50060496976518e709057a80388914c6",
+    "mtime": 1793707391.2749264,
+    "seen": 1793707434.5748477,
+    "ast_hash": "f4f3216ca27a9b62da8e35c09990aa2e",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -5238,15 +5238,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/XlsWriter.java": {
-    "mtime": 1793705445.6394892,
-    "seen": 1793705687.7522929,
-    "ast_hash": "f8db5c4207c007395e26ad6ef446ff28",
+    "mtime": 1793707230.833565,
+    "seen": 1793707434.4341276,
+    "ast_hash": "02db7548859bfc5b8af50f939caf52b6",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/ProductFile.java": {
-    "mtime": 1793700574.0332193,
-    "seen": 1793701516.1414952,
-    "ast_hash": "2017cf76150087c55de502caca71ff7a",
+    "mtime": 1793707072.7311363,
+    "seen": 1793707434.4361274,
+    "ast_hash": "0ba7b41d3ddfdb95416ab31efc8e599f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/ProductFileRequest.java": {
@@ -5376,9 +5376,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductFileTests.java": {
-    "mtime": 1793705513.5500114,
-    "seen": 1793705687.8444836,
-    "ast_hash": "6cf2f8a555ba8d4c2d6e0239d7e33765",
+    "mtime": 1793707276.4746947,
+    "seen": 1793707434.5277677,
+    "ast_hash": "572298f9d476abf80960cfc611b60f29",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/PromotionAndProductCodeImportIntegrationTests.java": {

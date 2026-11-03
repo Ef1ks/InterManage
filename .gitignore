@@ -17,6 +17,8 @@ graphify-out/20*/
 
 # Pliki z systemu sklepu i wygenerowane przez aplikację (raporty, skany, PROTO, CTRLPRIX, TRACEART)
 *.[xX][lL][sS]
+# Wzór CADBEZP z Impeka do testu ProductFileTests.sameBytesAsImpekFile
+!backend/src/test/resources/xls/cadbezp-impek.xls
 *.[xX][lL][sS][xX]
 *.[pP][dD][fF]
 *.[tT][rR][aA][iI][tT][eE]0
