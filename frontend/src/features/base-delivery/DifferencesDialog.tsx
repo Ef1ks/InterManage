@@ -166,7 +166,10 @@ export function DifferencesDialog({ storeId, rows, open, onOpenChange }: Props) 
                     </thead>
                     <tbody className="divide-y">
                       {result.differences.map((difference) => {
-                        const delta = difference.programQuantity - difference.sheetQuantity
+                        const delta =
+                          difference.programQuantity === null
+                            ? 0
+                            : difference.programQuantity - difference.sheetQuantity
                         const priceDiffers = difference.kinds.includes('price')
                         return (
                           <tr key={difference.key}>
@@ -192,7 +195,9 @@ export function DifferencesDialog({ storeId, rows, open, onOpenChange }: Props) 
                             </td>
                             <td className="px-2 py-1.5">{difference.carriers.join(', ')}</td>
                             <td className="px-2 py-1.5 text-right">{formatQuantity(difference.sheetQuantity)}</td>
-                            <td className="px-2 py-1.5 text-right">{formatQuantity(difference.programQuantity)}</td>
+                            <td className="px-2 py-1.5 text-right">
+                              {difference.programQuantity === null ? '' : formatQuantity(difference.programQuantity)}
+                            </td>
                             <td className="px-2 py-1.5 text-right font-medium">
                               {delta === 0 ? '' : `${delta > 0 ? '+' : ''}${formatQuantity(delta)}`}
                             </td>
