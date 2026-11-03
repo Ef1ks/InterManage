@@ -2,7 +2,14 @@ import { Link2Icon, Link2OffIcon, SearchIcon } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { formatPrice, formatQuantity } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
 import type { DataEntryCatalogListItem, DataEntryCatalogProduct } from '@/lib/types'
@@ -13,19 +20,20 @@ import { CatalogListDialog } from './CatalogListDialog'
 import type { DataEntryRow, RowLink } from './rows'
 
 /**
- * Filtr nazwy w liście towarów z nazwy z faktury: początki pierwszych dwóch słów z gwiazdką, bo kartoteka skraca
- * nazwy („SZYNKA KRUCHA” → „szy*kru”). Opis kraju pochodzenia pomijany.
+ * Wyszukiwanie w liście towarów z nazwy z faktury: początki pierwszych dwóch słów, bo kartoteka skraca nazwy
+ * („SZYNKA KRUCHA” → „szy kru”). Idzie do pola Szukaj, w którym słowo trafia też w markę: dostawcy piszą markę
+ * w nazwie („KABANOSY TARCZYNSKI” → „kab tar”), a rodzaj mięsa jest w kartotece tylko w marce („FILET Z KURCZAKA” →
+ * „fil kur” → FILET SWIEZY KL A, marka KURCZAK). Opis kraju pochodzenia pomijany.
  */
-function nameFilter(text: string) {
-  const words = text
+function searchFilter(text: string) {
+  return text
     .toLowerCase()
     .replace(/\bkr\.?\s*poch\b.*$/, '')
     .split(/[^\p{L}]+/u)
     .filter((word) => word.length >= 3)
-  return words
     .slice(0, 2)
     .map((word) => word.slice(0, 3))
-    .join('*')
+    .join(' ')
 }
 
 export type LinkTarget = { row: DataEntryRow; sellerNip: string | null; sellerName: string | null }
@@ -237,7 +245,7 @@ function LinkContent({
         onOpenChange={setCatalogOpen}
         inTable={inTable}
         title="Wybierz artykuł do przypisania"
-        initialName={nameFilter(text)}
+        initialQuery={searchFilter(text)}
         onPick={(item) => {
           setCatalogOpen(false)
           void pick(item)

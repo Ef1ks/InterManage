@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Form, FormActions, TextField } from '@/components/form'
+import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -22,6 +23,7 @@ import { type CatalogListFilters, type CatalogSortKey, fetchCatalogPage, useCata
 import { parseNumber } from './grid-values'
 
 const NO_FILTERS: CatalogListFilters = {
+  query: '',
   itm8: '',
   ean: '',
   name: '',
@@ -138,7 +140,7 @@ export function CatalogListDialog({
   inTable,
   onAdd,
   onPick,
-  initialName = '',
+  initialQuery = '',
   title = 'Lista towarów',
   lastSaleDate,
 }: {
@@ -151,14 +153,14 @@ export function CatalogListDialog({
   onAdd?: (additions: CatalogAddition[]) => Promise<void>
   /** Zamiast dodawania: plus od razu wybiera artykuł (przypisanie pozycji z faktury). */
   onPick?: (item: DataEntryCatalogListItem) => void
-  /** Początkowy filtr nazwy (np. „szy*kru” z nazwy z faktury). */
-  initialName?: string
+  /** Początkowe wyszukiwanie (np. „fil kur” z „FILET Z KURCZAKA” z faktury). */
+  initialQuery?: string
   title?: string
   /** Ostatni dzień ze sprzedażą; {@code null} = bez dostępu do raportów sprzedaży, bez statystyk. */
   lastSaleDate: string | null
 }) {
   const [chartTarget, setChartTarget] = useState<SalesChartTarget | null>(null)
-  const [filters, setFilters] = useState(() => ({ ...NO_FILTERS, name: initialName }))
+  const [filters, setFilters] = useState(() => ({ ...NO_FILTERS, query: initialQuery }))
   const [sort, setSort] = useState(DEFAULT_SORT)
   const onSort = (key: CatalogSortKey) => setSort((current) => nextSort(current, key))
   const [hidden, setHidden] = useState(storedHiddenColumns)
@@ -373,12 +375,22 @@ export function CatalogListDialog({
         <DialogHeader>
           <DialogTitle className="text-lg">{title}</DialogTitle>
           <DialogDescription>
-            Artykuły z kartoteki sklepu. Wpisz fragment nad dowolną kolumną; gwiazdka zastępuje dowolny ciąg znaków
-            (excel*o znajdzie „EXCELLENT MLEKO”). Dostawca: kod albo nazwa, pokazuje artykuły przyjęte od niego na PZ
-            w ostatnich 6 miesiącach. Nomenklatura: kod (np. 25 44) albo nazwa rejonu, rodziny lub podrodziny.{' '}
-            {onPick ? 'Plus wybiera artykuł.' : 'Plus dodaje artykuł do tabeli.'} Oczko przy nagłówku chowa kolumnę.
+            Artykuły z kartoteki sklepu. Wpisz fragmenty słów, w dowolnej kolejności (kab ex 19 znajdzie „KABANOSY
+            EXCLUSIVE 190G”): w polu Szukaj każde słowo trafia w nazwę, markę, EAN albo ITM8 (marka i rodzaj mięsa są w
+            kartotece w marce), nad kolumną tylko w nią. Gwiazdka zastępuje dowolny ciąg znaków, a w ITM8 i EAN-ie
+            wyznacza początek albo koniec kodu (5923532* to kody od 5923532). Dostawca: kod albo nazwa, pokazuje
+            artykuły przyjęte od niego na PZ w ostatnich 6 miesiącach. Nomenklatura: kod (np. 25 44) albo nazwa rejonu,
+            rodziny lub podrodziny. {onPick ? 'Plus wybiera artykuł.' : 'Plus dodaje artykuł do tabeli.'} Oczko przy
+            nagłówku chowa kolumnę.
           </DialogDescription>
         </DialogHeader>
+
+        <SearchInput
+          value={filters.query}
+          onChange={(query) => setFilters((current) => ({ ...current, query }))}
+          placeholder="Szukaj: nazwa, marka, EAN, ITM8"
+          className="max-w-xl"
+        />
 
         {(hidden.length > 0 || (onAdd && !onPick)) && (
           <div className="-mb-1 flex min-h-8 flex-wrap items-center gap-1.5 text-sm">

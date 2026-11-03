@@ -149,6 +149,16 @@ class ProductImportIntegrationTests {
                 where store_id = ?::uuid and matched_at is null and removed_at is null""", String.class, storeId))
                 .containsExactlyInAnyOrderElementsOf(firstIds);
 
+        // Do raportu artykuł jest już w programie sklepu: wpisany EAN dostaje dane ze szkicu, bez ITM8.
+        mvc.perform(get("/api/stores/" + storeId + "/data-entry/products").param("ean", createdEan).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].draft").value(true))
+                .andExpect(jsonPath("$[0].itm8").doesNotExist())
+                .andExpect(jsonPath("$[0].name").value("NOWY 1"))
+                .andExpect(jsonPath("$[0].salePrice").value(2.99))
+                .andExpect(jsonPath("$[0].purchasePrice").value(1.5));
+
         // Kolejny raport: nowy artykuł jest w kartotece, drugiego program sklepu nie założył.
         upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"),
                 product(created, "2.99", "0", "NOWY 1")))

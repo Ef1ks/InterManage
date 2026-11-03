@@ -57,6 +57,7 @@ import { ProtocolDialog, type ProtocolLine } from '@/features/data-entry/Protoco
 import {
   type DataEntryRow,
   depositError,
+  incompleteEan,
   netValue,
   purchasePerPiece,
   suggestedPrice,
@@ -613,8 +614,12 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     }
   }
 
-  const blocked = depositErrorCount > 0
-  const blockedTitle = `W tabeli są błędy kaucji (${depositErrorCount}): popraw kaucję w kartotece Mercalys albo usuń te wiersze`
+  const incompleteEanCount = rows.filter(incompleteEan).length
+  const blocked = depositErrorCount > 0 || incompleteEanCount > 0
+  const blockedTitle =
+    incompleteEanCount > 0
+      ? `W tabeli są niepełne EAN-y (${incompleteEanCount}): popraw je, zanim zapiszesz plik`
+      : `W tabeli są błędy kaucji (${depositErrorCount}): popraw kaucję w kartotece Mercalys albo usuń te wiersze`
 
   // Protokół (np. MM nośnika dla innego sklepu): artykuły z EAN-em i ilością różną od 0.
   const protocolLines: ProtocolLine[] = rows.flatMap((row) =>

@@ -8,6 +8,7 @@ import {
   netValue,
   normalizeBrand,
   normalizeName,
+  paddedScaleCode,
   suggestedPrice,
   withCatalogProduct,
   withMeasure,
@@ -238,7 +239,7 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
     case 'ean': {
       // Kod spoza EAN-u z faktury (indeks, nazwa) zatwierdzony bez zmian zostaje, choć nie jest liczbą.
       if (trimmed === row.ean) return { row }
-      const digits = trimmed.replace(/[\s-]/g, '')
+      const digits = paddedScaleCode(trimmed.replace(/[\s-]/g, ''))
       if (digits !== '' && !/^\d{1,14}$/.test(digits)) return { error: 'EAN to do 14 cyfr' }
       if (digits === row.ean) return { row }
       return {

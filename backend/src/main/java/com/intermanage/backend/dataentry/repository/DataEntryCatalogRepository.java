@@ -178,7 +178,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
 
     /**
      * Lista towarów (okno „Lista towarów”): artykuły sklepu, które pasują do każdego podanego filtra ({@code null} =
-     * bez filtra). Wzorce LIKE: nazwa, marka i dostawca bez wielkości liter i polskich znaków (wzorce przychodzą już
+     * bez filtra, pusta tablica = bez filtra). Każde pole to tablica wzorców LIKE (słowa filtra), które muszą pasować
+     * wszystkie. Pole „Szukaj” to trzy tablice po jednym wzorcu na słowo: {@code queryText} (nazwa albo marka),
+     * {@code queryCode} (EAN albo ITM8) i {@code queryMultiCode} (EAN z multikodów, {@code null} dla słowa bez cyfr,
+     * żeby nie szukać w multikodach przy każdym artykule); słowo musi trafić w któreś z nich. Wzorce: nazwa, marka i dostawca bez wielkości liter i polskich znaków (wzorce przychodzą już
      * wielkimi literami bez znaków diakrytycznych), ITM8 i EAN jako tekst (EAN: główny albo każdy obowiązujący
      * z multikodów). Dostawca to nie pole z kartoteki (często błędne), tylko przyjęcia PZ od {@code deliveredSince}
      * z ilością > 0: dostawca linii o kodzie równym {@code supplierCode} albo nazwie pasującej do {@code supplier}
@@ -196,26 +199,35 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             from products p
             left join nomenclatures s on s.store_id = p.store_id and s.code = p.subfamily_code
             where p.store_id = :storeId
-                and (cast(:itm8 as text) is null or p.itm8 like cast(:itm8 as text))
-                and (cast(:ean as text) is null or p.ean like cast(:ean as text)
+                and not exists (
+                    select 1 from unnest(cast(:queryText as text[]), cast(:queryCode as text[]),
+                        cast(:queryMultiCode as text[])) w(t, c, m)
+                    where not (translate(upper(coalesce(p.name, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like w.t
+                        or translate(upper(coalesce(p.brand, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like w.t
+                        or coalesce(p.ean, '') like w.c or p.itm8 like w.c
+                        or (w.m is not null and exists (
+                            select 1 from product_codes pc
+                            where pc.store_id = :storeId and pc.current and pc.itm8 = p.itm8 and pc.ean like w.m))))
+                and (cardinality(cast(:itm8 as text[])) = 0 or p.itm8 like all (cast(:itm8 as text[])))
+                and (cardinality(cast(:ean as text[])) = 0 or p.ean like all (cast(:ean as text[]))
                     or p.itm8 in (select c.itm8 from product_codes c
-                                  where c.store_id = :storeId and c.current and c.ean like cast(:ean as text)))
-                and (cast(:name as text) is null
-                    or translate(upper(p.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:name as text))
-                and (cast(:brand as text) is null
-                    or translate(upper(p.brand), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:brand as text))
-                and (cast(:supplier as text) is null or p.itm8 in (
+                                  where c.store_id = :storeId and c.current and c.ean like all (cast(:ean as text[]))))
+                and (cardinality(cast(:name as text[])) = 0
+                    or translate(upper(p.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like all (cast(:name as text[])))
+                and (cardinality(cast(:brand as text[])) = 0
+                    or translate(upper(p.brand), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like all (cast(:brand as text[])))
+                and (cardinality(cast(:supplier as text[])) = 0 or p.itm8 in (
                     select l.itm8 from documents d join document_lines l on l.document_id = d.id
                     where d.store_id = :storeId and d.type = 'PZ' and d.document_date >= cast(:deliveredSince as timestamp)
                         and l.quantity > 0
                         and (l.supplier_code = cast(:supplierCode as text)
-                            or translate(upper(l.supplier_name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:supplier as text))))
+                            or translate(upper(l.supplier_name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like all (cast(:supplier as text[])))))
                 and (cast(:nomenclatureCode as text) is null
                     or p.subfamily_code like cast(:nomenclatureCode as text) || '%')
-                and (cast(:nomenclatureName as text) is null or exists (
+                and (cardinality(cast(:nomenclatureName as text[])) = 0 or exists (
                     select 1 from nomenclatures n
                     where n.store_id = p.store_id and n.code in (p.region_code, p.family_code, p.subfamily_code)
-                        and translate(upper(n.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like cast(:nomenclatureName as text)))
+                        and translate(upper(n.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like all (cast(:nomenclatureName as text[]))))
                 and (cast(:purchaseFrom as numeric) is null or p.purchase_price >= cast(:purchaseFrom as numeric))
                 and (cast(:purchaseTo as numeric) is null or p.purchase_price <= cast(:purchaseTo as numeric))
                 and (cast(:saleFrom as numeric) is null or p.sale_price >= cast(:saleFrom as numeric))
@@ -235,8 +247,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                     when 'rotation' then p.rotation end end desc nulls last,
                 p.name, p.itm8
             limit :limit offset :offset""", nativeQuery = true)
-    List<CatalogListItem> search(UUID storeId, String itm8, String ean, String name, String brand, String supplier,
-            String supplierCode, LocalDate deliveredSince, String nomenclatureCode, String nomenclatureName, BigDecimal purchaseFrom, BigDecimal purchaseTo,
+    List<CatalogListItem> search(UUID storeId, String[] queryText, String[] queryCode, String[] queryMultiCode,
+            String[] itm8, String[] ean, String[] name, String[] brand,
+            String[] supplier, String supplierCode, LocalDate deliveredSince, String nomenclatureCode,
+            String[] nomenclatureName, BigDecimal purchaseFrom, BigDecimal purchaseTo,
             BigDecimal saleFrom, BigDecimal saleTo, String sort, String direction, int limit, int offset);
 
     interface LastDelivery {
@@ -278,7 +292,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
     @Query(value = """
             with q as (select cast(:text as text) as t),
             candidates as (
-                select p.id, p.name
+                select p.id, p.name, p.brand
                 from products p cross join q
                 where p.store_id = :storeId and p.ean <> ''
                     and (p.name ~* cast(:candidatePattern as text) or p.name % q.t)
@@ -286,7 +300,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             scored as (
                 select c.id, word_similarity(c.name, q.t) as sim,
                     (select count(*) from unnest(cast(:prefixes as text[])) x
-                     where translate(upper(c.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') ~ ('\\m' || x)) as hits
+                     where translate(upper(c.name || ' ' || coalesce(c.brand, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ')
+                        ~ ('\\m' || x)) as hits
                 from candidates c cross join q
             )
             select p.itm8 as itm8, p.ean as ean, p.name as name, p.brand as brand, p.supplier as supplier,

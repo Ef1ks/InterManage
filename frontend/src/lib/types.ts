@@ -1651,7 +1651,8 @@ export type DataEntryCatalogListPage = {
 export type DataEntryCatalogProduct = {
   /** EAN, którego szukano (bez zer wiodących). */
   ean: string
-  itm8: string
+  /** {@code null} dla artykułu ze szkicu CADBEZP ({@code draft}), którego nie ma jeszcze w kartotece. */
+  itm8: string | null
   /** Bieżący EAN artykułu w kartotece (inny niż {@code ean} np. dla kodu z etykiety wagi). */
   catalogEan: string | null
   name: string | null
@@ -1676,6 +1677,11 @@ export type DataEntryCatalogProduct = {
   rotation: number | null
   /** Szukany kod to nie EAN, tylko ITM8 artykułu (albo ITM8 z multikodów). */
   byItm8: boolean
+  /**
+   * Artykuł utworzony plikiem CADBEZP, którego nie ma jeszcze w kartotece (czeka na kolejny raport): dane z pliku,
+   * jest już w programie sklepu, więc nie jest nowym artykułem.
+   */
+  draft: boolean
 }
 
 /** Pozycja faktury z KSeF; bez {@code product} to nowy artykuł, a miara jest z nazwy z faktury. */
@@ -2305,6 +2311,8 @@ export type TemporaryNoteLine = {
   purchasePrice: number | null
   salePrice: number | null
   netValue: number | null
+  /** Wszystkie EAN-y artykułu z kartoteki sklepu (bieżący, multikody, dawne pary). */
+  catalogEans: string[]
 }
 
 /** Rodzaj opakowania z kaucją w pliku z bazy: NIE, PLA (PET), PUS (puszka), SZK (szkło). */

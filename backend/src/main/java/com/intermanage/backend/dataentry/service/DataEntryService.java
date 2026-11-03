@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +52,8 @@ import com.intermanage.backend.ksef.service.KsefInvoiceService;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.nomenclature.service.NomenclatureMarginService;
+import com.intermanage.backend.product.entity.ProductDraft;
+import com.intermanage.backend.product.repository.ProductDraftRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 import com.intermanage.backend.supplier.entity.Supplier;
@@ -90,12 +93,14 @@ public class DataEntryService {
     private final PriceRoundingService rounding;
     private final SupplierRepository suppliers;
     private final DataEntryProductLinkRepository productLinks;
+    private final ProductDraftRepository productDrafts;
 
     public DataEntryService(KsefInvoiceService ksefInvoices, KsefInvoiceReader reader,
             DataEntryCatalogRepository catalog, NomenclatureRepository nomenclatures,
             DataEntrySuggestionRepository suggestions, StoreRepository stores, AppUserRepository users,
             XlsxWriter xlsxWriter, NomenclatureMarginService margins, PriceRoundingService rounding,
-            SupplierRepository suppliers, DataEntryProductLinkRepository productLinks) {
+            SupplierRepository suppliers, DataEntryProductLinkRepository productLinks,
+            ProductDraftRepository productDrafts) {
         this.ksefInvoices = ksefInvoices;
         this.reader = reader;
         this.catalog = catalog;
@@ -108,6 +113,7 @@ public class DataEntryService {
         this.rounding = rounding;
         this.suppliers = suppliers;
         this.productLinks = productLinks;
+        this.productDrafts = productDrafts;
     }
 
     public record ExportFile(String fileName, byte[] content) {
@@ -262,8 +268,12 @@ public class DataEntryService {
     }
 
     /**
-     * Lista towarów z kartoteki z filtrem nad każdą kolumną; każde pole tekstowe to fragment, a {@code *} w nim
-     * zastępuje dowolny ciąg znaków ({@code excel*o} pasuje do „EXCELLENT MLEKO”), {@code ?} jeden znak. Nomenklatura
+     * Lista towarów z kartoteki z filtrem nad każdą kolumną; pole dzieli się na słowa i każde musi pasować, w dowolnej
+     * kolejności ({@code kab ex 19} znajdzie „KABANOSY EXCLUSIVE 190G”). Słowo to fragment, {@code *} w nim zastępuje
+     * dowolny ciąg znaków, {@code ?} jeden znak; w ITM8 i EAN słowo z gwiazdką jest całym kodem jak w Excelu
+     * ({@code 5923532*} = kody od 5923532). Pole „Szukaj” ({@code query}): każde słowo w nazwie albo marce (marki
+     * producentów i rodzaje mięsa są w kartotece tylko w marce: „fil kur” znajdzie „FILET SWIEZY KL A” marki KURCZAK),
+     * EAN-ie (też z multikodów, gdy słowo ma cyfrę) albo ITM8. Nomenklatura
      * z samych cyfr (spacje i kropki pomijane) to początek kodu podrodziny, inny tekst to nazwa któregoś poziomu.
      * Dostawca: kod albo fragment nazwy z linii przyjęć PZ z ostatnich {@link #CATALOG_SUPPLIER_MONTHS} miesięcy, bo
      * dostawca z kartoteki bywa błędny; przy każdym artykule strony jego ostatnia dostawa (drugie zapytanie, tylko dla
@@ -276,15 +286,19 @@ public class DataEntryService {
         String nomenclature = request.nomenclature() != null ? request.nomenclature().strip() : "";
         String code = nomenclature.replaceAll("[\\s.]", "");
         boolean byCode = code.matches("\\d{1,6}");
-        String supplier = likePattern(request.supplier(), true);
+        String[] supplier = likePatterns(request.supplier(), true);
         String sort = request.sort() != null && CATALOG_SORTS.contains(request.sort()) ? request.sort() : "name";
         String direction = "desc".equals(request.direction()) ? "desc" : "asc";
+        String[] queryCodes = likePatterns(request.query(), false);
         List<DataEntryCatalogRepository.CatalogListItem> found = catalog.search(storeId,
-                likePattern(request.itm8(), false), likePattern(request.ean(), false),
-                likePattern(request.name(), true), likePattern(request.brand(), true),
-                supplier, supplier != null ? request.supplier().strip() : null,
+                likePatterns(request.query(), true), queryCodes,
+                Arrays.stream(queryCodes).map(pattern -> pattern.matches(".*\\d.*") ? pattern : null)
+                        .toArray(String[]::new),
+                likePatterns(request.itm8(), false), likePatterns(request.ean(), false),
+                likePatterns(request.name(), true), likePatterns(request.brand(), true),
+                supplier, supplier.length > 0 ? request.supplier().strip() : null,
                 LocalDate.now(WARSAW).minusMonths(CATALOG_SUPPLIER_MONTHS), byCode ? code : null,
-                byCode ? null : likePattern(nomenclature, true), request.purchaseFrom(), request.purchaseTo(),
+                byCode ? new String[0] : likePatterns(nomenclature, true), request.purchaseFrom(), request.purchaseTo(),
                 request.saleFrom(), request.saleTo(), sort, direction, CATALOG_PAGE_SIZE + 1, offset);
         List<DataEntryCatalogRepository.CatalogListItem> page = found.stream().limit(CATALOG_PAGE_SIZE).toList();
         Map<String, CatalogListItem.LastDelivery> deliveries = page.isEmpty() ? Map.of()
@@ -302,21 +316,27 @@ public class DataEntryService {
     }
 
     /**
-     * Wzorzec LIKE z tekstu z filtra: fragment ({@code %…%}), {@code *} = dowolny ciąg, {@code ?} = jeden znak, znaki
-     * specjalne LIKE dosłownie. {@code plain}: wielkie litery bez polskich znaków, jak porównuje baza. Pusty =
-     * {@code null}.
+     * Wzorce LIKE z tekstu z filtra, po jednym na słowo (każde musi pasować). {@code text}: wielkie litery bez polskich
+     * znaków, jak porównuje baza, a słowo to fragment ({@code %…%}). Kod ({@code text = false}): słowo z {@code *} albo
+     * {@code ?} jest całym kodem ({@code 5923532*} = początek kodu), bez nich fragmentem. {@code *} = dowolny ciąg,
+     * {@code ?} = jeden znak, znaki specjalne LIKE dosłownie. Pusty tekst = pusta tablica.
      */
-    static String likePattern(String text, boolean plain) {
+    static String[] likePatterns(String text, boolean plain) {
         if (text == null || text.isBlank()) {
-            return null;
+            return new String[0];
         }
         String value = text.strip();
         if (plain) {
             value = java.text.Normalizer.normalize(value.toUpperCase(Locale.ROOT).replace('Ł', 'L'),
                     java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
         }
-        StringBuilder pattern = new StringBuilder("%");
-        for (char c : value.toCharArray()) {
+        return Arrays.stream(value.split("\\s+")).map(word -> likePattern(word, plain)).toArray(String[]::new);
+    }
+
+    private static String likePattern(String word, boolean plain) {
+        boolean whole = !plain && (word.indexOf('*') >= 0 || word.indexOf('?') >= 0);
+        StringBuilder pattern = new StringBuilder(whole ? "" : "%");
+        for (char c : word.toCharArray()) {
             switch (c) {
                 case '*' -> pattern.append('%');
                 case '?' -> pattern.append('_');
@@ -324,7 +344,7 @@ public class DataEntryService {
                 default -> pattern.append(c);
             }
         }
-        return pattern.append('%').toString();
+        return pattern.append(whole ? "" : "%").toString();
     }
 
     /** Cała nomenklatura sklepu (rejony, rodziny, podrodziny) w kolejności kodów, z obowiązującą marżą wymaganą. */
@@ -600,9 +620,26 @@ public class DataEntryService {
                     row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(),
                     row.getPromoPrice(), row.getPromoTo(), measure != null ? measure.unit() : Measure.PIECE,
                     measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), row.getSubfamilyCode(),
-                    row.getStock(), row.getRotation(), row.getByItm8()));
+                    row.getStock(), row.getRotation(), row.getByItm8(), false));
+        }
+        List<String> missing = keys.stream().filter(key -> !found.containsKey(key)).distinct().toList();
+        if (!missing.isEmpty()) {
+            productDrafts.findPendingByEans(storeId, missing).forEach(draft -> found.put(draft.getEan(), draft(draft)));
         }
         return found;
+    }
+
+    /**
+     * Artykuł utworzony plikiem CADBEZP, którego nie ma jeszcze w kartotece (czeka na kolejny raport): jest już
+     * w programie sklepu, więc wpisany EAN dostaje dane z pliku, a wiersz nie jest nowym artykułem.
+     */
+    private static CatalogProduct draft(ProductDraft draft) {
+        Measure measure = Measure.of(draft.getUnit(), draft.getNetContent());
+        return new CatalogProduct(draft.getEan(), null, draft.getEan(), draft.getName(), draft.getBrand(),
+                draft.getPurchasePrice(), draft.getVatPercent(), draft.getSalePrice(), false, null, null, null,
+                measure != null ? measure.unit() : Measure.PIECE,
+                measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), draft.getSubfamilyCode(), null,
+                null, false, true);
     }
 
     /** EAN z GTIN-u faktury: same cyfry, GTIN-14 z zerem na początku jako EAN-13; {@code null} bez kodu. */

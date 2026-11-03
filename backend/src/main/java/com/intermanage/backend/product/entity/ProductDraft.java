@@ -195,6 +195,38 @@ public class ProductDraft {
         return ean;
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public String getBrand() {
+        return brand;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public BigDecimal getNetContent() {
+        return netContent;
+    }
+
+    public BigDecimal getPurchasePrice() {
+        return purchasePrice;
+    }
+
+    public BigDecimal getVatPercent() {
+        return vatPercent;
+    }
+
+    public BigDecimal getSalePrice() {
+        return salePrice;
+    }
+
+    public String getSubfamilyCode() {
+        return subfamilyCode;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

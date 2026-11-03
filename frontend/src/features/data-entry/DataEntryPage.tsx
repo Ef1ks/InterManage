@@ -691,6 +691,10 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     )
   }
 
+  // Błędny albo niepełny EAN blokuje każdy plik dla programu sklepu: protokół, etykiety, zmianę cen i plik XML.
+  const badEanCount = filled.filter((row) => rowProblems(row).includes('invalid-ean')).length
+  const badEanTitle = badEanCount > 0 ? `Najpierw popraw błędne albo niepełne EAN-y w tabeli: ${badEanCount}` : null
+
   // Do protokołu idą artykuły z EAN-em (nie zastępczym kodem z faktury) i ilością różną od 0, ze znakiem.
   const protocolLines: ProtocolLine[] = []
   for (const row of rows.filter(isArticle)) {
@@ -996,11 +1000,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   size="sm"
                   onClick={savePriceChanges}
                   loading={savingPrices}
-                  disabled={priceControlRows.length === 0}
+                  disabled={priceControlRows.length === 0 || badEanTitle !== null}
                   title={
-                    priceControlRows.length > 0
+                    badEanTitle ??
+                    (priceControlRows.length > 0
                       ? `Zapisuje samą zmianę cen (${priceControlRows.length} ${pieces(priceControlRows.length)}) w folderze zmiany cen, bez pliku XML`
-                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
+                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży')
                   }
                 >
                   <TagIcon />
@@ -1085,7 +1090,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 variant="outline"
                 size="sm"
                 onClick={() => setProtocolOpen(true)}
-                disabled={protocolLines.length === 0}
+                disabled={protocolLines.length === 0 || badEanTitle !== null}
+                title={badEanTitle ?? undefined}
               >
                 <FileOutputIcon />
                 Wygeneruj protokół
@@ -1094,11 +1100,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 variant="outline"
                 size="sm"
                 onClick={() => setLabelsOpen(true)}
-                disabled={labelLines.length === 0}
+                disabled={labelLines.length === 0 || badEanTitle !== null}
                 title={
-                  selectedArticles.length > 0
+                  badEanTitle ??
+                  (selectedArticles.length > 0
                     ? `Plik etykiet cenowych dla zaznaczonych artykułów (${labelLines.length})`
-                    : 'Plik etykiet cenowych dla wszystkich artykułów tabeli (zaznacz wiersze, żeby wybrać tylko część)'
+                    : 'Plik etykiet cenowych dla wszystkich artykułów tabeli (zaznacz wiersze, żeby wybrać tylko część)')
                 }
               >
                 <TagsIcon />

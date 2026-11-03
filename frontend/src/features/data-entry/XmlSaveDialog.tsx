@@ -53,7 +53,12 @@ export function XmlSaveDialog({
   const invalidEan = problems.invalidEan.length > 0
   const issues = [
     { rows: problems.tooLong, text: 'Nazwa dłuższa niż 30 znaków', key: 'name' as const, show: 'Pokaż pierwszą' },
-    { rows: problems.noSubfamily, text: 'Nowy artykuł bez podrodziny', key: 'subfamily' as const, show: 'Pokaż pierwszy' },
+    {
+      rows: problems.noSubfamily,
+      text: 'Nowy artykuł bez podrodziny',
+      key: 'subfamily' as const,
+      show: 'Pokaż pierwszy',
+    },
   ].filter((issue) => issue.rows.length > 0)
 
   return (
@@ -91,10 +96,10 @@ export function XmlSaveDialog({
             role="alert"
             className="rounded-xl border border-red-400 bg-red-200 px-4 py-3 text-sm text-red-950 dark:border-red-500/50 dark:bg-red-950/70 dark:text-red-50"
           >
-            <p className="font-medium">Błędny EAN nowego artykułu: {problems.invalidEan.length}</p>
+            <p className="font-medium">Błędny albo niepełny EAN: {problems.invalidEan.length}</p>
             <p className="mt-1">
-              Zła długość albo cyfra kontrolna. Popraw EAN z towaru (albo wyczyść komórkę, gdy towar nie ma kodu), dopiero
-              wtedy plik da się zapisać.{' '}
+              Zła długość (np. kod z etykiety wagi bez końca) albo cyfra kontrolna nowego artykułu. Popraw EAN z towaru
+              (albo wyczyść komórkę, gdy towar nie ma kodu), dopiero wtedy plik da się zapisać.{' '}
               <button
                 type="button"
                 className="font-medium underline underline-offset-3"
@@ -160,7 +165,6 @@ export function XmlSaveDialog({
                 ? 'Zapisz mimo to'
                 : 'Zapisz plik XML'}
         </Button>
-
       </DialogContent>
     </Dialog>
   )

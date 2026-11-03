@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,6 +48,8 @@ import com.intermanage.backend.dataentry.dto.CatalogProduct;
 import com.intermanage.backend.dataentry.service.DataEntryService;
 import com.intermanage.backend.document.service.DocumentService;
 import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.repository.ProductCodeRepository;
+import com.intermanage.backend.product.repository.ProductEanRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -73,6 +76,8 @@ public class BaseDeliveryService {
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final ProductRepository products;
+    private final ProductEanRepository productEans;
+    private final ProductCodeRepository productCodes;
     private final DataEntryService dataEntry;
     private final BaseDeliveryParser parser;
     private final XlsReader xlsReader;
@@ -83,13 +88,16 @@ public class BaseDeliveryService {
     private final BaseDeliveryMapper mapper;
 
     public BaseDeliveryService(BaseDeliveryRepository deliveries, StoreRepository stores, AppUserRepository users,
-            ProductRepository products, DataEntryService dataEntry, BaseDeliveryParser parser, XlsReader xlsReader,
+            ProductRepository products, ProductEanRepository productEans, ProductCodeRepository productCodes,
+            DataEntryService dataEntry, BaseDeliveryParser parser, XlsReader xlsReader,
             XlsxReader xlsxReader, TextSheetReader textSheetReader, TemporaryNoteParser temporaryNoteParser,
             ShortDatesPdf shortDatesPdf, BaseDeliveryMapper mapper) {
         this.deliveries = deliveries;
         this.stores = stores;
         this.users = users;
         this.products = products;
+        this.productEans = productEans;
+        this.productCodes = productCodes;
         this.dataEntry = dataEntry;
         this.parser = parser;
         this.xlsReader = xlsReader;
@@ -229,15 +237,37 @@ public class BaseDeliveryService {
 
     /**
      * „Tymczasowy bon dostawy” z Mercalys do porównania z tabelą dostawy z bazy („Znajdź różnice”). Plik jest tylko
-     * czytany, nic nie zapisujemy.
+     * czytany, nic nie zapisujemy. Przy linii wszystkie EAN-y jej artykułu z kartoteki (bieżący, multikody, dawne
+     * pary): program wpisuje dostawę pod artykułem sklepu, a w pliku bazy bywa inny jego kod (IMBIR 5KG
+     * 2192850000007 to w programie IMBIR LUZ).
      */
-    public TemporaryNoteResponse readTemporaryNote(MultipartFile file) {
+    @Transactional(readOnly = true)
+    public TemporaryNoteResponse readTemporaryNote(UUID storeId, MultipartFile file) {
         String fileName = file.getOriginalFilename() == null ? "bon.xlsx" : file.getOriginalFilename();
         check(file);
+        TemporaryNoteResponse note;
         try {
-            return temporaryNoteParser.parse(sheet(file, fileName), fileName);
+            note = temporaryNoteParser.parse(sheet(file, fileName), fileName);
         } catch (InvalidReportException e) {
             throw invalid(fileName, e);
+        }
+        Set<String> itm8s = note.lines().stream().map(line -> catalogItm8(line.itm8())).collect(Collectors.toSet());
+        if (itm8s.isEmpty()) {
+            return note;
+        }
+        Map<String, Set<String>> eans = new HashMap<>();
+        products.findByStoreIdAndItm8In(storeId, itm8s).forEach(product -> addEan(eans, product.getItm8(),
+                product.getEan()));
+        productEans.findEans(storeId, itm8s).forEach(pair -> addEan(eans, pair.getItm8(), pair.getEan()));
+        productCodes.findCurrentByItm8s(storeId, itm8s).forEach(code -> addEan(eans, code.getItm8(), code.getEan()));
+        return note.withLines(note.lines().stream()
+                .map(line -> line.withCatalogEans(List.copyOf(eans.getOrDefault(catalogItm8(line.itm8()), Set.of()))))
+                .toList());
+    }
+
+    private static void addEan(Map<String, Set<String>> eans, String itm8, String ean) {
+        if (ean != null && !ean.isBlank()) {
+            eans.computeIfAbsent(itm8, key -> new LinkedHashSet<>()).add(ean);
         }
     }
 

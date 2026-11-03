@@ -300,6 +300,20 @@ export function scaleCode(ean: string): { kind: 'price' | 'weight'; value: numbe
   return digits[1] === '4' ? { kind: 'price', value: value / 100 } : { kind: 'weight', value: value / 1000 }
 }
 
+/**
+ * Kod z etykiety wagi wpisany bez końca (np. 24213300: 7 cyfr artykułu i część ceny) dostaje zera do 13 cyfr jak EAN
+ * z kartoteki (2421330000000). Poprawny EAN-8 zostaje, bo kartoteka ma kilka takich zaczynających się od 2.
+ */
+export function paddedScaleCode(ean: string) {
+  if (!/^2[1-9]\d{5,9}$/.test(ean) || (ean.length === 8 && validGtin(ean))) return ean
+  return ean.padEnd(13, '0')
+}
+
+/** EAN z samych cyfr o długości innej niż 8, 12, 13, 14 (kod zastępczy z faktury się nie liczy). */
+export function incompleteEan(row: DataEntryRow) {
+  return !row.eanFallback && /^\d+$/.test(row.ean) && !/^(\d{8}|\d{12,14})$/.test(row.ean)
+}
+
 /** Cyfra kontrolna GTIN (EAN-8, UPC-12, EAN-13, GTIN-14), jak {@code ProductCodeSources.validGtin}. */
 export function validGtin(code: string) {
   if (!/^(\d{8}|\d{12,14})$/.test(code)) return false
@@ -312,18 +326,20 @@ export function validGtin(code: string) {
 }
 
 /**
- * Błąd EAN-u nowego artykułu: zła długość albo cyfra kontrolna. Nie sprawdzamy artykułów z kartoteki (ok. 4% ich
- * EAN-ów to kody wewnętrzne bez poprawnej cyfry kontrolnej), kodów z etykiety wagi (2 + cyfra 1-9, cyfra kontrolna
- * bywa pominięta), kodów zastępczych z faktury ani kaucji i dostawy. W tabeli dopiero po sprawdzeniu w kartotece
+ * Błąd EAN-u: niepełny (zła długość) w każdym wierszu, także z kartoteki (jej EAN-y mają zawsze 13 cyfr), a w nowym
+ * artykule też zła cyfra kontrolna. Cyfry kontrolnej nie sprawdzamy w artykułach z kartoteki (ok. 4% ich EAN-ów to
+ * kody wewnętrzne bez poprawnej cyfry kontrolnej), w kodach z etykiety wagi (2 + cyfra 1-9, cyfra kontrolna bywa
+ * pominięta), kodach zastępczych z faktury ani kaucjach i dostawie. W tabeli dopiero po sprawdzeniu w kartotece
  * ({@code checkedOnly}), żeby kod wewnętrzny nie mignął na czerwono w trakcie szukania.
  */
 export function eanError(row: DataEntryRow, checkedOnly = true): string | null {
-  if (row.known || row.ean === '' || row.eanFallback || serviceKind(row)) return null
+  if (row.ean === '' || row.eanFallback || serviceKind(row)) return null
   if (checkedOnly && row.eanChecked !== undefined && row.eanChecked !== row.ean) return null
+  if (incompleteEan(row)) return `Niepełny EAN: ${row.ean.length} cyfr (EAN ma 8 albo 13 cyfr)`
+  if (row.known) return null
   const digits = row.ean.replace(/^0+/, '')
   if (/^2[1-9]\d{10,11}$/.test(digits)) return null
   if (!/^\d+$/.test(row.ean)) return 'EAN to same cyfry'
-  if (!/^(\d{8}|\d{12,14})$/.test(row.ean)) return 'Błędny EAN: zła długość (EAN ma 8 albo 13 cyfr)'
   return validGtin(row.ean) ? null : 'Błędny EAN: zła cyfra kontrolna'
 }
 
@@ -344,7 +360,9 @@ export function withScannedProduct(row: DataEntryRow, product: DataEntryCatalogP
   // Nowy artykuł też przyszedł w sztuce; tylko etykiety z ceną nie da się przeliczyć bez ceny 1 kg z kartoteki.
   if (!product)
     return scale?.kind === 'price' ? { ...next, eanChecked: row.ean } : { ...next, eanChecked: row.ean, quantity }
-  const ean = (scale || product.byItm8) && product.catalogEan ? product.catalogEan : next.ean
+  // Kod artykułu z etykiety wagi dopełniony zerami (paddedScaleCode) też bierze EAN z kartoteki.
+  const scaleArticle = /^2[1-9]\d{5}0{6}$/.test(row.ean)
+  const ean = (scale || scaleArticle || product.byItm8) && product.catalogEan ? product.catalogEan : next.ean
   return {
     ...next,
     ean,

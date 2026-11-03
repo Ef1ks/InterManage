@@ -71,7 +71,7 @@ public class BaseDeliveryController {
     @PreAuthorize(ACCESS)
     public TemporaryNoteResponse readTemporaryNote(@PathVariable UUID storeId,
             @RequestParam("file") MultipartFile file) {
-        return deliveries.readTemporaryNote(file);
+        return deliveries.readTemporaryNote(storeId, file);
     }
 
     @GetMapping("/base-deliveries/{id}")

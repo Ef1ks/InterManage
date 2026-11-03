@@ -45,8 +45,7 @@ export function useDataEntryNomenclature(storeId: string) {
 export function useInvoiceLines(storeId: string, invoiceId: string | null, source: string) {
   return useQuery({
     queryKey: ['stores', storeId, 'data-entry', 'invoice', invoiceId, source],
-    queryFn: () =>
-      api<DataEntryInvoice>(`${path(storeId)}/invoices/${invoiceId}?source=${encodeURIComponent(source)}`),
+    queryFn: () => api<DataEntryInvoice>(`${path(storeId)}/invoices/${invoiceId}?source=${encodeURIComponent(source)}`),
     enabled: invoiceId !== null,
     // Przy zmianie źródła tej samej faktury poprzedni wynik zostaje na ekranie, przy innej fakturze - nie.
     placeholderData: (previous) => (previous?.invoiceId === invoiceId ? previous : undefined),
@@ -166,8 +165,7 @@ export type InvoiceBulkAction = 'LOADED' | 'NOT_MINE' | 'RESTORE'
 
 /** Zaznaczone faktury: podane albo wszystkie pasujące do filtrów listy bez wykluczonych. */
 export type InvoiceBulkSelection =
-  | { invoiceIds: string[] }
-  | { filter: InvoicePickerFilters & { query: string }; excludeIds: string[] }
+  { invoiceIds: string[] } | { filter: InvoicePickerFilters & { query: string }; excludeIds: string[] }
 
 /** Działanie na zaznaczonych fakturach (wczytane, nie moje, z powrotem do wczytania) i jego „Cofnij”. */
 export function useBulkInvoices(storeId: string) {
@@ -248,6 +246,8 @@ export function lookupProducts(storeId: string, eans: string[]) {
  * 6 miesięcy; ceny od-do jak wpisane (błędna liczba jest pomijana).
  */
 export type CatalogListFilters = {
+  /** Pole „Szukaj”: każde słowo w nazwie, marce, EAN-ie albo ITM8. */
+  query: string
   itm8: string
   ean: string
   name: string
@@ -264,15 +264,7 @@ const PRICE_FILTERS = new Set(['purchaseFrom', 'purchaseTo', 'saleFrom', 'saleTo
 
 /** Kolumny, po których serwer sortuje listę towarów. */
 export type CatalogSortKey =
-  | 'itm8'
-  | 'ean'
-  | 'name'
-  | 'brand'
-  | 'nomenclature'
-  | 'purchase'
-  | 'sale'
-  | 'stock'
-  | 'rotation'
+  'itm8' | 'ean' | 'name' | 'brand' | 'nomenclature' | 'purchase' | 'sale' | 'stock' | 'rotation'
 
 /** Lista towarów z kartoteki, strony po 100 (kolejne przy przewijaniu), posortowana w bazie (puste na końcu). */
 export function useCatalogList(

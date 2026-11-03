@@ -11,10 +11,11 @@ import java.time.LocalDate;
  * {@code cadencier} = artykuł ma CENA_CAD, {@code cadencierPrice} to ta cena (brutto sztuki narzucona przez centralę),
  * {@code promoPrice} trwająca promocja z pliku TRACEART (cena brutto na kasie, jest wtedy też {@code salePrice}) do
  * {@code promoTo}, {@code stock} i {@code rotation} to stan magazynowy i rotacja z ostatniego raportu kartoteki.
- * {@code byItm8}: szukany kod to nie EAN, tylko ITM8 artykułu (albo ITM8 z multikodów).
+ * {@code byItm8}: szukany kod to nie EAN, tylko ITM8 artykułu (albo ITM8 z multikodów). {@code draft}: artykułu nie
+ * ma jeszcze w kartotece, dane są ze szkicu z pliku CADBEZP (jest już w programie sklepu, czeka na raport); bez ITM8.
  */
 public record CatalogProduct(String ean, String itm8, String catalogEan, String name, String brand,
         BigDecimal purchasePrice, BigDecimal vatPercent, BigDecimal salePrice, boolean cadencier,
         BigDecimal cadencierPrice, BigDecimal promoPrice, LocalDate promoTo, String unit, BigDecimal netContent, String subfamilyCode, BigDecimal stock,
-        BigDecimal rotation, boolean byItm8) {
+        BigDecimal rotation, boolean byItm8, boolean draft) {
 }

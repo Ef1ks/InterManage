@@ -19,11 +19,16 @@ public record TemporaryNoteResponse(
         LocalDateTime createdAt,
         List<Line> lines) {
 
+    public TemporaryNoteResponse withLines(List<Line> lines) {
+        return new TemporaryNoteResponse(fileName, supplierCode, supplierName, number, createdAt, lines);
+    }
+
     /**
      * Linia bonu.
      *
      * @param itm8 Kod ITM8 z kartoteki sklepu (13 cyfr)
      * @param reference Referencja dostawcy: ITM8 z pliku bazy
+     * @param catalogEans wszystkie EAN-y artykułu z kartoteki sklepu (bieżący, multikody, dawne pary)
      */
     public record Line(
             String itm8,
@@ -34,6 +39,12 @@ public record TemporaryNoteResponse(
             BigDecimal quantity,
             BigDecimal purchasePrice,
             BigDecimal salePrice,
-            BigDecimal netValue) {
+            BigDecimal netValue,
+            List<String> catalogEans) {
+
+        public Line withCatalogEans(List<String> eans) {
+            return new Line(itm8, ean, reference, name, vatPercent, quantity, purchasePrice, salePrice, netValue,
+                    eans);
+        }
     }
 }

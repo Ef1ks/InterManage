@@ -252,6 +252,39 @@ class BaseDeliveryIntegrationTests {
         mvc.perform(get("/api/stores/" + storeId + "/mea-codes").cookie(sales)).andExpect(status().isForbidden());
     }
 
+    /**
+     * „Tymczasowy bon dostawy” z Mercalys do „Znajdź różnice”: niczego nie zapisuje, a przy linii są EAN-y jej
+     * artykułu z kartoteki (program wpisuje dostawę pod artykułem sklepu, nie pod kodem z bazy).
+     */
+    @Test
+    void readsTemporaryNoteWithCatalogEans() throws Exception {
+        List<List<Object>> rows = new ArrayList<>();
+        rows.add(List.of("Dostawca 538"));
+        rows.add(List.of("Numer dostawy: 10727"));
+        rows.add(List.of("Data : 03/11/2026  18:06:39"));
+        rows.add(List.of("Kod ITM8", "EAN Prio", "Referencja dostawcy", "Nazwa artykułu", "VAT", "Ilość dost.",
+                "Jednostk. cena zakupu"));
+        rows.add(List.of("0000006893790", "5900497047708", "61652855", "7 UP 0,5L PET", new BigDecimal("23"),
+                new BigDecimal("24"), new BigDecimal("3.19")));
+        rows.add(List.of("0000099999999", "5900000000001", "538", "SPOZA KARTOTEKI", new BigDecimal("23"),
+                BigDecimal.ONE, new BigDecimal("1.00")));
+        rows.add(List.of("Ilość linii: 000002"));
+        MockMultipartFile file = new MockMultipartFile("file", "bon.xls", "application/vnd.ms-excel",
+                xlsWriter.write("Mercalys", List.of("SCAPR POLSKA SP.Z.O.O."), rows));
+
+        mvc.perform(multipart(path() + "/temporary-notes").file(file).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.supplierCode").value("538"))
+                .andExpect(jsonPath("$.number").value("10727"))
+                .andExpect(jsonPath("$.lines", hasSize(2)))
+                .andExpect(jsonPath("$.lines[0].reference").value("61652855"))
+                .andExpect(jsonPath("$.lines[0].quantity").value(24))
+                .andExpect(jsonPath("$.lines[0].catalogEans[0]").value("5900497047708"))
+                .andExpect(jsonPath("$.lines[1].catalogEans", hasSize(0)));
+        assertThat(jdbc.queryForObject("select count(*) from base_deliveries where store_id = ?::uuid", Integer.class,
+                storeId)).isZero();
+    }
+
     private String path() {
         return "/api/stores/" + storeId + "/base-deliveries";
     }

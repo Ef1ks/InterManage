@@ -160,7 +160,7 @@ public class TemporaryNoteParser {
                     name == null ? "" : name, number(cells, vat(), "VAT"), quantity,
                     number(cells, purchasePrice(), "Jednostk. cena zakupu"),
                     number(cells, salePrice(), "Jednostkowa C.S."),
-                    number(cells, netValue(), "Wartość zakupu netto"));
+                    number(cells, netValue(), "Wartość zakupu netto"), List.of());
         }
 
         /** Kod z cyfr (liczba z Excela bez „.0”); inny tekst zostaje, jak jest. */

@@ -24,16 +24,17 @@ import jakarta.persistence.criteria.Subquery;
 /**
  * Wyszukiwarka kartoteki sklepu. Zapytanie dzielimy na słowa i każde musi pasować do produktu, w dowolnej kolejności
  * i jako fragment: "fil swie" znajdzie "FILET SWIEZY KL A". Słowo pasuje do fragmentu nazwy lub marki, początku EAN
- * (głównego z kartoteki albo każdego obowiązującego z multikodów) albo fragmentu ITM8. Wielkość liter nie ma
- * znaczenia.
+ * (głównego z kartoteki albo każdego obowiązującego z multikodów) albo fragmentu ITM8. {@code *} w słowie to dowolny
+ * ciąg znaków, {@code ?} jeden znak; w EAN-ie i ITM8 słowo z nimi jest całym kodem jak w Excelu ({@code 5923532*} =
+ * kody od 5923532). Wielkość liter nie ma znaczenia.
  */
 public final class ProductSearch {
 
     /** Najpierw aktywne w systemie sklepu, potem alfabetycznie. */
     public static final Sort ORDER = Sort.by(Sort.Order.desc("active").nullsLast(), Sort.Order.asc("name"));
 
-    /** Słowo z samych cyfr szukamy też wśród wszystkich EAN-ów artykułu z multikodów. */
-    private static final Pattern DIGITS = Pattern.compile("\\d+");
+    /** Słowo z samych cyfr (i gwiazdek) szukamy też wśród wszystkich EAN-ów artykułu z multikodów. */
+    private static final Pattern DIGITS = Pattern.compile("[\\d*?]*\\d[\\d*?]*");
 
     private ProductSearch() {
     }
@@ -61,12 +62,15 @@ public final class ProductSearch {
             List<Predicate> all = new ArrayList<>();
             all.add(cb.equal(root.get("store").get("id"), storeId));
             for (String word : words) {
-                String contains = "%" + word + "%";
+                String pattern = word.replace('*', '%').replace('?', '_');
+                boolean wildcard = !pattern.equals(word);
+                String contains = "%" + pattern + "%";
+                String eanPattern = wildcard ? pattern : pattern + "%";
                 List<Predicate> any = new ArrayList<>(List.of(
                         cb.like(cb.lower(root.get("name")), contains),
                         cb.like(cb.lower(root.get("brand")), contains),
-                        cb.like(root.get("ean"), word + "%"),
-                        cb.like(root.get("itm8"), contains)));
+                        cb.like(root.get("ean"), eanPattern),
+                        cb.like(root.get("itm8"), wildcard ? pattern : contains)));
                 if (DIGITS.matcher(word).matches()) {
                     Subquery<Integer> code = query.subquery(Integer.class);
                     Root<ProductCode> c = code.from(ProductCode.class);
@@ -74,7 +78,7 @@ public final class ProductSearch {
                             cb.equal(c.get("storeId"), storeId),
                             cb.isTrue(c.get("current")),
                             cb.equal(c.get("itm8"), root.get("itm8")),
-                            cb.like(c.get("ean"), word + "%"));
+                            cb.like(c.get("ean"), eanPattern));
                     any.add(cb.exists(code));
                 }
                 all.add(cb.or(any.toArray(Predicate[]::new)));

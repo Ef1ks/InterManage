@@ -290,6 +290,22 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.items.length()").value(0));
         mvc.perform(get(url("/catalog")).param("name", "mleko 3").cookie(owner))
                 .andExpect(jsonPath("$.items[0].lastDelivery.date").value(today.minusMonths(7).toString()));
+        // Słowa w dowolnej kolejności, każde musi pasować.
+        mvc.perform(get(url("/catalog")).param("name", "pla gou 15").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("SER GOUDA PLASTRY 150G")));
+        // Pole Szukaj: każde słowo w nazwie albo marce (marka producenta nie jest w nazwie), EAN-ie albo ITM8.
+        mvc.perform(get(url("/catalog")).param("query", "pla ser lili").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("SER LILIPUT PLASTRY 150G")));
+        mvc.perform(get(url("/catalog")).param("query", "plas serp gou").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("SER GOUDA PLASTRY 150G")));
+        mvc.perform(get(url("/catalog")).param("query", "chi 5905555000002").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("CHIPSY SOLONE 100G")));
+        // W kodach gwiazdka wyznacza początek albo koniec całego kodu; bez niej to fragment (0001 jest w wielu EAN-ach).
+        mvc.perform(get(url("/catalog?ean=5905*")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("CHIPSY PAPRYKOWE 100G", "CHIPSY SOLONE 100G")));
+        mvc.perform(get(url("/catalog?ean=*0001")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(
+                        contains("CHIPSY PAPRYKOWE 100G", "SER LILIPUT PLASTRY 150G")));
         // Znaki specjalne LIKE są dosłowne.
         mvc.perform(get(url("/catalog")).param("name", "3,2%").cookie(owner))
                 .andExpect(jsonPath("$.items[*].name").value(contains("MLEKO 3,2% 1L")));
