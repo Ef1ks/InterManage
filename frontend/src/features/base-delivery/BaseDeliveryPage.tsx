@@ -18,6 +18,7 @@ import {
   BeefIcon,
   HashIcon,
   HistoryIcon,
+  KeyboardIcon,
   ScanBarcodeIcon,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -104,6 +105,7 @@ import { CarrierDialog } from './CarrierDialog'
 import { ColumnFilter } from './ColumnFilter'
 import { DeliveryPickerDialog } from './DeliveryPickerDialog'
 import { meaPath } from './paths'
+import { Itm8MacroDialog } from './Itm8MacroDialog'
 import { ShortDatesDialog } from './ShortDatesDialog'
 
 /**
@@ -269,6 +271,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     setCarrierOpen(true)
   }
   const [shortDatesOpen, setShortDatesOpen] = useState(false)
+  const [itm8MacroOpen, setItm8MacroOpen] = useState(false)
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
@@ -792,6 +795,16 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!delivery}
+                  onClick={() => setItm8MacroOpen(true)}
+                  title="Makro AutoHotkey do schowka: wpisanie kodów ITM8 artykułom z dokumentu w programie sklepu (F9 w odtwarzaczu)"
+                >
+                  <KeyboardIcon />
+                  Uzupełnij ITM8
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   loading={saving === 'articles'}
                   disabled={newArticles === 0 || saving !== null}
                   onClick={saveNewArticles}
@@ -1095,6 +1108,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         onConfirm={chooseCarriers}
       />
       <ShortDatesDialog storeId={store.id} delivery={delivery} open={shortDatesOpen} onOpenChange={setShortDatesOpen} />
+      <Itm8MacroDialog delivery={delivery} open={itm8MacroOpen} onOpenChange={setItm8MacroOpen} />
       <ProtocolDialog
         storeId={store.id}
         lines={protocolLines}

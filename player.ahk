@@ -1,41 +1,84 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
- SendMode "Event" ; Tryb Event ze wsparciem opóźnień (najlepszy dla starszych aplikacji okienkowych)
+SendMode "Event"
 SetKeyDelay 30, 30
-CoordMode "Mouse", "Screen" ; Współrzędne względem całego ekranu
 
-; Powiadomienie przy starcie - od razu wiesz, że .exe przeszedł przez AppLocker
-TrayTip "Odtwarzacz Makr gotowy!", "F8 = Test | F9 = Start ze Schowka | ESC = Wyłącz", 1
-MsgBox "Plik .exe działa poprawnie!`n`nSkróty:`n[F8] - Test ruchu myszy i pisania`n[F9] - Wykonaj makro ze Schowka`n[ESC] - Awaryjne wyłączenie", "Test środowiska OK", "Iconi"
+; Współrzędne względem całego EKRANU
+CoordMode "Mouse", "Screen"
+CoordMode "ToolTip", "Screen"
+
+global radarActive := false
+global recordedPoints := ""
+
+TrayTip "Tryb Screen gotowy!", "F6 = Celownik | F7 = Zapisz punkt | F9 = Odtwórz | ESC = Wyjdź", 1
 
 ; ==============================================================================
-; [F8] - SZYBKI TEST: Sprawdza czy klikanie i pisanie działa w docelowym programie
+; [F6] - CELOWNIK (Pokazuje aktualne X, Y na ekranie na żywo)
+; ==============================================================================
+F6:: {
+    global radarActive
+    radarActive := !radarActive
+    if (radarActive) {
+        SetTimer UpdateRadar, 50
+    } else {
+        SetTimer UpdateRadar, 0
+        ToolTip()
+    }
+}
+
+UpdateRadar() {
+    MouseGetPos &screenX, &screenY, &winId, &ctrlName
+    
+    info := "TRYB: EKRAN (Screen)`n"
+    info .= "X: " . screenX . " | Y: " . screenY . "`n"
+    info .= "Kontrolka: " . (ctrlName != "" ? ctrlName : "brak") . "`n"
+    info .= "[F7] = Zapisz ten punkt"
+    
+    ToolTip info, screenX + 20, screenY + 20
+}
+
+; ==============================================================================
+; [F7] - ZAPISZ PUNKT EKRANU DO SCHOWKA
+; Zapisuje w bezpiecznym formacie: CLICK|X|Y
+; ==============================================================================
+F7:: {
+    global recordedPoints
+    MouseGetPos &x, &y, &winId, &ctrlName
+    
+    line := "CLICK|" . x . "|" . y . "`r`n"
+    recordedPoints .= line
+    A_Clipboard := recordedPoints
+    
+    ToolTip "Zapisano punkt: X=" . x . " Y=" . y, x + 20, y - 20
+    SetTimer () => ToolTip(), -800
+}
+
+; ==============================================================================
+; [Shift + F7] - WYCZYŚĆ LISTĘ ZAPISANYCH PUNKTÓW
+; ==============================================================================
++F7:: {
+    global recordedPoints := ""
+    A_Clipboard := ""
+    TrayTip "Wyczyszczono", "Lista punktów wyzerowana.", 1
+}
+
+; ==============================================================================
+; [F8] - TEST PISANIA
 ; ==============================================================================
 F8:: {
-    MouseGetPos &startX, &startY
-    ; Przesuń kursor lekko w prawo i w dół, żeby wizualnie potwierdzić sterowanie myszą
-    MouseMove startX + 80, startY + 80, 10
-    Sleep 300
-    MouseMove startX, startY, 10
-    
-    ; Wpisz tekst testowy i naciśnij Enter w aktywnym polu (np. w Notatniku lub programie)
     SendText "TEST_AHK_OK_123"
     Sleep 100
     Send "{Enter}"
 }
 
 ; ==============================================================================
-; [F9] - WYKONAJ MAKRO ZE SCHOWKA (Wyeksportowane ze strony webowej)
-; Format w schowku (każda instrukcja w nowej linii, separator to średnik ';'):
-; CLICK;500;300
-; SLEEP;500
-; TEXT;Przykładowy towar
-; KEY;{Tab}
+; [F9] - WYKONAJ MAKRO ZE SCHOWKA
+; Obsługuje zarówno separator '|' jak i ';'
 ; ==============================================================================
 F9:: {
     rawClip := Trim(A_Clipboard)
     if (rawClip = "") {
-        MsgBox "Schowek jest pusty! Skopiuj makro ze strony webowej.", "Błąd", "Icon!"
+        MsgBox "Schowek jest pusty! Skopiuj makro.", "Błąd", "Icon!"
         return
     }
 
@@ -43,27 +86,33 @@ F9:: {
     
     for index, line in lines {
         line := Trim(line)
-        if (line = "" || SubStr(line, 1, 1) = "#") ; Ignoruj puste linie i komentarze
+        if (line = "" || SubStr(line, 1, 1) = "#")
             continue
 
-        parts := StrSplit(line, ";")
+        ; Wykryj separator (| lub ;)
+        sep := InStr(line, "|") ? "|" : ";"
+        parts := StrSplit(line, sep)
         cmd := StrUpper(Trim(parts[1]))
 
         switch cmd {
             case "CLICK":
                 if (parts.Length >= 3) {
-                    x := Integer(Trim(parts[2]))
-                    y := Integer(Trim(parts[3]))
-                    Click x, y
+                    Click Integer(Trim(parts[2])), Integer(Trim(parts[3]))
+                }
+            case "RCLICK":
+                if (parts.Length >= 3) {
+                    Click Integer(Trim(parts[2])), Integer(Trim(parts[3])), "Right"
+                }
+            case "DBLCLICK":
+                if (parts.Length >= 3) {
+                    Click Integer(Trim(parts[2])), Integer(Trim(parts[3])), 2
                 }
             case "TEXT":
                 if (parts.Length >= 2) {
-                    ; SendText wpisuje ciąg znaków dosłownie (nie interpretuje znaków ! + ^ # jako skrótów)
                     SendText parts[2]
                 }
             case "KEY":
                 if (parts.Length >= 2) {
-                    ; Send obsługuje klawisze specjalne np. {Enter}, {Tab}, {Down}, ^a (Ctrl+A)
                     Send Trim(parts[2])
                 }
             case "SLEEP":
@@ -71,14 +120,14 @@ F9:: {
                     Sleep Integer(Trim(parts[2]))
                 }
         }
-        Sleep 50 ; Bezpieczny bufor między krokami
+        Sleep 50
     }
     
-    TrayTip "Zakończono", "Makro ze schowka zostało wykonane.", 1
+    TrayTip "Zakończono", "Makro wykonane.", 1
 }
 
 ; ==============================================================================
-; [ESC] - AWARYJNE ZATRZYMANIE (Kill-switch)
+; [ESC] - AWARYJNE ZATRZYMANIE
 ; ==============================================================================
 Esc:: {
     ExitApp
