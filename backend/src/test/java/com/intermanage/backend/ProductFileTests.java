@@ -88,7 +88,7 @@ class ProductFileTests {
         assertThat(rk(1)).isEqualTo(0x6);
         assertThat(rk(0.15)).isEqualTo(0x402E0001);
         assertThat(rk(5.9)).isEqualTo(0x40827001);
-        assertThat(rk(12.35)).isEqualTo(0x40934C01);
+        assertThat(rk(9.95)).isNull(); // 9,95 × 100 = 994,999…, Excel zapisuje NUMBER
         assertThat(rk(0.5)).isEqualTo(0x3FE00000);
         assertThat(rk(1 / 1024.0)).isEqualTo((int) (Double.doubleToLongBits(1 / 1024.0) >>> 32));
         assertThat(rk(0.123456)).isNull();

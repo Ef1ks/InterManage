@@ -17,10 +17,12 @@ import org.springframework.stereotype.Component;
  * które nie czytają .xlsx. Bez Apache POI: pierwszy wiersz to nagłówek, teksty zapisujemy jako tekst (kody zachowują
  * zera wiodące), liczby ({@link Number}) jako liczby, {@code null} to pusta komórka.
  * <p>
- * Układ rekordów jak w pliku zapisanym przez Excela (teksty we wspólnej tablicy SST i komórkach LABELSST, liczby jako
- * RK, a kilka kolejnych jako MULRK, wiersze ROW w blokach po 32 z DBCELL i INDEX, rekordy ustawień skoroszytu
- * i arkusza, CLSID Excela przy katalogu głównym i strumienie SummaryInformation / DocumentSummaryInformation), bo
- * program sklepu nie wczytywał „chudszego” pliku, dopóki nie otworzyło się go i nie zapisało w Excelu.
+ * Plik jak zapisany przez Excela: rekordy skoroszytu i ustawień arkusza ze wzoru ({@code resources/xls}, wycięte
+ * z pliku CADBEZP zapisanego w Excelu 2010), teksty we wspólnej tablicy SST i komórkach LABELSST, liczby jako RK
+ * (kilka kolejnych jako MULRK) albo NUMBER według reguły Excela, wiersze ROW w blokach po 32 z DBCELL i INDEX, CLSID
+ * Excela przy katalogu głównym i strumienie SummaryInformation / DocumentSummaryInformation. Program sklepu nie
+ * wczytywał pliku składanego inaczej („Błąd podczas czytania pliku CadArtFrs.xls”), dopóki nie zapisało się go
+ * w Excelu.
  */
 @Component
 public class XlsWriter {
@@ -37,8 +39,8 @@ public class XlsWriter {
     private static final int MAX_RECORD = 8224;
     private static final int ROWS_PER_BLOCK = 32;
     private static final int ROW_RECORD = 20;
-    /** Wysokość wiersza w 1/20 punktu, jak we wzorze z Excela. */
-    private static final int ROW_HEIGHT = 300;
+    /** Wysokość wiersza w 1/20 punktu, jak w pliku zapisanym przez Excela (i DEFAULTROWHEIGHT wzoru). */
+    private static final int ROW_HEIGHT = 255;
 
     public byte[] write(String sheetName, List<String> headers, List<List<Object>> rows) {
         if (rows.size() + 1 > 65_536 || headers.size() > 256) {
@@ -58,11 +60,10 @@ public class XlsWriter {
         Records globals = globals(sheetName, strings);
         int sheetStart = globals.size();
 
-        // Arkusz: BOF, INDEX (pozycje DBCELL w strumieniu), ustawienia arkusza jak w Excelu, DEFCOLWIDTH, DIMENSIONS,
-        // bloki wierszy, WINDOW2, SELECTION, EOF.
-        Records settings = sheetSettings();
+        // Arkusz: BOF, INDEX (pozycje DBCELL w strumieniu), ustawienia arkusza ze wzoru, DEFCOLWIDTH, DIMENSIONS,
+        // bloki wierszy, zakończenie ze wzoru (WINDOW2, PLV, SELECTION, FEATHDR), EOF.
         int indexSize = 4 + 16 + 4 * blocks.size();
-        int defColWidthAt = sheetStart + 20 + indexSize + settings.size();
+        int defColWidthAt = sheetStart + SHEET_BOF.length + indexSize + SHEET_SETTINGS.length;
         int blocksAt = defColWidthAt + 6 + 18;
         ByteBuffer index = buffer(16 + 4 * blocks.size()).putInt(0).putInt(0).putInt(all.size()).putInt(defColWidthAt);
         int position = blocksAt;
@@ -72,18 +73,16 @@ public class XlsWriter {
             index.putInt(position - (8 + 2 * rowsInBlock)); // DBCELL zamyka blok
         }
         Records sheet = new Records();
-        sheet.add(0x0809, bof(0x0010));
+        sheet.raw(SHEET_BOF);
         sheet.add(0x020B, index.array());
-        sheet.raw(settings.bytes());
+        sheet.raw(SHEET_SETTINGS);
         sheet.add(0x0055, buffer(2).putShort((short) 8).array());
         sheet.add(0x0200, buffer(14).putInt(0).putInt(all.size()).putShort((short) 0)
                 .putShort((short) columns).putShort((short) 0).array());
         for (byte[] block : blocks) {
             sheet.raw(block);
         }
-        // WINDOW2: siatka, nagłówki wierszy i kolumn, zera, arkusz zaznaczony i aktywny; SELECTION: kursor w A1.
-        sheet.add(0x023E, hex("b6060000000040000000000000000f000000"));
-        sheet.add(0x001D, hex("030000000000000100000000000000"));
+        sheet.raw(SHEET_END);
         sheet.add(0x000A, new byte[0]);
 
         ByteArrayOutputStream workbook = new ByteArrayOutputStream();
@@ -93,91 +92,45 @@ public class XlsWriter {
     }
 
     /**
-     * Rekordy skoroszytu w kolejności i z wartościami jak w pliku zapisanym przez Excela (wzór {@code CADBEZP-IMPEK.xls}):
-     * program sklepu czyta plik ściślej niż Excel i bez nich wymagał otwarcia i zapisania pliku w Excelu.
+     * Skoroszyt ze wzoru (rekordy pliku CADBEZP zapisanego przez Excela 2010, {@code resources/xls}: od BOF po
+     * USESELFS, potem MTRSETTINGS…RECALCID i BOOKEXT…COMPAT12), a między nimi nasz BOUNDSHEET i tablica tekstów.
+     * Program sklepu przyjmował tylko plik zapisany przez Excela, więc niczego tu nie składamy sami.
      */
     private static Records globals(String sheetName, SharedStrings strings) {
         Records globals = new Records();
-        globals.add(0x0809, bof(0x0005));
-        globals.add(0x00E1, buffer(2).putShort((short) 1200).array()); // INTERFACEHDR
-        globals.add(0x00C1, new byte[2]); // MMS
-        globals.add(0x00E2, new byte[0]); // INTERFACEEND
-        globals.add(0x005C, writeAccess("Intermanage"));
-        globals.add(0x0042, buffer(2).putShort((short) 1200).array()); // CODEPAGE: UTF-16
-        globals.add(0x0161, new byte[2]); // DSF
-        globals.add(0x013D, buffer(2).putShort((short) 1).array()); // TABID: jeden arkusz
-        globals.add(0x009C, buffer(2).putShort((short) 0x0E).array()); // FNGROUPCOUNT
-        for (int type : new int[] {0x0019, 0x0012, 0x0013, 0x01AF, 0x01BC}) {
-            globals.add(type, new byte[2]); // bez ochrony okna, skoroszytu i hasła
-        }
-        globals.add(0x003D, buffer(18).putShort((short) 0).putShort((short) 0).putShort((short) 0x3A5C)
-                .putShort((short) 0x23BE).putShort((short) 0x0038).putShort((short) 0).putShort((short) 0)
-                .putShort((short) 1).putShort((short) 0x0258).array());
-        globals.add(0x0040, new byte[2]); // BACKUP
-        globals.add(0x008D, new byte[2]); // HIDEOBJ
-        globals.add(0x0022, new byte[2]); // DATEMODE: daty od 1900
-        globals.add(0x000E, buffer(2).putShort((short) 1).array()); // PRECISION
-        globals.add(0x01B7, new byte[2]); // REFRESHALL
-        globals.add(0x00DA, new byte[2]); // BOOKBOOL
-        // Czcionka nr 4 jest w BIFF zarezerwowana, więc zapisujemy cztery takie same (0-3).
-        for (int i = 0; i < 4; i++) {
-            globals.add(0x0031, font("Arial"));
-        }
-        for (int i = 0; i < CELL_XF; i++) {
-            globals.add(0x00E0, xf(true));
-        }
-        globals.add(0x00E0, xf(false));
-        globals.add(0x0293, buffer(4).putShort((short) 0x8000).put((byte) 0).put((byte) 0xFF).array()); // styl Normal
-        globals.add(0x0160, new byte[2]); // USESELFS
+        globals.raw(GLOBALS_HEAD);
         byte[] name = shortString(sheetName);
         int boundSheetSize = 4 + 4 + 2 + name.length;
-        int countrySize = 4 + 4;
-        int sstAt = globals.size() + boundSheetSize + countrySize;
+        int sstAt = globals.size() + boundSheetSize + GLOBALS_MID.length;
         Records sst = strings.records(sstAt);
-        int sheetOffset = sstAt + sst.size() + 4; // + EOF
+        int sheetOffset = sstAt + sst.size() + GLOBALS_TAIL.length + 4; // + EOF
         globals.add(0x0085, ByteBuffer.allocate(6 + name.length).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(sheetOffset).put((byte) 0).put((byte) 0).put(name).array());
-        globals.add(0x008C, buffer(4).putShort((short) 48).putShort((short) 48).array()); // COUNTRY: Polska
+        globals.raw(GLOBALS_MID);
         globals.raw(sst.bytes());
+        globals.raw(GLOBALS_TAIL);
         globals.add(0x000A, new byte[0]);
         return globals;
     }
 
-    /** Ustawienia arkusza między INDEX a DEFCOLWIDTH: przeliczanie, druk i marginesy jak w Excelu. */
-    private static Records sheetSettings() {
-        Records settings = new Records();
-        settings.add(0x000D, buffer(2).putShort((short) 1).array()); // CALCMODE: automatycznie
-        settings.add(0x000C, buffer(2).putShort((short) 100).array()); // CALCCOUNT
-        settings.add(0x000F, buffer(2).putShort((short) 1).array()); // REFMODE: A1
-        settings.add(0x0011, new byte[2]); // ITERATION
-        settings.add(0x0010, buffer(8).putDouble(0.001).array()); // DELTA
-        settings.add(0x005F, buffer(2).putShort((short) 1).array()); // SAVERECALC
-        settings.add(0x002A, new byte[2]); // PRINTHEADERS
-        settings.add(0x002B, new byte[2]); // PRINTGRIDLINES
-        settings.add(0x0082, buffer(2).putShort((short) 1).array()); // GRIDSET
-        settings.add(0x0080, new byte[8]); // GUTS
-        settings.add(0x0225, buffer(4).putShort((short) 0).putShort((short) ROW_HEIGHT).array()); // DEFAULTROWHEIGHT
-        settings.add(0x0081, buffer(2).putShort((short) 0x04C1).array()); // WSBOOL
-        settings.add(0x0014, new byte[0]); // HEADER
-        settings.add(0x0015, new byte[0]); // FOOTER
-        settings.add(0x0083, new byte[2]); // HCENTER
-        settings.add(0x0084, new byte[2]); // VCENTER
-        settings.add(0x0026, buffer(8).putDouble(0.7).array()); // LEFTMARGIN
-        settings.add(0x0027, buffer(8).putDouble(0.7).array()); // RIGHTMARGIN
-        settings.add(0x0028, buffer(8).putDouble(0.75).array()); // TOPMARGIN
-        settings.add(0x0029, buffer(8).putDouble(0.75).array()); // BOTTOMMARGIN
-        settings.add(0x00A1, hex("00002c01010001000100040042e50100333333333333d33f333333333333d33f0000")); // SETUP
-        return settings;
-    }
+    private static final byte[] GLOBALS_HEAD = template("globals-head.bin");
+    private static final byte[] GLOBALS_MID = template("globals-mid.bin");
+    private static final byte[] GLOBALS_TAIL = template("globals-tail.bin");
+    private static final byte[] SHEET_BOF = template("sheet-bof.bin");
+    /** CALCMODE…HEADERFOOTER: przeliczanie, druk i marginesy. */
+    private static final byte[] SHEET_SETTINGS = template("sheet-settings.bin");
+    /** WINDOW2, PLV, SELECTION, FEATHDR. */
+    private static final byte[] SHEET_END = template("sheet-end.bin");
 
-    /** WRITEACCESS: nazwa użytkownika, który zapisał plik, dopełniona spacjami do 112 bajtów. */
-    private static byte[] writeAccess(String user) {
-        byte[] record = new byte[112];
-        java.util.Arrays.fill(record, (byte) ' ');
-        byte[] chars = user.getBytes(StandardCharsets.ISO_8859_1);
-        buffer(3).putShort((short) chars.length).put((byte) 0).flip().get(record, 0, 3);
-        System.arraycopy(chars, 0, record, 3, chars.length);
-        return record;
+    private static byte[] template(String name) {
+        try (var in = XlsWriter.class.getResourceAsStream("/xls/" + name)) {
+            if (in == null) {
+                throw new IllegalStateException("Brak wzoru /xls/" + name);
+            }
+            return in.readAllBytes();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static byte[] hex(String hex) {
@@ -290,10 +243,10 @@ public class XlsWriter {
     }
 
     /**
-     * Liczba jako RK tak, jak zapisuje ją Excel (sprawdzone na wszystkich 733 liczbach pliku CADBEZP przed i po zapisie
+     * Liczba jako RK tak, jak zapisuje ją Excel (sprawdzone na wszystkich 777 liczbach pliku CADBEZP przed i po zapisie
      * w Excelu): całkowita jako całkowite RK (1 → {@code 0x6}), inna jako górne 32 bity double'a, a gdy dolne bity nie
      * są zerowe, double setek z flagą „÷100” (0,15 → 15,0, 5,90 → 590,0). Całkowitego RK z flagą „÷100” Excel nie
-     * zapisuje i program sklepu go nie czyta. Inaczej {@code null} i rekord NUMBER.
+     * zapisuje. Inaczej {@code null} i rekord NUMBER (9,95; 16,99).
      */
     static Integer rk(double value) {
         if (value == Math.rint(value) && Math.abs(value) < 1 << 29) {
@@ -303,8 +256,10 @@ public class XlsWriter {
         if (plain != null) {
             return plain;
         }
-        long hundredths = Math.round(value * 100);
-        if (Math.abs(hundredths) < 1L << 52 && hundredths / 100.0 == value) {
+        // Jak Excel: tylko gdy mnożenie przez 100 daje dokładnie liczbę całkowitą (9,95 × 100 = 994,999… idzie do
+        // NUMBER, nie do zaokrąglonego RK).
+        double hundredths = value * 100;
+        if (hundredths == Math.rint(hundredths)) {
             Integer scaled = floatRk(hundredths);
             if (scaled != null) {
                 return scaled | 0x1;
@@ -319,29 +274,12 @@ public class XlsWriter {
         return (bits & 0x3_FFFF_FFFFL) == 0 ? (int) (bits >>> 32) : null;
     }
 
-    private static byte[] bof(int type) {
-        return buffer(16).putShort((short) 0x0600).putShort((short) type).putShort((short) 0x0DBB)
-                .putShort((short) 0x07CC).putInt(0).putInt(0x06).array();
-    }
-
-    private static byte[] font(String name) {
-        byte[] text = shortString(name);
-        return ByteBuffer.allocate(14 + text.length).order(ByteOrder.LITTLE_ENDIAN)
-                .putShort((short) 200).putShort((short) 0).putShort((short) 0x7FFF).putShort((short) 400)
-                .putShort((short) 0).put((byte) 0).put((byte) 0).put((byte) 0xEE).put((byte) 0).put(text).array();
-    }
-
-    /** XF stylu (bez rodzica) albo komórki (rodzic = styl Normal); wyrównanie do dołu, bez obramowań i wypełnienia. */
-    private static byte[] xf(boolean style) {
-        return buffer(20).putShort((short) 0).putShort((short) 0).putShort((short) (style ? 0xFFF5 : 0x0001))
-                .put((byte) 0x20).put((byte) 0).put((byte) 0).put((byte) (style ? 0xF4 : 0))
-                .putInt(0).putInt(0).putShort((short) 0x20C0).array();
-    }
-
-    /** Napis z 1-bajtową długością (nazwa arkusza, czcionki); zawsze UTF-16. */
+    /** Napis z 1-bajtową długością (nazwa arkusza): jednobajtowy jak w Excelu, UTF-16 tylko z polskimi znakami. */
     private static byte[] shortString(String text) {
-        byte[] chars = text.getBytes(StandardCharsets.UTF_16LE);
-        return ByteBuffer.allocate(2 + chars.length).put((byte) text.length()).put((byte) 1).put(chars).array();
+        boolean compressed = text.chars().allMatch(c -> c <= 0xFF);
+        byte[] chars = text.getBytes(compressed ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_16LE);
+        return ByteBuffer.allocate(2 + chars.length).put((byte) text.length()).put((byte) (compressed ? 0 : 1))
+                .put(chars).array();
     }
 
     /**

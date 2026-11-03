@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793701100.553466,
-    "seen": 1793701516.3311381,
-    "ast_hash": "f1cf113a5a3dc7190761b33c488339f7",
+    "mtime": 1793705645.390317,
+    "seen": 1793705687.8920372,
+    "ast_hash": "50060496976518e709057a80388914c6",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4386,9 +4386,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryController.java": {
-    "mtime": 1793657187.8619702,
-    "seen": 1793657320.548214,
-    "ast_hash": "e5a41c80a86f47876b0da91dab2ba823",
+    "mtime": 1793701970.4924402,
+    "seen": 1793705687.7542927,
+    "ast_hash": "e3ff562889bb9de48ea61b86971888d2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CatalogProduct.java": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1793657202.0547264,
-    "seen": 1793657320.6529646,
-    "ast_hash": "01532b0c57aec5a861eab50701aec908",
+    "mtime": 1793702063.5048313,
+    "seen": 1793705687.8560011,
+    "ast_hash": "22598fcc334a20debcbc2e6bfbaf8553",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4686,9 +4686,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryProtocolService.java": {
-    "mtime": 1793519066.9696348,
-    "seen": 1793519530.8734748,
-    "ast_hash": "4282cc98017ab9360798461a8a808b35",
+    "mtime": 1793701968.7684464,
+    "seen": 1793705687.7632923,
+    "ast_hash": "5f72e2a3c1f5053fdafb98ab5c039eda",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/store/controller/StoreProtoSettingsController.java": {
@@ -5238,9 +5238,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/XlsWriter.java": {
-    "mtime": 1793701099.3305392,
-    "seen": 1793701516.1394956,
-    "ast_hash": "25ae7fc79a955177caeb30c0d59b5d45",
+    "mtime": 1793705445.6394892,
+    "seen": 1793705687.7522929,
+    "ast_hash": "f8db5c4207c007395e26ad6ef446ff28",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/ProductFile.java": {
@@ -5376,9 +5376,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductFileTests.java": {
-    "mtime": 1793700575.3455403,
-    "seen": 1793701516.266549,
-    "ast_hash": "e8b8eaade9f2292c547f1c916cab77e6",
+    "mtime": 1793705513.5500114,
+    "seen": 1793705687.8444836,
+    "ast_hash": "6cf2f8a555ba8d4c2d6e0239d7e33765",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/PromotionAndProductCodeImportIntegrationTests.java": {
@@ -6378,9 +6378,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/BaseDeliveryPage.tsx": {
-    "mtime": 1793700588.7654386,
-    "seen": 1793701516.279083,
-    "ast_hash": "79335cc69b207e16544542201384fa95",
+    "mtime": 1793702063.504309,
+    "seen": 1793705687.85449,
+    "ast_hash": "2cbe9d6d63b85216616b35970d160041",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/CarrierDialog.tsx": {
@@ -6567,6 +6567,30 @@
     "mtime": 1793695932.9788013,
     "seen": 1793696036.6988566,
     "ast_hash": "4cd815300518af46e5c46a7c8e28499b",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/dataentry/component/LabelFile.java": {
+    "mtime": 1793701966.3813605,
+    "seen": 1793705687.7532926,
+    "ast_hash": "82fa9284f4f2c71dcf025710fba58ce9",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/dataentry/dto/LabelRequest.java": {
+    "mtime": 1793702001.9807909,
+    "seen": 1793705687.7562928,
+    "ast_hash": "1d24c8ac49f6d5adae3b765aac0adcbc",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/LabelFileTests.java": {
+    "mtime": 1793702119.9955008,
+    "seen": 1793705687.8429713,
+    "ast_hash": "b5acb0a2bc9030e3299c21731f20514d",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/data-entry/LabelDialog.tsx": {
+    "mtime": 1793702002.8332138,
+    "seen": 1793705687.8560011,
+    "ast_hash": "6eb23553abd08031c9a2beffd5c0ad4d",
     "semantic_hash": ""
   }
 }
