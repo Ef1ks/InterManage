@@ -82,9 +82,14 @@ class ProductFileTests {
         assertThat(read).hasSize(41);
         assertThat(read.get(0)).startsWith("A", "B", "C", "D", "E");
         assertThat(read.get(40)).containsExactly("0061527580", "Zażółć", "P", "12.35", "39", null, "0.123456", "-7");
+        // RK jak w pliku zapisanym przez Excela: całkowite jako całkowite, reszta jako double (grosze jako setki ÷100),
+        // nigdy całkowite ÷100.
+        assertThat(rk(0)).isEqualTo(0x2);
         assertThat(rk(1)).isEqualTo(0x6);
-        assertThat(rk(12.35)).isEqualTo(1235 << 2 | 3);
-        assertThat(rk(0.5)).isEqualTo(50 << 2 | 3);
+        assertThat(rk(0.15)).isEqualTo(0x402E0001);
+        assertThat(rk(5.9)).isEqualTo(0x40827001);
+        assertThat(rk(12.35)).isEqualTo(0x40934C01);
+        assertThat(rk(0.5)).isEqualTo(0x3FE00000);
         assertThat(rk(1 / 1024.0)).isEqualTo((int) (Double.doubleToLongBits(1 / 1024.0) >>> 32));
         assertThat(rk(0.123456)).isNull();
     }

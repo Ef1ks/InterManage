@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.dataentry.component.LabelFile;
+import com.intermanage.backend.dataentry.dto.LabelRequest;
 import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.store.entity.ProtocolKind;
 import com.intermanage.backend.store.entity.Store;
@@ -46,5 +48,16 @@ public class DataEntryProtocolService {
             throw ApiException.badRequest("Brak pozycji z EAN-em i ilością różną od 0");
         }
         return new ProtocolFile(ProtoFile.fileName(kind.number(), store.getNumber(), username), content);
+    }
+
+    /** Plik etykiet cenowych ETIQUETTE z artykułów tabeli (zapisuje go przeglądarka w folderze plików PROTO). */
+    public ProtocolFile labels(LabelRequest request, String username) {
+        byte[] content = LabelFile.content(request.lines().stream()
+                .map(line -> new LabelFile.Line(line.ean(), line.count()))
+                .toList());
+        if (content.length == 0) {
+            throw ApiException.badRequest("Brak pozycji z EAN-em do etykiet");
+        }
+        return new ProtocolFile(LabelFile.fileName(username), content);
     }
 }

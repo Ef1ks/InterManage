@@ -24,7 +24,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useStore } from 'react-redux'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { CopyButton } from '@/components/CopyButton'
@@ -60,6 +60,7 @@ import {
   purchasePerPiece,
   suggestedPrice,
   withScannedProduct,
+  withTrailingEmptyRow,
 } from '@/features/data-entry/rows'
 import { SaveSettingsDialog } from '@/features/data-entry/SaveSettingsDialog'
 import { useSuppliers } from '@/features/documents/api'
@@ -67,6 +68,7 @@ import { formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules } from '@/features/store-settings/api'
+import { TOOL_ROUTES } from '@/features/tools/categories'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
@@ -75,6 +77,7 @@ import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
 import type { BaseDelivery, StoreSummary, Supplier } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { type RootState, useAppDispatch, useAppSelector } from '@/store'
+import { setDataEntryDraft, setDataEntrySaved } from '@/store/dataEntryDraftSlice'
 import {
   type BaseDeliveryDraft,
   type BaseDeliveryView,
@@ -448,19 +451,53 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     })
   }
 
+  // Weryfikacja warzyw i mięsa pakowanego idzie we wprowadzaniu danych: tam są ceny sugerowane z dokumentu (cena dla
+  // klienta z bazy), zmiana cen dla dostawcy z bazy i etykiety. Tabela wprowadzania danych jest zastępowana
+  // („Przywróć” w toaście oddaje poprzednią).
+  const navigate = useNavigate()
   const verify = (target: Exclude<BaseDeliveryView, 'carriers'>) => {
     if (!delivery) return
-    const current = currentDraft()
     const next = viewRows(delivery, target, [])
-    resetView()
-    setDraft({
-      ...current,
-      view: target,
-      rows: next,
-      previous: current.view === 'carriers' ? { carriers: current.carriers, rows: current.rows } : current.previous,
-    })
+    const counts = new Map<string, number>()
+    for (const row of next) {
+      const key = supplierKey(row.base?.supplierCode) || '538'
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    const code = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '538'
+    const supplier = supplierFor(code)
+    const state = reduxStore.getState()
+    const before = state.dataEntryDraft.drafts[store.id] ?? null
+    const beforeSaved = state.dataEntryDraft.saved[store.id] ?? null
+    dispatch(setDataEntrySaved({ storeId: store.id, saved: null }))
+    dispatch(
+      setDataEntryDraft({
+        storeId: store.id,
+        draft: {
+          invoice: {
+            id: null,
+            number: delivery.number,
+            sellerName: supplier?.name ?? null,
+            sellerNip: supplier?.nip ?? null,
+            issueDate: delivery.deliveryDate,
+            supplier: supplier ? { id: supplier.id, name: supplier.name, nip: supplier.nip } : null,
+          },
+          rows: withTrailingEmptyRow(next),
+        },
+      }),
+    )
+    navigate(TOOL_ROUTES.DATA_ENTRY.path)
     toast.success(VIEW_LABELS[target], {
-      description: `${next.length} ${pieces(next.length)} z całego dokumentu. Cena sugerowana to cena z dokumentu bazy: zaznacz wiersze i „Ustaw ceny sugerowane”.`,
+      description: `${next.length} ${pieces(next.length)} z bonu ${delivery.number} we wprowadzaniu danych. Cena sugerowana to cena z dokumentu bazy: zaznacz wiersze i „Ustaw ceny sugerowane”.`,
+      action:
+        before && before.rows.some((row) => row.ean !== '' || row.name !== '')
+          ? {
+              label: 'Przywróć',
+              onClick: () => {
+                dispatch(setDataEntryDraft({ storeId: store.id, draft: before }))
+                dispatch(setDataEntrySaved({ storeId: store.id, saved: beforeSaved }))
+              },
+            }
+          : undefined,
     })
   }
 
@@ -703,7 +740,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
           'Wczytaj dokument z bazy (plik .xls) i wybierz nośniki: ich artykuły trafią do tabeli z ilościami w sztukach. Linie, które nie przyjechały, mają ilość 0.',
           'Sprawdź kaucje (czerwona komórka = inna kaucja w dokumencie niż w kartotece; blokuje zmianę cen i protokół) i ujemne marże na cenach cadencier.',
           'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: plik CADBEZP z danymi z dokumentu.',
-          'Weryfikuj warzywa / mięso pakowane: tabela z całego dokumentu, cena sugerowana z bazy. Zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, potem „Zmień ceny”.',
+          'Weryfikuj warzywa / mięso pakowane: przenosi artykuły z całego dokumentu do wprowadzania danych, cena sugerowana z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
           'Filtr w nagłówku każdej kolumny działa jak w Excelu; Ctrl+Z cofa.',
         ]}
       />

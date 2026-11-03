@@ -16,6 +16,7 @@ import {
   Redo2Icon,
   SettingsIcon,
   TagIcon,
+  TagsIcon,
   Trash2Icon,
   Undo2Icon,
 } from 'lucide-react'
@@ -42,6 +43,7 @@ import { useCan } from '@/features/auth/api'
 import { useSuppliers } from '@/features/documents/api'
 import { formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
+import { documentPrice } from '@/features/base-delivery/base-rows'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -91,6 +93,7 @@ import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
+import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { usePriceFileOverview } from './price-files'
 import { savePriceControlFile } from './price-control'
@@ -257,6 +260,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [protocolOpen, setProtocolOpen] = useState(false)
+  const [labelsOpen, setLabelsOpen] = useState(false)
   const [checkOpen, setCheckOpen] = useState(false)
   const [resaveOpen, setResaveOpen] = useState(false)
   const [saveSettings, setSaveSettings] = useState<{ open: boolean; missing: SavedFolderSpec[] }>({
@@ -278,8 +282,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       supplierPrices?.find((price) => price.supplierId === supplierId)?.salePrice ?? null,
     [supplierPrices],
   )
+  // Wiersze z dostawy z bazy (Weryfikuj warzywa / mięso pakowane): cena sugerowana to cena dla klienta z dokumentu.
   const pricing = useMemo(
-    () => pricingOf(nomenclature, rounding, supplierPriceFor(supplier?.id)),
+    () => ({ ...pricingOf(nomenclature, rounding, supplierPriceFor(supplier?.id)), rowPrice: documentPrice }),
     [nomenclature, rounding, supplierPriceFor, supplier],
   )
   // Wysokość przyklejonego paska nad tabelą: pod nim przykleja się nagłówek kolumn.
@@ -695,6 +700,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   }
   const protocolSkipped = rows.filter(isArticle).length - protocolLines.length
 
+  // Etykiety cenowe: zaznaczone artykuły, a bez zaznaczenia wszystkie; tylko z prawdziwym EAN-em.
+  const labelSource = selectedArticles.length > 0 ? selectedArticles : rows.filter(isArticle)
+  const labelLines: LabelLine[] = labelSource
+    .filter((row) => !row.eanFallback && /^\d{8,14}$/.test(row.ean))
+    .map((row) => ({ ean: row.ean, quantity: row.quantity }))
+
   const conflicts = priceConflicts(rows)
   const duplicates = duplicateGroups(rows)
   const duplicateRows = duplicates.reduce((sum, group) => sum + group.length, 0)
@@ -1082,6 +1093,21 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setLabelsOpen(true)}
+                disabled={labelLines.length === 0}
+                title={
+                  selectedArticles.length > 0
+                    ? `Plik etykiet cenowych dla zaznaczonych artykułów (${labelLines.length})`
+                    : 'Plik etykiet cenowych dla wszystkich artykułów tabeli (zaznacz wiersze, żeby wybrać tylko część)'
+                }
+              >
+                <TagsIcon />
+                Etykiety
+                {selectedArticles.length > 0 && labelLines.length > 0 && ` (${labelLines.length})`}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={applySuggestedPrices}
                 disabled={priceChanges.size === 0}
                 title={
@@ -1276,6 +1302,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         skipped={protocolSkipped}
         open={protocolOpen}
         onOpenChange={setProtocolOpen}
+      />
+
+      <LabelDialog
+        storeId={store.id}
+        lines={labelLines}
+        selection={selectedArticles.length > 0}
+        skipped={labelSource.length - labelLines.length}
+        open={labelsOpen}
+        onOpenChange={setLabelsOpen}
       />
 
       <CatalogListDialog

@@ -290,24 +290,33 @@ public class XlsWriter {
     }
 
     /**
-     * Liczba jako RK, jak zapisuje ją Excel: całkowita, całkowita setna część (ceny z groszami) albo double, którego
-     * dolne 34 bity są zerowe; inaczej {@code null} i rekord NUMBER.
+     * Liczba jako RK tak, jak zapisuje ją Excel (sprawdzone na wszystkich 733 liczbach pliku CADBEZP przed i po zapisie
+     * w Excelu): całkowita jako całkowite RK (1 → {@code 0x6}), inna jako górne 32 bity double'a, a gdy dolne bity nie
+     * są zerowe, double setek z flagą „÷100” (0,15 → 15,0, 5,90 → 590,0). Całkowitego RK z flagą „÷100” Excel nie
+     * zapisuje i program sklepu go nie czyta. Inaczej {@code null} i rekord NUMBER.
      */
     static Integer rk(double value) {
-        int limit = 1 << 29;
-        if (value == Math.rint(value) && Math.abs(value) < limit) {
+        if (value == Math.rint(value) && Math.abs(value) < 1 << 29) {
             return (int) value << 2 | 0x2;
         }
-        double hundredths = value * 100;
-        long rounded = Math.round(hundredths);
-        if (Math.abs(rounded) < limit && rounded / 100.0 == value) {
-            return (int) rounded << 2 | 0x3;
+        Integer plain = floatRk(value);
+        if (plain != null) {
+            return plain;
         }
-        long bits = Double.doubleToLongBits(value);
-        if ((bits & 0x3_FFFF_FFFFL) == 0) {
-            return (int) (bits >>> 32);
+        long hundredths = Math.round(value * 100);
+        if (Math.abs(hundredths) < 1L << 52 && hundredths / 100.0 == value) {
+            Integer scaled = floatRk(hundredths);
+            if (scaled != null) {
+                return scaled | 0x1;
+            }
         }
         return null;
+    }
+
+    /** Górne 32 bity double'a, gdy dolne 32 są zerowe (RK bez flag). */
+    private static Integer floatRk(double value) {
+        long bits = Double.doubleToLongBits(value);
+        return (bits & 0x3_FFFF_FFFFL) == 0 ? (int) (bits >>> 32) : null;
     }
 
     private static byte[] bof(int type) {

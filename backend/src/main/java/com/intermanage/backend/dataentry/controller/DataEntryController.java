@@ -46,6 +46,8 @@ import com.intermanage.backend.dataentry.dto.ExportRequest;
 import com.intermanage.backend.dataentry.dto.NomenclatureItem;
 import com.intermanage.backend.dataentry.dto.ProductLink;
 import com.intermanage.backend.dataentry.dto.ProductLinkRequest;
+import com.intermanage.backend.dataentry.component.LabelFile;
+import com.intermanage.backend.dataentry.dto.LabelRequest;
 import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionResponse;
@@ -475,6 +477,19 @@ public class DataEntryController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(ProtoFile.CONTENT_TYPE))
+                .body(file.content());
+    }
+
+    /** Plik etykiet cenowych ETIQUETTE z artykułów tabeli; zapisuje go przeglądarka w folderze plików PROTO. */
+    @PostMapping("/export/labels")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> labels(@PathVariable UUID storeId, @Valid @RequestBody LabelRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        DataEntryProtocolService.ProtocolFile file = protocolService.labels(request, principal.getUsername());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType(LabelFile.CONTENT_TYPE))
                 .body(file.content());
     }
 }
