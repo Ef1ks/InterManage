@@ -70,7 +70,9 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * kody, np. 3, 7 kaucje, są niepewne), bez niego z najnowszej linii dokumentu sklepu z tym ITM8, a na końcu
      * najczęstsza stawka z dokumentów artykułów tej samej podrodziny.
      * {@code promoPrice}/{@code promoTo}: trwająca w dniu {@code today} promocja z pliku TRACEART; jej cena jest wtedy
-     * też {@code salePrice} (aktualna cena na kasie).
+     * też {@code salePrice} (aktualna cena na kasie). Bez niej trwająca promocja z listy promocji, ale tylko gdy jej
+     * cena to cena sprzedaży z kartoteki: plik TRACEART sprzed ostatniego raportu kartoteki jest pomijany, więc
+     * promocja rozpoczęta przed raportem ma w kartotece samą cenę promocyjną, bez daty końca.
      */
     @Query(value = """
             with keys as (select distinct unnest(cast(:eans as varchar[])) as key),
@@ -124,13 +126,20 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                     else p.sale_price end as salePrice,
                 coalesce(p.cadencier_price > 0 and c.itm8 is not null, false) as cadencier,
                 case when p.cadencier_price > 0 and c.itm8 is not null then p.cadencier_price end as cadencierPrice,
-                case when p.promo_price is not null and p.promo_to >= cast(:today as date)
-                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_price end as promoPrice,
-                case when p.promo_price is not null and p.promo_to >= cast(:today as date)
-                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_to end as promoTo,
+                coalesce(case when p.promo_price is not null and p.promo_to >= cast(:today as date)
+                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_price end,
+                    lp.promo_price) as promoPrice,
+                coalesce(case when p.promo_price is not null and p.promo_to >= cast(:today as date)
+                    and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_to end,
+                    lp.end_date) as promoTo,
                 p.subfamily_code as subfamilyCode, p.stock as stock, p.rotation as rotation
             from hits h join products p on p.id = h.id
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
+            left join lateral (
+                select pr.promo_price, pr.end_date from promotions pr
+                where pr.store_id = p.store_id and pr.itm8 = p.itm8 and pr.promo_price = p.sale_price
+                    and pr.start_date <= cast(:today as date) and pr.end_date >= cast(:today as date)
+                order by pr.end_date desc limit 1) lp on true
             order by h.key, h.rank, p.updated_at desc""", nativeQuery = true)
     List<CatalogProduct> findByEans(UUID storeId, String[] eans, boolean byItm8, LocalDate today);
 

@@ -65,4 +65,31 @@ class ProductFileTests {
                 + new String(file, 1, file.length - 1, StandardCharsets.UTF_16LE);
         assertThat(content).contains("Masa/Objętość").contains("Zażółć");
     }
+
+    @Test
+    void writesCellsLikeExcel() throws Exception {
+        // Ponad 32 wiersze (kilka bloków ROW/DBCELL), powtórzone teksty (SST), liczby RK i NUMBER.
+        List<List<Object>> rows = new java.util.ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            rows.add(Arrays.asList("0061527580", "Zażółć", "P", new BigDecimal("12.35"), i, null,
+                    new BigDecimal("0.123456"), -7));
+        }
+        byte[] file = new XlsWriter().write("Arkusz1", List.of("A", "B", "C", "D", "E", "", "G", "H"), rows);
+
+        List<List<String>> read = new com.intermanage.backend.common.component.XlsReader().readFirstSheet(file);
+        assertThat(read).hasSize(41);
+        assertThat(read.get(0)).startsWith("A", "B", "C", "D", "E");
+        assertThat(read.get(40)).containsExactly("0061527580", "Zażółć", "P", "12.35", "39", null, "0.123456", "-7");
+        assertThat(rk(1)).isEqualTo(0x6);
+        assertThat(rk(12.35)).isEqualTo(1235 << 2 | 3);
+        assertThat(rk(0.5)).isEqualTo(50 << 2 | 3);
+        assertThat(rk(1 / 1024.0)).isEqualTo((int) (Double.doubleToLongBits(1 / 1024.0) >>> 32));
+        assertThat(rk(0.123456)).isNull();
+    }
+
+    private static Integer rk(double value) throws Exception {
+        var method = XlsWriter.class.getDeclaredMethod("rk", double.class);
+        method.setAccessible(true);
+        return (Integer) method.invoke(null, value);
+    }
 }
