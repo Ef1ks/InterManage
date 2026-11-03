@@ -57,7 +57,10 @@ public class PriceFileService {
 
     private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final int HISTORY_SIZE = 20;
-    private static final long MAX_FILE_BYTES = 5L * 1024 * 1024;
+    /** Zwykle pliki mają do ok. 150 kB, ale przeładowanie wszystkich cen daje kilka MB. */
+    private static final long MAX_FILE_BYTES = 30L * 1024 * 1024;
+    /** Starsza historia z BACKUP nie jest potrzebna, więc pliki sprzed tego dnia są pomijane. */
+    static final LocalDateTime FIRST_FILE_TIME = LocalDate.of(2026, 1, 1).atStartOfDay();
     private static final int MAX_FILES = 200;
 
     private final PriceFileParser parser;
@@ -88,11 +91,17 @@ public class PriceFileService {
         return new PriceFileOverview(latest, imports.countActivePromotions(storeId, LocalDate.now(STORE_ZONE)));
     }
 
-    /** Pliki TRACEART z listy, których sklep jeszcze nie wczytał, od najstarszego; inne nazwy są pomijane. */
+    /**
+     * Pliki TRACEART z listy, których sklep jeszcze nie wczytał, od najstarszego; inne nazwy i pliki sprzed
+     * {@link #FIRST_FILE_TIME} są pomijane.
+     */
     @Transactional(readOnly = true)
     public PendingPriceFilesResponse pending(UUID storeId, List<String> fileNames) {
         List<String> candidates = fileNames.stream()
-                .filter(name -> name != null && PriceFileParser.fileTime(name) != null)
+                .filter(name -> {
+                    LocalDateTime time = name != null ? PriceFileParser.fileTime(name) : null;
+                    return time != null && !time.isBefore(FIRST_FILE_TIME);
+                })
                 .distinct()
                 .toList();
         Set<String> imported = candidates.isEmpty() ? Set.of()

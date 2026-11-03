@@ -18,9 +18,13 @@ import type { PriceFileOverview, PriceFileUploadResult } from '@/lib/types'
  */
 
 const CHECK_INTERVAL_MS = 10 * 60_000
-/** Tyle plików idzie w jednym żądaniu (pliki mają po kilkaset linii, najwyżej ok. 150 kB). */
+/** Najwyżej tyle plików idzie w jednym żądaniu (zwykle mają po kilkaset linii, do ok. 150 kB). */
 const UPLOAD_CHUNK = 20
+/** I najwyżej tyle bajtów, bo przeładowanie wszystkich cen daje plik 6-7 MB, a serwer przyjmuje żądanie do 50 MB. */
+const UPLOAD_CHUNK_BYTES = 20 * 1024 * 1024
 const FILE_NAME = /^TRACEART_\d{8}_\d{6}/i
+/** Starsza historia z BACKUP nie jest potrzebna (serwer też pomija pliki sprzed tego dnia). */
+const FIRST_FILE_DAY = '20260101'
 /** Podfolder z plikami z poprzednich dni. */
 const HISTORY_FOLDER = 'BACKUP'
 /** Tyle nazw przyjmuje naraz `POST …/pending`. */
@@ -99,24 +103,39 @@ async function run(storeId: string, queryClient: QueryClient) {
     }
     update({ access })
     if (access !== 'granted') return
-    const files = await listFolderFiles(key, (name) => FILE_NAME.test(name), HISTORY_FOLDER)
+    const files = await listFolderFiles(
+      key,
+      (name) => FILE_NAME.test(name) && name.slice(9, 17) >= FIRST_FILE_DAY,
+      HISTORY_FOLDER,
+    )
     const pending = await pendingFiles(storeId, files)
     update({ progress: pending.length > UPLOAD_CHUNK ? { done: 0, total: pending.length } : null })
-    for (let start = 0; start < pending.length; start += UPLOAD_CHUNK) {
-      const formData = new FormData()
-      for (const handle of pending.slice(start, start + UPLOAD_CHUNK)) {
-        try {
-          formData.append('files', await handle.getFile(), handle.name)
-        } catch {
-          // Plik przeniesiony do BACKUP między listą a odczytem: pójdzie przy kolejnym sprawdzeniu.
-        }
-      }
-      if (formData.has('files')) {
+    let formData = new FormData()
+    let count = 0
+    let bytes = 0
+    const send = async (done: number) => {
+      if (count > 0) {
         await api<PriceFileUploadResult>(`/stores/${storeId}/imports/price-files`, { method: 'POST', formData })
       }
-      if (state.progress)
-        update({ progress: { done: Math.min(start + UPLOAD_CHUNK, pending.length), total: pending.length } })
+      formData = new FormData()
+      count = 0
+      bytes = 0
+      if (state.progress) update({ progress: { done, total: pending.length } })
     }
+    for (const [index, handle] of pending.entries()) {
+      let file: File
+      try {
+        file = await handle.getFile()
+      } catch {
+        // Plik przeniesiony do BACKUP między listą a odczytem: pójdzie przy kolejnym sprawdzeniu.
+        continue
+      }
+      if (count > 0 && (count >= UPLOAD_CHUNK || bytes + file.size > UPLOAD_CHUNK_BYTES)) await send(index)
+      formData.append('files', file, handle.name)
+      count++
+      bytes += file.size
+    }
+    await send(pending.length)
     // Bez unieważniania wszystkiego: nowe ceny dostaje każdy kolejny artykuł wczytany z kartoteki.
     if (pending.length > 0) await queryClient.invalidateQueries({ queryKey: overviewKey(storeId) })
     update({ checkedAt: Date.now(), error: null })

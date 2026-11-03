@@ -1,9 +1,9 @@
-# Graph Report - intermanage  (2026-11-02)
+# Graph Report - intermanage  (2026-11-03)
 
 ## Corpus Check
-- 1157 files · ~1,026,997 words
+- 1157 files · ~1,027,108 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 26 file(s) not represented in the graph (top: (none) 11, .css 4, .properties 3)
+- Unclassified: 28 file(s) not represented in the graph (top: (none) 11, .css 4, .properties 3)
 
 ## Summary
 - 11420 nodes · 41176 edges · 329 communities (259 shown, 70 thin omitted)
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5f3e78ee`
+- Built from commit: `6cfe6b3a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1426,7 +1426,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `org.springframework.security.access.prepost.PreAuthorize` be split into smaller, more focused modules?**
   _Cohesion score 0.04024676850763807 - nodes in this community are weakly interconnected._
 - **Why does `Document` connect `Document` to `DeliveryReportClosing`, `DocumentTotalsRepositoryImpl.java`, `uuid`, `org.springframework.data.jpa.repository.Query`, `.sheet`, `.list`, `DeliveryReportService`, `Store`, `DocumentTransferTarget`, `ProductionCardService`, `KsefInvoiceService`, `GratisFilter`, `ValueField`, `DocumentType`, `DocumentTotalsRepository`, `PriceCheckService`, `org.springframework.transaction.annotation.Transactional`, `.headers`, `InvoiceComparisonService`, `DeliveryKsefCorrectionService`, `org.springframework.data.jpa.domain.Specification`, `org.springframework.web.bind.annotation.GetMapping`, `DeliveryNotePdf`, `PriceCalculation`, `ProductionCard`, `.badRequest`, `KsefInvoicePdf.java`, `DocumentLine`, `DocumentKsefLinkService`, `AppUser`?**
-  _High betweenness centrality (0.265) - this node is a cross-community bridge._
+  _High betweenness centrality (0.268) - this node is a cross-community bridge._
 - **Should `BackupSettings` be split into smaller, more focused modules?**
   _Cohesion score 0.04293785310734463 - nodes in this community are weakly interconnected._
 - **Why does `clamp()` connect `Layout` to `adapt.md`, `DataEntryGrid.tsx`?**
