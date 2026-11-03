@@ -1084,7 +1084,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
       <input
         ref={fileInput}
         type="file"
-        accept=".xls,.xlsx"
+        accept=".xls,.xlsx,.htm,.html"
         className="sr-only"
         tabIndex={-1}
         aria-hidden

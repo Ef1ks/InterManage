@@ -50,7 +50,7 @@ public class BaseDeliveryParser {
                 columns.putIfAbsent(key(header.get(i)), i);
             }
         }
-        List<String> missing = REQUIRED.stream().filter(name -> !columns.containsKey(name)).toList();
+        List<String> missing = REQUIRED.stream().filter(name -> !columns.containsKey(key(name))).toList();
         if (!missing.isEmpty()) {
             throw new InvalidReportException("To nie jest plik dostawy z bazy: brak kolumn "
                     + String.join(", ", missing.stream().map(BaseDeliveryParser::label).toList()));
@@ -66,6 +66,10 @@ public class BaseDeliveryParser {
             Line line = new Line(sheet.get(r), columns);
             if (line.blank()) {
                 continue;
+            }
+            // Stopka z podsumowaniem stawek VAT („RAZEM | VAT | WART.NETT …”, na końcu „SUMA”) to nie linie bonu.
+            if ("razem".equalsIgnoreCase(line.text("sklep"))) {
+                break;
             }
             try {
                 String rowStore = line.required("sklep");
@@ -94,10 +98,14 @@ public class BaseDeliveryParser {
         return new Parsed(storeNumber, number, deliveryDate, rows);
     }
 
-    /** Nazwa kolumny bez znaków diakrytycznych i wielkości liter ({@code Nazwa_Produktu} → {@code nazwa_produktu}). */
+    /**
+     * Nazwa kolumny same litery i cyfry, bez znaków diakrytycznych i wielkości liter: system bazy zapisuje nagłówki
+     * raz z podkreśleniami, raz ze spacjami i polskimi znakami ({@code Nr_Bl}, {@code Nr Bl}, {@code NrNosnika},
+     * {@code Nr Nośnika}, {@code Spolka}, {@code Spółka}).
+     */
     static String key(String header) {
         return Normalizer.normalize(header.strip(), Normalizer.Form.NFD).replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT);
+                .replace('ł', 'l').replace('Ł', 'L').toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
 
     private static String label(String key) {
@@ -146,7 +154,7 @@ public class BaseDeliveryParser {
 
         /** Tekst komórki bez spacji na brzegach; pusta albo brak kolumny = {@code null}. */
         String text(String column) {
-            Integer index = columns.get(column);
+            Integer index = columns.get(key(column));
             if (index == null || index >= cells.size() || cells.get(index) == null) {
                 return null;
             }

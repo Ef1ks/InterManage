@@ -57,10 +57,10 @@ export function DeliveryPickerDialog({ storeId, open, onOpenChange, onOpen }: Pr
         </DialogHeader>
 
         <FileDropZone
-          accept={['.xls', '.xlsx']}
+          accept={['.xls', '.xlsx', '.htm', '.html']}
           pendingFile={upload.isPending ? file : undefined}
           title="Przeciągnij plik z bazy albo kliknij"
-          hint=".xls (albo .xlsx), ten sam bon wgrany ponownie zastępuje poprzedni"
+          hint=".xls (albo .xlsx, albo sheet001.htm ze strony zapisanej przez Excela), ten sam bon wgrany ponownie zastępuje poprzedni"
           className="py-6"
           onReject={(name) => toast.error(`${name}: wgraj plik .xls z bazy`)}
           onFile={(chosen) => {

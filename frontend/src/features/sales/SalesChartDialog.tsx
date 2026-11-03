@@ -1163,7 +1163,7 @@ function linePath(values: (number | null)[], x: (index: number) => number, y: (v
 
 /** Podziałki prawej osi bez wymuszonego zera; przy jednej wartości przedział wokół niej. */
 function lineRangeTicks(min: number, max: number) {
-  if (min !== max) return niceTicks(min, max)
+  if (!sameValue(min, max)) return niceTicks(min, max)
   const spread = Math.abs(min) * 0.1 || 1
   return niceTicks(min - spread, max + spread)
 }
@@ -1187,9 +1187,15 @@ function barPath(x: number, base: number, width: number, height: number) {
   ].join(' ')
 }
 
+/**
+ * Ta sama wartość mimo błędu zaokrąglenia: średnia cena 20,97 / 3 to 6,989999999999999, a 41,94 / 6 to 6,99. Przy
+ * takiej różnicy krok podziałek jest mniejszy niż dokładność liczby i pętla w {@link niceTicks} nigdy się nie kończy.
+ */
+const sameValue = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b))
+
 /** Okrągłe podziałki osi (1, 2, 2,5 albo 5 × 10^n) od {@code min} do {@code max}. */
 function niceTicks(min: number, max: number): number[] {
-  if (min === max) return [0, 1]
+  if (sameValue(min, max)) return [0, 1]
   const rough = (max - min) / 4
   const power = 10 ** Math.floor(Math.log10(rough))
   const step = [1, 2, 2.5, 5, 10].map((factor) => factor * power).find((candidate) => candidate >= rough)!

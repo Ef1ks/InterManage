@@ -139,6 +139,54 @@ class BaseDeliveryIntegrationTests {
         assertThat(new String(pdf, 0, 5)).isEqualTo("%PDF-");
     }
 
+    /** Ten sam bon z nagłówkami ze spacjami i polskimi znakami („Data Bl”, „Nr Nośnika”, „Spółka”). */
+    @Test
+    void uploadsDeliveryWithSpacedPolishHeaders() throws Exception {
+        List<String> headers = HEADERS.stream().map(header -> switch (header) {
+            case "NrNosnika" -> "Nr Nośnika";
+            case "Spolka" -> "Spółka";
+            default -> header.replace('_', ' ');
+        }).toList();
+        // Pod liniami stopka z podsumowaniem stawek VAT, jak w pliku zapisanym przez Excela.
+        List<List<Object>> rows = new ArrayList<>(rowsOf(storeNumber));
+        rows.add(Arrays.asList((Object) null));
+        rows.add(List.of("RAZEM", "VAT", "WART.NETT", "WART.VAT", "WART.BRUTT"));
+        rows.add(Arrays.asList(null, "23", "115141.12", "26482.24", "141623.47"));
+        rows.add(Arrays.asList(null, "SUMA", "189365.18", "30514.17", "219879.56"));
+        mvc.perform(multipart(path()).file(new MockMultipartFile("file", "dostawa_baza.xls",
+                        "application/vnd.ms-excel", xlsWriter.write("Arkusz1", headers, rows)))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.number").value("09516050082"))
+                .andExpect(jsonPath("$.carriers", hasSize(2)))
+                .andExpect(jsonPath("$.lines", hasSize(4)))
+                .andExpect(jsonPath("$.lines[0].supplierCode").value("538"));
+    }
+
+    /** System bazy zapisuje bon jako tabelę HTML z końcówką .xls (Excel ostrzega o innym formacie). */
+    @Test
+    void uploadsDeliverySavedAsHtmlTable() throws Exception {
+        mvc.perform(multipart(path()).file(htmlFile(storeNumber)).cookie(owner).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.number").value("09516050082"))
+                .andExpect(jsonPath("$.deliveryDate").value("2026-11-02"))
+                .andExpect(jsonPath("$.carriers", hasSize(2)))
+                .andExpect(jsonPath("$.lines", hasSize(4)))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000061111111"))
+                .andExpect(jsonPath("$.lines[0].quantity").value(24))
+                .andExpect(jsonPath("$.lines[1].name").value("G.SC.X.RM.M.7 UP 0.5L PET"))
+                .andExpect(jsonPath("$.lines[2].retailPrice").value(4.99))
+                .andExpect(jsonPath("$.lines[3].quantity").value(0));
+
+        // Sama ramka strony („Strona sieci Web” z Excela) nie ma danych: komunikat wskazuje plik arkusza.
+        byte[] frameset = ("<html><head><meta name=ProgId content=Excel.Sheet></head><frameset rows=\"*,39\">"
+                + "<frame src=\"bon_pliki/sheet001.htm\" name=\"frSheet\"></frameset></html>").getBytes();
+        mvc.perform(multipart(path()).file(new MockMultipartFile("file", "bon.xls", "application/vnd.ms-excel",
+                        frameset)).cookie(owner).with(csrf()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("bon_pliki/sheet001.htm")));
+    }
+
     @Test
     void rejectsFileOfOtherStoreAndWrongColumns() throws Exception {
         mvc.perform(multipart(path()).file(file("99999")).cookie(owner).with(csrf()))
@@ -205,6 +253,11 @@ class BaseDeliveryIntegrationTests {
      * przyjechał (0 przygotowanych kartonów), na drugim nośniku.
      */
     private MockMultipartFile file(String store) {
+        return new MockMultipartFile("file", "09516050082.xls", "application/vnd.ms-excel",
+                xlsWriter.write("Arkusz1", HEADERS, rowsOf(store)));
+    }
+
+    private static List<List<Object>> rowsOf(String store) {
         List<List<Object>> rows = new ArrayList<>();
         rows.add(line(store, "42799515", "61111111", "PIWO TYSKIE 4X0.5L PU", "TYSKIE", "6", "PUS", "2027-04-30",
                 "72", "5901359174181", "81390", "4", "4", "9.99", "17.96", "23", "69", "01", "01", "2", "L"));
@@ -214,8 +267,29 @@ class BaseDeliveryIntegrationTests {
                 "2000000000001", "81390", "1", "1", "2.10", "4.99", "5", "14", "01", "01", "1", "U"));
         rows.add(line(store, "42765167", "61700002", "KUBEK SWIATECZNY", "13 KAT", "6", "NIE", "0000-00-00", "0",
                 "0000000000000", "60003", "1", "0", "12.07", "19.99", "23", "54", "06", "04", "1", "U"));
+        return rows;
+    }
+
+    /** Te same linie co {@link #file(String)} jako tabela HTML (windows-1250, przecinek dziesiętny, encje). */
+    private MockMultipartFile htmlFile(String store) {
+        StringBuilder html = new StringBuilder("<html><head><meta http-equiv=Content-Type "
+                + "content=\"text/html; charset=windows-1250\"></head><body><table border=1>\r\n<tr>");
+        HEADERS.forEach(header -> html.append("<th>").append(header).append("</th>"));
+        html.append("</tr>\r\n");
+        for (List<Object> row : rowsOf(store)) {
+            html.append("<tr>");
+            for (Object value : row) {
+                String text = value == null ? "" : value.toString().replace("&", "&amp;");
+                if (value instanceof BigDecimal) {
+                    text = text.replace('.', ',');
+                }
+                html.append("<td x:str>").append(text.isEmpty() ? "&nbsp;" : text).append("</td>");
+            }
+            html.append("</tr>\r\n");
+        }
+        html.append("</table></body></html>");
         return new MockMultipartFile("file", "09516050082.xls", "application/vnd.ms-excel",
-                xlsWriter.write("Arkusz1", HEADERS, rows));
+                html.toString().getBytes(java.nio.charset.Charset.forName("windows-1250")));
     }
 
     private static List<Object> line(String store, String carrier, String itm8, String name, String brand, String pack,

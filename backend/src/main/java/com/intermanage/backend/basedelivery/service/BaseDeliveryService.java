@@ -35,6 +35,7 @@ import com.intermanage.backend.basedelivery.entity.BaseDelivery;
 import com.intermanage.backend.basedelivery.entity.BaseDeliveryLine;
 import com.intermanage.backend.basedelivery.mapper.BaseDeliveryMapper;
 import com.intermanage.backend.basedelivery.repository.BaseDeliveryRepository;
+import com.intermanage.backend.common.component.TextSheetReader;
 import com.intermanage.backend.common.component.XlsReader;
 import com.intermanage.backend.common.component.XlsxReader;
 import com.intermanage.backend.common.exception.ApiException;
@@ -72,12 +73,14 @@ public class BaseDeliveryService {
     private final BaseDeliveryParser parser;
     private final XlsReader xlsReader;
     private final XlsxReader xlsxReader;
+    private final TextSheetReader textSheetReader;
     private final ShortDatesPdf shortDatesPdf;
     private final BaseDeliveryMapper mapper;
 
     public BaseDeliveryService(BaseDeliveryRepository deliveries, StoreRepository stores, AppUserRepository users,
             ProductRepository products, DataEntryService dataEntry, BaseDeliveryParser parser, XlsReader xlsReader,
-            XlsxReader xlsxReader, ShortDatesPdf shortDatesPdf, BaseDeliveryMapper mapper) {
+            XlsxReader xlsxReader, TextSheetReader textSheetReader, ShortDatesPdf shortDatesPdf,
+            BaseDeliveryMapper mapper) {
         this.deliveries = deliveries;
         this.stores = stores;
         this.users = users;
@@ -86,6 +89,7 @@ public class BaseDeliveryService {
         this.parser = parser;
         this.xlsReader = xlsReader;
         this.xlsxReader = xlsxReader;
+        this.textSheetReader = textSheetReader;
         this.shortDatesPdf = shortDatesPdf;
         this.mapper = mapper;
     }
@@ -219,7 +223,8 @@ public class BaseDeliveryService {
 
     /**
      * Format rozpoznajemy po pierwszych bajtach, nie po nazwie: plik z końcówką .xls bywa w środku .xlsx (zip), a
-     * Windows podaje typ (application/vnd.ms-excel) tylko po końcówce.
+     * Windows podaje typ (application/vnd.ms-excel) tylko po końcówce. Plik tekstowy z końcówką .xls (tabela HTML, XML
+     * arkusza 2003, tekst z tabulatorami) czyta {@link TextSheetReader}.
      */
     private BaseDeliveryParser.Parsed parse(MultipartFile file, String fileName) {
         try {
@@ -230,13 +235,13 @@ public class BaseDeliveryService {
             if (startsWith(bytes, ZIP_SIGNATURE)) {
                 return parser.parse(readXlsx(file));
             }
+            if (TextSheetReader.looksLikeText(bytes)) {
+                return parser.parse(textSheetReader.readFirstSheet(bytes));
+            }
             log.warn("Nieznany format pliku dostawy z bazy {}: {}", fileName, HexFormat.of().formatHex(bytes, 0,
                     Math.min(bytes.length, 16)));
-            throw ApiException.badRequest(looksLikeText(bytes)
-                    ? "Plik " + fileName + " to nie Excel, tylko tekst (np. strona HTML zapisana jako .xls). "
-                            + "Otwórz go w Excelu i zapisz jako skoroszyt .xlsx albo .xls."
-                    : "Plik " + fileName + " to nie Excel (.xls ani .xlsx). Otwórz go w Excelu i zapisz jako "
-                            + "skoroszyt .xlsx albo .xls.");
+            throw ApiException.badRequest("Plik " + fileName + " to nie Excel (.xls ani .xlsx). Otwórz go w Excelu "
+                    + "i zapisz jako skoroszyt .xlsx albo .xls.");
         } catch (InvalidReportException e) {
             throw ApiException.badRequest(e.getMessage())
                     .withProperty("rowErrors", e.errors())
@@ -251,18 +256,6 @@ public class BaseDeliveryService {
 
     private static boolean startsWith(byte[] bytes, byte[] prefix) {
         return bytes.length >= prefix.length && Arrays.equals(bytes, 0, prefix.length, prefix, 0, prefix.length);
-    }
-
-    /** Początek pliku bez bajtów sterujących poza tabulatorem i końcem linii (HTML, CSV, tekst z tabulatorami). */
-    private static boolean looksLikeText(byte[] bytes) {
-        int length = Math.min(bytes.length, 512);
-        for (int i = 0; i < length; i++) {
-            int b = bytes[i] & 0xFF;
-            if (b < 0x09 || (b > 0x0D && b < 0x20)) {
-                return false;
-            }
-        }
-        return length > 0;
     }
 
     private List<List<String>> readXlsx(MultipartFile file) throws IOException, InvalidWorkbookException {
