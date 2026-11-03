@@ -5,6 +5,7 @@ import {
   CarrotIcon,
   CheckCheckIcon,
   FileInputIcon,
+  FileSearchIcon,
   FileOutputIcon,
   FilePlusIcon,
   FilterXIcon,
@@ -108,6 +109,7 @@ import {
 import { CarrierDialog } from './CarrierDialog'
 import { ColumnFilter } from './ColumnFilter'
 import { DeliveryPickerDialog } from './DeliveryPickerDialog'
+import { DifferencesDialog } from './DifferencesDialog'
 import { meaPath } from './paths'
 import { Itm8MacroDialog } from './Itm8MacroDialog'
 import { ShortDatesDialog } from './ShortDatesDialog'
@@ -276,6 +278,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   }
   const [shortDatesOpen, setShortDatesOpen] = useState(false)
   const [itm8MacroOpen, setItm8MacroOpen] = useState(false)
+  const [differencesOpen, setDifferencesOpen] = useState(false)
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
@@ -850,6 +853,16 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={rows.length === 0}
+                  onClick={() => setDifferencesOpen(true)}
+                  title="Porównaj tabelę z tymczasowymi bonami dostawy z Mercalys (538, 88110): czego brakuje w programie albo co się różni"
+                >
+                  <FileSearchIcon />
+                  Znajdź różnice
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   loading={saving === 'articles'}
                   disabled={newArticles === 0 || saving !== null}
                   onClick={saveNewArticles}
@@ -1154,6 +1167,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
       />
       <ShortDatesDialog storeId={store.id} delivery={delivery} open={shortDatesOpen} onOpenChange={setShortDatesOpen} />
       <Itm8MacroDialog delivery={delivery} open={itm8MacroOpen} onOpenChange={setItm8MacroOpen} />
+      <DifferencesDialog storeId={store.id} rows={rows} open={differencesOpen} onOpenChange={setDifferencesOpen} />
       <ProtocolDialog
         storeId={store.id}
         lines={protocolLines}

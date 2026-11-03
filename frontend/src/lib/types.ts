@@ -2279,6 +2279,34 @@ export type BaseDeliverySummary = {
   uploadedBy: string | null
 }
 
+/**
+ * „Tymczasowy bon dostawy” z Mercalys: dostawa z bazy wprowadzona do programu sklepu (osobno 538 i 88110), do
+ * „Znajdź różnice” z tabelą dostawy z bazy. Nie jest zapisywany.
+ */
+export type TemporaryNote = {
+  fileName: string
+  /** Kod dostawcy z „Dostawca 539”. */
+  supplierCode: string | null
+  supplierName: string | null
+  number: string | null
+  createdAt: string | null
+  lines: TemporaryNoteLine[]
+}
+
+export type TemporaryNoteLine = {
+  /** Kod ITM8 z kartoteki sklepu (13 cyfr). */
+  itm8: string
+  ean: string | null
+  /** Referencja dostawcy: ITM8 z pliku bazy. */
+  reference: string | null
+  name: string
+  vatPercent: number | null
+  quantity: number
+  purchasePrice: number | null
+  salePrice: number | null
+  netValue: number | null
+}
+
 /** Rodzaj opakowania z kaucją w pliku z bazy: NIE, PLA (PET), PUS (puszka), SZK (szkło). */
 export type BaseDeposit = 'NIE' | 'PLA' | 'PUS' | 'SZK'
 

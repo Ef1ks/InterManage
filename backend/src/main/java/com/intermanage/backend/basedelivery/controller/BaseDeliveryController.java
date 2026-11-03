@@ -27,6 +27,7 @@ import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliverySummary;
 import com.intermanage.backend.basedelivery.dto.MeaConfirmRequest;
 import com.intermanage.backend.basedelivery.dto.MeaOverview;
+import com.intermanage.backend.basedelivery.dto.TemporaryNoteResponse;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
 import com.intermanage.backend.basedelivery.service.MeaCodeService;
 import com.intermanage.backend.document.service.DocumentService;
@@ -63,6 +64,14 @@ public class BaseDeliveryController {
     public BaseDeliveryResponse upload(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return deliveries.upload(storeId, file, principal.getId());
+    }
+
+    /** „Tymczasowy bon dostawy” z Mercalys do „Znajdź różnice”: tylko odczyt pliku, nic nie zapisuje. */
+    @PostMapping("/base-deliveries/temporary-notes")
+    @PreAuthorize(ACCESS)
+    public TemporaryNoteResponse readTemporaryNote(@PathVariable UUID storeId,
+            @RequestParam("file") MultipartFile file) {
+        return deliveries.readTemporaryNote(file);
     }
 
     @GetMapping("/base-deliveries/{id}")

@@ -16,20 +16,26 @@ export const MACRO_CONFIG = {
   /** Tab do pola EAN. */
   toEanField: 150,
   afterEan: 300,
-  itm8Tab: { x: 254, y: 117, sleep: 200 },
+  /**
+   * Zakładka ITM8 reaguje wolniej niż reszta karty: przy 200 ms pusty Enter nie zdążał przeskoczyć pola, więc ITM8
+   * trafiał o pole za wcześnie, a ilość w „Ref. dostawcy”.
+   */
+  itm8Tab: { x: 254, y: 117, sleep: 600 },
   /** Tab do pola ITM8 na zakładce. */
-  toItm8Field: 150,
-  /** Po Enterze w kolejnych polach karty (ITM8, pusty Enter, dostawca, pusty Enter, ITM8 ponownie). */
-  afterField: 200,
+  toItm8Field: 400,
+  /** Po Enterze z tekstem w kolejnych polach karty (ITM8, dostawca, ITM8 ponownie). */
+  afterField: 500,
+  /** Po pustym Enterze, który tylko przeskakuje pole. */
+  afterSkip: 700,
   /** Między pierwszym a drugim wpisaniem ilości w opakowaniu. */
-  betweenPack: 150,
-  afterPack: 200,
-  afterExpiry: 150,
+  betweenPack: 500,
+  afterPack: 500,
+  afterExpiry: 500,
   /** Klawisze zamykające i zatwierdzające kartę (dawniej trzy kliknięcia). */
   closeKeys: [
-    { key: '{Enter}', sleep: 300 },
-    { key: '{Space}', sleep: 300 },
-    { key: '{Enter}', sleep: 400 },
+    { key: '{Enter}', sleep: 600 },
+    { key: '{Space}', sleep: 600 },
+    { key: '{Enter}', sleep: 800 },
   ],
   /** Okno ceny zakupu: trzy Entery do pola ceny, cena, Enter, Enter. */
   beforePrice: 200,
@@ -55,6 +61,12 @@ export type MacroPlan = {
   missing: string[]
   /** Kody z dokumentu, którego linia nie ma EAN-u (bez niego nie da się otworzyć karty). */
   withoutEan: string[]
+  /**
+   * Kody z tym samym EAN-em co kod wcześniej w makrze (np. Ferrero Rocher pod trzema ITM8 z bazy). Makro otwiera kartę
+   * po EAN-ie, więc drugi przebieg trafiłby na kartę z już wpisanym ITM8, w której pola są gdzie indziej; te kody
+   * wpisuje się ręcznie.
+   */
+  sameEan: { code: string; ean: string; firstCode: string }[]
 }
 
 /** Kody z wklejonego tekstu (nowa linia, przecinek, średnik, spacja, tabulator), bez powtórzeń, w kolejności. */
@@ -82,14 +94,19 @@ export function planMacro(delivery: BaseDelivery, codes: string[]): MacroPlan {
     if (key && !lines.has(key)) lines.set(key, line)
   }
   const expiry = expiryDate(delivery.deliveryDate)
-  const plan: MacroPlan = { items: [], missing: [], withoutEan: [] }
+  const plan: MacroPlan = { items: [], missing: [], withoutEan: [], sameEan: [] }
+  const byEan = new Map<string, string>()
   for (const code of codes) {
     const line = lines.get(itm8Key(code))
+    const eanKey = line?.ean?.replace(/^0+/, '')
     if (!line) {
       plan.missing.push(code)
-    } else if (!line.ean) {
+    } else if (!line.ean || !eanKey) {
       plan.withoutEan.push(code)
+    } else if (byEan.has(eanKey)) {
+      plan.sameEan.push({ code, ean: line.ean, firstCode: byEan.get(eanKey) ?? '' })
     } else {
+      byEan.set(eanKey, code)
       plan.items.push({
         itm8: code,
         ean: line.ean,
@@ -137,9 +154,9 @@ export function buildMacro(items: MacroItem[]) {
     click(c.itm8Tab)
     key('{Tab}', c.toItm8Field)
     enter(item.itm8, c.afterField)
-    key('{Enter}', c.afterField)
+    key('{Enter}', c.afterSkip)
     enter(item.supplierCode, c.afterField)
-    key('{Enter}', c.afterField)
+    key('{Enter}', c.afterSkip)
     enter(item.itm8, c.afterField)
     enter(item.packQuantity, c.betweenPack)
     enter(item.packQuantity, c.afterPack)

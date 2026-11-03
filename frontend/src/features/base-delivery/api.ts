@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { BaseDelivery, BaseDeliverySummary, MeaOverview } from '@/lib/types'
+import type { BaseDelivery, BaseDeliverySummary, MeaOverview, TemporaryNote } from '@/lib/types'
 
 const path = (storeId: string) => `/stores/${storeId}/base-deliveries`
 const listKey = (storeId: string) => ['stores', storeId, 'base-deliveries'] as const
@@ -35,6 +35,18 @@ export function useUploadBaseDelivery(storeId: string) {
       formData.append('file', file)
       return api<BaseDelivery>(path(storeId), { method: 'POST', formData })
     },
+  })
+}
+
+/** Odczyt „Tymczasowego bonu dostawy” z Mercalys do porównania z tabelą (niczego nie zapisuje). */
+export function useReadTemporaryNote(storeId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<TemporaryNote>(`${path(storeId)}/temporary-notes`, { method: 'POST', formData })
+    },
+    meta: { invalidates: false },
   })
 }
 

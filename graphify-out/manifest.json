@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1793657381.0033734,
-    "seen": 1793657672.0215333,
-    "ast_hash": "d3b37c10b2b2525ba57d3e2bace94ac1",
+    "mtime": 1793726139.3231947,
+    "seen": 1793726189.2878237,
+    "ast_hash": "6c06bccb35d77d48179e2a228938341f",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793707391.2749264,
-    "seen": 1793707434.5748477,
-    "ast_hash": "f4f3216ca27a9b62da8e35c09990aa2e",
+    "mtime": 1793726159.8536549,
+    "seen": 1793726189.3003771,
+    "ast_hash": "6028c552914546d0e40c532decaf89a7",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -6270,9 +6270,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/controller/BaseDeliveryController.java": {
-    "mtime": 1793654451.6069674,
-    "seen": 1793655490.9440522,
-    "ast_hash": "6acb7546ee18cb65a2c394c9bcabe98d",
+    "mtime": 1793725966.039219,
+    "seen": 1793726189.149266,
+    "ast_hash": "565440da277b150583bc4b0cdedbef6f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/dto/BaseDeliveryLineResponse.java": {
@@ -6354,9 +6354,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/service/BaseDeliveryService.java": {
-    "mtime": 1793697660.283457,
-    "seen": 1793697769.0156662,
-    "ast_hash": "919faf59786604d8a4b2999c2925d74f",
+    "mtime": 1793725973.1941051,
+    "seen": 1793726189.1512659,
+    "ast_hash": "47fc2f2026299e8682f005ac22750409",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/service/MeaCodeService.java": {
@@ -6378,9 +6378,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/BaseDeliveryPage.tsx": {
-    "mtime": 1793702063.504309,
-    "seen": 1793705687.85449,
-    "ast_hash": "2cbe9d6d63b85216616b35970d160041",
+    "mtime": 1793726100.3740332,
+    "seen": 1793726189.262717,
+    "ast_hash": "2ce737d4f39947931cc61dbd0a4c8cb1",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/CarrierDialog.tsx": {
@@ -6414,9 +6414,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/api.ts": {
-    "mtime": 1793654767.6845233,
-    "seen": 1793655491.0519497,
-    "ast_hash": "ba157ee521eb75db2c04942aad899c97",
+    "mtime": 1793726022.536278,
+    "seen": 1793726189.263717,
+    "ast_hash": "990d0df31161eddf898ad0580cb38d01",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/base-rows.ts": {
@@ -6552,15 +6552,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
-    "mtime": 1793695080.2711532,
-    "seen": 1793695147.0417607,
-    "ast_hash": "be5a6d2749cd31f6307fcf4da6789dfc",
+    "mtime": 1793726409.4457986,
+    "seen": 1793726461.6843321,
+    "ast_hash": "06c7d03452ee50035fe20663494eaa67",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/itm8-macro.ts": {
-    "mtime": 1793725037.6736727,
-    "seen": 1793725096.7444723,
-    "ast_hash": "085b0a21f10339eb2f19c2265e482b0b",
+    "mtime": 1793726409.4457986,
+    "seen": 1793726461.6843321,
+    "ast_hash": "02d4350bc31535e0a819fcc141de11dd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/TextSheetReader.java": {
@@ -6591,6 +6591,36 @@
     "mtime": 1793702002.8332138,
     "seen": 1793705687.8560011,
     "ast_hash": "6eb23553abd08031c9a2beffd5c0ad4d",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/basedelivery/component/TemporaryNoteParser.java": {
+    "mtime": 1793725940.9700537,
+    "seen": 1793726189.149266,
+    "ast_hash": "18d43bac32f49a6a82c8f73a0b89e199",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/basedelivery/dto/TemporaryNoteResponse.java": {
+    "mtime": 1793725941.757333,
+    "seen": 1793726189.1502662,
+    "ast_hash": "7f43ff270b143f45aaf6769c373058c0",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/TemporaryNoteParserTests.java": {
+    "mtime": 1793725989.5480573,
+    "seen": 1793726189.25517,
+    "ast_hash": "241687fda92681f3a42e4ed5cede7e2d",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/base-delivery/DifferencesDialog.tsx": {
+    "mtime": 1793726100.9329934,
+    "seen": 1793726189.263717,
+    "ast_hash": "4060a542b1097eaa5e97e9e7fd4c26c3",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/base-delivery/differences.ts": {
+    "mtime": 1793726100.9815476,
+    "seen": 1793726189.263717,
+    "ast_hash": "98feae14d3ab93086c476a8ec86b047a",
     "semantic_hash": ""
   }
 }

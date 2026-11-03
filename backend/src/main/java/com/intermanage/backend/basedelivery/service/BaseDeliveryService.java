@@ -27,10 +27,12 @@ import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.basedelivery.component.BaseDeliveryParser;
 import com.intermanage.backend.basedelivery.component.ShortDatesPdf;
+import com.intermanage.backend.basedelivery.component.TemporaryNoteParser;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryLineResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryRow;
 import com.intermanage.backend.basedelivery.dto.BaseDeliverySummary;
+import com.intermanage.backend.basedelivery.dto.TemporaryNoteResponse;
 import com.intermanage.backend.basedelivery.entity.BaseDelivery;
 import com.intermanage.backend.basedelivery.entity.BaseDeliveryLine;
 import com.intermanage.backend.basedelivery.mapper.BaseDeliveryMapper;
@@ -76,13 +78,14 @@ public class BaseDeliveryService {
     private final XlsReader xlsReader;
     private final XlsxReader xlsxReader;
     private final TextSheetReader textSheetReader;
+    private final TemporaryNoteParser temporaryNoteParser;
     private final ShortDatesPdf shortDatesPdf;
     private final BaseDeliveryMapper mapper;
 
     public BaseDeliveryService(BaseDeliveryRepository deliveries, StoreRepository stores, AppUserRepository users,
             ProductRepository products, DataEntryService dataEntry, BaseDeliveryParser parser, XlsReader xlsReader,
-            XlsxReader xlsxReader, TextSheetReader textSheetReader, ShortDatesPdf shortDatesPdf,
-            BaseDeliveryMapper mapper) {
+            XlsxReader xlsxReader, TextSheetReader textSheetReader, TemporaryNoteParser temporaryNoteParser,
+            ShortDatesPdf shortDatesPdf, BaseDeliveryMapper mapper) {
         this.deliveries = deliveries;
         this.stores = stores;
         this.users = users;
@@ -92,6 +95,7 @@ public class BaseDeliveryService {
         this.xlsReader = xlsReader;
         this.xlsxReader = xlsxReader;
         this.textSheetReader = textSheetReader;
+        this.temporaryNoteParser = temporaryNoteParser;
         this.shortDatesPdf = shortDatesPdf;
         this.mapper = mapper;
     }
@@ -110,12 +114,7 @@ public class BaseDeliveryService {
     public BaseDeliveryResponse upload(UUID storeId, MultipartFile file, UUID userId) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
         String fileName = file.getOriginalFilename() == null ? "dostawa.xls" : file.getOriginalFilename();
-        if (file.isEmpty()) {
-            throw ApiException.badRequest("Wybierz plik do wgrania");
-        }
-        if (file.getSize() > MAX_FILE_BYTES) {
-            throw ApiException.badRequest("Plik jest za duży (najwyżej 20 MB)");
-        }
+        check(file);
         BaseDeliveryParser.Parsed parsed = parse(file, fileName);
         if (!sameStore(parsed.storeNumber(), store.getNumber())) {
             throw ApiException.conflict("Plik jest dla sklepu " + parsed.storeNumber() + ", a wybrany sklep to "
@@ -229,34 +228,67 @@ public class BaseDeliveryService {
     }
 
     /**
+     * „Tymczasowy bon dostawy” z Mercalys do porównania z tabelą dostawy z bazy („Znajdź różnice”). Plik jest tylko
+     * czytany, nic nie zapisujemy.
+     */
+    public TemporaryNoteResponse readTemporaryNote(MultipartFile file) {
+        String fileName = file.getOriginalFilename() == null ? "bon.xlsx" : file.getOriginalFilename();
+        check(file);
+        try {
+            return temporaryNoteParser.parse(sheet(file, fileName), fileName);
+        } catch (InvalidReportException e) {
+            throw invalid(fileName, e);
+        }
+    }
+
+    private static void check(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw ApiException.badRequest("Wybierz plik do wgrania");
+        }
+        if (file.getSize() > MAX_FILE_BYTES) {
+            throw ApiException.badRequest("Plik jest za duży (najwyżej 20 MB)");
+        }
+    }
+
+    private BaseDeliveryParser.Parsed parse(MultipartFile file, String fileName) {
+        try {
+            return parser.parse(sheet(file, fileName));
+        } catch (InvalidReportException e) {
+            throw invalid(null, e);
+        }
+    }
+
+    private static ApiException invalid(String fileName, InvalidReportException e) {
+        return ApiException.badRequest(fileName == null ? e.getMessage() : fileName + ": " + e.getMessage())
+                .withProperty("rowErrors", e.errors())
+                .withProperty("rowErrorCount", e.errorCount());
+    }
+
+    /**
      * Format rozpoznajemy po pierwszych bajtach, nie po nazwie: plik z końcówką .xls bywa w środku .xlsx (zip), a
      * Windows podaje typ (application/vnd.ms-excel) tylko po końcówce. Plik tekstowy z końcówką .xls (tabela HTML, XML
      * arkusza 2003, tekst z tabulatorami) czyta {@link TextSheetReader}.
      */
-    private BaseDeliveryParser.Parsed parse(MultipartFile file, String fileName) {
+    private List<List<String>> sheet(MultipartFile file, String fileName) {
         try {
             byte[] bytes = file.getBytes();
             if (startsWith(bytes, OLE_SIGNATURE)) {
-                return parser.parse(xlsReader.readFirstSheet(bytes));
+                return xlsReader.readFirstSheet(bytes);
             }
             if (startsWith(bytes, ZIP_SIGNATURE)) {
-                return parser.parse(readXlsx(file));
+                return readXlsx(file);
             }
             if (TextSheetReader.looksLikeText(bytes)) {
-                return parser.parse(textSheetReader.readFirstSheet(bytes));
+                return textSheetReader.readFirstSheet(bytes);
             }
-            log.warn("Nieznany format pliku dostawy z bazy {}: {}", fileName, HexFormat.of().formatHex(bytes, 0,
+            log.warn("Nieznany format pliku {}: {}", fileName, HexFormat.of().formatHex(bytes, 0,
                     Math.min(bytes.length, 16)));
             throw ApiException.badRequest("Plik " + fileName + " to nie Excel (.xls ani .xlsx). Otwórz go w Excelu "
                     + "i zapisz jako skoroszyt .xlsx albo .xls.");
-        } catch (InvalidReportException e) {
-            throw ApiException.badRequest(e.getMessage())
-                    .withProperty("rowErrors", e.errors())
-                    .withProperty("rowErrorCount", e.errorCount());
         } catch (InvalidWorkbookException e) {
             throw ApiException.badRequest(e.getMessage());
         } catch (IOException e) {
-            log.warn("Nie udało się odczytać pliku dostawy z bazy", e);
+            log.warn("Nie udało się odczytać pliku {}", fileName, e);
             throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
         }
     }

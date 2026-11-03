@@ -34,12 +34,17 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
 
   const submit = async () => {
     if (!plan) return
-    const skipped = [...plan.missing, ...plan.withoutEan]
+    const skipped = [...plan.missing, ...plan.withoutEan, ...plan.sameEan.map((item) => item.code)]
     if (plan.missing.length > 0) {
       toast.warning(`Nie ma w dokumencie: ${plan.missing.join(', ')}`, { duration: 10_000 })
     }
     if (plan.withoutEan.length > 0) {
       toast.warning(`Bez EAN-u w dokumencie: ${plan.withoutEan.join(', ')}`, { duration: 10_000 })
+    }
+    if (plan.sameEan.length > 0) {
+      toast.warning(`Wpisz ręcznie (ten sam EAN co inny kod): ${plan.sameEan.map((item) => item.code).join(', ')}`, {
+        duration: 15_000,
+      })
     }
     if (plan.items.length === 0) return
     try {
@@ -89,6 +94,21 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
               <p className="rounded-lg bg-amber-200 px-3 py-2 text-amber-950 dark:bg-amber-900 dark:text-amber-50">
                 Bez EAN-u w dokumencie ({plan.withoutEan.length}): {plan.withoutEan.join(', ')}
               </p>
+            )}
+            {plan.sameEan.length > 0 && (
+              <div className="rounded-lg bg-amber-200 px-3 py-2 text-amber-950 dark:bg-amber-900 dark:text-amber-50">
+                <p className="font-medium">Ten sam EAN co inny kod: wpisz ręcznie ({plan.sameEan.length})</p>
+                <p className="mt-0.5 text-xs">
+                  Makro otwiera kartę po EAN-ie, więc kolejny ITM8 tego artykułu trafiłby na kartę z już wpisanym kodem.
+                </p>
+                <ul className="mt-1 font-mono text-xs">
+                  {plan.sameEan.map((item) => (
+                    <li key={item.code}>
+                      {item.code} · EAN {item.ean} (makro wpisze {item.firstCode})
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}
