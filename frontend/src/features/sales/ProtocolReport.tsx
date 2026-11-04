@@ -48,6 +48,7 @@ import type {
 } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
+import { useSearchParamText } from '@/lib/use-search-param-text'
 
 /** Stan raportu w adresie po polsku, żeby link otwierał ten sam widok. */
 const PROTOCOL_PARAMS: Record<ProtocolKind, string> = {
@@ -162,7 +163,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
   const customError = mode === 'custom' ? rangeError(custom) : null
   const compareError = compare === 'custom' ? rangeError(compareCustom) : null
   const valid = !customError && !compareError
-  const query = params.get('szukaj') ?? ''
+  const { text: query, setText: setQuery } = useSearchParamText('szukaj')
 
   const update = (changes: Record<string, string | null>) =>
     setParams(
@@ -383,7 +384,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
                 report={report.data}
                 compareLabel={compare === 'none' ? null : COMPARE_LABELS[compare].column}
                 query={query}
-                onQuery={(next) => update({ szukaj: next || null })}
+                onQuery={setQuery}
                 lastSaleDate={sales.data?.lastSaleDate ?? lastDate}
               />
             </div>

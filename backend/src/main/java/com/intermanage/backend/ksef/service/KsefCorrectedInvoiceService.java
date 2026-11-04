@@ -1,5 +1,6 @@
 package com.intermanage.backend.ksef.service;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -146,13 +147,21 @@ public class KsefCorrectedInvoiceService {
             }
             transaction.executeWithoutResult(status -> {
                 if (!xmlFiles.existsById(invoice.getId())) {
-                    xmlFiles.save(new KsefInvoiceXml(invoice.getId(), content));
+                    xmlFiles.save(new KsefInvoiceXml(invoice.getId(), content, depositNet(content)));
                 }
                 invoices.findById(invoice.getId()).ifPresent(found -> record(found, content));
             });
             downloaded++;
         }
         return new Result(fromStored, downloaded);
+    }
+
+    private BigDecimal depositNet(byte[] xml) {
+        try {
+            return KsefInvoiceReader.depositNet(reader.read(xml).lines());
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            return null;
+        }
     }
 
     private void record(KsefInvoice invoice, byte[] xml) {

@@ -71,9 +71,9 @@ export function ProFilesDialog({ files, open, onOpenChange }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted text-left text-xs text-muted-foreground">
                 <tr>
+                  <th className="px-3 py-2 font-medium">Kod taryfy</th>
                   <th className="px-3 py-2 font-medium">Okres</th>
                   <th className="px-3 py-2 font-medium">Plik</th>
-                  <th className="px-3 py-2 font-medium">Kod taryfy</th>
                   <th className="px-3 py-2 text-right font-medium">W pliku</th>
                   <th className="px-3 py-2 font-medium">Pominięte</th>
                 </tr>
@@ -81,16 +81,22 @@ export function ProFilesDialog({ files, open, onOpenChange }: Props) {
               <tbody>
                 {files.map((file) => (
                   <tr key={file.fileName} className="border-t align-top">
-                    <td className="px-3 py-2 whitespace-nowrap tabular-nums">
-                      {formatDocumentDate(file.dateFrom)} – {formatDocumentDate(file.dateTo)}
-                    </td>
-                    <td className="px-3 py-2 font-medium">{file.fileName}</td>
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1 font-semibold tabular-nums">
                         {file.tariff}
                         <CopyButton value={file.tariff} label={`Kopiuj kod taryfy ${file.tariff}`} />
                       </span>
                     </td>
+                    <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                      <span className="inline-flex items-center gap-1">
+                        {formatDocumentDate(file.dateFrom)} – {formatDocumentDate(file.dateTo)}
+                        <CopyButton
+                          value={`${formatDocumentDate(file.dateFrom)} - ${formatDocumentDate(file.dateTo)}`}
+                          label={`Kopiuj okres ${formatDocumentDate(file.dateFrom)} - ${formatDocumentDate(file.dateTo)}`}
+                        />
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-medium">{file.fileName}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{articles(file.lines.length)}</td>
                     <td className="px-3 py-2 text-xs">
                       <Skipped label="bez artykułu z kartoteki" names={file.withoutProduct.map((line) => line.name)} />

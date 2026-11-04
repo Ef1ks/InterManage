@@ -401,7 +401,7 @@ export type ManualInvoiceFile = {
  * {@code difference} = faktury - przyjęcie. {@code confirmedAt}: różnicę ktoś potwierdził (dla tych kwot).
  */
 export type InvoiceComparisonStatus =
-  'MATCH' | 'PRICE' | 'QUANTITY' | 'MISSING_ON_INVOICE' | 'MISSING_IN_DELIVERY' | 'NO_CODE'
+  'MATCH' | 'PRICE' | 'QUANTITY' | 'MISSING_ON_INVOICE' | 'MISSING_IN_DELIVERY' | 'NO_CODE' | 'DEPOSIT'
 
 /** Artykuł przyjęcia i pozycje faktur z tym samym EAN; {@code difference} = faktura - przyjęcie. */
 export type InvoiceComparisonRow = {
@@ -429,7 +429,9 @@ export type InvoiceComparisonRow = {
 export type InvoiceComparison = {
   invoices: string[]
   unavailable: { invoiceNumber: string; message: string }[]
+  /** Pozycje faktur bez kaucji; kaucje są osobno w `depositNet`, bo przyjęcie nigdy ich nie ma. */
   invoiceNet: number
+  depositNet: number
   deliveryValue: number
   rows: InvoiceComparisonRow[]
 }

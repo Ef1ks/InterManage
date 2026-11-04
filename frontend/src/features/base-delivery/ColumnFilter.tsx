@@ -6,10 +6,15 @@ import { Button } from '@/components/ui/button'
 import { plain } from '@/features/data-entry/rows'
 import { cn } from '@/lib/utils'
 
+export type FilterValue = { value: string; count: number }
+
 type Props = {
   label: string
-  /** Wartości kolumny w tabeli z liczbą wierszy, w kolejności do wyświetlenia. */
-  values: { value: string; count: number }[]
+  /**
+   * Wartości kolumny w tabeli z liczbą wierszy, w kolejności do wyświetlenia. Liczone dopiero po otwarciu listy, bo
+   * przejście po wszystkich wierszach przy każdej zmianie tabeli spowalniało edycję.
+   */
+  getValues: () => FilterValue[]
   /** Zaznaczone wartości; {@code null} = bez filtra (wszystkie). */
   selected: string[] | null
   onChange: (selected: string[] | null) => void
@@ -19,8 +24,9 @@ type Props = {
  * Filtr kolumny jak w Excelu: lista wartości z polami wyboru i wyszukiwarka nad nią. Zmiana działa od razu;
  * „Tylko wyszukane” zostawia same pasujące do wpisanego tekstu.
  */
-export function ColumnFilter({ label, values, selected, onChange }: Props) {
+export function ColumnFilter({ label, getValues, selected, onChange }: Props) {
   const [query, setQuery] = useState('')
+  const [values, setValues] = useState<FilterValue[]>(NO_VALUES)
   const active = selected !== null
   const chosen = useMemo(() => new Set(selected ?? values.map((item) => item.value)), [selected, values])
   const needle = plain(query.trim())
@@ -34,10 +40,17 @@ export function ColumnFilter({ label, values, selected, onChange }: Props) {
   }
 
   return (
-    <Popover.Root onOpenChange={(open) => !open && setQuery('')}>
+    <Popover.Root
+      onOpenChange={(open) => {
+        if (open) setValues(getValues())
+        else setQuery('')
+      }}
+    >
       <Popover.Trigger
         aria-label={`Filtr kolumny ${label}`}
-        title={active ? `Filtr: ${selected.length} z ${values.length}` : 'Filtruj kolumnę'}
+        title={
+          active ? `Filtr: ${selected.length} ${selected.length === 1 ? 'wartość' : 'wartości'}` : 'Filtruj kolumnę'
+        }
         // Widoczny po najechaniu na nagłówek, z klawiatury i zawsze, gdy filtr działa (jak strzałka filtra w Excelu).
         className={cn(
           'grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground shadow-xs ring-1 ring-border hover:bg-background hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100',
@@ -111,3 +124,5 @@ export function ColumnFilter({ label, values, selected, onChange }: Props) {
     </Popover.Root>
   )
 }
+
+const NO_VALUES: FilterValue[] = []

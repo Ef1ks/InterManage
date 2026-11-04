@@ -31,11 +31,12 @@ public final class LabelFile {
 
     /**
      * Nazwa pliku; z {@code format} (format cenówki, np. {@code PRO_GAZ_FOR_30} z opracowania gazetki) format stoi
-     * w miejscu pierwszego loginu: {@code ETIQUETTE_20261103_105800_PRO_GAZ_FOR_30_ImpEk.traite0}.
+     * w miejscu pierwszego loginu, bez podkreślników ({@link ProtoFile#namePart}, bo program dzieli nazwę po {@code _}):
+     * {@code ETIQUETTE_20261103_105800_PROGAZFOR30_ImpEk.traite0}.
      */
     public static String fileName(String username, String format) {
         String login = ProtoFile.loginPart(username);
-        String first = format == null || format.isBlank() ? login : format;
+        String first = format == null || format.isBlank() ? login : ProtoFile.namePart(format);
         return "ETIQUETTE_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + first + "_" + login + ".traite0";
     }
 

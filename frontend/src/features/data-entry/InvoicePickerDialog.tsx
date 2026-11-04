@@ -18,7 +18,14 @@ import { toast } from 'sonner'
 
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -143,6 +150,8 @@ const STATUS_BADGES: Record<'LOADED' | 'NOT_MINE', { label: string; className: s
   LOADED: { label: 'wczytana', className: 'bg-violet-200 text-violet-950 dark:bg-violet-900 dark:text-violet-50' },
   NOT_MINE: { label: 'nie moja', className: 'bg-stone-300 text-stone-950 dark:bg-stone-700 dark:text-stone-50' },
 }
+
+const COMPLETED_BADGE = 'bg-emerald-300 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50'
 
 function Badge({ className, children, title }: { className: string; children: React.ReactNode; title?: string }) {
   return (
@@ -333,10 +342,7 @@ function ListStep({
         onSuccess: (result) => {
           clearSelection()
           toast(`${BULK_LABELS[action]}: ${result.count}`, {
-            action:
-              result.count > 0
-                ? { label: 'Cofnij', onClick: () => bulk.undo.mutate(result) }
-                : undefined,
+            action: result.count > 0 ? { label: 'Cofnij', onClick: () => bulk.undo.mutate(result) } : undefined,
           })
         },
         onError: (error) =>
@@ -391,7 +397,10 @@ function ListStep({
           )}
           <div className="ml-auto flex items-center gap-3">
             <SupplierRules storeId={storeId} rules={rules.data ?? []} />
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <label
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              title="Także faktury dostawców pomijanych w tym oknie i w Fakturach KSeF"
+            >
               <Switch checked={filters.showSkipped} onCheckedChange={(value) => set('showSkipped', value)} />
               Pokaż pomijanych{hiddenCount > 0 && ` (${hiddenCount})`}
             </label>
@@ -522,7 +531,8 @@ function InvoiceRow({
   const documentTitle = documents
     .map((document) => `${document.typeSingular} ${bonNumber(document.number)} (sklep ${document.store})`)
     .join(', ')
-  const failed = (error: unknown) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać zmiany')
+  const failed = (error: unknown) =>
+    toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać zmiany')
 
   const setMark = (kind: InvoiceMarkKind | null, message: string, undo: InvoiceMarkKind | null) =>
     mark.mutate(
@@ -606,12 +616,13 @@ function InvoiceRow({
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
             <span className="truncate">{invoice.invoiceNumber}</span>
-            {item.status && (
+            {/* Dokument w systemie sklepu zamyka sprawę: „zakończona” zastępuje „wczytana”, żeby nie wprowadzić jej drugi raz. */}
+            {item.status && (documents.length === 0 || item.status === 'NOT_MINE') && (
               <Badge className={STATUS_BADGES[item.status].className}>{STATUS_BADGES[item.status].label}</Badge>
             )}
-            {!item.status && documents.length > 0 && (
-              <Badge className={STATUS_BADGES.LOADED.className} title={`Wczytana z automatu: ${documentTitle}`}>
-                wczytana · {documents[0].type === 'PZ' ? 'w PZ' : documents[0].typeSingular.toLowerCase()}{' '}
+            {documents.length > 0 && (
+              <Badge className={COMPLETED_BADGE} title={`Faktura jest już w systemie sklepu: ${documentTitle}`}>
+                zakończona · {documents[0].type === 'PZ' ? 'w PZ' : documents[0].typeSingular.toLowerCase()}{' '}
                 {bonNumber(documents[0].number)}
                 {documents.length > 1 && ` +${documents.length - 1}`}
               </Badge>
@@ -633,6 +644,11 @@ function InvoiceRow({
                 {other.kind === 'DOWNLOADED' ? 'pobrana' : 'wczytana'} na innym stanowisku: {other.store}
               </Badge>
             ))}
+            {invoice.supplierSkipped && (
+              <Badge className={RULE_BADGES.HIDDEN.className} title="Dostawca pominięty w Fakturach KSeF">
+                pomijany w KSeF
+              </Badge>
+            )}
             {item.supplierRule && (
               <Badge className={RULE_BADGES[item.supplierRule].className} title={RULE_BADGES[item.supplierRule].title}>
                 {RULE_BADGES[item.supplierRule].label}
@@ -777,7 +793,11 @@ function SupplierRules({ storeId, rules }: { storeId: string; rules: DataEntrySk
 }
 
 const positions = (count: number) =>
-  count === 1 ? 'pozycja' : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? 'pozycje' : 'pozycji'
+  count === 1
+    ? 'pozycja'
+    : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14)
+      ? 'pozycje'
+      : 'pozycji'
 
 function SourceStep({
   storeId,

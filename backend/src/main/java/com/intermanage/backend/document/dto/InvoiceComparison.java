@@ -9,11 +9,13 @@ import java.util.UUID;
  * przyjęcia po kodzie EAN (GTIN z faktury, także dawne EAN-y artykułu z kartoteki) albo ręcznie połączone
  * ({@link com.intermanage.backend.document.entity.InvoiceComparisonMatch}). {@code rows}: najpierw różnice, od
  * największej. {@code unavailable}: faktury, których XML nie udało się teraz pobrać (np. limit KSeF).
+ * {@code invoiceNet}: pozycje faktur bez kaucji, {@code depositNet}: kaucje (przyjęcie nigdy ich nie ma).
  */
 public record InvoiceComparison(
         List<String> invoices,
         List<Unavailable> unavailable,
         BigDecimal invoiceNet,
+        BigDecimal depositNet,
         BigDecimal deliveryValue,
         List<Row> rows) {
 
@@ -47,9 +49,10 @@ public record InvoiceComparison(
     /**
      * MATCH: wartości zgodne (do grosza); PRICE: ta sama ilość, inna cena; QUANTITY: inna ilość (albo inna jednostka
      * na fakturze, np. kartony); MISSING_ON_INVOICE: artykułu przyjęcia nie ma na fakturze; MISSING_IN_DELIVERY: pozycja
-     * faktury z kodem, którego nie ma w przyjęciu; NO_CODE: pozycja faktury bez kodu EAN.
+     * faktury z kodem, którego nie ma w przyjęciu; NO_CODE: pozycja faktury bez kodu EAN; DEPOSIT: kaucja z faktury,
+     * której w przyjęciu nigdy nie ma, więc to nie różnica.
      */
     public enum Status {
-        MATCH, PRICE, QUANTITY, MISSING_ON_INVOICE, MISSING_IN_DELIVERY, NO_CODE
+        MATCH, PRICE, QUANTITY, MISSING_ON_INVOICE, MISSING_IN_DELIVERY, NO_CODE, DEPOSIT
     }
 }

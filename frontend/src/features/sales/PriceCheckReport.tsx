@@ -52,6 +52,7 @@ import type {
   PriceCheckStatus,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useSearchParamText } from '@/lib/use-search-param-text'
 
 type StatusFilter = 'open' | 'reported' | 'resolved' | 'all'
 
@@ -152,7 +153,11 @@ const supplierKey = (delivery: PriceCheckDelivery) => delivery.supplierCode ?? d
 function periodStart(to: string, days: number) {
   const date = new Date(`${to}T12:00:00`)
   date.setDate(date.getDate() - (days - 1))
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 /** "1 artykuł", "3 artykuły", "5 artykułów". */
@@ -199,7 +204,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
     (Object.keys(FILTER_PARAMS) as StatusFilter[]).find((key) => FILTER_PARAMS[key] === params.get('status')) ?? 'open'
   const { expanded, toggle } = useExpanded(storeId)
   const view: View = params.get('widok') === VIEW_PARAMS.incidents ? 'incidents' : 'verify'
-  const query = params.get('szukaj') ?? ''
+  const { text: query, setText: setQuery } = useSearchParamText('szukaj')
   const supplier = params.get('dostawca') ?? ALL_SUPPLIERS
   const period = PERIOD_FILTERS.find((option) => option.value === params.get('okres'))?.value ?? '30'
   const priceFilter =
@@ -326,7 +331,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
           <div className="mb-3 grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
             <SearchInput
               value={query}
-              onChange={(next) => setParam('szukaj', next || null)}
+              onChange={setQuery}
               placeholder="Szukaj: dostawca, bon, faktura, artykuł, EAN, ITM8"
             />
             <SelectField
@@ -387,7 +392,10 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
               {report.data.minMarginPercent == null ? (
                 <>
                   Bez minimalnej marży linie nie są oceniane.{' '}
-                  <Link to={storeSettingsPaths.priceCheck} className="underline underline-offset-4 hover:text-foreground">
+                  <Link
+                    to={storeSettingsPaths.priceCheck}
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
                     Ustaw ją
                   </Link>
                 </>
@@ -726,7 +734,9 @@ function DeliveryRow({
             <StatusBadge status={status} />
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums">
-            <span className="rounded bg-muted px-1.5 font-medium text-foreground">Bon {bonNumber(delivery.number)}</span>
+            <span className="rounded bg-muted px-1.5 font-medium text-foreground">
+              Bon {bonNumber(delivery.number)}
+            </span>
             {formatDocumentDate(delivery.documentDate)}
             {delivery.supplierDocumentNumber && <span>· faktura {delivery.supplierDocumentNumber}</span>}
             {delivery.correctionCount > 0 && (
@@ -741,11 +751,7 @@ function DeliveryRow({
           )}
           <MoneyPill label="zakup" value={`${formatMoney(delivery.linesPurchaseValue)} zł`} tone="neutral" />
           {delivery.baseDifferenceValue > 0 && (
-            <MoneyPill
-              label="drożej niż baza"
-              value={`${formatMoney(delivery.baseDifferenceValue)} zł`}
-              tone="loss"
-            />
+            <MoneyPill label="drożej niż baza" value={`${formatMoney(delivery.baseDifferenceValue)} zł`} tone="loss" />
           )}
         </span>
       </button>
@@ -920,7 +926,9 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
                   {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`].filter(Boolean).join(' · ')}
                 </p>
                 {line.cadencierItm8 && (
-                  <p className="text-xs text-muted-foreground">w cadencier jako ITM8 {line.cadencierItm8} (ten sam EAN)</p>
+                  <p className="text-xs text-muted-foreground">
+                    w cadencier jako ITM8 {line.cadencierItm8} (ten sam EAN)
+                  </p>
                 )}
                 {line.incidentDate && (
                   <p
@@ -939,7 +947,9 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
               <TableCell className="text-right">
                 {formatPrice(line.salePriceGross) || '–'}
                 {line.cadencierPrice != null && line.cadencierPrice !== line.salePriceGross && (
-                  <span className="block text-xs text-muted-foreground">CENA_CAD {formatPrice(line.cadencierPrice)}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    CENA_CAD {formatPrice(line.cadencierPrice)}
+                  </span>
                 )}
               </TableCell>
               <TableCell className={cn('text-right font-medium', line.belowMinimum && 'text-destructive')}>

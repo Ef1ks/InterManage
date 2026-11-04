@@ -514,6 +514,26 @@ class KsefIntegrationTests {
         mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
                 .andExpect(jsonPath("$.rows.length()").value(2));
 
+        // Kaucja po 50 gr: przyjęcie nigdy jej nie ma, więc to nie różnica ani w pozycjach, ani w zgodności kwot.
+        // Plik zapisany przed liczeniem kaucji (deposit_net pusty) uzupełnia się przy kolejnym odczycie.
+        mvc.perform(delete(matchUrl + "/" + match).cookie(owner).with(csrf())).andExpect(status().isNoContent());
+        byte[] original = new ClassPathResource("ksef/faktura-fa3.xml").getContentAsByteArray();
+        byte[] withDeposit = new String(original, StandardCharsets.UTF_8).replace("<P_8B>12.5</P_8B>", "<P_8B>200</P_8B>")
+                .replace("<P_9A>8.00</P_9A>", "<P_9A>0.50</P_9A>").getBytes(StandardCharsets.UTF_8);
+        String storedXml = "update ksef_invoice_xml set content = ?, deposit_net = null where invoice_id = "
+                + "(select id from ksef_invoices where invoice_number = 'FV/42/2026')";
+        jdbc.update(storedXml, (Object) withDeposit);
+        mvc.perform(get(pz + delivery + "/invoice-comparison").cookie(owner))
+                .andExpect(jsonPath("$.invoiceNet").value(200.0))
+                .andExpect(jsonPath("$.depositNet").value(100.0))
+                .andExpect(jsonPath("$.rows[?(@.status == 'NO_CODE')]").isEmpty())
+                .andExpect(jsonPath("$.rows[?(@.status == 'DEPOSIT')].invoiceValue").value(contains(100.0)));
+        mvc.perform(get(pz + delivery).cookie(owner))
+                .andExpect(jsonPath("$.invoiceAmountCheck.invoiceNet").value(200.0));
+        jdbc.update(storedXml, (Object) original);
+        mvc.perform(post(matchUrl + "/" + match + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+
         // Przyjęcie z fakturą z KSeF nie dostaje drugiej spoza KSeF.
         String supplier = JsonPath.read(send(owner, post("/api/stores/" + storeId + "/suppliers"),
                 "{\"name\":\"Dostawca bez KSeF\"}").andReturn().getResponse().getContentAsString(), "$.id");

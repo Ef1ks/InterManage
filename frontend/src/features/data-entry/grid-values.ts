@@ -161,10 +161,22 @@ export function pricingOf(
   }
 }
 
-const plainNumber = (value: number | null, digits = 4) =>
-  value === null
-    ? ''
-    : new Intl.NumberFormat('pl-PL', { maximumFractionDigits: digits, useGrouping: false }).format(value)
+// Formatery są drogie w tworzeniu, a filtry i sortowanie wołają cellText dla każdej komórki tabeli.
+const plainFormats = new Map<number, Intl.NumberFormat>()
+const plainNumber = (value: number | null, digits = 4) => {
+  if (value === null) return ''
+  let format = plainFormats.get(digits)
+  if (!format) {
+    format = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: digits, useGrouping: false })
+    plainFormats.set(digits, format)
+  }
+  return format.format(value)
+}
+const netContentFormat = new Intl.NumberFormat('pl-PL', {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+  useGrouping: false,
+})
 
 /** Wartość komórki jako tekst: do kopiowania (TSV dla Excela) i jako start edycji. */
 export function cellText(row: DataEntryRow, key: ColumnKey, pricing: Pricing): string {
@@ -207,11 +219,7 @@ export function cellText(row: DataEntryRow, key: ColumnKey, pricing: Pricing): s
     case 'unit':
       return row.unit
     case 'netContent':
-      return new Intl.NumberFormat('pl-PL', {
-        minimumFractionDigits: 3,
-        maximumFractionDigits: 3,
-        useGrouping: false,
-      }).format(row.netContent)
+      return netContentFormat.format(row.netContent)
   }
 }
 

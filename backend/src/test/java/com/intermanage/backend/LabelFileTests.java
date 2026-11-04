@@ -38,8 +38,8 @@ class LabelFileTests {
     }
 
     @Test
-    void formatTakesPlaceOfFirstLogin() {
+    void formatWithoutUnderscoresTakesPlaceOfFirstLogin() {
         assertThat(LabelFile.fileName("pdv_10023", "PRO_GAZ_FOR_30"))
-                .matches("ETIQUETTE_\\d{8}_\\d{6}_PRO_GAZ_FOR_30_pdv10023\\.traite0");
+                .matches("ETIQUETTE_\\d{8}_\\d{6}_PROGAZFOR30_pdv10023\\.traite0");
     }
 }

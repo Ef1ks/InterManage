@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -215,11 +216,14 @@ public class InvoiceComparisonService {
         }
         Map<String, Side> invoice = new LinkedHashMap<>();
         BigDecimal invoiceNet = BigDecimal.ZERO;
+        Set<String> depositKeys = new HashSet<>();
+        Set<String> goodsKeys = new HashSet<>();
         for (KsefInvoiceReader.Line line : invoiceLines) {
             BigDecimal sign = line.beforeCorrection() ? BigDecimal.ONE.negate() : BigDecimal.ONE;
             BigDecimal quantity = line.quantity() != null ? line.quantity().multiply(sign) : null;
             BigDecimal net = line.net() != null ? line.net().multiply(sign) : null;
             invoiceNet = invoiceNet.add(net != null ? net : BigDecimal.ZERO);
+            (line.deposit() ? depositKeys : goodsKeys).add(invoiceKey(line));
             boolean coded = line.gtin() != null && !line.gtin().isBlank();
             invoice.computeIfAbsent(invoiceKey(line), key -> new Side(coded ? line.gtin() : null, line.name()))
                     .add(quantity, net);
@@ -267,17 +271,21 @@ public class InvoiceComparisonService {
             if (itm8s.isEmpty() && keys.isEmpty()) {
                 continue;
             }
+            boolean deposit = itm8s.isEmpty()
+                    && keys.stream().allMatch(key -> depositKeys.contains(key) && !goodsKeys.contains(key));
             rows.add(row(Side.merge(itm8s.stream().map(delivery::get).toList()),
                     Side.merge(keys.stream().map(invoice::get).toList()), itm8s, keys,
-                    matchIds.getOrDefault(group.getKey(), List.of())));
+                    matchIds.getOrDefault(group.getKey(), List.of()), deposit));
         }
-        rows.sort(Comparator.comparing((Row row) -> row.status() == Status.MATCH)
+        rows.sort(Comparator.comparing((Row row) -> row.status() == Status.MATCH || row.status() == Status.DEPOSIT)
                 .thenComparing(row -> row.difference() == null ? BigDecimal.ZERO : row.difference().abs(),
                         Comparator.reverseOrder()));
         BigDecimal deliveryValue = delivery.values().stream().map(side -> side.value)
                 .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
-        return new InvoiceComparison(compared, unavailable, invoiceNet.setScale(2, RoundingMode.HALF_UP),
-                deliveryValue, rows);
+        BigDecimal depositNet = rows.stream().filter(row -> row.status() == Status.DEPOSIT).map(Row::invoiceValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+        return new InvoiceComparison(compared, unavailable,
+                invoiceNet.subtract(depositNet).setScale(2, RoundingMode.HALF_UP), depositNet, deliveryValue, rows);
     }
 
     private static List<String> nodes(Match match) {
@@ -287,14 +295,16 @@ public class InvoiceComparisonService {
     }
 
     /** Wiersz grupy: {@code ours}/{@code theirs} {@code null}, gdy po tej stronie nic nie ma. */
-    private static Row row(Side ours, Side theirs, List<String> itm8s, List<String> keys, List<UUID> matchIds) {
+    private static Row row(Side ours, Side theirs, List<String> itm8s, List<String> keys, List<UUID> matchIds,
+            boolean deposit) {
         String itm8 = itm8s.isEmpty() ? null : itm8s.getFirst();
         if (theirs == null) {
             return new Row(Status.MISSING_ON_INVOICE, ours.ean, itm8, ours.name, null, ours.quantity, ours.price(),
                     ours.value, null, null, null, ours.value.negate(), itm8s, keys, matchIds);
         }
         if (ours == null) {
-            Status status = keys.stream().allMatch(key -> key.startsWith(NAME_KEY)) ? Status.NO_CODE
+            Status status = deposit ? Status.DEPOSIT
+                    : keys.stream().allMatch(key -> key.startsWith(NAME_KEY)) ? Status.NO_CODE
                     : Status.MISSING_IN_DELIVERY;
             return new Row(status, theirs.ean, null, theirs.name, theirs.name, null, null, null, theirs.quantity,
                     theirs.price(), theirs.value, theirs.value, itm8s, keys, matchIds);

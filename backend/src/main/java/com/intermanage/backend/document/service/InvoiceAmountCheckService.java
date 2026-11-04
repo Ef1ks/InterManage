@@ -6,7 +6,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -25,10 +24,12 @@ import com.intermanage.backend.document.entity.DocumentAmountConfirmation;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentAmountConfirmationRepository;
 import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.ksef.repository.KsefInvoiceXmlRepository;
 
 /**
  * Zgodność kwot przyjęć PZ z fakturami KSeF: suma netto faktur przyjęcia (przypiętych, dopasowanych po numerze
- * i faktur jego korekt od dostawcy) i wartość zakupu netto przyjęcia po korektach. Różnica do
+ * i faktur jego korekt od dostawcy, bez kaucji, których przyjęcie nigdy nie ma; kaucje znamy z odczytanego XML)
+ * i wartość zakupu netto przyjęcia po korektach. Różnica do
  * {@link #TOLERANCE} zł w obie strony to zgodność (zaokrąglenia po stronie dostawcy). Większą różnicę można
  * potwierdzić; potwierdzenie obowiązuje dla zapisanych kwot, więc po zmianie faktur albo przyjęcia różnica wraca do
  * sprawdzenia.
@@ -44,9 +45,12 @@ public class InvoiceAmountCheckService {
     private final DocumentKsefLinkService ksefLinks;
     private final DeliveryCorrectionService corrections;
     private final AppUserRepository users;
+    private final KsefInvoiceXmlRepository xmlFiles;
 
     public InvoiceAmountCheckService(DocumentAmountConfirmationRepository confirmations, DocumentRepository documents,
-            DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections, AppUserRepository users) {
+            DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections, AppUserRepository users,
+            KsefInvoiceXmlRepository xmlFiles) {
+        this.xmlFiles = xmlFiles;
         this.confirmations = confirmations;
         this.documents = documents;
         this.ksefLinks = ksefLinks;
@@ -72,9 +76,14 @@ public class InvoiceAmountCheckService {
         Map<UUID, DocumentAmountConfirmation> confirmed = confirmations
                 .findActive(deliveries.stream().map(Document::getId).toList()).stream()
                 .collect(Collectors.toMap(confirmation -> confirmation.getDocument().getId(), Function.identity()));
+        Map<UUID, BigDecimal> deposits = xmlFiles.findDeposits(deliveries.stream()
+                        .flatMap(delivery -> invoices.get(delivery.getId()).stream()).map(LinkedKsefInvoice::id)
+                        .collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(KsefInvoiceXmlRepository.Deposit::getInvoiceId,
+                        KsefInvoiceXmlRepository.Deposit::getDepositNet));
         Map<UUID, InvoiceAmountCheck> result = new HashMap<>();
         for (Document delivery : deliveries) {
-            BigDecimal invoiceNet = invoiceNet(invoices.get(delivery.getId()));
+            BigDecimal invoiceNet = invoiceNet(invoices.get(delivery.getId()), deposits);
             BigDecimal documentValue = documentValue(delivery, totals.get(delivery.getId()));
             BigDecimal difference = invoiceNet.subtract(documentValue);
             DocumentAmountConfirmation confirmation = confirmed.get(delivery.getId());
@@ -135,8 +144,9 @@ public class InvoiceAmountCheckService {
         return document;
     }
 
-    private static BigDecimal invoiceNet(List<LinkedKsefInvoice> invoices) {
-        return invoices.stream().map(LinkedKsefInvoice::netAmount).filter(Objects::nonNull)
+    private static BigDecimal invoiceNet(List<LinkedKsefInvoice> invoices, Map<UUID, BigDecimal> deposits) {
+        return invoices.stream().filter(invoice -> invoice.netAmount() != null)
+                .map(invoice -> invoice.netAmount().subtract(deposits.getOrDefault(invoice.id(), BigDecimal.ZERO)))
                 .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
     }
 

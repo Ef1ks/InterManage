@@ -40,7 +40,10 @@ export type DataEntryRow = {
   unitNet: number | null
   name: string
   brand: string
+  /** Stawka z dokumentu (faktura, plik XML): jedyne źródło prawdy, kartoteka jej nie nadpisuje. */
   vatPercent: number | null
+  /** Stawka VAT artykułu z kartoteki: inna niż w dokumencie = błędny VAT w kartotece. Brak w starszych szkicach. */
+  catalogVat?: number | null
   salePrice: number | null
   subfamilyCode: string | null
   /** Rejon (2 cyfry) albo rodzina (4) wybrane bez podrodziny: zawęża kolejną listę. Brak w starszych szkicach. */
@@ -158,6 +161,20 @@ function snapshot(row: DataEntryRow): DataEntryRow {
   }
 }
 
+/**
+ * Stawka VAT z dokumentu inna niż w kartotece: w tabeli i pliku zostaje stawka z dokumentu, a komórka jest czerwona,
+ * bo poprawić trzeba kartotekę.
+ */
+export function vatMismatch(row: DataEntryRow) {
+  return (
+    row.known &&
+    serviceKind(row) === null &&
+    row.vatPercent !== null &&
+    row.catalogVat != null &&
+    Math.abs(row.vatPercent - row.catalogVat) > 0.001
+  )
+}
+
 /** Pola artykułu z kartoteki zmienione w tabeli (powrót do wartości z kartoteki zdejmuje zmianę). */
 export function catalogChanges(row: DataEntryRow): CatalogField[] {
   const catalog = row.catalog
@@ -226,6 +243,7 @@ export function rowFromLine(line: DataEntryLine): DataEntryRow {
     name: product?.name ?? line.invoiceName ?? '',
     brand: product?.brand ?? '',
     vatPercent: line.vatPercent,
+    catalogVat: product?.vatPercent ?? null,
     salePrice: product?.salePrice ?? null,
     subfamilyCode: product?.subfamilyCode ?? null,
     unit: line.unit,
@@ -252,6 +270,7 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
     return {
       ...row,
       known: false,
+      catalogVat: null,
       cadencier: false,
       cadencierPrice: null,
       promoPrice: null,
@@ -265,6 +284,7 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
   return snapshot({
     ...row,
     known: true,
+    catalogVat: product.vatPercent,
     cadencier: product.cadencier,
     cadencierPrice: product.cadencierPrice,
     promoPrice: product.promoPrice,
@@ -511,11 +531,8 @@ export function plain(text: string) {
     .replace(/\p{M}/gu, '')
 }
 
-const decimal = (value: number) =>
-  new Intl.NumberFormat('pl-PL', {
-    maximumFractionDigits: 3,
-    useGrouping: false,
-  }).format(value)
+const decimalFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 3, useGrouping: false })
+const decimal = (value: number) => decimalFormat.format(value)
 
 /** Miara do nazwy: 250G, 1,5KG, 330ML, 1,5L; przy sztukach pusta. */
 export function measureLabel(unit: SaleUnit, netContent: number) {

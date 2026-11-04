@@ -87,22 +87,24 @@ public class DataEntryInvoiceService {
 
     /**
      * Faktury albo korekty widoczne w sklepie (IDWew jak w Fakturach KSeF: {@code internalId} = null to IDWew sklepu
-     * i bez IDWew), najnowsze na górze. Pomijani dostawcy KSeF nie mają tu znaczenia, liczą się tylko reguły tego okna
-     * ({@code showSkipped} pokazuje także faktury pomijanych).
+     * i bez IDWew), najnowsze na górze. Dostawcy pomijani w tym oknie albo w Fakturach KSeF są ukryci, dopóki
+     * {@code showSkipped} nie pokaże i ich faktur.
      */
     @Transactional(readOnly = true)
     public DataEntryInvoicePage list(UUID storeId, int page, String query, String internalId, boolean corrections,
             ListStatus status, boolean showSkipped) {
-        KsefInvoicePage found = ksefInvoices.list(storeId, page, filter(query, internalId, corrections),
+        KsefInvoicePage found = ksefInvoices.list(storeId, page, filter(query, internalId, corrections, showSkipped),
                 extra(storeId, status, showSkipped), "issueDate", "desc");
         return new DataEntryInvoicePage(items(storeId, found.invoices()), found.page(), found.hasMore(),
                 found.matchingCount());
     }
 
-    private static KsefInvoiceSearch.Filter filter(String query, String internalId, boolean corrections) {
+    private static KsefInvoiceSearch.Filter filter(String query, String internalId, boolean corrections,
+            boolean showSkipped) {
         return new KsefInvoiceSearch.Filter(query, null, null, KsefInvoiceSearch.Entered.ALL,
                 corrections ? KsefInvoiceSearch.Kind.CORRECTIONS : KsefInvoiceSearch.Kind.INVOICES,
-                internalId == null || internalId.isBlank() || "ALL".equals(internalId) ? null : internalId, true);
+                internalId == null || internalId.isBlank() || "ALL".equals(internalId) ? null : internalId,
+                showSkipped);
     }
 
     /**
@@ -240,7 +242,8 @@ public class DataEntryInvoiceService {
         } else if (request.filter() != null) {
             InvoiceBulkRequest.Filter filter = request.filter();
             ids = ksefInvoices.ids(storeId,
-                    filter(filter.query(), filter.internalId(), "CORRECTIONS".equals(filter.kind())),
+                    filter(filter.query(), filter.internalId(), "CORRECTIONS".equals(filter.kind()),
+                            Boolean.TRUE.equals(filter.showSkipped())),
                     extra(storeId, filter.status() != null ? filter.status() : ListStatus.NEW,
                             Boolean.TRUE.equals(filter.showSkipped())),
                     BULK_LIMIT);

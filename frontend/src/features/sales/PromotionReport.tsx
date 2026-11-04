@@ -34,6 +34,7 @@ import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import type { PromotionReport as Report, PromotionReportItem, PromotionVerdict } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
+import { useSearchParamText } from '@/lib/use-search-param-text'
 
 /** Jak PromotionReportService.MAX_PERIOD_DAYS: rozpoznawanie promocji ze sprzedaży liczy się ok. 2 s na miesiąc. */
 const MAX_DAYS = 92
@@ -294,7 +295,7 @@ function Promotions({
   const verdict: VerdictFilter = VERDICT_ORDER.find((key) => VERDICT_PARAMS[key] === params.get('ocena')) ?? 'ALL'
   const source =
     (Object.keys(SOURCE_PARAMS) as Source[]).find((key) => SOURCE_PARAMS[key] === params.get('zrodlo')) ?? 'all'
-  const query = params.get('szukaj') ?? ''
+  const { text: query, setText: setQuery } = useSearchParamText('szukaj')
   const deferredQuery = useDeferredValue(query)
   const region = params.get('rejon') ?? ALL_REGIONS
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
@@ -390,11 +391,7 @@ function Promotions({
       </div>
 
       <div className="mb-3 grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
-        <SearchInput
-          value={query}
-          onChange={(next) => setParam({ szukaj: next || null })}
-          placeholder="Szukaj: artykuł, marka, EAN, ITM8"
-        />
+        <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: artykuł, marka, EAN, ITM8" />
         <SelectField
           label="Rejon"
           options={[{ value: ALL_REGIONS, label: 'Wszystkie rejony' }, ...regions]}

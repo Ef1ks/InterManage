@@ -108,7 +108,7 @@ import {
   viewRows,
 } from './base-rows'
 import { CarrierDialog } from './CarrierDialog'
-import { ColumnFilter } from './ColumnFilter'
+import { ColumnFilter, type FilterValue } from './ColumnFilter'
 import { DeliveryPickerDialog } from './DeliveryPickerDialog'
 import { DifferencesDialog } from './DifferencesDialog'
 import { meaPath } from './paths'
@@ -361,37 +361,31 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     [setRows, visibleOf],
   )
 
-  const columnValues = useMemo(() => {
-    const result = new Map<ColumnKey, { value: string; count: number }[]>()
-    for (const column of BASE_COLUMNS) {
-      const counts = new Map<string, number>()
-      for (const row of rows) {
-        const value = cellText(row, column.key, pricing) || EMPTY_VALUE
-        counts.set(value, (counts.get(value) ?? 0) + 1)
-      }
-      const numeric = column.align === 'right'
-      result.set(
-        column.key,
-        [...counts.entries()]
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) =>
-            a.value === EMPTY_VALUE
-              ? 1
-              : b.value === EMPTY_VALUE
-                ? -1
-                : numeric
-                  ? Number(a.value.replace(',', '.')) - Number(b.value.replace(',', '.'))
-                  : a.value.localeCompare(b.value, 'pl'),
-          ),
-      )
+  // Wartości kolumny do filtra liczone dopiero po otwarciu jego listy (z tabeli z tej chwili), nie przy każdej zmianie.
+  const columnValues = (column: Column): FilterValue[] => {
+    const counts = new Map<string, number>()
+    for (const row of currentDraft().rows) {
+      const value = cellText(row, column.key, pricing) || EMPTY_VALUE
+      counts.set(value, (counts.get(value) ?? 0) + 1)
     }
-    return result
-  }, [rows, pricing])
+    const numeric = column.align === 'right'
+    return [...counts.entries()]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) =>
+        a.value === EMPTY_VALUE
+          ? 1
+          : b.value === EMPTY_VALUE
+            ? -1
+            : numeric
+              ? Number(a.value.replace(',', '.')) - Number(b.value.replace(',', '.'))
+              : a.value.localeCompare(b.value, 'pl'),
+      )
+  }
 
   const headerExtra = (column: Column) => (
     <ColumnFilter
       label={column.title ?? column.header}
-      values={columnValues.get(column.key) ?? []}
+      getValues={() => columnValues(column)}
       selected={applied?.filters[column.key] ?? null}
       onChange={(selected) => setColumnFilter(column.key, selected)}
     />
@@ -563,13 +557,16 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     gridRef.current?.focus()
   }
 
-  const selectedIds = new Set(selectedRows)
-  const selectedArticles = visibleRows.filter((row) => selectedIds.has(row.id))
-  const priceChanges = new Map<string, number>()
-  for (const row of selectedArticles) {
-    const price = suggestedPrice(row, pricing)
-    if (price !== null && price !== row.salePrice) priceChanges.set(row.id, price)
-  }
+  const priceChanges = useMemo(() => {
+    const selectedIds = new Set(selectedRows)
+    const changes = new Map<string, number>()
+    for (const row of visibleRows) {
+      if (!selectedIds.has(row.id)) continue
+      const price = suggestedPrice(row, pricing)
+      if (price !== null && price !== row.salePrice) changes.set(row.id, price)
+    }
+    return changes
+  }, [selectedRows, visibleRows, pricing])
   const applySuggestedPrices = () => {
     const before = currentDraft()
     const changes = new Map(priceChanges)
@@ -582,19 +579,34 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     gridRef.current?.focus()
   }
 
-  const quickCounts = Object.fromEntries(
-    (Object.keys(QUICK_FILTERS) as QuickFilter[]).map((quick) => [quick, rows.filter(QUICK_FILTERS[quick]).length]),
-  ) as Record<QuickFilter, number>
+  // Liczniki z całej tabeli i dokumentu liczą się tylko przy zmianie danych: zaznaczanie i strzałki odświeżają stronę
+  // przy każdym ruchu, a przy ponad tysiącu wierszy przeliczanie wszystkiego od nowa zacinało tabelę.
+  const tableStats = useMemo(
+    () => ({
+      quick: Object.fromEntries(
+        (Object.keys(QUICK_FILTERS) as QuickFilter[]).map((quick) => [quick, rows.filter(QUICK_FILTERS[quick]).length]),
+      ) as Record<QuickFilter, number>,
+      net: rows.reduce((sum, row) => sum + (netValue(row) ?? 0), 0),
+      incompleteEans: rows.filter(incompleteEan).length,
+    }),
+    [rows],
+  )
+  const quickCounts = tableStats.quick
   const negativeCount = quickCounts.negative
   const depositErrorCount = quickCounts.deposit
-  const tableNet = rows.reduce((sum, row) => sum + (netValue(row) ?? 0), 0)
-  const shortDated = delivery?.lines.filter((line) => line.shortDated).length ?? 0
-  const regionCounts = {
-    vegetables: delivery ? viewLines(delivery, 'vegetables', []).length : 0,
-    meat: delivery ? viewLines(delivery, 'meat', []).length : 0,
-  }
-  // „Sprawdź PLU”: EAN-y artykułów z rejonów 32 i 33 całego dokumentu do pliku .lst w folderze z ustawień zapisu.
-  const plu = delivery ? pluEans(delivery) : []
+  const tableNet = tableStats.net
+  const { shortDated, regionCounts, plu } = useMemo(
+    () => ({
+      shortDated: delivery?.lines.filter((line) => line.shortDated).length ?? 0,
+      regionCounts: {
+        vegetables: delivery ? viewLines(delivery, 'vegetables', []).length : 0,
+        meat: delivery ? viewLines(delivery, 'meat', []).length : 0,
+      },
+      // „Sprawdź PLU”: EAN-y artykułów z rejonów 32 i 33 całego dokumentu do pliku .lst w folderze z ustawień zapisu.
+      plu: delivery ? pluEans(delivery) : [],
+    }),
+    [delivery],
+  )
   const [savingPlu, setSavingPlu] = useState(false)
   const savePlu = async () => {
     if (!draft.delivery || plu.length === 0) return
@@ -614,7 +626,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     }
   }
 
-  const incompleteEanCount = rows.filter(incompleteEan).length
+  const incompleteEanCount = tableStats.incompleteEans
   const blocked = depositErrorCount > 0 || incompleteEanCount > 0
   const blockedTitle =
     incompleteEanCount > 0
@@ -622,22 +634,30 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
       : `W tabeli są błędy kaucji (${depositErrorCount}): popraw kaucję w kartotece Mercalys albo usuń te wiersze`
 
   // Protokół (np. MM nośnika dla innego sklepu): artykuły z EAN-em i ilością różną od 0.
-  const protocolLines: ProtocolLine[] = rows.flatMap((row) =>
-    /^\d{1,14}$/.test(row.ean) && row.quantity ? [{ ean: row.ean, quantity: row.quantity }] : [],
+  const protocolLines = useMemo<ProtocolLine[]>(
+    () =>
+      rows.flatMap((row) =>
+        /^\d{1,14}$/.test(row.ean) && row.quantity ? [{ ean: row.ean, quantity: row.quantity }] : [],
+      ),
+    [rows],
   )
 
   // ---------- pliki: zmiana cen (CTRLPRIX) i nowe artykuły (CADBEZP), osobno dla dostawcy (538, 88110)
 
   const priceChangeFolder = usePriceChangeFolder(store.id)
   const productFolder = useProductFileFolder(store.id)
-  const priceRows = rows.filter(
-    (row) =>
-      row.known &&
-      row.ean &&
-      row.catalog &&
-      row.salePrice !== null &&
-      row.salePrice > 0 &&
-      row.salePrice !== row.catalog.salePrice,
+  const priceRows = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          row.known &&
+          row.ean &&
+          row.catalog &&
+          row.salePrice !== null &&
+          row.salePrice > 0 &&
+          row.salePrice !== row.catalog.salePrice,
+      ),
+    [rows],
   )
   const [saving, setSaving] = useState<'prices' | 'articles' | null>(null)
 
@@ -675,7 +695,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   }
 
   const productDrafts = useProductDraftConfirm(store.id)
-  const newGroups = delivery ? newArticlesBySupplier(delivery, rows) : []
+  const newGroups = useMemo(() => (delivery ? newArticlesBySupplier(delivery, rows) : []), [delivery, rows])
   const newArticles = newGroups.reduce((sum, group) => sum + group.rows.length, 0)
   const saveNewArticles = async () => {
     setSaving('articles')
@@ -731,13 +751,8 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     <>
       <PageHeader
         title="Dostawa z bazy"
-        description={
-          draft.delivery
-            ? `Bon ${draft.delivery.number} z ${formatDocumentDate(draft.delivery.deliveryDate)} · ${
-                view === 'carriers' ? `nośniki: ${draft.carriers.join(', ')}` : VIEW_LABELS[view]
-              }`
-            : storeLabel(store)
-        }
+        // Bon i data są w pasku poleceń, a liczba wybranych nośników przy przycisku „Nośniki”.
+        description={!draft.delivery ? storeLabel(store) : view !== 'carriers' ? VIEW_LABELS[view] : undefined}
       />
 
       <HowTo

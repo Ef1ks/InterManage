@@ -87,6 +87,38 @@ public class KsefInvoiceReader {
     public record Line(String number, String name, List<String> details, BigDecimal quantity, String unit,
             BigDecimal unitNet, BigDecimal unitGross, BigDecimal discount, String rate, BigDecimal net,
             BigDecimal vat, BigDecimal gross, boolean beforeCorrection, boolean grossComputed, String gtin) {
+
+        private static final BigDecimal DEPOSIT_PRICE = new BigDecimal("0.50");
+        private static final BigDecimal DEPOSIT_TOLERANCE = new BigDecimal("0.005");
+
+        /**
+         * Kaucja za opakowanie (jak we wprowadzaniu danych): nazwa z "kaucj" i 50 gr za sztukę netto albo brutto.
+         * Przyjęcie PZ nigdy jej nie ma, więc porównania z fakturą ją pomijają.
+         */
+        public boolean deposit() {
+            if (name == null || !name.toUpperCase(Locale.ROOT).contains("KAUCJ")) {
+                return false;
+            }
+            return Stream.of(unitNet, unitGross, perPiece(net), perPiece(gross)).filter(Objects::nonNull)
+                    .anyMatch(price -> price.abs().subtract(DEPOSIT_PRICE).abs().compareTo(DEPOSIT_TOLERANCE) <= 0);
+        }
+
+        private BigDecimal perPiece(BigDecimal value) {
+            return value != null && quantity != null && quantity.signum() != 0
+                    ? value.divide(quantity, 4, RoundingMode.HALF_UP) : null;
+        }
+
+        /** Wartość netto ze znakiem: wiersz "przed korektą" odejmuje się od faktury. */
+        public BigDecimal signedNet() {
+            BigDecimal value = net != null ? net : BigDecimal.ZERO;
+            return beforeCorrection ? value.negate() : value;
+        }
+    }
+
+    /** Suma netto kaucji faktury (wiersze "przed korektą" odjęte). */
+    public static BigDecimal depositNet(List<Line> lines) {
+        return lines.stream().filter(Line::deposit).map(Line::signedNet).reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     /** Podsumowanie stawki: netto, VAT i VAT w złotych przy fakturze w obcej walucie. */

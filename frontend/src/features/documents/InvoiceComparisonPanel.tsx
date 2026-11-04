@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Checkbox } from '@base-ui/react/checkbox'
+import { useQueryClient } from '@tanstack/react-query'
 import { CheckIcon, CombineIcon, ListChecksIcon, LoaderCircleIcon, UnlinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -8,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
-import { useInvoiceComparison, useInvoiceComparisonMatches } from '@/features/documents/api'
+import { documentsKey, useInvoiceComparison, useInvoiceComparisonMatches } from '@/features/documents/api'
 import { formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
 import type { InvoiceAmountCheck, InvoiceComparisonRow, InvoiceComparisonStatus } from '@/lib/types'
@@ -21,14 +22,19 @@ const STATUS: Record<InvoiceComparisonStatus, string> = {
   MISSING_ON_INVOICE: 'Brak na fakturze',
   MISSING_IN_DELIVERY: 'Brak w przyjęciu',
   NO_CODE: 'Pozycja bez EAN',
+  DEPOSIT: 'Kaucja',
 }
+
+/** Kaucji przyjęcie nigdy nie ma, więc tak jak zgodne pozycje nie jest różnicą. */
+const isSettled = (row: InvoiceComparisonRow) => row.status === 'MATCH' || row.status === 'DEPOSIT'
 
 /** Wiersz po artykułach i pozycjach faktury - ten sam po odświeżeniu porównania. */
 const rowKey = (row: InvoiceComparisonRow) => [...row.itm8s, ...row.invoiceKeys].join('|')
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
-const signed = (value: number) => (value > 0 ? `+${formatMoney(value)}` : value < 0 ? `−${formatMoney(-value)}` : '0,00')
+const signed = (value: number) =>
+  value > 0 ? `+${formatMoney(value)}` : value < 0 ? `−${formatMoney(-value)}` : '0,00'
 
 /**
  * W którym artykule przyjęcie różni się od faktury: pozycje z XML faktur KSeF połączone z artykułami przyjęcia po EAN.
@@ -55,6 +61,19 @@ export function InvoiceComparisonPanel({
   const { match, unmatch, restore } = useInvoiceComparisonMatches(storeId, documentId)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
 
+  // Pierwsze porównanie odczytuje kaucje z XML: zgodność kwot przyjęcia liczy się wtedy od nowa (raz, bez porównania).
+  const queryClient = useQueryClient()
+  const depositsRefreshed = useRef(false)
+  const deposits = data?.depositNet ?? 0
+  useEffect(() => {
+    if (deposits === 0 || depositsRefreshed.current || !check || check.matches) return
+    depositsRefreshed.current = true
+    void queryClient.invalidateQueries({
+      queryKey: documentsKey(storeId),
+      predicate: (query) => !query.queryKey.includes('invoice-comparison'),
+    })
+  }, [deposits, check, queryClient, storeId])
+
   if (!canViewKsef || !check) return null
   if (!enabled) {
     return (
@@ -80,7 +99,7 @@ export function InvoiceComparisonPanel({
     )
   }
 
-  const differences = data.rows.filter((row) => row.status !== 'MATCH')
+  const differences = data.rows.filter((row) => !isSettled(row))
   const matching = data.rows.length - differences.length
   const visible = showMatching ? data.rows : differences
   const selectedRows = data.rows.filter((row) => selected.has(rowKey(row)))
@@ -127,8 +146,9 @@ export function InvoiceComparisonPanel({
           <h4 className="text-sm font-semibold">Porównanie pozycji z fakturą</h4>
           <p className="text-xs text-muted-foreground tabular-nums">
             {data.invoices.length > 0 && `${data.invoices.join(', ')} · `}
-            pozycje faktur netto {formatMoney(data.invoiceNet)} zł, przyjęcie {formatMoney(data.deliveryValue)} zł ·
-            łączone po EAN
+            pozycje faktur netto {formatMoney(data.invoiceNet)} zł
+            {data.depositNet !== 0 && ` (bez kaucji ${formatMoney(data.depositNet)} zł)`}, przyjęcie{' '}
+            {formatMoney(data.deliveryValue)} zł · łączone po EAN
           </p>
           {canEdit && differences.length > 0 && (
             <p className="mt-1 max-w-prose text-xs text-muted-foreground">
@@ -222,7 +242,7 @@ function ComparisonRow({
   onSplit?: () => void
   splitting: boolean
 }) {
-  const match = row.status === 'MATCH'
+  const match = isSettled(row)
   const label = row.name ?? row.invoiceName ?? 'Bez nazwy'
   return (
     <TableRow className={cn('tabular-nums', match && 'text-muted-foreground', selected && 'bg-muted/50')}>
@@ -259,13 +279,7 @@ function ComparisonRow({
             </span>
           )}
           {onSplit && (
-            <Button
-              variant="ghost"
-              size="xs"
-              className="text-muted-foreground"
-              loading={splitting}
-              onClick={onSplit}
-            >
+            <Button variant="ghost" size="xs" className="text-muted-foreground" loading={splitting} onClick={onSplit}>
               <UnlinkIcon />
               Rozłącz
             </Button>

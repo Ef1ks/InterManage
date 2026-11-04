@@ -24,6 +24,7 @@ import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { addDays, todayIso } from '@/lib/dates'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
+import { useSearchParamText } from '@/lib/use-search-param-text'
 import type { ProductListItem, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +52,7 @@ export function InventoryPage() {
 
 function StoreInventory({ store }: { store: StoreSummary }) {
   const [params, setParams] = useSearchParams()
-  const query = params.get('szukaj') ?? ''
+  const { text: query, setText: setQuery, debounced: debouncedQuery } = useSearchParamText('szukaj')
   const selected = params.get('artykul')
   const filters = readFilters(params)
   const overview = useSalesReportsOverview(store.id)
@@ -83,7 +84,8 @@ function StoreInventory({ store }: { store: StoreSummary }) {
         <ProductList
           storeId={store.id}
           query={query}
-          onQueryChange={(value) => setParam('szukaj', value || null)}
+          debouncedQuery={debouncedQuery}
+          onQueryChange={setQuery}
           filters={filters}
           onFiltersChange={(next) => setParams((current) => writeFilters(current, next), { replace: true })}
           selected={selected}
@@ -131,6 +133,7 @@ function StoreInventory({ store }: { store: StoreSummary }) {
 function ProductList({
   storeId,
   query,
+  debouncedQuery,
   onQueryChange,
   filters,
   onFiltersChange,
@@ -140,6 +143,7 @@ function ProductList({
 }: {
   storeId: string
   query: string
+  debouncedQuery: string
   onQueryChange: (value: string) => void
   filters: ProductFilters
   onFiltersChange: (filters: ProductFilters) => void
@@ -147,7 +151,6 @@ function ProductList({
   onSelect: (itm8: string) => void
   className?: string
 }) {
-  const debouncedQuery = useDebouncedValue(query.trim(), 250)
   // Filtry jako tekst zapytania: przedziały wpisuje się cyframi, więc też z opóźnieniem.
   const debouncedFilters = useDebouncedValue(filterParams(filters).toString(), 250)
   const list = useProductList(storeId, debouncedQuery, debouncedFilters)

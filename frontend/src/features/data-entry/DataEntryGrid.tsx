@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import {
   activePromoPrice,
   belowRequiredMargin,
+  vatMismatch,
   cadencierPrice,
   canSellSmaller,
   canSplitQuantity,
@@ -709,7 +710,14 @@ export function DataEntryGrid({
     }
     switch (event.key) {
       case 'Enter':
-        if (columns[editing.c].key === 'ean' && !event.shiftKey && editing.text.trim() !== '') {
+        // Skan w pustym wierszu idzie dalej seriami; poprawiony kod pozycji (np. błędny EAN z faktury) tylko
+        // przechodzi niżej, bez wstawiania pustego wiersza.
+        if (
+          columns[editing.c].key === 'ean' &&
+          !event.shiftKey &&
+          editing.text.trim() !== '' &&
+          rows[editing.r]?.name === ''
+        ) {
           event.preventDefault()
           if (commitEdit(editing)) nextScan(editing.r)
           return
@@ -762,6 +770,7 @@ export function DataEntryGrid({
   const tooLongNames = rows.filter((row) => row.name.length > NAME_LIMIT && !serviceKind(row)).length
   const invalidEans = rows.filter((row) => eanError(row) !== null).length
   const depositErrors = rows.filter((row) => depositError(row) !== null).length
+  const vatMismatches = rows.filter(vatMismatch).length
 
   // Kaucje i dostawa są zawsze na końcu (układa je strona), nad nimi nagłówek sekcji.
   const firstService = rows.findIndex((row) => serviceKind(row) !== null)
@@ -824,7 +833,13 @@ export function DataEntryGrid({
                 <th
                   key={column.key}
                   scope="col"
-                  title={onSort ? `${column.title ?? column.header} · kliknij, żeby posortować` : column.title}
+                  title={
+                    column.key === 'vat' && vatMismatches > 0
+                      ? `Błędny VAT w kartotece: ${vatMismatches}. Obowiązuje stawka z dokumentu.`
+                      : onSort
+                        ? `${column.title ?? column.header} · kliknij, żeby posortować`
+                        : column.title
+                  }
                   aria-sort={
                     sort?.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined
                   }
@@ -843,6 +858,9 @@ export function DataEntryGrid({
                       'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
                     column.key === 'deposit' &&
                       depositErrors > 0 &&
+                      'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
+                    column.key === 'vat' &&
+                      vatMismatches > 0 &&
                       'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50',
                   )}
                 >
@@ -879,6 +897,11 @@ export function DataEntryGrid({
                       {column.key === 'name' && tooLongNames > 0 && (
                         <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
                           za długie: {tooLongNames}
+                        </span>
+                      )}
+                      {column.key === 'vat' && vatMismatches > 0 && (
+                        <span className="ml-1.5 rounded bg-destructive px-1 py-px text-[0.9em] text-white">
+                          {vatMismatches}
                         </span>
                       )}
                       {column.key === 'deposit' && depositErrors > 0 && (
@@ -1058,6 +1081,7 @@ const GridRow = memo(function GridRow({
   const tooLong = !service && row.name.length > NAME_LIMIT
   const badEan = eanError(row) !== null
   const badDeposit = depositError(row) !== null
+  const badVat = vatMismatch(row)
   const changes = catalogChanges(row)
   const changedColumns = new Set(changes.flatMap((field) => CHANGED_COLUMNS[field]))
   const filled = row.ean !== '' || row.name !== ''
@@ -1135,6 +1159,7 @@ const GridRow = memo(function GridRow({
                   : 'bg-red-200 text-red-950 dark:bg-red-900 dark:text-red-50'),
               badEan && column.key === 'ean' && 'bg-red-500 font-medium text-white dark:bg-red-700',
               badDeposit && column.key === 'deposit' && 'bg-red-500 font-medium text-white dark:bg-red-700',
+              badVat && column.key === 'vat' && 'bg-red-500 font-medium text-white dark:bg-red-700',
               inRange && SELECTION_LAYER,
               inRange && !isActive && SELECTION_FILL,
               inRange && rangeTop && 'after:border-t-2',
@@ -1331,8 +1356,18 @@ function CellContent({
       return <span title={row.brand}>{row.brand}</span>
     case 'value':
       return formatMoney(netValue(row))
-    case 'vat':
-      return row.vatPercent === null ? null : `${percentFormat.format(row.vatPercent)}%`
+    case 'vat': {
+      if (row.vatPercent === null) return null
+      const text = `${percentFormat.format(row.vatPercent)}%`
+      if (!vatMismatch(row)) return text
+      const message = `Błędny VAT w kartotece: ${percentFormat.format(row.catalogVat ?? 0)}%, w dokumencie ${text}. Do pliku idzie stawka z dokumentu.`
+      return (
+        <span className="flex min-w-0 items-center" title={message}>
+          <span className="truncate">{text}</span>
+          <TriangleAlertIcon aria-label={message} className="ml-auto size-[1.1em] shrink-0 pl-0.5" />
+        </span>
+      )
+    }
     case 'salePrice': {
       // Trwająca promocja z kasy (pliki TRACEART): kartoteka podaje wtedy cenę promocyjną jako cenę sprzedaży.
       const promo = activePromoPrice(row)

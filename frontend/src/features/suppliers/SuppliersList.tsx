@@ -19,6 +19,7 @@ import { phoneHref, supplierPaths, websiteLabel } from '@/features/suppliers/for
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { matchesSearch } from '@/lib/search'
 import type { StoreSummary, Supplier } from '@/lib/types'
+import { useSearchParamText } from '@/lib/use-search-param-text'
 
 type Origin = 'all' | 'list' | 'manual'
 
@@ -40,9 +41,10 @@ export function SuppliersList({ store }: { store: StoreSummary }) {
   const canImport = useCan('IMPORTS')
   const { data: suppliers, isPending, isError, refetch } = useSuppliers(store.id)
   const [params, setParams] = useSearchParams()
-  const query = params.get('szukaj') ?? ''
+  const { text: query, setText: setQuery } = useSearchParamText('szukaj')
   const deferredQuery = useDeferredValue(query)
-  const origin: Origin = params.get('rodzaj') === 'lista' ? 'list' : params.get('rodzaj') === 'reczni' ? 'manual' : 'all'
+  const origin: Origin =
+    params.get('rodzaj') === 'lista' ? 'list' : params.get('rodzaj') === 'reczni' ? 'manual' : 'all'
   const [adding, setAdding] = useState(false)
   const navigate = useNavigate()
 
@@ -107,7 +109,8 @@ export function SuppliersList({ store }: { store: StoreSummary }) {
             Wgraj raport „Lista dostawców” z systemu sklepu
             {canImport && (
               <>
-                {' '}w{' '}
+                {' '}
+                w{' '}
                 <Link
                   to={TOOL_ROUTES.IMPORTS.path}
                   className="font-medium text-foreground underline-offset-4 hover:underline"
@@ -125,7 +128,7 @@ export function SuppliersList({ store }: { store: StoreSummary }) {
             <SearchInput
               className="w-full sm:w-96"
               value={query}
-              onChange={(value) => setParam('szukaj', value || null)}
+              onChange={setQuery}
               placeholder="Szukaj: nazwa, kod, NIP, miasto, przedstawiciel"
             />
             <SegmentedField
@@ -160,7 +163,9 @@ export function SuppliersList({ store }: { store: StoreSummary }) {
                 ) : visible.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      {deferredQuery ? `Żaden dostawca nie pasuje do „${deferredQuery}”.` : 'Brak dostawców w tej grupie.'}
+                      {deferredQuery
+                        ? `Żaden dostawca nie pasuje do „${deferredQuery}”.`
+                        : 'Brak dostawców w tej grupie.'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -194,7 +199,11 @@ export function SuppliersList({ store }: { store: StoreSummary }) {
 }
 
 function SupplierRow({ supplier, onOpen }: { supplier: Supplier; onOpen: () => void }) {
-  const details = [supplier.code ? `kod ${supplier.code}` : 'dodany ręcznie', supplier.city, supplier.nip && `NIP ${supplier.nip}`]
+  const details = [
+    supplier.code ? `kod ${supplier.code}` : 'dodany ręcznie',
+    supplier.city,
+    supplier.nip && `NIP ${supplier.nip}`,
+  ]
   const representative = supplier.representative
   return (
     <TableRow
@@ -239,9 +248,7 @@ function SupplierRow({ supplier, onOpen }: { supplier: Supplier; onOpen: () => v
               external
             />
           )}
-          {!supplier.phone && !supplier.email && !supplier.website && (
-            <span className="text-muted-foreground">—</span>
-          )}
+          {!supplier.phone && !supplier.email && !supplier.website && <span className="text-muted-foreground">—</span>}
         </div>
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">

@@ -14,6 +14,8 @@ import type {
   DataEntryXmlExport,
   InvoiceBulkResult,
   InvoiceMarkKind,
+  KsefInvoice,
+  KsefInvoicePage,
   SupplierRuleMode,
   NomenclatureItem,
   PriceControlFileItem,
@@ -24,6 +26,22 @@ import type {
 import { parseNumber } from './grid-values'
 
 const path = (storeId: string) => `/stores/${storeId}/data-entry`
+
+/**
+ * Wczytana faktura z listy faktur KSeF (po numerze i id): czy jest już w systemie sklepu (`deliveries`: przyjęcie z jej
+ * numerem albo przypięty dokument w sklepie firmy) i czy to korekta. `null`, gdy jej nie widać na liście.
+ */
+export function useLoadedKsefInvoice(storeId: string, invoiceId: string | null, number: string | null) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'ksef', 'loaded-invoice', invoiceId, number],
+    queryFn: async () => {
+      const params = new URLSearchParams({ query: number ?? '', showSkipped: 'true' })
+      const page = await api<KsefInvoicePage>(`/stores/${storeId}/ksef/invoices?${params}`)
+      return page.invoices.find((invoice: KsefInvoice) => invoice.id === invoiceId) ?? null
+    },
+    enabled: Boolean(invoiceId && number),
+  })
+}
 
 /**
  * Wolne kody 240001-242999 do zakładania artykułów ważonych (pełne EAN-y, np. 2400010000000), bez zajętych w kartotece,

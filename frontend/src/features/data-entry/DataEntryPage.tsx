@@ -13,6 +13,7 @@ import {
   ScaleIcon,
   PlusIcon,
   ReceiptTextIcon,
+  SearchIcon,
   SparklesIcon,
   Redo2Icon,
   SettingsIcon,
@@ -24,8 +25,10 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from 'react-redux'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
+import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { PageHeader } from '@/components/PageHeader'
@@ -42,7 +45,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useCan } from '@/features/auth/api'
 import { useSuppliers } from '@/features/documents/api'
-import { formatMoney } from '@/features/documents/format'
+import { bonNumber, documentPaths, formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { documentPrice } from '@/features/base-delivery/base-rows'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
@@ -75,6 +78,7 @@ import {
   lookupProducts,
   useDataEntryNomenclature,
   useLinkProduct,
+  useLoadedKsefInvoice,
   useMarkInvoice,
   useSaveTemporaryXml,
   useSuggest,
@@ -192,7 +196,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       dispatch(
         setDataEntryDraft({
           storeId: store.id,
-          draft: { ...draft, rows: withTrailingEmptyRow(draft.rows) },
+          // Pusta tabela to jeden pusty wiersz: od razu można skanować i wybrać dostawcę.
+          draft: { ...draft, rows: draft.rows.length === 0 ? [emptyRow()] : withTrailingEmptyRow(draft.rows) },
         }),
       ),
     [dispatch, store.id],
@@ -236,6 +241,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const names = useMemo(() => nomenclatureNames(nomenclature), [nomenclature])
   const { data: rounding } = usePriceRoundingRules(store.id)
   const gridRef = useRef<GridHandle>(null)
+  // Pusta tabela: fokus od razu w EAN-ie pierwszego wiersza, więc skan trafia do tabeli bez klikania.
+  const focusFirstEan = useCallback(
+    () =>
+      requestAnimationFrame(() => {
+        const first = currentDraft().rows[0]
+        if (first) gridRef.current?.focusCell(first.id, 'ean')
+      }),
+    [currentDraft],
+  )
+  useEffect(() => {
+    const draft = currentDraft()
+    if (draft.rows.length === 0) applyDraft(draft)
+    if (draft.rows.every((row) => row.ean === '' && row.name === '')) focusFirstEan()
+  }, [store.id, currentDraft, applyDraft, focusFirstEan])
 
   // Okno sprzedaży i dostaw artykułu jak w raportach; wymaga dostępu do raportów sprzedaży.
   const canSeeSales = useCan('SALES', 'VIEW')
@@ -748,6 +767,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     const before = currentDraft()
     forgetSaved()
     setDraft(EMPTY_DATA_ENTRY)
+    focusFirstEan()
     toast('Wyczyszczono tabelę', {
       action: { label: 'Przywróć', onClick: () => setDraft(before) },
     })
@@ -939,7 +959,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   return (
     <>
-      <PageHeader title="Wprowadzanie danych" description={invoice ? documentLabel(invoice) : storeLabel(store)} />
+      <PageHeader
+        title="Wprowadzanie danych"
+        description={
+          invoice ? (
+            <DocumentHeading storeId={store.id} invoice={invoice} canSeeKsef={canLoadInvoices} />
+          ) : (
+            storeLabel(store)
+          )
+        }
+      />
 
       <HowTo
         id="data-entry"
@@ -981,7 +1010,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
             <Button
-              variant={rows.length > 0 ? 'outline' : 'default'}
+              variant={filled.length > 0 ? 'outline' : 'default'}
               size="sm"
               onClick={() => setPickerOpen(true)}
               disabled={!canLoadInvoices}
@@ -1262,79 +1291,55 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         </div>
       </CommandBar>
 
-      {rows.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center">
-          <p className="text-base font-medium">Tabela jest pusta</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            Wczytaj fakturę zakupową z KSeF, plik XML faktury (z dysku albo zapisany tu wcześniej) albo dodaj wiersz i
-            wklej pozycje z Excela (Ctrl+V).
-          </p>
-          <div className="mt-2 flex gap-2">
-            <Button onClick={() => setPickerOpen(true)} disabled={!canLoadInvoices}>
-              <ReceiptTextIcon />
-              Wczytaj fakturę z KSeF
-            </Button>
-            <Button variant="outline" onClick={() => setXmlOpenOpen(true)}>
-              <FileInputIcon />
-              Wczytaj z XML
-            </Button>
-            <Button variant="outline" onClick={() => setDraft({ invoice: null, rows: [emptyRow()] })}>
-              <PlusIcon />
-              Pusty wiersz
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <dl className="mb-2 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-            <Stat label="Pozycje" value={filled.length} />
-            <Stat
-              label="Suma netto"
-              value={<ComparedSum value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />}
-            />
-            <Stat
-              label="VAT"
-              value={<ComparedSum value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />}
-            />
-            <Stat label="Nowe" value={newCount} />
-            {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
-            <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
-          </dl>
-
-          <Legend />
-
-          <DataEntryGrid
-            ref={gridRef}
-            rows={viewRows}
-            setRows={setViewRows}
-            onEansChanged={onEansChanged}
-            onSelectedRowsChange={setSelectedRows}
-            onDeleteRows={removeRows}
-            onInvalidPaste={(count) =>
-              toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
-            }
-            nomenclature={nomenclature}
-            names={names}
-            pricing={pricing}
-            onShowArticle={canSeeSales ? showArticle : undefined}
-            onLinkArticle={openLink}
-            onSplitQuantity={setSplitTarget}
-            stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
+      <>
+        <dl className="mb-2 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
+          <Stat label="Pozycje" value={filled.length} />
+          <Stat
+            label="Suma netto"
+            value={<ComparedSum value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />}
           />
+          <Stat
+            label="VAT"
+            value={<ComparedSum value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />}
+          />
+          <Stat label="Nowe" value={newCount} />
+          {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
+          <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
+        </dl>
 
-          <div data-keep-grid-selection className="mt-3 flex shrink-0 gap-2">
-            <Button variant="outline" onClick={() => setRows((current) => [...current, emptyRow()])}>
-              <PlusIcon />
-              Dodaj wiersz
-            </Button>
-            <Button variant="ghost" onClick={() => removeRows(selectedRows)} disabled={selectedRows.length === 0}>
-              <Trash2Icon />
-              Usuń zaznaczone wiersze
-              {selectedRows.length > 0 && ` (${selectedRows.length})`}
-            </Button>
-          </div>
-        </>
-      )}
+        <Legend />
+
+        <DataEntryGrid
+          ref={gridRef}
+          rows={viewRows}
+          setRows={setViewRows}
+          onEansChanged={onEansChanged}
+          onSelectedRowsChange={setSelectedRows}
+          onDeleteRows={removeRows}
+          onInvalidPaste={(count) =>
+            toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
+          }
+          nomenclature={nomenclature}
+          names={names}
+          pricing={pricing}
+          onShowArticle={canSeeSales ? showArticle : undefined}
+          onLinkArticle={openLink}
+          onSplitQuantity={setSplitTarget}
+          stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
+        />
+
+        <div data-keep-grid-selection className="mt-3 flex shrink-0 gap-2">
+          <Button variant="outline" onClick={() => setRows((current) => [...current, emptyRow()])}>
+            <PlusIcon />
+            Dodaj wiersz
+          </Button>
+          <Button variant="ghost" onClick={() => removeRows(selectedRows)} disabled={selectedRows.length === 0}>
+            <Trash2Icon />
+            Usuń zaznaczone wiersze
+            {selectedRows.length > 0 && ` (${selectedRows.length})`}
+          </Button>
+        </div>
+      </>
 
       {canSeeSales && (
         <SalesChartDialog
@@ -1505,12 +1510,71 @@ function parseDraft(json: string | null): DataEntryDraft | null {
 /** Dokument czekający na wczytanie: faktura z KSeF albo plik XML (`fromXml` = nazwa pliku). */
 type PendingDocument = { data: DataEntryDocument; fromXml?: string }
 
-function documentLabel(invoice: NonNullable<DataEntryDraft['invoice']>) {
+/**
+ * Wczytany dokument pod tytułem: duży numer faktury (kopiowanie i „Wyszukaj”, który otwiera przyjęcia PZ albo przy
+ * korekcie korekty od dostawcy z tym numerem w wyszukiwarce), dostawca i plik. Faktura, która ma już dokument
+ * w systemie sklepu, jest „zakończona”, żeby nie wprowadzić jej drugi raz. Same elementy liniowe, bo opis nagłówka
+ * jest akapitem.
+ */
+function DocumentHeading({
+  storeId,
+  invoice,
+  canSeeKsef,
+}: {
+  storeId: string
+  invoice: NonNullable<DataEntryDraft['invoice']>
+  canSeeKsef: boolean
+}) {
+  const navigate = useNavigate()
+  const canSeeDocuments = useCan('DOCUMENTS', 'VIEW')
+  const ksef = useLoadedKsefInvoice(storeId, canSeeKsef ? invoice.id : null, invoice.number)
+  const documents = ksef.data?.deliveries ?? []
+  const correction = ksef.data?.correction ?? false
   const seller = invoice.supplier ? `dla ${invoice.supplier.name}` : (invoice.sellerName ?? invoice.sellerNip)
-  const what = invoice.number ? `${invoice.id ? 'Faktura' : 'Dokument'} ${invoice.number}` : 'Dokument bez numeru'
-  return [what, seller, invoice.fromXml && !invoice.id ? `z pliku ${invoice.fromXml}` : null]
-    .filter(Boolean)
-    .join(' · ')
+  const details = [seller, invoice.fromXml && !invoice.id ? `z pliku ${invoice.fromXml}` : null].filter(Boolean)
+  const number = invoice.number
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {number ? (
+        <>
+          <span className="text-muted-foreground">
+            {invoice.id ? (correction ? 'Korekta' : 'Faktura') : 'Dokument'}
+          </span>
+          <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">{number}</span>
+          <CopyButton value={number} label="Kopiuj numer faktury" />
+          {canSeeDocuments && (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() =>
+                navigate(`${documentPaths.list(correction ? 'WZ' : 'PZ')}?szukaj=${encodeURIComponent(number)}`)
+              }
+              title={`Szukaj numeru ${number} w ${correction ? 'korektach od dostawcy' : 'przyjęciach PZ'}`}
+            >
+              <SearchIcon />
+              Wyszukaj
+            </Button>
+          )}
+        </>
+      ) : (
+        <span className="text-foreground">Dokument bez numeru</span>
+      )}
+      {documents.length > 0 && (
+        <span
+          className="rounded-md bg-emerald-300 px-2 py-0.5 text-sm font-semibold text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50"
+          title={`Faktura jest już w systemie sklepu: ${documents
+            .map((document) => `${document.typeSingular} ${bonNumber(document.number)} (sklep ${document.store})`)
+            .join(', ')}`}
+        >
+          Zakończona · {documents[0].type === 'PZ' ? 'w PZ' : documents[0].typeSingular.toLowerCase()}{' '}
+          {bonNumber(documents[0].number)}
+          {documents.length > 1 && ` +${documents.length - 1}`}
+        </span>
+      )}
+      {details.length > 0 && <span>· {details.join(' · ')}</span>}
+    </span>
+  )
 }
 
 /**

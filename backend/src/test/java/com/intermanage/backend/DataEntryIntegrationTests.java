@@ -954,6 +954,19 @@ class DataEntryIntegrationTests {
         mvc.perform(delete(url("/invoices/" + invoiceId + "/marks")).with(csrf()).cookie(owner))
                 .andExpect(status().isOk());
 
+        // Dostawca pominięty w Fakturach KSeF też znika z okna i wraca z "Pokaż pomijanych".
+        String ksefSkipped = JsonPath.read(mvc.perform(post("/api/stores/" + storeId + "/ksef/settings/skipped-suppliers")
+                        .with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nip\":\"" + SELLER_NIP + "\",\"name\":\"SERY I CHIPSY SA\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.skippedSuppliers[0].id");
+        mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        mvc.perform(get(url("/invoices?status=ALL")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(0));
+        mvc.perform(get(url("/invoices?showSkipped=true")).cookie(owner))
+                .andExpect(jsonPath("$.invoices.length()").value(1));
+        mvc.perform(delete("/api/stores/" + storeId + "/ksef/settings/skipped-suppliers/" + ksefSkipped)
+                .with(csrf()).cookie(owner)).andExpect(status().isOk());
+
         // Pomijany dostawca znika z okna; usunięcie z listy (znacznik) i przywrócenie.
         String skipped = JsonPath.read(mvc.perform(post(url("/skipped-suppliers")).with(csrf()).cookie(owner)
                         .contentType(MediaType.APPLICATION_JSON)

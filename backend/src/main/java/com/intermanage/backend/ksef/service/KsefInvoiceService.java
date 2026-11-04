@@ -80,13 +80,16 @@ public class KsefInvoiceService {
     private final KsefInvoiceEntryRepository entries;
     private final DocumentKsefInvoiceRepository documentLinks;
     private final StoreRepository stores;
+    private final KsefInvoiceReader reader;
 
     public KsefInvoiceService(KsefInvoiceRepository invoices, KsefConnectionRepository connections,
             KsefInternalIdRepository internalIds, KsefSkippedSupplierRepository skippedSuppliers,
             DocumentRepository documents, AppUserRepository users, KsefSessionService sessions, KsefClient client,
             KsefMapper mapper, KsefInvoicePdf invoicePdf, KsefInvoiceXmlRepository xmlFiles,
             KsefRateLimiter limiter, KsefSyncService syncService, KsefSyncStateRepository syncStates,
-            KsefInvoiceEntryRepository entries, DocumentKsefInvoiceRepository documentLinks, StoreRepository stores) {
+            KsefInvoiceEntryRepository entries, DocumentKsefInvoiceRepository documentLinks, StoreRepository stores,
+            KsefInvoiceReader reader) {
+        this.reader = reader;
         this.documentLinks = documentLinks;
         this.stores = stores;
         this.invoices = invoices;
@@ -220,10 +223,16 @@ public class KsefInvoiceService {
 
     /**
      * XML faktury: z bazy, a za pierwszym razem z KSeF (w granicach limitu pobrań, {@link KsefRateLimiter}) i od razu
-     * zapisany - faktura w KSeF się nie zmienia.
+     * zapisany - faktura w KSeF się nie zmienia. Przy okazji zapisuje sumę kaucji z pozycji (także plikom zapisanym
+     * przed jej liczeniem), z której korzysta zgodność kwot przyjęć.
      */
     private byte[] download(UUID storeId, KsefInvoice invoice) {
-        return xmlFiles.findById(invoice.getId()).map(KsefInvoiceXml::getContent).orElseGet(() -> {
+        return xmlFiles.findById(invoice.getId()).map(stored -> {
+            if (stored.getDepositNet() == null) {
+                stored.setDepositNet(depositNet(stored.getContent()));
+            }
+            return stored.getContent();
+        }).orElseGet(() -> {
             KsefConnection connection = connections.findById(storeId)
                     .orElseThrow(() -> ApiException.notFound("Sklep nie ma połączenia z KSeF"));
             byte[] content;
@@ -235,9 +244,18 @@ public class KsefInvoiceService {
                 throw e.rateLimited() ? new ApiException(HttpStatus.TOO_MANY_REQUESTS, e.getMessage())
                         : ApiException.badRequest("KSeF: " + e.getMessage());
             }
-            xmlFiles.save(new KsefInvoiceXml(invoice.getId(), content));
+            xmlFiles.save(new KsefInvoiceXml(invoice.getId(), content, depositNet(content)));
             return content;
         });
+    }
+
+    /** Suma netto kaucji z pozycji faktury; {@code null}, gdy pliku nie da się odczytać. */
+    private BigDecimal depositNet(byte[] xml) {
+        try {
+            return KsefInvoiceReader.depositNet(reader.read(xml).lines());
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            return null;
+        }
     }
 
     /** "Faktura FV_12_2026 MLECZARNIA" - znaki niedozwolone w nazwach plików zamienione na _. */

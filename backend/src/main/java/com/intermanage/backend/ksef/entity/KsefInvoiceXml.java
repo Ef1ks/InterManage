@@ -1,5 +1,6 @@
 package com.intermanage.backend.ksef.entity;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -23,13 +24,18 @@ public class KsefInvoiceXml {
     @Column(name = "downloaded_at", nullable = false)
     private Instant downloadedAt;
 
+    /** Suma netto kaucji z pozycji faktury; {@code null}, dopóki XML nie został odczytany. */
+    @Column(name = "deposit_net", precision = 16, scale = 2)
+    private BigDecimal depositNet;
+
     protected KsefInvoiceXml() {
     }
 
-    public KsefInvoiceXml(UUID invoiceId, byte[] content) {
+    public KsefInvoiceXml(UUID invoiceId, byte[] content, BigDecimal depositNet) {
         this.invoiceId = invoiceId;
         this.content = content;
         this.downloadedAt = Instant.now();
+        this.depositNet = depositNet;
     }
 
     public UUID getInvoiceId() {
@@ -42,5 +48,13 @@ public class KsefInvoiceXml {
 
     public Instant getDownloadedAt() {
         return downloadedAt;
+    }
+
+    public BigDecimal getDepositNet() {
+        return depositNet;
+    }
+
+    public void setDepositNet(BigDecimal depositNet) {
+        this.depositNet = depositNet;
     }
 }

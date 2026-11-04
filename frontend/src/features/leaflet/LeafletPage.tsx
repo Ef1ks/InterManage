@@ -163,7 +163,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
       ),
     [scope, filters, withoutProduct],
   )
-  const files = useMemo(() => (leaflet.data ? proFiles(lines, leaflet.data.year) : []), [lines, leaflet.data])
+  const files = useMemo(() => (leaflet.data ? proFiles(lines, leaflet.data.week) : []), [lines, leaflet.data])
   const extras = useMemo(() => extraMarks(lines), [lines])
   const missing = scope.filter((line) => !line.product).length
   const filtersActive = Object.keys(filters).length > 0 || withoutProduct
@@ -221,7 +221,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
   const columnFilter = (key: FilterKey, label: string) => (
     <ColumnFilter
       label={label}
-      values={filterValues(scope, key)}
+      getValues={() => filterValues(scope, key)}
       selected={filters[key] ?? null}
       onChange={(selected) =>
         setFilters((current) => {

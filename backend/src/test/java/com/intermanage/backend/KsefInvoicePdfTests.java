@@ -74,6 +74,21 @@ class KsefInvoicePdfTests {
     }
 
     @Test
+    void basicVariantHasTotalsDeliveryNotesInOneLineAndLineNotesUnderLines() throws IOException {
+        String xml = new String(fixture(), StandardCharsets.UTF_8)
+                .replace("<WZ>WZ/881/2026</WZ>", "<WZ>WZ/881/2026</WZ><WZ>WZ/882/2026</WZ>")
+                .replace("<DodatkowyOpis>", "<DodatkowyOpis><NrWiersza>000001</NrWiersza><Klucz>PARTIA</Klucz>"
+                        + "<Wartosc>L-123</Wartosc></DodatkowyOpis><DodatkowyOpis>");
+        byte[] file = pdf.pdf(xml.getBytes(StandardCharsets.UTF_8), KSEF_NUMBER, "1111111111",
+                Instant.parse("2026-10-19T09:20:00Z"), KsefInvoicePdf.Variant.BASIC);
+
+        String text = new PdfTextExtractor(new PdfReader(file)).getTextFromPage(1);
+        assertThat(text).contains("Mleko 3,2% 1 l karton", "333,00 PLN", "WZ/881/2026, WZ/882/2026",
+                "PARTIA L-123");
+        assertThat(text).doesNotContain("poz. 000001");
+    }
+
+    @Test
     void verificationUrlFollowsKsefQrFormat() throws Exception {
         byte[] xml = fixture();
         String hash = Base64.getUrlEncoder().withoutPadding()
