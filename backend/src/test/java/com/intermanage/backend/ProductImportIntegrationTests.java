@@ -279,6 +279,25 @@ class ProductImportIntegrationTests {
     }
 
     @Test
+    void vatColumnKeepsCodeFromCodeWithRate() throws Exception {
+        Cookie owner = login();
+        String reduced = itm8();
+        String standard = itm8();
+        String plain = itm8();
+        String[] reducedRow = product(reduced, "1.00", "1", "VAT 5");
+        reducedRow[13] = "6 5.0%";
+        String[] standardRow = product(standard, "1.00", "1", "VAT 23");
+        standardRow[13] = "1 23.0%";
+        String[] plainRow = product(plain, "1.00", "1", "VAT KOD");
+        plainRow[13] = "2";
+
+        upload(owner, report(nextReportDate(), reducedRow, standardRow, plainRow)).andExpect(status().isCreated());
+
+        assertThat(jdbc.queryForList("select vat_code from products where itm8 in (?, ?, ?) order by itm8",
+                Short.class, reduced, standard, plain)).containsExactlyInAnyOrder((short) 6, (short) 1, (short) 2);
+    }
+
+    @Test
     void reportWithoutRequiredColumnIsRejected() throws Exception {
         Cookie owner = login();
         String itm8 = itm8();

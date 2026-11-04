@@ -61,6 +61,7 @@ public class ProductReportParser {
         private static final DateTimeFormatter REPORT_DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy H:mm:ss");
         private static final Pattern LINE_COUNT = Pattern.compile("Ilo\\S*\\s+linii\\D*(\\d+)", Pattern.CASE_INSENSITIVE);
         private static final Pattern DIGITS = Pattern.compile("\\d+");
+        private static final Pattern VAT_WITH_RATE = Pattern.compile("(\\d{1,4})\\s+\\d+(?:[.,]\\d+)?\\s*%");
         /** Mieści się w najwęższej kolumnie liczbowej, numeric(12, 4). */
         private static final BigDecimal MAX_DECIMAL = new BigDecimal("100000000");
 
@@ -180,7 +181,7 @@ public class ProductReportParser {
                     decimal(cells, "COLI", 3),
                     yesNo(cells, "AKTYWNY"),
                     yesNo(cells, "PRIO"),
-                    smallInteger(cells, "VAT"),
+                    vatCode(cells),
                     text(cells, "JED", 10),
                     decimal(cells, "WAGA", 3),
                     integer(cells, "DLV", Integer.MAX_VALUE),
@@ -252,6 +253,14 @@ public class ProductReportParser {
         private Short smallInteger(List<String> cells, String column) {
             Integer value = integer(cells, column, Short.MAX_VALUE);
             return value == null ? null : value.shortValue();
+        }
+
+        /** Kod stawki: sam ("6") albo z procentem, jak w raporcie ("6 5.0%"); procent wynika z kodu. */
+        private Short vatCode(List<String> cells) {
+            String value = text(cells, "VAT", 64);
+            Matcher withRate = value != null ? VAT_WITH_RATE.matcher(value) : null;
+            return withRate != null && withRate.matches() ? Short.valueOf(withRate.group(1))
+                    : smallInteger(cells, "VAT");
         }
 
         private Boolean yesNo(List<String> cells, String column) {
