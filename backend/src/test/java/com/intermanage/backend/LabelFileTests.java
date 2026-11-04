@@ -33,6 +33,13 @@ class LabelFileTests {
 
     @Test
     void fileNameHasLoginTwice() {
-        assertThat(LabelFile.fileName("pdv_10023")).matches("ETIQUETTE_\\d{8}_\\d{6}_pdv10023_pdv10023\\.traite0");
+        assertThat(LabelFile.fileName("pdv_10023", null))
+                .matches("ETIQUETTE_\\d{8}_\\d{6}_pdv10023_pdv10023\\.traite0");
+    }
+
+    @Test
+    void formatTakesPlaceOfFirstLogin() {
+        assertThat(LabelFile.fileName("pdv_10023", "PRO_GAZ_FOR_30"))
+                .matches("ETIQUETTE_\\d{8}_\\d{6}_PRO_GAZ_FOR_30_pdv10023\\.traite0");
     }
 }

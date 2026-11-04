@@ -230,6 +230,13 @@ public class DataEntryController {
         return service.lookup(storeId, ean, true);
     }
 
+    /** Wolne kody 240001-242999 (pełne EAN-y) do zakładania nowych artykułów ważonych. */
+    @GetMapping("/free-scale-codes")
+    @PreAuthorize(VIEW)
+    public List<String> freeScaleCodes(@PathVariable UUID storeId) {
+        return service.freeScaleCodes(storeId);
+    }
+
     /**
      * Lista towarów z kartoteki z filtrem nad każdą kolumną (fragment, {@code *} = dowolny ciąg), nomenklaturą,
      * przedziałami cen i sortowaniem po stanie; strony po 100 od {@code page} = 0.

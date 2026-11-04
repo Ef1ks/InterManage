@@ -85,7 +85,7 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
         className="mb-4"
         title="Jak wpisać kody MEA"
         steps={[
-          'Lista pokazuje kody MEA z wgranych dokumentów z bazy, których jeszcze nie wpisano w Mercalys.',
+          'Lista pokazuje kody MEA z wgranych dokumentów z bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
           'Wpisz kody w Mercalys (przycisk kopiuje wszystkie zaznaczone, po jednym w wierszu).',
           'Kliknij „Potwierdź wpisanie”: kody znikają z listy i nie wrócą przy kolejnych dostawach. Pomyłkę cofniesz w historii.',
         ]}
@@ -111,7 +111,8 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
           <p className="px-4 py-6 text-sm text-muted-foreground">Wczytywanie…</p>
         ) : pending.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">
-            Wszystkie kody z dokumentów z bazy są wpisane. Nowe pojawią się po wgraniu kolejnego dokumentu.
+            Wszystkie kody z dokumentów z bazy i gazetek są wpisane. Nowe pojawią się po wgraniu kolejnego dokumentu
+            albo gazetki.
           </p>
         ) : (
           <ul
@@ -143,10 +144,11 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
                     />
                     <span className="text-lg font-semibold tabular-nums">{item.code}</span>
                     <span className="ml-auto text-right text-xs text-muted-foreground">
-                      bon {item.deliveryNumber}
+                      {item.leaflet ? 'gazetka' : 'bon'} {item.deliveryNumber}
                       <br />
+                      {item.leaflet && 'od '}
                       {formatDocumentDate(item.deliveryDate)}
-                      {item.deliveryCount > 1 && ` · w ${item.deliveryCount} bonach`}
+                      {item.deliveryCount > 1 && ` · w ${item.deliveryCount} dokumentach`}
                     </span>
                   </label>
                 </li>

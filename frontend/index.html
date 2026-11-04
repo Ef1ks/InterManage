@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- Instalacja jako aplikacja (Chrome, Edge): własne okno bez paska adresu. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/app-icon-192.png" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Intermanage</title>
     <!-- Motyw przed pierwszym malowaniem (klucz jak THEME_STORAGE_KEY w lib/theme.ts), żeby ciemny nie mignął jasnym. -->
     <script>
@@ -14,6 +18,16 @@
         document.documentElement.classList.add(d ? 'dark' : 'light')
         document.documentElement.style.colorScheme = d ? 'dark' : 'light'
       } catch (e) {}
+      // Pasek tytułu zainstalowanej aplikacji w kolorze tła motywu (--background z index.css), też po zmianie motywu.
+      ;(function () {
+        var html = document.documentElement
+        var meta = document.querySelector('meta[name="theme-color"]')
+        var sync = function () {
+          meta.content = html.classList.contains('dark') ? '#0c0c0c' : '#ffffff'
+        }
+        sync()
+        new MutationObserver(sync).observe(html, { attributes: true, attributeFilter: ['class'] })
+      })()
     </script>
   </head>
   <body>

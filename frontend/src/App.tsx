@@ -11,6 +11,8 @@ import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { LeafletPage } from '@/features/leaflet/LeafletPage'
+import { leafletPath } from '@/features/leaflet/paths'
 import { DataEntryPage } from '@/features/data-entry/DataEntryPage'
 import { DeliOrderPage } from '@/features/deli-order/DeliOrderPage'
 import { ProductionPage } from '@/features/deli-production/ProductionPage'
@@ -95,6 +97,15 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <MeaCodesPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Opracowanie gazetki: jak dostawa z bazy, z uprawnieniem wprowadzania danych.
+        path: leafletPath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <LeafletPage />
           </RequireAuth>
         ),
       },

@@ -1,5 +1,7 @@
 package com.intermanage.backend.basedelivery.service;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,11 +22,12 @@ import com.intermanage.backend.basedelivery.mapper.BaseDeliveryMapper;
 import com.intermanage.backend.basedelivery.repository.BaseDeliveryRepository;
 import com.intermanage.backend.basedelivery.repository.MeaConfirmationRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.leaflet.repository.PromoLeafletRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
- * Kody MEA z dokumentów dostaw z bazy: do wpisania w Mercalys zostają tylko te, których jeszcze nie potwierdzono.
+ * Kody MEA z dokumentów dostaw z bazy i z gazetek: do wpisania w Mercalys zostają tylko te, których jeszcze nie potwierdzono.
  * Kod trafia do wpisanych dopiero po potwierdzeniu; cofnięcie potwierdzenia (znacznik) przywraca jego kody na listę.
  */
 @Service
@@ -35,14 +38,17 @@ public class MeaCodeService {
                     .thenComparing(MeaOverview.PendingCode::code);
 
     private final BaseDeliveryRepository deliveries;
+    private final PromoLeafletRepository leaflets;
     private final MeaConfirmationRepository confirmations;
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final BaseDeliveryMapper mapper;
 
-    public MeaCodeService(BaseDeliveryRepository deliveries, MeaConfirmationRepository confirmations,
-            StoreRepository stores, AppUserRepository users, BaseDeliveryMapper mapper) {
+    public MeaCodeService(BaseDeliveryRepository deliveries, PromoLeafletRepository leaflets,
+            MeaConfirmationRepository confirmations, StoreRepository stores, AppUserRepository users,
+            BaseDeliveryMapper mapper) {
         this.deliveries = deliveries;
+        this.leaflets = leaflets;
         this.confirmations = confirmations;
         this.stores = stores;
         this.users = users;
@@ -52,19 +58,27 @@ public class MeaCodeService {
     /** Kody do wpisania (z najnowszym bonem, w którym są) i ostatnie potwierdzenia. */
     @Transactional(readOnly = true)
     public MeaOverview overview(UUID storeId) {
-        Map<String, List<BaseDeliveryRepository.MeaOccurrence>> byCode = deliveries.findPendingMeaCodes(storeId)
-                .stream().collect(Collectors.groupingBy(BaseDeliveryRepository.MeaOccurrence::getCode));
-        List<MeaOverview.PendingCode> pending = byCode.values().stream().map(occurrences -> {
-            BaseDeliveryRepository.MeaOccurrence latest = occurrences.stream()
-                    .max(Comparator.comparing(BaseDeliveryRepository.MeaOccurrence::getDeliveryDate)).orElseThrow();
-            long deliveryCount = occurrences.stream().map(BaseDeliveryRepository.MeaOccurrence::getNumber).distinct()
-                    .count();
-            return new MeaOverview.PendingCode(latest.getCode(), latest.getNumber(), latest.getDeliveryDate(),
-                    deliveryCount);
+        List<Occurrence> occurrences = new ArrayList<>();
+        deliveries.findPendingMeaCodes(storeId).forEach(occurrence -> occurrences.add(new Occurrence(
+                occurrence.getCode(), occurrence.getNumber(), occurrence.getDeliveryDate(), false)));
+        leaflets.findPendingMeaCodes(storeId).forEach(occurrence -> occurrences.add(new Occurrence(
+                occurrence.getCode(), occurrence.getWeek() + "/" + occurrence.getYear(), occurrence.getDateFrom(),
+                true)));
+        Map<String, List<Occurrence>> byCode = occurrences.stream().collect(Collectors.groupingBy(Occurrence::code));
+        List<MeaOverview.PendingCode> pending = byCode.values().stream().map(found -> {
+            Occurrence latest = found.stream().max(Comparator.comparing(Occurrence::date)).orElseThrow();
+            long documentCount = found.stream().map(occurrence -> occurrence.leaflet() + occurrence.number())
+                    .distinct().count();
+            return new MeaOverview.PendingCode(latest.code(), latest.number(), latest.date(), documentCount,
+                    latest.leaflet());
         }).sorted(PENDING_ORDER).toList();
         List<MeaOverview.Confirmation> history = confirmations.findTop20ByStoreIdOrderByConfirmedAtDesc(storeId)
                 .stream().map(mapper::toConfirmation).toList();
         return new MeaOverview(pending, history);
+    }
+
+    /** Kod MEA w dokumencie z bazy (numer bonu) albo w gazetce ({@code leaflet}, numer „44/2026”). */
+    private record Occurrence(String code, String number, LocalDate date, boolean leaflet) {
     }
 
     /** Potwierdza wpisanie kodów; kody już wpisane wcześniej pomija, a gdy nie zostaje żaden, nic nie zapisuje. */

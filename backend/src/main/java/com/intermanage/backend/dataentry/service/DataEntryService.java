@@ -249,6 +249,27 @@ public class DataEntryService {
         return amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    /** Pierwszy i ostatni kod artykułu z etykiety wagi (prefiks 24), który sklep może nadać nowemu artykułowi. */
+    static final int FREE_SCALE_CODE_FROM = 240001;
+    static final int FREE_SCALE_CODE_TO = 242999;
+
+    /**
+     * Wolne kody dla nowych artykułów ważonych: 240001-242999 bez kodów zajętych w sklepie, jako pełny EAN z zerami
+     * w miejscu ceny ({@code 2400010000000}), jak towar na wagę w kartotece.
+     */
+    @Transactional(readOnly = true)
+    public List<String> freeScaleCodes(UUID storeId) {
+        Set<String> used = Set.copyOf(catalog.findUsedScaleCodes(storeId));
+        List<String> free = new ArrayList<>();
+        for (int code = FREE_SCALE_CODE_FROM; code <= FREE_SCALE_CODE_TO; code++) {
+            String prefix = Integer.toString(code);
+            if (!used.contains(prefix)) {
+                free.add(prefix + "0000000");
+            }
+        }
+        return free;
+    }
+
     /** Artykuły z kartoteki dla EAN-ów (bez zer wiodących); nieznane EAN-y pomija. */
     @Transactional(readOnly = true)
     public List<CatalogProduct> lookup(UUID storeId, Collection<String> eans) {

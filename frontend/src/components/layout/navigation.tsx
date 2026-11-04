@@ -5,6 +5,7 @@ import {
   DatabaseBackupIcon,
   DatabaseIcon,
   HashIcon,
+  NewspaperIcon,
   PackageIcon,
   SettingsIcon,
   ShieldIcon,
@@ -16,6 +17,7 @@ import {
 
 import { hasPermission } from '@/features/auth/api'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { leafletPath } from '@/features/leaflet/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { salesPaths } from '@/features/sales/paths'
@@ -77,8 +79,16 @@ const GROUPS: GroupSpec[] = [
         key: 'mea-codes',
         path: meaPath,
         label: 'Kody MEA',
-        description: 'Kody MEA z dokumentów bazy, których jeszcze nie wpisano w Mercalys.',
+        description: 'Kody MEA z dokumentów bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
         icon: HashIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
+      {
+        key: 'leaflet',
+        path: leafletPath,
+        label: 'Opracowanie gazetki',
+        description: 'Gazetka z centrali: artykuły z Mercalys, pliki cen .PRO, etykiety i kody MEA.',
+        icon: NewspaperIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
       { category: 'SUPPLIERS' },

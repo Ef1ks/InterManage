@@ -291,13 +291,16 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
  * Kod z etykiety wagi sklepu: 2 + cyfra 1-9, 5 cyfr artykułu (razem 7 cyfr jak w EAN-ie z kartoteki, np.
  * 2404140000000), w cyfrach 8-12 cena (prefiks 24, w groszach) albo waga (21-23, 25-29, w gramach), na końcu cyfra
  * kontrolna (bywa pominięta). Z zerami w miejscu ceny to zwykły EAN artykułu.
+ * Z {@code weightIn24} (przełącznik „Kody 24 = waga” w pasku) prefiks 24 też niesie wagę w gramach: 24…05000 = 5 kg.
  */
-export function scaleCode(ean: string): { kind: 'price' | 'weight'; value: number } | null {
+export function scaleCode(ean: string, weightIn24 = false): { kind: 'price' | 'weight'; value: number } | null {
   const digits = ean.replace(/^0+/, '')
   if (!/^2[1-9]\d{10,11}$/.test(digits)) return null
   const value = Number(digits.slice(7, 12))
   if (value === 0) return null
-  return digits[1] === '4' ? { kind: 'price', value: value / 100 } : { kind: 'weight', value: value / 1000 }
+  return digits[1] === '4' && !weightIn24
+    ? { kind: 'price', value: value / 100 }
+    : { kind: 'weight', value: value / 1000 }
 }
 
 /**
@@ -345,14 +348,18 @@ export function eanError(row: DataEntryRow, checkedOnly = true): string | null {
 
 /**
  * Artykuł z kartoteki dla EAN-u wpisanego w tabeli: dane jak przy fakturze, a do tego cena zakupu i VAT, gdy wiersz
- * ich nie ma, i ilość: z kodu etykiety wagi (waga w kg albo cena z etykiety / cena sprzedaży 1 kg), inaczej 1 (także
- * przy EAN-ie spoza kartoteki).
+ * ich nie ma, i ilość: z kodu etykiety wagi (waga w kg albo cena z etykiety / cena sprzedaży 1 kg; z {@code weightIn24}
+ * kod 24 też jako waga), inaczej 1 (także przy EAN-ie spoza kartoteki).
  * Kod z etykiety zamienia się na EAN artykułu z kartoteki, więc kilka etykiet jednego artykułu łączy się w pary.
  * Wpisany ITM8 też, bo do pliku XML idzie kod kreskowy.
  */
-export function withScannedProduct(row: DataEntryRow, product: DataEntryCatalogProduct | null): DataEntryRow {
+export function withScannedProduct(
+  row: DataEntryRow,
+  product: DataEntryCatalogProduct | null,
+  weightIn24 = false,
+): DataEntryRow {
   const next = withCatalogProduct(row, product)
-  const scale = scaleCode(row.ean)
+  const scale = scaleCode(row.ean, weightIn24)
   let quantity = row.quantity ?? 1
   if (scale?.kind === 'weight') quantity = scale.value
   if (scale?.kind === 'price' && product?.salePrice)

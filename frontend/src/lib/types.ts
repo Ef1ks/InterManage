@@ -2368,9 +2368,12 @@ export type BaseDelivery = {
   lines: BaseDeliveryLine[]
 }
 
-/** Kody MEA: do wpisania w Mercalys (z najnowszym bonem) i ostatnie potwierdzenia wpisania. */
+/**
+ * Kody MEA: do wpisania w Mercalys (z najnowszym dokumentem: bonem dostawy z bazy albo gazetką, {@code leaflet},
+ * wtedy {@code deliveryNumber} to numer gazetki „44/2026”, a data to początek promocji) i ostatnie potwierdzenia.
+ */
 export type MeaOverview = {
-  pending: { code: string; deliveryNumber: string; deliveryDate: string; deliveryCount: number }[]
+  pending: { code: string; deliveryNumber: string; deliveryDate: string; deliveryCount: number; leaflet: boolean }[]
   confirmations: {
     id: string
     confirmedAt: string
@@ -2379,4 +2382,59 @@ export type MeaOverview = {
     deletedBy: string | null
     codes: string[]
   }[]
+}
+
+/** Wgrana gazetka na liście do otwarcia. */
+export type LeafletSummary = {
+  id: string
+  year: number
+  /** Tydzień = numer gazetki. */
+  week: number
+  fileName: string
+  lineCount: number
+  uploadedAt: string
+  uploadedBy: string | null
+}
+
+/**
+ * Pozycja gazetki: kolumny z pliku centrali i artykuł z kartoteki dla EAN-u z gazetki ({@code null} = nie znaleziono).
+ * {@code linkId}: artykuł wybrany ręcznie (zapamiętany w sklepie). {@code price}: cena gazetkowa brutto, od -1 do 0
+ * rabat od ceny z kartoteki (-0,2 = -20%). {@code regularPrice}: cena sprzedaży z kartoteki bez promocji z kasy.
+ */
+export type LeafletLine = {
+  id: string
+  lineNo: number
+  section: string | null
+  dateFrom: string
+  dateTo: string
+  /** Puste albo DDD = pozycja do opracowania w sklepie. */
+  meaCode: string | null
+  itm8: string | null
+  promoItm8: string | null
+  ean: string
+  name: string
+  brand: string | null
+  promoForm: string | null
+  megaKind: string | null
+  clientPrice: string | null
+  price: number | null
+  /** OZNACZENIE PRZY PÓŁCE: rodzaj cenówki. */
+  shelfLabel: string | null
+  product: DataEntryCatalogProduct | null
+  regularPrice: number | null
+  linkId: string | null
+}
+
+export type Leaflet = Omit<LeafletSummary, 'lineCount'> & {
+  lines: LeafletLine[]
+  /** Kody MEA z gazetki, których jeszcze nie potwierdzono jako wpisane w Mercalys. */
+  pendingMeaCodes: string[]
+}
+
+/** Artykuł dla EAN-u z gazetki (bez zer wiodących) po zmianie przypięcia. */
+export type LeafletMatch = {
+  ean: string
+  linkId: string | null
+  product: DataEntryCatalogProduct | null
+  regularPrice: number | null
 }

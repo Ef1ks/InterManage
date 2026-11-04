@@ -26,6 +26,19 @@ import { parseNumber } from './grid-values'
 const path = (storeId: string) => `/stores/${storeId}/data-entry`
 
 /**
+ * Wolne kody 240001-242999 do zakładania artykułów ważonych (pełne EAN-y, np. 2400010000000), bez zajętych w kartotece,
+ * multikodach i szkicach artykułów. Pobierane przy każdym otwarciu okna, bo kartoteka zmienia się w ciągu dnia.
+ */
+export function useFreeScaleCodes(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'data-entry', 'free-scale-codes'],
+    queryFn: () => api<string[]>(`${path(storeId)}/free-scale-codes`),
+    enabled,
+    staleTime: 0,
+  })
+}
+
+/**
  * Cała nomenklatura sklepu: nazwy rejonów, rodzin i podrodzin w tabeli, wyszukiwarka podrodzin i marża wymagana do
  * ceny sugerowanej. Marżę zmienia się zwykle w Ustawieniach sklepu w drugiej karcie, więc powrót do karty z tabelą
  * zawsze pobiera ją od nowa i ceny sugerowane od razu się przeliczają.

@@ -29,9 +29,14 @@ public final class LabelFile {
     private LabelFile() {
     }
 
-    public static String fileName(String username) {
+    /**
+     * Nazwa pliku; z {@code format} (format cenówki, np. {@code PRO_GAZ_FOR_30} z opracowania gazetki) format stoi
+     * w miejscu pierwszego loginu: {@code ETIQUETTE_20261103_105800_PRO_GAZ_FOR_30_ImpEk.traite0}.
+     */
+    public static String fileName(String username, String format) {
         String login = ProtoFile.loginPart(username);
-        return "ETIQUETTE_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + login + "_" + login + ".traite0";
+        String first = format == null || format.isBlank() ? login : format;
+        return "ETIQUETTE_" + ZonedDateTime.now(STORE_ZONE).format(TIME) + "_" + first + "_" + login + ".traite0";
     }
 
     /** Linie bez EAN-u albo z liczbą etykiet poniżej 1 są pomijane. */

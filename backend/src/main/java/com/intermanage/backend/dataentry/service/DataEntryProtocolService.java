@@ -58,6 +58,6 @@ public class DataEntryProtocolService {
         if (content.length == 0) {
             throw ApiException.badRequest("Brak pozycji z EAN-em do etykiet");
         }
-        return new ProtocolFile(LabelFile.fileName(username), content);
+        return new ProtocolFile(LabelFile.fileName(username, request.format()), content);
     }
 }

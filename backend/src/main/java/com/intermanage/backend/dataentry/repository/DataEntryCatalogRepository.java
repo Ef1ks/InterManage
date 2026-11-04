@@ -411,4 +411,24 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 and translate(upper(p.brand), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') = any(cast(:brands as varchar[]))
             group by p.brand""", nativeQuery = true)
     List<CodeCount> countBrands(UUID storeId, String[] brands);
+
+    /**
+     * Zajęte kody artykułów z etykiety wagi z prefiksem 24 (pierwsze 6 cyfr, np. {@code 240029} z
+     * {@code 2400290000000}): bieżące EAN-y kartoteki, multikody (też dawne), dawne pary {@code product_eans}
+     * i oczekujące szkice artykułów z CADBEZP. EAN-y bez zer wiodących.
+     */
+    @Query(value = """
+            with eans as (
+                select p.ean from products p where p.store_id = :storeId
+                union all
+                select c.ean from product_codes c where c.store_id = :storeId
+                union all
+                select pe.ean from product_eans pe join products p on p.id = pe.product_id and p.store_id = :storeId
+                union all
+                select d.ean from product_drafts d
+                where d.store_id = :storeId and d.matched_at is null and d.removed_at is null
+            )
+            select distinct left(ltrim(ean, '0'), 6) from eans
+            where ltrim(ean, '0') ~ '^24[0-9]{10,11}$'""", nativeQuery = true)
+    List<String> findUsedScaleCodes(UUID storeId);
 }

@@ -88,8 +88,9 @@ type Item =
  * Różnice między wierszami tabeli a liniami bonów z programu. Wiersze i linie o wspólnym ITM8, EAN-ie albo kodzie
  * wagi to jeden artykuł, także gdy program zsumował pod jednym artykułem kilka linii bazy (AVOKADO SZT 18 + AVOKADO
  * HASS 20 = 38 w programie). Artykuł z ilością 0 w tabeli (nie przyjechał), którego nie ma w programie, nie jest
- * różnicą. Cenę porównujemy dla każdej linii tabeli, także z ilością 0, z ceną artykułu w programie (z kilku cen
- * programu z najbliższą). {@code compared} to liczba porównanych artykułów.
+ * różnicą. Cenę porównujemy dla każdej linii tabeli z ilością (linia, która nie przyjechała, nie ma czego
+ * sprawdzać: CYTRYNA 1/5 po 7,90 z ilością 0 obok CYTRYNA KL1-15KG po 7,50) z ceną artykułu w programie (z kilku
+ * cen programu z najbliższą). {@code compared} to liczba porównanych artykułów.
  */
 export function findDifferences(rows: DataEntryRow[], notes: TemporaryNote[]) {
   const items: Item[] = []
@@ -160,7 +161,7 @@ export function findDifferences(rows: DataEntryRow[], notes: TemporaryNote[]) {
     if (programPrices.length === 0) continue
     for (const row of sheet) {
       const price = row.unitNet
-      if (price === null) continue
+      if (price === null || !row.quantity) continue
       const closest = programPrices.reduce((best, candidate) =>
         Math.abs(candidate - price) < Math.abs(best - price) ? candidate : best,
       )

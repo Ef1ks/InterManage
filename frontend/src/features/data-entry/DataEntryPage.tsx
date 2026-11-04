@@ -8,6 +8,7 @@ import {
   FileInputIcon,
   FileClockIcon,
   FileOutputIcon,
+  ListOrderedIcon,
   PackageSearchIcon,
   ScaleIcon,
   PlusIcon,
@@ -90,6 +91,7 @@ import {
 import { nomenclatureNames, pricingOf } from './grid-values'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
+import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
@@ -254,6 +256,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [freeCodesOpen, setFreeCodesOpen] = useState(false)
+  // Kody 24 z wagą zamiast ceny (24…05000 = 5 kg). Celowo bez zapamiętania: po odświeżeniu wraca zwykłe działanie.
+  const [weightIn24, setWeightIn24] = useState(false)
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null)
   const [splitTarget, setSplitTarget] = useState<DataEntryRow | null>(null)
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
@@ -382,7 +387,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             (current) =>
               current.map((row) =>
                 requested.get(row.id) === row.ean
-                  ? withScannedProduct(row, byKey.get(row.ean.replace(/^0+/, '')) ?? null)
+                  ? withScannedProduct(row, byKey.get(row.ean.replace(/^0+/, '')) ?? null, weightIn24)
                   : row,
               ),
             { record: false },
@@ -390,7 +395,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         })
         .catch(() => toast.error('Nie udało się sprawdzić EAN-ów w kartotece'))
     },
-    [currentDraft, setRows, store.id],
+    [currentDraft, setRows, store.id, weightIn24],
   )
 
   // ---------- promocje z kasy: wiersz pamięta promocję z chwili dodania, a plik TRACEART przychodzi w ciągu dnia,
@@ -462,6 +467,19 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         action: { label: 'Przywróć', onClick: () => setDraft(before) },
       })
     }
+  }
+
+  // ---------- wolne kody 24: nowe artykuły ważone z kodem do założenia w programie sklepu
+
+  const insertScaleCodes = (eans: string[]) => {
+    if (eans.length === 0) return
+    const before = currentDraft()
+    setRows((current) =>
+      eans.map((ean) => withScannedProduct({ ...emptyRow(), ean }, null)).reduce(withAddedRow, current),
+    )
+    toast.success(`Wstawiono wolne kody: ${eans.length}`, {
+      action: { label: 'Przywróć', onClick: () => setDraft(before) },
+    })
   }
 
   // ---------- podział ilości (opakowanie z faktury na sztuki sprzedaży)
@@ -980,6 +998,33 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <PackageSearchIcon />
               Lista towarów
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFreeCodesOpen(true)}
+              title="Wolne kody 240001–242999 do zakładania nowych artykułów ważonych"
+            >
+              <ListOrderedIcon />
+              Wolne kody 24
+            </Button>
+            <label
+              className={cn(
+                'flex h-8 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-sm',
+                weightIn24
+                  ? 'border-amber-400 bg-amber-200 font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-900/70 dark:text-amber-100'
+                  : 'border-input',
+              )}
+              title="Zwykle kod 24 z etykiety ma na końcu cenę. Zaznaczone: koniec kodu to waga w gramach (24…05000 = 5 kg)"
+            >
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={weightIn24}
+                onChange={(event) => setWeightIn24(event.target.checked)}
+              />
+              <ScaleIcon className="size-4" />
+              Kody 24 = waga
+            </label>
             <PriceFileStatus storeId={store.id} size="sm" />
             {rows.length > 0 && (
               <>
@@ -1327,6 +1372,14 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         inTable={tableEans}
         onAdd={addFromCatalog}
         lastSaleDate={canSeeSales ? (salesOverview.data?.lastSaleDate ?? addDays(todayIso(), -1)) : null}
+      />
+
+      <FreeScaleCodesDialog
+        storeId={store.id}
+        open={freeCodesOpen}
+        onOpenChange={setFreeCodesOpen}
+        inTable={tableEans}
+        onInsert={insertScaleCodes}
       />
 
       <LinkArticleDialog

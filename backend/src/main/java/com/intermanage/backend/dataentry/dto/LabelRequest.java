@@ -7,11 +7,17 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-/** Artykuły tabeli do pliku etykiet: EAN i liczba etykiet. */
+/**
+ * Artykuły tabeli do pliku etykiet: EAN i liczba etykiet. {@code format}: format cenówki w programie sklepu
+ * (np. {@code PRO_GAZ_FOR_30} z opracowania gazetki), trafia do nazwy pliku; pusty = zwykłe etykiety.
+ */
 public record LabelRequest(
-        @NotNull @Size(min = 1, max = 2000, message = "Od 1 do 2000 pozycji") List<@Valid Line> lines) {
+        @NotNull @Size(min = 1, max = 2000, message = "Od 1 do 2000 pozycji") List<@Valid Line> lines,
+        @Pattern(regexp = "[A-Z0-9_]{1,30}", message = "Format etykiet to wielkie litery, cyfry i podkreślenia")
+        String format) {
 
     public record Line(
             @NotBlank @Size(max = 14) String ean,
