@@ -209,6 +209,8 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.lines[6].product.cadencierPrice").doesNotExist())
                 .andExpect(jsonPath("$.lines[7].ean").value("5900000000050"))
                 .andExpect(jsonPath("$.lines[7].eanSource").value("EXTRA:EAN"))
+                // Cena przed rabatem (3,00 z rabatem 0,50): obowiązuje wartość netto pozycji.
+                .andExpect(jsonPath("$.lines[7].unitNet").value(2.5))
                 .andExpect(jsonPath("$.sources[0].key").value("AUTO"))
                 .andExpect(jsonPath("$.sources[0].filled").value(7))
                 .andExpect(jsonPath("$.sources[0].matched").value(4))
@@ -428,7 +430,11 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$[?(@.ean == '240414004920')].itm8").value(hasItem("0000000000501")))
                 .andExpect(jsonPath("$[?(@.ean == '2404140049205')].purchasePrice").value(hasItem(26.5)))
                 .andExpect(jsonPath("$[?(@.ean == '2404140049205')].vatPercent").value(hasItem(5)))
-                .andExpect(jsonPath("$[?(@.ean == '2991150012347')].itm8").value(hasItem("0000000000502")));
+                .andExpect(jsonPath("$[?(@.ean == '2404140049205')].catalogVat").value(hasItem(5)))
+                .andExpect(jsonPath("$[?(@.ean == '2991150012347')].itm8").value(hasItem("0000000000502")))
+                // Bez własnego dokumentu stawka z podrodziny to tylko podpowiedź, nie stawka artykułu.
+                .andExpect(jsonPath("$[?(@.ean == '2991150012347')].vatPercent").value(hasItem(5)))
+                .andExpect(jsonPath("$[?(@.ean == '2991150012347')].catalogVat").value(not(hasItem(5))));
         // Inny artykuł z tym samym początkiem prefiksu nie łapie się.
         mvc.perform(get(url("/products?ean=2404150049205")).cookie(owner))
                 .andExpect(jsonPath("$.length()").value(0));
@@ -1073,7 +1079,8 @@ class DataEntryIntegrationTests {
                     <FaWiersz><NrWierszaFa>7</NrWierszaFa><P_7>Masło ekstra 200g</P_7><Indeks>5900000000043</Indeks>
                       <P_8A>szt.</P_8A><P_8B>10</P_8B><P_9A>6.00</P_9A><P_11>60.00</P_11><P_12>5</P_12></FaWiersz>
                     <FaWiersz><NrWierszaFa>8</NrWierszaFa><P_7>Kefir 400g</P_7><Indeks>KF-400</Indeks>
-                      <P_8A>szt.</P_8A><P_8B>10</P_8B><P_9A>2.50</P_9A><P_11>25.00</P_11><P_12>5</P_12></FaWiersz>
+                      <P_8A>szt.</P_8A><P_8B>10</P_8B><P_9A>3.00</P_9A><P_10>0.50</P_10><P_11>25.00</P_11>
+                      <P_12>5</P_12></FaWiersz>
                   </Fa>
                 </Faktura>""".formatted(CHEESE_EAN, CHIPS_EAN, CHIPS_EAN, MARSHMALLOW_EAN);
     }

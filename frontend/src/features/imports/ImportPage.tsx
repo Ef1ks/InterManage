@@ -87,6 +87,38 @@ const REPORT_DESCRIPTIONS: Record<ImportReportKind, string> = {
     'Rejony, rodziny i podrodziny z nazwami do raportów (PDF, np. nomenklatury.pdf). Wgraj ją ponownie, gdy w systemie sklepu zmieni się nomenklatura.',
 }
 
+/** Kolumny, bez których raport jest odrzucany (ta sama lista w ProductReportParser). */
+const REQUIRED_COLUMNS: Partial<Record<ImportReportKind, readonly string[]>> = {
+  PRODUCTS: [
+    'EAN',
+    'ITM8',
+    'NAZWA',
+    'MARKA',
+    'DOST',
+    'NOM',
+    'CENA_SPRZEDAZY',
+    'CENA_ZAKUPU',
+    'STAN',
+    'ROTACJA',
+    'COLI',
+    'AKTYWNY',
+    'PRIO',
+    'VAT',
+    'JED',
+    'WAGA',
+    'DLV',
+    'RP',
+    'KAUCJA',
+    'REFERENCJA',
+    'KASA',
+    'TYP',
+    'RODZ',
+    'JMSP',
+    'CN',
+    'CENA_CAD',
+  ],
+}
+
 /** Okres raportu albo zakres dni w bazie: "31.12.2025 – 30.06.2026". */
 function formatPeriod(from: string, to: string) {
   return `${dayFormat.format(parseIsoDate(from))} – ${dayFormat.format(parseIsoDate(to))}`
@@ -555,6 +587,7 @@ function ReportCard({
             kind={kind}
             title={REPORT_TITLES[kind]}
             description={REPORT_DESCRIPTIONS[kind]}
+            requiredColumns={REQUIRED_COLUMNS[kind]}
             guide={guide}
             canEdit={canEditGuide}
           />

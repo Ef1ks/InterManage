@@ -123,8 +123,8 @@ export type ProLine = { ean: string; price: number; name: string }
 
 /**
  * Plik cen promocji dla jednego okresu (od-do). {@code tariff}: kod taryfy do wpisania w programie sklepu
- * (TYDZGAZ + numer gazetki z kolumny TYDZIEŃ na dwóch cyfrach + numer pliku na dwóch). Pominięte pozycje: bez artykułu, bez ceny, a artykuł
- * z kilkoma EAN-ami z gazetki idzie raz ({@code conflicts}: artykuły z różnymi cenami, w pliku pierwsza).
+ * (numer gazetki z kolumny TYDZIEŃ + rok + numer pliku, każde na dwóch cyfrach: 452601).
+ * Pominięte pozycje: bez artykułu, bez ceny, a artykuł z kilkoma EAN-ami z gazetki idzie raz ({@code conflicts}: artykuły z różnymi cenami, w pliku pierwsza).
  */
 export type ProFile = {
   dateFrom: string
@@ -143,7 +143,7 @@ const day = (iso: string) => String(Number(iso.slice(8, 10)))
  * Pliki .PRO z pozycji do opracowania: jeden okres od-do = jeden plik ({@code 29-1.PRO} = od 29. do 1.), od
  * najwcześniejszego okresu, numerowane w kodzie taryfy od 01.
  */
-export function proFiles(lines: LeafletLine[], week: number): ProFile[] {
+export function proFiles(lines: LeafletLine[], week: number, year: number): ProFile[] {
   const groups = new Map<string, LeafletLine[]>()
   for (const line of lines) {
     if (!toProcess(line)) continue
@@ -179,7 +179,7 @@ export function proFiles(lines: LeafletLine[], week: number): ProFile[] {
         dateFrom,
         dateTo,
         fileName,
-        tariff: `TYDZGAZ${String(week).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`,
+        tariff: `${String(week).padStart(2, '0')}${String(year % 100).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`,
         lines: [...byEan.values()],
         withoutProduct,
         withoutPrice,

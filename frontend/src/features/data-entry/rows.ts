@@ -243,7 +243,7 @@ export function rowFromLine(line: DataEntryLine): DataEntryRow {
     name: product?.name ?? line.invoiceName ?? '',
     brand: product?.brand ?? '',
     vatPercent: line.vatPercent,
-    catalogVat: product?.vatPercent ?? null,
+    catalogVat: product?.catalogVat ?? null,
     salePrice: product?.salePrice ?? null,
     subfamilyCode: product?.subfamilyCode ?? null,
     unit: line.unit,
@@ -284,7 +284,7 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
   return snapshot({
     ...row,
     known: true,
-    catalogVat: product.vatPercent,
+    catalogVat: product.catalogVat,
     cadencier: product.cadencier,
     cadencierPrice: product.cadencierPrice,
     promoPrice: product.promoPrice,

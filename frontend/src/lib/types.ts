@@ -1661,8 +1661,10 @@ export type DataEntryCatalogProduct = {
   brand: string | null
   /** Cena zakupu netto sztuki (przy wagowych 1 kg) z kartoteki. */
   purchasePrice: number | null
-  /** Stawka VAT w % z ostatniego dokumentu z tym artykułem; kartoteka ma tylko kod stawki. */
+  /** Stawka VAT w % do pustego wiersza; może być tylko najczęstszą stawką podrodziny. */
   vatPercent: number | null
+  /** Stawka tego artykułu (kod z kartoteki albo jego ostatni dokument); tylko z nią porównujemy stawkę z faktury. */
+  catalogVat: number | null
   salePrice: number | null
   /** Artykuł ma CENA_CAD z ostatniego raportu kartoteki. */
   cadencier: boolean

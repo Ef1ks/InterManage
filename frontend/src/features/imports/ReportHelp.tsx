@@ -22,12 +22,14 @@ export function ReportHelp({
   kind,
   title,
   description,
+  requiredColumns,
   guide,
   canEdit,
 }: {
   kind: ImportReportKind
   title: string
   description: string
+  requiredColumns?: readonly string[]
   guide: ImportGuide | undefined
   canEdit: boolean
 }) {
@@ -49,6 +51,15 @@ export function ReportHelp({
             <Popover.Popup className="grid w-80 max-w-[calc(100vw-2rem)] origin-(--transform-origin) gap-3 rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-lg outline-none transition-[opacity,scale] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none">
               <Popover.Title className="font-semibold">{title}</Popover.Title>
               <p className="text-muted-foreground">{description}</p>
+              {requiredColumns && (
+                <div className="grid gap-1.5 border-t pt-3">
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Wymagane kolumny</p>
+                  <p className="font-mono text-xs leading-relaxed">{requiredColumns.join(', ')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Kolejność nie ma znaczenia. Plik bez którejś z nich zostanie odrzucony.
+                  </p>
+                </div>
+              )}
               <div className="grid gap-1.5 border-t pt-3">
                 <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                   Jak wygenerować plik

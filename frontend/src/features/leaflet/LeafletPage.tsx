@@ -163,7 +163,10 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
       ),
     [scope, filters, withoutProduct],
   )
-  const files = useMemo(() => (leaflet.data ? proFiles(lines, leaflet.data.week) : []), [lines, leaflet.data])
+  const files = useMemo(
+    () => (leaflet.data ? proFiles(lines, leaflet.data.week, leaflet.data.year) : []),
+    [lines, leaflet.data],
+  )
   const extras = useMemo(() => extraMarks(lines), [lines])
   const missing = scope.filter((line) => !line.product).length
   const filtersActive = Object.keys(filters).length > 0 || withoutProduct
@@ -249,7 +252,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
           'Wczytaj plik gazetki z centrali (UTRZYMYWANIE CEN Gazetka … .xlsx). Tabela pokazuje pozycje do opracowania: bez kodu MEA (puste albo DDD); „Wszystkie” pokazuje całą gazetkę.',
           'Każdy EAN z gazetki musi mieć artykuł z Mercalys. Brakujący albo zły zmienisz strzałkami przy nazwie: wybrany artykuł zostaje zapamiętany na kolejne gazetki.',
           'Kody MEA z gazetki wpisz w Mercalys i potwierdź w „Kody MEA”, tak jak przy dostawie z bazy.',
-          '„Stwórz pliki PRO”: plik z cenami promocji na każdy okres od-do do N:\\ALOA\\PRO\\IMPORT, przy wczytaniu wpisz jego kod taryfy (TYDZGAZ…).',
+          '„Stwórz pliki PRO”: plik z cenami promocji na każdy okres od-do do N:\\ALOA\\PRO\\IMPORT, przy wczytaniu wpisz jego kod taryfy i okres.',
           'Etykiety: wybierz format albo „Generuj wszystkie etykiety” (z całej gazetki, także pozycji z kodem MEA, według oznaczenia przy półce; każdy artykuł raz). „Extra Znaczek” to lista do wydruku.',
         ]}
       />

@@ -6,8 +6,10 @@ import java.time.LocalDate;
 /**
  * Artykuł z kartoteki sklepu dla EAN-u ({@code ean} bez zer wiodących, tak jak go szukano; {@code catalogEan} to
  * bieżący EAN artykułu, inny np. dla kodu z etykiety wagi). {@code purchasePrice} to cena zakupu netto sztuki (przy
- * wagowych 1 kg) z kartoteki, {@code vatPercent} stawka z ostatniego dokumentu z tym artykułem. {@code unit} to rodzaj
- * sprzedaży (kg, L, szt.), {@code salePrice} cena sprzedaży brutto sztuki,
+ * wagowych 1 kg) z kartoteki, {@code vatPercent} stawka do pustego wiersza (może być najczęstszą stawką podrodziny),
+ * {@code catalogVat} stawka tego artykułu (kod z kartoteki albo jego ostatni dokument), jedyna, z którą porównujemy
+ * stawkę z faktury; {@code null}, gdy jej nie znamy. {@code unit} to rodzaj sprzedaży (kg, L, szt.),
+ * {@code salePrice} cena sprzedaży brutto sztuki,
  * {@code cadencier} = artykuł ma CENA_CAD, {@code cadencierPrice} to ta cena (brutto sztuki narzucona przez centralę),
  * {@code promoPrice} trwająca promocja z pliku TRACEART (cena brutto na kasie, jest wtedy też {@code salePrice}) do
  * {@code promoTo}, {@code stock} i {@code rotation} to stan magazynowy i rotacja z ostatniego raportu kartoteki.
@@ -15,7 +17,7 @@ import java.time.LocalDate;
  * ma jeszcze w kartotece, dane są ze szkicu z pliku CADBEZP (jest już w programie sklepu, czeka na raport); bez ITM8.
  */
 public record CatalogProduct(String ean, String itm8, String catalogEan, String name, String brand,
-        BigDecimal purchasePrice, BigDecimal vatPercent, BigDecimal salePrice, boolean cadencier,
+        BigDecimal purchasePrice, BigDecimal vatPercent, BigDecimal catalogVat, BigDecimal salePrice, boolean cadencier,
         BigDecimal cadencierPrice, BigDecimal promoPrice, LocalDate promoTo, String unit, BigDecimal netContent, String subfamilyCode, BigDecimal stock,
         BigDecimal rotation, boolean byItm8, boolean draft) {
 }

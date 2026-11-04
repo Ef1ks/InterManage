@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1793782654.9193652,
-    "seen": 1793782803.7173,
-    "ast_hash": "a4d5f6ab4a841f1e60383ecee6a8f129",
+    "mtime": 1793784618.3093631,
+    "seen": 1793784674.345397,
+    "ast_hash": "1ef6b534384eaa186816b0c678059c87",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793782915.8519764,
-    "seen": 1793782951.3277016,
-    "ast_hash": "600af8df389c60b4a4237df76f2074df",
+    "mtime": 1793784719.1978238,
+    "seen": 1793784837.181333,
+    "ast_hash": "3d00f86f66e033655e062eacdc73833b",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1128,15 +1128,15 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductImportIntegrationTests.java": {
-    "mtime": 1793729059.851202,
-    "seen": 1793729186.1914651,
-    "ast_hash": "8fd979da3cce356f9706a3b35243962a",
+    "mtime": 1793784717.8117793,
+    "seen": 1793784837.1295843,
+    "ast_hash": "16e5889df3c07ff786ce1c14d15fe9d3",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1793658213.0812883,
-    "seen": 1793684476.6905296,
-    "ast_hash": "eb8a3f020f3b46fd4564ebab5c7eb858",
+    "mtime": 1793784700.1703544,
+    "seen": 1793784837.1538227,
+    "ast_hash": "0dd15116dfba52d547cec74b7e2f074d",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
@@ -3084,9 +3084,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/component/ProductReportParser.java": {
-    "mtime": 1793189737.3025072,
-    "seen": 1793190243.141722,
-    "ast_hash": "11ba188f6fc4c5010bbf4e475c77f7e8",
+    "mtime": 1793784698.5493665,
+    "seen": 1793784837.0996268,
+    "ast_hash": "3aa6af3cfb49f1faf0a3e0834b28595f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/controller/ProductImportController.java": {
@@ -4392,9 +4392,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CatalogProduct.java": {
-    "mtime": 1793729012.0920334,
-    "seen": 1793729186.0971453,
-    "ast_hash": "f0381b33098b0abfe7995bd175d977ba",
+    "mtime": 1793784612.6681905,
+    "seen": 1793784674.2170665,
+    "ast_hash": "3833c2d22a37774620d02c8c03c1c9ef",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/DataEntryInvoice.java": {
@@ -4446,9 +4446,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/repository/DataEntryCatalogRepository.java": {
-    "mtime": 1793737718.740514,
-    "seen": 1793737925.3420882,
-    "ast_hash": "7256f78c98982092613562c95e790e6c",
+    "mtime": 1793784615.9167683,
+    "seen": 1793784674.2245798,
+    "ast_hash": "aa126bfe00f296ad866258f6177a9113",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/repository/DataEntrySuggestionRepository.java": {
@@ -4458,9 +4458,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryService.java": {
-    "mtime": 1793737727.5300665,
-    "seen": 1793737925.3440878,
-    "ast_hash": "b61e603a83804112bf05e1b15a1c5757",
+    "mtime": 1793784643.2476861,
+    "seen": 1793784674.22709,
+    "ast_hash": "c67327af70747d08ef30882ac590e5eb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntrySuggestionService.java": {
@@ -4470,9 +4470,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1793782654.918365,
-    "seen": 1793782803.678476,
-    "ast_hash": "6b663e02416150c6246af3ef23cf2efa",
+    "mtime": 1793784655.5170226,
+    "seen": 1793784674.3065326,
+    "ast_hash": "7d759755ae18527c34d45ca87a239cc0",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -4524,9 +4524,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/rows.ts": {
-    "mtime": 1793782244.1565583,
-    "seen": 1793782394.3023577,
-    "ast_hash": "8f0f129b31348b7c1eda512a81e356ac",
+    "mtime": 1793784617.5157049,
+    "seen": 1793784674.3252966,
+    "ast_hash": "6331b544c60cef7a84ddf0ed48f587e1",
     "semantic_hash": ""
   },
   "frontend/src/store/dataEntryDraftSlice.ts": {
@@ -6540,9 +6540,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ReportHelp.tsx": {
-    "mtime": 1793657598.7063541,
-    "seen": 1793657672.0107343,
-    "ast_hash": "39e267b13b82e8926ab15527901bdf0e",
+    "mtime": 1793784701.7551508,
+    "seen": 1793784837.1538227,
+    "ast_hash": "450704917d04640fea0b60f349f2ba77",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/import-sources.ts": {
@@ -6738,9 +6738,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/LeafletPage.tsx": {
-    "mtime": 1793782915.8507266,
-    "seen": 1793782951.305002,
-    "ast_hash": "18165c2ef63676ef81b177fb5c199b85",
+    "mtime": 1793784632.9791934,
+    "seen": 1793784674.3368843,
+    "ast_hash": "d9657c1d3c46ff06b0b660d008f61b11",
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/ProFilesDialog.tsx": {
@@ -6756,9 +6756,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/leaflet-rows.ts": {
-    "mtime": 1793782915.8497252,
-    "seen": 1793782951.3055198,
-    "ast_hash": "53209c4cedce12140e790b0fac12435d",
+    "mtime": 1793784632.978191,
+    "seen": 1793784674.337389,
+    "ast_hash": "2b2ca4f852e3c4da7857286ca9f349e2",
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/paths.ts": {

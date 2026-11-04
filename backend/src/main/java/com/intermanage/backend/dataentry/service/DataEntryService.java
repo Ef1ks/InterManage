@@ -69,6 +69,8 @@ public class DataEntryService {
 
     private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    /** Ilość × cena może różnić się od wartości pozycji o zaokrąglenie; więcej to rabat albo cena sprzed korekty. */
+    private static final BigDecimal VALUE_TOLERANCE = new BigDecimal("0.01");
     private static final Pattern RATE = Pattern.compile("^(\\d+(?:[.,]\\d+)?)\\s*%");
     private static final Pattern XML_EAN = Pattern.compile("\\d{8,14}");
     static final int CATALOG_PAGE_SIZE = 100;
@@ -638,7 +640,7 @@ public class DataEntryService {
                 keys.stream().distinct().toArray(String[]::new), byItm8, LocalDate.now(WARSAW))) {
             Measure measure = Measure.of(row.getUnit(), row.getNetContent());
             found.put(row.getKey(), new CatalogProduct(row.getKey(), row.getItm8(), row.getCatalogEan(), row.getName(),
-                    row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(),
+                    row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getCatalogVat(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(),
                     row.getPromoPrice(), row.getPromoTo(), measure != null ? measure.unit() : Measure.PIECE,
                     measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), row.getSubfamilyCode(),
                     row.getStock(), row.getRotation(), row.getByItm8(), false));
@@ -657,7 +659,8 @@ public class DataEntryService {
     private static CatalogProduct draft(ProductDraft draft) {
         Measure measure = Measure.of(draft.getUnit(), draft.getNetContent());
         return new CatalogProduct(draft.getEan(), null, draft.getEan(), draft.getName(), draft.getBrand(),
-                draft.getPurchasePrice(), draft.getVatPercent(), draft.getSalePrice(), false, null, null, null,
+                draft.getPurchasePrice(), draft.getVatPercent(), draft.getVatPercent(), draft.getSalePrice(), false,
+                null, null, null,
                 measure != null ? measure.unit() : Measure.PIECE,
                 measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), draft.getSubfamilyCode(), null,
                 null, false, true);
@@ -693,17 +696,21 @@ public class DataEntryService {
         return lower.startsWith("zw") || lower.startsWith("np") || lower.startsWith("odwr") ? BigDecimal.ZERO : null;
     }
 
-    /** Cena jednostkowa netto; bez niej z brutto i stawki, a bez obu z wartości netto i ilości. */
+    /**
+     * Cena jednostkowa netto; bez niej z brutto i stawki, a bez obu z wartości netto i ilości. Obowiązuje wartość netto
+     * pozycji (P_11): gdy ilość × cena jej nie daje, cena jest przed rabatem (P_10: 10 × 21,40 z rabatem 1,50 = 199,00)
+     * albo w korekcie zerowa, więc liczymy ją z wartości.
+     */
     private static BigDecimal unitNet(KsefInvoiceReader.Line line, BigDecimal vat) {
+        BigDecimal fromValue = line.net() != null && line.quantity() != null && line.quantity().signum() != 0
+                ? line.net().divide(line.quantity(), 4, RoundingMode.HALF_UP) : null;
         if (line.unitNet() != null) {
-            return line.unitNet();
+            return fromValue != null && line.unitNet().multiply(line.quantity()).subtract(line.net()).abs()
+                    .compareTo(VALUE_TOLERANCE) > 0 ? fromValue : line.unitNet();
         }
         if (line.unitGross() != null && vat != null) {
             return line.unitGross().multiply(HUNDRED).divide(HUNDRED.add(vat), 4, RoundingMode.HALF_UP);
         }
-        if (line.net() != null && line.quantity() != null && line.quantity().signum() != 0) {
-            return line.net().divide(line.quantity(), 4, RoundingMode.HALF_UP);
-        }
-        return null;
+        return fromValue;
     }
 }

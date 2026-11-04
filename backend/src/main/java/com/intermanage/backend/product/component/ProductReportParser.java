@@ -64,8 +64,14 @@ public class ProductReportParser {
         /** Mieści się w najwęższej kolumnie liczbowej, numeric(12, 4). */
         private static final BigDecimal MAX_DECIMAL = new BigDecimal("100000000");
 
+        /**
+         * Wszystkie kolumny raportu (kolejność dowolna; lista też we froncie, w opisie raportu). Import nadpisuje
+         * kartotekę, więc plik bez kolumny wyczyściłby jej dane, jak bez VAT w 73 tys. artykułów.
+         */
         private static final List<String> REQUIRED_COLUMNS = List.of(
-                "EAN", "ITM8", "NAZWA", "CENA_SPRZEDAZY", "CENA_ZAKUPU", "STAN", "ROTACJA");
+                "EAN", "ITM8", "NAZWA", "MARKA", "DOST", "NOM", "CENA_SPRZEDAZY", "CENA_ZAKUPU", "STAN", "ROTACJA",
+                "COLI", "AKTYWNY", "PRIO", "VAT", "JED", "WAGA", "DLV", "RP", "KAUCJA", "REFERENCJA", "KASA", "TYP",
+                "RODZ", "JMSP", "CN", "CENA_CAD");
 
         private LocalDateTime generatedAt;
         private String storeNumber;

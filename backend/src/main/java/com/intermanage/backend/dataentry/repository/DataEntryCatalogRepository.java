@@ -35,6 +35,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
 
         BigDecimal getVatPercent();
 
+        BigDecimal getCatalogVat();
+
         String getUnit();
 
         BigDecimal getNetContent();
@@ -70,7 +72,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * po ITM8 z multikodów (artykuł z EAN-em tej pary); {@code byItm8} w wyniku mówi, że trafił ITM8.
      * {@code vatPercent}: z kodu stawki z kartoteki (1 = 23%, 2 = 8%, 6 = 5%, sprawdzone z liniami dokumentów; inne
      * kody, np. 3, 7 kaucje, są niepewne), bez niego z najnowszej linii dokumentu sklepu z tym ITM8, a na końcu
-     * najczęstsza stawka z dokumentów artykułów tej samej podrodziny.
+     * najczęstsza stawka z dokumentów artykułów tej samej podrodziny. {@code catalogVat}: to samo bez najczęstszej
+     * stawki, bo to tylko podpowiedź (w podrodzinie SEZON 23% od pralin, biszkopty mają 5%), a nie stawka artykułu.
      * {@code promoPrice}/{@code promoTo}: trwająca w dniu {@code today} promocja z pliku TRACEART; jej cena jest wtedy
      * też {@code salePrice} (aktualna cena na kasie). Bez niej trwająca promocja z listy promocji, ale tylko gdy jej
      * cena to cena sprzedaży z kartoteki: plik TRACEART sprzed ostatniego raportu kartoteki jest pomijany, więc
@@ -119,16 +122,14 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 p.name as name,
                 p.brand as brand, p.purchase_price as purchasePrice,
                 coalesce(
-                    case p.vat_code when 1 then 23 when 2 then 8 when 6 then 5 end,
-                    (select l.vat_rate from document_lines l join documents d on d.id = l.document_id
-                     where d.store_id = :storeId and l.itm8 = p.itm8 and l.vat_rate is not null
-                     order by d.document_date desc limit 1),
+                    v.rate,
                     (select mode() within group (order by l.vat_rate)
                      from products q
                      join document_lines l on l.itm8 = q.itm8
                      join documents d on d.id = l.document_id and d.store_id = :storeId
                      where q.store_id = :storeId and q.subfamily_code = p.subfamily_code
                          and l.vat_rate is not null)) as vatPercent,
+                v.rate as catalogVat,
                 p.unit as unit, p.net_content as netContent,
                 case when p.promo_price is not null and p.promo_to >= cast(:today as date)
                     and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_price
@@ -144,6 +145,11 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 p.subfamily_code as subfamilyCode, p.stock as stock, p.rotation as rotation
             from hits h join products p on p.id = h.id
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
+            cross join lateral (select coalesce(
+                case p.vat_code when 1 then 23 when 2 then 8 when 6 then 5 end,
+                (select l.vat_rate from document_lines l join documents d on d.id = l.document_id
+                 where d.store_id = :storeId and l.itm8 = p.itm8 and l.vat_rate is not null
+                 order by d.document_date desc limit 1)) as rate) v
             left join lateral (
                 select pr.promo_price, pr.end_date from promotions pr
                 where pr.store_id = p.store_id and pr.itm8 = p.itm8 and pr.promo_price = p.sale_price

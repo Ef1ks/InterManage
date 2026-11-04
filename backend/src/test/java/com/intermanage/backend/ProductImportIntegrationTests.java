@@ -279,6 +279,22 @@ class ProductImportIntegrationTests {
     }
 
     @Test
+    void reportWithoutRequiredColumnIsRejected() throws Exception {
+        Cookie owner = login();
+        String itm8 = itm8();
+        byte[] file = workbook(List.of(
+                row("Data : " + REPORT_DATE.format(nextReportDate())),
+                row(Arrays.stream(HEADER).filter(name -> !name.equals("VAT")).toArray(String[]::new)),
+                product(itm8, "1.00", "1", "BEZ VAT")));
+
+        upload(owner, file)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Brakuje kolumn: VAT"));
+
+        assertThat(jdbc.queryForObject("select count(*) from products where itm8 = ?", Integer.class, itm8)).isZero();
+    }
+
+    @Test
     void olderReportThanTheLastImportedIsRejected() throws Exception {
         Cookie owner = login();
         upload(owner, report(nextReportDate(), product(itm8(), "1.00", "1", "NOWY"))).andExpect(status().isCreated());
