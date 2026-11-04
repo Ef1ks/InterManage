@@ -10,6 +10,7 @@ import {
   FilePlusIcon,
   FilterXIcon,
   LayersIcon,
+  PackageCheckIcon,
   Redo2Icon,
   SettingsIcon,
   TagIcon,
@@ -53,13 +54,14 @@ import {
 } from '@/features/data-entry/grid-values'
 import { savePriceControlFile } from '@/features/data-entry/price-control'
 import { type SavedProductFile, useProductDraftConfirm } from '@/features/data-entry/product-drafts'
+import { ArticleFileDialog } from '@/features/data-entry/ArticleFileDialog'
 import { ProtocolDialog, type ProtocolLine } from '@/features/data-entry/ProtocolDialog'
 import {
   type DataEntryRow,
   depositError,
   incompleteEan,
   netValue,
-  purchasePerPiece,
+  productFileRow,
   suggestedPrice,
   withScannedProduct,
   withTrailingEmptyRow,
@@ -697,33 +699,21 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const productDrafts = useProductDraftConfirm(store.id)
   const newGroups = useMemo(() => (delivery ? newArticlesBySupplier(delivery, rows) : []), [delivery, rows])
   const newArticles = newGroups.reduce((sum, group) => sum + group.rows.length, 0)
-  const saveNewArticles = async () => {
+  /** Osobny plik CADBEZP dla każdego dostawcy; o wprowadzenie pyta tylko przy nowych artykułach. Zwraca, czy się udało. */
+  const saveArticleFiles = async (groups: { supplierCode: string; rows: DataEntryRow[] }[], title: string) => {
     setSaving('articles')
     try {
       const folderReady = await ensureFolderAccess(productFolder.key)
       const saved: string[] = []
       const savedFiles: SavedProductFile[] = []
-      for (const group of newGroups) {
+      for (const group of groups) {
         const supplier = supplierFor(group.supplierCode)
         const payload: ProductFilePayload = {
           supplierId: supplier?.id ?? null,
           sellerNip: null,
           sellerName: supplier?.name ?? `BAZA ${group.supplierCode}`,
           invoiceNumber: draft.delivery?.number ?? null,
-          rows: group.rows.map((row) => ({
-            ean: row.ean || null,
-            name: row.name,
-            brand: row.brand || null,
-            unit: row.unit,
-            netContent: row.netContent,
-            purchasePrice: purchasePerPiece(row),
-            vatPercent: row.vatPercent,
-            salePrice: row.salePrice,
-            subfamilyCode: row.subfamilyCode,
-            supplierCode: row.supplierCode ?? null,
-            cn: row.cn ?? null,
-            pack: row.base?.pack ?? null,
-          })),
+          rows: group.rows.map(productFileRow),
         }
         const { fileName, blob } = await fetchPostedFile(
           `/stores/${store.id}/data-entry/export/product-file`,
@@ -733,15 +723,37 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
         else saveBlob(blob, fileName)
         saved.push(`${fileName}${folderReady ? '' : ' (pobrany)'}`)
-        savedFiles.push({ fileName, payload, supplierCode: supplier?.code ?? group.supplierCode })
+        const fresh = group.rows.filter((row) => !row.known)
+        if (fresh.length > 0) {
+          savedFiles.push({
+            fileName,
+            payload: { ...payload, rows: fresh.map(productFileRow) },
+            supplierCode: supplier?.code ?? group.supplierCode,
+          })
+        }
       }
-      toast.success(`Zapisano nowe artykuły: ${newArticles}`, { description: saved.join(', '), duration: 10_000 })
+      toast.success(title, { description: saved.join(', '), duration: 10_000 })
       productDrafts.ask(savedFiles)
+      return true
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku nowych artykułów')
+      return false
     } finally {
       setSaving(null)
     }
+  }
+  const saveNewArticles = () => saveArticleFiles(newGroups, `Zapisano nowe artykuły: ${newArticles}`)
+
+  // „Zmień artykuły”: plik CADBEZP z artykułów wybranych w oknie, także niezmienionych.
+  const [articleFileOpen, setArticleFileOpen] = useState(false)
+  const saveChosenArticles = async (chosen: DataEntryRow[]) => {
+    const groups = new Map<string, DataEntryRow[]>()
+    for (const row of chosen) {
+      const key = supplierKey(row.base?.supplierCode) || '538'
+      groups.set(key, [...(groups.get(key) ?? []), row])
+    }
+    const files = [...groups.entries()].map(([supplierCode, rows]) => ({ supplierCode, rows }))
+    if (await saveArticleFiles(files, `Zapisano plik artykułów: ${chosen.length}`)) setArticleFileOpen(false)
   }
 
   const meaPending = mea.data?.pending.length ?? 0
@@ -762,7 +774,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         steps={[
           'Wczytaj dokument z bazy (plik .xls) i wybierz nośniki: ich artykuły trafią do tabeli z ilościami w sztukach. Linie, które nie przyjechały, mają ilość 0.',
           'Sprawdź kaucje (czerwona komórka = inna kaucja w dokumencie niż w kartotece; blokuje zmianę cen i protokół) i ujemne marże na cenach cadencier.',
-          'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: plik CADBEZP z danymi z dokumentu.',
+          'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: plik CADBEZP z danymi z dokumentu. Zmień artykuły: plik CADBEZP z wybranych artykułów tabeli.',
           'Weryfikuj warzywa / mięso pakowane: przenosi artykuły z całego dokumentu do wprowadzania danych, cena sugerowana z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
           'Filtr w nagłówku każdej kolumny działa jak w Excelu; Ctrl+Z cofa.',
         ]}
@@ -894,6 +906,16 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                 >
                   <FilePlusIcon />
                   Dodaj nowe artykuły ({newArticles})
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={rows.length === 0 || saving !== null}
+                  onClick={() => setArticleFileOpen(true)}
+                  title="Wybierz artykuły tabeli do pliku CADBEZP, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu"
+                >
+                  <PackageCheckIcon />
+                  Zmień artykuły
                 </Button>
                 {plu.length > 0 && (
                   <Button
@@ -1194,6 +1216,16 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         skipped={rows.length - protocolLines.length}
         open={protocolOpen}
         onOpenChange={setProtocolOpen}
+      />
+      <ArticleFileDialog
+        rows={rows}
+        selectedIds={selectedRows}
+        allowLongNames
+        supplierNote="Osobny plik CADBEZP dla każdego dostawcy z dokumentu (538 baza, 88110 alkohol)."
+        saving={saving === 'articles'}
+        open={articleFileOpen}
+        onOpenChange={setArticleFileOpen}
+        onSave={(chosen) => void saveChosenArticles(chosen)}
       />
       {productDrafts.dialog}
 

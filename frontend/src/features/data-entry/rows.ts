@@ -595,6 +595,24 @@ export function purchasePerPiece(row: DataEntryRow) {
   return row.unitNet
 }
 
+/** Wiersz pliku CADBEZP; kod zastępczy z faktury nie jest EAN-em, a PAK znamy tylko z dostawy z bazy. */
+export function productFileRow(row: DataEntryRow) {
+  return {
+    ean: (!row.eanFallback && row.ean) || null,
+    name: row.name,
+    brand: row.brand || null,
+    unit: row.unit,
+    netContent: row.netContent,
+    purchasePrice: purchasePerPiece(row),
+    vatPercent: row.vatPercent,
+    salePrice: row.salePrice,
+    subfamilyCode: row.subfamilyCode,
+    supplierCode: row.supplierCode ?? null,
+    cn: row.cn ?? null,
+    pack: row.base?.pack ?? null,
+  }
+}
+
 /** Marża % od sprzedaży netto przy obecnej cenie sprzedaży (jak w raportach sprzedaży). */
 export function marginPercent(row: DataEntryRow) {
   const purchase = purchasePerPiece(row)

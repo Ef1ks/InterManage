@@ -9,6 +9,7 @@ import {
   FileClockIcon,
   FileOutputIcon,
   ListOrderedIcon,
+  PackageCheckIcon,
   PackagePlusIcon,
   PackageSearchIcon,
   ScaleIcon,
@@ -100,6 +101,7 @@ import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
+import { ArticleFileDialog } from './ArticleFileDialog'
 import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { usePriceFileOverview } from './price-files'
@@ -120,7 +122,7 @@ import {
   needsAi,
   needsProductFile,
   nomenclatureState,
-  purchasePerPiece,
+  productFileRow,
   rowFromLine,
   rowProblems,
   serviceKind,
@@ -287,6 +289,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [labelsOpen, setLabelsOpen] = useState(false)
+  const [articleFileOpen, setArticleFileOpen] = useState(false)
   const [checkOpen, setCheckOpen] = useState(false)
   const [resaveOpen, setResaveOpen] = useState(false)
   const [saveSettings, setSaveSettings] = useState<{ open: boolean; missing: SavedFolderSpec[] }>({
@@ -836,40 +839,21 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // Nowe i zmienione artykuły (bez samej zmiany ceny) idą razem z plikiem XML do pliku CADBEZP dla programu sklepu.
   const productRows = filled.filter(needsProductFile)
-  const productFilePayload: ProductFilePayload | null =
-    productRows.length > 0
-      ? {
-          supplierId: invoice?.supplier?.id ?? null,
-          sellerNip: invoice?.sellerNip ?? null,
-          sellerName: invoice?.supplier?.name ?? invoice?.sellerName ?? null,
-          invoiceNumber: invoice?.number ?? null,
-          rows: productRows.map((row) => ({
-            ean: (!row.eanFallback && row.ean) || null,
-            name: row.name,
-            brand: row.brand || null,
-            unit: row.unit,
-            netContent: row.netContent,
-            purchasePrice: purchasePerPiece(row),
-            vatPercent: row.vatPercent,
-            salePrice: row.salePrice,
-            subfamilyCode: row.subfamilyCode,
-            supplierCode: row.supplierCode ?? null,
-            cn: row.cn ?? null,
-          })),
-        }
-      : null
+  const productFileOf = (source: DataEntryRow[]): ProductFilePayload => ({
+    supplierId: invoice?.supplier?.id ?? null,
+    sellerNip: invoice?.sellerNip ?? null,
+    sellerName: invoice?.supplier?.name ?? invoice?.sellerName ?? null,
+    invoiceNumber: invoice?.number ?? null,
+    rows: source.map(productFileRow),
+  })
+  const productFilePayload = productRows.length > 0 ? productFileOf(productRows) : null
 
   // O wprowadzenie pytamy tylko przy nowych artykułach; zmiany artykułów z kartoteki idą do pliku bez pytania.
-  const newArticles: NewArticles | null =
-    productFilePayload && productRows.some((row) => !row.known)
-      ? {
-          payload: {
-            ...productFilePayload,
-            rows: productFilePayload.rows.filter((_, index) => !productRows[index].known),
-          },
-          supplierCode: supplier?.code ?? null,
-        }
-      : null
+  const newArticlesOf = (source: DataEntryRow[]): NewArticles | null => {
+    const fresh = source.filter((row) => !row.known)
+    return fresh.length > 0 ? { payload: productFileOf(fresh), supplierCode: supplier?.code ?? null } : null
+  }
+  const newArticles = newArticlesOf(productRows)
 
   // Sam plik CADBEZP nie ma okna sprawdzenia, więc artykuły bez podrodziny i z za długą nazwą trzeba najpierw poprawić.
   const unfinishedProducts = productRows.filter((row) =>
@@ -963,6 +947,10 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     if (!fileName) return
     setCheckOpen(false)
     dispatch(setDataEntrySaved({ storeId: store.id, saved: { at: nowIso(), fileName, signature } }))
+  }
+  // „Zmień artykuły”: plik CADBEZP z artykułów wybranych w oknie, także niezmienionych.
+  const saveChosenArticles = async (chosen: DataEntryRow[]) => {
+    if (await xmlSave.saveProducts(productFileOf(chosen), newArticlesOf(chosen))) setArticleFileOpen(false)
   }
   const checkAndSave = () => {
     if (hasProblems) setCheckOpen(true)
@@ -1124,6 +1112,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   <PackagePlusIcon />
                   Dodaj nowe artykuły
                   {productRows.length > 0 && ` (${productRows.length})`}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setArticleFileOpen(true)}
+                  disabled={filled.length === 0}
+                  title="Wybierz artykuły do pliku CADBEZP, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu"
+                >
+                  <PackageCheckIcon />
+                  Zmień artykuły
                 </Button>
               </>
             )}
@@ -1398,6 +1396,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         skipped={protocolSkipped}
         open={protocolOpen}
         onOpenChange={setProtocolOpen}
+      />
+
+      <ArticleFileDialog
+        rows={filled}
+        selectedIds={selectedRows}
+        supplierNote={
+          supplier?.code
+            ? `Plik CADBEZP dla dostawcy ${supplier.code} ${supplier.name}.`
+            : 'Dokument nie ma dostawcy z numerem: wybierz go w pasku, jeśli artykuły mają przejść na innego dostawcę.'
+        }
+        saving={xmlSave.savingProducts}
+        open={articleFileOpen}
+        onOpenChange={setArticleFileOpen}
+        onSave={(chosen) => void saveChosenArticles(chosen)}
       />
 
       <LabelDialog

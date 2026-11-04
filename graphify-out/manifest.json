@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793784719.1978238,
-    "seen": 1793784837.181333,
-    "ast_hash": "3d00f86f66e033655e062eacdc73833b",
+    "mtime": 1793797856.2443373,
+    "seen": 1793797904.2923589,
+    "ast_hash": "41abd954c1a68d0956cdc9376a128342",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductImportIntegrationTests.java": {
-    "mtime": 1793784717.8117793,
-    "seen": 1793784837.1295843,
-    "ast_hash": "16e5889df3c07ff786ce1c14d15fe9d3",
+    "mtime": 1793786120.0771813,
+    "seen": 1793797904.2426543,
+    "ast_hash": "6f9c9ab33cc63f4cda867c429319450d",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
@@ -3084,9 +3084,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/component/ProductReportParser.java": {
-    "mtime": 1793784698.5493665,
-    "seen": 1793784837.0996268,
-    "ast_hash": "3aa6af3cfb49f1faf0a3e0834b28595f",
+    "mtime": 1793786108.909295,
+    "seen": 1793797904.214773,
+    "ast_hash": "fdde776e00e6cbdd1006e3cd94981ea8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/controller/ProductImportController.java": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1793782322.1487882,
-    "seen": 1793782394.2992072,
-    "ast_hash": "ad37a78d30bc225ab34e1e7797698176",
+    "mtime": 1793797849.173075,
+    "seen": 1793797904.2538774,
+    "ast_hash": "91cad9b12cc56fee6876a4303aab5300",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4524,9 +4524,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/rows.ts": {
-    "mtime": 1793784617.5157049,
-    "seen": 1793784674.3252966,
-    "ast_hash": "6331b544c60cef7a84ddf0ed48f587e1",
+    "mtime": 1793797841.2773056,
+    "seen": 1793797904.257871,
+    "ast_hash": "ea5d3b763c1e9401587c233c31aebae9",
     "semantic_hash": ""
   },
   "frontend/src/store/dataEntryDraftSlice.ts": {
@@ -6006,9 +6006,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/xml-save.tsx": {
-    "mtime": 1793657238.105245,
-    "seen": 1793657320.6564703,
-    "ast_hash": "6ced23fdd74966b481bd78638c705fd2",
+    "mtime": 1793797842.8589704,
+    "seen": 1793797904.257871,
+    "ast_hash": "29096ba7084c37d098ecd551c7e0a5f7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/SupplierSalePriceController.java": {
@@ -6378,9 +6378,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/BaseDeliveryPage.tsx": {
-    "mtime": 1793782322.7295468,
-    "seen": 1793782394.2972074,
-    "ast_hash": "b522ea61588fec5a78d8f5ff60b47813",
+    "mtime": 1793797855.451993,
+    "seen": 1793797904.2518706,
+    "ast_hash": "614911486c4b6973a3e24afd0a5e9ff8",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/CarrierDialog.tsx": {
@@ -6480,9 +6480,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/product-drafts.tsx": {
-    "mtime": 1793657238.0487883,
-    "seen": 1793657320.6549664,
-    "ast_hash": "b08bb87efce481185824a5487ac7d5a6",
+    "mtime": 1793787354.5450482,
+    "seen": 1793797904.2568707,
+    "ast_hash": "d4c54572109f85ae51a83f0b625d731f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/controller/ImportGuideController.java": {
@@ -6789,6 +6789,12 @@
     "mtime": 1793782654.918365,
     "seen": 1793782803.6795182,
     "ast_hash": "b672120d8a6a52393b54c759b7f7167d",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/data-entry/ArticleFileDialog.tsx": {
+    "mtime": 1793797784.8197324,
+    "seen": 1793797904.2538774,
+    "ast_hash": "f5a522ea09df6eec4f79fbe34979c120",
     "semantic_hash": ""
   }
 }

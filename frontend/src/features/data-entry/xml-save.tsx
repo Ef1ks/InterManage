@@ -123,7 +123,10 @@ export function useXmlSave(storeId: string) {
     return { fileName, downloaded: !folderReady }
   }
 
-  /** Sam plik CADBEZP, bez pliku XML (np. artykuły zakładane przed dostawą); o nowe artykuły pyta jak zapis. */
+  /**
+   * Sam plik CADBEZP, bez pliku XML (np. artykuły zakładane przed dostawą); o nowe artykuły pyta jak zapis. Zwraca,
+   * czy plik się zapisał.
+   */
   const saveProducts = async (file: ProductFilePayload, newArticles: NewArticles | null) => {
     setSavingProducts(true)
     try {
@@ -134,8 +137,10 @@ export function useXmlSave(storeId: string) {
         duration: 10_000,
       })
       if (newArticles) drafts.ask([{ ...newArticles, fileName: saved.fileName }])
+      return true
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku nowych artykułów')
+      return false
     } finally {
       setSavingProducts(false)
     }
