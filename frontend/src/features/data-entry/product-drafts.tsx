@@ -15,15 +15,19 @@ import { ApiError, api } from '@/lib/api'
 
 import type { ProductFilePayload } from './api'
 
-/** Zapisany plik CADBEZP z tym, co w nim poszło. */
-export type SavedProductFile = { fileName: string; payload: ProductFilePayload }
+/** Nowe artykuły z pliku CADBEZP (bez zmian artykułów z kartoteki) i numer dostawcy do pytania. */
+export type NewArticles = { payload: ProductFilePayload; supplierCode: string | null }
+
+/** Zapisany plik CADBEZP z nowymi artykułami. */
+export type SavedProductFile = NewArticles & { fileName: string }
 
 type DraftResult = { createdIds: string[]; knownCount: number; withoutEanCount: number }
 
 /**
- * Pytanie po zapisie plików CADBEZP, czy program sklepu wczytał je poprawnie. „Tak” zapisuje nowe artykuły z plików
- * jako szkice w bazie: kolejny raport kartoteki dopisze resztę danych (ITM8, stan…), a artykuł, którego w nim nie
- * będzie, usunie. Zwraca `ask` do wywołania po zapisie i okno do wyrenderowania.
+ * Pytanie po zapisie plików CADBEZP z nowymi artykułami (sama zmiana artykułów z kartoteki o nic nie pyta), czy
+ * wprowadzono je w programie sklepu. „Tak” zapisuje je jako szkice w bazie: kolejny raport kartoteki dopisze resztę
+ * danych (ITM8, stan…), a artykuł, którego w nim nie będzie, usunie. Zwraca `ask` do wywołania po zapisie i okno do
+ * wyrenderowania.
  */
 export function useProductDraftConfirm(storeId: string) {
   const [files, setFiles] = useState<SavedProductFile[] | null>(null)
@@ -80,32 +84,23 @@ export function useProductDraftConfirm(storeId: string) {
     }
   }
 
-  const count = files?.reduce((sum, file) => sum + file.payload.rows.length, 0) ?? 0
+  const supplierCodes = [...new Set(files?.flatMap((file) => file.supplierCode ?? []) ?? [])]
 
   const dialog = (
     <AlertDialog open={files !== null} onOpenChange={(open) => !open && !confirming && setFiles(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Czy pliki zostały poprawnie utworzone?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Sprawdź, czy program sklepu wczytał {files && files.length > 1 ? 'pliki' : 'plik'} nowych artykułów ({count}{' '}
-            {count === 1 ? 'artykuł' : 'artykułów'}). Po potwierdzeniu nowe artykuły trafią do bazy; resztę danych
-            dopisze kolejny raport kartoteki, a artykuł, którego w nim nie będzie, zostanie usunięty.
-          </AlertDialogDescription>
+          <AlertDialogTitle>Czy wprowadziłeś nowe artykuły?</AlertDialogTitle>
+          {supplierCodes.length > 0 && (
+            <AlertDialogDescription className="text-3xl font-bold text-foreground tabular-nums">
+              dla dostawcy NR {supplierCodes.join(', ')}
+            </AlertDialogDescription>
+          )}
         </AlertDialogHeader>
-        {files && (
-          <ul className="grid gap-0.5 text-sm text-muted-foreground">
-            {files.map((file) => (
-              <li key={file.fileName} className="break-all">
-                {file.fileName}
-              </li>
-            ))}
-          </ul>
-        )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={confirming}>Nie, nie dodawaj</AlertDialogCancel>
+          <AlertDialogCancel disabled={confirming}>Nie</AlertDialogCancel>
           <Button loading={confirming} onClick={() => void confirm()}>
-            Tak, dodaj artykuły
+            Tak
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -733,7 +733,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
         else saveBlob(blob, fileName)
         saved.push(`${fileName}${folderReady ? '' : ' (pobrany)'}`)
-        savedFiles.push({ fileName, payload })
+        savedFiles.push({ fileName, payload, supplierCode: supplier?.code ?? group.supplierCode })
       }
       toast.success(`Zapisano nowe artykuły: ${newArticles}`, { description: saved.join(', '), duration: 10_000 })
       productDrafts.ask(savedFiles)

@@ -9,6 +9,7 @@ import {
   FileClockIcon,
   FileOutputIcon,
   ListOrderedIcon,
+  PackagePlusIcon,
   PackageSearchIcon,
   ScaleIcon,
   PlusIcon,
@@ -103,6 +104,7 @@ import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { usePriceFileOverview } from './price-files'
 import { savePriceControlFile } from './price-control'
+import type { NewArticles } from './product-drafts'
 import { PriceFileStatus } from './PriceFileStatus'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SaveSettingsDialog } from './SaveSettingsDialog'
@@ -857,6 +859,26 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         }
       : null
 
+  // O wprowadzenie pytamy tylko przy nowych artykułach; zmiany artykułów z kartoteki idą do pliku bez pytania.
+  const newArticles: NewArticles | null =
+    productFilePayload && productRows.some((row) => !row.known)
+      ? {
+          payload: {
+            ...productFilePayload,
+            rows: productFilePayload.rows.filter((_, index) => !productRows[index].known),
+          },
+          supplierCode: supplier?.code ?? null,
+        }
+      : null
+
+  // Sam plik CADBEZP nie ma okna sprawdzenia, więc artykuły bez podrodziny i z za długą nazwą trzeba najpierw poprawić.
+  const unfinishedProducts = productRows.filter((row) =>
+    rowProblems(row).some((problem) => problem === 'no-subfamily' || problem === 'name-too-long'),
+  ).length
+  const productFileBlocker =
+    badEanTitle ??
+    (unfinishedProducts > 0 ? `Najpierw uzupełnij podrodzinę i popraw za długie nazwy: ${unfinishedProducts}` : null)
+
   // Artykuły z kartoteki z ceną sprzedaży inną niż przy wczytaniu (kartoteka albo promocja z kasy) idą do CTRLPRIX.
   const priceControlRows = filled.flatMap((row) =>
     row.known &&
@@ -937,7 +959,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       setSaveSettings({ open: true, missing })
       return
     }
-    const fileName = await xmlSave.save(payload, productFilePayload, priceControlPayload)
+    const fileName = await xmlSave.save(payload, productFilePayload, priceControlPayload, newArticles)
     if (!fileName) return
     setCheckOpen(false)
     dispatch(setDataEntrySaved({ storeId: store.id, saved: { at: nowIso(), fileName, signature } }))
@@ -1085,6 +1107,23 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   <TagIcon />
                   Zmień ceny
                   {priceControlRows.length > 0 && ` (${priceControlRows.length})`}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => productFilePayload && void xmlSave.saveProducts(productFilePayload, newArticles)}
+                  loading={xmlSave.savingProducts}
+                  disabled={productRows.length === 0 || productFileBlocker !== null}
+                  title={
+                    productFileBlocker ??
+                    (productRows.length > 0
+                      ? `Zapisuje sam plik nowych i zmienionych artykułów (${productRows.length} ${pieces(productRows.length)}), bez pliku XML`
+                      : 'W tabeli nie ma nowych ani zmienionych artykułów')
+                  }
+                >
+                  <PackagePlusIcon />
+                  Dodaj nowe artykuły
+                  {productRows.length > 0 && ` (${productRows.length})`}
                 </Button>
               </>
             )}

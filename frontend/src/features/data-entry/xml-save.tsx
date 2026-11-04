@@ -14,7 +14,7 @@ import {
 
 import type { ExportPayload, PriceControlPayload, ProductFilePayload } from './api'
 import { savePriceControlFile } from './price-control'
-import { useProductDraftConfirm } from './product-drafts'
+import { type NewArticles, useProductDraftConfirm } from './product-drafts'
 
 /** Pliki XML faktur mają własny folder, wybrany raz w ustawieniach zapisu. */
 export const XML_FOLDER: SavedFolderSpec = { key: 'data-entry-xml', label: 'Plik XML faktury' }
@@ -24,11 +24,12 @@ type SavedFile = { fileName: string; downloaded: boolean }
 /**
  * Zapis tabeli: plik XML faktury do folderu z ustawień zapisu (bez obsługi folderów w przeglądarce: pobranie), potem
  * nowe i zmienione artykuły do pliku CADBEZP i zmienione ceny do pliku CTRLPRIX w folderze zmian cen; ich błąd
- * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a po zapisie pliku CADBEZP
- * pytanie, czy program sklepu go wczytał (`draftDialog` do wyrenderowania): „Tak” dodaje nowe artykuły do bazy.
+ * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a gdy w pliku CADBEZP są nowe
+ * artykuły, pytanie, czy je wprowadzono (`draftDialog` do wyrenderowania): „Tak” dodaje je do bazy.
  */
 export function useXmlSave(storeId: string) {
   const [saving, setSaving] = useState(false)
+  const [savingProducts, setSavingProducts] = useState(false)
   const queryClient = useQueryClient()
   const productFolder = useProductFileFolder(storeId)
   const priceChangeFolder = usePriceChangeFolder(storeId)
@@ -47,6 +48,7 @@ export function useXmlSave(storeId: string) {
     payload: ExportPayload,
     productFile: ProductFilePayload | null,
     priceControl: PriceControlPayload | null,
+    newArticles: NewArticles | null,
   ): Promise<string | null> => {
     setSaving(true)
     try {
@@ -98,7 +100,7 @@ export function useXmlSave(storeId: string) {
         ),
         duration: 10_000,
       })
-      if (productFile && productFileSaved) drafts.ask([{ fileName: productFileSaved.fileName, payload: productFile }])
+      if (newArticles && productFileSaved) drafts.ask([{ ...newArticles, fileName: productFileSaved.fileName }])
       return fileName
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku XML', {
@@ -110,17 +112,39 @@ export function useXmlSave(storeId: string) {
     }
   }
 
+  const writeProductFile = async (file: ProductFilePayload, folderReady: boolean): Promise<SavedFile> => {
+    const { fileName, blob } = await fetchPostedFile(
+      `/stores/${storeId}/data-entry/export/product-file`,
+      file,
+      'CADBEZP.xls',
+    )
+    if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
+    else saveBlob(blob, fileName)
+    return { fileName, downloaded: !folderReady }
+  }
+
+  /** Sam plik CADBEZP, bez pliku XML (np. artykuły zakładane przed dostawą); o nowe artykuły pyta jak zapis. */
+  const saveProducts = async (file: ProductFilePayload, newArticles: NewArticles | null) => {
+    setSavingProducts(true)
+    try {
+      // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
+      const saved = await writeProductFile(file, await ensureFolderAccess(productFolder.key))
+      toast.success(`Zapisano plik artykułów: ${file.rows.length}`, {
+        description: `${saved.fileName}${saved.downloaded ? ' (pobrany: folder nowych artykułów nie jest wybrany w tej przeglądarce)' : ''}`,
+        duration: 10_000,
+      })
+      if (newArticles) drafts.ask([{ ...newArticles, fileName: saved.fileName }])
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku nowych artykułów')
+    } finally {
+      setSavingProducts(false)
+    }
+  }
+
   /** Plik CADBEZP po zapisanym pliku XML: błąd tylko ostrzega, plik XML zostaje. */
   const saveProductFile = async (file: ProductFilePayload, folderReady: boolean): Promise<SavedFile | null> => {
     try {
-      const { fileName, blob } = await fetchPostedFile(
-        `/stores/${storeId}/data-entry/export/product-file`,
-        file,
-        'CADBEZP.xls',
-      )
-      if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
-      else saveBlob(blob, fileName)
-      return { fileName, downloaded: !folderReady }
+      return await writeProductFile(file, folderReady)
     } catch (error) {
       toast.error('Nie udało się zapisać pliku nowych artykułów', {
         description: `${error instanceof ApiError ? `${error.message} ` : ''}Plik XML jest zapisany.`,
@@ -148,5 +172,14 @@ export function useXmlSave(storeId: string) {
     }
   }
 
-  return { save, saving, missingFolders, productFolder, priceChangeFolder, draftDialog: drafts.dialog }
+  return {
+    save,
+    saving,
+    saveProducts,
+    savingProducts,
+    missingFolders,
+    productFolder,
+    priceChangeFolder,
+    draftDialog: drafts.dialog,
+  }
 }
