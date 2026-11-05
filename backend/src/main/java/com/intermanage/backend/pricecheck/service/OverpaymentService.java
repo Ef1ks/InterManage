@@ -74,7 +74,7 @@ public class OverpaymentService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final BigDecimal THRESHOLD_FACTOR = BigDecimal.ONE
             .add(BigDecimal.valueOf(THRESHOLD_PERCENT).divide(HUNDRED));
-    private static final Map<PriceCheckStatus, Integer> STATUS_ORDER =
+    static final Map<PriceCheckStatus, Integer> STATUS_ORDER =
             Map.of(PriceCheckStatus.REPORTED, 1, PriceCheckStatus.RESOLVED, 2);
 
     private final DocumentRepository documents;
@@ -224,7 +224,7 @@ public class OverpaymentService {
     }
 
     /** Rejon z kodu nomenklatury linii ("570101" albo "57 01 01" -> "57"). */
-    private static String regionOf(String nomenclatureCode) {
+    static String regionOf(String nomenclatureCode) {
         if (nomenclatureCode == null) {
             return null;
         }
@@ -232,7 +232,7 @@ public class OverpaymentService {
         return digits.length() < 2 ? null : digits.substring(0, 2);
     }
 
-    private static <T> BigDecimal sum(List<T> items, Function<T, BigDecimal> value) {
+    static <T> BigDecimal sum(List<T> items, Function<T, BigDecimal> value) {
         return items.stream().map(value).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

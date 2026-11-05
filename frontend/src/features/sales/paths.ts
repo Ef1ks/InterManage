@@ -9,6 +9,7 @@ export const salesPaths = {
   periodSummary: `${base}/podsumowanie`,
   priceCheck: `${base}/zakup-bazowy-poza-baza`,
   overpayments: `${base}/przeplacone-artykuly`,
+  lowMargins: `${base}/za-niskie-marze`,
   topSales: `${base}/topy`,
   gratis: `${base}/gratisy`,
   protocols: `${base}/protokoly`,

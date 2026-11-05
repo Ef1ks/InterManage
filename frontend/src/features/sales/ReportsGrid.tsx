@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   ScaleIcon,
   TagIcon,
+  TrendingDownIcon,
   TrophyIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
@@ -69,6 +70,14 @@ const REPORTS: Report[] = [
     description:
       'Artykuły kupione o ponad 5% drożej niż w jednej z trzech poprzednich dostaw. Do wyjaśnienia z dostawcą.',
     icon: BadgeAlertIcon,
+    fromDocuments: 'Z przyjęć PZ i ich korekt',
+  },
+  {
+    path: salesPaths.lowMargins,
+    title: 'Za niskie marże',
+    description:
+      'Artykuły z marżą o 10 punktów niższą niż wymagana na nomenklaturze, liczoną z ceny poza promocją. Do wyjaśnienia.',
+    icon: TrendingDownIcon,
     fromDocuments: 'Z przyjęć PZ i ich korekt',
   },
   {

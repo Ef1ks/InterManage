@@ -5,5 +5,7 @@ public enum ReviewedReport {
     /** Zakup bazowy poza bazą. */
     BASE_PURCHASE,
     /** Przepłacone artykuły. */
-    OVERPAYMENT
+    OVERPAYMENT,
+    /** Za niskie marże. */
+    LOW_MARGIN
 }

@@ -1714,6 +1714,57 @@ export type OverpaymentReport = {
   deliveries: OverpaymentDelivery[]
 }
 
+/** Skąd wiadomo o promocji w dniu przyjęcia: lista promocji, gazetka, spadek ceny w sprzedaży. */
+export type LowMarginPromotion = 'LIST' | 'LEAFLET' | 'SALES'
+
+export type LowMarginLine = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  regionCode: string | null
+  supplierCode: string | null
+  quantity: number
+  purchasePrice: number
+  purchaseValue: number
+  /** Cena katalogowa brutto, od niej liczy się marża. */
+  salePrice: number
+  documentSalePrice: number
+  promotion: LowMarginPromotion | null
+  marginPercent: number
+  requiredMargin: number
+  /** Cena zakupu dająca marżę wymaganą. */
+  targetPurchasePrice: number
+  excessValue: number
+  corrected: boolean
+}
+
+export type LowMarginDelivery = {
+  id: string
+  number: string
+  documentDate: string
+  supplierCode: string | null
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  correctionCount: number
+  linesPurchaseValue: number
+  excessValue: number
+  review: PriceCheckReview | null
+  history: PriceCheckReview[]
+  lines: LowMarginLine[]
+}
+
+export type LowMarginReport = {
+  from: string
+  to: string
+  periodDays: number
+  marginGap: number
+  marginsConfigured: boolean
+  documentsCoveredUntil: string | null
+  documentsReportGeneratedAt: string | null
+  deliveries: LowMarginDelivery[]
+}
+
 /** Własna kategoria raportu zakupu bazowego poza bazą: nazwa i rejony nomenklatury. */
 export type PriceCheckCategory = {
   id: string

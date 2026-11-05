@@ -19,7 +19,7 @@ import { applyServerErrors } from '@/lib/form-errors'
 import type { PriceCheckCategory, PriceCheckReview, PriceCheckStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-/** Części wspólne raportów cen wyjaśnianych z dostawcą: zakupu bazowego poza bazą i przepłaconych artykułów. */
+/** Części wspólne raportów cen wyjaśnianych z dostawcą: zakupu bazowego poza bazą, przepłaconych i za niskich marż. */
 
 export type ReviewedDelivery = {
   id: string

@@ -42,13 +42,13 @@ public class PromotionReportService {
     static final int MIN_BASE_DAYS = 14;
     static final BigDecimal NO_REACTION_UPLIFT = new BigDecimal("1.2");
     /** Dzień jest promocyjny, gdy cena dnia jest niższa niż 85% ceny zwykłej (obniżka ponad 15%). */
-    static final BigDecimal PRICE_FACTOR = new BigDecimal("0.85");
-    static final int MIN_REFERENCE_DAYS = 10;
+    public static final BigDecimal PRICE_FACTOR = new BigDecimal("0.85");
+    public static final int MIN_REFERENCE_DAYS = 10;
     static final int GAP_DAYS = 3;
     static final int MIN_DAYS = 3;
     static final int MAX_ESTIMATED_DAYS = 31;
     /** Cena zwykła patrzy na dwa miesiące wstecz. */
-    static final int REFERENCE_MONTHS = 2;
+    public static final int REFERENCE_MONTHS = 2;
     /** Sprzedaż po promocji oceniamy dopiero z tylu dni. */
     static final int MIN_AFTER_DAYS = 7;
 

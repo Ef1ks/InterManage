@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.leaflet.repository.PromoLeafletRepository;
+import com.intermanage.backend.promotion.repository.PromotionReportRepository;
 
 public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID> {
 
@@ -79,6 +81,17 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     }
 
     /** Dostawa artykułu z historii: ilość i wartość z bonu oraz po korektach przypiętych do przyjęcia. */
+    /** Linie przypiętych korekt przyjęć z CTE {@code lines}, po artykule, CTE {@code fixes}. */
+    String DELIVERY_FIXES = """
+            fixes as (
+                select c.delivery_id, cl.itm8, sum(cl.quantity) as quantity, sum(cl.purchase_value) as purchase_value
+                from delivery_corrections c
+                join document_lines cl on cl.document_id = c.correction_id
+                where c.unlinked_at is null and c.delivery_id in (select document_id from lines)
+                group by c.delivery_id, cl.itm8
+            )
+            """;
+
     interface DeliveryHistory {
         UUID getDocumentId();
 
@@ -131,13 +144,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                                    and ((cd.document_date >= :from and cd.document_date < :until)
                                         or cast(cd.id as varchar) = any(cast(:documentIds as varchar[]))))
                 group by d.id, d.number, d.document_date, l.itm8
-            ), fixes as (
-                select c.delivery_id, cl.itm8, sum(cl.quantity) as quantity, sum(cl.purchase_value) as purchase_value
-                from delivery_corrections c
-                join document_lines cl on cl.document_id = c.correction_id
-                where c.unlinked_at is null and c.delivery_id in (select document_id from lines)
-                group by c.delivery_id, cl.itm8
-            ), history as (
+            ), """ + DELIVERY_FIXES + """
+            , history as (
                 select l.*, l.quantity + coalesce(f.quantity, 0) as corrected_quantity,
                        l.purchase_value + coalesce(f.purchase_value, 0) as corrected_value,
                        f.delivery_id is not null as corrected,
@@ -165,6 +173,93 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<DeliveryHistory> findDeliveryHistory(UUID storeId, LocalDateTime since, LocalDateTime from,
             LocalDateTime until, String[] documentIds, BigDecimal minPrice, BigDecimal priceFactor);
+
+    interface DeliveryMargin {
+        UUID getDocumentId();
+
+        String getItm8();
+
+        String getEan();
+
+        String getName();
+
+        String getBrand();
+
+        String getNomenclatureCode();
+
+        String getSupplierCode();
+
+        BigDecimal getSalePrice();
+
+        Short getVatRate();
+
+        BigDecimal getCorrectedQuantity();
+
+        BigDecimal getCorrectedValue();
+
+        boolean getCorrected();
+
+        BigDecimal getListedPrice();
+
+        boolean getLeaflet();
+
+        BigDecimal getReferencePrice();
+
+        BigDecimal getCatalogPrice();
+    }
+
+    /**
+     * Artykuły przyjęć PZ z datą w [from, until) i przyjęć {@code documentIds}, po korektach, z tym, co wiadomo o cenie
+     * sprzedaży w dniu przyjęcia: {@code salePrice} z dokumentu (w promocji to cena promocyjna), {@code listedPrice}
+     * cena zwykła z promocji trwającej tego dnia na liście promocji, {@code leaflet} artykuł w gazetce tego dnia,
+     * {@code referencePrice} cena zwykła ze sprzedaży ({@link PromotionReportRepository#REGULAR_PRICES}),
+     * {@code catalogPrice} cena z kartoteki. Linie bez wartości (gratis) się nie liczą.
+     */
+    @Query(value = """
+            with lines as (
+                select d.id as document_id, cast(d.document_date as date) as day, l.itm8,
+                       max(l.ean) as ean, max(l.name) as name, max(l.brand) as brand,
+                       max(l.nomenclature_code) as nomenclature_code, max(l.supplier_code) as supplier_code,
+                       max(l.sale_price_document) as sale_price, max(l.vat_rate) as vat_rate,
+                       sum(l.quantity) as quantity, sum(l.purchase_value) as purchase_value
+                from document_lines l
+                join documents d on d.id = l.document_id
+                where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
+                  and ((d.document_date >= :from and d.document_date < :until)
+                       or cast(d.id as varchar) = any(cast(:documentIds as varchar[])))
+                group by d.id, d.document_date, l.itm8
+            ), """ + DELIVERY_FIXES + ", leaflet as (" + PromoLeafletRepository.ARTICLE_PERIODS + "), "
+            + PromotionReportRepository.REGULAR_PRICES + """
+            , listed as (
+                select l.document_id, l.itm8, max(p.regular_sale_price) as price
+                from lines l
+                join promotions p on p.store_id = :storeId and p.itm8 = l.itm8
+                                 and l.day between p.start_date and p.end_date
+                group by l.document_id, l.itm8
+            ), in_leaflet as (
+                select distinct l.document_id, l.itm8
+                from lines l
+                join leaflet g on g.itm8 = l.itm8 and l.day between g.date_from and g.date_to
+            )
+            select l.document_id as documentId, l.itm8 as itm8, l.ean as ean, l.name as name, l.brand as brand,
+                   l.nomenclature_code as nomenclatureCode, l.supplier_code as supplierCode,
+                   l.sale_price as salePrice, l.vat_rate as vatRate,
+                   l.quantity + coalesce(f.quantity, 0) as correctedQuantity,
+                   l.purchase_value + coalesce(f.purchase_value, 0) as correctedValue,
+                   f.delivery_id is not null as corrected,
+                   p.price as listedPrice, g.itm8 is not null as leaflet,
+                   round(cast(r.price as numeric), 2) as referencePrice,
+                   c.sale_price as catalogPrice
+            from lines l
+            left join fixes f on f.delivery_id = l.document_id and f.itm8 = l.itm8
+            left join listed p on p.document_id = l.document_id and p.itm8 = l.itm8
+            left join in_leaflet g on g.document_id = l.document_id and g.itm8 = l.itm8
+            left join reference r on r.itm8 = l.itm8
+                                 and r.month = cast(date_trunc('month', l.day) as date)
+            left join products c on c.store_id = :storeId and c.itm8 = l.itm8
+            """, nativeQuery = true)
+    List<DeliveryMargin> findDeliveryMargins(UUID storeId, LocalDateTime from, LocalDateTime until,
+            String[] documentIds, LocalDate dataFrom, LocalDate dataTo, LocalDate referenceFrom, int minReferenceDays);
 
     /**
      * Linie artykułu {@code :itm8}. Dostawca spoza bazy przywozi towar pod własnym, lokalnym ITM8 ({@code 99…}),

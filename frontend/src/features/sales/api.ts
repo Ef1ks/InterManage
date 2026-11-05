@@ -14,6 +14,7 @@ import type {
   NomenclatureOption,
   PeriodSummary,
   PeriodSummaryLevel,
+  LowMarginReport,
   OverpaymentReport,
   PriceCheckCategory,
   PriceCheckReport,
@@ -399,6 +400,14 @@ export function useOverpayments(storeId: string) {
   })
 }
 
+/** Za niskie marże z przyjęć z ostatnich 30 dni. */
+export function useLowMargins(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'low-margins'],
+    queryFn: () => api<LowMarginReport>(`${reportsPath(storeId)}/low-margins`),
+  })
+}
+
 /** Skuteczność promocji kończących się w okresie (najwyżej 92 dni; liczy się kilka sekund). */
 export function usePromotionReport(storeId: string, range: DateRange, enabled: boolean) {
   return useQuery({
@@ -496,11 +505,15 @@ export function usePriceCheckCategoryActions(storeId: string) {
 }
 
 /** Raport, którego dotyczy status wyjaśniania: statusy obu raportów są niezależne. */
-export type ReviewedReport = 'BASE_PURCHASE' | 'OVERPAYMENT'
+export type ReviewedReport = 'BASE_PURCHASE' | 'OVERPAYMENT' | 'LOW_MARGIN'
 
 /** Status wyjaśniania przyjęcia: nowy wpis, cofnięcie (znacznik) i przywrócenie; każde zwraca historię. */
 export function usePriceReviewActions(storeId: string, report: ReviewedReport) {
-  const reportPath = report === 'OVERPAYMENT' ? `${reportsPath(storeId)}/overpayments` : priceCheckPath(storeId)
+  const reportPath = {
+    BASE_PURCHASE: priceCheckPath(storeId),
+    OVERPAYMENT: `${reportsPath(storeId)}/overpayments`,
+    LOW_MARGIN: `${reportsPath(storeId)}/low-margins`,
+  }[report]
   return {
     review: useMutation({
       mutationFn: ({ documentId, status, note }: { documentId: string; status: PriceCheckStatus; note: string }) =>

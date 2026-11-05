@@ -29,11 +29,8 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
               and s.sale_date between cast(:dataFrom as date) and cast(:dataTo as date)
             """;
 
-    /**
-     * Rozpoznanie promocji ze sprzedaży {@code days}: {@code flagged} to dni z ceną poniżej {@code priceFactor} × cena
-     * zwykła (patrz {@link #findPromotions}).
-     */
-    String PROMO_FLAGS = """
+    /** Cena zwykła artykułu w miesiącu, CTE {@code reference} (patrz {@link #findPromotions}). */
+    String REGULAR_PRICES = """
             reference as (
                 select itm8, month,
                        max(price) filter (where sale_days >= :minReferenceDays)
@@ -41,7 +38,15 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
                                  range between interval '2 month' preceding and current row) as price
                 from sales_month_prices
                 where store_id = :storeId and month between cast(:referenceFrom as date) and cast(:dataTo as date)
-            ), flagged as (
+            )
+            """;
+
+    /**
+     * Rozpoznanie promocji ze sprzedaży {@code days}: {@code flagged} to dni z ceną poniżej {@code priceFactor} × cena
+     * zwykła (patrz {@link #findPromotions}).
+     */
+    String PROMO_FLAGS = REGULAR_PRICES + """
+            , flagged as (
                 select d.itm8, d.sale_date, r.price as reference_price
                 from days d
                 join reference r on r.itm8 = d.itm8 and r.month = d.month
