@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793869705.7815802,
-    "seen": 1793869796.5676284,
-    "ast_hash": "c914822b489007d7a4a22dd4c868602a",
+    "mtime": 1793870459.6296377,
+    "seen": 1793870535.4494796,
+    "ast_hash": "7b78a2f6dfea27562664ae78cdd98c0f",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -3804,9 +3804,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/SavedFolder.tsx": {
-    "mtime": 1793171231.1934862,
-    "seen": 1793171403.4912462,
-    "ast_hash": "cc909f5c46bba2c1742e4b388f947117",
+    "mtime": 1793870363.7105484,
+    "seen": 1793870535.4001188,
+    "ast_hash": "3816253fafb3a1b033729a984a317b2e",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/FulfillOrderDialog.tsx": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1793869705.7805805,
-    "seen": 1793869796.526261,
-    "ast_hash": "ccaf6cd51bf602960fe63854f8d16475",
+    "mtime": 1793870472.2782524,
+    "seen": 1793870535.4090586,
+    "ast_hash": "f9d1778d1ed2f5c31dc285771f173310",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4992,9 +4992,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/XmlOpenDialog.tsx": {
-    "mtime": 1793551733.3329513,
-    "seen": 1793551778.9771008,
-    "ast_hash": "4cdb954cecdaa0eab76a3995d561e712",
+    "mtime": 1793870459.628512,
+    "seen": 1793870535.4106264,
+    "ast_hash": "ed6b41f3667895f7d3e2332d1c4de597",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/TemporaryXmlRequest.java": {
@@ -5994,9 +5994,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/SaveSettingsDialog.tsx": {
-    "mtime": 1793865577.1297455,
-    "seen": 1793866067.153877,
-    "ast_hash": "4c96ee760456b276c431a12459718700",
+    "mtime": 1793870363.7105484,
+    "seen": 1793870535.4106264,
+    "ast_hash": "bb743937ec51762ffb8a1fdfe4802510",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/xml-save.tsx": {

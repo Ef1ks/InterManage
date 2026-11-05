@@ -1,4 +1,5 @@
 import { RotateCcwIcon } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { SavedFolder } from '@/components/SavedFolder'
@@ -39,7 +40,14 @@ export function SaveSettingsDialog({
   const productFolder = useProductFileFolder(storeId)
   const protoFolder = useProtoFolder(storeId)
   const priceControlFiles = usePriceControlFiles(storeId, open)
-  const isMissing = (folder: SavedFolderSpec) => missing.some((item) => item.key === folder.key)
+  // Wybrany w tym oknie folder przestaje być brakujący od razu, bez zamykania okna.
+  const [picked, setPicked] = useState<string[]>([])
+  const stillMissing = missing.filter((folder) => !picked.includes(folder.key))
+  const isMissing = (folder: SavedFolderSpec) => stillMissing.some((item) => item.key === folder.key)
+  const changeOpen = (next: boolean) => {
+    if (!next) setPicked([])
+    onOpenChange(next)
+  }
 
   /** Ponowny zapis pliku CTRLPRIX z historii w folderze protokołów (bez folderu: pobranie). */
   const saveAgain = async (id: string) => {
@@ -67,7 +75,7 @@ export function SaveSettingsDialog({
   ]
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent className="gap-5 p-6 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Ustawienia zapisu</DialogTitle>
@@ -76,7 +84,7 @@ export function SaveSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {missing.length > 0 && (
+        {stillMissing.length > 0 && (
           <p
             role="alert"
             className="rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-medium text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-100"
@@ -91,6 +99,7 @@ export function SaveSettingsDialog({
               <p className="text-sm font-medium">{folder.label}</p>
               <SavedFolder
                 folder={folder}
+                onPicked={() => setPicked((current) => [...current, folder.key])}
                 className={cn(
                   isMissing(folder) && 'border-amber-400 bg-amber-100/60 dark:border-amber-600 dark:bg-amber-950/40',
                 )}

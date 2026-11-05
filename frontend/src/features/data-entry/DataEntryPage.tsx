@@ -12,7 +12,7 @@ import {
   FileTextIcon,
   FileUpIcon,
   FilterXIcon,
-  FolderOpenIcon,
+  HistoryIcon,
   ListOrderedIcon,
   PackageCheckIcon,
   PackagePlusIcon,
@@ -72,13 +72,7 @@ import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useProtoFolder } from '@/lib/proto-files'
-import {
-  ensureFolderAccess,
-  folderAccess,
-  folderSavingSupported,
-  type SavedFolderSpec,
-  saveToFolder,
-} from '@/lib/saved-folders'
+import { ensureFolderAccess, folderSavingSupported, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
 import { addDays, todayIso } from '@/lib/dates'
 import type {
   DataEntryCatalogProduct,
@@ -171,7 +165,7 @@ import {
   withTrailingEmptyRow,
 } from './rows'
 import { useUndoHistory, useUndoShortcuts } from './undo-history'
-import { XmlOpenDialog } from './XmlOpenDialog'
+import { XmlOpenDialog, type XmlSource } from './XmlOpenDialog'
 import { XmlSaveDialog } from './XmlSaveDialog'
 import { useXmlSave } from './xml-save'
 
@@ -325,6 +319,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [splitTarget, setSplitTarget] = useState<DataEntryRow | null>(null)
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
+  const [xmlSource, setXmlSource] = useState<XmlSource>('file')
+  const openXml = (source: XmlSource) => {
+    setXmlSource(source)
+    setXmlOpenOpen(true)
+  }
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [labelsOpen, setLabelsOpen] = useState(false)
@@ -808,13 +807,13 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   ]
   const [savingLst, setSavingLst] = useState(false)
   const saveLst = async () => {
-    if (folderSavingSupported && (await folderAccess(LST_FOLDER.key, 'readwrite')) === 'missing') {
-      setSaveSettings({ open: true, missing: [LST_FOLDER] })
-      return
-    }
     setSavingLst(true)
     try {
       const folderReady = await ensureFolderAccess(LST_FOLDER.key)
+      if (!folderReady && folderSavingSupported) {
+        setSaveSettings({ open: true, missing: [LST_FOLDER] })
+        return
+      }
       const fileName = lstFileName(depositFilter ? 'KAUCJE' : 'EAN', invoice?.number)
       if (folderReady) await saveToFolder(LST_FOLDER.key, fileName, lstFile(lstEans))
       else saveBlob(lstFile(lstEans), fileName)
@@ -1183,7 +1182,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           'Kliknij „Uzupełnij z AI”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów. Artykuły z kaucją dostają plakietkę, a „Brakująca kaucja” pokazuje tylko je.',
           'Skanujesz ręcznie? Wpisz albo zeskanuj EAN i Enter: od razu powstaje kolejny wiersz na następny kod.',
           'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Żółte komórki wymagają wyboru.',
-          'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później: „Wczytaj” → „Plik XML”.',
+          'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później: „Wczytaj” → „Wczytaj tymczasowe”.',
         ]}
       />
 
@@ -1227,12 +1226,25 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               hint={canLoadInvoices ? undefined : 'Wczytanie faktury wymaga dostępu do faktur KSeF'}
               onClick={() => setPickerOpen(true)}
             />
-            <ActionItem icon={<FileCodeIcon />} label="Plik XML" onClick={() => setXmlOpenOpen(true)} />
+            <ActionItem icon={<FileCodeIcon />} label="Plik XML" onClick={() => openXml('file')} />
             <ActionItem
               icon={<FileUpIcon />}
               label="Plik .lst"
               hint="Dopisuje do tabeli kody z pliku .lst: jeden kod w wierszu, trafia do kolumny EAN"
               onClick={() => lstInput.current?.click()}
+            />
+            <DropdownMenuSeparator />
+            <ActionItem
+              icon={<FileClockIcon />}
+              label="Wczytaj tymczasowe"
+              hint="Tabela zapisana tymczasowo, taka jak przy zapisie (10 ostatnich)"
+              onClick={() => openXml('temporary')}
+            />
+            <ActionItem
+              icon={<HistoryIcon />}
+              label="Wczytaj kopię"
+              hint="Kopia pliku XML zapisanego wcześniej na dysku (100 ostatnich)"
+              onClick={() => openXml('history')}
             />
           </ActionMenu>
           <input
@@ -1374,11 +1386,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 }
                 onClick={() => void saveLst()}
               />
-              <ActionItem
-                icon={<FolderOpenIcon />}
-                label="Folder plików .lst"
-                onClick={() => setSaveSettings({ open: true, missing: [LST_FOLDER] })}
-              />
             </DropdownMenuGroup>
           </ActionMenu>
         </div>
@@ -1448,7 +1455,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                       <ActionItem
                         icon={<FileClockIcon />}
                         label="Zapisz tymczasowo"
-                        hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Plik XML” (10 ostatnich)"
+                        hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Wczytaj tymczasowe” (10 ostatnich)"
                         onClick={saveTemporary}
                       />
                     </DropdownMenuContent>
@@ -1778,7 +1785,13 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onConfirm={(data) => confirmDocument({ data })}
       />
 
-      <XmlOpenDialog storeId={store.id} open={xmlOpenOpen} onOpenChange={setXmlOpenOpen} onLoaded={confirmXml} />
+      <XmlOpenDialog
+        storeId={store.id}
+        source={xmlSource}
+        open={xmlOpenOpen}
+        onOpenChange={setXmlOpenOpen}
+        onLoaded={confirmXml}
+      />
 
       <AlertDialog open={pendingInvoice !== null} onOpenChange={(open) => !open && setPendingInvoice(null)}>
         <AlertDialogContent>

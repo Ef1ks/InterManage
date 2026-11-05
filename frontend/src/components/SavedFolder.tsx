@@ -12,7 +12,16 @@ import { cn } from '@/lib/utils'
  * wybiera się go raz. Gdy rodzaj ma podpowiedzianą ścieżkę, przy wyborze trafia ona do schowka: folder za skrótem
  * (np. N:\avisoconfig na zablokowanym dysku N) otwiera się, wklejając ją w pasek adresu okna wyboru.
  */
-export function SavedFolder({ folder, className }: { folder: SavedFolderSpec; className?: string }) {
+export function SavedFolder({
+  folder,
+  className,
+  onPicked,
+}: {
+  folder: SavedFolderSpec
+  className?: string
+  /** Po wybraniu folderu, np. żeby zdjąć ostrzeżenie o jego braku. */
+  onPicked?: () => void
+}) {
   const { name, loaded, pick } = useSavedFolder(folder.key)
   const [picking, setPicking] = useState(false)
 
@@ -30,7 +39,10 @@ export function SavedFolder({ folder, className }: { folder: SavedFolderSpec; cl
     setPicking(true)
     try {
       const handle = await pick()
-      if (handle) toast.success(`${folder.label} będzie zapisywany w folderze ${handle.name}`)
+      if (handle) {
+        toast.success(`${folder.label} będzie zapisywany w folderze ${handle.name}`)
+        onPicked?.()
+      }
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się wybrać folderu')
     } finally {
