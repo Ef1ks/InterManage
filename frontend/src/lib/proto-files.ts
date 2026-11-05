@@ -5,8 +5,8 @@ import type { SavedFolderSpec } from '@/lib/saved-folders'
 import type { ProtocolKind, ProtoSettings } from '@/lib/types'
 
 /*
- * Pliki PROTO dla programu sklepu (PROTO6 garmażu i przyjęć MM, protokoły PROTO1-6 z wprowadzania danych) idą do
- * jednego folderu, z którego program sklepu je wczytuje. Folder wybiera się raz w przeglądarce; ścieżkę z ustawień
+ * Pliki PROTO dla programu sklepu (PROTO6 garmażu i przyjęć MM, protokoły PROTO1-6, zmiana cen CTRLPRIX, etykiety
+ * i zamówienia COMMANDE z wprowadzania danych) idą do jednego folderu, z którego program sklepu je wczytuje. Folder wybiera się raz w przeglądarce; ścieżkę z ustawień
  * sklepu podpowiadamy przy wyborze (przeglądarka nie pozwala podać jej z kodu).
  */
 
@@ -44,8 +44,7 @@ export function useSaveProtoSettings(storeId: string) {
       folderPath: string | null
       hiddenProtocols: ProtocolKind[]
       productFileFolderPath: string | null
-    }) =>
-      api<ProtoSettings>(settingsPath(storeId), { method: 'PUT', json: settings }),
+    }) => api<ProtoSettings>(settingsPath(storeId), { method: 'PUT', json: settings }),
     onSuccess: (saved) => queryClient.setQueryData(settingsKey(storeId), saved),
     meta: { invalidates: false },
   })
@@ -55,15 +54,6 @@ export function useSaveProtoSettings(storeId: string) {
 export function useProtoFolder(storeId: string): SavedFolderSpec {
   const { data } = useProtoSettings(storeId)
   return { key: PROTO_FOLDER_KEY, label: 'Protokół', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
-}
-
-/**
- * Folder pliku zmian cen (CTRLPRIX) z wprowadzania danych. Pracownik wybiera go osobno („Zmiana cen”), choć program
- * sklepu wczytuje go zwykle z tego samego folderu co protokoły, więc podpowiadamy tę samą ścieżkę.
- */
-export function usePriceChangeFolder(storeId: string): SavedFolderSpec {
-  const { data } = useProtoSettings(storeId)
-  return { key: 'data-entry-price-control', label: 'Zmiana cen', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
 }
 
 /**

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useCan } from '@/features/auth/api'
 import { useCorrectionCandidates, useDeliveryCorrections } from '@/features/documents/api'
 import { bonNumber, documentPaths, formatDocumentDate, formatMoney } from '@/features/documents/format'
+import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import type { CorrectionCandidate, Document, DocumentSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -23,9 +24,30 @@ const errorMessage = (error: unknown, fallback: string) => (error instanceof Api
  * międzymagazynowy: MM na plus to przyjęcie z innego sklepu albo poprawa błędnego MM, o czym decyduje przypięcie.
  */
 export function DeliveryCorrections({ storeId, document }: { storeId: string; document: Document }) {
+  if (document.transferReceiptOf) return <ReceiptOf transfer={document.transferReceiptOf} />
   if (document.correctable) return <DeliveryCorrectionList storeId={storeId} document={document} />
   if (document.attachableToDelivery) return <CorrectedDelivery storeId={storeId} document={document} />
   return null
+}
+
+/** MM na plus przypięty jako przyjęcie towaru od innego sklepu; odpina się go przy dokumencie do wprowadzenia. */
+function ReceiptOf({ transfer }: { transfer: NonNullable<Document['transferReceiptOf']> }) {
+  return (
+    <section aria-labelledby="transfer-receipt-of" className="mb-6">
+      <h3 id="transfer-receipt-of" className="mb-2 text-sm font-semibold">
+        Przyjęcie od sklepu {storeLabel(transfer.fromStore)}
+      </h3>
+      <Card className="flex-row flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 tabular-nums">
+        <PackageIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <Link
+          to={documentPaths.incomingTransfer(transfer.id)}
+          className="min-w-0 flex-1 font-medium underline-offset-4 hover:underline"
+        >
+          {transfer.number}
+        </Link>
+      </Card>
+    </section>
+  )
 }
 
 /** Przyjęcie: przypięte korekty z odpięciem i przypinanie kolejnych. */
@@ -371,7 +393,7 @@ export function CorrectionBadge({ document, type }: { document: DocumentSummary;
 }
 
 /** "1 wspólny artykuł", "2 wspólne artykuły", "5 wspólnych artykułów". */
-function commonItemsLabel(count: number) {
+export function commonItemsLabel(count: number) {
   if (count === 1) return '1 wspólny artykuł'
   const lastTwo = count % 100
   const last = count % 10

@@ -129,20 +129,97 @@ class StorePartnerTransferIntegrationTests {
         send(owner, put(incomingUrl(receiver) + "/" + targetId + "/entered"), "{\"entered\":true}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enteredAt").isNotEmpty());
+        // Samo oznaczenie niczego nie potwierdza: dokument czeka na przypięcie dokumentu przyjęcia.
         mvc.perform(get(incomingUrl(receiver)).cookie(owner))
-                .andExpect(jsonPath("$.pending.length()").value(0))
-                .andExpect(jsonPath("$.entered.length()").value(1));
+                .andExpect(jsonPath("$.pending.length()").value(1))
+                .andExpect(jsonPath("$.entered.length()").value(0));
         mvc.perform(get(documentsUrl(sender) + "/mm/" + transfer).cookie(owner))
-                .andExpect(jsonPath("$.transferTarget.enteredAt").isNotEmpty());
+                .andExpect(jsonPath("$.transferTarget.enteredAt").isNotEmpty())
+                .andExpect(jsonPath("$.transferTarget.receipt").value(Matchers.nullValue()));
 
         // Cofnięcie przez sklep wysyłający: dokument znika u odbiorcy, "Przywróć" go oddaje.
         send(owner, delete(documentsUrl(sender) + "/mm/" + transfer + "/transfer-target"), "{}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.transferTarget").value(Matchers.nullValue()));
-        mvc.perform(get(incomingUrl(receiver)).cookie(owner)).andExpect(jsonPath("$.entered.length()").value(0));
+        mvc.perform(get(incomingUrl(receiver)).cookie(owner)).andExpect(jsonPath("$.pending.length()").value(0));
         send(owner, post(documentsUrl(sender) + "/mm/" + transfer + "/transfer-target/restore"), "{}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.transferTarget.store.id").value(receiver));
+    }
+
+    @Test
+    void receiptDocumentEndsWaitingAndReceiverSeesTransferAfterCorrections() throws Exception {
+        Cookie owner = login();
+        String sender = createStore(owner);
+        String receiver = createStore(owner);
+        String invited = send(owner, post(partnersUrl(sender)), "{\"storeId\":\"" + receiver + "\"}")
+                .andReturn().getResponse().getContentAsString();
+        send(owner, post(partnersUrl(receiver) + "/" + JsonPath.read(invited, "$.partners[0].id") + "/accept"),
+                "{}").andExpect(status().isOk());
+
+        // Wydanie: ilość na plus, zakup na minus. Poprawa odejmuje 8 szt. pierwszego artykułu i cały drugi.
+        String transfer = insertValued(sender, "MM0000120261023", "-1202",
+                line("0000000000011", "5900000000017", "OLEJ", 48, -1152),
+                line("0000000000012", "5900000000024", "RECZNIK", 10, -50));
+        String fix = insertValued(sender, "MM0000220261023", "242",
+                line("0000000000011", "5900000000017", "OLEJ", -8, 192),
+                line("0000000000012", "5900000000024", "RECZNIK", -10, 50));
+        setTarget(owner, sender, transfer, receiver).andExpect(status().isOk());
+        send(owner, post(documentsUrl(sender) + "/mm/" + fix + "/corrections"),
+                "{\"documentId\":\"" + transfer + "\"}").andExpect(status().isOk());
+
+        String list = mvc.perform(get(incomingUrl(receiver)).cookie(owner))
+                .andExpect(jsonPath("$.pending[0].purchaseValue").value(-960))
+                .andExpect(jsonPath("$.pending[0].lineCount").value(1))
+                .andExpect(jsonPath("$.pending[0].corrections[0]").value("MM0000220261023"))
+                .andReturn().getResponse().getContentAsString();
+        String targetId = JsonPath.read(list, "$.pending[0].id");
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId).cookie(owner))
+                .andExpect(jsonPath("$.lines.length()").value(1))
+                .andExpect(jsonPath("$.lines[0].quantity").value(40));
+        assertThat(mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/export/proto").cookie(owner))
+                .andReturn().getResponse().getContentAsString()).isEqualTo("5900000000017000040000\r\n");
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/print/pdf").cookie(owner))
+                .andExpect(status().isOk());
+        mvc.perform(get(documentsUrl(sender) + "/mm/" + transfer + "/print/xlsx").cookie(owner))
+                .andExpect(status().isOk());
+
+        // Przyjęcie w sklepie docelowym: dokument na plus; dokument na minus albo cudzy nie potwierdza niczego.
+        String receipt = insertValued(receiver, "MM0000120261024", "960",
+                line("0000000000011", "5900000000017", "OLEJ", -40, 960));
+        String issue = insertValued(receiver, "MM0000220261024", "-5",
+                line("0000000000013", "5900000000031", "SOL", 1, -5));
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/receipt/candidates").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].number").value("MM0000120261024"))
+                .andExpect(jsonPath("$[0].commonItems").value(1));
+        String receiptUrl = incomingUrl(receiver) + "/" + targetId + "/receipt";
+        send(owner, post(receiptUrl), "{\"documentId\":\"" + issue + "\"}").andExpect(status().isBadRequest());
+        send(owner, post(receiptUrl), "{\"documentId\":\"" + fix + "\"}").andExpect(status().isNotFound());
+
+        send(owner, post(receiptUrl), "{\"documentId\":\"" + receipt + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.receipt.number").value("MM0000120261024"))
+                .andExpect(jsonPath("$.enteredAt").isNotEmpty());
+        mvc.perform(get(incomingUrl(receiver) + "/count").cookie(owner)).andExpect(jsonPath("$").value(0));
+        mvc.perform(get(incomingUrl(receiver)).cookie(owner))
+                .andExpect(jsonPath("$.pending.length()").value(0))
+                .andExpect(jsonPath("$.entered[0].receipt.number").value("MM0000120261024"));
+        mvc.perform(get(documentsUrl(sender) + "/mm/" + transfer).cookie(owner))
+                .andExpect(jsonPath("$.transferTarget.receipt.number").value("MM0000120261024"));
+        mvc.perform(get(documentsUrl(sender) + "/mm").cookie(owner))
+                .andExpect(jsonPath("$.documents[?(@.number == 'MM0000120261023')].transferTarget.receipt.number")
+                        .value("MM0000120261024"));
+        mvc.perform(get(documentsUrl(receiver) + "/mm/" + receipt).cookie(owner))
+                .andExpect(jsonPath("$.transferReceiptOf.number").value("MM0000120261023"));
+
+        // Dokument przyjęcia nie jest poprawą własnego ruchu, a odpięcie przywraca czekanie.
+        send(owner, post(documentsUrl(receiver) + "/mm/" + issue + "/corrections"),
+                "{\"documentId\":\"" + receipt + "\"}").andExpect(status().isConflict());
+        send(owner, delete(receiptUrl), "{}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.receipt").value(Matchers.nullValue()));
+        mvc.perform(get(incomingUrl(receiver) + "/count").cookie(owner)).andExpect(jsonPath("$").value(1));
     }
 
     @Test
@@ -254,6 +331,28 @@ class StorePartnerTransferIntegrationTests {
         jdbc.update("""
                 insert into document_lines (document_id, line_number, itm8, name, quantity, purchase_value)
                 values (?::uuid, 1, '0000000000001', 'SAŁATKA', -2, -20)""", documentId);
+        return documentId;
+    }
+
+    private record Line(String itm8, String ean, String name, int quantity, int purchaseValue) {
+    }
+
+    private static Line line(String itm8, String ean, String name, int quantity, int purchaseValue) {
+        return new Line(itm8, ean, name, quantity, purchaseValue);
+    }
+
+    /** Ruch międzymagazynowy z podanymi liniami i wartością zakupu. */
+    private String insertValued(String storeId, String number, String purchaseValue, Line... lines) {
+        String documentId = insertDocument(storeId, "MM", number);
+        jdbc.update("update documents set purchase_value = ?::numeric, line_count = ? where id = ?::uuid",
+                purchaseValue, lines.length, documentId);
+        int lineNumber = 0;
+        for (Line line : lines) {
+            jdbc.update("""
+                    insert into document_lines (document_id, line_number, itm8, ean, name, quantity, purchase_value)
+                    values (?::uuid, ?, ?, ?, ?, ?, ?)""", documentId, ++lineNumber, line.itm8(), line.ean(),
+                    line.name(), line.quantity(), line.purchaseValue());
+        }
         return documentId;
     }
 

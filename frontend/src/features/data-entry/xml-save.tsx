@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { ApiError, api, fetchPostedFile, saveBlob } from '@/lib/api'
-import { usePriceChangeFolder, useProductFileFolder } from '@/lib/proto-files'
+import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import {
   ensureFolderAccess,
   folderAccess,
@@ -23,7 +23,7 @@ type SavedFile = { fileName: string; downloaded: boolean }
 
 /**
  * Zapis tabeli: plik XML faktury do folderu z ustawień zapisu (bez obsługi folderów w przeglądarce: pobranie), potem
- * nowe i zmienione artykuły do pliku CADBEZP i zmienione ceny do pliku CTRLPRIX w folderze zmian cen; ich błąd
+ * nowe i zmienione artykuły do pliku CADBEZP i zmienione ceny do pliku CTRLPRIX w folderze protokołów; ich błąd
  * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a gdy w pliku CADBEZP są nowe
  * artykuły, pytanie, czy je wprowadzono (`draftDialog` do wyrenderowania): „Tak” dodaje je do bazy.
  */
@@ -32,13 +32,13 @@ export function useXmlSave(storeId: string) {
   const [savingProducts, setSavingProducts] = useState(false)
   const queryClient = useQueryClient()
   const productFolder = useProductFileFolder(storeId)
-  const priceChangeFolder = usePriceChangeFolder(storeId)
+  const protoFolder = useProtoFolder(storeId)
   const drafts = useProductDraftConfirm(storeId)
 
   /** Foldery potrzebne do zapisu, których nie wybrano w tej przeglądarce (bez obsługi folderów: żadne). */
   const missingFolders = async (productFile: ProductFilePayload | null, priceControl: PriceControlPayload | null) => {
     if (!folderSavingSupported) return []
-    const needed = [XML_FOLDER, ...(productFile ? [productFolder] : []), ...(priceControl ? [priceChangeFolder] : [])]
+    const needed = [XML_FOLDER, ...(productFile ? [productFolder] : []), ...(priceControl ? [protoFolder] : [])]
     const access = await Promise.all(needed.map((folder) => folderAccess(folder.key, 'readwrite')))
     return needed.filter((_, index) => access[index] === 'missing')
   }
@@ -55,7 +55,7 @@ export function useXmlSave(storeId: string) {
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
       const folderReady = await ensureFolderAccess(XML_FOLDER.key)
       const productFolderReady = productFile ? await ensureFolderAccess(productFolder.key) : false
-      const priceChangeFolderReady = priceControl ? await ensureFolderAccess(priceChangeFolder.key) : false
+      const protoFolderReady = priceControl ? await ensureFolderAccess(protoFolder.key) : false
       const { fileName, blob, headers } = await fetchPostedFile(
         `/stores/${storeId}/data-entry/export/xml`,
         payload,
@@ -81,7 +81,7 @@ export function useXmlSave(storeId: string) {
       if (productFileSaved) saved.push(productFileSaved)
       let supplierCode: string | null = null
       if (priceControl) {
-        const result = await savePriceControl(priceControl, priceChangeFolderReady)
+        const result = await savePriceControl(priceControl, protoFolderReady)
         if (result) {
           saved.push(result.file)
           supplierCode = result.supplierCode
@@ -158,13 +158,13 @@ export function useXmlSave(storeId: string) {
     }
   }
 
-  /** Plik CTRLPRIX (zmienione ceny) w folderze zmian cen: błąd tylko ostrzega, plik XML zostaje. */
+  /** Plik CTRLPRIX (zmienione ceny) w folderze protokołów: błąd tylko ostrzega, plik XML zostaje. */
   const savePriceControl = async (file: PriceControlPayload, folderReady: boolean) => {
     try {
       const { fileName, downloaded, supplierCode } = await savePriceControlFile(
         storeId,
         file,
-        priceChangeFolder.key,
+        protoFolder.key,
         folderReady,
       )
       void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-files'] })
@@ -184,7 +184,6 @@ export function useXmlSave(storeId: string) {
     savingProducts,
     missingFolders,
     productFolder,
-    priceChangeFolder,
     draftDialog: drafts.dialog,
   }
 }

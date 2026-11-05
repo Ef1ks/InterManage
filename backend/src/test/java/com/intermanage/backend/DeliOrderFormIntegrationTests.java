@@ -226,9 +226,9 @@ class DeliOrderFormIntegrationTests {
         String pasztetEan = jdbc.queryForObject("select ean from products where id = ?::uuid", String.class, pasztet);
         String lst = mvc.perform(get(url(shop, "/orders/" + orderId + "/export/lst")).cookie(owner))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".lst")))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".LST")))
                 .andReturn().getResponse().getContentAsString();
-        assertThat(lst).isEqualTo(kabanosEan + "\r\n" + pasztetEan + "\r\n");
+        assertThat(lst).isEqualTo(kabanosEan + "\r\n" + pasztetEan);
         byte[] xlsx = mvc.perform(get(url(supplier, "/orders/" + orderId + "/export/xlsx")).cookie(owner))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
         assertThat(new String(xlsx, 0, 2)).isEqualTo("PK");
@@ -279,7 +279,7 @@ class DeliOrderFormIntegrationTests {
         send(owner, put(url(supplier, "/orders/" + secondId + "/items")),
                 "{\"items\":[{\"id\":\"" + secondPasztet + "\",\"quantity\":0}]}").andExpect(status().isOk());
         assertThat(mvc.perform(get(url(shop, "/orders/" + secondId + "/export/lst")).cookie(owner))
-                .andReturn().getResponse().getContentAsString()).isEqualTo(kabanosEan + "\r\n");
+                .andReturn().getResponse().getContentAsString()).isEqualTo(kabanosEan);
         assertThat(pasztetLine).isNotBlank();
         // Realizacja z ilościami zapisuje je w tym samym kroku.
         String secondKabanos = id(secondOrder, "$.items[0].id");

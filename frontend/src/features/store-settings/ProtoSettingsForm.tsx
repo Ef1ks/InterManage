@@ -6,11 +6,11 @@ import { Form, FormActions, FormNote, SwitchField, TextField } from '@/component
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { LST_FOLDER } from '@/features/data-entry/lst-file'
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import {
   PROTOCOLS,
-  usePriceChangeFolder,
   useProductFileFolder,
   useProtoFolder,
   useProtoSettings,
@@ -50,7 +50,6 @@ type Values = { folderPath: string; productFileFolderPath: string; hidden: Proto
 function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoSettings }) {
   const save = useSaveProtoSettings(storeId)
   const folder = useProtoFolder(storeId)
-  const priceChangeFolder = usePriceChangeFolder(storeId)
   const productFolder = useProductFileFolder(storeId)
   const [formError, setFormError] = useState<string | null>(null)
   const {
@@ -136,8 +135,8 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
           Przeglądarka nie zapisze pliku pod ścieżką podaną w aplikacji: folder trzeba wskazać raz na każdym komputerze.
         </p>
         <SavedFolder folder={folder} />
-        <SavedFolder folder={priceChangeFolder} />
         <SavedFolder folder={productFolder} />
+        <SavedFolder folder={LST_FOLDER} />
       </div>
     </Card>
   )

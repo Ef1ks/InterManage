@@ -27,6 +27,7 @@ import com.intermanage.backend.document.component.DocumentPrint.Party;
 import com.intermanage.backend.document.component.DocumentPrintPdf;
 import com.intermanage.backend.document.component.DocumentPrintXlsx;
 import com.intermanage.backend.document.dto.CorrectedDelivery;
+import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentTransferReceivedLine;
@@ -46,6 +47,7 @@ import com.intermanage.backend.supplier.repository.SupplierRepository;
  * Wydruki dokumentów magazynowych: PDF i Excel z tych samych danych ({@link DocumentPrint}). Przyjęcie PZ ma PDF
  * w układzie bonu z systemu sklepu ({@link DocumentService#deliveryNote}), a w Excelu linie po korektach. Sklep
  * docelowy ruchu międzymagazynowego drukuje przyjęcie: ten sam dokument w ilościach, które naprawdę przyjechały.
+ * Ruch międzymagazynowy z przypiętymi poprawami drukuje się po nich, po obu stronach.
  */
 @Service
 public class DocumentPrintService {
@@ -119,12 +121,22 @@ public class DocumentPrintService {
         Map<UUID, BigDecimal> received = receivedLines.findByTargetId(target.getId()).stream()
                 .collect(Collectors.toMap(DocumentTransferReceivedLine::getDocumentLineId,
                         DocumentTransferReceivedLine::getQuantity));
-        List<Line> lines = document.getLines().stream()
-                .map(line -> received(line, received.get(line.getId()))).toList();
-        long differences = lines.stream().filter(line -> line.note() != null).count();
-        List<Detail> details = target.getReceivedAt() == null ? List.of(new Detail("Przyjęte ilości", "nie wpisano"))
+        List<DeliveryCorrection> fixes = corrections.correctionsOf(List.of(document))
+                .getOrDefault(document.getId(), List.of());
+        List<Line> lines = fixes.isEmpty()
+                ? document.getLines().stream()
+                        .map(line -> received(line(line, true), received.get(line.getId()))).toList()
+                : corrections.transferLines(document, fixes).stream()
+                        .map(line -> received(line(line, true), received.get(UUID.fromString(line.key())))).toList();
+        long differences = lines.stream().filter(line -> line.note() != null && line.note().startsWith("w dok"))
+                .count();
+        List<Detail> details = new ArrayList<>(target.getReceivedAt() == null
+                ? List.of(new Detail("Przyjęte ilości", "nie wpisano"))
                 : List.of(new Detail("Przyjęto", DATE.format(target.getReceivedAt().atZone(StoreTime.ZONE))),
-                        new Detail("Różnic", String.valueOf(differences)));
+                        new Detail("Różnic", String.valueOf(differences))));
+        if (!fixes.isEmpty()) {
+            details.add(new Detail("Po poprawach", numbers(fixes)));
+        }
         Heading heading = new Heading("PRZYJĘCIE MIĘDZYMAGAZYNOWE", "Przyjęcie międzymagazynowe", document.getNumber(),
                 document.getDocumentDate().toLocalDate(), store(target.getTargetStore(), null),
                 store(document.getStore(), "Od sklepu"), details,
@@ -136,8 +148,7 @@ public class DocumentPrintService {
      * Linia w przyjętej ilości: kwoty proporcjonalnie do niej, a ilość z dokumentu w opisie. Bez wpisu albo z tą samą
      * ilością zostaje linia z dokumentu; linia z ilością 0 nie ma z czego przeliczyć kwot.
      */
-    private static Line received(DocumentLine source, BigDecimal arrived) {
-        Line line = line(source, true);
+    private static Line received(Line line, BigDecimal arrived) {
         BigDecimal sent = line.quantity().abs();
         if (arrived == null || arrived.compareTo(sent) == 0) {
             return line;
@@ -214,15 +225,25 @@ public class DocumentPrintService {
         if (document.getSupplierDocumentNumber() != null) {
             details.add(new Detail("Nr dok. dostawcy", document.getSupplierDocumentNumber()));
         }
-        if (document.getType().isDeliveryCorrection()) {
-            Document delivery = corrections.deliveriesOf(List.of(document)).get(document.getId());
-            if (delivery != null) {
-                details.add(new Detail("Dotyczy przyjęcia", "bon " + delivery.bonNumber()));
+        Document corrected = corrections.deliveriesOf(List.of(document)).get(document.getId());
+        if (corrected != null) {
+            details.add(document.getType() == DocumentType.MM ? new Detail("Poprawia", corrected.getNumber())
+                    : new Detail("Dotyczy przyjęcia", "bon " + corrected.bonNumber()));
+        }
+        if (document.getType() == DocumentType.MM) {
+            List<DeliveryCorrection> fixes = corrections.correctionsOf(List.of(document))
+                    .getOrDefault(document.getId(), List.of());
+            if (!fixes.isEmpty()) {
+                details.add(new Detail("Po poprawach", numbers(fixes)));
             }
         }
         return new Heading(layout.title(), document.getType().singular(), number(document),
                 document.getDocumentDate().toLocalDate(), store(document.getStore(), null), party(document, layout),
                 details, layout.signatures());
+    }
+
+    private static String numbers(List<DeliveryCorrection> fixes) {
+        return fixes.stream().map(link -> link.getCorrection().getNumber()).collect(Collectors.joining(", "));
     }
 
     private Party party(Document document, Layout layout) {
@@ -265,16 +286,19 @@ public class DocumentPrintService {
         return new Party(label, supplier != null ? supplier.getName() : document.getSupplierName(), lines);
     }
 
-    /** Przyjęcie po przypiętych korektach (jak bon dostawy), reszta jak w raporcie; wydania bez minusa przy zakupie. */
+    /**
+     * Przyjęcie po przypiętych korektach (jak bon dostawy) i ruch międzymagazynowy po poprawach, reszta jak w raporcie;
+     * wydania bez minusa przy zakupie.
+     */
     private List<Line> lines(Document document) {
-        if (document.getType() == DocumentType.PZ) {
-            UUID storeId = document.getStore().getId();
-            List<Document> correctionDocuments = corrections.correctionDocuments(storeId,
-                    corrections.correctionsOf(List.of(document)).getOrDefault(document.getId(), List.of()));
-            CorrectedDelivery corrected = corrections.corrected(document, correctionDocuments);
-            return corrected.lines().stream().map(DocumentPrintService::line).toList();
-        }
         boolean issue = document.getType().isIssue();
+        List<DeliveryCorrection> fixes = corrections.correctionsOf(List.of(document))
+                .getOrDefault(document.getId(), List.of());
+        if (document.getType() == DocumentType.PZ || !fixes.isEmpty()) {
+            List<Document> correctionDocuments = corrections.correctionDocuments(document.getStore().getId(), fixes);
+            CorrectedDelivery corrected = corrections.corrected(document, correctionDocuments);
+            return corrected.lines().stream().map(line -> line(line, issue)).toList();
+        }
         return document.getLines().stream().map(line -> line(line, issue)).toList();
     }
 
@@ -289,11 +313,11 @@ public class DocumentPrintService {
         return value != null && issue ? value.negate() : value;
     }
 
-    private static Line line(CorrectedDelivery.CorrectedLine line) {
+    private static Line line(CorrectedDelivery.CorrectedLine line, boolean issue) {
         String note = !line.corrected() ? null : line.originalQuantity() == null ? "dopisane korektą" : "po korekcie";
         return new Line(line.lineNumber(), line.itm8(), line.ean(), line.name(), line.brand(), null,
-                line.nomenclatureCode(), line.unit(), line.quantity(), line.vatRate(), line.purchasePrice(),
-                line.purchaseValue(), line.salePriceDocument(), line.saleValueNet(), line.vatValue(),
-                line.saleValueGross(), note);
+                line.nomenclatureCode(), line.unit(), line.quantity(), line.vatRate(),
+                purchase(line.purchasePrice(), issue), purchase(line.purchaseValue(), issue),
+                line.salePriceDocument(), line.saleValueNet(), line.vatValue(), line.saleValueGross(), note);
     }
 }

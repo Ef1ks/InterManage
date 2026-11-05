@@ -62,6 +62,7 @@ import com.intermanage.backend.document.repository.DocumentGratisRepository;
 import com.intermanage.backend.document.repository.DocumentTransferTargetRepository;
 import com.intermanage.backend.document.repository.DocumentImportRepository;
 import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.document.repository.DocumentTransferReceiptRepository;
 import com.intermanage.backend.document.repository.DeliveryReportClosingDeliveryRepository;
 import com.intermanage.backend.document.repository.DocumentSearch;
 import com.intermanage.backend.document.repository.DocumentTotalsRepository;
@@ -101,6 +102,7 @@ public class DocumentService {
     private final DocumentGratisRepository gratis;
     private final DocumentKsefLinkService ksefLinks;
     private final DeliveryCorrectionService corrections;
+    private final DocumentTransferReceiptRepository transferReceipts;
     private final SupplierRepository suppliers;
     private final NomenclatureRepository nomenclatures;
     private final DeliveryNotePdf deliveryNotePdf;
@@ -113,6 +115,7 @@ public class DocumentService {
             DocumentMapper documentMapper, DocumentImportRepository imports, DocumentRepository documents,
             AppUserRepository users, StoreRepository stores, DeliOrderDocumentRepository deliOrderDocuments,
             DocumentGratisRepository gratis, DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
+            DocumentTransferReceiptRepository transferReceipts,
             SupplierRepository suppliers, NomenclatureRepository nomenclatures, DeliveryNotePdf deliveryNotePdf,
             InvoiceAmountCheckService amountCheckService, DocumentManualInvoiceService manualInvoices,
             DeliveryReportClosingDeliveryRepository closingDeliveries,
@@ -123,6 +126,7 @@ public class DocumentService {
         this.manualInvoices = manualInvoices;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
+        this.transferReceipts = transferReceipts;
         this.suppliers = suppliers;
         this.nomenclatures = nomenclatures;
         this.deliveryNotePdf = deliveryNotePdf;
@@ -252,7 +256,10 @@ public class DocumentService {
                 amountCheckService.checks(List.of(document), ksefInvoices, totalsByDocument).get(document.getId()),
                 manualInvoices.invoicesOf(List.of(document)).getOrDefault(document.getId(), List.of()),
                 document.getType() == DocumentType.MM ? transferTargets.findActive(document.getId()).orElse(null)
-                        : null);
+                        : null,
+                document.getType() != DocumentType.MM ? null
+                        : transferReceipts.findActiveByDocumentIds(List.of(document.getId())).stream().findFirst()
+                                .map(documentMapper::toIncomingRef).orElse(null));
     }
 
     /**

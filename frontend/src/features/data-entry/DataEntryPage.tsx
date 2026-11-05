@@ -1,6 +1,7 @@
 import {
   BadgePercentIcon,
   CheckCheckIcon,
+  ChevronDownIcon,
   CircleCheckIcon,
   CombineIcon,
   DiffIcon,
@@ -11,12 +12,14 @@ import {
   FileTextIcon,
   FileUpIcon,
   FilterXIcon,
+  FolderOpenIcon,
   ListOrderedIcon,
   PackageCheckIcon,
   PackagePlusIcon,
   PackageSearchIcon,
   RecycleIcon,
   ScaleIcon,
+  ShoppingCartIcon,
   PlusIcon,
   ReceiptTextIcon,
   SearchIcon,
@@ -49,6 +52,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useCan } from '@/features/auth/api'
 import { useSuppliers } from '@/features/documents/api'
 import { bonNumber, documentPaths, formatMoney } from '@/features/documents/format'
@@ -57,10 +69,16 @@ import { documentPrice } from '@/features/base-delivery/base-rows'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
-import { ApiError, saveBlob } from '@/lib/api'
+import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { usePriceChangeFolder } from '@/lib/proto-files'
-import { ensureFolderAccess, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
+import { useProtoFolder } from '@/lib/proto-files'
+import {
+  ensureFolderAccess,
+  folderAccess,
+  folderSavingSupported,
+  type SavedFolderSpec,
+  saveToFolder,
+} from '@/lib/saved-folders'
 import { addDays, todayIso } from '@/lib/dates'
 import type {
   DataEntryCatalogProduct,
@@ -107,6 +125,7 @@ import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { ArticleFileDialog } from './ArticleFileDialog'
+import { ACTION_TONES, ActionItem, ActionMenu } from './ActionMenu'
 import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { LST_FOLDER, lstFile, lstFileName, parseLst } from './lst-file'
@@ -114,6 +133,8 @@ import { usePriceFileOverview } from './price-files'
 import { savePriceControlFile } from './price-control'
 import type { NewArticles } from './product-drafts'
 import { PriceFileStatus } from './PriceFileStatus'
+import { orderLines } from './order-file'
+import { ProFileDialog } from './ProFileDialog'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SaveSettingsDialog } from './SaveSettingsDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
@@ -307,6 +328,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [labelsOpen, setLabelsOpen] = useState(false)
+  const [proFileOpen, setProFileOpen] = useState(false)
   const [articleFileOpen, setArticleFileOpen] = useState(false)
   const [checkOpen, setCheckOpen] = useState(false)
   const [resaveOpen, setResaveOpen] = useState(false)
@@ -764,6 +786,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   }
 
   const isArticle = (row: DataEntryRow) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null
+  // Sam kursor też zaznacza wiersz, także pusty pod artykułami, a taki nie wybiera artykułów do pliku.
+  const chosenArticles = selectedArticles.filter(isArticle)
 
   const toggleDepositFilter = () => {
     if (depositFilter) {
@@ -778,12 +802,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   }
 
   // Plik .lst: zaznaczone artykuły, a bez zaznaczenia wszystkie widoczne (także po filtrze); tylko prawdziwe EAN-y.
-  const lstSource = selectedArticles.length > 0 ? selectedArticles : viewRows.filter(isArticle)
+  const lstSource = chosenArticles.length > 0 ? chosenArticles : viewRows.filter(isArticle)
   const lstEans = [
     ...new Set(lstSource.filter((row) => !row.eanFallback && /^\d{8,14}$/.test(row.ean)).map((row) => row.ean)),
   ]
   const [savingLst, setSavingLst] = useState(false)
   const saveLst = async () => {
+    if (folderSavingSupported && (await folderAccess(LST_FOLDER.key, 'readwrite')) === 'missing') {
+      setSaveSettings({ open: true, missing: [LST_FOLDER] })
+      return
+    }
     setSavingLst(true)
     try {
       const folderReady = await ensureFolderAccess(LST_FOLDER.key)
@@ -795,7 +823,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         description: [
           `Kodów: ${lstEans.length}`,
           skipped > 0 && `pominięto bez EAN-u i powtórzone: ${skipped}`,
-          !folderReady && 'pobrany: folder nie jest wybrany w ustawieniach zapisu',
+          !folderReady && 'pobrany: ta przeglądarka nie zapisuje do folderów',
         ]
           .filter(Boolean)
           .join(', '),
@@ -849,7 +877,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const protocolSkipped = rows.filter(isArticle).length - protocolLines.length
 
   // Etykiety cenowe: zaznaczone artykuły, a bez zaznaczenia wszystkie; tylko z prawdziwym EAN-em.
-  const labelSource = selectedArticles.length > 0 ? selectedArticles : rows.filter(isArticle)
+  const labelSource = chosenArticles.length > 0 ? chosenArticles : rows.filter(isArticle)
   const labelLines: LabelLine[] = labelSource
     .filter((row) => !row.eanFallback && /^\d{8,14}$/.test(row.ean))
     .map((row) => ({ ean: row.ean, quantity: row.quantity }))
@@ -1002,7 +1030,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       : null
 
   // „Zmień ceny”: sam plik CTRLPRIX, bez pliku XML (np. gdy dokument jest już wprowadzony).
-  const priceChangeFolder = usePriceChangeFolder(store.id)
+  const protoFolder = useProtoFolder(store.id)
   const queryClient = useQueryClient()
   const [savingPrices, setSavingPrices] = useState(false)
   const savePriceChanges = async () => {
@@ -1010,17 +1038,57 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     setSavingPrices(true)
     try {
       // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
-      const folderReady = await ensureFolderAccess(priceChangeFolder.key)
-      const file = await savePriceControlFile(store.id, priceControlPayload, priceChangeFolder.key, folderReady)
+      const folderReady = await ensureFolderAccess(protoFolder.key)
+      const file = await savePriceControlFile(store.id, priceControlPayload, protoFolder.key, folderReady)
       void queryClient.invalidateQueries({ queryKey: ['stores', store.id, 'data-entry', 'price-control-files'] })
       toast.success(`Zapisano plik zmian cen${file.supplierCode ? ` dla dostawcy ${file.supplierCode}` : ''}`, {
-        description: `${file.fileName}${file.downloaded ? ' (pobrany: folder zmiany cen nie jest wybrany w tej przeglądarce)' : ''}`,
+        description: `${file.fileName}${file.downloaded ? ' (pobrany: folder protokołów nie jest wybrany w tej przeglądarce)' : ''}`,
         duration: 10_000,
       })
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku zmiany cen')
     } finally {
       setSavingPrices(false)
+    }
+  }
+
+  // „Stwórz zamówienie”: plik COMMANDE w folderze protokołów, ze wszystkich artykułów, a z zaznaczonych dopiero od dwóch:
+  // kursor stojący na jednym wierszu nie może zamienić zamówienia w jedną pozycję.
+  const orderFromSelection = chosenArticles.length > 1
+  const order = orderLines(orderFromSelection ? chosenArticles : rows.filter(isArticle))
+  const orderBlockedTitle =
+    badEanTitle ??
+    (order.invalid.length > 0
+      ? `Popraw ilości w tabeli: w zamówieniu tylko liczby całkowite od 1 do 99 (${order.invalid.map((line) => line.ean).join(', ')})`
+      : null)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const saveOrder = async () => {
+    setSavingOrder(true)
+    try {
+      // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
+      const folderReady = await ensureFolderAccess(protoFolder.key)
+      const { fileName, blob } = await fetchPostedFile(
+        `/stores/${store.id}/data-entry/export/order`,
+        { lines: order.lines },
+        'COMMANDE.traite0',
+      )
+      if (folderReady) await saveToFolder(protoFolder.key, fileName, blob)
+      else saveBlob(blob, fileName)
+      toast.success('Zapisano zamówienie', {
+        description: [
+          fileName,
+          `Pozycji: ${order.lines.length}`,
+          order.skipped > 0 && `pominięto bez EAN-u albo ilości: ${order.skipped}`,
+          !folderReady && 'pobrany: folder protokołów nie jest wybrany w tej przeglądarce',
+        ]
+          .filter(Boolean)
+          .join(', '),
+        duration: 10_000,
+      })
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać zamówienia')
+    } finally {
+      setSavingOrder(false)
     }
   }
 
@@ -1115,7 +1183,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           'Kliknij „Uzupełnij z AI”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów. Artykuły z kaucją dostają plakietkę, a „Brakująca kaucja” pokazuje tylko je.',
           'Skanujesz ręcznie? Wpisz albo zeskanuj EAN i Enter: od razu powstaje kolejny wiersz na następny kod.',
           'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Żółte komórki wymagają wyboru.',
-          'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później w „Wczytaj z XML”.',
+          'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później: „Wczytaj” → „Plik XML”.',
         ]}
       />
 
@@ -1143,135 +1211,201 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             onChange={() => setSupplierOpen(true)}
           />
         )}
+        <div className="grid w-32 shrink-0 content-center gap-1.5" role="group" aria-label="Pliki">
+          <ActionMenu
+            label="Wczytaj"
+            icon={<FileInputIcon />}
+            tone="load"
+            className="w-full"
+            loading={loadingLst}
+            title="Wczytaj do tabeli fakturę z KSeF, plik XML albo listę .lst"
+          >
+            <ActionItem
+              icon={<ReceiptTextIcon />}
+              label="Fakturę z KSeF"
+              disabled={!canLoadInvoices}
+              hint={canLoadInvoices ? undefined : 'Wczytanie faktury wymaga dostępu do faktur KSeF'}
+              onClick={() => setPickerOpen(true)}
+            />
+            <ActionItem icon={<FileCodeIcon />} label="Plik XML" onClick={() => setXmlOpenOpen(true)} />
+            <ActionItem
+              icon={<FileUpIcon />}
+              label="Plik .lst"
+              hint="Dopisuje do tabeli kody z pliku .lst: jeden kod w wierszu, trafia do kolumny EAN"
+              onClick={() => lstInput.current?.click()}
+            />
+          </ActionMenu>
+          <input
+            ref={lstInput}
+            type="file"
+            accept=".lst,.txt"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) void loadLst(file)
+            }}
+          />
+          <ActionMenu
+            label="Wytwórz"
+            icon={<FileOutputIcon />}
+            tone="make"
+            className="w-full"
+            loading={savingOrder || savingLst || savingPrices || xmlSave.savingProducts}
+            disabled={filled.length === 0}
+            title={
+              filled.length === 0
+                ? 'Najpierw dodaj artykuły do tabeli'
+                : chosenArticles.length > 1
+                  ? `Pliki z zaznaczonych artykułów (${chosenArticles.length}): zamówienie, etykiety, plik .lst`
+                  : 'Protokół, zamówienie, etykiety, zmiana cen i pliki artykułów'
+            }
+          >
+            {badEanTitle && (
+              <p className="mb-1 rounded-md bg-amber-200 px-2 py-1.5 text-xs font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-50">
+                {badEanTitle}
+              </p>
+            )}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Do folderu protokołów</DropdownMenuLabel>
+              <ActionItem
+                icon={<FileOutputIcon />}
+                label="Wygeneruj protokół"
+                disabled={protocolLines.length === 0 || badEanTitle !== null}
+                hint={!badEanTitle && protocolLines.length === 0 ? 'Żaden artykuł nie ma EAN-u i ilości' : undefined}
+                onClick={() => setProtocolOpen(true)}
+              />
+              <ActionItem
+                icon={<ShoppingCartIcon />}
+                label="Stwórz zamówienie"
+                count={order.lines.length}
+                disabled={order.lines.length === 0 || orderBlockedTitle !== null}
+                hint={
+                  badEanTitle
+                    ? undefined
+                    : (orderBlockedTitle ??
+                      (order.lines.length === 0
+                        ? 'Żaden artykuł nie ma EAN-u i ilości'
+                        : orderFromSelection
+                          ? 'Z zaznaczonych artykułów'
+                          : 'Ze wszystkich artykułów tabeli (zaznacz wiersze, żeby wybrać tylko część)'))
+                }
+                onClick={() => void saveOrder()}
+              />
+              <ActionItem
+                icon={<TagsIcon />}
+                label="Etykiety"
+                count={labelLines.length}
+                disabled={labelLines.length === 0 || badEanTitle !== null}
+                hint={
+                  badEanTitle
+                    ? undefined
+                    : labelLines.length === 0
+                      ? 'Żaden artykuł nie ma EAN-u'
+                      : chosenArticles.length > 0
+                        ? 'Etykiety cenowe zaznaczonych artykułów'
+                        : 'Etykiety cenowe wszystkich artykułów tabeli (zaznacz wiersze, żeby wybrać tylko część)'
+                }
+                onClick={() => setLabelsOpen(true)}
+              />
+              <ActionItem
+                icon={<TagIcon />}
+                label="Zmień ceny"
+                count={priceControlRows.length}
+                disabled={priceControlRows.length === 0 || badEanTitle !== null}
+                hint={
+                  badEanTitle
+                    ? undefined
+                    : priceControlRows.length > 0
+                      ? 'Sama zmiana cen, bez pliku XML'
+                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
+                }
+                onClick={() => void savePriceChanges()}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Promocja</DropdownMenuLabel>
+              <ActionItem
+                icon={<BadgePercentIcon />}
+                label="Plik cen promocji .PRO"
+                disabled={badEanTitle !== null}
+                hint={badEanTitle ? undefined : 'EAN i cena z kolumny „Cena sprz.”, do folderu plików .PRO'}
+                onClick={() => setProFileOpen(true)}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Plik artykułów</DropdownMenuLabel>
+              <ActionItem
+                icon={<PackagePlusIcon />}
+                label="Dodaj nowe artykuły"
+                count={productRows.length}
+                disabled={productRows.length === 0 || productFileBlocker !== null}
+                hint={
+                  (productFileBlocker === badEanTitle ? undefined : productFileBlocker) ??
+                  (productRows.length > 0
+                    ? 'Sam plik nowych i zmienionych artykułów, bez pliku XML'
+                    : 'W tabeli nie ma nowych ani zmienionych artykułów')
+                }
+                onClick={() => productFilePayload && void xmlSave.saveProducts(productFilePayload, newArticles)}
+              />
+              <ActionItem
+                icon={<PackageCheckIcon />}
+                label="Zmień artykuły"
+                hint="Wybierz artykuły do pliku, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu"
+                onClick={() => setArticleFileOpen(true)}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Lista EAN</DropdownMenuLabel>
+              <ActionItem
+                icon={<FileTextIcon />}
+                label="Plik .lst"
+                count={lstEans.length}
+                disabled={lstEans.length === 0}
+                hint={
+                  lstEans.length === 0
+                    ? 'Żaden artykuł nie ma EAN-u'
+                    : chosenArticles.length > 0
+                      ? 'EAN-y zaznaczonych artykułów'
+                      : 'EAN-y artykułów widocznych w tabeli (zaznacz wiersze, żeby wybrać tylko część)'
+                }
+                onClick={() => void saveLst()}
+              />
+              <ActionItem
+                icon={<FolderOpenIcon />}
+                label="Folder plików .lst"
+                onClick={() => setSaveSettings({ open: true, missing: [LST_FOLDER] })}
+              />
+            </DropdownMenuGroup>
+          </ActionMenu>
+        </div>
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
-            <Button
-              variant={filled.length > 0 ? 'outline' : 'default'}
-              size="sm"
-              onClick={() => setPickerOpen(true)}
-              disabled={!canLoadInvoices}
-              title={canLoadInvoices ? undefined : 'Wczytanie faktury wymaga dostępu do faktur KSeF'}
-            >
-              <ReceiptTextIcon />
-              Wczytaj fakturę z KSeF
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setXmlOpenOpen(true)}>
-              <FileInputIcon />
-              Wczytaj z XML
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => lstInput.current?.click()}
-              loading={loadingLst}
-              title="Dopisuje do tabeli kody z pliku .lst: jeden kod w wierszu, trafia do kolumny EAN"
-            >
-              <FileUpIcon />
-              Wczytaj .lst
-            </Button>
-            <input
-              ref={lstInput}
-              type="file"
-              accept=".lst,.txt"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                event.target.value = ''
-                if (file) void loadLst(file)
-              }}
-            />
             <Button variant="outline" size="sm" onClick={() => setCatalogOpen(true)}>
               <PackageSearchIcon />
               Lista towarów
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFreeCodesOpen(true)}
-              title="Wolne kody 240001–242999 do zakładania nowych artykułów ważonych"
+            <ActionMenu
+              label={weightIn24 ? 'Kody 24 = waga' : 'Kody 24'}
+              icon={<ScaleIcon />}
+              tone={weightIn24 ? 'warn' : undefined}
+              title="Wolne kody 240001–242999 i odczyt kodów 24 z etykiety"
             >
-              <ListOrderedIcon />
-              Wolne kody 24
-            </Button>
-            <label
-              className={cn(
-                'flex h-8 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-sm',
-                weightIn24
-                  ? 'border-amber-400 bg-amber-200 font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-900/70 dark:text-amber-100'
-                  : 'border-input',
-              )}
-              title="Zwykle kod 24 z etykiety ma na końcu cenę. Zaznaczone: koniec kodu to waga w gramach (24…05000 = 5 kg)"
-            >
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={weightIn24}
-                onChange={(event) => setWeightIn24(event.target.checked)}
+              <ActionItem
+                icon={<ListOrderedIcon />}
+                label="Wolne kody 24"
+                hint="Wolne kody 240001–242999 do zakładania nowych artykułów ważonych"
+                onClick={() => setFreeCodesOpen(true)}
               />
-              <ScaleIcon className="size-4" />
-              Kody 24 = waga
-            </label>
+              <DropdownMenuCheckboxItem checked={weightIn24} onCheckedChange={setWeightIn24}>
+                Koniec kodu 24 to waga (24…05000 = 5 kg)
+              </DropdownMenuCheckboxItem>
+            </ActionMenu>
             <PriceFileStatus storeId={store.id} size="sm" />
-            {rows.length > 0 && (
-              <>
-                <ToolbarDivider />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={saveTemporary}
-                  loading={saveTemporaryXml.isPending}
-                  disabled={filled.length === 0}
-                  title="Zapisuje tabelę na serwerze bez pliku na dysku; wczytasz ją w „Wczytaj z XML” (10 ostatnich)"
-                >
-                  <FileClockIcon />
-                  Zapisz tymczasowo
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={savePriceChanges}
-                  loading={savingPrices}
-                  disabled={priceControlRows.length === 0 || badEanTitle !== null}
-                  title={
-                    badEanTitle ??
-                    (priceControlRows.length > 0
-                      ? `Zapisuje samą zmianę cen (${priceControlRows.length} ${pieces(priceControlRows.length)}) w folderze zmiany cen, bez pliku XML`
-                      : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży')
-                  }
-                >
-                  <TagIcon />
-                  Zmień ceny
-                  {priceControlRows.length > 0 && ` (${priceControlRows.length})`}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => productFilePayload && void xmlSave.saveProducts(productFilePayload, newArticles)}
-                  loading={xmlSave.savingProducts}
-                  disabled={productRows.length === 0 || productFileBlocker !== null}
-                  title={
-                    productFileBlocker ??
-                    (productRows.length > 0
-                      ? `Zapisuje sam plik nowych i zmienionych artykułów (${productRows.length} ${pieces(productRows.length)}), bez pliku XML`
-                      : 'W tabeli nie ma nowych ani zmienionych artykułów')
-                  }
-                >
-                  <PackagePlusIcon />
-                  Dodaj nowe artykuły
-                  {productRows.length > 0 && ` (${productRows.length})`}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setArticleFileOpen(true)}
-                  disabled={filled.length === 0}
-                  title="Wybierz artykuły do pliku CADBEZP, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu"
-                >
-                  <PackageCheckIcon />
-                  Zmień artykuły
-                </Button>
-              </>
-            )}
+            {invoice?.id && <InvoiceFileActions storeId={store.id} invoiceId={invoice.id} />}
             <div className="ml-auto flex items-center gap-2">
               {saved && savedState && <SavedStatus state={savedState} at={saved.at} fileName={saved.fileName} />}
               <Button
@@ -1279,21 +1413,47 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 size="icon-sm"
                 onClick={() => setSaveSettings({ open: true, missing: [] })}
                 aria-label="Ustawienia zapisu"
-                title="Ustawienia zapisu: foldery na plik XML, nowe artykuły, protokoły i zmianę cen"
+                title="Ustawienia zapisu: foldery na plik XML, nowe artykuły, protokoły i pliki .lst"
               >
                 <SettingsIcon />
               </Button>
               {rows.length > 0 && (
-                <Button
-                  size="sm"
-                  onClick={onSaveClick}
-                  loading={xmlSave.saving}
-                  disabled={filled.length === 0}
-                  title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
-                >
-                  <FileCodeIcon />
-                  Zapisz
-                </Button>
+                <div className="flex items-center" role="group" aria-label="Zapis">
+                  <Button
+                    size="sm"
+                    className={cn(ACTION_TONES.save, 'rounded-r-none')}
+                    onClick={onSaveClick}
+                    loading={xmlSave.saving}
+                    disabled={filled.length === 0}
+                    title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
+                  >
+                    <FileCodeIcon />
+                    Zapisz
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          size="icon-sm"
+                          className={cn(ACTION_TONES.save, '-ml-px rounded-l-none')}
+                          aria-label="Inne sposoby zapisu"
+                          loading={saveTemporaryXml.isPending}
+                          disabled={filled.length === 0}
+                        />
+                      }
+                    >
+                      <ChevronDownIcon />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-80">
+                      <ActionItem
+                        icon={<FileClockIcon />}
+                        label="Zapisz tymczasowo"
+                        hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Plik XML” (10 ostatnich)"
+                        onClick={saveTemporary}
+                      />
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
             </div>
           </div>
@@ -1338,54 +1498,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 <Trash2Icon />
               </Button>
               <ToolbarDivider />
-              {invoice?.id && (
-                <>
-                  <InvoiceFileActions storeId={store.id} invoiceId={invoice.id} />
-                  <ToolbarDivider />
-                </>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setProtocolOpen(true)}
-                disabled={protocolLines.length === 0 || badEanTitle !== null}
-                title={badEanTitle ?? undefined}
-              >
-                <FileOutputIcon />
-                Wygeneruj protokół
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setLabelsOpen(true)}
-                disabled={labelLines.length === 0 || badEanTitle !== null}
-                title={
-                  badEanTitle ??
-                  (selectedArticles.length > 0
-                    ? `Plik etykiet cenowych dla zaznaczonych artykułów (${labelLines.length})`
-                    : 'Plik etykiet cenowych dla wszystkich artykułów tabeli (zaznacz wiersze, żeby wybrać tylko część)')
-                }
-              >
-                <TagsIcon />
-                Etykiety
-                {selectedArticles.length > 0 && labelLines.length > 0 && ` (${labelLines.length})`}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void saveLst()}
-                loading={savingLst}
-                disabled={lstEans.length === 0}
-                title={
-                  selectedArticles.length > 0
-                    ? `Plik .lst z EAN-ami zaznaczonych artykułów (${lstEans.length})`
-                    : `Plik .lst z EAN-ami artykułów widocznych w tabeli (${lstEans.length}); zaznacz wiersze, żeby wybrać tylko część`
-                }
-              >
-                <FileTextIcon />
-                Plik .lst
-                {(selectedArticles.length > 0 || depositFilter) && lstEans.length > 0 && ` (${lstEans.length})`}
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -1403,18 +1515,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 Ustaw ceny sugerowane
                 {priceChanges.size > 0 && ` (${priceChanges.size})`}
               </Button>
-              <ToolbarDivider />
-              <Button
-                variant={depositFilter ? 'default' : 'outline'}
-                size="sm"
-                aria-pressed={depositFilter !== null}
-                onClick={toggleDepositFilter}
-                disabled={depositCount === 0 && !depositFilter}
-                title="Nowe artykuły z kaucją wskazane przez „Uzupełnij z AI”: kaucję trzeba ustawić przy zakładaniu w Mercalys"
-              >
-                <RecycleIcon />
-                Brakująca kaucja ({depositCount})
-              </Button>
+              {(depositCount > 0 || depositFilter) && (
+                <>
+                  <ToolbarDivider />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(depositFilter && ACTION_TONES.warn)}
+                    aria-pressed={depositFilter !== null}
+                    onClick={toggleDepositFilter}
+                    title="Nowe artykuły z kaucją wskazane przez „Uzupełnij z AI”: kaucję trzeba ustawić przy zakładaniu w Mercalys"
+                  >
+                    <RecycleIcon />
+                    Brakująca kaucja ({depositCount})
+                  </Button>
+                </>
+              )}
               {depositFilter && (
                 <Button variant="ghost" size="sm" onClick={toggleDepositFilter}>
                   <FilterXIcon />
@@ -1438,27 +1554,33 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   </Button>
                 ))}
               </div>
-              {conflicts.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={averagePrices}
-                  title="Ten sam EAN jest na fakturze w różnych cenach: wpisuje w nich cenę średnią ważoną ilością"
-                >
-                  <ScaleIcon />
-                  Uśrednij ceny ({conflicts.length})
-                </Button>
-              )}
               {duplicates.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={mergeDuplicates}
-                  title="Łączy wiersze z tym samym EAN-em w jeden: ilości zsumowane, cena średnia"
+                <ActionMenu
+                  label={`Ten sam EAN (${duplicates.length})`}
+                  icon={<CombineIcon />}
+                  tone="warn"
+                  title="Ten sam EAN jest w kilku wierszach: program sklepu łączy takie pozycje"
                 >
-                  <CombineIcon />
-                  Połącz te same ({duplicates.length})
-                </Button>
+                  <ActionItem
+                    icon={<ScaleIcon />}
+                    label="Uśrednij ceny"
+                    count={conflicts.length}
+                    disabled={conflicts.length === 0}
+                    hint={
+                      conflicts.length > 0
+                        ? 'Wpisuje w wierszach cenę średnią ważoną ilością'
+                        : 'Wiersze z tym samym EAN-em mają już jedną cenę'
+                    }
+                    onClick={averagePrices}
+                  />
+                  <ActionItem
+                    icon={<CombineIcon />}
+                    label="Połącz te same"
+                    count={duplicates.length}
+                    hint="Łączy wiersze w jeden: ilości zsumowane, cena średnia"
+                    onClick={mergeDuplicates}
+                  />
+                </ActionMenu>
               )}
               {(agreed.length > 0 || canUseAi) && <ToolbarDivider />}
               {agreed.length > 0 && (
@@ -1470,6 +1592,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  className={ACTION_TONES.ai}
                   onClick={fillWithAi}
                   loading={suggest.isPending}
                   disabled={forAi.length === 0}
@@ -1606,10 +1729,17 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       <LabelDialog
         storeId={store.id}
         lines={labelLines}
-        selection={selectedArticles.length > 0}
+        selection={chosenArticles.length > 0}
         skipped={labelSource.length - labelLines.length}
         open={labelsOpen}
         onOpenChange={setLabelsOpen}
+      />
+
+      <ProFileDialog
+        rows={orderFromSelection ? chosenArticles : rows.filter(isArticle)}
+        selection={orderFromSelection}
+        open={proFileOpen}
+        onOpenChange={setProFileOpen}
       />
 
       <CatalogListDialog

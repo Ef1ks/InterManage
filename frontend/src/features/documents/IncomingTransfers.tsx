@@ -38,6 +38,7 @@ import { DocumentPrintMenu } from '@/features/documents/DocumentPrintMenu'
 import { BackToTypes } from '@/features/documents/DocumentsList'
 import { IncomingProductionCards } from '@/features/deli-production/TransferProductionCards'
 import { ReceiveTransferDialog, receivedQuantities } from '@/features/documents/ReceiveTransferDialog'
+import { TransferReceiptSection } from '@/features/documents/TransferReceipt'
 import {
   countFormat,
   documentPaths,
@@ -103,6 +104,9 @@ function TransferLink({ transfer }: { transfer: IncomingTransfer }) {
       <span className="min-w-0 flex-1">
         <span className="font-medium">{transfer.number}</span>
         <span className="text-muted-foreground"> · od {storeLabel(transfer.fromStore)}</span>
+        {transfer.enteredAt && !transfer.receipt && (
+          <span className="text-amber-800 dark:text-amber-300"> · przypnij dokument przyjęcia</span>
+        )}
       </span>
       <span className="hidden text-muted-foreground sm:inline">{formatDocumentDate(transfer.documentDate)}</span>
       <span className="hidden text-muted-foreground sm:inline">{countFormat.format(transfer.lineCount)} linii</span>
@@ -124,8 +128,8 @@ export function IncomingTransfersPage({ storeId }: { storeId: string }) {
       <BackToTypes />
       <h2 className="mb-1 text-xl font-semibold tracking-tight">Od innych sklepów</h2>
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-        Ruchy międzymagazynowe, które sklepy zaprzyjaźnione wystawiły dla tego sklepu. Wprowadź je u siebie i oznacz
-        jako wprowadzone.
+        Ruchy międzymagazynowe, które sklepy zaprzyjaźnione wystawiły dla tego sklepu. Wprowadź je u siebie, a po
+        wgraniu raportu dokumentów przypnij swój dokument przyjęcia.
       </p>
       {isError ? (
         <FullPageMessage
@@ -142,7 +146,7 @@ export function IncomingTransfersPage({ storeId }: { storeId: string }) {
             transfers={data.pending}
             empty="Nic nie czeka na wprowadzenie."
           />
-          {data.entered.length > 0 && <TransferGroup title="Ostatnio wprowadzone" transfers={data.entered} />}
+          {data.entered.length > 0 && <TransferGroup title="Ostatnio potwierdzone" transfers={data.entered} />}
         </div>
       )}
     </>
@@ -243,9 +247,15 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
         </div>
       </div>
 
+      {transfer.corrections.length > 0 && (
+        <p className="mb-4 rounded-xl bg-violet-200 px-4 py-3 text-sm font-medium text-violet-950 dark:bg-violet-950/60 dark:text-violet-100">
+          Sklep wysyłający poprawił ten dokument ({transfer.corrections.join(', ')}). Ilości, wartości, pliki i wydruk są
+          już po poprawie.
+        </p>
+      )}
       <div
         className={cn(
-          'mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border px-4 py-3',
+          'mb-3 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border px-4 py-3',
           transfer.enteredAt
             ? 'border-emerald-300/70 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/5'
             : 'border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-500/5',
@@ -295,6 +305,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
       {canEdit && (
         <ReceiveTransferDialog storeId={storeId} transfer={transfer} open={receiving} onOpenChange={setReceiving} />
       )}
+      <TransferReceiptSection storeId={storeId} transfer={transfer} />
       <IncomingProductionCards storeId={storeId} transferId={transfer.id} />
 
       <SearchInput

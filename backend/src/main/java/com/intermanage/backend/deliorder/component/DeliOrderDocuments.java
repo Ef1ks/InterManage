@@ -89,13 +89,13 @@ public class DeliOrderDocuments {
             BigDecimal quantity) {
     }
 
-    /** Same kody EAN, jeden w linii, w kolejności zamówienia. CRLF, bo plik trafia do programów na Windows. */
+    /**
+     * Same kody EAN, jeden w linii, w kolejności zamówienia. CRLF między liniami, bo plik trafia do programów na
+     * Windows, ale bez końca linii po ostatnim kodzie: program sklepu takiej listy nie wczytuje.
+     */
     public byte[] lst(OrderDocument order) {
-        StringBuilder text = new StringBuilder();
-        for (Line line : order.orderedLines()) {
-            text.append(line.ean()).append("\r\n");
-        }
-        return text.toString().getBytes(StandardCharsets.US_ASCII);
+        return String.join("\r\n", order.orderedLines().stream().map(Line::ean).toList())
+                .getBytes(StandardCharsets.US_ASCII);
     }
 
     /** Plik PROTO6 dla programu sklepu, w kolejności zamówienia. */

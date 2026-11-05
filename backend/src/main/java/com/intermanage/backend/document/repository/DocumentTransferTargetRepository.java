@@ -29,23 +29,29 @@ public interface DocumentTransferTargetRepository extends JpaRepository<Document
     /** Ostatnio cofnięty sklep docelowy dokumentu (do "Przywróć"). */
     Optional<DocumentTransferTarget> findFirstByDocumentIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(UUID documentId);
 
-    /** Ruchy międzymagazynowe innych sklepów czekające na wprowadzenie w sklepie, od najstarszego. */
-    @Query("""
-            select t from DocumentTransferTarget t join fetch t.document d join fetch d.store
-            left join fetch t.createdBy
-            where t.targetStore.id = :storeId and t.deletedAt is null and t.enteredAt is null
-            order by d.documentDate, d.number""")
-    List<DocumentTransferTarget> findPending(UUID storeId);
-
-    /** Ostatnio wprowadzone ruchy międzymagazynowe innych sklepów. */
+    /** Ruchy międzymagazynowe innych sklepów bez przypiętego dokumentu przyjęcia, od najstarszego. */
     @Query("""
             select t from DocumentTransferTarget t join fetch t.document d join fetch d.store
             left join fetch t.createdBy left join fetch t.enteredBy
-            where t.targetStore.id = :storeId and t.deletedAt is null and t.enteredAt is not null
-            order by t.enteredAt desc""")
+            where t.targetStore.id = :storeId and t.deletedAt is null and not exists (
+                select 1 from DocumentTransferReceipt r where r.target = t and r.unlinkedAt is null)
+            order by d.documentDate, d.number""")
+    List<DocumentTransferTarget> findPending(UUID storeId);
+
+    /** Ostatnio potwierdzone ruchy międzymagazynowe innych sklepów (przypięty dokument przyjęcia). */
+    @Query("""
+            select t from DocumentTransferTarget t join fetch t.document d join fetch d.store
+            left join fetch t.createdBy left join fetch t.enteredBy
+            join DocumentTransferReceipt r on r.target = t and r.unlinkedAt is null
+            where t.targetStore.id = :storeId and t.deletedAt is null
+            order by r.linkedAt desc""")
     List<DocumentTransferTarget> findEntered(UUID storeId, Limit limit);
 
-    long countByTargetStoreIdAndDeletedAtIsNullAndEnteredAtIsNull(UUID storeId);
+    @Query("""
+            select count(t) from DocumentTransferTarget t
+            where t.targetStore.id = :storeId and t.deletedAt is null and not exists (
+                select 1 from DocumentTransferReceipt r where r.target = t and r.unlinkedAt is null)""")
+    long countPending(UUID storeId);
 
     @Query("""
             select t from DocumentTransferTarget t join fetch t.document d join fetch d.store

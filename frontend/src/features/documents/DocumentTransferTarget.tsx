@@ -17,24 +17,24 @@ import { cn } from '@/lib/utils'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
-/** Na liście ruchów międzymagazynowych: dla którego sklepu i czy już go wprowadził. */
+/** Na liście ruchów międzymagazynowych: dla którego sklepu i czy potwierdził przyjęcie swoim dokumentem. */
 export function TransferTargetBadge({ document }: { document: DocumentSummary }) {
   const target = document.transferTarget
   if (!target) return null
   return (
     <Badge
       variant="outline"
-      title={target.enteredAt ? 'Sklep wprowadził dokument u siebie' : 'Sklep jeszcze nie wprowadził dokumentu'}
+      title={target.receipt ? `Przyjęcie potwierdza dokument ${target.receipt.number}` : waitingFor(target)}
       className={cn(
         'max-w-56',
-        target.enteredAt
+        target.receipt
           ? 'border-emerald-300/70 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
           : 'border-sky-300/70 bg-sky-50 text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300',
       )}
     >
-      {target.enteredAt ? <CheckCircle2Icon aria-hidden /> : <ArrowRightLeftIcon aria-hidden />}
+      {target.receipt ? <CheckCircle2Icon aria-hidden /> : <ArrowRightLeftIcon aria-hidden />}
       <span className="truncate">
-        {target.enteredAt ? 'Dla' : 'Czeka:'} {storeLabel(target.store)}
+        {target.receipt ? 'Dla' : 'Czeka:'} {storeLabel(target.store)}
       </span>
     </Badge>
   )
@@ -73,12 +73,12 @@ export function DocumentTransferTargetSection({ storeId, document }: { storeId: 
         <div
           className={cn(
             'flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border px-4 py-3',
-            target.enteredAt
+            target.receipt
               ? 'border-emerald-300/70 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/5'
               : 'border-sky-300/70 bg-sky-50/60 dark:border-sky-500/30 dark:bg-sky-500/5',
           )}
         >
-          {target.enteredAt ? (
+          {target.receipt ? (
             <CheckCircle2Icon aria-hidden className="size-5 shrink-0 text-emerald-700 dark:text-emerald-400" />
           ) : (
             <ArrowRightLeftIcon aria-hidden className="size-5 shrink-0 text-sky-700 dark:text-sky-400" />
@@ -151,9 +151,16 @@ function statusLine(target: TransferTarget) {
   const created = target.createdBy
     ? `wskazał(a) ${target.createdBy}, ${dateFormat.format(new Date(target.createdAt))}`
     : `wskazano ${dateFormat.format(new Date(target.createdAt))}`
-  if (!target.enteredAt) return `Czeka, aż sklep wprowadzi go u siebie · ${created}`
-  const entered = dateFormat.format(new Date(target.enteredAt))
-  return `Wprowadzony w sklepie ${entered}${target.enteredBy ? ` (${target.enteredBy})` : ''} · ${created}`
+  if (!target.receipt) return `${waitingFor(target)} · ${created}`
+  const linked = dateFormat.format(new Date(target.receipt.linkedAt))
+  const by = target.receipt.linkedBy ? ` (${target.receipt.linkedBy})` : ''
+  return `Przyjęcie potwierdza dokument ${target.receipt.number} sklepu, przypięty ${linked}${by} · ${created}`
+}
+
+function waitingFor(target: TransferTarget) {
+  return target.enteredAt
+    ? 'Sklep wprowadził dokument, czeka na przypięcie jego dokumentu przyjęcia'
+    : 'Czeka, aż sklep wprowadzi go u siebie i przypnie dokument przyjęcia'
 }
 
 type DialogBodyProps = {

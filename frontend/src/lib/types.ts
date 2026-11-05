@@ -1117,6 +1117,8 @@ export type Document = DocumentSummary & {
   corrected: CorrectedDelivery | null
   /** Korektę (błędu sklepu, od dostawcy) można przypiąć do przyjęcia. */
   attachableToDelivery: boolean
+  /** Ruch międzymagazynowy innego sklepu, który ten dokument potwierdza jako przyjęty. */
+  transferReceiptOf: { id: string; number: string; fromStore: StoreSummary } | null
 }
 
 export type LinkedDeliOrder = {
@@ -1369,12 +1371,24 @@ export type KsefInvoicePage = {
 }
 
 /** Sklep, dla którego wystawiono ruch międzymagazynowy; {@code enteredAt}, gdy sklep wprowadził go u siebie. */
+/** Dokument sklepu docelowego potwierdzający wprowadzenie ruchu międzymagazynowego. */
+export type TransferReceipt = {
+  documentId: string
+  number: string
+  documentDate: string
+  purchaseValue: number
+  linkedBy: string | null
+  linkedAt: string
+}
+
 export type TransferTarget = {
   store: StoreSummary
   createdBy: string | null
   createdAt: string
   enteredBy: string | null
   enteredAt: string | null
+  /** Pusty = dokument czeka, aż sklep przypnie swój dokument przyjęcia. */
+  receipt: TransferReceipt | null
 }
 
 /** Ruch międzymagazynowy innego sklepu wystawiony dla tego sklepu; {@code id} to id wpisu, nie dokumentu. */
@@ -1393,6 +1407,10 @@ export type IncomingTransfer = {
   /** Kto i kiedy ostatnio wpisał ilości, które naprawdę przyjechały. */
   receivedBy: string | null
   receivedAt: string | null
+  /** Dokument tego sklepu potwierdzający wprowadzenie; pusty = ruch czeka. */
+  receipt: TransferReceipt | null
+  /** Numery poprawek sklepu wysyłającego: linie i wartości są już po nich. */
+  corrections: string[]
   /** Pusta na liście, z liniami w szczegółach. */
   lines: DocumentLine[]
   /** Przyjęte ilości; linia bez wpisu przyjechała w ilości z dokumentu. */
@@ -1401,7 +1419,7 @@ export type IncomingTransfer = {
 
 export type IncomingTransfers = {
   pending: IncomingTransfer[]
-  /** Ostatnio wprowadzone, od najnowszego. */
+  /** Ostatnio potwierdzone dokumentem przyjęcia, od najnowszego. */
   entered: IncomingTransfer[]
 }
 

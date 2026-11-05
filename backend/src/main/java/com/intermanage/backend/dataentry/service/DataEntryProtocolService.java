@@ -9,7 +9,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.LabelFile;
+import com.intermanage.backend.dataentry.component.OrderFile;
 import com.intermanage.backend.dataentry.dto.LabelRequest;
+import com.intermanage.backend.dataentry.dto.OrderFileRequest;
 import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.store.entity.ProtocolKind;
 import com.intermanage.backend.store.entity.Store;
@@ -59,5 +61,13 @@ public class DataEntryProtocolService {
             throw ApiException.badRequest("Brak pozycji z EAN-em do etykiet");
         }
         return new ProtocolFile(LabelFile.fileName(username, request.format()), content);
+    }
+
+    /** Plik zamówienia COMMANDE z artykułów tabeli (zapisuje go przeglądarka w folderze plików PROTO). */
+    public ProtocolFile order(OrderFileRequest request, String username) {
+        byte[] content = OrderFile.content(request.lines().stream()
+                .map(line -> new OrderFile.Line(line.ean(), line.quantity()))
+                .toList());
+        return new ProtocolFile(OrderFile.fileName(username), content);
     }
 }

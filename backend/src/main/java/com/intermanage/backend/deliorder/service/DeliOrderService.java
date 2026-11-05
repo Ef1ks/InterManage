@@ -261,7 +261,7 @@ public class DeliOrderService {
                         .toList());
         String baseName = "zamowienie-" + order.getStore().getNumber() + "-" + order.getDeliveryDate() + "-nr" + order.getId();
         return switch (format) {
-            case "lst" -> new ExportFile(baseName + ".lst", "text/plain;charset=US-ASCII", documents.lst(document));
+            case "lst" -> new ExportFile(baseName + ".LST", "text/plain;charset=US-ASCII", documents.lst(document));
             case "xlsx" -> new ExportFile(baseName + ".xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", documents.xlsx(document));
             case "pdf" -> new ExportFile(baseName + ".pdf", "application/pdf", documents.pdf(document));

@@ -47,7 +47,9 @@ import com.intermanage.backend.dataentry.dto.NomenclatureItem;
 import com.intermanage.backend.dataentry.dto.ProductLink;
 import com.intermanage.backend.dataentry.dto.ProductLinkRequest;
 import com.intermanage.backend.dataentry.component.LabelFile;
+import com.intermanage.backend.dataentry.component.OrderFile;
 import com.intermanage.backend.dataentry.dto.LabelRequest;
+import com.intermanage.backend.dataentry.dto.OrderFileRequest;
 import com.intermanage.backend.dataentry.dto.ProtocolRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionRequest;
 import com.intermanage.backend.dataentry.dto.SuggestionResponse;
@@ -497,6 +499,19 @@ public class DataEntryController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(LabelFile.CONTENT_TYPE))
+                .body(file.content());
+    }
+
+    /** Plik zamówienia COMMANDE z artykułów tabeli; zapisuje go przeglądarka w folderze plików PROTO. */
+    @PostMapping("/export/order")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> order(@PathVariable UUID storeId, @Valid @RequestBody OrderFileRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        DataEntryProtocolService.ProtocolFile file = protocolService.order(request, principal.getUsername());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType(OrderFile.CONTENT_TYPE))
                 .body(file.content());
     }
 }

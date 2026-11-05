@@ -911,6 +911,20 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", containsString("PROTO6_")));
 
+        // Plik zamówienia COMMANDE: EAN i ilość na 2 cyfrach; ilość spoza 1-99 odrzuca plik.
+        byte[] order = mvc.perform(post(url("/export/order")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"ean\":\"5900000000012\",\"quantity\":3}]}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(".*filename=\"COMMANDE_\\d{8}_\\d{6}_wlasciciel_wlasciciel\\.traite0\".*")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(order, StandardCharsets.US_ASCII)).isEqualTo("590000000001203\r\n");
+        mvc.perform(post(url("/export/order")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"ean\":\"5900000000012\",\"quantity\":100}]}"))
+                .andExpect(status().isBadRequest());
+
         // Ukryty protokół nie powstaje; folder sklepu wraca w ustawieniach.
         mvc.perform(put(settings).cookie(owner)
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON)

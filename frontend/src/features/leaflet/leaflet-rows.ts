@@ -139,6 +139,9 @@ export type ProFile = {
 
 const day = (iso: string) => String(Number(iso.slice(8, 10)))
 
+/** Nazwa pliku .PRO z okresu: dzień początku i końca ({@code 29-1.PRO}). */
+export const proFileName = (dateFrom: string, dateTo: string) => `${day(dateFrom)}-${day(dateTo)}.PRO`
+
 /**
  * Pliki .PRO z pozycji do opracowania: jeden okres od-do = jeden plik ({@code 29-1.PRO} = od 29. do 1.), od
  * najwcześniejszego okresu, numerowane w kodzie taryfy od 01.
@@ -170,7 +173,7 @@ export function proFiles(lines: LeafletLine[], week: number, year: number): ProF
           else if (Math.abs(known.price - price) >= 0.005) conflicts.add(known.name)
         }
       }
-      let fileName = `${day(dateFrom)}-${day(dateTo)}.PRO`
+      let fileName = proFileName(dateFrom, dateTo)
       // Ten sam dzień w różnych miesiącach dałby tę samą nazwę.
       if (names.has(fileName))
         fileName = `${dateFrom.slice(8, 10)}${dateFrom.slice(5, 7)}-${dateTo.slice(8, 10)}${dateTo.slice(5, 7)}.PRO`
@@ -192,7 +195,7 @@ export function proFiles(lines: LeafletLine[], week: number, year: number): ProF
  * Treść pliku .PRO jak z Impeka ({@code pliki/29-1.PRO}): w linii 20 znaków, EAN na 13 (krótszy z zerami z przodu)
  * i cena promocji w groszach na 7 cyfrach ({@code 2481500000000} + {@code 0002699} = 26,99 zł), CRLF.
  */
-export function proContent(file: ProFile) {
+export function proContent(file: Pick<ProFile, 'lines'>) {
   const text = file.lines
     .map((line) => `${line.ean.padStart(13, '0')}${String(Math.round(line.price * 100)).padStart(7, '0')}\r\n`)
     .join('')

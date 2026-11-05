@@ -33,6 +33,7 @@ import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DeliveryCorrectionRepository;
 import com.intermanage.backend.document.repository.DocumentRepository;
 import com.intermanage.backend.document.repository.DocumentSearch;
+import com.intermanage.backend.document.repository.DocumentTransferReceiptRepository;
 
 /**
  * Korekty błędów sklepu (PK) i od dostawcy (WZ) przypięte do przyjęć PZ, których dotyczą. Raport nie mówi, którą
@@ -59,12 +60,14 @@ public class DeliveryCorrectionService {
     private final DeliveryCorrectionRepository links;
     private final DocumentRepository documents;
     private final AppUserRepository users;
+    private final DocumentTransferReceiptRepository receipts;
 
     public DeliveryCorrectionService(DeliveryCorrectionRepository links, DocumentRepository documents,
-            AppUserRepository users) {
+            AppUserRepository users, DocumentTransferReceiptRepository receipts) {
         this.links = links;
         this.documents = documents;
         this.users = users;
+        this.receipts = receipts;
     }
 
     /** Korekty przyjęć PZ i ruchów międzymagazynowych spośród podanych dokumentów (same nagłówki), od najstarszej. */
@@ -148,8 +151,9 @@ public class DeliveryCorrectionService {
         }
         Set<UUID> taken = new HashSet<>();
         if (delivery && !found.isEmpty()) {
-            links.findActiveByCorrectionIds(found.stream().map(Document::getId).toList())
-                    .forEach(link -> taken.add(link.getCorrection().getId()));
+            List<UUID> ids = found.stream().map(Document::getId).toList();
+            links.findActiveByCorrectionIds(ids).forEach(link -> taken.add(link.getCorrection().getId()));
+            receipts.findActiveByDocumentIds(ids).forEach(receipt -> taken.add(receipt.getDocument().getId()));
         }
         Set<String> items = itm8s(document);
         List<String> words = DocumentSearch.words(query);
@@ -183,6 +187,10 @@ public class DeliveryCorrectionService {
             throw ApiException.badRequest(correction.getType().singular() + " " + correction.getNumber()
                     + " jest od innego dostawcy niż przyjęcie (bon " + delivery.bonNumber() + ").");
         }
+        if (!receipts.findActiveByDocumentIds(List.of(correction.getId())).isEmpty()) {
+            throw ApiException.conflict("Dokument " + correction.getNumber()
+                    + " potwierdza przyjęcie towaru od innego sklepu, więc nie jest poprawą.");
+        }
         DeliveryCorrection current = links.findActiveByCorrection(correction.getId()).orElse(null);
         if (current != null) {
             if (current.getDelivery().getId().equals(delivery.getId())) {
@@ -206,6 +214,18 @@ public class DeliveryCorrectionService {
                 .filter(link -> link.getDelivery().getId().equals(pair[0].getId()))
                 .orElseThrow(() -> ApiException.notFound("Ta korekta nie jest przypięta do przyjęcia"))
                 .unlink(userId != null ? users.getReferenceById(userId) : null);
+    }
+
+    /**
+     * Ruch międzymagazynowy po poprawach, tak jak widzi go sklep docelowy: artykuł, który po poprawie nie jedzie albo
+     * wyszedł w drugą stronę, do niego nie trafia. Bez poprawek linie z dokumentu. {@code document} z liniami.
+     */
+    @Transactional(readOnly = true)
+    public List<CorrectedLine> transferLines(Document document, List<DeliveryCorrection> corrections) {
+        List<CorrectedLine> lines = corrected(document,
+                correctionDocuments(document.getStore().getId(), corrections)).lines();
+        return corrections.isEmpty() ? lines
+                : lines.stream().filter(line -> line.quantity() != null && line.quantity().signum() > 0).toList();
     }
 
     /**

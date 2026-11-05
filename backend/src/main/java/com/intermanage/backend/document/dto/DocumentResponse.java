@@ -63,7 +63,9 @@ public record DocumentResponse(
         /** Dokument można wystawić dla sklepu zaprzyjaźnionego (ruchy międzymagazynowe). */
         boolean transferTargetAllowed,
         /** Sklep, dla którego wystawiono ruch międzymagazynowy. */
-        TransferTargetResponse transferTarget) {
+        TransferTargetResponse transferTarget,
+        /** Ruch międzymagazynowy innego sklepu, który ten dokument potwierdza jako przyjęty. */
+        IncomingTransferRef transferReceiptOf) {
 
     public record DocumentLineResponse(
             UUID id,

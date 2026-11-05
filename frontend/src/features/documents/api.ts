@@ -580,6 +580,37 @@ export function useIncomingTransfer(storeId: string, id: string) {
   })
 }
 
+/** Dokumenty tego sklepu, które mogą potwierdzić przyjęcie ruchu międzymagazynowego. */
+export function useTransferReceiptCandidates(storeId: string, id: string, query: string) {
+  const debounced = useDebouncedValue(query.trim(), 250)
+  return useQuery({
+    queryKey: [...incomingKey(storeId), id, 'receipt-candidates', { query: debounced }],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (debounced) params.set('query', debounced)
+      return api<CorrectionCandidate[]>(`${incomingPath(storeId)}/${id}/receipt/candidates?${params}`)
+    },
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Przypięcie dokumentu przyjęcia kończy czekanie w obu sklepach; odpięcie zostawia wpis i ruch znów czeka. */
+export function useTransferReceipt(storeId: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${incomingPath(storeId)}/${id}/receipt`
+  const onSuccess = (transfer: IncomingTransfer) => queryClient.setQueryData([...incomingKey(storeId), id], transfer)
+  return {
+    attach: useMutation({
+      mutationFn: (documentId: string) => api<IncomingTransfer>(path, { method: 'POST', json: { documentId } }),
+      onSuccess,
+    }),
+    detach: useMutation({
+      mutationFn: () => api<IncomingTransfer>(path, { method: 'DELETE' }),
+      onSuccess,
+    }),
+  }
+}
+
 /** Oznacza dokument jako wprowadzony w tym sklepie albo cofa oznaczenie. */
 export function useMarkTransferEntered(storeId: string, id: string) {
   const queryClient = useQueryClient()

@@ -1,26 +1,31 @@
 package com.intermanage.backend.document.entity;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.UuidGenerator;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.store.entity.Store;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * Sklep, dla którego wystawiono ruch międzymagazynowy (MM). Sklep docelowy widzi dokument do wprowadzenia u siebie
- * i oznacza go jako wprowadzony ({@code enteredAt}). Cofnięcie ustawia {@code deletedAt}; zmiana sklepu to cofnięcie
- * tego wpisu i nowy wpis.
+ * Sklep, dla którego wystawiono ruch międzymagazynowy (MM). Sklep docelowy widzi dokument do wprowadzenia u siebie,
+ * oznacza go jako wprowadzony ({@code enteredAt}), a potem przypina swój dokument przyjęcia ({@link #getReceipt}),
+ * i dopiero to kończy czekanie. Cofnięcie ustawia {@code deletedAt}; zmiana sklepu to cofnięcie tego wpisu i nowy wpis.
  */
 @Entity
 @Table(name = "document_transfer_targets")
@@ -67,6 +72,10 @@ public class DocumentTransferTarget {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    @OneToMany(mappedBy = "target", cascade = CascadeType.PERSIST)
+    @BatchSize(size = 100)
+    private List<DocumentTransferReceipt> receipts = new ArrayList<>();
+
     protected DocumentTransferTarget() {
     }
 
@@ -85,6 +94,15 @@ public class DocumentTransferTarget {
     public void markEntered(AppUser by, boolean entered) {
         enteredAt = entered ? Instant.now() : null;
         enteredBy = entered ? by : null;
+    }
+
+    /** Dokument sklepu docelowego potwierdzający wprowadzenie; {@code null}, gdy jeszcze czeka. */
+    public DocumentTransferReceipt getReceipt() {
+        return receipts.stream().filter(DocumentTransferReceipt::isActive).findFirst().orElse(null);
+    }
+
+    public void attachReceipt(Document document, AppUser by) {
+        receipts.add(new DocumentTransferReceipt(this, document, by));
     }
 
     public void markReceived(AppUser by) {

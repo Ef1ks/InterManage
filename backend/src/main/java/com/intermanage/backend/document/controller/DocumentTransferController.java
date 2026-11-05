@@ -1,6 +1,7 @@
 package com.intermanage.backend.document.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
@@ -16,13 +17,16 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.document.dto.CorrectionCandidate;
 import com.intermanage.backend.document.dto.DocumentResponse;
 import com.intermanage.backend.document.dto.EnteredRequest;
 import com.intermanage.backend.document.dto.IncomingTransfer;
 import com.intermanage.backend.document.dto.IncomingTransfers;
+import com.intermanage.backend.document.dto.LinkDocumentRequest;
 import com.intermanage.backend.document.dto.ReceiveTransferRequest;
 import com.intermanage.backend.document.dto.SetTransferTargetRequest;
 import com.intermanage.backend.document.service.DocumentPrintService;
@@ -128,6 +132,30 @@ public class DocumentTransferController {
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
                 .contentType(MediaType.parseMediaType(file.contentType()))
                 .body(file.content());
+    }
+
+    /** Dokumenty tego sklepu, które mogą potwierdzić przyjęcie. */
+    @GetMapping("/incoming-transfers/{id}/receipt/candidates")
+    @PreAuthorize(VIEW)
+    public List<CorrectionCandidate> receiptCandidates(@PathVariable UUID storeId, @PathVariable UUID id,
+            @RequestParam(required = false) String query) {
+        return transferService.receiptCandidates(storeId, id, query);
+    }
+
+    /** Przypina dokument tego sklepu: potwierdza przyjęcie i kończy czekanie. */
+    @PostMapping("/incoming-transfers/{id}/receipt")
+    @PreAuthorize(EDIT)
+    public IncomingTransfer attachReceipt(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody LinkDocumentRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return transferService.attachReceipt(storeId, id, request.documentId(), principal.getId());
+    }
+
+    /** Odpina dokument przyjęcia (znacznik); ruch znów czeka. */
+    @DeleteMapping("/incoming-transfers/{id}/receipt")
+    @PreAuthorize(EDIT)
+    public IncomingTransfer detachReceipt(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return transferService.detachReceipt(storeId, id, principal.getId());
     }
 
     /** Oznacza dokument jako wprowadzony w tym sklepie albo cofa oznaczenie. */

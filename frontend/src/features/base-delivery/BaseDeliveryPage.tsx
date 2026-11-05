@@ -78,7 +78,7 @@ import { TOOL_ROUTES } from '@/features/tools/categories'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
-import { usePriceChangeFolder, useProductFileFolder } from '@/lib/proto-files'
+import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
 import type { BaseDelivery, StoreSummary, Supplier } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -598,7 +598,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     setSavingPlu(true)
     try {
       const folderReady = await ensureFolderAccess(PLU_FOLDER.key)
-      const fileName = `PLU_${draft.delivery.number}.lst`
+      const fileName = `PLU_${draft.delivery.number}.LST`
       if (folderReady) await saveToFolder(PLU_FOLDER.key, fileName, lstFile(plu))
       else saveBlob(lstFile(plu), fileName)
       toast.success(`Zapisano plik ${fileName}`, {
@@ -629,7 +629,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 
   // ---------- pliki: zmiana cen (CTRLPRIX) i nowe artykuły (CADBEZP), osobno dla dostawcy (538, 88110)
 
-  const priceChangeFolder = usePriceChangeFolder(store.id)
+  const protoFolder = useProtoFolder(store.id)
   const productFolder = useProductFileFolder(store.id)
   const priceRows = useMemo(
     () =>
@@ -649,7 +649,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const savePriceChanges = async () => {
     setSaving('prices')
     try {
-      const folderReady = await ensureFolderAccess(priceChangeFolder.key)
+      const folderReady = await ensureFolderAccess(protoFolder.key)
       const groups = new Map<string, DataEntryRow[]>()
       for (const row of priceRows) {
         const key = supplierKey(row.base?.supplierCode) || '538'
@@ -665,7 +665,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
           invoiceNumber: draft.delivery?.number ?? null,
           rows: group.map((row) => ({ ean: row.ean, salePrice: row.salePrice ?? 0 })),
         }
-        const file = await savePriceControlFile(store.id, payload, priceChangeFolder.key, folderReady)
+        const file = await savePriceControlFile(store.id, payload, protoFolder.key, folderReady)
         saved.push(`${file.fileName}${file.downloaded ? ' (pobrany)' : ''}`)
       }
       void queryClient.invalidateQueries({ queryKey: ['stores', store.id, 'data-entry', 'price-control-files'] })

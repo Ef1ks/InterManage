@@ -1,6 +1,7 @@
 package com.intermanage.backend.document.mapper;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.mapstruct.Mapper;
@@ -11,7 +12,10 @@ import com.intermanage.backend.document.dto.CorrectionTotals;
 import com.intermanage.backend.document.dto.DeliveryCorrectionResponse;
 import com.intermanage.backend.document.dto.DocumentGratisResponse;
 import com.intermanage.backend.document.dto.DocumentImportResponse;
+import com.intermanage.backend.document.dto.CorrectedDelivery.CorrectedLine;
 import com.intermanage.backend.document.dto.DocumentResponse.DocumentLineResponse;
+import com.intermanage.backend.document.dto.IncomingTransferRef;
+import com.intermanage.backend.document.dto.TransferReceiptResponse;
 import com.intermanage.backend.document.dto.DocumentResponse;
 import com.intermanage.backend.document.dto.DocumentReportClosing;
 import com.intermanage.backend.document.dto.DocumentSummary;
@@ -33,6 +37,7 @@ import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.repository.DocumentManualInvoiceFileRepository;
 import com.intermanage.backend.document.entity.DocumentTransferReceivedLine;
+import com.intermanage.backend.document.entity.DocumentTransferReceipt;
 import com.intermanage.backend.document.entity.DocumentTransferTarget;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.store.mapper.StoreMapper;
@@ -98,34 +103,58 @@ public interface DocumentMapper {
     @Mapping(target = "transferTargetAllowed",
             expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.MM && document.isCorrectable())")
     @Mapping(target = "transferTarget", source = "transferTarget")
+    @Mapping(target = "transferReceiptOf", source = "transferReceiptOf")
     DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis,
             List<LinkedKsefInvoice> ksefInvoices, List<DeliveryCorrectionResponse> corrections,
             CorrectedDelivery corrected, CorrectionTotals correctionTotals, LinkedDelivery correctionOf,
             InvoiceAmountCheck invoiceAmountCheck, List<ManualInvoice> manualInvoices,
-            DocumentTransferTarget transferTarget);
+            DocumentTransferTarget transferTarget, IncomingTransferRef transferReceiptOf);
 
     @Mapping(target = "store", source = "targetStore")
     @Mapping(target = "createdBy", source = "createdBy.displayName")
     @Mapping(target = "enteredBy", source = "enteredBy.displayName")
     TransferTargetResponse toResponse(DocumentTransferTarget target);
 
-    /** Ruch międzymagazynowy innego sklepu; {@code lines} pusta na liście, z liniami w szczegółach. */
+    @Mapping(target = "documentId", source = "document.id")
+    @Mapping(target = "number", source = "document.number")
+    @Mapping(target = "documentDate", source = "document.documentDate")
+    @Mapping(target = "purchaseValue", source = "document.purchaseValue")
+    @Mapping(target = "linkedBy", source = "linkedBy.displayName")
+    TransferReceiptResponse toResponse(DocumentTransferReceipt receipt);
+
+    @Mapping(target = "id", source = "target.id")
+    @Mapping(target = "number", source = "target.document.number")
+    @Mapping(target = "fromStore", source = "target.document.store")
+    IncomingTransferRef toIncomingRef(DocumentTransferReceipt receipt);
+
+    /** Linia ruchu po poprawach dla sklepu docelowego; dostawcy i ceny aktualnej tam nie pokazujemy. */
+    @Mapping(target = "id", expression = "java(java.util.UUID.fromString(line.key()))")
+    @Mapping(target = "supplierCode", ignore = true)
+    @Mapping(target = "supplierName", ignore = true)
+    @Mapping(target = "nomenclatureName", ignore = true)
+    @Mapping(target = "salePriceCurrent", ignore = true)
+    DocumentLineResponse toLineResponse(CorrectedLine line);
+
+    /** Ruch międzymagazynowy innego sklepu po poprawach; {@code lines} pusta na liście, z liniami w szczegółach. */
     @Mapping(target = "id", source = "target.id")
     @Mapping(target = "fromStore", source = "target.document.store")
     @Mapping(target = "number", source = "target.document.number")
     @Mapping(target = "documentDate", source = "target.document.documentDate")
-    @Mapping(target = "lineCount", source = "target.document.lineCount")
-    @Mapping(target = "purchaseValue", source = "target.document.purchaseValue")
-    @Mapping(target = "saleValueGross", source = "target.document.saleValueGross")
+    @Mapping(target = "lineCount", source = "lineCount")
+    @Mapping(target = "purchaseValue", source = "purchaseValue")
+    @Mapping(target = "saleValueGross", source = "saleValueGross")
     @Mapping(target = "createdBy", source = "target.createdBy.displayName")
     @Mapping(target = "createdAt", source = "target.createdAt")
     @Mapping(target = "enteredBy", source = "target.enteredBy.displayName")
     @Mapping(target = "enteredAt", source = "target.enteredAt")
     @Mapping(target = "receivedBy", source = "target.receivedBy.displayName")
     @Mapping(target = "receivedAt", source = "target.receivedAt")
+    @Mapping(target = "receipt", source = "target.receipt")
+    @Mapping(target = "corrections", source = "corrections")
     @Mapping(target = "lines", source = "lines")
     @Mapping(target = "received", source = "received")
-    IncomingTransfer toIncoming(DocumentTransferTarget target, List<DocumentLine> lines,
+    IncomingTransfer toIncoming(DocumentTransferTarget target, int lineCount, BigDecimal purchaseValue,
+            BigDecimal saleValueGross, List<String> corrections, List<CorrectedLine> lines,
             List<DocumentTransferReceivedLine> received);
 
     @Mapping(target = "lineId", source = "documentLineId")
