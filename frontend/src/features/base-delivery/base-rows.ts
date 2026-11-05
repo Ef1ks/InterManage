@@ -166,11 +166,6 @@ export function pluEans(delivery: BaseDelivery) {
   return [...eans]
 }
 
-/** Plik .lst: EAN w każdej linii, CRLF (jak lista EAN-ów zamówienia garmażu). */
-export function pluFile(eans: string[]) {
-  return new Blob([eans.map((ean) => `${ean}\r\n`).join('')], { type: 'text/plain' })
-}
-
 /** Pusta wartość w filtrze kolumny. */
 export const EMPTY_VALUE = '(puste)'
 

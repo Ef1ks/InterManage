@@ -200,6 +200,30 @@ class StorePartnerTransferIntegrationTests {
                 .andExpect(status().isOk());
         mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/export/xml").cookie(owner))
                 .andExpect(status().isNotFound());
+
+        // Wydruk przyjęcia: ilości, które przyjechały, z ilością z dokumentu przy zmienionej linii.
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/print/pdf").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        Matchers.containsString("przyjecie-miedzymagazynowe-")));
+        byte[] excel = mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/print/xlsx").cookie(owner))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(excel))) {
+            while (!zip.getNextEntry().getName().equals("xl/worksheets/sheet1.xml")) {
+                zip.closeEntry();
+            }
+            assertThat(new String(zip.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
+                    .contains("PRZYJĘCIE MIĘDZYMAGAZYNOWE")
+                    .contains("2.75</v>")
+                    .contains("w dokumencie: 3")
+                    .contains("Podsumowanie według nomenklatury");
+        }
+        mvc.perform(get(incomingUrl(receiver) + "/" + targetId + "/print/xml").cookie(owner))
+                .andExpect(status().isNotFound());
+        // Dokument cudzego sklepu: tylko sklep docelowy widzi przyjęcie.
+        mvc.perform(get(incomingUrl(sender) + "/" + targetId + "/print/pdf").cookie(owner))
+                .andExpect(status().isNotFound());
     }
 
     private ResultActions setTarget(Cookie owner, String storeId, String documentId, String targetStoreId)

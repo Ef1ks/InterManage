@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -23,6 +22,7 @@ import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.dto.CorrectedDelivery;
@@ -47,6 +47,7 @@ import com.intermanage.backend.pricecheck.entity.CadencierImport;
 import com.intermanage.backend.pricecheck.entity.PriceCheckReview;
 import com.intermanage.backend.pricecheck.entity.PriceCheckSettings;
 import com.intermanage.backend.pricecheck.entity.PriceCheckStatus;
+import com.intermanage.backend.pricecheck.entity.ReviewedReport;
 import com.intermanage.backend.pricecheck.mapper.PriceCheckMapper;
 import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
 import com.intermanage.backend.pricecheck.repository.CadencierImportRepository.CadencierEan;
@@ -54,6 +55,7 @@ import com.intermanage.backend.pricecheck.repository.IncidentImportRepository;
 import com.intermanage.backend.pricecheck.repository.IncidentImportRepository.IncidentItem;
 import com.intermanage.backend.pricecheck.repository.PriceCheckReviewRepository;
 import com.intermanage.backend.pricecheck.repository.PriceCheckSettingsRepository;
+import com.intermanage.backend.sales.repository.SaleRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.product.repository.ProductRepository.CadencierPrice;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -79,7 +81,6 @@ public class PriceCheckService {
     public static final int PERIOD_DAYS = 30;
     /** Cenę z bazy bierzemy z dostaw najwyżej tyle dni przed przyjęciem. */
     static final int BASE_LOOKBACK_DAYS = 365;
-    private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     /** Przyjęcie od innego dostawcy do tylu dni po incydencie zamówienia do bazy jest usprawiedliwione. */
     public static final int INCIDENT_DAYS = 10;
@@ -101,12 +102,13 @@ public class PriceCheckService {
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final PriceCheckMapper mapper;
+    private final SaleRepository sales;
 
     public PriceCheckService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             ProductRepository products, CadencierImportRepository cadencierImports,
             IncidentImportRepository incidents, PriceCheckSettingsRepository settings, PriceCheckReviewRepository reviews, StoreRepository stores,
-            AppUserRepository users, PriceCheckMapper mapper) {
+            AppUserRepository users, PriceCheckMapper mapper, SaleRepository sales) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -119,6 +121,7 @@ public class PriceCheckService {
         this.stores = stores;
         this.users = users;
         this.mapper = mapper;
+        this.sales = sales;
     }
 
     /**
@@ -127,7 +130,8 @@ public class PriceCheckService {
      */
     @Transactional(readOnly = true)
     public PriceCheckReport report(UUID storeId) {
-        LocalDate to = LocalDate.now(STORE_ZONE);
+        sales.tuneForReport();
+        LocalDate to = LocalDate.now(StoreTime.ZONE);
         LocalDate from = to.minusDays(PERIOD_DAYS - 1L);
         BigDecimal minMargin = settings.findByStoreId(storeId).map(PriceCheckSettings::getMinMarginPercent)
                 .orElse(null);
@@ -137,7 +141,7 @@ public class PriceCheckService {
         CadencierImport cadencierImport = cadencierImports.findNewest(storeId).orElse(null);
         Cadencier cadencier = cadencierImport == null ? Cadencier.EMPTY
                 : Cadencier.of(cadencierImports.findCurrentItm8s(storeId), cadencierImports.findCurrentEans(storeId));
-        Map<UUID, List<PriceCheckReview>> reviewsByDelivery = reviews.findActive(storeId).stream()
+        Map<UUID, List<PriceCheckReview>> reviewsByDelivery = reviews.findActive(storeId, ReviewedReport.BASE_PURCHASE).stream()
                 .collect(Collectors.groupingBy(review -> review.getDocument().getId(), LinkedHashMap::new,
                         Collectors.toList()));
         // Linie wczytujemy tylko dla przyjęć, które odsiała baza, i dla przyjęć ze statusem (także starszych).
@@ -445,16 +449,16 @@ public class PriceCheckService {
         return settings(storeId);
     }
 
-    /** Nowy status wyjaśniania przyjęcia PZ; zwraca całą historię od najnowszej zmiany. */
+    /** Nowy status wyjaśniania przyjęcia PZ w raporcie; zwraca całą historię od najnowszej zmiany. */
     @Transactional
-    public List<PriceCheckReviewResponse> review(UUID storeId, UUID documentId, PriceCheckReviewRequest request,
-            UUID userId) {
+    public List<PriceCheckReviewResponse> review(UUID storeId, ReviewedReport report, UUID documentId,
+            PriceCheckReviewRequest request, UUID userId) {
         Document delivery = documents.findHeader(storeId, DocumentType.PZ, documentId)
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono przyjęcia towaru"));
         String note = request.note() == null || request.note().isBlank() ? null : request.note().trim();
-        reviews.saveAndFlush(new PriceCheckReview(stores.getReferenceById(storeId), delivery, request.status(), note,
-                userId != null ? users.getReferenceById(userId) : null));
-        return history(storeId, documentId);
+        reviews.saveAndFlush(new PriceCheckReview(stores.getReferenceById(storeId), delivery, report, request.status(),
+                note, userId != null ? users.getReferenceById(userId) : null));
+        return history(storeId, report, documentId);
     }
 
     /** Cofa zmianę statusu (znacznik); obowiązuje wtedy poprzednia. */
@@ -466,7 +470,7 @@ public class PriceCheckService {
             review.markDeleted(userId != null ? users.getReferenceById(userId) : null);
             reviews.flush();
         }
-        return history(storeId, review.getDocument().getId());
+        return history(storeId, review.getReport(), review.getDocument().getId());
     }
 
     @Transactional
@@ -475,10 +479,10 @@ public class PriceCheckService {
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono zmiany statusu"));
         review.restore();
         reviews.flush();
-        return history(storeId, review.getDocument().getId());
+        return history(storeId, review.getReport(), review.getDocument().getId());
     }
 
-    private List<PriceCheckReviewResponse> history(UUID storeId, UUID documentId) {
-        return reviews.findActiveByDocument(storeId, documentId).stream().map(mapper::toResponse).toList();
+    private List<PriceCheckReviewResponse> history(UUID storeId, ReviewedReport report, UUID documentId) {
+        return reviews.findActiveByDocument(storeId, report, documentId).stream().map(mapper::toResponse).toList();
     }
 }

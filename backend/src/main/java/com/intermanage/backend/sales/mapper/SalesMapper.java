@@ -7,10 +7,12 @@ import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
+import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesImportResponse;
@@ -30,6 +32,14 @@ public interface SalesMapper {
 
     @Mapping(target = "purchasePrice", expression = "java(unitPrice(delivery))")
     ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery);
+
+    @Mapping(target = "label", expression = "java(protocolLabel(protocol))")
+    ArticleProtocolResponse toProtocol(DocumentLineRepository.ArticleProtocol protocol);
+
+    /** Przeniesienie stanów zarejestrowane jako gratis to w statystykach gratis, reszta ma nazwę typu dokumentu. */
+    default String protocolLabel(DocumentLineRepository.ArticleProtocol protocol) {
+        return protocol.getGratis() ? "Gratis" : DocumentType.valueOf(protocol.getDocumentType()).singular();
+    }
 
     /** Cena zakupu netto sztuki (kg) z sumy linii przyjęcia, do 4 miejsc jak w raporcie. */
     default BigDecimal unitPrice(DocumentLineRepository.ArticleDelivery delivery) {

@@ -13,6 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -155,6 +159,24 @@ class LeafletIntegrationTests {
     }
 
     @Test
+    void olderLeafletDoesNotBecomeCurrentNorAddMeaCodes() throws Exception {
+        mvc.perform(multipart(path()).file(file()).cookie(owner).with(csrf())).andExpect(status().isCreated());
+        String json = mvc.perform(multipart(path()).file(leaflet(2026, 20)).cookie(owner).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pendingMeaCodes", hasSize(0)))
+                .andReturn().getResponse().getContentAsString();
+
+        // Na górze listy zostaje gazetka 44, choć 20 wgrano później.
+        mvc.perform(get(path()).cookie(owner))
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].week").value(44))
+                .andExpect(jsonPath("$[1].id").value((String) JsonPath.read(json, "$.id")));
+        mvc.perform(get("/api/stores/" + storeId + "/mea-codes").cookie(owner))
+                .andExpect(jsonPath("$.pending[?(@.code == '81366')]", hasSize(1)))
+                .andExpect(jsonPath("$.pending[?(@.code == '70000')]", hasSize(0)));
+    }
+
+    @Test
     void rejectsFileWithoutLeafletColumns() throws Exception {
         MockMultipartFile other = new MockMultipartFile("file", "inny.xlsx", "application/octet-stream",
                 xlsxWriter.write("Arkusz1", List.of(new XlsxWriter.Column("Kod", 10)),
@@ -175,7 +197,7 @@ class LeafletIntegrationTests {
         List<XlsxWriter.Column> columns = HEADERS.stream().map(header -> new XlsxWriter.Column(header, 12)).toList();
         List<List<Object>> rows = List.of(
                 section("1", "PRODUKTY KLUCZOWE"),
-                row("2", "29.10.2026", "04.11.2026", "81366", "667810", "8711000517826", "FM.X.KAWA VELVET 200G INST.",
+                row("2", "29.10.2026", nextWeek(), "81366", "667810", "8711000517826", "FM.X.KAWA VELVET 200G INST.",
                         "JACOBS", new BigDecimal("24.99"), "Karteczka Produkt z gazetki z MERKALYS"),
                 section("3", "CUKIERNIA"),
                 row("4", "29.10.2026", "01.11.2026", "DDD", null, "2481500000000", "*CIASTO WZ", null,
@@ -187,6 +209,23 @@ class LeafletIntegrationTests {
         return new MockMultipartFile("file", "UTRZYMYWANIE_CEN_Gazetka_nr_44_2026_+_ceny.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 xlsxWriter.write("Arkusz", columns, rows));
+    }
+
+    /** Koniec promocji za tydzień, żeby kod MEA z gazetki był do wpisania bez względu na dzień testu. */
+    private static String nextWeek() {
+        return LocalDate.now(ZoneId.of("Europe/Warsaw")).plusDays(7).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+    }
+
+    /** Dawna gazetka z jedną, zakończoną promocją z kodem MEA 70000. */
+    private MockMultipartFile leaflet(int year, int week) {
+        List<XlsxWriter.Column> columns = HEADERS.stream().map(header -> new XlsxWriter.Column(header, 12)).toList();
+        List<Object> line = new ArrayList<>(row("1", "14.05.2026", "20.05.2026", "70000", "667810", "8711000517826",
+                "FM.X.KAWA VELVET 200G INST.", "JACOBS", new BigDecimal("24.99"), "NADSTAWKA PROMO"));
+        line.set(1, String.valueOf(year));
+        line.set(2, String.valueOf(week));
+        return new MockMultipartFile("file", "UTRZYMYWANIE_CEN_Gazetka_nr_" + week + ".xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                xlsxWriter.write("Arkusz", columns, List.of(line)));
     }
 
     private static List<Object> section(String lp, String name) {

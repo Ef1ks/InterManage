@@ -25,6 +25,8 @@ import com.intermanage.backend.document.dto.IncomingTransfer;
 import com.intermanage.backend.document.dto.IncomingTransfers;
 import com.intermanage.backend.document.dto.ReceiveTransferRequest;
 import com.intermanage.backend.document.dto.SetTransferTargetRequest;
+import com.intermanage.backend.document.service.DocumentPrintService;
+import com.intermanage.backend.document.service.DocumentService;
 import com.intermanage.backend.document.service.DocumentTransferService;
 import com.intermanage.backend.document.service.DocumentTransferService.ExportFile;
 
@@ -44,9 +46,11 @@ public class DocumentTransferController {
             "hasAuthority('DOCUMENTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
 
     private final DocumentTransferService transferService;
+    private final DocumentPrintService prints;
 
-    public DocumentTransferController(DocumentTransferService transferService) {
+    public DocumentTransferController(DocumentTransferService transferService, DocumentPrintService prints) {
         this.transferService = transferService;
+        this.prints = prints;
     }
 
     /** Wskazuje sklep zaprzyjaźniony, dla którego wystawiono dokument MM, albo go zmienia. */
@@ -106,6 +110,19 @@ public class DocumentTransferController {
     public ResponseEntity<byte[]> export(@PathVariable UUID storeId, @PathVariable UUID id,
             @PathVariable String format, @AuthenticationPrincipal AppUserPrincipal principal) {
         ExportFile file = transferService.export(storeId, id, format, principal.getUsername());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .body(file.content());
+    }
+
+    /** Wydruk przyjęcia ({@code pdf} albo {@code xlsx}): dokument w przyjętych ilościach, z rozbiciem na nomenklaturę. */
+    @GetMapping("/incoming-transfers/{id}/print/{format}")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> print(@PathVariable UUID storeId, @PathVariable UUID id,
+            @PathVariable String format, @AuthenticationPrincipal AppUserPrincipal principal) {
+        DocumentService.ExportFile file = prints.incoming(storeId, id, format, principal.getId());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())

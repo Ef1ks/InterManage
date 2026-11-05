@@ -1,10 +1,10 @@
 import { createContext, Fragment, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
-import { ChartColumnIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router'
+import { ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
-import { DateField, SegmentedField } from '@/components/form'
+import { SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -20,47 +20,23 @@ import {
 } from '@/features/sales/api'
 import { barClass, displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
+import { ChartButton, formatPercent, StatTile } from '@/features/sales/report-parts'
+import { lastCompleteDay, MODE_PARAMS, PeriodPicker, useReportParams, useReportPeriod } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import {
-  canShiftForward,
-  currentPeriod,
   type DateRange,
   dayCount,
   daysLabel,
   formatRange,
-  lastCompleteWeekEnd,
-  MAX_PERIOD_DAYS,
   PERIOD_MODES,
-  type PeriodMode,
-  resolveAnchor,
-  shiftAnchor,
 } from '@/features/sales/periods'
 import { ApiError } from '@/lib/api'
-import { addDays, todayIso } from '@/lib/dates'
 import type { PeriodSummary, PeriodSummaryFigures, PeriodSummaryLine } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** Okres w adresie strony po polsku, jak w porównaniu sprzedaży. */
-const MODE_PARAMS: Record<PeriodMode, string> = {
-  day: 'dzien',
-  week: 'tydzien',
-  month: 'miesiac',
-  custom: 'wlasny',
-}
-const ANCHOR_LABELS: Record<Exclude<PeriodMode, 'custom'>, string> = {
-  day: 'Dzień',
-  week: 'Tydzień z dniem',
-  month: 'Miesiąc z dniem',
-}
-const STEP_LABELS: Record<Exclude<PeriodMode, 'custom'>, [string, string]> = {
-  day: ['Poprzedni dzień', 'Następny dzień'],
-  week: ['Poprzedni tydzień', 'Następny tydzień'],
-  month: ['Poprzedni miesiąc', 'Następny miesiąc'],
-}
 
-const percentFormat = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const budgetFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
-const percent = (value: number | null) => (value == null ? '–' : `${percentFormat.format(value)}%`)
 
 /**
  * Podsumowanie sprzedaży i strat za jeden okres (bez porównania), następca arkusza „kombajn”: rejony nomenklatury
@@ -69,37 +45,11 @@ const percent = (value: number | null) => (value == null ? '–' : `${percentFor
  */
 export function PeriodSummaryReport({ storeId }: { storeId: string }) {
   const overview = useSalesReportsOverview(storeId)
-  const [params, setParams] = useSearchParams()
+  const { params, update } = useReportParams()
 
-  // Raport najwyżej za wczoraj: dzisiejsza sprzedaż jeszcze trwa.
-  const yesterday = addDays(todayIso(), -1)
-  const savedUntil = overview.data?.lastSaleDate ?? null
-  const lastSaleDate = savedUntil && savedUntil < yesterday ? savedUntil : yesterday
-  const mode = (Object.keys(MODE_PARAMS) as PeriodMode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'week'
-  const anchor = resolveAnchor(mode, params.get('data') ?? lastSaleDate, lastSaleDate)
-  const custom: DateRange = {
-    from: params.get('od') ?? addDays(lastSaleDate, -6),
-    to: params.get('do') ?? lastSaleDate,
-  }
-  const customError =
-    mode !== 'custom'
-      ? null
-      : custom.from > custom.to
-        ? 'Data „od” jest późniejsza niż „do”.'
-        : dayCount(custom) > MAX_PERIOD_DAYS
-          ? `Okres może mieć najwyżej ${MAX_PERIOD_DAYS} dni.`
-          : null
-  const range = currentPeriod(mode, anchor, custom, lastSaleDate)
-
-  const update = (changes: Record<string, string>) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        Object.entries(changes).forEach(([key, value]) => next.set(key, value))
-        return next
-      },
-      { replace: true },
-    )
+  const lastSaleDate = lastCompleteDay(overview.data?.lastSaleDate)
+  const period = useReportPeriod({ params, lastDate: lastSaleDate, defaultMode: 'week', customDays: 7 })
+  const { mode, customError, range } = period
 
   const summary = usePeriodSummary(storeId, range, !customError && !overview.isPending)
   const pdf = usePeriodSummaryPdf(storeId)
@@ -145,61 +95,7 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
           </div>
         </div>
 
-        {mode === 'custom' ? (
-          <div className="flex flex-wrap items-start gap-3">
-            <DateField
-              label="Od"
-              value={custom.from}
-              onChange={(from) => update({ od: from, do: custom.to })}
-              max={lastSaleDate}
-              shortcuts={[]}
-              className="w-full sm:w-64"
-            />
-            <DateField
-              label="Do"
-              value={custom.to}
-              onChange={(to) => update({ od: custom.from, do: to })}
-              max={lastSaleDate}
-              shortcuts={[{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }]}
-              error={customError ?? undefined}
-              className="w-full sm:w-64"
-            />
-          </div>
-        ) : (
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={STEP_LABELS[mode][0]}
-              title={STEP_LABELS[mode][0]}
-              onClick={() => update({ data: shiftAnchor(mode, anchor, -1) })}
-            >
-              <ChevronLeftIcon />
-            </Button>
-            <DateField
-              label={ANCHOR_LABELS[mode]}
-              value={anchor}
-              onChange={(data) => update({ data })}
-              max={lastSaleDate}
-              shortcuts={
-                mode === 'week'
-                  ? [{ label: 'Ostatni pełny tydzień', value: lastCompleteWeekEnd(lastSaleDate) }]
-                  : [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }]
-              }
-              className="min-w-0 flex-1 sm:w-72 sm:flex-none"
-            />
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={STEP_LABELS[mode][1]}
-              title={STEP_LABELS[mode][1]}
-              disabled={!canShiftForward(mode, anchor, lastSaleDate)}
-              onClick={() => update({ data: shiftAnchor(mode, anchor, 1) })}
-            >
-              <ChevronRightIcon />
-            </Button>
-          </div>
-        )}
+        <PeriodPicker period={period} update={update} />
 
         {!customError && (
           <p className="border-t pt-4 text-sm tabular-nums">
@@ -278,18 +174,18 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
       )}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile label="Sprzedaż brutto" value={`${formatMoney(total.saleValueGross)} zł`} detail={`netto ${formatMoney(total.saleValueNet)} zł`} />
-        <Tile label="Marża" value={percent(total.marginPercent)} detail={`${formatMoney(total.marginValue)} zł`} />
-        <Tile
+        <StatTile label="Sprzedaż brutto" value={`${formatMoney(total.saleValueGross)} zł`} detail={`netto ${formatMoney(total.saleValueNet)} zł`} />
+        <StatTile label="Marża" value={formatPercent(total.marginPercent)} detail={`${formatMoney(total.marginValue)} zł`} />
+        <StatTile
           label="Straty (likwidacje)"
-          value={percent(total.lossPercent)}
+          value={formatPercent(total.lossPercent)}
           detail={`${formatMoney(total.lossValue)} zł`}
         />
-        <Tile
+        <StatTile
           label="Marża po stratach"
-          value={percent(total.marginAfterLossesPercent)}
+          value={formatPercent(total.marginAfterLossesPercent)}
           detail={`${formatMoney(total.marginAfterLossesValue)} zł`}
-          strong
+          tone="strong"
         />
       </div>
 
@@ -367,15 +263,6 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
         onClose={() => setChart(null)}
       />
     </>
-  )
-}
-
-function NumberHead({ children, hint, className }: { children: string; hint?: string; className?: string }) {
-  return (
-    <TableHead className={cn('h-auto py-2 text-right align-bottom whitespace-nowrap', className)}>
-      {children}
-      {hint && <span className="block text-xs font-normal text-muted-foreground">{hint}</span>}
-    </TableHead>
   )
 }
 
@@ -633,25 +520,6 @@ function ExpandButton({ open, onToggle, children }: { open: boolean; onToggle: (
   )
 }
 
-/** Ikonka wykresu przy nazwie wiersza; nie rozwija wiersza. */
-function ChartButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      aria-label="Wykres sprzedaży"
-      title="Wykres sprzedaży"
-      className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-    >
-      <ChartColumnIcon />
-    </Button>
-  )
-}
-
 function FigureCells({
   figures,
   marginBudget = null,
@@ -685,9 +553,9 @@ function FigureCells({
       </TableCell>
       <TableCell className={cn(cell, 'font-semibold')}>
         {formatMoney(figures.marginAfterLossesValue)}
-        <span className={cn('block text-xs', muted)}>{percent(figures.marginAfterLossesPercent)}</span>
+        <span className={cn('block text-xs', muted)}>{formatPercent(figures.marginAfterLossesPercent)}</span>
       </TableCell>
-      <TableCell className={cn(cell, 'pr-4', muted)}>{total ? '100%' : percent(figures.sharePercent)}</TableCell>
+      <TableCell className={cn(cell, 'pr-4', muted)}>{total ? '100%' : formatPercent(figures.sharePercent)}</TableCell>
     </>
   )
 }
@@ -724,7 +592,7 @@ function BudgetLine({
               : 'font-semibold text-rose-700 dark:text-rose-400'
         }
       >
-        {percent(value)}
+        {formatPercent(value)}
       </span>
       {budget != null && (
         <span className={muted}>
@@ -736,12 +604,11 @@ function BudgetLine({
   )
 }
 
-function Tile({ label, value, detail, strong }: { label: string; value: string; detail: string; strong?: boolean }) {
+function NumberHead({ children, hint, className }: { children: string; hint?: string; className?: string }) {
   return (
-    <Card className={cn('gap-1 p-4', strong && 'bg-foreground text-background ring-0')}>
-      <p className={cn('text-sm', strong ? 'text-background/70' : 'text-muted-foreground')}>{label}</p>
-      <p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-      <p className={cn('text-sm tabular-nums', strong ? 'text-background/70' : 'text-muted-foreground')}>{detail}</p>
-    </Card>
+    <TableHead className={cn('h-auto py-2 text-right align-bottom whitespace-nowrap', className)}>
+      {children}
+      {hint && <span className="block text-xs font-normal text-muted-foreground">{hint}</span>}
+    </TableHead>
   )
 }

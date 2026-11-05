@@ -2,7 +2,6 @@ package com.intermanage.backend.sales.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -14,6 +13,7 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
@@ -22,6 +22,7 @@ import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
+import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse.Level;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
@@ -45,13 +46,13 @@ import com.intermanage.backend.sales.repository.SalesImportRepository;
 public class SalesReportService {
 
     /** Najdłuższy okres porównania: rok do roku, także w latach przestępnych. */
-    static final int MAX_PERIOD_DAYS = 366;
 
     /** Rozwinięta pozycja: nic (rejony sklepu), rejon, rodzina albo podrodzina. */
     private static final Pattern PARENT = Pattern.compile("([0-9]{2}){0,3}");
 
     /** Ile ostatnich dostaw pokazuje okno artykułu. */
     static final int DELIVERY_LIMIT = 50;
+    static final int PROTOCOL_LIMIT = 20;
 
     /** Pozycja nomenklatury w filtrze: rejon, rodzina albo podrodzina. */
     private static final Pattern FILTER_CODE = Pattern.compile("([0-9]{2}){1,3}");
@@ -89,8 +90,8 @@ public class SalesReportService {
      */
     public SalesComparisonResponse compare(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
             LocalDate currentFrom, LocalDate currentTo, String parent, boolean unassigned, List<String> filter) {
-        checkPeriod(previousFrom, previousTo, "Poprzedni okres");
-        checkPeriod(currentFrom, currentTo, "Aktualny okres");
+        ReportPeriod.check(previousFrom, previousTo, ReportPeriod.MAX_DAYS, "Poprzedni okres");
+        ReportPeriod.check(currentFrom, currentTo, ReportPeriod.MAX_DAYS, "Aktualny okres");
         String code = parentCode(parent, unassigned);
         String[] codes = filterCodes(filter);
 
@@ -135,7 +136,7 @@ public class SalesReportService {
      */
     public SalesHistoryResponse history(UUID storeId, LocalDate from, LocalDate to, String itm8, String parent,
             boolean unassigned, List<String> filter) {
-        checkPeriod(from, to, "Okres wykresu");
+        ReportPeriod.check(from, to, ReportPeriod.MAX_DAYS, "Okres wykresu");
         boolean article = itm8 != null && !itm8.isBlank();
         String code = article ? null : parentCode(parent, unassigned);
         String[] codes = article ? null : filterCodes(filter);
@@ -186,6 +187,13 @@ public class SalesReportService {
                 .toList();
     }
 
+    /** Ostatnie protokoły artykułu (bez przyjęć i korekt), od najnowszego, najwyżej {@link #PROTOCOL_LIMIT}. */
+    public List<ArticleProtocolResponse> protocols(UUID storeId, String itm8) {
+        return documentLines.findArticleProtocols(storeId, itm8.strip(), PROTOCOL_LIMIT).stream()
+                .map(salesMapper::toProtocol)
+                .toList();
+    }
+
     private static String parentCode(String parent, boolean unassigned) {
         String code = parent == null ? "" : parent.strip();
         if (!PARENT.matcher(code).matches() || unassigned && !code.isEmpty()) {
@@ -205,15 +213,6 @@ public class SalesReportService {
             }
         }
         return codes.toArray(String[]::new);
-    }
-
-    private static void checkPeriod(LocalDate from, LocalDate to, String label) {
-        if (from.isAfter(to)) {
-            throw ApiException.badRequest(label + ": data początkowa jest późniejsza niż końcowa");
-        }
-        if (ChronoUnit.DAYS.between(from, to) + 1 > MAX_PERIOD_DAYS) {
-            throw ApiException.badRequest(label + " może mieć najwyżej " + MAX_PERIOD_DAYS + " dni");
-        }
     }
 
     private static SalesComparisonRow toRow(SaleRepository.ComparisonRow row) {

@@ -27,13 +27,19 @@ public final class SuggestionPrompt {
               * jak najbardziej czytelna: pełne słowa, skróty tylko wtedy, gdy bez nich nazwa się nie mieści;
                 wtedy skracaj słowa opisowe (CZEKOLADOWY -> CZEKOL), a rodzaj towaru i wariant (smak, kolor) zostaw;
               * WIELKIE LITERY, bez polskich znaków, bez kropek (ułamek z przecinkiem);
-              * bez marki i bez producenta (marka idzie osobno), bez opisu kartonu (np. "/12", "8/");
+              * bez marki i bez producenta: marka idzie tylko do pola brand i nie powtarzaj jej w nazwie,
+                nazwa zaczyna się od rodzaju towaru; bez opisu kartonu (np. "/12", "8/");
+                wyjątek: papierosy i wyroby tytoniowe (rodzina 3901) mają markę w nazwie, bez słowa PAPIEROSY;
+              * bez słowa KAUCJA i wszystkiego o kaucji ("+KAUCJA", "KAUC"): tę informację daje pole deposit;
               * na końcu miara sprzedawanej sztuki: poniżej 1 kg gramy (250G), od 1 kg kilogramy (1KG, 1,5KG),
                 poniżej 1 l mililitry (330ML, 900ML), od 1 l litry (1L, 1,5L), wielopak 5X14G;
                 towar bez gramatury i pojemności bez miary.
               Przykłady: "Ferrero Ciastka Kinder DUO 150g/12" -> "CIASTKA DUO 150G";
               "Mleko UHT Wypasione o smak.trusk.200ml" -> "MLEKO UHT TRUSKAWKOWE 200ML";
-              "WAFI | Krem dla kota - kurczak [5x14g]" -> "KREM DLA KOTA KURCZAK 5X14G".
+              "WAFI | Krem dla kota - kurczak [5x14g]" -> "KREM DLA KOTA KURCZAK 5X14G";
+              "ALE BROWAR TMAVE but 0,5l" -> "PIWO TMAVE 500ML" (marka ALE BROWAR);
+              "P.Winston Blue Superline /10/ (25.50) TTT JTI" -> "WINSTON BLUE SUPERLINE" (marka WINSTON);
+              "Hortex Napój Jeżyna/Limonka 0.33L Puszka KAUCJA" -> "NAPOJ JEZYNA-LIMONKA 330ML" (marka HORTEX).
             - brand: MARKA produktu, nie producent ani dystrybutor: Milka (nie Mondelez), Kinder (nie Ferrero),
               WIELKIE LITERY. Jeśli marka jest już w kartotece (podobne nazwy, ten sam producent), zapisz ją tak samo.
               Gdy marki nie da się ustalić, pusty tekst.
@@ -41,6 +47,9 @@ public final class SuggestionPrompt {
               gramatura -> unit "kg" i net_content w kg (150 g -> 0.15), pojemność -> "L" (330 ml -> 0.33),
               wielopak -> suma (5x14 g -> 0.07), towar na wagę -> "kg" i 1, bez gramatury i pojemności -> "szt." i 1.
               Opis kartonu ("8/360 g" = karton 8 sztuk po 360 g) nie zmienia sztuki: 0.36 kg.
+            - deposit: true, gdy artykuł ma kaucję: pozycja mówi o kaucji ("KAUCJA", "+KAUCJA", "KAUC"), to butelka
+              zwrotna ("BUT ZW") albo napój w systemie kaucyjnym: butelka plastikowa do 3 l, puszka do 1 l.
+              false dla reszty, także butelki bezzwrotnej ("BZ", "BEZZW"), "BEZ KAUCJI" i mleka.
             Zwróć wynik dla każdej pozycji, z jej id.
 
             Drzewo nomenklatury sklepu (rejon > rodzina > podrodzina):
@@ -55,7 +64,7 @@ public final class SuggestionPrompt {
             - Zostaw rodzaj towaru i wariant (smak, kolor, odmiana), bo po nich klient rozróżnia artykuły.
             - Najpierw pomiń słowa zbędne, potem skracaj słowa opisowe i nazwy linii produktów
               (CZEKOLADOWY -> CZEKOL, TRUSKAWKOWY -> TRUSK, ATHLETES -> ATHL), bez kropek po skrótach.
-            - Bez marki i producenta.
+            - Bez marki, producenta i słowa KAUCJA; tylko papierosy zachowują markę.
             Przykład: "ROCKY ATHLETES CREATINE MANGO" (limit 25) -> "ROCKY ATHL CREATINE MANGO".
             Zwróć wynik dla każdej pozycji, z jej id.
             """;

@@ -1,10 +1,8 @@
 package com.intermanage.backend.sales.service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneId;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,6 +15,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.Percent;
+import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
@@ -45,9 +45,7 @@ public class GratisReportService {
     /** Gratisy rejestrujemy od 2026 roku; wcześniejszych miesięcy raport nie pokazuje. */
     public static final YearMonth FIRST_MONTH = YearMonth.of(2026, 1);
 
-    private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final Locale POLISH = Locale.of("pl", "PL");
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final String UNASSIGNED_NAME = "Bez nomenklatury";
 
     private final DocumentGratisRepository gratis;
@@ -78,7 +76,7 @@ public class GratisReportService {
         if (from.isBefore(FIRST_MONTH)) {
             throw ApiException.badRequest("Raport obejmuje miesiące od stycznia 2026");
         }
-        if (to.isAfter(YearMonth.now(STORE_ZONE))) {
+        if (to.isAfter(YearMonth.now(StoreTime.ZONE))) {
             throw ApiException.badRequest("Raport nie może sięgać w przyszłe miesiące");
         }
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
@@ -152,8 +150,7 @@ public class GratisReportService {
     private static Figures figures(Sums sums) {
         BigDecimal gratisValue = sums.trade().add(sums.loss());
         return new Figures(sums.trade(), sums.loss(), gratisValue, sums.sales(),
-                sums.sales().signum() == 0 ? null
-                        : gratisValue.multiply(HUNDRED).divide(sums.sales(), 2, RoundingMode.HALF_UP));
+                Percent.of(gratisValue, sums.sales()));
     }
 
     /** "Październik 2026" */
@@ -165,7 +162,7 @@ public class GratisReportService {
     /** "Rok 2026" dla pełnego roku albo jego początku do bieżącego miesiąca, inaczej "Styczeń – marzec 2026". */
     static String periodLabel(YearMonth from, YearMonth to) {
         if (from.getYear() == to.getYear() && from.getMonthValue() == 1
-                && (to.getMonthValue() == 12 || to.equals(YearMonth.now(STORE_ZONE)))) {
+                && (to.getMonthValue() == 12 || to.equals(YearMonth.now(StoreTime.ZONE)))) {
             return "Rok " + from.getYear();
         }
         String start = monthLabel(from);

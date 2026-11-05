@@ -15,10 +15,11 @@ public record SuggestionResponse(boolean modelUsed, String message, List<Suggest
     /**
      * {@code subfamilyCode} jest puste przy {@link SuggestionStatus#TO_CHECK}: wybiera człowiek z {@code proposals}
      * (do 5, od najbardziej prawdopodobnej). {@code unitMismatch}: model podał inną miarę niż nazwa z faktury.
+     * {@code deposit}: artykuł z kaucją (mówi o tym nazwa z faktury albo model); kaucji nie ma w {@code name}.
      */
     public record Suggestion(String key, UUID id, String name, String brand, String unit, BigDecimal netContent,
             boolean unitMismatch, String subfamilyCode, SuggestionStatus status, BigDecimal confidence,
-            List<Proposal> proposals) {
+            List<Proposal> proposals, boolean deposit) {
     }
 
     public record Proposal(String code, List<Source> sources) {

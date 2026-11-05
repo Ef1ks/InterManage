@@ -2,7 +2,6 @@ package com.intermanage.backend.sales.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -16,6 +15,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentImportRepository;
@@ -30,6 +30,7 @@ import com.intermanage.backend.sales.dto.ProtocolReportResponse.Article;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Figures;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Group;
 import com.intermanage.backend.sales.dto.ProtocolReportsOverview;
+import com.intermanage.backend.sales.repository.SaleRepository;
 import com.intermanage.backend.store.entity.ProtocolKind;
 import com.intermanage.backend.store.entity.StoreProtoSettings;
 import com.intermanage.backend.store.service.StoreProtoSettingsService;
@@ -60,13 +61,15 @@ public class ProtocolReportService {
     private final DocumentImportRepository documentImports;
     private final NomenclatureRepository nomenclatures;
     private final StoreProtoSettingsService protoSettings;
+    private final SaleRepository sales;
 
     public ProtocolReportService(DocumentLineRepository lines, DocumentImportRepository documentImports,
-            NomenclatureRepository nomenclatures, StoreProtoSettingsService protoSettings) {
+            NomenclatureRepository nomenclatures, StoreProtoSettingsService protoSettings, SaleRepository sales) {
         this.lines = lines;
         this.documentImports = documentImports;
         this.nomenclatures = nomenclatures;
         this.protoSettings = protoSettings;
+        this.sales = sales;
     }
 
     @Transactional(readOnly = true)
@@ -88,16 +91,17 @@ public class ProtocolReportService {
         if (protoSettings.find(storeId).isHidden(protocol)) {
             throw ApiException.badRequest("Protokół „" + protocol.label() + "” jest wyłączony w Ustawieniach sklepu");
         }
-        checkPeriod(from, to);
+        ReportPeriod.check(from, to);
         boolean compare = previousFrom != null || previousTo != null;
         if (compare) {
             if (previousFrom == null || previousTo == null) {
                 throw ApiException.badRequest("Podaj początek i koniec okresu porównywanego");
             }
-            checkPeriod(previousFrom, previousTo);
+            ReportPeriod.check(previousFrom, previousTo);
         }
         NomenclatureLevel nomenclatureLevel = level == null ? NomenclatureLevel.REGION : level;
 
+        sales.tuneForReport();
         DocumentType type = DOCUMENT_TYPES.get(protocol);
         List<ProtocolArticle> articles = type == null ? List.of()
                 : lines.sumProtocolArticles(storeId, type.name(), from, to, compare,
@@ -129,15 +133,6 @@ public class ProtocolReportService {
                 documentImports.findLastPeriodTo(storeId).orElse(null),
                 sum(articles, ProtocolReportService::current),
                 compare ? sum(articles, ProtocolReportService::previous) : null, groups);
-    }
-
-    private static void checkPeriod(LocalDate from, LocalDate to) {
-        if (from.isAfter(to)) {
-            throw ApiException.badRequest("Początek okresu jest późniejszy niż koniec");
-        }
-        if (ChronoUnit.DAYS.between(from, to) + 1 > SalesReportService.MAX_PERIOD_DAYS) {
-            throw ApiException.badRequest("Okres może mieć najwyżej " + SalesReportService.MAX_PERIOD_DAYS + " dni");
-        }
     }
 
     /** Ostatni dostawca z przyjęć PZ; artykuł, którego nikt nie przywiózł, bierze dostawcę z linii protokołu. */

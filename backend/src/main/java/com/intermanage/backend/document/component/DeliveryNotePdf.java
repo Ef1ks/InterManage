@@ -42,7 +42,7 @@ import com.lowagie.text.pdf.PdfWriter;
 
 /**
  * Wydruk bonu dostawy przyjęcia PZ, w układzie bonu z systemu sklepu: dostawca, linie z ceną zakupu i sprzedaży,
- * sumy z marżą, wycena w cenach zakupu i sprzedaży według stawek VAT i według rejonów nomenklatury. Linie i sumy są
+ * sumy z marżą, wycena w cenach zakupu i sprzedaży według stawek VAT i według nomenklatury. Linie i sumy są
  * po przypiętych korektach ({@link CorrectedDelivery}); zmienione linie mają gwiazdkę i wartości sprzed korekty,
  * a na końcu jest lista uwzględnionych korekt.
  */
@@ -70,10 +70,10 @@ public class DeliveryNotePdf {
 
     /**
      * Dane wydruku: przyjęcie (nagłówek), sklep, dostawca z listy dostawców ({@code null}, gdy go tam nie ma),
-     * przyjęcie po korektach, dokumenty korekt, nazwy rejonów nomenklatury po kodzie i kto drukuje.
+     * przyjęcie po korektach, dokumenty korekt, nazwy rejonów i rodzin nomenklatury po kodzie i kto drukuje.
      */
     public record Note(Document delivery, Store store, Supplier supplier, CorrectedDelivery corrected,
-            List<Document> corrections, Map<String, String> regions, String printedBy) {
+            List<Document> corrections, Map<String, String> nomenclatures, String printedBy) {
     }
 
     public byte[] pdf(Note note) {
@@ -297,29 +297,42 @@ public class DeliveryNotePdf {
         return table;
     }
 
-    /** Wycena w cenach zakupu według rejonów nomenklatury (pierwsze dwie cyfry kodu artykułu). */
+    /** Wycena w cenach zakupu według nomenklatury: rejony (pierwsze dwie cyfry kodu artykułu), pod nimi ich rodziny. */
     private void writeRegions(com.lowagie.text.Document document, Note note) throws DocumentException {
-        Map<String, List<CorrectedLine>> byRegion = new TreeMap<>();
-        for (CorrectedLine line : note.corrected().lines()) {
-            String code = line.nomenclatureCode() != null && line.nomenclatureCode().length() >= 2
-                    ? line.nomenclatureCode().substring(0, 2) : "";
-            byRegion.computeIfAbsent(code, key -> new ArrayList<>()).add(line);
-        }
-        PdfPTable table = sectionTable("Wycena w cenach zakupu według rejonów", new float[] {10, 42, 16, 16, 16});
+        PdfPTable table = sectionTable("Wycena w cenach zakupu według nomenklatury", new float[] {10, 42, 16, 16, 16});
         table.setWidthPercentage(70);
         table.setHorizontalAlignment(Element.ALIGN_LEFT);
         table.setSpacingBefore(16);
-        table.setKeepTogether(true);
-        header(table, List.of("Kod", "Rejon", "Wartość netto", "VAT", "Wartość brutto"), 2);
-        byRegion.forEach((code, lines) -> {
+        table.setSplitLate(false);
+        table.setSplitRows(false);
+        header(table, List.of("Kod", "Nomenklatura", "Wartość netto", "VAT", "Wartość brutto"), 2);
+        byCodePrefix(note.corrected().lines(), 2).forEach((code, lines) -> {
             Valuation valuation = purchaseValuation(lines).total();
             row(table, List.of(code.isEmpty() ? "–" : code,
-                    code.isEmpty() ? "Bez nomenklatury" : note.regions().getOrDefault(code, "Rejon " + code),
-                    money(valuation.net()), money(valuation.vat()), money(valuation.gross())), 2, false);
+                    code.isEmpty() ? "Bez nomenklatury" : note.nomenclatures().getOrDefault(code, "Rejon " + code),
+                    money(valuation.net()), money(valuation.vat()), money(valuation.gross())), 2, true);
+            byCodePrefix(lines, 4).forEach((family, familyLines) -> {
+                if (!family.isEmpty()) {
+                    Valuation familyValuation = purchaseValuation(familyLines).total();
+                    row(table, List.of(family, "   " + note.nomenclatures().getOrDefault(family, "Rodzina " + family),
+                            money(familyValuation.net()), money(familyValuation.vat()),
+                            money(familyValuation.gross())), 2, false);
+                }
+            });
         });
         Valuation total = purchaseValuation(note.corrected().lines()).total();
         row(table, List.of("Suma", "", money(total.net()), money(total.vat()), money(total.gross())), 2, true);
         document.add(table);
+    }
+
+    private static Map<String, List<CorrectedLine>> byCodePrefix(List<CorrectedLine> lines, int length) {
+        Map<String, List<CorrectedLine>> byCode = new TreeMap<>();
+        for (CorrectedLine line : lines) {
+            String code = line.nomenclatureCode() != null && line.nomenclatureCode().length() >= length
+                    ? line.nomenclatureCode().substring(0, length) : "";
+            byCode.computeIfAbsent(code, key -> new ArrayList<>()).add(line);
+        }
+        return byCode;
     }
 
     private void writeCorrections(com.lowagie.text.Document document, List<Document> corrections)

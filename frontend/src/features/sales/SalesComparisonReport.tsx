@@ -1,14 +1,9 @@
 import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronDownIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
-  ChevronUpIcon,
-  ChartColumnIcon,
 } from 'lucide-react'
-import { useSearchParams } from 'react-router'
 
 import { BackLink } from '@/components/BackLink'
 import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
@@ -28,9 +23,11 @@ import {
 } from '@/features/sales/api'
 import { barClass, displayCode, LEVEL_STYLES, type NomenclatureLevel } from '@/features/sales/nomenclature-levels'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { NomenclatureNav, type NomenclatureNavItem } from '@/features/sales/NomenclatureNav'
 import { salesPaths } from '@/features/sales/paths'
+import { ChartButton, nomenclatureName } from '@/features/sales/report-parts'
+import { lastCompleteDay, MODE_PARAMS, PeriodPicker, rangeError, useReportParams, useReportPeriod } from '@/features/sales/report-period'
 import {
-  canShiftForward,
   COMPARE_LABELS,
   type CompareMode,
   compareModes,
@@ -39,41 +36,19 @@ import {
   dayCount,
   daysLabel,
   formatRange,
-  lastCompleteWeekEnd,
-  MAX_PERIOD_DAYS,
   PERIOD_MODES,
-  type PeriodMode,
   type Periods,
-  resolveAnchor,
   resolveCompareMode,
-  shiftAnchor,
 } from '@/features/sales/periods'
-import { addDays, todayIso } from '@/lib/dates'
 import type { SalesComparison, SalesComparisonLevel, SalesComparisonRow, SalesFigures } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** Okres w adresie strony po polsku, żeby link do raportu otwierał ten sam widok. */
-const MODE_PARAMS: Record<PeriodMode, string> = {
-  day: 'dzien',
-  week: 'tydzien',
-  month: 'miesiac',
-  custom: 'wlasny',
-}
 const COMPARE_PARAMS: Record<CompareMode, string> = {
   year: 'rok',
   previous: 'poprzedni',
   week: 'tydzien',
   custom: 'wlasny',
-}
-const ANCHOR_LABELS: Record<Exclude<PeriodMode, 'custom'>, string> = {
-  day: 'Dzień',
-  week: 'Tydzień z dniem',
-  month: 'Miesiąc z dniem',
-}
-const STEP_LABELS: Record<Exclude<PeriodMode, 'custom'>, [string, string]> = {
-  day: ['Poprzedni dzień', 'Następny dzień'],
-  week: ['Poprzedni tydzień', 'Następny tydzień'],
-  month: ['Poprzedni miesiąc', 'Następny miesiąc'],
 }
 
 type SaleBasis = 'gross' | 'net'
@@ -97,20 +72,12 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
   const deli = kind === 'deli'
   const overview = useSalesReportsOverview(storeId)
   const costs = useDeliCostsOverview(storeId, deli)
-  const [params, setParams] = useSearchParams()
+  const { params, update } = useReportParams()
   const [basis, setBasis] = useState<SaleBasis>('gross')
 
-  // Raport najwyżej za wczoraj: dzisiejsza sprzedaż jeszcze trwa (import i tak nie zapisuje dnia niezakończonego).
-  const yesterday = addDays(todayIso(), -1)
-  const savedUntil = overview.data?.lastSaleDate ?? null
-  const lastSaleDate = savedUntil && savedUntil < yesterday ? savedUntil : yesterday
-  const fallbackDay = lastSaleDate
-  const mode = (Object.keys(MODE_PARAMS) as PeriodMode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'day'
-  const anchor = resolveAnchor(mode, params.get('data') ?? fallbackDay, lastSaleDate)
-  const custom: DateRange = {
-    from: params.get('od') ?? addDays(fallbackDay, -6),
-    to: params.get('do') ?? fallbackDay,
-  }
+  const lastSaleDate = lastCompleteDay(overview.data?.lastSaleDate)
+  const period = useReportPeriod({ params, lastDate: lastSaleDate, defaultMode: 'day', customDays: 7 })
+  const { mode, anchor, custom, customError } = period
   const filter = useMemo(() => (deli ? NO_FILTER : [...new Set(params.getAll('nom'))].sort()), [params, deli])
   const nomenclatures = useSalesNomenclatures(storeId)
   const compare = resolveCompareMode(
@@ -118,17 +85,6 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
     (Object.keys(COMPARE_PARAMS) as CompareMode[]).find((key) => COMPARE_PARAMS[key] === params.get('porownaj')) ?? 'year',
   )
 
-  const update = (changes: Record<string, string>) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        Object.entries(changes).forEach(([key, value]) => next.set(key, value))
-        return next
-      },
-      { replace: true },
-    )
-
-  const customError = mode === 'custom' ? rangeError(custom) : null
   // Bez wybranych dat własne porównanie startuje od roku temu.
   const yearAgo = comparePeriods(mode, anchor, custom, lastSaleDate, 'year', custom).previous
   const compareCustom: DateRange = {
@@ -203,83 +159,7 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           />
         </div>
 
-        <div className="flex flex-wrap items-start gap-3">
-          {mode === 'custom' ? (
-            <>
-              <DateField
-                label="Od"
-                value={custom.from}
-                onChange={(from) => update({ od: from, do: custom.to })}
-                max={lastSaleDate}
-                shortcuts={[]}
-                className="w-full sm:w-64"
-              />
-              <DateField
-                label="Do"
-                value={custom.to}
-                onChange={(to) => update({ od: custom.from, do: to })}
-                max={lastSaleDate}
-                shortcuts={
-                  lastSaleDate
-                    ? [
-                        {
-                          label: 'Ostatni dzień sprzedaży',
-                          value: lastSaleDate,
-                        },
-                      ]
-                    : []
-                }
-                error={customError ?? undefined}
-                className="w-full sm:w-64"
-              />
-            </>
-          ) : (
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              <Button
-                variant="outline"
-                size="icon-lg"
-                aria-label={STEP_LABELS[mode][0]}
-                title={STEP_LABELS[mode][0]}
-                onClick={() => update({ data: shiftAnchor(mode, anchor, -1) })}
-              >
-                <ChevronLeftIcon />
-              </Button>
-              <DateField
-                label={ANCHOR_LABELS[mode]}
-                value={anchor}
-                onChange={(data) => update({ data })}
-                max={lastSaleDate}
-                shortcuts={
-                  !lastSaleDate
-                    ? []
-                    : mode === 'week'
-                      ? [
-                          {
-                            label: 'Ostatni pełny tydzień',
-                            value: lastCompleteWeekEnd(lastSaleDate),
-                          },
-                        ]
-                      : [
-                          {
-                            label: 'Ostatni dzień sprzedaży',
-                            value: lastSaleDate,
-                          },
-                        ]
-                }
-                className="min-w-0 flex-1 sm:w-72 sm:flex-none"
-              />
-              <Button
-                variant="outline"
-                size="icon-lg"
-                aria-label={STEP_LABELS[mode][1]}
-                title={STEP_LABELS[mode][1]}
-                disabled={!canShiftForward(mode, anchor, lastSaleDate)}
-                onClick={() => update({ data: shiftAnchor(mode, anchor, 1) })}
-              >
-                <ChevronRightIcon />
-              </Button>
-            </div>
-          )}
+        <PeriodPicker period={period} update={update}>
           {compare === 'custom' && (
             <>
               <DateField
@@ -301,7 +181,7 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
               />
             </>
           )}
-        </div>
+        </PeriodPicker>
 
         {!deli && (
         <MultiComboboxField
@@ -309,21 +189,11 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
           options={(nomenclatures.data ?? []).map((item) => ({
             value: item.code,
-            label: `${displayCode(item.code)} ${item.name.replace(/^\d+_/, '')}`,
+            label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
             hint: LEVEL_STYLES[item.level].label,
           }))}
           value={filter}
-          onChange={(codes) =>
-            setParams(
-              (current) => {
-                const next = new URLSearchParams(current)
-                next.delete('nom')
-                codes.forEach((code) => next.append('nom', code))
-                return next
-              },
-              { replace: true },
-            )
-          }
+          onChange={(codes) => update({ nom: codes })}
           placeholder={nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'}
           className="max-w-3xl"
         />
@@ -354,12 +224,6 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
       )}
     </>
   )
-}
-
-function rangeError(range: DateRange) {
-  if (range.from > range.to) return 'Data „od” jest późniejsza niż „do”.'
-  if (dayCount(range) > MAX_PERIOD_DAYS) return `Okres może mieć najwyżej ${MAX_PERIOD_DAYS} dni.`
-  return null
 }
 
 function PeriodsSummary({
@@ -472,14 +336,6 @@ type TableLayout = {
   headerHeight: number
   tableWidth: number
   widths: number[]
-}
-
-/** Pozycja ściągi: każdy rejon, a pod rozwiniętymi rejonami ich rodziny i podrodziny. */
-type NavItem = {
-  key: string
-  row: SalesComparisonRow
-  level: NomenclatureLevel
-  depth: number
 }
 
 function Comparison({
@@ -657,13 +513,14 @@ function Comparison({
     return row ? [{ key, row, depth: depthOf(key), level: LEVELS[depthOf(key)] }] : []
   })
 
-  const navItems: NavItem[] = []
+  const navItems: NomenclatureNavItem[] = []
   const collectNav = (parent: string, depth: number) => {
     const level = depth === 0 ? data : cachedLevel(parent)
     if (!level || level.level === 'PRODUCT') return
     for (const row of level.rows) {
       const key = rowKey(row, level.level)
-      navItems.push({ key, row, level: level.level, depth })
+      const name = row.code === '' ? 'Bez nomenklatury' : (displayName(row) ?? 'Brak nazwy')
+      navItems.push({ key, code: row.code, name, level: level.level, depth })
       if (key !== UNASSIGNED_KEY && expanded.has(key)) collectNav(key, depth + 1)
     }
   }
@@ -1010,25 +867,6 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
   })
 }
 
-/** Ikonka wykresu przy nazwie wiersza; nie rozwija wiersza. */
-function ChartButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      aria-label="Wykres sprzedaży"
-      title="Wykres sprzedaży"
-      className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-    >
-      <ChartColumnIcon />
-    </Button>
-  )
-}
-
 function chartTarget(row: SalesComparisonRow, level: SalesComparisonLevel, key: string): SalesChartTarget {
   if (level === 'PRODUCT')
     return {
@@ -1060,7 +898,7 @@ function chartTarget(row: SalesComparisonRow, level: SalesComparisonLevel, key: 
 const indent = (depth: number) => `${1 + depth * 1.25}rem`
 
 /** Nazwa bez kodu z systemu sklepu: rejony mają nazwy z kodem ("01_DELIKATESY"), a kod i tak stoi obok. */
-const displayName = (row: SalesComparisonRow) => row.name?.replace(/^\d+_/, '') ?? null
+const displayName = (row: SalesComparisonRow) => (row.name ? nomenclatureName(row.name) : null)
 
 function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesComparisonLevel }) {
   if (level === 'PRODUCT') {
@@ -1093,98 +931,6 @@ function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesCompari
         {displayName(row) ?? 'Brak nazwy w nomenklaturze'}
       </span>
     </span>
-  )
-}
-
-/**
- * Ściąga do szybkiego przejścia po nomenklaturze, jak spis kategorii w zamówieniu garmażu: na dużym ekranie
- * w kolumnie obok tabeli (przyklejona pod paskiem aplikacji), na mniejszych strzałki po lewej - poprzednia / następna
- * pozycja.
- */
-function NomenclatureNav({
-  items,
-  current,
-  onJump,
-}: {
-  items: NavItem[]
-  current: string | null
-  onJump: (key: string) => void
-}) {
-  const listRef = useRef<HTMLOListElement>(null)
-  const currentIndex = items.findIndex((item) => item.key === current)
-
-  // Bieżąca pozycja zawsze widoczna w spisie, także gdy rozwinięto dużo grup. Przewijamy sam spis, nie stronę.
-  useEffect(() => {
-    const list = listRef.current
-    const active = list?.querySelector<HTMLElement>('[aria-current="location"]')
-    if (!list || !active) return
-    const top = active.offsetTop - list.offsetTop
-    if (top < list.scrollTop || top + active.offsetHeight > list.scrollTop + list.clientHeight) {
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      list.scrollTo({
-        top: top - list.clientHeight / 2 + active.offsetHeight / 2,
-        behavior: reduceMotion ? 'auto' : 'smooth',
-      })
-    }
-  }, [current])
-
-  if (items.length < 2) return null
-
-  return (
-    <>
-      <div className="fixed bottom-4 left-4 z-40 flex flex-col gap-2 xl:hidden">
-        <Button
-          variant="outline"
-          size="icon-lg"
-          className="size-11 rounded-full bg-background shadow-md"
-          aria-label="Poprzednia pozycja nomenklatury"
-          disabled={currentIndex <= 0}
-          onClick={() => onJump(items[currentIndex - 1].key)}
-        >
-          <ChevronUpIcon />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon-lg"
-          className="size-11 rounded-full bg-background shadow-md"
-          aria-label="Następna pozycja nomenklatury"
-          disabled={currentIndex >= items.length - 1}
-          onClick={() => onJump(items[currentIndex + 1].key)}
-        >
-          <ChevronDownIcon />
-        </Button>
-      </div>
-
-      <nav aria-label="Nomenklatura" className="sticky top-20 hidden xl:block">
-        <div className="overflow-hidden rounded-xl bg-background ring-1 ring-foreground/10">
-          <div className="border-b px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Nomenklatura
-          </div>
-          <ol ref={listRef} className="max-h-[calc(80svh-2.5rem)] overflow-y-auto overscroll-contain p-1">
-            {items.map((item) => (
-              <li key={item.key}>
-                <button
-                  type="button"
-                  aria-current={item.key === current ? 'location' : undefined}
-                  onClick={() => onJump(item.key)}
-                  style={{ paddingLeft: `${0.5 + item.depth * 0.875}rem` }}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm text-muted-foreground transition-colors duration-200 ease-out outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
-                    item.key === current && 'bg-muted font-medium text-foreground',
-                  )}
-                >
-                  <span aria-hidden className={cn('size-2 shrink-0 rounded-sm', LEVEL_STYLES[item.level].dot)} />
-                  <span className="shrink-0 text-xs tabular-nums">{item.row.code ? displayCode(item.row.code) : '–'}</span>
-                  <span className="min-w-0 flex-1 truncate">
-                    {item.row.code === '' ? 'Bez nomenklatury' : (displayName(item.row) ?? 'Brak nazwy')}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </nav>
-    </>
   )
 }
 

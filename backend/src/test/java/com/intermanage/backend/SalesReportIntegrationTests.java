@@ -253,6 +253,100 @@ class SalesReportIntegrationTests {
     }
 
     @Test
+    void articleDeliveriesIncludeLocalItm8FromOutsideCatalogByEan() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 2, 2, 0, 0, 0) returning id""", String.class, storeId);
+        String article = insertProduct(storeId, productImport, "NAPOJ MLECZNY", "01 01 01");
+        String other = insertProduct(storeId, productImport, "INNY ARTYKUL", "01 01 01");
+        String ean = jdbc.queryForObject("select ean from products where store_id = ?::uuid and itm8 = ?",
+                String.class, storeId, article);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-10-03 08:00:00', date '2026-09-01',
+                    date '2026-10-02', 3, 3, 3, 0, 0) returning id""", String.class, storeId);
+        String own = insertDocument(storeId, documentImport, "PZ", "1000100", "2026-09-10 10:00");
+        insertDeliveryLine(own, 1, article, "2", "8");
+        // Lokalny ITM8 dostawcy spoza kartoteki, EAN z zerem wiodącym: dostawa tego artykułu.
+        String local = insertDocument(storeId, documentImport, "PZ", "1000200", "2026-09-20 10:00");
+        insertDeliveryLine(local, 1, "0000099042090", "4", "12");
+        jdbc.update("update document_lines set ean = ? where document_id = ?::uuid", "0" + ean, local);
+        // Ten sam EAN przy ITM8 z kartoteki (kod przeniesiony): dostawa tamtego artykułu, nie tego.
+        String moved = insertDocument(storeId, documentImport, "PZ", "1000300", "2026-09-25 10:00");
+        insertDeliveryLine(moved, 1, other, "5", "20");
+        jdbc.update("update document_lines set ean = ? where document_id = ?::uuid", ean, moved);
+
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/deliveries").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].documentId").value(local))
+                .andExpect(jsonPath("$[0].purchasePrice").value(3.0))
+                .andExpect(jsonPath("$[1].documentId").value(own));
+    }
+
+    @Test
+    void listsArticleProtocolsWithoutDeliveriesAndCorrections() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        String article = insertProduct(storeId, productImport, "KETCHUP PIKANTNY", "01 01 01");
+        String ean = jdbc.queryForObject("select ean from products where store_id = ?::uuid and itm8 = ?",
+                String.class, storeId, article);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-10-03 08:00:00', date '2026-09-01',
+                    date '2026-10-02', 7, 7, 7, 0, 0) returning id""", String.class, storeId);
+        insertDeliveryLine(insertDocument(storeId, documentImport, "PZ", "1000100", "2026-09-05 10:00"),
+                1, article, "10", "40");
+        insertDeliveryLine(insertDocument(storeId, documentImport, "WZ", "WZ01", "2026-09-06 10:00"),
+                1, article, "-1", "-4");
+        insertDeliveryLine(insertDocument(storeId, documentImport, "PK", "PK01", "2026-09-07 10:00"),
+                1, article, "1", "4");
+        insertDeliveryLine(insertDocument(storeId, documentImport, "PL", "PL01", "2026-09-10 10:00"),
+                1, article, "3", "-12");
+        // Lokalny ITM8 spoza kartoteki należy do artykułu po EAN-ie, jak w dostawach.
+        String transfer = insertDocument(storeId, documentImport, "MM", "MM01", "2026-09-12 10:00");
+        insertDeliveryLine(transfer, 1, "0000099042090", "2", "-8");
+        jdbc.update("update document_lines set ean = ? where document_id = ?::uuid", ean, transfer);
+        String gratis = insertDocument(storeId, documentImport, "PPP", "PPP01", "2026-09-14 10:00");
+        insertDeliveryLine(gratis, 1, article, "6", "0");
+        String cancelled = insertDocument(storeId, documentImport, "PPP", "PPP02", "2026-09-16 10:00");
+        insertDeliveryLine(cancelled, 1, article, "-1", "0");
+        String supplier = jdbc.queryForObject("insert into suppliers (store_id, name) values (?::uuid, 'WASA') returning id",
+                String.class, storeId);
+        jdbc.update("insert into document_gratis (document_id, supplier_id, kind) values (?::uuid, ?::uuid, 'TRADE')",
+                gratis, supplier);
+        jdbc.update("""
+                insert into document_gratis (document_id, supplier_id, kind, deleted_at)
+                values (?::uuid, ?::uuid, 'TRADE', now())""", cancelled, supplier);
+
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/protocols").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4))
+                .andExpect(jsonPath("$[0].documentId").value(cancelled))
+                .andExpect(jsonPath("$[0].label").value("Przeniesienie stanów"))
+                .andExpect(jsonPath("$[0].gratis").value(false))
+                .andExpect(jsonPath("$[0].quantity").value(-1.0))
+                .andExpect(jsonPath("$[1].documentId").value(gratis))
+                .andExpect(jsonPath("$[1].documentType").value("PPP"))
+                .andExpect(jsonPath("$[1].label").value("Gratis"))
+                .andExpect(jsonPath("$[1].gratis").value(true))
+                .andExpect(jsonPath("$[1].quantity").value(6.0))
+                .andExpect(jsonPath("$[2].label").value("Ruch międzymagazynowy"))
+                .andExpect(jsonPath("$[2].quantity").value(2.0))
+                .andExpect(jsonPath("$[3].label").value("Likwidacja"))
+                .andExpect(jsonPath("$[3].documentNumber").value("PL01"));
+    }
+
+    @Test
     void listsArticleDeliveriesNewestFirst() throws Exception {
         Cookie owner = login();
         String storeId = createStore(owner);

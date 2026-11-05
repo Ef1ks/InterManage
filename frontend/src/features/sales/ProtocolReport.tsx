@@ -1,11 +1,12 @@
 import { Fragment, useMemo, useState } from 'react'
-import { ChartColumnIcon, ChevronLeftIcon, ChevronRightIcon, TriangleAlertIcon } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router'
+import { ChartColumnIcon, ChevronRightIcon, TriangleAlertIcon } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { BackLink } from '@/components/BackLink'
 import { DateField, SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
+import { SortableHead } from '@/components/SortableHead'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -19,6 +20,8 @@ import {
 } from '@/features/sales/api'
 import { displayCode } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
+import { StatTile } from '@/features/sales/report-parts'
+import { MODE_PARAMS, PeriodPicker, rangeError, useReportParams, useReportPeriod } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import {
   COMPARE_LABELS,
@@ -29,15 +32,11 @@ import {
   dayCount,
   daysLabel,
   formatRange,
-  lastCompleteWeekEnd,
-  MAX_PERIOD_DAYS,
   PERIOD_MODES,
-  type PeriodMode,
-  resolveAnchor,
   resolveCompareMode,
-  shiftAnchor,
 } from '@/features/sales/periods'
 import { addDays, todayIso } from '@/lib/dates'
+import { nextSort, type SortAccessors, type SortState, sortRows } from '@/lib/table-sort'
 import type {
   ProtocolFigures,
   ProtocolKind,
@@ -80,12 +79,6 @@ const LEVELS: { value: Level; label: string; param: string }[] = [
   { value: 'FAMILY', label: 'Rodzina', param: 'rodzina' },
   { value: 'SUBFAMILY', label: 'Podrodzina', param: 'podrodzina' },
 ]
-const MODE_PARAMS: Record<PeriodMode, string> = {
-  day: 'dzien',
-  week: 'tydzien',
-  month: 'miesiac',
-  custom: 'wlasny',
-}
 type Compare = CompareMode | 'none'
 const COMPARE_PARAMS: Record<Compare, string> = {
   none: 'brak',
@@ -93,16 +86,6 @@ const COMPARE_PARAMS: Record<Compare, string> = {
   previous: 'poprzedni',
   week: 'tydzien',
   custom: 'wlasny',
-}
-const ANCHOR_LABELS: Record<Exclude<PeriodMode, 'custom'>, string> = {
-  day: 'Dzień',
-  week: 'Tydzień z dniem',
-  month: 'Miesiąc z dniem',
-}
-const STEP_LABELS: Record<Exclude<PeriodMode, 'custom'>, [string, string]> = {
-  day: ['Poprzedni dzień', 'Następny dzień'],
-  week: ['Poprzedni tydzień', 'Następny tydzień'],
-  month: ['Poprzedni miesiąc', 'Następny miesiąc'],
 }
 
 type Metric = keyof ProtocolFigures
@@ -112,7 +95,27 @@ const METRICS: { key: Metric; label: string; format: (value: number) => string }
   { key: 'quantity', label: 'Ilość', format: formatQuantity },
 ]
 
-type Sort = 'value' | 'change' | 'name'
+/** Wiersz tabeli: grupa albo jej artykuł. */
+type SortableRow = { name: string | null; current: ProtocolFigures; previous: ProtocolFigures | null }
+type SortKey = 'name' | 'share' | `${Metric}:${'previous' | 'current' | 'change'}`
+
+const relativeChange = (current: number, previous: number) =>
+  previous === 0 ? null : ((current - previous) / Math.abs(previous)) * 100
+
+/** Co pokazuje kolumna, po tym sortuje: zmiana to procent, udział idzie za wartością zakupu. */
+const SORT_ACCESSORS = {
+  name: (row) => row.name,
+  share: (row) => row.current.purchaseValue,
+  ...Object.fromEntries(
+    METRICS.flatMap(({ key }) => [
+      [`${key}:previous`, (row: SortableRow) => row.previous?.[key]],
+      [`${key}:current`, (row: SortableRow) => row.current[key]],
+      [`${key}:change`, (row: SortableRow) => (row.previous ? relativeChange(row.current[key], row.previous[key]) : null)],
+    ]),
+  ),
+} as SortAccessors<SortableRow, SortKey>
+
+const DEFAULT_SORT: SortState<SortKey> = { key: 'purchaseValue:current', direction: 'desc' }
 
 const percentFormat = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const signedPercent = new Intl.NumberFormat('pl-PL', {
@@ -136,7 +139,7 @@ const find = <T extends { param: string }>(options: T[], param: string | null) =
 export function ProtocolReport({ storeId }: { storeId: string }) {
   const overview = useProtocolReportsOverview(storeId)
   const sales = useSalesReportsOverview(storeId)
-  const [params, setParams] = useSearchParams()
+  const { params, update } = useReportParams()
 
   const today = todayIso()
   const coveredUntil = overview.data?.documentsCoveredUntil ?? null
@@ -147,10 +150,8 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
     protocols.find((item) => PROTOCOL_PARAMS[item.kind] === params.get('protokol')) ?? protocols[0] ?? null
   const grouping = find(GROUPINGS, params.get('grupuj'))
   const level = find(LEVELS, params.get('poziom'))
-  const mode =
-    (Object.keys(MODE_PARAMS) as PeriodMode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'month'
-  const anchor = resolveAnchor(mode, params.get('data') ?? lastDate, lastDate)
-  const custom: DateRange = { from: params.get('od') ?? addDays(lastDate, -29), to: params.get('do') ?? lastDate }
+  const period = useReportPeriod({ params, lastDate, defaultMode: 'month', customDays: 30 })
+  const { mode, anchor, custom, customError } = period
   const requestedCompare =
     (Object.keys(COMPARE_PARAMS) as Compare[]).find((key) => COMPARE_PARAMS[key] === params.get('porownaj')) ?? 'none'
   const compare: Compare = requestedCompare === 'none' ? 'none' : resolveCompareMode(mode, requestedCompare)
@@ -160,20 +161,9 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
     to: params.get('por_do') ?? yearAgo.to,
   }
   const periods = comparePeriods(mode, anchor, custom, lastDate, compare === 'none' ? 'year' : compare, compareCustom)
-  const customError = mode === 'custom' ? rangeError(custom) : null
   const compareError = compare === 'custom' ? rangeError(compareCustom) : null
   const valid = !customError && !compareError
   const { text: query, setText: setQuery } = useSearchParamText('szukaj')
-
-  const update = (changes: Record<string, string | null>) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        Object.entries(changes).forEach(([key, value]) => (value == null ? next.delete(key) : next.set(key, value)))
-        return next
-      },
-      { replace: true },
-    )
 
   const report = useProtocolReport(
     storeId,
@@ -267,62 +257,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
               />
             </div>
 
-            <div className="flex flex-wrap items-start gap-3">
-              {mode === 'custom' ? (
-                <>
-                  <DateField
-                    label="Od"
-                    value={custom.from}
-                    onChange={(from) => update({ od: from, do: custom.to })}
-                    max={today}
-                    shortcuts={[]}
-                    className="w-full sm:w-64"
-                  />
-                  <DateField
-                    label="Do"
-                    value={custom.to}
-                    onChange={(to) => update({ od: custom.from, do: to })}
-                    max={today}
-                    shortcuts={[{ label: 'Ostatni dzień z dokumentów', value: lastDate }]}
-                    error={customError ?? undefined}
-                    className="w-full sm:w-64"
-                  />
-                </>
-              ) : (
-                <div className="flex w-full items-center gap-2 sm:w-auto">
-                  <Button
-                    variant="outline"
-                    size="icon-lg"
-                    aria-label={STEP_LABELS[mode][0]}
-                    title={STEP_LABELS[mode][0]}
-                    onClick={() => update({ data: shiftAnchor(mode, anchor, -1) })}
-                  >
-                    <ChevronLeftIcon />
-                  </Button>
-                  <DateField
-                    label={ANCHOR_LABELS[mode]}
-                    value={anchor}
-                    onChange={(data) => update({ data })}
-                    max={today}
-                    shortcuts={
-                      mode === 'week'
-                        ? [{ label: 'Ostatni pełny tydzień', value: lastCompleteWeekEnd(lastDate) }]
-                        : [{ label: 'Ostatni dzień z dokumentów', value: lastDate }]
-                    }
-                    className="min-w-0 flex-1 sm:w-72 sm:flex-none"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon-lg"
-                    aria-label={STEP_LABELS[mode][1]}
-                    title={STEP_LABELS[mode][1]}
-                    disabled={shiftAnchor(mode, anchor, 1) > lastDate}
-                    onClick={() => update({ data: shiftAnchor(mode, anchor, 1) })}
-                  >
-                    <ChevronRightIcon />
-                  </Button>
-                </div>
-              )}
+            <PeriodPicker period={period} update={update} max={today} lastDateLabel="Ostatni dzień z dokumentów">
               {compare === 'custom' && (
                 <>
                   <DateField
@@ -344,7 +279,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
                   />
                 </>
               )}
-            </div>
+            </PeriodPicker>
 
             {valid && (
               <p className="border-t pt-4 text-sm tabular-nums">
@@ -395,12 +330,6 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
   )
 }
 
-function rangeError(range: DateRange) {
-  if (range.from > range.to) return 'Data „od” jest późniejsza niż „do”.'
-  if (dayCount(range) > MAX_PERIOD_DAYS) return `Okres może mieć najwyżej ${MAX_PERIOD_DAYS} dni.`
-  return null
-}
-
 function Report({
   storeId,
   report,
@@ -419,7 +348,9 @@ function Report({
   const compare = report.previousTotal != null && compareLabel != null
   const byArticle = report.grouping === 'ARTICLE'
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
-  const [sort, setSort] = useState<Sort>('value')
+  const [requestedSort, setSort] = useState(DEFAULT_SORT)
+  // Po wyłączeniu porównania nie ma już kolumn okresu porównywanego.
+  const sort = compare || requestedSort.key.endsWith(':current') || !requestedSort.key.includes(':') ? requestedSort : DEFAULT_SORT
   const [shown, setShown] = useState(PAGE)
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
 
@@ -436,17 +367,16 @@ function Report({
             const articles = group.articles.filter((article) => matches(articleText(article)))
             return articles.length > 0 ? [{ group, articles, viaArticles: true }] : []
           })
-    const key = (figures: ProtocolReportGroup) => {
-      if (sort === 'change') return figures.current.purchaseValue - (figures.previous?.purchaseValue ?? 0)
-      return figures.current.purchaseValue
-    }
-    return sort === 'name'
-      ? [...filtered].sort((a, b) => (a.group.name ?? '').localeCompare(b.group.name ?? '', 'pl'))
-      : sort === 'change'
-        ? [...filtered].sort((a, b) => Math.abs(key(b.group)) - Math.abs(key(a.group)))
-        : filtered
+    const byGroup: SortAccessors<(typeof filtered)[number], SortKey> = Object.fromEntries(
+      Object.entries(SORT_ACCESSORS).map(([key, accessor]) => [key, (row: (typeof filtered)[number]) => accessor(row.group)]),
+    ) as SortAccessors<(typeof filtered)[number], SortKey>
+    return sortRows(filtered, byGroup, sort).map((row) => ({
+      ...row,
+      articles: sortRows(row.articles, SORT_ACCESSORS, sort),
+    }))
   }, [report.groups, query, sort])
 
+  const sorting = { sort, onSort: (column: SortKey) => setSort(nextSort(sort, column)) }
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < groups.length, shown)
   const share = (value: number) =>
     report.total.purchaseValue === 0 ? '–' : `${percentFormat.format((value / report.total.purchaseValue) * 100)}%`
@@ -479,7 +409,7 @@ function Report({
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {METRICS.map((metric) => (
-          <Tile
+          <StatTile
             key={metric.key}
             label={metric.label}
             value={metric.format(report.total[metric.key])}
@@ -490,7 +420,7 @@ function Report({
             }
           />
         ))}
-        <Tile
+        <StatTile
           label="Artykuły"
           value={formatQuantity(report.groups.reduce((sum, group) => sum + group.articles.length, 0))}
           detail={byArticle ? null : `${formatQuantity(report.groups.length)} × ${groupColumn.toLowerCase()}`}
@@ -520,16 +450,6 @@ function Report({
               }
               className="min-w-64 flex-1"
             />
-            <SegmentedField
-              label="Sortuj"
-              options={[
-                { value: 'value' as Sort, label: 'Wartość' },
-                ...(compare ? [{ value: 'change' as Sort, label: 'Największa zmiana' }] : []),
-                { value: 'name' as Sort, label: 'Nazwa' },
-              ]}
-              value={sort === 'change' && !compare ? 'value' : sort}
-              onChange={setSort}
-            />
           </div>
 
           <Card className="overflow-clip py-0">
@@ -548,19 +468,34 @@ function Report({
                     </TableRow>
                   )}
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="sticky left-0 z-10 min-w-64 bg-card pl-4">{groupColumn}</TableHead>
+                    <SortableHead column="name" {...sorting} className="sticky left-0 z-10 min-w-64 bg-card pl-4">
+                      {groupColumn}
+                    </SortableHead>
                     {METRICS.map((metric) =>
                       compare ? (
                         <Fragment key={metric.key}>
-                          <NumberHead className="border-l">{compareLabel}</NumberHead>
-                          <NumberHead>Aktualny</NumberHead>
-                          <NumberHead>Zmiana</NumberHead>
+                          <NumberHead column={`${metric.key}:previous`} {...sorting} className="border-l">
+                            {compareLabel}
+                          </NumberHead>
+                          <NumberHead column={`${metric.key}:current`} {...sorting}>
+                            Aktualny
+                          </NumberHead>
+                          <NumberHead column={`${metric.key}:change`} {...sorting}>
+                            Zmiana
+                          </NumberHead>
                         </Fragment>
                       ) : (
-                        <NumberHead key={metric.key}>{metric.label}</NumberHead>
+                        <NumberHead key={metric.key} column={`${metric.key}:current`} {...sorting}>
+                          {metric.label}
+                        </NumberHead>
                       ),
                     )}
-                    <NumberHead className={cn('pr-4', compare && 'border-l')} hint="w zakupie netto protokołu">
+                    <NumberHead
+                      column="share"
+                      {...sorting}
+                      className={cn('pr-4', compare && 'border-l')}
+                      hint="w zakupie netto protokołu"
+                    >
                       Udział
                     </NumberHead>
                   </TableRow>
@@ -729,24 +664,6 @@ function Figures({
   )
 }
 
-function NumberHead({ children, hint, className }: { children: string | null; hint?: string; className?: string }) {
-  return (
-    <TableHead className={cn('text-right whitespace-nowrap', className)} title={hint}>
-      {children}
-    </TableHead>
-  )
-}
-
-function Tile({ label, value, detail }: { label: string; value: string; detail: string | null }) {
-  return (
-    <div className="rounded-xl border bg-card p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-      {detail && <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">{detail}</p>}
-    </div>
-  )
-}
-
 /** Zmiana % względem okresu porównywanego; bez niego „nowe”, bez obu „–”. */
 function change(current: number, previous: number) {
   if (previous === 0) return current === 0 ? '–' : 'nowe'
@@ -776,4 +693,26 @@ function normalize(text: string) {
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .replace(/ł/g, 'l')
+}
+
+function NumberHead({
+  column,
+  sort,
+  onSort,
+  children,
+  hint,
+  className,
+}: {
+  column: SortKey
+  sort: SortState<SortKey>
+  onSort: (column: SortKey) => void
+  children: string | null
+  hint?: string
+  className?: string
+}) {
+  return (
+    <SortableHead column={column} sort={sort} onSort={onSort} align="right" className={cn('whitespace-nowrap', className)}>
+      <span title={hint}>{children}</span>
+    </SortableHead>
+  )
 }

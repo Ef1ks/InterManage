@@ -54,6 +54,52 @@ class DocumentImportIntegrationTests {
     MockMvc mvc;
 
     @Test
+    void printsDocumentsToPdfAndExcelWithNomenclatureSummary() throws Exception {
+        Cookie owner = login();
+        String liquidation = "PL" + docNumber();
+        String delivery = docNumber();
+        upload(owner, report(STORE_NUMBER,
+                line("PL", liquidation, "0", 1, "2", "-1.5", "-3"),
+                withoutSale(line("PL", liquidation, "0", 2, "0", "0", "0")),
+                line("PZ", delivery, "F/9/26", 1, "3", "4.49", "13.47")))
+                .andExpect(status().isCreated());
+        String id = id(storeId, "/pl", liquidation);
+
+        mvc.perform(get(url("/pl/" + id + "/print/pdf")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("protokol-likwidacji-" + liquidation + ".pdf")));
+
+        byte[] excel = mvc.perform(get(url("/pl/" + id + "/print/xlsx")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("protokol-likwidacji-" + liquidation + ".xlsx")))
+                .andReturn().getResponse().getContentAsByteArray();
+        String sheet = sheet(excel);
+        org.assertj.core.api.Assertions.assertThat(sheet)
+                .contains("PROTOKÓŁ LIKWIDACJI nr " + liquidation)
+                .contains("Podsumowanie według nomenklatury")
+                .contains("Pominięto pozycje z ilością 0: 1")
+                // Wydanie ma w raporcie zakup z minusem, na wydruku z plusem.
+                .contains("<v>3</v>")
+                .doesNotContain("<v>-3</v>");
+
+        // Przyjęcie drukuje się jak bon dostawy z systemu sklepu.
+        byte[] note = mvc.perform(get(url("/pz/" + id(storeId, "/pz", delivery) + "/print/pdf")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("bon-dostawy-")))
+                .andReturn().getResponse().getContentAsByteArray();
+        String out = System.getProperty("document.print.out");
+        if (out != null) {
+            java.nio.file.Files.write(java.nio.file.Path.of(out, "wydruk.xlsx"), excel);
+            java.nio.file.Files.write(java.nio.file.Path.of(out, "bon.pdf"), note);
+        }
+        mvc.perform(get(url("/pl/" + java.util.UUID.randomUUID() + "/print/pdf")).cookie(owner))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void importStoresAllDocumentTypesAndMergesLaterReports() throws Exception {
         Cookie owner = login();
         String a = docNumber();
@@ -592,6 +638,13 @@ class DocumentImportIntegrationTests {
                 supplierDocument, String.valueOf(lineNumber), "0000061515426", "5902180810132",
                 "LEKKA KANAPKA CZEKOLADA 30G   ", "SONKO     ", "Sztuka", quantity, price, "4.99", "4.99", value,
                 "4.99", "4.75", "5", "0.24", "8.6", "31,5%"};
+    }
+
+    private static String[] withoutSale(String[] line) {
+        line[19] = "0";
+        line[20] = "0";
+        line[22] = "0";
+        return line;
     }
 
     private static String[] withItm8(String[] line, String itm8) {

@@ -741,13 +741,7 @@ export type SupplierImportOverview = {
 
 /** Raporty z Importu danych (nazwy jak w backendzie, `ImportReportKind`). */
 export type ImportReportKind =
-  | 'PRODUCTS'
-  | 'PRODUCT_CODES'
-  | 'PROMOTIONS'
-  | 'SALES'
-  | 'DOCUMENTS'
-  | 'SUPPLIERS'
-  | 'NOMENCLATURES'
+  'PRODUCTS' | 'PRODUCT_CODES' | 'PROMOTIONS' | 'SALES' | 'DOCUMENTS' | 'SUPPLIERS' | 'NOMENCLATURES'
 
 /** Instrukcja właściciela do raportu: jak wygenerować plik i w jakim folderze go szukać. */
 export type ImportGuide = {
@@ -910,6 +904,67 @@ export type NomenclatureOption = {
   level: Exclude<SalesComparisonLevel, 'PRODUCT'>
 }
 
+export type TopSalesMetric = 'QUANTITY' | 'MARGIN' | 'MARGIN_PERCENT'
+export type TopSalesLevel = 'STORE' | 'REGION' | 'FAMILY' | 'SUBFAMILY'
+
+export type TopSalesPartner = { id: string; number: string; name: string }
+
+export type TopSalesOtherStore = {
+  storeId: string
+  /** Miejsce w tej samej pozycji nomenklatury w tamtym sklepie. */
+  rank: number
+  quantity: number
+  marginValue: number
+  marginPercent: number | null
+}
+
+export type TopSalesRow = {
+  rank: number
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  quantity: number
+  saleValueGross: number
+  saleValueNet: number
+  marginValue: number
+  marginPercent: number | null
+  others: TopSalesOtherStore[]
+}
+
+export type TopSalesGroup = {
+  /** Pusty = bez nomenklatury, null = cały sklep. */
+  code: string | null
+  name: string | null
+  articleCount: number
+  quantity: number
+  saleValueNet: number
+  marginValue: number
+  marginPercent: number | null
+  rows: TopSalesRow[]
+}
+
+export type TopSalesReport = {
+  from: string
+  to: string
+  metric: TopSalesMetric
+  level: TopSalesLevel
+  limit: number
+  minQuantity: number
+  maxPromotionMarginPercent: number
+  rankStoreId: string
+  /** Sklep rankingu na początku, dalej porównywane. */
+  stores: {
+    id: string
+    number: string
+    name: string
+    articleCount: number
+    promotionSkipped: number
+    noCostSkipped: number
+  }[]
+  groups: TopSalesGroup[]
+}
+
 /** Sprzedaż dzień po dniu do wykresu; każdy dzień okresu, bez sprzedaży z zerami. */
 export type SalesHistory = {
   from: string
@@ -951,6 +1006,17 @@ export type ArticleDelivery = {
   quantity: number
   purchasePrice: number | null
   purchaseValue: number
+}
+
+/** Protokół artykułu: dokument inny niż przyjęcie i korekta; {@code label} to rodzaj do pokazania. */
+export type ArticleProtocol = {
+  documentId: string
+  documentType: string
+  documentNumber: string
+  documentDate: string
+  label: string
+  gratis: boolean
+  quantity: number
 }
 
 /**
@@ -1575,6 +1641,61 @@ export type PriceCheckReport = {
   deliveries: PriceCheckDelivery[]
 }
 
+/** Poprzednia dostawa artykułu z ceną z bonu, sprzed korekt. */
+export type OverpaymentReference = {
+  documentId: string
+  documentNumber: string
+  documentDate: string
+  supplierCode: string | null
+  quantity: number
+  purchasePrice: number
+}
+
+export type OverpaymentLine = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  regionCode: string | null
+  supplierCode: string | null
+  quantity: number
+  purchasePrice: number
+  purchaseValue: number
+  /** Najniższa z cen poprzednich dostaw. */
+  referencePrice: number
+  overpaidPercent: number
+  excessValue: number
+  corrected: boolean
+  references: OverpaymentReference[]
+}
+
+export type OverpaymentDelivery = {
+  id: string
+  number: string
+  documentDate: string
+  supplierCode: string | null
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  correctionCount: number
+  linesPurchaseValue: number
+  excessValue: number
+  review: PriceCheckReview | null
+  history: PriceCheckReview[]
+  lines: OverpaymentLine[]
+}
+
+export type OverpaymentReport = {
+  from: string
+  to: string
+  periodDays: number
+  thresholdPercent: number
+  referenceCount: number
+  largeQuantityFactor: number
+  documentsCoveredUntil: string | null
+  documentsReportGeneratedAt: string | null
+  deliveries: OverpaymentDelivery[]
+}
+
 /** Własna kategoria raportu zakupu bazowego poza bazą: nazwa i rejony nomenklatury. */
 export type PriceCheckCategory = {
   id: string
@@ -1839,6 +1960,8 @@ export type Suggestion = {
   status: SuggestionStatus
   confidence: number | null
   proposals: SuggestionProposal[]
+  /** Artykuł z kaucją: kaucji nie ma w nazwie, trzeba ją ustawić przy zakładaniu w Mercalys. */
+  deposit: boolean
 }
 
 export type SuggestionResponse = { modelUsed: boolean; message: string | null; items: Suggestion[] }
@@ -2272,6 +2395,8 @@ export type PromotionReport = {
   to: string
   lastSaleDate: string | null
   listSince: string | null
+  /** Pierwszy dzień promocji z wgranych gazetek; artykuły w gazetce wypadają z raportu. */
+  leafletsSince: string | null
   noReactionUplift: number
   baseDays: number
   afterDays: number

@@ -13,7 +13,7 @@ export const PERIOD_MODES: { value: PeriodMode; label: string }[] = [
   { value: 'custom', label: 'Własny okres' },
 ]
 
-/** Najdłuższy okres, jak SalesReportService.MAX_PERIOD_DAYS. */
+/** Najdłuższy okres, jak ReportPeriod.MAX_DAYS. */
 export const MAX_PERIOD_DAYS = 366
 
 /**

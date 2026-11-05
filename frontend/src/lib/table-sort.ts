@@ -24,25 +24,30 @@ export function useTableSort<T, K extends string>(
 ) {
   const [sort, setSort] = useState(initial)
 
-  const sorted = useMemo(() => {
-    const accessor = accessors[sort.key]
-    const factor = sort.direction === 'asc' ? 1 : -1
-    return [...rows].sort((rowA, rowB) => {
-      const a = accessor(rowA)
-      const b = accessor(rowB)
-      const aEmpty = a == null || a === ''
-      const bEmpty = b == null || b === ''
-      if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : aEmpty ? 1 : -1
-      return compare(a, b) * factor
-    })
-  }, [rows, accessors, sort])
+  const sorted = useMemo(() => sortRows(rows, accessors, sort), [rows, accessors, sort])
 
   const toggle = (key: K) => setSort((current) => nextSort(current, key))
 
   return { sorted, sort, toggle }
 }
 
+/** Kopia wierszy posortowana po kolumnie; puste wartości na końcu w obu kierunkach. */
+export function sortRows<T, K extends string>(rows: T[], accessors: SortAccessors<T, K>, sort: SortState<K>): T[] {
+  const accessor = accessors[sort.key]
+  const factor = sort.direction === 'asc' ? 1 : -1
+  return [...rows].sort((rowA, rowB) => {
+    const a = accessor(rowA)
+    const b = accessor(rowB)
+    const aEmpty = a == null || a === ''
+    const bEmpty = b == null || b === ''
+    if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : aEmpty ? 1 : -1
+    return compare(a, b) * factor
+  })
+}
+
 /** Kliknięcie nagłówka: ta sama kolumna odwraca kierunek, inna sortuje rosnąco (także przy sortowaniu na serwerze). */
 export function nextSort<K extends string>(current: SortState<K>, key: K): SortState<K> {
-  return current.key === key ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' }
+  return current.key === key
+    ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+    : { key, direction: 'asc' }
 }

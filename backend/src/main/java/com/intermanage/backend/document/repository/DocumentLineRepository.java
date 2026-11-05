@@ -78,22 +78,170 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
         BigDecimal getPurchaseValue();
     }
 
+    /** Dostawa artykułu z historii: ilość i wartość z bonu oraz po korektach przypiętych do przyjęcia. */
+    interface DeliveryHistory {
+        UUID getDocumentId();
+
+        String getDocumentNumber();
+
+        LocalDateTime getDocumentDate();
+
+        String getItm8();
+
+        String getEan();
+
+        String getName();
+
+        String getBrand();
+
+        String getNomenclatureCode();
+
+        String getSupplierCode();
+
+        BigDecimal getQuantity();
+
+        BigDecimal getPurchaseValue();
+
+        BigDecimal getCorrectedQuantity();
+
+        BigDecimal getCorrectedValue();
+
+        boolean getCorrected();
+    }
+
+    /**
+     * Dostawy z datą w [since, until) artykułów przyjętych w [from, until) albo w przyjęciach {@code documentIds}, od
+     * najstarszej. Linie tego samego ITM8 w przyjęciu są sumowane; linie bez wartości (gratis) nie liczą się do ceny.
+     * Tylko artykuły, które mogą być przepłacone: sprawdzana dostawa jest droższa niż {@code priceFactor} × najniższa
+     * cena powyżej {@code minPrice} z całej historii, więc bez nich raport nie wczytuje dziesiątek tysięcy wierszy.
+     */
+    @Query(value = """
+            with lines as (
+                select d.id as document_id, d.number as document_number, d.document_date, l.itm8,
+                       max(l.ean) as ean, max(l.name) as name, max(l.brand) as brand,
+                       max(l.nomenclature_code) as nomenclature_code, max(l.supplier_code) as supplier_code,
+                       sum(l.quantity) as quantity, sum(l.purchase_value) as purchase_value
+                from document_lines l
+                join documents d on d.id = l.document_id
+                where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
+                  and d.document_date >= :since and d.document_date < :until
+                  and l.itm8 in (select c.itm8 from document_lines c
+                                 join documents cd on cd.id = c.document_id
+                                 where cd.store_id = :storeId and cd.type = 'PZ'
+                                   and ((cd.document_date >= :from and cd.document_date < :until)
+                                        or cast(cd.id as varchar) = any(cast(:documentIds as varchar[]))))
+                group by d.id, d.number, d.document_date, l.itm8
+            ), fixes as (
+                select c.delivery_id, cl.itm8, sum(cl.quantity) as quantity, sum(cl.purchase_value) as purchase_value
+                from delivery_corrections c
+                join document_lines cl on cl.document_id = c.correction_id
+                where c.unlinked_at is null and c.delivery_id in (select document_id from lines)
+                group by c.delivery_id, cl.itm8
+            ), history as (
+                select l.*, l.quantity + coalesce(f.quantity, 0) as corrected_quantity,
+                       l.purchase_value + coalesce(f.purchase_value, 0) as corrected_value,
+                       f.delivery_id is not null as corrected,
+                       min(round(l.purchase_value / l.quantity, 4))
+                           filter (where round(l.purchase_value / l.quantity, 4) > :minPrice)
+                           over (partition by l.itm8) as lowest_price
+                from lines l
+                left join fixes f on f.delivery_id = l.document_id and f.itm8 = l.itm8
+            ), suspects as (
+                select distinct h.itm8
+                from history h
+                where (h.document_date >= :from or cast(h.document_id as varchar) = any(cast(:documentIds as varchar[])))
+                  and h.corrected_quantity > 0 and h.corrected_value > 0
+                  and round(h.corrected_value / h.corrected_quantity, 4) > h.lowest_price * :priceFactor
+            )
+            select h.document_id as documentId, h.document_number as documentNumber,
+                   h.document_date as documentDate, h.itm8 as itm8, h.ean as ean, h.name as name, h.brand as brand,
+                   h.nomenclature_code as nomenclatureCode, h.supplier_code as supplierCode,
+                   h.quantity as quantity, h.purchase_value as purchaseValue,
+                   h.corrected_quantity as correctedQuantity, h.corrected_value as correctedValue,
+                   h.corrected as corrected
+            from history h
+            where h.itm8 in (select itm8 from suspects)
+            order by h.document_date, length(h.document_number), h.document_number
+            """, nativeQuery = true)
+    List<DeliveryHistory> findDeliveryHistory(UUID storeId, LocalDateTime since, LocalDateTime from,
+            LocalDateTime until, String[] documentIds, BigDecimal minPrice, BigDecimal priceFactor);
+
+    /**
+     * Linie artykułu {@code :itm8}. Dostawca spoza bazy przywozi towar pod własnym, lokalnym ITM8 ({@code 99…}),
+     * którego nie ma w kartotece, więc taka linia należy do artykułu po EAN-ie (główny, dawne pary, multikody; bez zer
+     * wiodących, od 8 cyfr). Linia z ITM8 z kartoteki należy tylko do swojego artykułu, bo EAN-y bywają przenoszone
+     * między artykułami. Warunek {@link #ARTICLE_LINE} korzysta z {@link #ARTICLE_EANS}.
+     */
+    String ARTICLE_EANS = """
+            with article_eans as (
+                select ltrim(btrim(p.ean), '0') as ean from products p where p.store_id = :storeId and p.itm8 = :itm8
+                union
+                select ltrim(btrim(pe.ean), '0') from product_eans pe join products p on p.id = pe.product_id
+                where p.store_id = :storeId and p.itm8 = :itm8
+                union
+                select ltrim(btrim(pc.ean), '0') from product_codes pc
+                where pc.store_id = :storeId and pc.itm8 = :itm8 and pc.current
+            )
+            """;
+
+    String ARTICLE_LINE = """
+            (l.itm8 = :itm8
+             or ltrim(btrim(l.ean), '0') in (select ean from article_eans where length(ean) >= 8)
+                and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8))
+            """;
+
     /**
      * Ostatnie dostawy artykułu (przyjęcia PZ z ilością > 0), od najnowszej. Linie tego samego ITM8 w jednym
      * przyjęciu są sumowane, więc cena to wartość / ilość.
      */
-    @Query(value = """
+    @Query(value = ARTICLE_EANS + """
             select d.id as document_id, d.number as document_number, d.document_date as document_date,
                    max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
                    sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
             from document_lines l
             join documents d on d.id = l.document_id
-            where d.store_id = :storeId and d.type = 'PZ' and l.itm8 = :itm8 and l.quantity > 0
+            where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
+              and """ + ARTICLE_LINE + """
             group by d.id, d.number, d.document_date
             order by d.document_date desc, length(d.number) desc, d.number desc
             limit :limit
             """, nativeQuery = true)
     List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, int limit);
+
+    /** Protokół z artykułem: dokument z sumą ilości jego linii i tym, czy jest zarejestrowanym gratisem. */
+    interface ArticleProtocol {
+        UUID getDocumentId();
+
+        String getDocumentType();
+
+        String getDocumentNumber();
+
+        LocalDateTime getDocumentDate();
+
+        boolean getGratis();
+
+        BigDecimal getQuantity();
+    }
+
+    /**
+     * Ostatnie dokumenty artykułu inne niż przyjęcia i ich korekty (likwidacje, ruchy międzymagazynowe, przeniesienia
+     * stanów, zwroty, wydania), od najnowszego. Ilość jak w raporcie, więc w przeniesieniu stanów ze znakiem.
+     */
+    @Query(value = ARTICLE_EANS + """
+            select d.id as document_id, d.type as document_type, d.number as document_number,
+                   d.document_date as document_date, sum(l.quantity) as quantity,
+                   exists (select 1 from document_gratis g
+                           where g.document_id = d.id and g.deleted_at is null) as gratis
+            from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type not in ('PZ', 'PK', 'WZ')
+              and """ + ARTICLE_LINE + """
+            group by d.id, d.type, d.number, d.document_date
+            having sum(l.quantity) <> 0
+            order by d.document_date desc, length(d.number) desc, d.number desc
+            limit :limit
+            """, nativeQuery = true)
+    List<ArticleProtocol> findArticleProtocols(UUID storeId, String itm8, int limit);
 
     /**
      * Likwidacje (PL) artykułu dzień po dniu wg daty dokumentu, {@code from} i {@code to} włącznie: wartość zakupu

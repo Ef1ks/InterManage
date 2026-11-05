@@ -171,6 +171,30 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
   const missing = scope.filter((line) => !line.product).length
   const filtersActive = Object.keys(filters).length > 0 || withoutProduct
 
+  /** Kilka plików naraz to zwykle dawne gazetki do raportów: wgrywają się po kolei, widok zostaje na obecnej. */
+  const uploadFiles = async (files: File[]) => {
+    const progress = toast.loading(`Wgrywanie gazetek: 0 z ${files.length}`)
+    const failed: string[] = []
+    for (const [index, file] of files.entries()) {
+      try {
+        await upload.mutateAsync(file)
+      } catch (error) {
+        failed.push(`${file.name}: ${error instanceof ApiError ? error.message : 'nie udało się wgrać pliku'}`)
+      }
+      toast.loading(`Wgrywanie gazetek: ${index + 1} z ${files.length}`, { id: progress })
+    }
+    const done = files.length - failed.length
+    if (failed.length > 0) {
+      toast.error(`Wgrano ${done} z ${files.length} gazetek`, {
+        id: progress,
+        description: failed.slice(0, 5).join('\n'),
+        duration: 10_000,
+      })
+    } else {
+      toast.success(`Wgrano gazetki: ${done}`, { id: progress })
+    }
+  }
+
   const uploadFile = (file: File) =>
     upload.mutate(file, {
       onSuccess: (loaded) => {
@@ -249,7 +273,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
         className="mb-4"
         title="Jak opracować gazetkę"
         steps={[
-          'Wczytaj plik gazetki z centrali (UTRZYMYWANIE CEN Gazetka … .xlsx). Tabela pokazuje pozycje do opracowania: bez kodu MEA (puste albo DDD); „Wszystkie” pokazuje całą gazetkę.',
+          'Wczytaj plik gazetki z centrali (UTRZYMYWANIE CEN Gazetka … .xlsx). Tabela pokazuje pozycje do opracowania: bez kodu MEA (puste albo DDD); „Wszystkie” pokazuje całą gazetkę. Dawne gazetki wgrasz naraz, zaznaczając kilka plików: raport skuteczności promocji pominie ich artykuły.',
           'Każdy EAN z gazetki musi mieć artykuł z Mercalys. Brakujący albo zły zmienisz strzałkami przy nazwie: wybrany artykuł zostaje zapamiętany na kolejne gazetki.',
           'Kody MEA z gazetki wpisz w Mercalys i potwierdź w „Kody MEA”, tak jak przy dostawie z bazy.',
           '„Stwórz pliki PRO”: plik z cenami promocji na każdy okres od-do do N:\\ALOA\\PRO\\IMPORT, przy wczytaniu wpisz jego kod taryfy i okres.',
@@ -276,7 +300,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
               onClick={() => fileInput.current?.click()}
             >
               <FileInputIcon />
-              Wczytaj gazetkę
+              Wczytaj gazetki
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -403,7 +427,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
           </p>
           <Button className="mt-2" loading={upload.isPending} onClick={() => fileInput.current?.click()}>
             <FileInputIcon />
-            Wczytaj gazetkę
+            Wczytaj gazetki
           </Button>
         </div>
       ) : leaflet.isError ? (
@@ -472,14 +496,16 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
         ref={fileInput}
         type="file"
         accept=".xlsx,.xlsm"
+        multiple
         className="sr-only"
         tabIndex={-1}
         aria-hidden
         onChange={(event) => {
-          const file = event.target.files?.[0]
+          const files = [...(event.target.files ?? [])]
           // Ten sam plik wybrany ponownie też ma wywołać zmianę.
           event.target.value = ''
-          if (file) uploadFile(file)
+          if (files.length === 1) uploadFile(files[0])
+          else if (files.length > 1) void uploadFiles(files)
         }}
       />
       <ProFilesDialog files={files} open={proOpen} onOpenChange={setProOpen} />

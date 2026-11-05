@@ -8,10 +8,14 @@ import {
   FileInputIcon,
   FileClockIcon,
   FileOutputIcon,
+  FileTextIcon,
+  FileUpIcon,
+  FilterXIcon,
   ListOrderedIcon,
   PackageCheckIcon,
   PackagePlusIcon,
   PackageSearchIcon,
+  RecycleIcon,
   ScaleIcon,
   PlusIcon,
   ReceiptTextIcon,
@@ -53,10 +57,10 @@ import { documentPrice } from '@/features/base-delivery/base-rows'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
-import { ApiError } from '@/lib/api'
+import { ApiError, saveBlob } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { usePriceChangeFolder } from '@/lib/proto-files'
-import { ensureFolderAccess, type SavedFolderSpec } from '@/lib/saved-folders'
+import { ensureFolderAccess, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
 import { addDays, todayIso } from '@/lib/dates'
 import type {
   DataEntryCatalogProduct,
@@ -104,6 +108,7 @@ import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { ArticleFileDialog } from './ArticleFileDialog'
 import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
+import { LST_FOLDER, lstFile, lstFileName, parseLst } from './lst-file'
 import { usePriceFileOverview } from './price-files'
 import { savePriceControlFile } from './price-control'
 import type { NewArticles } from './product-drafts'
@@ -119,9 +124,12 @@ import {
   type DataEntryRow,
   type RowLink,
   emptyRow,
+  mergeVisible,
+  missingDeposit,
   needsAi,
   needsProductFile,
   nomenclatureState,
+  paddedScaleCode,
   productFileRow,
   rowFromLine,
   rowProblems,
@@ -227,16 +235,24 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     [currentDraft, setDraft],
   )
   useUndoShortcuts(history.undo, history.redo)
+  // Filtr „Brakująca kaucja” działa na wiersze z chwili włączenia: poprawiony wiersz nie znika, nowe są widoczne.
+  const [depositFilter, setDepositFilter] = useState<RowFilter | null>(null)
+  const visibleOf = useCallback(
+    (all: DataEntryRow[]) =>
+      depositFilter ? all.filter((row) => !depositFilter.known.has(row.id) || depositFilter.pass.has(row.id)) : all,
+    [depositFilter],
+  )
   // Tabela pokazuje kaucje i dostawę pod artykułami; zmiany z tabeli dotyczą wierszy w tej samej kolejności.
   // Zmiana artykułu w jednym wierszu przechodzi na wiersze z tym samym EAN-em.
-  const viewRows = useMemo(() => withServicesLast(rows), [rows])
+  const viewRows = useMemo(() => visibleOf(withServicesLast(rows)), [visibleOf, rows])
   const setViewRows = useCallback(
     (update: (rows: DataEntryRow[]) => DataEntryRow[]) =>
       setRows((current) => {
         const before = withServicesLast(current)
-        return withSyncedDuplicates(before, update(before))
+        const visible = visibleOf(before)
+        return withSyncedDuplicates(before, mergeVisible(before, visible, update(visible)))
       }),
-    [setRows],
+    [setRows, visibleOf],
   )
 
   const canLoadInvoices = useCan('KSEF_INVOICES', 'VIEW')
@@ -327,6 +343,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     setPendingInvoice(null)
     setPickerOpen(false)
     setXmlOpenOpen(false)
+    setDepositFilter(null)
     const loaded = data.lines.map(rowFromLine)
     const base = mode === 'append' ? currentDraft().rows.filter((row) => row.ean !== '' || row.name !== '') : []
     // Dopisana faktura: tabela porównuje się z sumą obu dokumentów.
@@ -378,6 +395,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     if (draft) {
       const before = currentDraft()
       setXmlOpenOpen(false)
+      setDepositFilter(null)
       forgetSaved()
       setDraft(draft)
       const replaced = before.rows.some((row) => row.ean !== '' || row.name !== '')
@@ -466,15 +484,18 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const tableEans = useMemo(() => new Set(rows.map((row) => row.ean.replace(/^0+/, '')).filter(Boolean)), [rows])
 
-  const addFromCatalog = async (additions: CatalogAddition[]) => {
-    // Dane wiersza jak po wpisaniu EAN-u (VAT, cena sprzedaży, nomenklatura); ilość i cena z okna mają pierwszeństwo.
-    // EAN-y idą paczkami, bo „Dodaj wszystkie wyfiltrowane” wysyła ich setki w adresie zapytania.
-    const eans = additions.map(({ item }) => item.ean)
+  // EAN-y idą paczkami, bo lista może mieć ich setki, a wysyłamy je w adresie zapytania.
+  const lookupByKey = async (eans: string[]) => {
     const chunks = Array.from({ length: Math.ceil(eans.length / 100) }, (_, index) =>
       eans.slice(index * 100, index * 100 + 100),
     )
     const products = (await Promise.all(chunks.map((chunk) => lookupProducts(store.id, chunk)))).flat()
-    const byKey = new Map(products.map((product) => [product.ean, product]))
+    return new Map(products.map((product) => [product.ean, product]))
+  }
+
+  const addFromCatalog = async (additions: CatalogAddition[]) => {
+    // Dane wiersza jak po wpisaniu EAN-u (VAT, cena sprzedaży, nomenklatura); ilość i cena z okna mają pierwszeństwo.
+    const byKey = await lookupByKey(additions.map(({ item }) => item.ean))
     const added = additions.map(({ item, quantity, unitNet }) => {
       const scanned = withScannedProduct(
         { ...emptyRow(), ean: item.ean, quantity, unitNet },
@@ -490,6 +511,37 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       toast.success(`Dodano do tabeli artykuły: ${additions.length}`, {
         action: { label: 'Przywróć', onClick: () => setDraft(before) },
       })
+    }
+  }
+
+  // ---------- plik .lst: jeden kod w linii, trafia do kolumny EAN i dalej jak po wpisaniu kodu
+
+  const lstInput = useRef<HTMLInputElement>(null)
+  const [loadingLst, setLoadingLst] = useState(false)
+  const loadLst = async (file: File) => {
+    setLoadingLst(true)
+    try {
+      const codes = parseLst(await file.text()).map(paddedScaleCode)
+      if (codes.length === 0) {
+        toast.warning(`Plik ${file.name} nie ma żadnych kodów`)
+        return
+      }
+      const byKey = await lookupByKey(codes)
+      const added = codes.map((ean) =>
+        withScannedProduct({ ...emptyRow(), ean }, byKey.get(ean.replace(/^0+/, '')) ?? null, weightIn24),
+      )
+      const before = currentDraft()
+      setDepositFilter(null)
+      setRows((current) => added.reduce(withAddedRow, current))
+      const fresh = added.filter((row) => !row.known).length
+      toast.success(`Wczytano z pliku ${file.name}: ${added.length} ${pieces(added.length)}`, {
+        description: fresh === 0 ? 'Wszystkie są w kartotece.' : `Nowych: ${fresh}.`,
+        action: { label: 'Przywróć', onClick: () => setDraft(before) },
+      })
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się wczytać pliku .lst')
+    } finally {
+      setLoadingLst(false)
     }
   }
 
@@ -633,7 +685,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           }),
         )
         const toCheck = response.items.filter((item) => item.status === 'TO_CHECK').length
-        const summary = `Uzupełniono ${response.items.length} ${pieces(response.items.length)}${toCheck ? `, do sprawdzenia: ${toCheck}` : ''}.`
+        const deposits = response.items.filter((item) => item.deposit).length
+        const summary = `Uzupełniono ${response.items.length} ${pieces(response.items.length)}${toCheck ? `, do sprawdzenia: ${toCheck}` : ''}${deposits ? `, z kaucją: ${deposits}` : ''}.`
         if (response.modelUsed) {
           toast.success(summary)
         } else {
@@ -665,6 +718,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const newCount = filled.filter((row) => !row.known).length
   const changedCount = filled.filter((row) => catalogChanges(row).length > 0).length
   const toCheck = rows.filter((row) => nomenclatureState(row) === 'TO_CHECK').length
+  const depositCount = filled.filter(missingDeposit).length
   const totals = useMemo(() => invoiceTotals(rows, invoice), [rows, invoice])
 
   const removeRows = (ids: string[]) => {
@@ -704,6 +758,48 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   }
 
   const isArticle = (row: DataEntryRow) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null
+
+  const toggleDepositFilter = () => {
+    if (depositFilter) {
+      setDepositFilter(null)
+      return
+    }
+    const all = currentDraft().rows
+    setDepositFilter({
+      known: new Set(all.map((row) => row.id)),
+      pass: new Set(all.filter(missingDeposit).map((row) => row.id)),
+    })
+  }
+
+  // Plik .lst: zaznaczone artykuły, a bez zaznaczenia wszystkie widoczne (także po filtrze); tylko prawdziwe EAN-y.
+  const lstSource = selectedArticles.length > 0 ? selectedArticles : viewRows.filter(isArticle)
+  const lstEans = [
+    ...new Set(lstSource.filter((row) => !row.eanFallback && /^\d{8,14}$/.test(row.ean)).map((row) => row.ean)),
+  ]
+  const [savingLst, setSavingLst] = useState(false)
+  const saveLst = async () => {
+    setSavingLst(true)
+    try {
+      const folderReady = await ensureFolderAccess(LST_FOLDER.key)
+      const fileName = lstFileName(depositFilter ? 'KAUCJE' : 'EAN', invoice?.number)
+      if (folderReady) await saveToFolder(LST_FOLDER.key, fileName, lstFile(lstEans))
+      else saveBlob(lstFile(lstEans), fileName)
+      const skipped = lstSource.length - lstEans.length
+      toast.success(`Zapisano plik ${fileName}`, {
+        description: [
+          `Kodów: ${lstEans.length}`,
+          skipped > 0 && `pominięto bez EAN-u i powtórzone: ${skipped}`,
+          !folderReady && 'pobrany: folder nie jest wybrany w ustawieniach zapisu',
+        ]
+          .filter(Boolean)
+          .join(', '),
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać pliku .lst')
+    } finally {
+      setSavingLst(false)
+    }
+  }
 
   /** Zmiana całej tabeli z paskiem „Przywróć”. */
   const changeAll = (update: (rows: DataEntryRow[]) => DataEntryRow[], message: string) => {
@@ -771,6 +867,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const clearAll = () => {
     const before = currentDraft()
     forgetSaved()
+    setDepositFilter(null)
     setDraft(EMPTY_DATA_ENTRY)
     focusFirstEan()
     toast('Wyczyszczono tabelę', {
@@ -963,6 +1060,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const goTo = (row: DataEntryRow, key: 'ean' | 'name' | 'subfamily') => {
     setCheckOpen(false)
+    setDepositFilter(null)
     // Fokus wraca do tabeli dopiero po zamknięciu okna.
     setTimeout(() => gridRef.current?.focusCell(row.id, key), 0)
   }
@@ -986,7 +1084,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         title="Jak wprowadzić artykuły z faktury"
         steps={[
           'Wczytaj fakturę z KSeF. Artykuły zapisane w kartotece są szare i mają dane z kartoteki, nowe są fioletowe, a zmienione w tabeli pomarańczowe. Kaucje i dostawa idą na dół i nie trafiają do pliku XML.',
-          'Kliknij „Uzupełnij z AI”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów.',
+          'Kliknij „Uzupełnij z AI”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów. Artykuły z kaucją dostają plakietkę, a „Brakująca kaucja” pokazuje tylko je.',
           'Skanujesz ręcznie? Wpisz albo zeskanuj EAN i Enter: od razu powstaje kolejny wiersz na następny kod.',
           'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Żółte komórki wymagają wyboru.',
           'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później w „Wczytaj z XML”.',
@@ -1033,6 +1131,27 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <FileInputIcon />
               Wczytaj z XML
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => lstInput.current?.click()}
+              loading={loadingLst}
+              title="Dopisuje do tabeli kody z pliku .lst: jeden kod w wierszu, trafia do kolumny EAN"
+            >
+              <FileUpIcon />
+              Wczytaj .lst
+            </Button>
+            <input
+              ref={lstInput}
+              type="file"
+              accept=".lst,.txt"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void loadLst(file)
+              }}
+            />
             <Button variant="outline" size="sm" onClick={() => setCatalogOpen(true)}>
               <PackageSearchIcon />
               Lista towarów
@@ -1226,6 +1345,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => void saveLst()}
+                loading={savingLst}
+                disabled={lstEans.length === 0}
+                title={
+                  selectedArticles.length > 0
+                    ? `Plik .lst z EAN-ami zaznaczonych artykułów (${lstEans.length})`
+                    : `Plik .lst z EAN-ami artykułów widocznych w tabeli (${lstEans.length}); zaznacz wiersze, żeby wybrać tylko część`
+                }
+              >
+                <FileTextIcon />
+                Plik .lst
+                {(selectedArticles.length > 0 || depositFilter) && lstEans.length > 0 && ` (${lstEans.length})`}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={applySuggestedPrices}
                 disabled={priceChanges.size === 0}
                 title={
@@ -1240,6 +1375,24 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 Ustaw ceny sugerowane
                 {priceChanges.size > 0 && ` (${priceChanges.size})`}
               </Button>
+              <ToolbarDivider />
+              <Button
+                variant={depositFilter ? 'default' : 'outline'}
+                size="sm"
+                aria-pressed={depositFilter !== null}
+                onClick={toggleDepositFilter}
+                disabled={depositCount === 0 && !depositFilter}
+                title="Nowe artykuły z kaucją wskazane przez „Uzupełnij z AI”: kaucję trzeba ustawić przy zakładaniu w Mercalys"
+              >
+                <RecycleIcon />
+                Brakująca kaucja ({depositCount})
+              </Button>
+              {depositFilter && (
+                <Button variant="ghost" size="sm" onClick={toggleDepositFilter}>
+                  <FilterXIcon />
+                  Pokaż wszystkie ({viewRows.length}/{rows.length})
+                </Button>
+              )}
               <ToolbarDivider />
               <div className="flex items-center gap-1" role="group" aria-label="Ilość we wszystkich artykułach">
                 <span className="mr-1 text-sm text-muted-foreground">Ilość:</span>
@@ -1342,28 +1495,38 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           <Stat label="Nowe" value={newCount} />
           {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
           <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
+          {depositCount > 0 && <Stat label="Brakująca kaucja" value={depositCount} highlight />}
         </dl>
 
         <Legend />
 
-        <DataEntryGrid
-          ref={gridRef}
-          rows={viewRows}
-          setRows={setViewRows}
-          onEansChanged={onEansChanged}
-          onSelectedRowsChange={setSelectedRows}
-          onDeleteRows={removeRows}
-          onInvalidPaste={(count) =>
-            toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
-          }
-          nomenclature={nomenclature}
-          names={names}
-          pricing={pricing}
-          onShowArticle={canSeeSales ? showArticle : undefined}
-          onLinkArticle={openLink}
-          onSplitQuantity={setSplitTarget}
-          stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
-        />
+        {viewRows.length === 0 ? (
+          <div className="rounded-xl border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
+            Żaden wiersz nie pasuje do filtra.{' '}
+            <Button variant="link" className="h-auto p-0" onClick={toggleDepositFilter}>
+              Pokaż wszystkie
+            </Button>
+          </div>
+        ) : (
+          <DataEntryGrid
+            ref={gridRef}
+            rows={viewRows}
+            setRows={setViewRows}
+            onEansChanged={onEansChanged}
+            onSelectedRowsChange={setSelectedRows}
+            onDeleteRows={removeRows}
+            onInvalidPaste={(count) =>
+              toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
+            }
+            nomenclature={nomenclature}
+            names={names}
+            pricing={pricing}
+            onShowArticle={canSeeSales ? showArticle : undefined}
+            onLinkArticle={openLink}
+            onSplitQuantity={setSplitTarget}
+            stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
+          />
+        )}
 
         <div data-keep-grid-selection className="mt-3 flex shrink-0 gap-2">
           <Button variant="outline" onClick={() => setRows((current) => [...current, emptyRow()])}>
@@ -1501,6 +1664,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         open={saveSettings.open}
         onOpenChange={(open) => setSaveSettings((current) => ({ ...current, open }))}
         missing={saveSettings.missing}
+        extraFolders={[{ folder: LST_FOLDER, note: 'Lista EAN-ów artykułów z tabeli („Plik .lst”).' }]}
       />
 
       {xmlSave.draftDialog}
@@ -1542,6 +1706,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 }
 
 const NO_FILTER: string[] = []
+
+/** Filtr wierszy z chwili włączenia: wszystkie wtedy znane wiersze i te, które przeszły filtr. */
+type RowFilter = { known: Set<string>; pass: Set<string> }
 
 /** Chwila zapisu pliku (poza komponentem: woła ją tylko obsługa kliknięcia). */
 const nowIso = () => new Date().toISOString()

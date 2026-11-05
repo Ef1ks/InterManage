@@ -7,11 +7,12 @@ import java.util.List;
 /**
  * Skuteczność promocji kończących się w okresie {@code from}-{@code to} (do ostatniego dnia sprzedaży).
  * {@code listSince}: od kiedy sklep wgrywa listę promocji (wcześniejsze promocje są tylko rozpoznane ze sprzedaży,
- * {@code null} = listy nie wgrano). {@code noReactionUplift}, {@code baseDays}, {@code afterDays}: progi raportu do
- * opisów na ekranie.
+ * {@code null} = listy nie wgrano). {@code leafletsSince}: pierwszy dzień promocji z wgranych gazetek (artykuły
+ * w gazetce wypadają z raportu, wcześniej raport ich nie rozpozna; {@code null} = żadnej nie wgrano).
+ * {@code noReactionUplift}, {@code baseDays}, {@code afterDays}: progi raportu do opisów na ekranie.
  */
 public record PromotionReport(LocalDate from, LocalDate to, LocalDate lastSaleDate, LocalDate listSince,
-        BigDecimal noReactionUplift, int baseDays, int afterDays, List<Promotion> promotions) {
+        LocalDate leafletsSince, BigDecimal noReactionUplift, int baseDays, int afterDays, List<Promotion> promotions) {
 
     /**
      * Jedna promocja artykułu. {@code listed}: z listy promocji, inaczej rozpoznana ze sprzedaży (cena zwykła to

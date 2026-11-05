@@ -47,6 +47,7 @@ import {
   depositError,
   depositLabel,
   depositNotice,
+  missingDeposit,
   eanError,
   emptyRow,
   type ServiceKind,
@@ -1217,9 +1218,9 @@ const weightFormat = new Intl.NumberFormat('pl-PL', {
   maximumFractionDigits: 3,
 })
 
-function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
+function Tag({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium', className)}>
+    <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium', className)} title={title}>
       {children}
     </span>
   )
@@ -1336,6 +1337,14 @@ function CellContent({
           {tooLong && (
             <Tag className="shrink-0 bg-destructive text-white">
               {row.name.length}/{NAME_LIMIT}
+            </Tag>
+          )}
+          {missingDeposit(row) && (
+            <Tag
+              className="shrink-0 bg-sky-300 text-sky-950 dark:bg-sky-800 dark:text-sky-50"
+              title="Artykuł z kaucją: ustaw kaucję przy zakładaniu w Mercalys"
+            >
+              kaucja
             </Tag>
           )}
           {onShowArticle && row.known && row.itm8 && (

@@ -34,6 +34,7 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.common.exception.InvalidReportException;
 import com.intermanage.backend.deliorder.repository.DeliOrderDocumentRepository;
 import com.intermanage.backend.document.component.DeliveryNotePdf;
+import com.intermanage.backend.document.component.DocumentPrint;
 import com.intermanage.backend.document.component.DocumentReportParser;
 import com.intermanage.backend.document.dto.CorrectedDelivery;
 import com.intermanage.backend.document.dto.CorrectionTotals;
@@ -271,15 +272,14 @@ public class DocumentService {
         Supplier supplier = document.getSupplierCode() == null ? null
                 : suppliers.findImported(storeId).stream()
                         .filter(found -> document.getSupplierCode().equals(found.getCode())).findFirst().orElse(null);
-        List<String> regionCodes = corrected.lines().stream().map(CorrectedDelivery.CorrectedLine::nomenclatureCode)
-                .filter(code -> code != null && code.length() >= 2).map(code -> code.substring(0, 2))
-                .distinct().toList();
-        Map<String, String> regions = regionCodes.isEmpty() ? Map.of()
-                : nomenclatures.findByStoreIdAndCodeIn(storeId, regionCodes).stream()
+        List<String> codes = corrected.lines().stream()
+                .flatMap(line -> DocumentPrint.parentCodes(line.nomenclatureCode()).stream()).distinct().toList();
+        Map<String, String> nomenclatureNames = codes.isEmpty() ? Map.of()
+                : nomenclatures.findByStoreIdAndCodeIn(storeId, codes).stream()
                         .collect(Collectors.toMap(Nomenclature::getCode, Nomenclature::getName, (a, b) -> a));
         String printedBy = userId != null ? users.findById(userId).map(AppUser::getDisplayName).orElse(null) : null;
         byte[] pdf = deliveryNotePdf.pdf(new DeliveryNotePdf.Note(document, document.getStore(), supplier,
-                corrected, correctionDocuments, regions, printedBy));
+                corrected, correctionDocuments, nomenclatureNames, printedBy));
         return new ExportFile("bon-dostawy-" + document.bonNumber() + ".pdf",
                 "application/pdf", pdf);
     }

@@ -29,10 +29,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useCan } from '@/features/auth/api'
 import {
   incomingTransferExportPath,
+  incomingTransferPrintPath,
   useIncomingTransfer,
   useIncomingTransfers,
   useMarkTransferEntered,
 } from '@/features/documents/api'
+import { DocumentPrintMenu } from '@/features/documents/DocumentPrintMenu'
 import { BackToTypes } from '@/features/documents/DocumentsList'
 import { IncomingProductionCards } from '@/features/deli-production/TransferProductionCards'
 import { ReceiveTransferDialog, receivedQuantities } from '@/features/documents/ReceiveTransferDialog'
@@ -282,6 +284,11 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
                 Wpisz przyjęte ilości
               </Button>
             ))}
+          <DocumentPrintMenu
+            path={(format) => incomingTransferPrintPath(storeId, transfer.id, format)}
+            number={transfer.number}
+            size="default"
+          />
           <TransferDownloads storeId={storeId} transferId={transfer.id} />
         </div>
       </div>

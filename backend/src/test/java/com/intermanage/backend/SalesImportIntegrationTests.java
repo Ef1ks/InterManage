@@ -28,6 +28,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -51,6 +52,9 @@ class SalesImportIntegrationTests {
     private static final String[] HEADER = {"ITM8 Prio", "EAN Prio", "Nazwa", "Marka", "Data", "Ilość",
             "Wartosc FIFO", "Wartość ceny sprzedaży", "Wartość VAT", "Wart.Marza FIFO", "% Marża"};
     private static final String EAN = "5900983014894";
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     @Autowired
     MockMvc mvc;
@@ -83,6 +87,10 @@ class SalesImportIntegrationTests {
                 .andExpect(jsonPath("$.existingCount").value(0))
                 .andExpect(jsonPath("$.periodFrom").value("2025-12-31"))
                 .andExpect(jsonPath("$.reportGeneratedAt").value("2026-10-26T15:03:27"));
+
+        // Import przelicza ceny miesięcy do rozpoznawania promocji; zwrotu (ilość ujemna) w nich nie ma.
+        assertThat(jdbc.queryForList("select itm8 from sales_month_prices where store_id = ?::uuid order by month",
+                String.class, storeId)).containsExactly("0000000000453", "0000000000453");
 
         Sale sale = sale(storeId, LocalDate.of(2025, 12, 31), "0000000000453");
         assertThat(sale.getVatValue()).isEqualByComparingTo("0.28");

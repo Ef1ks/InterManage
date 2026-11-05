@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -60,6 +62,7 @@ public class LeafletService {
 
     private static final Logger log = LoggerFactory.getLogger(LeafletService.class);
 
+    private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final long MAX_FILE_BYTES = 20L * 1024 * 1024;
     /** Tyle kodów {@link DataEntryService#lookup} przyjmuje w jednym wywołaniu. */
     private static final int LOOKUP_BATCH = 500;
@@ -97,7 +100,7 @@ public class LeafletService {
 
     @Transactional(readOnly = true)
     public List<LeafletSummary> list(UUID storeId) {
-        return leaflets.findTop30ByStoreIdAndReplacedAtIsNullOrderByUploadedAtDesc(storeId).stream()
+        return leaflets.findTop60ByStoreIdAndReplacedAtIsNullOrderByYearDescWeekDesc(storeId).stream()
                 .map(mapper::toSummary).toList();
     }
 
@@ -218,7 +221,9 @@ public class LeafletService {
             responses.add(mapper.toLine(line, product, resolved.regularPrice(product), resolved.linkIds().get(key)));
         }
         Set<String> confirmed = meaConfirmations.findActiveCodes(storeId);
-        List<String> pendingMea = lines.stream().map(PromoLeafletLine::getMeaCode)
+        LocalDate today = LocalDate.now(STORE_ZONE);
+        List<String> pendingMea = lines.stream().filter(line -> !line.getDateTo().isBefore(today))
+                .map(PromoLeafletLine::getMeaCode)
                 .filter(code -> code != null && !NO_MEA.equals(code) && !confirmed.contains(code))
                 .collect(Collectors.toCollection(LinkedHashSet::new)).stream().sorted().toList();
         return mapper.toResponse(leaflet, responses, pendingMea);

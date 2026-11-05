@@ -4,6 +4,7 @@ import type { DateRange, Periods } from '@/features/sales/periods'
 import { api, ApiError, downloadFile, printFile } from '@/lib/api'
 import type {
   ArticleDelivery,
+  ArticleProtocol,
   CadencierImport,
   CadencierOverview,
   DeliCostsOverview,
@@ -13,6 +14,7 @@ import type {
   NomenclatureOption,
   PeriodSummary,
   PeriodSummaryLevel,
+  OverpaymentReport,
   PriceCheckCategory,
   PriceCheckReport,
   PriceCheckReview,
@@ -28,6 +30,10 @@ import type {
   SalesComparison,
   SalesHistory,
   SalesReportsOverview,
+  TopSalesLevel,
+  TopSalesMetric,
+  TopSalesPartner,
+  TopSalesReport,
 } from '@/lib/types'
 
 /** Raporty liczą się z zapisanej sprzedaży sklepu, więc sklep jest częścią klucza. */
@@ -143,7 +149,13 @@ export function useSalesHistory(
 ) {
   return useQuery({
     enabled,
-    queryKey: [...reportsKey(storeId), `${kind}-history`, target.kind === 'article' ? target.itm8 : target, range, filter],
+    queryKey: [
+      ...reportsKey(storeId),
+      `${kind}-history`,
+      target.kind === 'article' ? target.itm8 : target,
+      range,
+      filter,
+    ],
     staleTime: REPORT_STALE_TIME,
     queryFn: () => {
       const params = new URLSearchParams({ from: range.from, to: range.to })
@@ -169,6 +181,14 @@ export function useArticleDeliveries(storeId: string, itm8: string | null) {
   })
 }
 
+/** Ostatnie protokoły artykułu inne niż przyjęcia i korekty, od najnowszego. */
+export function useArticleProtocols(storeId: string, itm8: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article', itm8, 'protocols'],
+    queryFn: () => api<ArticleProtocol[]>(`${reportsPath(storeId)}/articles/${itm8}/protocols`),
+  })
+}
+
 /** Artykuł z kartoteki; {@code null}, gdy go w niej nie ma (sprzedaż artykułu spoza kartoteki). */
 export function useSalesArticle(storeId: string, itm8: string | null) {
   return useQuery({
@@ -191,7 +211,9 @@ export function usePeriodSummary(storeId: string, range: DateRange, enabled: boo
     queryKey: [...reportsKey(storeId), 'period-summary', range],
     staleTime: REPORT_STALE_TIME,
     queryFn: () =>
-      api<PeriodSummary>(`${reportsPath(storeId)}/period-summary?${new URLSearchParams({ from: range.from, to: range.to })}`),
+      api<PeriodSummary>(
+        `${reportsPath(storeId)}/period-summary?${new URLSearchParams({ from: range.from, to: range.to })}`,
+      ),
     enabled,
     placeholderData: keepPreviousData,
   })
@@ -250,7 +272,7 @@ export function usePeriodSummaryChildren(storeId: string, range: DateRange, pare
   })
 }
 
-const summaryPdfPath =(storeId: string, range: DateRange) =>
+const summaryPdfPath = (storeId: string, range: DateRange) =>
   `${reportsPath(storeId)}/period-summary/pdf?${new URLSearchParams({ from: range.from, to: range.to })}`
 
 /** Wydruk podsumowania: PDF od razu w oknie drukowania albo zapis pliku. */
@@ -326,13 +348,66 @@ export function usePriceCheck(storeId: string) {
   })
 }
 
+export type TopSalesQuery = {
+  range: DateRange
+  metric: TopSalesMetric
+  level: TopSalesLevel
+  limit: number
+  minQuantity: number
+  filter: string[]
+  compared: string[]
+  rankStore: string
+}
+
+/** Topy sprzedażowe; top ilościowy sprawdza promocje, więc za rok liczy się kilka sekund. */
+export function useTopSales(storeId: string, query: TopSalesQuery, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'top-sales', query],
+    staleTime: REPORT_STALE_TIME,
+    placeholderData: keepPreviousData,
+    queryFn: () => {
+      const params = new URLSearchParams({
+        from: query.range.from,
+        to: query.range.to,
+        metric: query.metric,
+        level: query.level,
+        limit: String(query.limit),
+        minQuantity: String(query.minQuantity),
+        rankStore: query.rankStore,
+      })
+      query.filter.forEach((code) => params.append('nomenclatures', code))
+      query.compared.forEach((store) => params.append('compareStores', store))
+      return api<TopSalesReport>(`${reportsPath(storeId)}/top-sales?${params}`)
+    },
+    enabled,
+  })
+}
+
+/** Sklepy zaprzyjaźnione do porównania w topach sprzedażowych. */
+export function useTopSalesPartners(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'top-sales', 'stores'],
+    queryFn: () => api<TopSalesPartner[]>(`${reportsPath(storeId)}/top-sales/stores`),
+  })
+}
+
+/** Przepłacone artykuły: przyjęcia z ostatnich 30 dni droższe niż poprzednie dostawy. */
+export function useOverpayments(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'overpayments'],
+    queryFn: () => api<OverpaymentReport>(`${reportsPath(storeId)}/overpayments`),
+  })
+}
+
 /** Skuteczność promocji kończących się w okresie (najwyżej 92 dni; liczy się kilka sekund). */
 export function usePromotionReport(storeId: string, range: DateRange, enabled: boolean) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'promotions', range],
     staleTime: REPORT_STALE_TIME,
     queryFn: () =>
-      api<PromotionReport>(`${reportsPath(storeId)}/promotions?${new URLSearchParams({ from: range.from, to: range.to })}`),
+      api<PromotionReport>(
+        `${reportsPath(storeId)}/promotions?${new URLSearchParams({ from: range.from, to: range.to })}`,
+      ),
     enabled,
     placeholderData: keepPreviousData,
   })
@@ -420,12 +495,16 @@ export function usePriceCheckCategoryActions(storeId: string) {
   }
 }
 
+/** Raport, którego dotyczy status wyjaśniania: statusy obu raportów są niezależne. */
+export type ReviewedReport = 'BASE_PURCHASE' | 'OVERPAYMENT'
+
 /** Status wyjaśniania przyjęcia: nowy wpis, cofnięcie (znacznik) i przywrócenie; każde zwraca historię. */
-export function usePriceCheckReviewActions(storeId: string) {
+export function usePriceReviewActions(storeId: string, report: ReviewedReport) {
+  const reportPath = report === 'OVERPAYMENT' ? `${reportsPath(storeId)}/overpayments` : priceCheckPath(storeId)
   return {
     review: useMutation({
       mutationFn: ({ documentId, status, note }: { documentId: string; status: PriceCheckStatus; note: string }) =>
-        api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/documents/${documentId}/reviews`, {
+        api<PriceCheckReview[]>(`${reportPath}/documents/${documentId}/reviews`, {
           method: 'POST',
           json: { status, note },
         }),

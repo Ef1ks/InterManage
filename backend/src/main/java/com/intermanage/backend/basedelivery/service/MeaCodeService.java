@@ -1,6 +1,7 @@
 package com.intermanage.backend.basedelivery.service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -33,6 +34,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
 @Service
 public class MeaCodeService {
 
+    private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final Comparator<MeaOverview.PendingCode> PENDING_ORDER =
             Comparator.comparing(MeaOverview.PendingCode::deliveryDate, Comparator.reverseOrder())
                     .thenComparing(MeaOverview.PendingCode::code);
@@ -61,7 +63,7 @@ public class MeaCodeService {
         List<Occurrence> occurrences = new ArrayList<>();
         deliveries.findPendingMeaCodes(storeId).forEach(occurrence -> occurrences.add(new Occurrence(
                 occurrence.getCode(), occurrence.getNumber(), occurrence.getDeliveryDate(), false)));
-        leaflets.findPendingMeaCodes(storeId).forEach(occurrence -> occurrences.add(new Occurrence(
+        leaflets.findPendingMeaCodes(storeId, LocalDate.now(STORE_ZONE)).forEach(occurrence -> occurrences.add(new Occurrence(
                 occurrence.getCode(), occurrence.getWeek() + "/" + occurrence.getYear(), occurrence.getDateFrom(),
                 true)));
         Map<String, List<Occurrence>> byCode = occurrences.stream().collect(Collectors.groupingBy(Occurrence::code));

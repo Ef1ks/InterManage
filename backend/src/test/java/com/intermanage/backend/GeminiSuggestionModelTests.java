@@ -27,7 +27,7 @@ class GeminiSuggestionModelTests {
     private static final String ANSWER = """
             {"candidates":[{"content":{"parts":[{"text":"{\\"items\\":[{\\"id\\":0,\\"name\\":\\"SER 350G\\",\
             \\"brand\\":\\"SERPOL\\",\\"subfamily\\":\\"254302\\",\\"alternatives\\":[\\"254301\\"],\
-            \\"confidence\\":0.92,\\"unit\\":\\"kg\\",\\"net_content\\":0.35}]}"}]}}]}""";
+            \\"confidence\\":0.92,\\"unit\\":\\"kg\\",\\"net_content\\":0.35,\\"deposit\\":true}]}"}]}}]}""";
     private static final String OVERLOADED = """
             {"error":{"code":503,"message":"The model is overloaded","details":[{"retryDelay":"0s"}]}}""";
 
@@ -54,6 +54,7 @@ class GeminiSuggestionModelTests {
             assertThat(answer.alternatives()).containsExactly("254301");
             assertThat(answer.confidence()).isEqualTo(0.92);
             assertThat(answer.netContent()).isEqualByComparingTo("0.35");
+            assertThat(answer.deposit()).isTrue();
         });
     }
 

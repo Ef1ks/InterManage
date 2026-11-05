@@ -5,7 +5,6 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -15,6 +14,7 @@ import java.util.Locale;
 
 import org.springframework.stereotype.Component;
 
+import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.component.PdfFonts;
 import com.intermanage.backend.common.component.PdfPageFooter;
 import com.intermanage.backend.sales.dto.PeriodSummaryResponse;
@@ -40,7 +40,6 @@ import com.lowagie.text.pdf.PdfWriter;
 @Component
 public class PeriodSummaryPdf {
 
-    private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final Locale POLISH = Locale.of("pl", "PL");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy", POLISH);
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm", POLISH);
@@ -85,7 +84,7 @@ public class PeriodSummaryPdf {
         try {
             PdfWriter writer = PdfWriter.getInstance(document, out);
             String footer = "Podsumowanie sprzedaży i strat · sklep " + summary.storeNumber() + " · "
-                    + period(summary) + " · wydruk " + DATE_TIME.format(ZonedDateTime.now(STORE_ZONE))
+                    + period(summary) + " · wydruk " + DATE_TIME.format(ZonedDateTime.now(StoreTime.ZONE))
                     + (printedBy != null ? " · " + printedBy : "");
             writer.setPageEvent(new PdfPageFooter(font(regular, 7, MUTED), footer));
             document.addTitle("Podsumowanie sprzedaży i strat " + period(summary));

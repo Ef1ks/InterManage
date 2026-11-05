@@ -21,8 +21,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * Zmiana statusu wyjaśniania przyjęcia PZ z ceną wyższą niż baza. Obowiązuje najnowszy wpis bez znacznika
- * {@code deletedAt}; cofnięcie zmiany przywraca poprzedni status.
+ * Zmiana statusu wyjaśniania przyjęcia PZ w jednym z raportów cen ({@link ReviewedReport}). Obowiązuje najnowszy wpis
+ * raportu bez znacznika {@code deletedAt}; cofnięcie zmiany przywraca poprzedni status.
  */
 @Entity
 @Table(name = "price_check_reviews")
@@ -39,6 +39,10 @@ public class PriceCheckReview {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "document_id", nullable = false, updatable = false)
     private Document document;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, updatable = false)
+    private ReviewedReport report;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20, updatable = false)
@@ -64,9 +68,11 @@ public class PriceCheckReview {
     protected PriceCheckReview() {
     }
 
-    public PriceCheckReview(Store store, Document document, PriceCheckStatus status, String note, AppUser createdBy) {
+    public PriceCheckReview(Store store, Document document, ReviewedReport report, PriceCheckStatus status, String note,
+            AppUser createdBy) {
         this.store = store;
         this.document = document;
+        this.report = report;
         this.status = status;
         this.note = note;
         this.createdBy = createdBy;
@@ -93,6 +99,10 @@ public class PriceCheckReview {
 
     public Document getDocument() {
         return document;
+    }
+
+    public ReviewedReport getReport() {
+        return report;
     }
 
     public PriceCheckStatus getStatus() {

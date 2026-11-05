@@ -1,9 +1,7 @@
 package com.intermanage.backend.sales.service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -17,6 +15,8 @@ import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.Percent;
+import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
@@ -53,7 +53,6 @@ import com.intermanage.backend.store.repository.StoreRepository;
 @Transactional(readOnly = true)
 public class PeriodSummaryService {
 
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final String UNASSIGNED_NAME = "Bez nomenklatury";
 
     private final SaleRepository sales;
@@ -85,7 +84,7 @@ public class PeriodSummaryService {
 
     /** Wiersze w kolejności wydruku; rejony bez sprzedaży i strat (i puste grupy) są pomijane. */
     public PeriodSummaryResponse summary(UUID storeId, LocalDate from, LocalDate to) {
-        checkPeriod(from, to);
+        ReportPeriod.check(from, to);
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
 
         Map<String, Sums> byRegion = new HashMap<>();
@@ -125,7 +124,7 @@ public class PeriodSummaryService {
      */
     public PeriodSummaryLevelResponse children(UUID storeId, LocalDate from, LocalDate to, String parent,
             boolean unassigned) {
-        checkPeriod(from, to);
+        ReportPeriod.check(from, to);
         String prefix = unassigned || parent == null ? "" : parent.strip();
         if (!unassigned && !prefix.matches("\\d{2}|\\d{4}|\\d{6}")) {
             throw ApiException.badRequest("Podaj kod rejonu, rodziny albo podrodziny");
@@ -183,15 +182,6 @@ public class PeriodSummaryService {
     }
 
     private record ArticleDetails(String name, String ean, String brand) {
-    }
-
-    private static void checkPeriod(LocalDate from, LocalDate to) {
-        if (from.isAfter(to)) {
-            throw ApiException.badRequest("Data początkowa jest późniejsza niż końcowa");
-        }
-        if (ChronoUnit.DAYS.between(from, to) + 1 > SalesReportService.MAX_PERIOD_DAYS) {
-            throw ApiException.badRequest("Okres może mieć najwyżej " + SalesReportService.MAX_PERIOD_DAYS + " dni");
-        }
     }
 
     /** Wydruk podsumowania (PDF, A4 poziomo). */
@@ -329,12 +319,8 @@ public class PeriodSummaryService {
     private static Figures figures(Sums sums, BigDecimal storeGross) {
         BigDecimal afterLosses = sums.margin().subtract(sums.loss());
         return new Figures(sums.saleNet(), sums.saleGross(), sums.cost(), sums.margin(),
-                percent(sums.margin(), sums.saleNet()), sums.loss(), percent(sums.loss(), sums.saleGross()),
-                afterLosses, percent(afterLosses, sums.saleNet()), percent(sums.saleGross(), storeGross));
-    }
-
-    private static BigDecimal percent(BigDecimal value, BigDecimal base) {
-        return base.signum() == 0 ? null : value.multiply(HUNDRED).divide(base, 2, RoundingMode.HALF_UP);
+                Percent.of(sums.margin(), sums.saleNet()), sums.loss(), Percent.of(sums.loss(), sums.saleGross()),
+                afterLosses, Percent.of(afterLosses, sums.saleNet()), Percent.of(sums.saleGross(), storeGross));
     }
 
     private record Sums(BigDecimal saleNet, BigDecimal saleGross, BigDecimal cost, BigDecimal margin,

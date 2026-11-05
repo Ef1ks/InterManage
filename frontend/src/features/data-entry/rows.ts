@@ -22,6 +22,8 @@ export type RowSuggestion = {
   confirmed: boolean
   /** Model odpowiedział (bez tego propozycje są tylko z kartoteki i warto zapytać ponownie). */
   modelAnswered: boolean
+  /** Artykuł z kaucją. Brak w starszych szkicach. */
+  deposit?: boolean
 }
 
 /** Wiersz tabeli wprowadzania danych (jedna pozycja faktury albo wiersz dopisany ręcznie). */
@@ -145,6 +147,11 @@ export function depositNotice(row: DataEntryRow): string | null {
   if (!base || row.known || !base.deposit || base.deposit === 'NIE') return null
   const label = depositLabel(base.deposit)
   return label ? `Nowy artykuł z kaucją (${label}): ustaw kaucję przy zakładaniu w Mercalys` : null
+}
+
+/** Nowy artykuł z kaucją wskazany przez „Uzupełnij z AI”: kaucji jeszcze nie ma w kartotece. */
+export function missingDeposit(row: DataEntryRow) {
+  return !row.known && row.suggestion?.deposit === true
 }
 
 /** Pola artykułu, które pochodzą z kartoteki (ilość, cena zakupu i VAT są z faktury). */
@@ -463,6 +470,24 @@ export function withServicesLast(rows: DataEntryRow[]) {
   return ordered.every((row, index) => row === rows[index]) ? rows : ordered
 }
 
+/** Wiersze widoczne po filtrze zastąpione nowymi z tabeli, każdy na swoim miejscu między ukrytymi. */
+export function mergeVisible(all: DataEntryRow[], visible: DataEntryRow[], next: DataEntryRow[]) {
+  const slots = new Set(visible.map((row) => row.id))
+  const result: DataEntryRow[] = []
+  let index = 0
+  let lastSlot = -1
+  for (const row of all) {
+    if (!slots.has(row.id)) {
+      result.push(row)
+      continue
+    }
+    if (index < next.length) result.push(next[index++])
+    lastSlot = result.length
+  }
+  const rest = next.slice(index)
+  return lastSlot < 0 ? [...result, ...rest] : [...result.slice(0, lastSlot), ...rest, ...result.slice(lastSlot)]
+}
+
 /**
  * Pod artykułami zawsze jest pusty wiersz na kolejny EAN (po wczytaniu faktury, po zatwierdzeniu kodu kliknięciem
  * obok). Pusta tabela zostaje pusta.
@@ -497,6 +522,7 @@ export function withSuggestion(row: DataEntryRow, suggestion: Suggestion): DataE
       unitMismatch: suggestion.unitMismatch,
       confirmed: false,
       modelAnswered: suggestion.name !== null,
+      deposit: suggestion.deposit,
     },
   }
   if (!row.edited.name && suggestion.name) {

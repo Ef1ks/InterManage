@@ -165,6 +165,9 @@ public class SalesImportService {
             log.warn("Nie udało się odczytać pliku importu sprzedaży", e);
             throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
         }
+        if (sink.created > 0) {
+            sales.refreshMonthPrices(storeId, sink.salesImport.getPeriodFrom(), sink.salesImport.getPeriodTo());
+        }
         sink.salesImport.recordResult(summary.totalRows(), Math.toIntExact(sink.created),
                 Math.toIntExact(sink.conflicting), Math.toIntExact(sink.incomplete));
         return salesMapper.toResponse(sink.salesImport);

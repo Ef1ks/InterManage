@@ -271,15 +271,34 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
 
     /**
      * Ostatnie przyjęcie PZ z ilością > 0 każdego z {@code itm8s} (dostawca linii i data dokumentu), do kolumny
-     * „Ostatnia dostawa” listy towarów; liczone tylko dla strony listy (indeks linii po ITM8).
+     * „Ostatnia dostawa” listy towarów; liczone tylko dla strony listy. Linia z lokalnym ITM8 dostawcy, którego nie ma
+     * w kartotece, należy do artykułu po EAN-ie (jak {@code DocumentLineRepository.findArticleDeliveries}).
      */
     @Query(value = """
-            select distinct on (l.itm8) l.itm8 as itm8, l.supplier_code as supplierCode,
+            with article_eans as (
+                select p.itm8, ltrim(btrim(p.ean), '0') as ean from products p
+                where p.store_id = :storeId and p.itm8 in (:itm8s)
+                union
+                select p.itm8, ltrim(btrim(pe.ean), '0') from product_eans pe join products p on p.id = pe.product_id
+                where p.store_id = :storeId and p.itm8 in (:itm8s)
+                union
+                select pc.itm8, ltrim(btrim(pc.ean), '0') from product_codes pc
+                where pc.store_id = :storeId and pc.current and pc.itm8 in (:itm8s)
+            ), article_lines as (
+                select l.itm8 as article, l.id from document_lines l where l.itm8 in (:itm8s)
+                union
+                select e.itm8, l.id from article_eans e
+                join document_lines l on ltrim(btrim(l.ean), '0') = e.ean
+                where length(e.ean) >= 8
+                    and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8)
+            )
+            select distinct on (a.article) a.article as itm8, l.supplier_code as supplierCode,
                 l.supplier_name as supplierName, d.document_date as documentDate
-            from document_lines l
+            from article_lines a
+            join document_lines l on l.id = a.id
             join documents d on d.id = l.document_id
-            where l.itm8 in (:itm8s) and d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
-            order by l.itm8, d.document_date desc, d.number desc""", nativeQuery = true)
+            where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
+            order by a.article, d.document_date desc, d.number desc""", nativeQuery = true)
     List<LastDelivery> findLastDeliveries(UUID storeId, Collection<String> itm8s);
 
     /**

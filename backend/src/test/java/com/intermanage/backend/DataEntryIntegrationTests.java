@@ -292,6 +292,19 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.items.length()").value(0));
         mvc.perform(get(url("/catalog")).param("name", "mleko 3").cookie(owner))
                 .andExpect(jsonPath("$.items[0].lastDelivery.date").value(today.minusMonths(7).toString()));
+        // Lokalny ITM8 dostawcy, którego nie ma w kartotece: dostawa należy do artykułu po EAN-ie.
+        String localDelivery = jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                    sale_value_gross, first_import_id, last_import_id)
+                values (?::uuid, 'PZ', '50', ?::timestamp, 1, 0, 0, ?::uuid, ?::uuid) returning id""",
+                String.class, storeId, today.minusDays(2).toString(), documentImport, documentImport);
+        jdbc.update("""
+                insert into document_lines (document_id, line_number, itm8, ean, quantity, supplier_code, supplier_name)
+                values (?::uuid, 1, '0000099000001', '05900000000012', 3, '132', 'HURTOWNIA LOKALNA')""",
+                UUID.fromString(localDelivery));
+        mvc.perform(get(url("/catalog")).param("name", "mleko 3").cookie(owner))
+                .andExpect(jsonPath("$.items[0].lastDelivery.supplierName").value("HURTOWNIA LOKALNA"))
+                .andExpect(jsonPath("$.items[0].lastDelivery.date").value(today.minusDays(2).toString()));
         // Słowa w dowolnej kolejności, każde musi pasować.
         mvc.perform(get(url("/catalog")).param("name", "pla gou 15").cookie(owner))
                 .andExpect(jsonPath("$.items[*].name").value(contains("SER GOUDA PLASTRY 150G")));
@@ -447,14 +460,14 @@ class DataEntryIntegrationTests {
         when(model.suggest(anyString(), anyString())).thenReturn(List.of(
                 // Ser: warstwa bez modelu jest pewna, więc podrodzina modelu (inna) jej nie zmienia.
                 new SuggestionModel.Answer(0, "Ser Liliput 350 g.", "serpol", "254401", List.of(), 0.7, "kg",
-                        new BigDecimal("0.35")),
+                        new BigDecimal("0.35"), false),
                 // Chipsy: model zgodny z podobnymi nazwami i pewny; marka jak w kartotece, kod spoza nomenklatury
                 // w alternatywach pominięty.
                 new SuggestionModel.Answer(1, "Chipsy paprykowe 150g/12", "lajkonik", "010105",
-                        List.of("999999", "010106"), 0.95, "kg", new BigDecimal("0.15")),
+                        List.of("999999", "010106"), 0.95, "kg", new BigDecimal("0.15"), null),
                 // Pianki: model niepewny - podrodziny nie wpisujemy, są propozycje do wyboru.
                 new SuggestionModel.Answer(2, "Pianki pasek pompon 30g", "Wisła", "010909", List.of("010904"),
-                        0.6, "kg", new BigDecimal("0.03"))));
+                        0.6, "kg", new BigDecimal("0.03"), false)));
 
         String response = suggest(owner, items()).andExpect(status().isOk())
                 .andExpect(jsonPath("$.modelUsed").value(true))
@@ -691,12 +704,58 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void marksDepositAndKeepsItAndBrandOutOfName() throws Exception {
+        when(model.available()).thenReturn(true);
+        when(model.name()).thenReturn("test-model");
+        when(model.suggest(anyString(), anyString())).thenReturn(List.of(
+                // Kaucję widać w nazwie z faktury, model jej nie zgłosił i zostawił ją razem z marką w nazwie.
+                new SuggestionModel.Answer(0, "Hortex Napój Jabłko KAUCJA 330ml", "Hortex", "010909", List.of(), 0.6,
+                        "L", new BigDecimal("0.33"), false),
+                // Tylko model wie, że to puszka z kaucją.
+                new SuggestionModel.Answer(1, "Piwo jasne 500ml", "Tyskie", "010909", List.of(), 0.6, "L",
+                        new BigDecimal("0.5"), true)));
+
+        suggest(owner, """
+                {"items":[
+                  {"key":"a","ean":null,"invoiceName":"Hortex Napój Jabłko 0.33L Puszka KAUCJA","invoiceUnit":"szt."},
+                  {"key":"b","ean":null,"invoiceName":"Piwo Tyskie 0,5l","invoiceUnit":"szt."},
+                  {"key":"c","ean":null,"invoiceName":"Sok jabłkowy bez kaucji 1l","invoiceUnit":"szt."}
+                ]}""").andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].name").value("NAPOJ JABLKO 330ML"))
+                .andExpect(jsonPath("$.items[0].brand").value("HORTEX"))
+                .andExpect(jsonPath("$.items[0].deposit").value(true))
+                .andExpect(jsonPath("$.items[1].name").value("PIWO JASNE 500ML"))
+                .andExpect(jsonPath("$.items[1].deposit").value(true))
+                .andExpect(jsonPath("$.items[2].deposit").value(false));
+    }
+
+    @Test
+    void tobaccoKeepsBrandInName() throws Exception {
+        when(model.available()).thenReturn(true);
+        when(model.name()).thenReturn("test-model");
+        when(model.suggest(anyString(), anyString())).thenReturn(List.of(
+                new SuggestionModel.Answer(0, "Winston Blue Superline", "Winston", "390101", List.of(), 0.9, "szt.",
+                        BigDecimal.ONE, false),
+                new SuggestionModel.Answer(1, "Winston Krem do rąk", "Winston", "010909", List.of(), 0.9, "szt.",
+                        BigDecimal.ONE, false)));
+
+        suggest(owner, """
+                {"items":[
+                  {"key":"a","ean":null,"invoiceName":"P.Winston Blue Superline /10/ (25.50)","invoiceUnit":"szt."},
+                  {"key":"b","ean":null,"invoiceName":"Winston Krem do rąk","invoiceUnit":"szt."}
+                ]}""").andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].name").value("WINSTON BLUE SUPERLINE"))
+                .andExpect(jsonPath("$.items[0].brand").value("WINSTON"))
+                .andExpect(jsonPath("$.items[1].name").value("KREM DO RAK"));
+    }
+
+    @Test
     void shortensTooLongNames() throws Exception {
         when(model.available()).thenReturn(true);
         when(model.name()).thenReturn("test-model");
         when(model.suggest(anyString(), anyString())).thenReturn(List.of(
                 new SuggestionModel.Answer(2, "Pianki pasek pompon truskawkowo-malinowe 30g", "Wisła", "010909",
-                        List.of(), 0.6, "kg", new BigDecimal("0.03"))));
+                        List.of(), 0.6, "kg", new BigDecimal("0.03"), false)));
         when(model.shorten(anyString()))
                 .thenReturn(List.of(new SuggestionModel.Shortened(0, "pianki pompon trusk-mal")));
 

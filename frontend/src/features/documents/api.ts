@@ -408,13 +408,9 @@ export function useAmountConfirmation(storeId: string, typeCode: string, id: str
   }
 }
 
-/** Wydruk bonu dostawy przyjęcia (PDF z wartościami po korektach). */
-export function useDownloadDeliveryNote(storeId: string) {
-  return useMutation({
-    mutationFn: (document: Pick<Document, 'id' | 'number'>) =>
-      downloadFile(`${documentsPath(storeId)}/pz/${document.id}/delivery-note`, `bon-dostawy-${document.number}.pdf`),
-    meta: { invalidates: false },
-  })
+/** Adres wydruku dokumentu (przyjęcie: bon dostawy po korektach, reszta: protokół z podsumowaniem nomenklatury). */
+export function documentPrintPath(storeId: string, document: Pick<Document, 'id' | 'type'>, format: 'pdf' | 'xlsx') {
+  return `${documentsPath(storeId)}/${document.type.toLowerCase()}/${document.id}/print/${format}`
 }
 
 /**
@@ -605,5 +601,8 @@ export function useReceiveTransfer(storeId: string, id: string) {
 }
 
 /** Plik przyjęcia w przyjętych ilościach: PROTO6 (.Traite0) dla programu sklepu albo Excel. */
+export const incomingTransferPrintPath = (storeId: string, id: string, format: 'pdf' | 'xlsx') =>
+  `${incomingPath(storeId)}/${id}/print/${format}`
+
 export const incomingTransferExportPath = (storeId: string, id: string, format: 'proto' | 'xlsx') =>
   `${incomingPath(storeId)}/${id}/export/${format}`

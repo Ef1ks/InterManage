@@ -43,6 +43,7 @@ import com.intermanage.backend.document.repository.DocumentSearch;
 import com.intermanage.backend.document.service.DeliveryCorrectionService;
 import com.intermanage.backend.document.service.DocumentGratisService;
 import com.intermanage.backend.document.service.DocumentKsefLinkService;
+import com.intermanage.backend.document.service.DocumentPrintService;
 import com.intermanage.backend.document.service.DocumentService;
 import com.intermanage.backend.document.service.InvoiceAmountCheckService;
 import com.intermanage.backend.document.service.InvoiceComparisonService;
@@ -69,10 +70,13 @@ public class DocumentController {
     private final DeliveryCorrectionService corrections;
     private final InvoiceAmountCheckService amountChecks;
     private final InvoiceComparisonService invoiceComparison;
+    private final DocumentPrintService prints;
 
     public DocumentController(DocumentService documentService, DocumentGratisService gratisService,
             DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
-            InvoiceAmountCheckService amountChecks, InvoiceComparisonService invoiceComparison) {
+            InvoiceAmountCheckService amountChecks, InvoiceComparisonService invoiceComparison,
+            DocumentPrintService prints) {
+        this.prints = prints;
         this.invoiceComparison = invoiceComparison;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
@@ -193,7 +197,26 @@ public class DocumentController {
     @PreAuthorize(VIEW)
     public ResponseEntity<byte[]> deliveryNote(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
-        DocumentService.ExportFile file = documentService.deliveryNote(storeId, type, id, principal.getId());
+        return attachment(documentService.deliveryNote(storeId, type, id, principal.getId()));
+    }
+
+    /** Wydruk dokumentu każdego typu (PDF): linie, a na dole rozbicie na nomenklaturę, stawki VAT i podpisy. */
+    @GetMapping("/{type}/{id}/print/pdf")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> printPdf(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return attachment(prints.pdf(storeId, type, id, principal.getId()));
+    }
+
+    /** To samo w Excelu. */
+    @GetMapping("/{type}/{id}/print/xlsx")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> printXlsx(@PathVariable UUID storeId, @PathVariable String type,
+            @PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return attachment(prints.xlsx(storeId, type, id, principal.getId()));
+    }
+
+    private static ResponseEntity<byte[]> attachment(DocumentService.ExportFile file) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())

@@ -160,7 +160,8 @@ public class GeminiSuggestionModel implements SuggestionModel {
                     text(item, "subfamily"), alternatives,
                     item.path("confidence").isNumber() ? item.path("confidence").asDouble() : null,
                     text(item, "unit"),
-                    item.path("net_content").isNumber() ? item.path("net_content").decimalValue() : null));
+                    item.path("net_content").isNumber() ? item.path("net_content").decimalValue() : null,
+                    item.path("deposit").isBoolean() ? item.path("deposit").asBoolean() : null));
         }
         return answers;
     }
@@ -207,9 +208,10 @@ public class GeminiSuggestionModel implements SuggestionModel {
                                     "alternatives", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
                                     "confidence", Map.of("type", "NUMBER"),
                                     "unit", Map.of("type", "STRING", "enum", List.of("kg", "L", "szt.")),
-                                    "net_content", Map.of("type", "NUMBER")),
+                                    "net_content", Map.of("type", "NUMBER"),
+                                    "deposit", Map.of("type", "BOOLEAN")),
                             "required", List.of("id", "name", "brand", "subfamily", "alternatives", "confidence",
-                                    "unit", "net_content")))),
+                                    "unit", "net_content", "deposit")))),
             "required", List.of("items"));
 
     private static final Map<String, Object> SHORTEN_SCHEMA = Map.of(

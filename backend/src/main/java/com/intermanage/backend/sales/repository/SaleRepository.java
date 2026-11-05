@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.sales.entity.Sale;
@@ -305,9 +306,13 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
 
     /**
      * Ustawienia zapytań raportu do końca transakcji: bez JIT (przy roku do roku kompilacja to ok. 100 ms z 800 ms
-     * i nic nie daje) i {@code work_mem} 32 MB (przy domyślnych 4 MB sumy ok. 55 tys. artykułów lądują na dysku).
+     * i nic nie daje), {@code work_mem} 64 MB (przy domyślnych 4 MB sumy ok. 55 tys. artykułów lądują na dysku) i plan
+     * liczony dla każdego wykonania: po kilku wykonaniach PostgreSQL przechodzi na plan ogólny, wolniejszy dla okresu.
      */
-    @Query(value = "select set_config('jit', 'off', true) || set_config('work_mem', '32MB', true)",
+    @Query(value = """
+            select set_config('jit', 'off', true) || set_config('work_mem', '64MB', true)
+                   || set_config('plan_cache_mode', 'force_custom_plan', true)
+            """,
             nativeQuery = true)
     String tuneForReport();
 
@@ -471,6 +476,26 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             from article a
             left join products p on p.store_id = :storeId and p.itm8 = a.itm8
             """;
+
+    /** Przelicza ceny artykułów ({@code sales_month_prices}) w miesiącach, których dotyczy okres. */
+    @Modifying
+    @Query(value = """
+            insert into sales_month_prices (store_id, itm8, month, price, sale_days)
+            select s.store_id, s.itm8, cast(date_trunc('month', s.sale_date) as date),
+                   percentile_cont(0.75) within group (order by s.sale_value_gross / s.quantity), count(*)
+            from sales_by_article s
+            where s.store_id = :storeId and s.quantity > 0 and s.sale_value_gross > 0
+              and s.sale_date >= date_trunc('month', cast(:from as timestamp))
+              and s.sale_date < date_trunc('month', cast(:to as timestamp)) + interval '1 month'
+            group by 1, 2, 3
+            on conflict (store_id, month, itm8) do update
+            set price = excluded.price, sale_days = excluded.sale_days
+            """, nativeQuery = true)
+    void refreshMonthPrices(UUID storeId, LocalDate from, LocalDate to);
+
+    /** Sprzedaż w okresie wszystkich artykułów sklepu. */
+    @Query(value = STORE_PERIOD_ARTICLES + PERIOD_ARTICLE_ROWS, nativeQuery = true)
+    List<ArticleSales> sumArticles(UUID storeId, LocalDate from, LocalDate to);
 
     /** Sprzedaż w okresie artykułów, których podrodzina zaczyna się od {@code parent} (rozwinięty wiersz podsumowania). */
     @Query(value = GROUP_PERIOD_ARTICLES + PERIOD_ARTICLE_ROWS, nativeQuery = true)

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
+import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.DeliCostsOverview;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
@@ -105,6 +106,13 @@ public class SalesReportController {
     @PreAuthorize(ARTICLE_VIEW)
     public List<ArticleDeliveryResponse> articleDeliveries(@PathVariable UUID storeId, @PathVariable String itm8) {
         return salesReportService.deliveries(storeId, itm8);
+    }
+
+    /** Ostatnie protokoły artykułu inne niż przyjęcia i korekty: rodzaj, data i ilość, od najnowszego. */
+    @GetMapping("/articles/{itm8}/protocols")
+    @PreAuthorize(ARTICLE_VIEW)
+    public List<ArticleProtocolResponse> articleProtocols(@PathVariable UUID storeId, @PathVariable String itm8) {
+        return salesReportService.protocols(storeId, itm8);
     }
 
     /** Skąd są koszty garmażu: najnowszy raport dokumentów i do którego dnia sięgają wgrane raporty. */

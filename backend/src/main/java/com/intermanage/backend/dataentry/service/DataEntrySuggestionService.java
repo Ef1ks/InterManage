@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.dataentry.component.ArticleName;
 import com.intermanage.backend.dataentry.component.Measure;
 import com.intermanage.backend.dataentry.component.SuggestionModel;
 import com.intermanage.backend.dataentry.component.SuggestionPrompt;
@@ -48,7 +50,7 @@ import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
- * "Uzupełnij z AI": nazwa, marka, podrodzina, rodzaj sprzedaży i waga dla nowych artykułów z faktury.
+ * "Uzupełnij z AI": nazwa, marka, podrodzina, rodzaj sprzedaży, waga i kaucja dla nowych artykułów z faktury.
  *
  * <p>Warstwa bez modelu (kartoteka sklepu): podobne nazwy (pg_trgm) głosują swoją podrodziną z wagą
  * podobieństwo², z premią dla podrodzin, w których dostawca faktury ma towar, a inne produkty producenta (prefiks EAN
@@ -76,6 +78,8 @@ public class DataEntrySuggestionService {
     static final double AGREED_MIN_CONFIDENCE = 0.9;
     static final double SUPPLIER_BOOST = 10;
     static final int PROPOSALS = 5;
+    /** Rodzina papierosów i wyrobów tytoniowych: po marce klient je rozpoznaje, więc zostaje ona w nazwie. */
+    static final String TOBACCO_FAMILY = "3901";
     /** Najdłuższa nazwa w kartotece sklepu (dłuższą tabela pokazuje jako błąd). */
     static final int NAME_LIMIT = 30;
 
@@ -157,10 +161,11 @@ public class DataEntrySuggestionService {
         Map<Integer, String> names = new HashMap<>();
         answers.forEach((index, answer) -> {
             if (answer.name() != null) {
-                names.put(index, Measure.normalizeName(answer.name(), measure(items.get(index), answer)));
+                names.put(index, ArticleName.clean(answer.name(), brandToRemove(answer, context.layers().get(index)),
+                        measure(items.get(index), answer)));
             }
         });
-        shortenNames(items, answers, names);
+        shortenNames(items, answers, names, context);
 
         return writeTransaction.execute(status -> {
             Store store = stores.getReferenceById(storeId);
@@ -322,7 +327,7 @@ public class DataEntrySuggestionService {
      * zastępuje dłuższą. Gdy model nie odpowie, nazwy zostają, a tabela pokaże je jako za długie.
      */
     private void shortenNames(List<SuggestionRequest.Item> items, Map<Integer, SuggestionModel.Answer> answers,
-            Map<Integer, String> names) {
+            Map<Integer, String> names, Context context) {
         List<Integer> tooLong = names.entrySet().stream().filter(entry -> entry.getValue().length() > NAME_LIMIT)
                 .map(Map.Entry::getKey).sorted().toList();
         if (tooLong.isEmpty()) {
@@ -355,7 +360,8 @@ public class DataEntrySuggestionService {
                         continue;
                     }
                     int index = tooLong.get(position);
-                    String name = Measure.normalizeName(shortened.name(), measures.get(index));
+                    String name = ArticleName.clean(shortened.name(),
+                            brandToRemove(answers.get(index), context.layers().get(index)), measures.get(index));
                     if (!name.isEmpty() && name.length() < names.get(index).length()) {
                         names.put(index, name);
                     }
@@ -366,6 +372,14 @@ public class DataEntrySuggestionService {
                 log.info("Model nie skrócił nazw: {}", e.getCause().getMessage());
             }
         });
+    }
+
+    /** Marka do usunięcia z nazwy; bez niej, gdy model albo kartoteka wskazują papierosy. */
+    private static String brandToRemove(SuggestionModel.Answer answer, Layer layer) {
+        String producerTop = layer.producer() != null ? layer.producer().top() : null;
+        boolean tobacco = Stream.of(answer.subfamily(), layer.top(), producerTop)
+                .anyMatch(code -> code != null && code.startsWith(TOBACCO_FAMILY));
+        return tobacco ? null : answer.brand();
     }
 
     /** Miara nowego artykułu: z faktury, bez niej od modelu, bez obu sztuki. */
@@ -461,6 +475,8 @@ public class DataEntrySuggestionService {
         boolean unitMismatch = parsed != null && fromModel != null && (!parsed.unit().equals(fromModel.unit())
                 || parsed.netContent().compareTo(fromModel.netContent()) != 0);
         String brand = answer != null ? brands.canonical(answer.brand(), layer.producer()) : null;
+        boolean deposit = ArticleName.mentionsDeposit(item.invoiceName())
+                || (answer != null && Boolean.TRUE.equals(answer.deposit()));
 
         BigDecimal modelConfidence = answer != null && answer.confidence() != null
                 ? BigDecimal.valueOf(Math.max(0, Math.min(1, answer.confidence()))).setScale(3, RoundingMode.HALF_UP)
@@ -484,7 +500,7 @@ public class DataEntrySuggestionService {
                         .toList(), name, brand, subfamily, measure.unit(), measure.netContent()),
                 user));
         return new SuggestionResponse.Suggestion(item.key(), saved.getId(), name, brand, measure.unit(),
-                measure.netContent(), unitMismatch, subfamily, status, modelConfidence, proposals);
+                measure.netContent(), unitMismatch, subfamily, status, modelConfidence, proposals, deposit);
     }
 
     /**

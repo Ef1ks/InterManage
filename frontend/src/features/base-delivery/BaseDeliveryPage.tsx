@@ -44,6 +44,7 @@ import {
 import { CommandBar, Stat, ToolbarDivider } from '@/features/data-entry/DataEntryPage'
 import { DataEntryGrid, type GridHandle } from '@/features/data-entry/DataEntryGrid'
 import { withSyncedDuplicates } from '@/features/data-entry/duplicates'
+import { lstFile } from '@/features/data-entry/lst-file'
 import {
   BASE_COLUMNS,
   type Column,
@@ -60,6 +61,7 @@ import {
   type DataEntryRow,
   depositError,
   incompleteEan,
+  mergeVisible,
   netValue,
   productFileRow,
   suggestedPrice,
@@ -102,7 +104,6 @@ import {
   PLU_FOLDER,
   PLU_REGIONS,
   pluEans,
-  pluFile,
   supplierKey,
   VIEW_LABELS,
   VIEW_REGIONS,
@@ -188,24 +189,6 @@ type AppliedFilter = {
   quick: QuickFilter | null
   known: Set<string>
   pass: Set<string>
-}
-
-/** Wiersze widoczne po filtrze zastąpione nowymi z tabeli, każdy na swoim miejscu między ukrytymi. */
-function mergeVisible(all: DataEntryRow[], visible: DataEntryRow[], next: DataEntryRow[]) {
-  const slots = new Set(visible.map((row) => row.id))
-  const result: DataEntryRow[] = []
-  let index = 0
-  let lastSlot = -1
-  for (const row of all) {
-    if (!slots.has(row.id)) {
-      result.push(row)
-      continue
-    }
-    if (index < next.length) result.push(next[index++])
-    lastSlot = result.length
-  }
-  const rest = next.slice(index)
-  return lastSlot < 0 ? [...result, ...rest] : [...result.slice(0, lastSlot), ...rest, ...result.slice(lastSlot)]
 }
 
 function StoreBaseDelivery({ store }: { store: StoreSummary }) {
@@ -616,8 +599,8 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     try {
       const folderReady = await ensureFolderAccess(PLU_FOLDER.key)
       const fileName = `PLU_${draft.delivery.number}.lst`
-      if (folderReady) await saveToFolder(PLU_FOLDER.key, fileName, pluFile(plu))
-      else saveBlob(pluFile(plu), fileName)
+      if (folderReady) await saveToFolder(PLU_FOLDER.key, fileName, lstFile(plu))
+      else saveBlob(lstFile(plu), fileName)
       toast.success(`Zapisano plik ${fileName}`, {
         description: `${plu.length} ${plu.length === 1 ? 'EAN' : 'EAN-ów'} z nomenklatury ${PLU_REGIONS.join(' i ')}${folderReady ? '' : ' (pobrany: folder nie jest wybrany w ustawieniach zapisu)'}`,
       })

@@ -13,6 +13,7 @@ import {
   type ReportKind,
   type SalesChartTarget,
   useArticleDeliveries,
+  useArticleProtocols,
   useSalesArticle,
   useSalesHistory,
 } from '@/features/sales/api'
@@ -343,7 +344,12 @@ function ChartContent({
         )}
       </div>
 
-      {target.kind === 'article' && <ArticleDeliveries storeId={storeId} itm8={target.itm8} />}
+      {target.kind === 'article' && (
+        <>
+          <ArticleDeliveries storeId={storeId} itm8={target.itm8} />
+          <ArticleProtocols storeId={storeId} itm8={target.itm8} />
+        </>
+      )}
     </>
   )
 }
@@ -576,6 +582,94 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
                     {delivery.purchasePrice == null ? '—' : `${formatPrice(delivery.purchasePrice)} zł`}
                   </td>
                   <td className="px-3 py-1.5 text-right whitespace-nowrap">{formatZloty(delivery.purchaseValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Ostatnie protokoły artykułu inne niż przyjęcia i korekty, od najnowszego: rodzaj, numer i ilość. Przeniesienie stanów
+ * zarejestrowane jako gratis ma plakietkę „Gratis”. Numer prowadzi do dokumentu.
+ */
+function ArticleProtocols({ storeId, itm8 }: { storeId: string; itm8: string }) {
+  const protocols = useArticleProtocols(storeId, itm8)
+  const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
+  const list = protocols.data
+
+  return (
+    <section className="grid min-w-0 gap-2" aria-labelledby="article-protocols">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 id="article-protocols" className="text-sm font-semibold">
+          Protokoły
+        </h3>
+        {list && list.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {list.length === 20 ? 'ostatnie 20' : `dokumenty: ${list.length}`}, od najnowszego
+          </p>
+        )}
+      </div>
+      {!list ? (
+        protocols.isError ? (
+          <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+            Nie udało się wczytać protokołów.
+          </p>
+        ) : (
+          <div aria-hidden className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        )
+      ) : list.length === 0 ? (
+        <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+          Brak protokołów tego artykułu we wgranych raportach dokumentów.
+        </p>
+      ) : (
+        <div className="max-h-56 min-w-0 overflow-y-auto rounded-lg border">
+          <table className="w-full table-fixed text-sm tabular-nums">
+            <colgroup>
+              <col className="w-28" />
+              <col />
+              <col className="w-36" />
+              <col className="w-20" />
+            </colgroup>
+            <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Data</th>
+                <th className="px-3 py-2 text-left font-medium">Protokół</th>
+                <th className="px-3 py-2 text-left font-medium">Numer</th>
+                <th className="px-3 py-2 text-right font-medium">Ilość</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((protocol) => (
+                <tr key={protocol.documentId} className="border-t">
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    {deliveryDate.format(parseIsoDate(protocol.documentDate.slice(0, 10)))}
+                  </td>
+                  <td className="truncate px-3 py-1.5" title={protocol.label}>
+                    {protocol.gratis ? (
+                      <span className="rounded bg-emerald-200 px-1.5 py-px text-xs font-medium text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50">
+                        {protocol.label}
+                      </span>
+                    ) : (
+                      protocol.label
+                    )}
+                  </td>
+                  <td className="truncate px-3 py-1.5">
+                    {canOpenDocuments ? (
+                      <Link
+                        to={documentPaths.document(protocol.documentType, protocol.documentId)}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {protocol.documentNumber}
+                      </Link>
+                    ) : (
+                      protocol.documentNumber
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right">{formatQuantity(protocol.quantity)}</td>
                 </tr>
               ))}
             </tbody>

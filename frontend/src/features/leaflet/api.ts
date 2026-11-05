@@ -6,7 +6,7 @@ import type { Leaflet, LeafletMatch, LeafletSummary } from '@/lib/types'
 const path = (storeId: string) => `/stores/${storeId}/leaflets`
 const listKey = (storeId: string) => ['stores', storeId, 'leaflets'] as const
 
-/** 30 ostatnich wgranych gazetek (bez zastąpionych), od najnowszego wgrania. */
+/** 60 ostatnich gazetek (bez zastąpionych), od najnowszego numeru: starą gazetkę wgrywa się też do raportów. */
 export function useLeaflets(storeId: string) {
   return useQuery({
     queryKey: listKey(storeId),

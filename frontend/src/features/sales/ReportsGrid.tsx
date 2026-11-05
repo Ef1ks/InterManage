@@ -1,5 +1,6 @@
 import {
   ArrowLeftRightIcon,
+  BadgeAlertIcon,
   ChefHatIcon,
   ChevronRightIcon,
   ClipboardListIcon,
@@ -8,6 +9,7 @@ import {
   type LucideIcon,
   ScaleIcon,
   TagIcon,
+  TrophyIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -35,6 +37,12 @@ const REPORTS: Report[] = [
     icon: ArrowLeftRightIcon,
   },
   {
+    path: salesPaths.topSales,
+    title: 'Topy sprzedażowe',
+    description: 'Najlepsze artykuły okresu: ilość, marża zł albo marża %, wg nomenklatury i w porównaniu ze sklepami.',
+    icon: TrophyIcon,
+  },
+  {
     path: salesPaths.deliCosts,
     title: 'Koszty garmażu',
     description: 'Sprzedaż garmażu (nomenklatura 36) z kosztem z protokołów reprezentacji zamiast zakupu FIFO.',
@@ -53,6 +61,14 @@ const REPORTS: Report[] = [
     description:
       'Artykuły z cadencier kupione u innego dostawcy niż baza w ostatnich 30 dniach. Do wyjaśnienia z dostawcą.',
     icon: ScaleIcon,
+    fromDocuments: 'Z przyjęć PZ i ich korekt',
+  },
+  {
+    path: salesPaths.overpayments,
+    title: 'Przepłacone artykuły',
+    description:
+      'Artykuły kupione o ponad 5% drożej niż w jednej z trzech poprzednich dostaw. Do wyjaśnienia z dostawcą.',
+    icon: BadgeAlertIcon,
     fromDocuments: 'Z przyjęć PZ i ich korekt',
   },
   {

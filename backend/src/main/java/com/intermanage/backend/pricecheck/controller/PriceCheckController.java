@@ -31,6 +31,7 @@ import com.intermanage.backend.pricecheck.dto.PriceCheckReviewRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
 import com.intermanage.backend.pricecheck.dto.PriceCheckSettingsRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckSettingsResponse;
+import com.intermanage.backend.pricecheck.entity.ReviewedReport;
 import com.intermanage.backend.pricecheck.service.CadencierService;
 import com.intermanage.backend.pricecheck.service.IncidentService;
 import com.intermanage.backend.pricecheck.service.PriceCheckCategoryService;
@@ -162,10 +163,10 @@ public class PriceCheckController {
     public List<PriceCheckReviewResponse> review(@PathVariable UUID storeId, @PathVariable UUID documentId,
             @Valid @RequestBody PriceCheckReviewRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return priceCheckService.review(storeId, documentId, request, principal.getId());
+        return priceCheckService.review(storeId, ReviewedReport.BASE_PURCHASE, documentId, request, principal.getId());
     }
 
-    /** Cofnięcie zmiany statusu (znacznik). */
+    /** Cofnięcie zmiany statusu (znacznik), także w raporcie przepłaconych artykułów. */
     @DeleteMapping("/reviews/{reviewId}")
     @PreAuthorize(EDIT)
     public List<PriceCheckReviewResponse> removeReview(@PathVariable UUID storeId, @PathVariable UUID reviewId,

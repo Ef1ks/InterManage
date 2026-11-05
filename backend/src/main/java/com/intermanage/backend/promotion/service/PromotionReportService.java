@@ -3,15 +3,17 @@ package com.intermanage.backend.promotion.service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.leaflet.repository.PromoLeafletRepository;
 import com.intermanage.backend.promotion.dto.PromotionReport;
 import com.intermanage.backend.promotion.dto.PromotionReport.Promotion;
 import com.intermanage.backend.promotion.dto.PromotionVerdict;
@@ -22,7 +24,8 @@ import com.intermanage.backend.sales.repository.SaleRepository;
 /**
  * Skuteczność promocji: czy promocja dała więcej marży zł, niż artykuł dałby bez niej. Porównuje sprzedaż w promocji
  * (marża FIFO, więc tani zakup pod promocję się liczy) ze sprzedażą dzienną z 28 dni przed nią. Promocje są z listy
- * promocji, a te sprzed jej wgrywania (i spoza niej) rozpoznane ze spadku ceny w sprzedaży.
+ * promocji, a te sprzed jej wgrywania (i spoza niej) rozpoznane ze spadku ceny w sprzedaży. Liczą się tylko promocje
+ * sklepu: artykuł w promocji gazetkowej (wgrane gazetki) wypada, bo gazetka narzuca cenę i często nie daje zarobku.
  * <p>
  * Ocena: promocja jest opłacalna, gdy marża zł w promocji jest co najmniej taka, jak bez promocji. Próg opłacalności
  * to wzrost sprzedaży, przy którym tak się dzieje (marża na sztuce w bazie / w promocji); każda promocja ma swój.
@@ -31,7 +34,7 @@ import com.intermanage.backend.sales.repository.SaleRepository;
 @Service
 public class PromotionReportService {
 
-    /** Rozpoznawanie ze sprzedaży czyta ok. 2 s na miesiąc okresu, więc najwyżej kwartał. */
+    /** Sprzedaż w oknach promocji czyta się kilka sekund, więc najwyżej kwartał. */
     public static final int MAX_PERIOD_DAYS = 92;
     static final int BASE_DAYS = 28;
     static final int AFTER_DAYS = 14;
@@ -53,28 +56,27 @@ public class PromotionReportService {
 
     private final PromotionReportRepository repository;
     private final SaleRepository sales;
+    private final PromoLeafletRepository leaflets;
 
-    public PromotionReportService(PromotionReportRepository repository, SaleRepository sales) {
+    public PromotionReportService(PromotionReportRepository repository, SaleRepository sales,
+            PromoLeafletRepository leaflets) {
         this.repository = repository;
         this.sales = sales;
+        this.leaflets = leaflets;
     }
 
     @Transactional(readOnly = true)
     public PromotionReport report(UUID storeId, LocalDate from, LocalDate to) {
-        if (from.isAfter(to)) {
-            throw ApiException.badRequest("Data „od” jest późniejsza niż „do”");
-        }
-        if (ChronoUnit.DAYS.between(from, to) + 1 > MAX_PERIOD_DAYS) {
-            throw ApiException.badRequest("Okres może mieć najwyżej " + MAX_PERIOD_DAYS + " dni");
-        }
+        ReportPeriod.check(from, to, MAX_PERIOD_DAYS);
         LocalDate lastDay = sales.findCoverage(storeId).getLastDate();
         LocalDate listSince = repository.findFirstImportDate(storeId);
+        LocalDate leafletsSince = leaflets.findFirstPromotionDate(storeId);
         LocalDate end = lastDay == null || to.isBefore(lastDay) ? to : lastDay;
         if (lastDay == null || end.isBefore(from)) {
-            return report(from, to, lastDay, listSince, List.of());
+            return report(from, to, lastDay, listSince, leafletsSince, List.of());
         }
 
-        repository.tuneForReport();
+        sales.tuneForReport();
         LocalDate start = from.minusDays(MAX_ESTIMATED_DAYS);
         LocalDate earliest = repository.findEarliestStart(storeId, from, end);
         if (earliest != null && earliest.isBefore(start)) {
@@ -92,13 +94,22 @@ public class PromotionReportService {
                 .sorted(Comparator.comparing(Promotion::extraMargin, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(Promotion::endDate))
                 .toList();
-        return report(from, to, lastDay, listSince, promotions);
+        return report(from, to, lastDay, listSince, leafletsSince, promotions);
+    }
+
+    /** Artykuły, które w okresie były w promocji i zarobiły w niej najwyżej {@code maxMarginPercent}% sprzedaży netto. */
+    @Transactional(readOnly = true)
+    public Set<String> lowMarginPromotionArticles(UUID storeId, LocalDate from, LocalDate to, int maxMarginPercent) {
+        sales.tuneForReport();
+        LocalDate referenceFrom = from.withDayOfMonth(1).minusMonths(REFERENCE_MONTHS);
+        return Set.copyOf(repository.findLowMarginPromotionArticles(storeId, from, to, referenceFrom, PRICE_FACTOR,
+                MIN_REFERENCE_DAYS, BigDecimal.valueOf(maxMarginPercent).divide(HUNDRED)));
     }
 
     private static PromotionReport report(LocalDate from, LocalDate to, LocalDate lastDay, LocalDate listSince,
-            List<Promotion> promotions) {
-        return new PromotionReport(from, to, lastDay, listSince, NO_REACTION_UPLIFT, BASE_DAYS, AFTER_DAYS,
-                promotions);
+            LocalDate leafletsSince, List<Promotion> promotions) {
+        return new PromotionReport(from, to, lastDay, listSince, leafletsSince, NO_REACTION_UPLIFT, BASE_DAYS,
+                AFTER_DAYS, promotions);
     }
 
     static Promotion promotion(Row row) {

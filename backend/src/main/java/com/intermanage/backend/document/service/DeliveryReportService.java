@@ -3,7 +3,6 @@ package com.intermanage.backend.document.service;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -27,6 +26,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.XlsxWriter;
@@ -77,9 +77,8 @@ public class DeliveryReportService {
 
     /** Najdłuższy okres raportu w dniach. */
     static final int MAX_DAYS = 366;
-    private static final ZoneId ZONE = ZoneId.of("Europe/Warsaw");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-    private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZONE);
+    private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(StoreTime.ZONE);
     private static final String WITHOUT_NOMENCLATURE = "Bez nomenklatury";
     private static final String LOCK_PREFIX = "delivery-report-closing:";
     private static final String XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -158,7 +157,7 @@ public class DeliveryReportService {
         List<Row> sheet = sheet(storeId, List.of(), changes.stream().map(change -> line(change, labels)).toList(),
                 null, null);
         footer(sheet, excludedLabel(excluded), "Wygenerowano " + DATE_TIME.format(Instant.now()));
-        return file("przyjecia-zmiany-po-zamknieciu-" + LocalDate.now(ZONE) + ".xlsx", sheet);
+        return file("przyjecia-zmiany-po-zamknieciu-" + LocalDate.now(StoreTime.ZONE) + ".xlsx", sheet);
     }
 
     /** Aktywne zamknięcia z liczbą przyjęć zmienionych po każdym z nich i pomijani dostawcy. */
@@ -220,7 +219,7 @@ public class DeliveryReportService {
     @Transactional
     public DeliveryReportClosingResponse close(UUID storeId, LocalDate from, LocalDate to, UUID userId) {
         validatePeriod(from, to);
-        if (to.isAfter(LocalDate.now(ZONE))) {
+        if (to.isAfter(LocalDate.now(StoreTime.ZONE))) {
             throw ApiException.badRequest("Nie można zamknąć okresu, który się jeszcze nie skończył");
         }
         documents.lockForImport(LOCK_PREFIX + storeId);

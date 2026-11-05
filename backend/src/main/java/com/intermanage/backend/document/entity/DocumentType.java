@@ -61,6 +61,14 @@ public enum DocumentType {
         return this == PK || this == WZ;
     }
 
+    /**
+     * Wydania ze sklepu: w raporcie cena i wartość zakupu mają minus (linia cofająca wydanie odwrotnie), a ilość
+     * i sprzedaż plus.
+     */
+    public boolean isIssue() {
+        return this == PL || this == MM || this == ZW || this == RWPO || this == RWREP || this == RWDA;
+    }
+
     public String label() {
         return label;
     }

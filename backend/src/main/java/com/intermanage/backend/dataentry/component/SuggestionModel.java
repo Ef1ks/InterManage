@@ -36,7 +36,7 @@ public interface SuggestionModel {
     }
 
     record Answer(int id, String name, String brand, String subfamily, List<String> alternatives, Double confidence,
-            String unit, BigDecimal netContent) {
+            String unit, BigDecimal netContent, Boolean deposit) {
     }
 
     class Unavailable extends RuntimeException {

@@ -1,9 +1,9 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { ChartColumnIcon, ChevronLeftIcon, ChevronRightIcon, InfoIcon } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router'
+import { ChartColumnIcon, InfoIcon } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { BackLink } from '@/components/BackLink'
-import { DateField, SegmentedField, SelectField } from '@/components/form'
+import { SegmentedField, SelectField } from '@/components/form'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
 import { Badge } from '@/components/ui/badge'
@@ -13,22 +13,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, usePromotionReport, useSalesReportsOverview } from '@/features/sales/api'
 import { salesPaths } from '@/features/sales/paths'
+import { StatTile } from '@/features/sales/report-parts'
+import { lastCompleteDay, MODE_PARAMS, PeriodPicker, useReportParams, useReportPeriod } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import {
-  canShiftForward,
-  currentPeriod,
-  type DateRange,
   dayCount,
   daysLabel,
   formatRange,
-  lastCompleteWeekEnd,
   PERIOD_MODES,
   type PeriodMode,
-  resolveAnchor,
-  shiftAnchor,
 } from '@/features/sales/periods'
 import { ApiError } from '@/lib/api'
-import { addDays, parseIsoDate, todayIso } from '@/lib/dates'
+import { parseIsoDate } from '@/lib/dates'
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import type { PromotionReport as Report, PromotionReportItem, PromotionVerdict } from '@/lib/types'
@@ -43,12 +39,7 @@ const NO_FILTER: string[] = []
 
 type Mode = Exclude<PeriodMode, 'day'>
 const MODES = PERIOD_MODES.filter((option): option is { value: Mode; label: string } => option.value !== 'day')
-const MODE_PARAMS: Record<Mode, string> = { week: 'tydzien', month: 'miesiac', custom: 'wlasny' }
-const ANCHOR_LABELS: Record<Exclude<Mode, 'custom'>, string> = { week: 'Tydzień z dniem', month: 'Miesiąc z dniem' }
-const STEP_LABELS: Record<Exclude<Mode, 'custom'>, [string, string]> = {
-  week: ['Poprzedni tydzień', 'Następny tydzień'],
-  month: ['Poprzedni miesiąc', 'Następny miesiąc'],
-}
+const MODE_VALUES = MODES.map((option) => option.value)
 
 type VerdictFilter = PromotionVerdict | 'ALL'
 const VERDICT_PARAMS: Record<PromotionVerdict, string> = {
@@ -144,36 +135,18 @@ function highLosses(row: PromotionReportItem) {
  */
 export function PromotionReport({ storeId }: { storeId: string }) {
   const overview = useSalesReportsOverview(storeId)
-  const [params, setParams] = useSearchParams()
+  const { params, update: setParam } = useReportParams()
 
-  const yesterday = addDays(todayIso(), -1)
-  const savedUntil = overview.data?.lastSaleDate ?? null
-  const lastSaleDate = savedUntil && savedUntil < yesterday ? savedUntil : yesterday
-  const mode = (Object.keys(MODE_PARAMS) as Mode[]).find((key) => MODE_PARAMS[key] === params.get('okres')) ?? 'month'
-  const anchor = resolveAnchor(mode, params.get('data') ?? lastSaleDate, lastSaleDate)
-  const custom: DateRange = {
-    from: params.get('od') ?? addDays(lastSaleDate, -29),
-    to: params.get('do') ?? lastSaleDate,
-  }
-  const customError =
-    mode !== 'custom'
-      ? null
-      : custom.from > custom.to
-        ? 'Data „od” jest późniejsza niż „do”.'
-        : dayCount(custom) > MAX_DAYS
-          ? `Okres może mieć najwyżej ${MAX_DAYS} dni.`
-          : null
-  const range = currentPeriod(mode, anchor, custom, lastSaleDate)
-
-  const setParam = (changes: Record<string, string | null>) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        Object.entries(changes).forEach(([key, value]) => (value == null ? next.delete(key) : next.set(key, value)))
-        return next
-      },
-      { replace: true },
-    )
+  const lastSaleDate = lastCompleteDay(overview.data?.lastSaleDate)
+  const period = useReportPeriod<Mode>({
+    params,
+    lastDate: lastSaleDate,
+    defaultMode: 'month',
+    customDays: 30,
+    maxDays: MAX_DAYS,
+    modes: MODE_VALUES,
+  })
+  const { mode, customError, range } = period
 
   const report = usePromotionReport(storeId, range, !customError && !overview.isPending)
 
@@ -184,9 +157,9 @@ export function PromotionReport({ storeId }: { storeId: string }) {
 
       <h2 className="mb-1 text-xl font-semibold tracking-tight">Skuteczność promocji</h2>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
-        Promocje kończące się w okresie. Każdą porównujemy ze sprzedażą tego artykułu w 28 dniach przed nią: czy dała
-        więcej marży zł, niż artykuł zarobiłby bez promocji. Marża liczy się z kosztu FIFO, więc tani zakup pod promocję
-        jest w niej uwzględniony.
+        Promocje sklepu kończące się w okresie, bez artykułów w promocji gazetkowej. Każdą porównujemy ze sprzedażą tego
+        artykułu w 28 dniach przed nią: czy dała więcej marży zł, niż artykuł zarobiłby bez promocji. Marża liczy się z
+        kosztu FIFO, więc tani zakup pod promocję jest w niej uwzględniony.
       </p>
 
       <Card className="mb-4 gap-4 p-4">
@@ -197,61 +170,7 @@ export function PromotionReport({ storeId }: { storeId: string }) {
           onChange={(next) => setParam({ okres: MODE_PARAMS[next] })}
         />
 
-        {mode === 'custom' ? (
-          <div className="flex flex-wrap items-start gap-3">
-            <DateField
-              label="Od"
-              value={custom.from}
-              onChange={(from) => setParam({ od: from, do: custom.to })}
-              max={lastSaleDate}
-              shortcuts={[]}
-              className="w-full sm:w-64"
-            />
-            <DateField
-              label="Do"
-              value={custom.to}
-              onChange={(to) => setParam({ od: custom.from, do: to })}
-              max={lastSaleDate}
-              shortcuts={[{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }]}
-              error={customError ?? undefined}
-              className="w-full sm:w-64"
-            />
-          </div>
-        ) : (
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={STEP_LABELS[mode][0]}
-              title={STEP_LABELS[mode][0]}
-              onClick={() => setParam({ data: shiftAnchor(mode, anchor, -1) })}
-            >
-              <ChevronLeftIcon />
-            </Button>
-            <DateField
-              label={ANCHOR_LABELS[mode]}
-              value={anchor}
-              onChange={(data) => setParam({ data })}
-              max={lastSaleDate}
-              shortcuts={
-                mode === 'week'
-                  ? [{ label: 'Ostatni pełny tydzień', value: lastCompleteWeekEnd(lastSaleDate) }]
-                  : [{ label: 'Ostatni dzień sprzedaży', value: lastSaleDate }]
-              }
-              className="min-w-0 flex-1 sm:w-72 sm:flex-none"
-            />
-            <Button
-              variant="outline"
-              size="icon-lg"
-              aria-label={STEP_LABELS[mode][1]}
-              title={STEP_LABELS[mode][1]}
-              disabled={!canShiftForward(mode, anchor, lastSaleDate)}
-              onClick={() => setParam({ data: shiftAnchor(mode, anchor, 1) })}
-            >
-              <ChevronRightIcon />
-            </Button>
-          </div>
-        )}
+        <PeriodPicker period={period} update={setParam} />
 
         {!customError && (
           <p className="border-t pt-4 text-sm tabular-nums">
@@ -344,25 +263,26 @@ function Promotions({
   return (
     <>
       <ListNotice report={report} />
+      <LeafletNotice report={report} />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile
+        <StatTile
           label="Promocje"
           value={String(matching.length)}
           detail={`z listy ${listed} · rozpoznane ${matching.length - listed}`}
         />
-        <Tile
+        <StatTile
           label="Marża w promocjach"
           value={`${formatMoney(margin)} zł`}
           detail={`sprzedaż brutto ${formatMoney(gross)} zł`}
         />
-        <Tile
+        <StatTile
           label="Wynik promocji"
           value={signedMoney(extra)}
           detail={extra >= 0 ? 'więcej marży niż bez promocji' : 'mniej marży niż bez promocji'}
           tone={extra >= 0 ? 'good' : 'bad'}
         />
-        <Tile
+        <StatTile
           label="Nieopłacalne"
           value={String(losing.length)}
           detail={losing.length ? `zabrały ${formatMoney(Math.abs(lost))} zł marży` : 'brak'}
@@ -609,24 +529,6 @@ function PromotionRow({ row, onChart }: { row: PromotionReportItem; onChart: () 
   )
 }
 
-function Tile({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: 'good' | 'bad' }) {
-  return (
-    <Card
-      className={cn(
-        'gap-1 p-4',
-        tone === 'good' &&
-          'border-emerald-300 bg-emerald-200/70 text-emerald-950 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-50',
-        tone === 'bad' &&
-          'border-red-300 bg-red-200/70 text-red-950 dark:border-red-500/40 dark:bg-red-500/20 dark:text-red-50',
-      )}
-    >
-      <p className="text-sm font-medium">{label}</p>
-      <p className="text-2xl font-semibold tabular-nums">{value}</p>
-      <p className={cn('text-sm tabular-nums', tone ? 'opacity-80' : 'text-muted-foreground')}>{detail}</p>
-    </Card>
-  )
-}
-
 function VerdictTab({
   selected,
   label,
@@ -678,6 +580,26 @@ function ListNotice({ report }: { report: Report }) {
           Imporcie danych
         </Link>{' '}
         co najmniej raz w tygodniu.
+      </p>
+    </div>
+  )
+}
+
+/** Raport obejmuje tylko promocje sklepu: artykuły z gazetki wypadają, ale raport zna tylko wgrane gazetki. */
+function LeafletNotice({ report }: { report: Report }) {
+  if (report.leafletsSince && report.leafletsSince <= report.from) return null
+  return (
+    <div className="mb-4 flex items-start gap-3 rounded-xl border border-sky-300 bg-sky-100 p-3 text-sm text-sky-950 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-50">
+      <InfoIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <p>
+        {report.leafletsSince
+          ? `Gazetki są wgrane od ${fullDate.format(parseIsoDate(report.leafletsSince))}, więc wcześniejsze promocje gazetkowe są jeszcze w raporcie.`
+          : 'Gazetek jeszcze nie wgrano, więc promocje gazetkowe są w raporcie.'}{' '}
+        Dawne pliki utrzymania cen wgrasz w{' '}
+        <Link to="/gazetka" className="font-medium underline underline-offset-2">
+          Opracowaniu gazetki
+        </Link>
+        .
       </p>
     </div>
   )

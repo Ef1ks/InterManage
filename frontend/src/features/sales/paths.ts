@@ -8,6 +8,8 @@ export const salesPaths = {
   deliCosts: `${base}/koszty-garmazu`,
   periodSummary: `${base}/podsumowanie`,
   priceCheck: `${base}/zakup-bazowy-poza-baza`,
+  overpayments: `${base}/przeplacone-artykuly`,
+  topSales: `${base}/topy`,
   gratis: `${base}/gratisy`,
   protocols: `${base}/protokoly`,
   promotions: `${base}/promocje`,

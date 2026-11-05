@@ -62,6 +62,11 @@ public class XlsxWriter {
     }
 
     public byte[] writeRows(String sheetName, List<Column> columns, List<Row> rows) {
+        return writeRows(sheetName, List.of(), columns, rows);
+    }
+
+    /** {@code intro}: wiersze nad nagłówkiem kolumn (opis dokumentu), zamrożone razem z nim. */
+    public byte[] writeRows(String sheetName, List<Row> intro, List<Column> columns, List<Row> rows) {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
             put(zip, "[Content_Types].xml", """
@@ -99,14 +104,15 @@ public class XlsxWriter {
                     <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
                     <cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/></cellXfs>
                     </styleSheet>""");
-            put(zip, "xl/worksheets/sheet1.xml", sheet(columns, rows));
+            put(zip, "xl/worksheets/sheet1.xml", sheet(intro, columns, rows));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
         return bytes.toByteArray();
     }
 
-    private static String sheet(List<Column> columns, List<Row> rows) {
+    private static String sheet(List<Row> intro, List<Column> columns, List<Row> rows) {
+        int headerRow = intro.size() + 1;
         boolean outlined = rows.stream().anyMatch(row -> row.outlineLevel() > 0);
         // Przycisk zwijania grupy przy wierszu nad nią; nagłówek zostaje na górze przy przewijaniu.
         StringBuilder xml = new StringBuilder("""
@@ -114,7 +120,8 @@ public class XlsxWriter {
                 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\
                 <sheetPr><outlinePr summaryBelow="0"/></sheetPr>\
                 <sheetViews><sheetView workbookViewId="0">\
-                <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>""");
+                <pane ySplit="%d" topLeftCell="A%d" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>"""
+                .formatted(headerRow, headerRow + 1));
         if (outlined) {
             xml.append("<sheetFormatPr defaultRowHeight=\"15\" outlineLevelRow=\"1\"/>");
         }
@@ -123,13 +130,19 @@ public class XlsxWriter {
             xml.append("<col min=\"").append(c + 1).append("\" max=\"").append(c + 1).append("\" width=\"")
                     .append(columns.get(c).width()).append("\" customWidth=\"1\"/>");
         }
-        xml.append("</cols><sheetData><row r=\"1\">");
+        xml.append("</cols><sheetData>");
+        for (int r = 0; r < intro.size(); r++) {
+            xml.append("<row r=\"").append(r + 1).append("\">");
+            appendCells(xml, intro.get(r), r + 1);
+            xml.append("</row>");
+        }
+        xml.append("<row r=\"").append(headerRow).append("\">");
         for (int c = 0; c < columns.size(); c++) {
-            xml.append(textCell(ref(c, 1), columns.get(c).header(), 1));
+            xml.append(textCell(ref(c, headerRow), columns.get(c).header(), 1));
         }
         xml.append("</row>");
         for (int r = 0; r < rows.size(); r++) {
-            int rowNumber = r + 2;
+            int rowNumber = headerRow + r + 1;
             Row row = rows.get(r);
             xml.append("<row r=\"").append(rowNumber).append('"');
             // Grupy otwierają się zwinięte: wiersze grupy ukryte, przycisk "+" przy wierszu nad nimi.
@@ -139,24 +152,28 @@ public class XlsxWriter {
                 xml.append(" collapsed=\"1\"");
             }
             xml.append('>');
-            for (int c = 0; c < row.cells().size(); c++) {
-                Object value = row.cells().get(c);
-                int style = 0;
-                if (value instanceof Cell cell) {
-                    style = (cell.bold() ? 1 : 0) + (cell.money() ? 2 : 0);
-                    value = cell.value();
-                }
-                if (value instanceof BigDecimal number) {
-                    xml.append("<c r=\"").append(ref(c, rowNumber)).append('"')
-                            .append(style > 0 ? " s=\"" + style + "\"" : "").append("><v>")
-                            .append(number.stripTrailingZeros().toPlainString()).append("</v></c>");
-                } else if (value != null) {
-                    xml.append(textCell(ref(c, rowNumber), value.toString(), style & 1));
-                }
-            }
+            appendCells(xml, row, rowNumber);
             xml.append("</row>");
         }
         return xml.append("</sheetData></worksheet>").toString();
+    }
+
+    private static void appendCells(StringBuilder xml, Row row, int rowNumber) {
+        for (int c = 0; c < row.cells().size(); c++) {
+            Object value = row.cells().get(c);
+            int style = 0;
+            if (value instanceof Cell cell) {
+                style = (cell.bold() ? 1 : 0) + (cell.money() ? 2 : 0);
+                value = cell.value();
+            }
+            if (value instanceof BigDecimal number) {
+                xml.append("<c r=\"").append(ref(c, rowNumber)).append('"')
+                        .append(style > 0 ? " s=\"" + style + "\"" : "").append("><v>")
+                        .append(number.stripTrailingZeros().toPlainString()).append("</v></c>");
+            } else if (value != null) {
+                xml.append(textCell(ref(c, rowNumber), value.toString(), style & 1));
+            }
+        }
     }
 
     private static String textCell(String ref, String text, int style) {

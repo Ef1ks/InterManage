@@ -1,23 +1,22 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { ClipboardListIcon, PrinterIcon } from 'lucide-react'
+import { ClipboardListIcon } from 'lucide-react'
 import { Link, useParams } from 'react-router'
-import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
 import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { deliPaths } from '@/features/deli-order/paths'
 import { DocumentProductionCards } from '@/features/deli-production/TransferProductionCards'
-import { useDocument, useDownloadDeliveryNote } from '@/features/documents/api'
+import { documentPrintPath, useDocument } from '@/features/documents/api'
 import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
+import { DocumentPrintMenu } from '@/features/documents/DocumentPrintMenu'
 import { DocumentTransferTargetSection } from '@/features/documents/DocumentTransferTarget'
 import { BackToTypes } from '@/features/documents/DocumentsList'
 import { SupplierDocumentNumber } from '@/features/documents/SupplierDocumentNumber'
@@ -35,7 +34,6 @@ import {
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import { useLoadMore } from '@/lib/use-load-more'
-import { ApiError } from '@/lib/api'
 import type { CorrectedLine, Document, DocumentLine } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -104,7 +102,6 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
     () => (corrected && showCorrected ? corrected.lines.map(fromCorrected) : document.lines),
     [corrected, showCorrected, document.lines],
   )
-  const download = useDownloadDeliveryNote(storeId)
   const emptyCount = useMemo(() => lines.filter((line) => line.quantity === 0).length, [lines])
   // W likwidacjach czy przeniesieniach każda linia ma swojego dostawcę - pokazujemy go przy linii.
   const perLineSupplier = document.supplierName == null
@@ -151,22 +148,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
               </span>
             )}
           </h2>
-          {document.correctable && (
-            <Button
-              variant="outline"
-              size="sm"
-              loading={download.isPending}
-              onClick={() =>
-                download.mutate(
-                  { id: document.id, number: bonNumber(document.number) },
-                  { onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się pobrać wydruku') },
-                )
-              }
-            >
-              <PrinterIcon />
-              Wydruk bonu
-            </Button>
-          )}
+          <DocumentPrintMenu path={(format) => documentPrintPath(storeId, document, format)} number={document.number} />
         </div>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr_auto_1fr]">
           <dt className="text-muted-foreground">Data</dt>
