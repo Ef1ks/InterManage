@@ -31,7 +31,9 @@ import com.intermanage.backend.product.dto.ProductListRequest;
 import com.intermanage.backend.product.dto.ProductPriceHistoryResponse;
 import com.intermanage.backend.product.dto.ProductPriceHistoryResponse.PriceChange;
 import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.ProductCatalogMapper;
+import com.intermanage.backend.product.repository.PriceFileImportRepository;
 import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.product.repository.ProductSearch;
@@ -47,6 +49,8 @@ public class ProductCatalogService {
     static final int PAGE_SIZE = 100;
     /** Ile zmian cen pokazujemy z każdego źródła. */
     static final int HISTORY_LIMIT = 200;
+    /** Artykuł ma kilka EAN-ów, także z etykiet obniżek, a historia każdego idzie od początku 2026. */
+    private static final int TILL_HISTORY_LIMIT = 1000;
 
     private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     /** Kolejność listy stała między stronami: po nazwie, przy tej samej nazwie po ITM8. */
@@ -60,15 +64,18 @@ public class ProductCatalogService {
     private final ProductRepository products;
     private final ProductCatalogMapper mapper;
     private final ProductPriceChangeRepository priceChanges;
+    private final PriceFileImportRepository priceFiles;
     private final PromotionImportRepository promotions;
     private final DataEntryPriceControlFileRepository priceControlFiles;
 
     public ProductCatalogService(ProductRepository products, ProductCatalogMapper mapper,
-            ProductPriceChangeRepository priceChanges, PromotionImportRepository promotions,
+            ProductPriceChangeRepository priceChanges, PriceFileImportRepository priceFiles,
+            PromotionImportRepository promotions,
             DataEntryPriceControlFileRepository priceControlFiles) {
         this.products = products;
         this.mapper = mapper;
         this.priceChanges = priceChanges;
+        this.priceFiles = priceFiles;
         this.promotions = promotions;
         this.priceControlFiles = priceControlFiles;
     }
@@ -127,22 +134,27 @@ public class ProductCatalogService {
                         row.getMarginPercent(), row.getCancelled()))
                 .toList();
 
-        List<PriceChange> changes = new ArrayList<>();
-        priceChanges.findByProduct(storeId, product.getId(), Limit.of(HISTORY_LIMIT)).forEach(row -> changes.add(
-                new PriceChange(row.getChangedAt(), row.getSource().name(), row.getPreviousSalePrice(),
-                        row.getSalePrice(), row.getPreviousPromoPrice(), row.getPromoPrice(), row.getPromoFrom(),
-                        row.getPromoTo(), row.getFileName(), null)));
-        changes.addAll(dataEntryChanges(storeId, product));
-        changes.sort(Comparator.comparing(PriceChange::changedAt, Comparator.nullsLast(Comparator.reverseOrder())));
-        return new ProductPriceHistoryResponse(promotionList, changes);
-    }
-
-    /** Linie plików CTRLPRIX z którymś EAN-em artykułu; z pliku tylko nowa cena (poprzedniej w nim nie ma). */
-    private List<PriceChange> dataEntryChanges(UUID storeId, Product product) {
         Set<String> codes = products.findAllEans(storeId, product.getId(), product.getItm8()).stream()
                 .map(PriceControlFile::ean)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        List<PriceChange> changes = new ArrayList<>();
+        priceFiles.findTillPriceChanges(storeId, itm8, codes.toArray(String[]::new), TILL_HISTORY_LIMIT)
+                .forEach(row -> changes.add(new PriceChange(row.getEan(), row.getFileTime(),
+                        ProductPriceChange.Source.TILL.name(), row.getPreviousSalePrice(), row.getSalePrice(),
+                        row.getPreviousPromoPrice(), row.getPromoPrice(), row.getPromoFrom(), row.getPromoTo(),
+                        row.getFileName(), null)));
+        priceChanges.findByProduct(storeId, product.getId(), ProductPriceChange.Source.REPORT, Limit.of(HISTORY_LIMIT))
+                .forEach(row -> changes.add(new PriceChange(null, row.getChangedAt(), row.getSource().name(),
+                        row.getPreviousSalePrice(), row.getSalePrice(), row.getPreviousPromoPrice(),
+                        row.getPromoPrice(), row.getPromoFrom(), row.getPromoTo(), row.getFileName(), null)));
+        changes.addAll(dataEntryChanges(storeId, codes));
+        changes.sort(Comparator.comparing(PriceChange::changedAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        return new ProductPriceHistoryResponse(PriceControlFile.ean(product.getEan()), promotionList, changes);
+    }
+
+    /** Linie plików CTRLPRIX z którymś EAN-em artykułu; z pliku tylko nowa cena (poprzedniej w nim nie ma). */
+    private List<PriceChange> dataEntryChanges(UUID storeId, Set<String> codes) {
         if (codes.isEmpty()) {
             return List.of();
         }
@@ -156,8 +168,8 @@ public class ProductCatalogService {
             String supplier = file.getSupplierName() != null ? file.getSupplierName() : file.getSupplierCode();
             String description = file.getInvoiceNumber() != null && !file.getInvoiceNumber().isBlank()
                     ? supplier + " · faktura " + file.getInvoiceNumber() : supplier;
-            changes.add(new PriceChange(LocalDateTime.ofInstant(file.getCreatedAt(), STORE_ZONE), "DATA_ENTRY", null,
-                    price, null, null, null, null, description, file.getCreatedBy()));
+            changes.add(new PriceChange(null, LocalDateTime.ofInstant(file.getCreatedAt(), STORE_ZONE), "DATA_ENTRY",
+                    null, price, null, null, null, null, description, file.getCreatedBy()));
         }
         return changes;
     }

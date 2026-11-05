@@ -21,17 +21,13 @@ public record LowMarginReport(
         boolean marginsConfigured,
         LocalDate documentsCoveredUntil,
         LocalDateTime documentsReportGeneratedAt,
-        List<Supplier> excludedSuppliers,
-        List<Supplier> suppliers,
+        List<ReportSupplier> excludedSuppliers,
+        List<ReportSupplier> suppliers,
         List<Delivery> deliveries) {
 
     /** Skąd wiadomo, że w dniu przyjęcia trwała promocja. */
     public enum PromotionSource {
         LIST, TILL, LEAFLET, SALES
-    }
-
-    /** Dostawca z listy dostawców sklepu albo pomijany w raporcie. */
-    public record Supplier(String code, String name) {
     }
 
     /**

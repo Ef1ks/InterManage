@@ -54,6 +54,7 @@ class LowMarginIntegrationTests {
     private static final String LEAFLET = "0000000000310";
     private static final String OTHER_REGION = "0000000000311";
     private static final String NO_MARGIN = "0000000000312";
+    private static final String LOCAL_ITM8 = "9900000000313";
 
     @Autowired
     MockMvc mvc;
@@ -194,7 +195,8 @@ class LowMarginIntegrationTests {
                 .andExpect(jsonPath("$.excludedSuppliers", hasSize(0)))
                 .andExpect(jsonPath("$.deliveries", hasSize(1)));
         assertThat(jdbc.queryForObject("""
-                select count(*) from low_margin_excluded_suppliers where store_id = ?::uuid and removed_at is not null""",
+                select count(*) from report_excluded_suppliers
+                where store_id = ?::uuid and report = 'LOW_MARGIN' and removed_at is not null""",
                 Integer.class, store)).isEqualTo(1);
 
         mvc.perform(put(url() + "/excluded-suppliers").cookie(owner).with(csrf())
@@ -255,6 +257,27 @@ class LowMarginIntegrationTests {
         delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
         delivery(ABOVE_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
         jdbc.update("update document_lines set supplier_code = '52' where itm8 = ?", ABOVE_THRESHOLD);
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD)));
+    }
+
+    @Test
+    void skipsArticlesActiveInCadencier() throws Exception {
+        requiredMargin("57", "30");
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
+        delivery(ABOVE_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
+        // Dostawca spoza bazy przywozi ten sam towar pod własnym ITM8, więc artykuł łączy dopiero EAN.
+        delivery(LOCAL_ITM8, 5, "10", "100.00", "12.50", "570101");
+        jdbc.update("update document_lines set ean = '05900000000017' where itm8 = ?", LOCAL_ITM8);
+
+        String cadencier = jdbc.queryForObject("""
+                insert into cadencier_imports (store_id, file_name, total_rows)
+                values (?::uuid, 'obecne w cad.xlsx', 2) returning id""", String.class, store);
+        jdbc.update("""
+                insert into cadencier_items (store_id, itm8, ean, import_id)
+                values (?::uuid, ?, null, ?::uuid), (?::uuid, ?, '5900000000017', ?::uuid)""",
+                store, ABOVE_THRESHOLD, cadencier, store, OTHER_REGION, cadencier);
 
         mvc.perform(get(url()).cookie(owner))
                 .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD)));

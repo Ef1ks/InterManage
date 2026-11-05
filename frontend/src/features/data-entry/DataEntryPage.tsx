@@ -5,6 +5,8 @@ import {
   CircleCheckIcon,
   CombineIcon,
   DiffIcon,
+  EyeIcon,
+  EyeOffIcon,
   FileCodeIcon,
   FileInputIcon,
   FileClockIcon,
@@ -17,6 +19,7 @@ import {
   PackageCheckIcon,
   PackagePlusIcon,
   PackageSearchIcon,
+  PencilIcon,
   RecycleIcon,
   ScaleIcon,
   ShoppingCartIcon,
@@ -29,6 +32,7 @@ import {
   TagIcon,
   TagsIcon,
   Trash2Icon,
+  TrendingDownIcon,
   Undo2Icon,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -39,7 +43,7 @@ import { toast } from 'sonner'
 
 import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
-import { HowTo } from '@/components/HowTo'
+import { HowTo, HowToButton } from '@/components/HowTo'
 import { PageHeader } from '@/components/PageHeader'
 import {
   AlertDialog,
@@ -70,6 +74,7 @@ import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
+import { useHiddenHint } from '@/lib/use-hidden-hint'
 import { cn } from '@/lib/utils'
 import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, folderSavingSupported, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
@@ -119,14 +124,13 @@ import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { ArticleFileDialog } from './ArticleFileDialog'
-import { ACTION_TONES, ActionItem, ActionMenu } from './ActionMenu'
+import { ACTION_TILE, ACTION_TONES, ActionItem, ActionMenu, TILE_WIDTH, TileContent } from './ActionMenu'
 import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
 import { LST_FOLDER, lstFile, lstFileName, parseLst } from './lst-file'
-import { usePriceFileOverview } from './price-files'
+import { priceFilesNeedAttention, usePriceFileOverview, usePriceFileWatch } from './price-files'
 import { savePriceControlFile } from './price-control'
 import type { NewArticles } from './product-drafts'
-import { PriceFileStatus } from './PriceFileStatus'
 import { orderLines } from './order-file'
 import { ProFileDialog } from './ProFileDialog'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
@@ -141,6 +145,7 @@ import {
   type RowLink,
   emptyRow,
   mergeVisible,
+  belowRequiredMargin,
   missingDeposit,
   needsAi,
   needsProductFile,
@@ -253,11 +258,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   )
   useUndoShortcuts(history.undo, history.redo)
   // Filtr „Brakująca kaucja” działa na wiersze z chwili włączenia: poprawiony wiersz nie znika, nowe są widoczne.
-  const [depositFilter, setDepositFilter] = useState<RowFilter | null>(null)
+  const [rowFilter, setRowFilter] = useState<RowFilter | null>(null)
   const visibleOf = useCallback(
     (all: DataEntryRow[]) =>
-      depositFilter ? all.filter((row) => !depositFilter.known.has(row.id) || depositFilter.pass.has(row.id)) : all,
-    [depositFilter],
+      rowFilter ? all.filter((row) => !rowFilter.known.has(row.id) || rowFilter.pass.has(row.id)) : all,
+    [rowFilter],
   )
   // Tabela pokazuje kaucje i dostawę pod artykułami; zmiany z tabeli dotyczą wierszy w tej samej kolejności.
   // Zmiana artykułu w jednym wierszu przechodzi na wiersze z tym samym EAN-em.
@@ -366,7 +371,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     setPendingInvoice(null)
     setPickerOpen(false)
     setXmlOpenOpen(false)
-    setDepositFilter(null)
+    setRowFilter(null)
     const loaded = data.lines.map(rowFromLine)
     const base = mode === 'append' ? currentDraft().rows.filter((row) => row.ean !== '' || row.name !== '') : []
     // Dopisana faktura: tabela porównuje się z sumą obu dokumentów.
@@ -422,7 +427,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     if (draft) {
       const before = currentDraft()
       setXmlOpenOpen(false)
-      setDepositFilter(null)
+      setRowFilter(null)
       forgetSaved()
       setDraft(draft)
       const replaced = before.rows.some((row) => row.ean !== '' || row.name !== '')
@@ -474,6 +479,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     .data?.latest.map((file) => file.id)
     .join()
   const refreshedPromos = useRef<string | null>(null)
+  const [legendHidden, setLegendHidden] = useHiddenHint('data-entry-legend')
   useEffect(() => {
     if (priceFiles === undefined) return
     const key = `${store.id}:${priceFiles}`
@@ -558,7 +564,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         withScannedProduct({ ...emptyRow(), ean }, byKey.get(ean.replace(/^0+/, '')) ?? null, weightIn24),
       )
       const before = currentDraft()
-      setDepositFilter(null)
+      setRowFilter(null)
       setRows((current) => added.reduce(withAddedRow, current))
       const fresh = added.filter((row) => !row.known).length
       toast.success(`Wczytano z pliku ${file.name}: ${added.length} ${pieces(added.length)}`, {
@@ -746,6 +752,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const changedCount = filled.filter((row) => catalogChanges(row).length > 0).length
   const toCheck = rows.filter((row) => nomenclatureState(row) === 'TO_CHECK').length
   const depositCount = filled.filter(missingDeposit).length
+  const lowMargin = (row: DataEntryRow) => serviceKind(row) === null && belowRequiredMargin(row, pricing)
+  const lowMarginCount = filled.filter(lowMargin).length
   const totals = useMemo(() => invoiceTotals(rows, invoice), [rows, invoice])
 
   const removeRows = (ids: string[]) => {
@@ -788,15 +796,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // Sam kursor też zaznacza wiersz, także pusty pod artykułami, a taki nie wybiera artykułów do pliku.
   const chosenArticles = selectedArticles.filter(isArticle)
 
-  const toggleDepositFilter = () => {
-    if (depositFilter) {
-      setDepositFilter(null)
+  const toggleRowFilter = (kind: RowFilter['kind']) => {
+    if (rowFilter?.kind === kind) {
+      setRowFilter(null)
       return
     }
     const all = currentDraft().rows
-    setDepositFilter({
+    setRowFilter({
+      kind,
       known: new Set(all.map((row) => row.id)),
-      pass: new Set(all.filter(missingDeposit).map((row) => row.id)),
+      pass: new Set(all.filter(kind === 'deposit' ? missingDeposit : lowMargin).map((row) => row.id)),
     })
   }
 
@@ -814,7 +823,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         setSaveSettings({ open: true, missing: [LST_FOLDER] })
         return
       }
-      const fileName = lstFileName(depositFilter ? 'KAUCJE' : 'EAN', invoice?.number)
+      const fileName = lstFileName(rowFilter?.kind === 'deposit' ? 'KAUCJE' : 'EAN', invoice?.number)
       if (folderReady) await saveToFolder(LST_FOLDER.key, fileName, lstFile(lstEans))
       else saveBlob(lstFile(lstEans), fileName)
       const skipped = lstSource.length - lstEans.length
@@ -900,7 +909,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const clearAll = () => {
     const before = currentDraft()
     forgetSaved()
-    setDepositFilter(null)
+    setRowFilter(null)
     setDraft(EMPTY_DATA_ENTRY)
     focusFirstEan()
     toast('Wyczyszczono tabelę', {
@@ -1154,7 +1163,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const goTo = (row: DataEntryRow, key: 'ean' | 'name' | 'subfamily') => {
     setCheckOpen(false)
-    setDepositFilter(null)
+    setRowFilter(null)
     // Fokus wraca do tabeli dopiero po zamknięciu okna.
     setTimeout(() => gridRef.current?.focusCell(row.id, key), 0)
   }
@@ -1179,17 +1188,25 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             storeLabel(store)
           )
         }
+        actions={
+          <>
+            <HowToButton id="data-entry" />
+            <SettingsButton storeId={store.id} onClick={() => setSaveSettings({ open: true, missing: [] })} />
+          </>
+        }
+        actionsAtBottom
       />
 
       <HowTo
         id="data-entry"
+        reopenInHeader
         className="mb-4"
         title="Jak wprowadzić artykuły z faktury"
         steps={[
           'Wczytaj fakturę z KSeF. Artykuły zapisane w kartotece są szare i mają dane z kartoteki, nowe są fioletowe, a zmienione w tabeli pomarańczowe. Kaucje i dostawa idą na dół i nie trafiają do pliku XML.',
-          'Kliknij „Uzupełnij z AI”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów. Artykuły z kaucją dostają plakietkę, a „Brakująca kaucja” pokazuje tylko je.',
+          'Kliknij „Uzupełnij”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów. Artykuły z kaucją dostają plakietkę, a „Brakująca kaucja” pokazuje tylko je.',
           'Skanujesz ręcznie? Wpisz albo zeskanuj EAN i Enter: od razu powstaje kolejny wiersz na następny kod.',
-          'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Żółte komórki wymagają wyboru.',
+          'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Ctrl + plus wstawia wiersz nad bieżącym, a plus przy numerze wiersza pod nim. Żółte komórki wymagają wyboru.',
           'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później: „Wczytaj” → „Wczytaj tymczasowe”.',
         ]}
       />
@@ -1218,12 +1235,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             onChange={() => setSupplierOpen(true)}
           />
         )}
-        <div className="grid w-32 shrink-0 content-center gap-1.5" role="group" aria-label="Pliki">
+        <div className="flex shrink-0 gap-1.5" role="group" aria-label="Pliki">
           <ActionMenu
             label="Wczytaj"
             icon={<FileInputIcon />}
             tone="load"
-            className="w-full"
+            tile
             loading={loadingLst}
             title="Wczytaj do tabeli fakturę z KSeF, plik XML albo listę .lst"
           >
@@ -1270,7 +1287,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             label="Wytwórz"
             icon={<FileOutputIcon />}
             tone="make"
-            className="w-full"
+            tile
             loading={savingOrder || savingLst || savingPrices || xmlSave.savingProducts}
             disabled={filled.length === 0}
             title={
@@ -1397,87 +1414,24 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             </DropdownMenuGroup>
           </ActionMenu>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
-            <Button variant="outline" size="sm" onClick={() => setCatalogOpen(true)}>
+        <div className={cn('grid w-28 shrink-0 gap-1', rows.length > 0 && 'grid-rows-[2fr_1fr]')}>
+          <Button
+            variant="outline"
+            className="h-auto rounded-md py-1 font-semibold [&_svg:not([class*='size-'])]:size-5"
+            onClick={() => setCatalogOpen(true)}
+            aria-label="Lista towarów"
+            title="Lista towarów: kartoteka sklepu"
+          >
+            <span className="flex flex-col items-center">
               <PackageSearchIcon />
-              Lista towarów
-            </Button>
-            <ActionMenu
-              label={weightIn24 ? 'Kody 24 = waga' : 'Kody 24'}
-              icon={<ScaleIcon />}
-              tone={weightIn24 ? 'warn' : undefined}
-              title="Wolne kody 240001–242999 i odczyt kodów 24 z etykiety"
-            >
-              <ActionItem
-                icon={<ListOrderedIcon />}
-                label="Wolne kody 24"
-                hint="Wolne kody 240001–242999 do zakładania nowych artykułów ważonych"
-                onClick={() => setFreeCodesOpen(true)}
-              />
-              <DropdownMenuCheckboxItem checked={weightIn24} onCheckedChange={setWeightIn24}>
-                Koniec kodu 24 to waga (24…05000 = 5 kg)
-              </DropdownMenuCheckboxItem>
-            </ActionMenu>
-            <PriceFileStatus storeId={store.id} size="sm" />
-            {invoice?.id && <InvoiceFileActions storeId={store.id} invoiceId={invoice.id} />}
-            <div className="ml-auto flex items-center gap-2">
-              {saved && savedState && <SavedStatus state={savedState} at={saved.at} fileName={saved.fileName} />}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setSaveSettings({ open: true, missing: [] })}
-                aria-label="Ustawienia zapisu"
-                title="Ustawienia zapisu: foldery na plik XML, nowe artykuły, protokoły i pliki .lst"
-              >
-                <SettingsIcon />
-              </Button>
-              {rows.length > 0 && (
-                <div className="flex items-center" role="group" aria-label="Zapis">
-                  <Button
-                    size="sm"
-                    className={cn(ACTION_TONES.save, 'rounded-r-none')}
-                    onClick={onSaveClick}
-                    loading={xmlSave.saving}
-                    disabled={filled.length === 0}
-                    title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
-                  >
-                    <FileCodeIcon />
-                    Zapisz
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          size="icon-sm"
-                          className={cn(ACTION_TONES.save, '-ml-px rounded-l-none')}
-                          aria-label="Inne sposoby zapisu"
-                          loading={saveTemporaryXml.isPending}
-                          disabled={filled.length === 0}
-                        />
-                      }
-                    >
-                      <ChevronDownIcon />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-80">
-                      <ActionItem
-                        icon={<FileClockIcon />}
-                        label="Zapisz tymczasowo"
-                        hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Wczytaj tymczasowe” (10 ostatnich)"
-                        onClick={saveTemporary}
-                      />
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
-            </div>
-          </div>
-
+              Lista
+            </span>
+          </Button>
           {rows.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Tabela">
+            <div className="flex gap-1" role="group" aria-label="Zaznaczone wiersze">
               <Button
-                variant="ghost"
-                size="icon-sm"
+                variant="outline"
+                className={ROW_ACTION}
                 onClick={() => gridRef.current?.selectAll()}
                 aria-label="Zaznacz wszystkie"
                 title="Zaznacz wszystkie pozycje (Ctrl+A)"
@@ -1485,8 +1439,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 <CheckCheckIcon />
               </Button>
               <Button
-                variant="ghost"
-                size="icon-sm"
+                variant="outline"
+                className={ROW_ACTION}
                 onClick={flipQuantities}
                 disabled={signTargets.length === 0}
                 aria-label="Zmień znak ilości"
@@ -1499,8 +1453,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 <DiffIcon />
               </Button>
               <Button
-                variant="ghost"
-                size="icon-sm"
+                variant="outline"
+                className={ROW_ACTION}
                 onClick={() => removeRows(selectedRows)}
                 disabled={selectedRows.length === 0}
                 aria-label="Usuń zaznaczone wiersze"
@@ -1512,10 +1466,70 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               >
                 <Trash2Icon />
               </Button>
-              <ToolbarDivider />
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
+            <ActionMenu
+              label={weightIn24 ? 'Kody 24 = waga' : 'Kody 24'}
+              icon={<ScaleIcon />}
+              tone={weightIn24 ? 'warn' : undefined}
+              title="Wolne kody 240001–242999 i odczyt kodów 24 z etykiety"
+            >
+              <ActionItem
+                icon={<ListOrderedIcon />}
+                label="Wolne kody 24"
+                hint="Wolne kody 240001–242999 do zakładania nowych artykułów ważonych"
+                onClick={() => setFreeCodesOpen(true)}
+              />
+              <DropdownMenuCheckboxItem
+                checked={weightIn24}
+                onCheckedChange={setWeightIn24}
+                className="gap-2 pr-1.5 **:data-[slot=dropdown-menu-checkbox-item-indicator]:hidden"
+              >
+                <input
+                  type="checkbox"
+                  checked={weightIn24}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden
+                  className="pointer-events-none size-4 shrink-0 accent-primary"
+                />
+                Koniec kodu to waga (24…05000 = 5 kg)
+              </DropdownMenuCheckboxItem>
+            </ActionMenu>
+            {rows.length > 0 && (agreed.length > 0 || canUseAi) && <ToolbarDivider />}
+            {rows.length > 0 && canUseAi && (
               <Button
                 variant="outline"
-                size="sm"
+                className={ACTION_TONES.ai}
+                onClick={fillWithAi}
+                loading={suggest.isPending}
+                disabled={forAi.length === 0}
+              >
+                <SparklesIcon />
+                Uzupełnij
+                {forAi.length > 0 && ` (${forAi.length} ${forAi.length === 1 ? 'nowy' : 'nowych'})`}
+              </Button>
+            )}
+            {agreed.length > 0 && (
+              <Button variant="outline" onClick={confirmAgreed}>
+                Zatwierdź zgodne ({agreed.length})
+              </Button>
+            )}
+            {invoice?.id && (
+              <>
+                <ToolbarDivider />
+                <InvoiceFileActions storeId={store.id} invoiceId={invoice.id} size="default" />
+              </>
+            )}
+          </div>
+
+          {rows.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Tabela">
+              <Button
+                variant="outline"
                 onClick={applySuggestedPrices}
                 disabled={priceChanges.size === 0}
                 title={
@@ -1530,28 +1544,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 Ustaw ceny sugerowane
                 {priceChanges.size > 0 && ` (${priceChanges.size})`}
               </Button>
-              {(depositCount > 0 || depositFilter) && (
-                <>
-                  <ToolbarDivider />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(depositFilter && ACTION_TONES.warn)}
-                    aria-pressed={depositFilter !== null}
-                    onClick={toggleDepositFilter}
-                    title="Nowe artykuły z kaucją wskazane przez „Uzupełnij z AI”: kaucję trzeba ustawić przy zakładaniu w Mercalys"
-                  >
-                    <RecycleIcon />
-                    Brakująca kaucja ({depositCount})
-                  </Button>
-                </>
-              )}
-              {depositFilter && (
-                <Button variant="ghost" size="sm" onClick={toggleDepositFilter}>
-                  <FilterXIcon />
-                  Pokaż wszystkie ({viewRows.length}/{rows.length})
-                </Button>
-              )}
               <ToolbarDivider />
               <div className="flex items-center gap-1" role="group" aria-label="Ilość we wszystkich artykułach">
                 <span className="mr-1 text-sm text-muted-foreground">Ilość:</span>
@@ -1559,7 +1551,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   <Button
                     key={quantity}
                     variant="outline"
-                    size="sm"
                     className="min-w-8 tabular-nums"
                     onClick={() => setAllQuantities(quantity)}
                     disabled={filled.length === 0}
@@ -1597,79 +1588,155 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   />
                 </ActionMenu>
               )}
-              {(agreed.length > 0 || canUseAi) && <ToolbarDivider />}
-              {agreed.length > 0 && (
-                <Button variant="outline" size="sm" onClick={confirmAgreed}>
-                  Zatwierdź zgodne ({agreed.length})
-                </Button>
-              )}
-              {canUseAi && (
+              {(lowMarginCount > 0 || rowFilter?.kind === 'margin') && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  className={ACTION_TONES.ai}
-                  onClick={fillWithAi}
-                  loading={suggest.isPending}
-                  disabled={forAi.length === 0}
+                  className={cn(rowFilter?.kind === 'margin' && ACTION_TONES.warn)}
+                  aria-pressed={rowFilter?.kind === 'margin'}
+                  onClick={() => toggleRowFilter('margin')}
+                  title="Artykuły z marżą poniżej wymaganej na ich nomenklaturze (Ustawienia sklepu → Marża wymagana)"
                 >
-                  <SparklesIcon />
-                  Uzupełnij z AI
-                  {forAi.length > 0 && ` (${forAi.length} ${forAi.length === 1 ? 'nowy' : 'nowych'})`}
+                  <TrendingDownIcon />
+                  Za mała marża ({lowMarginCount})
                 </Button>
               )}
-              <div className="ml-auto flex items-center gap-1" role="group" aria-label="Historia zmian">
-                <Button variant="ghost" size="sm" onClick={clearAll}>
-                  Wyczyść
-                </Button>
+              {(depositCount > 0 || rowFilter?.kind === 'deposit') && (
                 <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={history.undo}
-                  disabled={!history.canUndo}
-                  aria-label="Cofnij"
-                  title="Cofnij ostatnią zmianę (Ctrl+Z)"
+                  variant="outline"
+                  className={cn(rowFilter?.kind === 'deposit' && ACTION_TONES.warn)}
+                  aria-pressed={rowFilter?.kind === 'deposit'}
+                  onClick={() => toggleRowFilter('deposit')}
+                  title="Nowe artykuły z kaucją wskazane przez „Uzupełnij”: kaucję trzeba ustawić przy zakładaniu w Mercalys"
                 >
-                  <Undo2Icon />
+                  <RecycleIcon />
+                  Brakująca kaucja ({depositCount})
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={history.redo}
-                  disabled={!history.canRedo}
-                  aria-label="Ponów"
-                  title="Ponów cofniętą zmianę (Ctrl+Y)"
-                >
-                  <Redo2Icon />
+              )}
+              {rowFilter && (
+                <Button variant="ghost" onClick={() => setRowFilter(null)}>
+                  <FilterXIcon />
+                  Pokaż wszystkie ({viewRows.length}/{rows.length})
                 </Button>
-              </div>
+              )}
             </div>
           )}
         </div>
+        {rows.length > 0 && (
+          <div
+            className="flex shrink-0 flex-col items-center justify-center gap-2"
+            role="group"
+            aria-label="Historia zmian"
+          >
+            <Button variant="ghost" onClick={clearAll}>
+              Wyczyść
+            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={history.undo}
+                disabled={!history.canUndo}
+                aria-label="Cofnij"
+                title="Cofnij ostatnią zmianę (Ctrl+Z)"
+              >
+                <Undo2Icon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={history.redo}
+                disabled={!history.canRedo}
+                aria-label="Ponów"
+                title="Ponów cofniętą zmianę (Ctrl+Y)"
+              >
+                <Redo2Icon />
+              </Button>
+            </div>
+          </div>
+        )}
+        {rows.length > 0 && (
+          <div className={cn('flex', TILE_WIDTH)} role="group" aria-label="Zapis">
+            <Button
+              className={cn(ACTION_TONES.save, ACTION_TILE, 'min-w-0 flex-1 rounded-r-none')}
+              onClick={onSaveClick}
+              loading={xmlSave.saving}
+              disabled={filled.length === 0}
+              title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
+            >
+              <TileContent
+                icon={
+                  saved && savedState ? (
+                    <SavedStatus state={savedState} at={saved.at} fileName={saved.fileName} />
+                  ) : (
+                    <FileCodeIcon />
+                  )
+                }
+              >
+                Zapisz
+              </TileContent>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    className={cn(ACTION_TONES.save, '-ml-px h-auto w-7 rounded-l-none rounded-r-md px-0')}
+                    aria-label="Inne sposoby zapisu"
+                    loading={saveTemporaryXml.isPending}
+                    disabled={filled.length === 0}
+                  />
+                }
+              >
+                <ChevronDownIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <ActionItem
+                  icon={<FileClockIcon />}
+                  label="Zapisz tymczasowo"
+                  hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Wczytaj tymczasowe” (10 ostatnich)"
+                  onClick={saveTemporary}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </CommandBar>
 
       <>
-        <dl className="mb-2 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-          <Stat label="Pozycje" value={filled.length} />
-          <Stat
-            label="Suma netto"
-            value={<ComparedSum value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />}
-          />
-          <Stat
-            label="VAT"
-            value={<ComparedSum value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />}
-          />
-          <Stat label="Nowe" value={newCount} />
-          {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
-          <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
-          {depositCount > 0 && <Stat label="Brakująca kaucja" value={depositCount} highlight />}
-        </dl>
+        <div className="mb-2 flex items-start gap-3">
+          <dl className="flex min-w-0 flex-1 flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
+            <Stat label="Pozycje" value={filled.length} />
+            <Stat
+              label="Suma netto"
+              value={<ComparedSum value={totals.net} document={totals.invoiceNet} diff={totals.netDiff} />}
+            />
+            <Stat
+              label="VAT"
+              value={<ComparedSum value={totals.vat} document={totals.invoiceVat} diff={totals.vatDiff} />}
+            />
+            <Stat label="Nowe" value={newCount} />
+            {changedCount > 0 && <Stat label="Zmienione z kartoteki" value={changedCount} />}
+            <Stat label="Do sprawdzenia" value={toCheck} highlight={toCheck > 0} />
+            {depositCount > 0 && <Stat label="Brakująca kaucja" value={depositCount} highlight />}
+          </dl>
+          <Button
+            data-keep-grid-selection
+            variant="ghost"
+            size="xs"
+            className="text-muted-foreground"
+            aria-expanded={!legendHidden}
+            onClick={() => setLegendHidden(!legendHidden)}
+          >
+            {legendHidden ? <EyeIcon /> : <EyeOffIcon />}
+            {legendHidden ? 'Pokaż legendę' : 'Schowaj legendę'}
+          </Button>
+        </div>
 
-        <Legend />
+        {!legendHidden && <Legend />}
 
         {viewRows.length === 0 ? (
           <div className="rounded-xl border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
             Żaden wiersz nie pasuje do filtra.{' '}
-            <Button variant="link" className="h-auto p-0" onClick={toggleDepositFilter}>
+            <Button variant="link" className="h-auto p-0" onClick={() => setRowFilter(null)}>
               Pokaż wszystkie
             </Button>
           </div>
@@ -1844,6 +1911,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onOpenChange={(open) => setSaveSettings((current) => ({ ...current, open }))}
         missing={saveSettings.missing}
         extraFolders={[{ folder: LST_FOLDER, note: 'Lista EAN-ów artykułów z tabeli („Plik .lst”).' }]}
+        withPriceFiles
       />
 
       {xmlSave.draftDialog}
@@ -1853,9 +1921,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Dokument jest już zapisany</AlertDialogTitle>
             <AlertDialogDescription>
-              {saved
-                ? `Plik ${saved.fileName} zapisano ${formatSavedAt(saved.at)}${savedState === 'changed' ? ', a tabela zmieniła się od tego czasu' : ''}. `
-                : ''}
+              {saved && (
+                <>
+                  Plik <span className="break-all">{saved.fileName}</span> zapisano {formatSavedAt(saved.at)}
+                  {savedState === 'changed' ? ', a tabela zmieniła się od tego czasu' : ''}.{' '}
+                </>
+              )}
               Czy na pewno chcesz zapisać go ponownie? Plik o tej samej nazwie zostanie nadpisany.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1886,8 +1957,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
 const NO_FILTER: string[] = []
 
+/** Przycisk pod „Lista”: trzy dzielą szerokość po równo, wysokość bierze z bloku. */
+const ROW_ACTION = 'h-full min-w-0 flex-1 rounded-md px-0'
+
 /** Filtr wierszy z chwili włączenia: wszystkie wtedy znane wiersze i te, które przeszły filtr. */
-type RowFilter = { known: Set<string>; pass: Set<string> }
+type RowFilter = { kind: 'deposit' | 'margin'; known: Set<string>; pass: Set<string> }
 
 /** Chwila zapisu pliku (poza komponentem: woła ją tylko obsługa kliknięcia). */
 const nowIso = () => new Date().toISOString()
@@ -2006,8 +2080,8 @@ export function CommandBar({
 }
 
 /**
- * Numer dostawcy dokumentu w dużym kwadracie (trafia do pliku XML i do programu sklepu), pod nim nazwa i zmiana
- * dostawcy. Bez numeru bursztynowy z powodem.
+ * Numer dostawcy dokumentu w dużym kwadracie (trafia do pliku XML i do programu sklepu), pod nim nazwa, a w rogu
+ * zmiana dostawcy, żeby nie podnosiła paska. Bez numeru bursztynowy z powodem.
  */
 function SupplierNumber({
   code,
@@ -2025,45 +2099,90 @@ function SupplierNumber({
   return (
     <div
       className={cn(
-        'flex w-36 shrink-0 flex-col items-center justify-center rounded-md border-2 px-2 py-1.5 text-center',
+        'relative flex flex-col items-center justify-center rounded-md border-2 px-2 py-0.5 text-center',
+        TILE_WIDTH,
         code
           ? 'border-foreground/20 bg-card'
           : 'border-amber-400 bg-amber-200 text-amber-950 dark:border-amber-600 dark:bg-amber-900 dark:text-amber-50',
       )}
       title={name ?? undefined}
     >
-      <span className={cn('text-xs', code ? 'text-muted-foreground' : 'font-medium')}>Nr dostawcy</span>
+      <span className={cn('text-xs leading-tight', code ? 'text-muted-foreground' : 'font-medium')}>Nr dostawcy</span>
       {code ? (
-        <span className="text-4xl leading-tight font-bold tracking-tight tabular-nums">{code}</span>
+        <span className="text-3xl leading-none font-bold tracking-tight tabular-nums">{code}</span>
       ) : (
-        <span className="my-1 text-sm leading-tight font-semibold">{problem ?? 'Sprawdzanie…'}</span>
+        <span className="text-sm leading-tight font-semibold">{problem ?? 'Sprawdzanie…'}</span>
       )}
-      {name && <span className="w-full truncate text-xs">{name}</span>}
+      {name && <span className="w-full truncate text-xs leading-tight">{name}</span>}
       {changeLabel && (
-        <Button variant="link" className="h-auto p-0 text-xs" onClick={onChange}>
-          {changeLabel}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="absolute top-0 right-0 size-5"
+          onClick={onChange}
+          aria-label={changeLabel}
+          title={changeLabel}
+        >
+          <PencilIcon />
         </Button>
       )}
     </div>
   )
 }
 
-/** Informacja o zapisie pliku XML: zielona, gdy tabela jest taka jak przy zapisie, bursztynowa po zmianach. */
+/**
+ * Koło zębate ustawień. Kropka mówi, że ceny z kasy czekają na zgodę albo mają błąd, bo ich stan jest teraz w oknie.
+ * Osobny komponent, żeby postęp wczytywania plików cen nie przerysowywał całej tabeli.
+ */
+function SettingsButton({ storeId, onClick }: { storeId: string; onClick: () => void }) {
+  const attention = priceFilesNeedAttention(usePriceFileWatch(), storeId)
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground"
+      onClick={onClick}
+      aria-label={
+        attention ? 'Ustawienia zapisu i cen z kasy: ceny z kasy wymagają uwagi' : 'Ustawienia zapisu i cen z kasy'
+      }
+      title={
+        attention
+          ? 'Ceny z kasy wymagają uwagi: brak zgody na odczyt folderu albo błąd sprawdzania'
+          : 'Ustawienia: foldery na plik XML, nowe artykuły, protokoły, pliki .lst i ceny z kasy'
+      }
+    >
+      <SettingsIcon />
+      {attention && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full bg-amber-500" />}
+    </Button>
+  )
+}
+
+/**
+ * Stan zapisu w kafelku Zapisz, w miejscu ikony, więc nie zmienia układu paska: godzina zapisu, a po zmianach w tabeli
+ * bursztynowe „zmiany”. Pełny opis w podpowiedzi. Kafelek jest zielony w obu motywach, stąd kolory bez wariantu dark.
+ */
 function SavedStatus({ state, at, fileName }: { state: 'saved' | 'changed'; at: string; fileName: string }) {
+  const time = new Date(at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
   return (
     <span
       className={cn(
-        'flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium',
-        state === 'saved'
-          ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50'
-          : 'bg-amber-200 text-amber-950 dark:bg-amber-900 dark:text-amber-50',
+        'flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-semibold tabular-nums',
+        state === 'saved' ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-950',
       )}
-      title={fileName}
+      title={
+        state === 'saved'
+          ? `Dokument zapisany ${formatSavedAt(at)}: ${fileName}`
+          : `Zapisany ${formatSavedAt(at)}, zmiany po zapisie: ${fileName}`
+      }
     >
-      <CircleCheckIcon aria-hidden className="size-4" />
-      {state === 'saved'
-        ? `Dokument zapisany ${formatSavedAt(at)}`
-        : `Zapisany ${formatSavedAt(at)} · zmiany po zapisie`}
+      {state === 'saved' ? (
+        <>
+          <CircleCheckIcon aria-hidden className="size-3.5" />
+          {time}
+        </>
+      ) : (
+        'zmiany'
+      )}
     </span>
   )
 }

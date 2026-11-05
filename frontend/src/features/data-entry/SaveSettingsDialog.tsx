@@ -2,6 +2,7 @@ import { RotateCcwIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { SwitchField } from '@/components/form'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,15 +10,19 @@ import { formatDateTime } from '@/features/ksef/format'
 import { ApiError, downloadFile } from '@/lib/api'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, type SavedFolderSpec, saveApiFileToFolder } from '@/lib/saved-folders'
+import { useHiddenHint } from '@/lib/use-hidden-hint'
 import { cn } from '@/lib/utils'
 
 import { usePriceControlFiles } from './api'
+import { PriceFileStatus } from './PriceFileStatus'
+import { PRODUCT_DRAFT_PROMPT } from './product-drafts'
 import { XML_FOLDER } from './xml-save'
 
 /**
  * Ustawienia zapisu wprowadzania danych: foldery w tej przeglądarce na plik XML faktury, plik nowych artykułów
  * (CADBEZP) i protokoły (pliki PROTO, zmiana cen CTRLPRIX, etykiety, zamówienie), wybrane raz, więc „Zapisz” zapisuje od razu bez pytania
- * o miejsce. Do tego ostatnie zmiany cen z ponownym zapisem. Nazw plików z programu sklepu pracownik nie widzi.
+ * o miejsce. Do tego ostatnie zmiany cen z ponownym zapisem, a we wprowadzaniu danych folder cen z kasy. Nazw plików
+ * z programu sklepu pracownik nie widzi.
  */
 export function SaveSettingsDialog({
   storeId,
@@ -26,6 +31,7 @@ export function SaveSettingsDialog({
   missing = [],
   withXml = true,
   extraFolders = [],
+  withPriceFiles = false,
 }: {
   storeId: string
   open: boolean
@@ -36,10 +42,13 @@ export function SaveSettingsDialog({
   withXml?: boolean
   /** Foldery innych plików ekranu (np. „Sprawdź PLU” w dostawie z bazy), na końcu listy. */
   extraFolders?: { folder: SavedFolderSpec; note: string }[]
+  /** Folder cen z kasy (pliki TRACEART), który przeglądarka czyta w tle. */
+  withPriceFiles?: boolean
 }) {
   const productFolder = useProductFileFolder(storeId)
   const protoFolder = useProtoFolder(storeId)
   const priceControlFiles = usePriceControlFiles(storeId, open)
+  const [draftPromptOff, setDraftPromptOff] = useHiddenHint(PRODUCT_DRAFT_PROMPT)
   // Wybrany w tym oknie folder przestaje być brakujący od razu, bez zamykania okna.
   const [picked, setPicked] = useState<string[]>([])
   const stillMissing = missing.filter((folder) => !picked.includes(folder.key))
@@ -76,9 +85,9 @@ export function SaveSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogContent className="gap-5 p-6 sm:max-w-lg">
+      <DialogContent className="gap-5 p-6 sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Ustawienia zapisu</DialogTitle>
+          <DialogTitle>{withPriceFiles ? 'Ustawienia zapisu i cen z kasy' : 'Ustawienia zapisu'}</DialogTitle>
           <DialogDescription>
             Foldery wybiera się raz w tej przeglądarce. Potem „Zapisz” od razu zapisuje pliki na miejscu.
           </DialogDescription>
@@ -107,6 +116,13 @@ export function SaveSettingsDialog({
               <p className="text-xs text-muted-foreground">{note}</p>
             </div>
           ))}
+          {withPriceFiles && <PriceFileStatus storeId={storeId} />}
+          <SwitchField
+            label="Pytaj o wprowadzenie nowych artykułów"
+            description="Okno po zapisie pliku nowych artykułów. Wyłączone działa jak „Tak”: artykuły od razu trafiają do bazy, a powiadomienie pozwala to cofnąć."
+            checked={!draftPromptOff}
+            onCheckedChange={(checked) => setDraftPromptOff(!checked)}
+          />
         </div>
 
         {priceControlFiles.data && priceControlFiles.data.length > 0 && (

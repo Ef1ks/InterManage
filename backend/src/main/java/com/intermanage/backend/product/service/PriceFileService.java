@@ -35,10 +35,8 @@ import com.intermanage.backend.product.dto.PriceFileOverview;
 import com.intermanage.backend.product.dto.PriceFileUploadResponse;
 import com.intermanage.backend.product.entity.PriceFileImport;
 import com.intermanage.backend.product.entity.Product;
-import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.PriceFileMapper;
 import com.intermanage.backend.product.repository.PriceFileImportRepository;
-import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -62,6 +60,7 @@ public class PriceFileService {
     /** Starsza historia z BACKUP nie jest potrzebna, więc pliki sprzed tego dnia są pomijane. */
     static final LocalDateTime FIRST_FILE_TIME = LocalDate.of(2026, 1, 1).atStartOfDay();
     private static final int MAX_FILES = 200;
+    private static final int EAN_LENGTH = 13;
 
     private final PriceFileParser parser;
     private final PriceFileMapper mapper;
@@ -69,18 +68,15 @@ public class PriceFileService {
     private final ProductRepository products;
     private final StoreRepository stores;
     private final AppUserRepository users;
-    private final ProductPriceChangeRepository priceChanges;
 
     public PriceFileService(PriceFileParser parser, PriceFileMapper mapper, PriceFileImportRepository imports,
-            ProductRepository products, StoreRepository stores, AppUserRepository users,
-            ProductPriceChangeRepository priceChanges) {
+            ProductRepository products, StoreRepository stores, AppUserRepository users) {
         this.parser = parser;
         this.mapper = mapper;
         this.imports = imports;
         this.products = products;
         this.stores = stores;
         this.users = users;
-        this.priceChanges = priceChanges;
     }
 
     @Transactional(readOnly = true)
@@ -141,7 +137,7 @@ public class PriceFileService {
         // Ta sama blokada co import kartoteki: oba zmieniają ceny, a kilka kart przeglądarki może wysłać ten sam plik.
         products.lockForImport(ProductImportService.IMPORT_LOCK_PREFIX + storeId);
         Set<String> already = new HashSet<>(imports.findImportedNames(storeId, parsed.keySet()));
-        Map<String, PriceFileImport> withoutPromotions = imports.findWithoutPromotions(storeId, parsed.keySet())
+        Map<String, PriceFileImport> partlyRead = imports.findPartlyRead(storeId, parsed.keySet())
                 .stream().collect(Collectors.toMap(PriceFileImport::getFileName, file -> file));
         AppUser user = userId != null ? users.getReferenceById(userId) : null;
 
@@ -152,9 +148,9 @@ public class PriceFileService {
                 skipped.add(name);
                 continue;
             }
-            PriceFileImport earlier = withoutPromotions.get(name);
+            PriceFileImport earlier = partlyRead.get(name);
             if (earlier != null) {
-                readPromotions(earlier, parsed.get(name));
+                readMissing(earlier, parsed.get(name));
                 skipped.add(name);
                 continue;
             }
@@ -175,38 +171,53 @@ public class PriceFileService {
         int updated = 0;
         int older = 0;
         int unknown = 0;
-        List<ProductPriceChange> changes = new ArrayList<>();
         for (Map.Entry<String, List<PriceFileLine>> entry : byItm8.entrySet()) {
             Product product = catalog.get(entry.getKey());
             if (product == null) {
                 unknown++;
                 continue;
             }
-            BigDecimal previousSalePrice = product.getSalePrice();
-            BigDecimal previousPromoPrice = product.getPromoPrice();
             switch (product.applyPriceFile(articleLine(product, entry.getValue()), priceFile)) {
-                case UPDATED -> {
-                    updated++;
-                    changes.add(ProductPriceChange.fromPriceFile(product, priceFile, previousSalePrice,
-                            previousPromoPrice));
-                }
+                case UPDATED -> updated++;
                 case OLDER -> older++;
                 case UNCHANGED -> {
                 }
             }
         }
-        priceChanges.saveAll(changes);
         priceFile.recordResult(byItm8.size(), updated, older, unknown);
         savePromotions(store.getId(), file.fileTime(), byItm8, catalog);
+        savePrices(store.getId(), priceFile, file);
         return priceFile;
     }
 
-    /** Plik wczytany, zanim serwer zapisywał promocje: tylko promocje, ceny zostają. */
-    private void readPromotions(PriceFileImport priceFile, ParsedPriceFile file) {
+    /** Plik wczytany wcześniej: tylko to, czego serwer wtedy nie zapisywał, ceny w kartotece zostają. */
+    private void readMissing(PriceFileImport priceFile, ParsedPriceFile file) {
         UUID storeId = priceFile.getStore().getId();
-        Map<String, List<PriceFileLine>> byItm8 = linesByItm8(file);
-        savePromotions(storeId, file.fileTime(), byItm8, catalog(storeId, byItm8));
-        priceFile.markPromotionsRead();
+        if (!priceFile.isPromotionsRead()) {
+            Map<String, List<PriceFileLine>> byItm8 = linesByItm8(file);
+            savePromotions(storeId, file.fileTime(), byItm8, catalog(storeId, byItm8));
+            priceFile.markPromotionsRead();
+        }
+        if (!priceFile.isPricesRead()) {
+            savePrices(storeId, priceFile, file);
+            priceFile.markPricesRead();
+        }
+    }
+
+    /** Historia cen po EAN-ie: każda linia pliku, także spoza kartoteki i starsza niż kartoteka. */
+    private void savePrices(UUID storeId, PriceFileImport priceFile, ParsedPriceFile file) {
+        List<PriceFileLine> lines = file.lines();
+        if (lines.isEmpty()) {
+            return;
+        }
+        imports.saveTillPrices(storeId, priceFile.getId(), file.fileTime(),
+                lines.stream().map(line -> "0".repeat(EAN_LENGTH - line.ean().length()) + line.ean())
+                        .toArray(String[]::new),
+                lines.stream().map(PriceFileLine::itm8).toArray(String[]::new),
+                lines.stream().map(PriceFileLine::salePrice).toArray(BigDecimal[]::new),
+                lines.stream().map(PriceFileLine::promoPrice).toArray(BigDecimal[]::new),
+                lines.stream().map(PriceFileLine::promoFrom).toArray(LocalDate[]::new),
+                lines.stream().map(PriceFileLine::promoTo).toArray(LocalDate[]::new));
     }
 
     private static Map<String, List<PriceFileLine>> linesByItm8(ParsedPriceFile file) {

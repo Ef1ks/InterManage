@@ -5,6 +5,7 @@ import {
   ChevronDownIcon,
   GripVerticalIcon,
   Link2Icon,
+  PlusIcon,
   SplitIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
@@ -478,6 +479,11 @@ export function DataEntryGrid({
       handled()
       return onDeleteRows(selectedIds.split(','))
     }
+    // Jak w Excelu: Ctrl + plus wstawia wiersz nad bieżącym.
+    if (ctrl && (event.key === '+' || event.key === '=' || event.key === 'Add')) {
+      handled()
+      return insertRow(active.r)
+    }
     if (!ctrl && !event.altKey && event.key.length === 1) {
       handled()
       setAnchor(active)
@@ -515,6 +521,12 @@ export function DataEntryGrid({
 
   const onMouseDown = (event: React.MouseEvent) => {
     if (event.button !== 0) return
+    const insert = (event.target as HTMLElement).closest<HTMLElement>('[data-row-insert]')
+    if (insert) {
+      event.preventDefault()
+      insertRow(Number(insert.dataset.rowInsert) + 1)
+      return
+    }
     const handle = (event.target as HTMLElement).closest<HTMLElement>('[data-row-handle]')
     if (handle) {
       event.preventDefault()
@@ -679,6 +691,16 @@ export function DataEntryGrid({
         : [...current.slice(0, r + 1), emptyRow(), ...current.slice(r + 1)]
     })
     const cell = { r: r + 1, c: 0 }
+    setActive(cell)
+    setAnchor(cell)
+    setEditing({ ...cell, mode: 'enter', text: '' })
+  }
+
+  /** Pusty wiersz w miejscu `r`, od razu w edycji EAN-u; między artykułami, nie wśród kaucji i dostawy. */
+  const insertRow = (r: number) => {
+    const at = Math.min(r, movableEnd)
+    setRows((current) => [...current.slice(0, at), emptyRow(), ...current.slice(at)])
+    const cell = { r: at, c: 0 }
     setActive(cell)
     setAnchor(cell)
     setEditing({ ...cell, mode: 'enter', text: '' })
@@ -1109,7 +1131,7 @@ const GridRow = memo(function GridRow({
         scope="row"
         data-row-header={index}
         className={cn(
-          'group/header sticky left-0 z-10 h-8 cursor-default border-r border-b bg-muted px-1 text-center text-[0.86em] font-normal text-muted-foreground',
+          'group/header sticky left-0 z-10 h-8 cursor-default border-r hover:z-20 border-b bg-muted px-1 text-center text-[0.86em] font-normal text-muted-foreground',
           rangeLeft >= 0 && SELECTED_HEADER,
           tooLong && 'bg-destructive font-medium text-white',
           dropLine,
@@ -1125,6 +1147,16 @@ const GridRow = memo(function GridRow({
             >
               <GripVerticalIcon aria-hidden className="size-[1.15em]" />
             </span>
+            <button
+              type="button"
+              tabIndex={-1}
+              data-row-insert={index}
+              aria-label="Wstaw wiersz poniżej"
+              title="Wstaw wiersz poniżej (Ctrl + plus wstawia nad bieżącym)"
+              className="absolute -bottom-2 left-1/2 hidden size-4 -translate-x-1/2 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground group-hover/header:grid"
+            >
+              <PlusIcon aria-hidden className="size-3" />
+            </button>
           </>
         ) : (
           index + 1

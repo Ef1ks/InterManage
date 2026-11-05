@@ -10,7 +10,8 @@ import java.util.UUID;
  * Przepłacone artykuły z ostatnich {@code periodDays} dni (wg daty przyjęcia): przyjęcia PZ z artykułem kupionym
  * o ponad {@code thresholdPercent}% drożej niż w jednej z {@code referenceCount} poprzednich dostaw z normalną ilością
  * oraz przyjęcia, które już mają status wyjaśniania. Dostawa z ilością ponad {@code largeQuantityFactor} razy większą
- * niż zwykle (mediana artykułu) nie bierze udziału w porównaniu.
+ * niż zwykle (mediana artykułu) nie bierze udziału w porównaniu. {@code excludedSuppliers}: dostawcy pomijani
+ * w raporcie, {@code suppliers}: lista do ich wyboru.
  */
 public record OverpaymentReport(
         LocalDate from,
@@ -21,6 +22,8 @@ public record OverpaymentReport(
         int largeQuantityFactor,
         LocalDate documentsCoveredUntil,
         LocalDateTime documentsReportGeneratedAt,
+        List<ReportSupplier> excludedSuppliers,
+        List<ReportSupplier> suppliers,
         List<Delivery> deliveries) {
 
     /**
@@ -72,6 +75,7 @@ public record OverpaymentReport(
             String documentNumber,
             LocalDateTime documentDate,
             String supplierCode,
+            String supplierName,
             BigDecimal quantity,
             BigDecimal purchasePrice) {
     }

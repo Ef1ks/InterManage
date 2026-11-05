@@ -19,10 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.leaflet.dto.LeafletLabelCheck;
 import com.intermanage.backend.leaflet.dto.LeafletLinkRequest;
 import com.intermanage.backend.leaflet.dto.LeafletMatch;
 import com.intermanage.backend.leaflet.dto.LeafletResponse;
 import com.intermanage.backend.leaflet.dto.LeafletSummary;
+import com.intermanage.backend.leaflet.service.LeafletLabelCheckService;
 import com.intermanage.backend.leaflet.service.LeafletService;
 
 import jakarta.validation.Valid;
@@ -35,10 +37,17 @@ public class LeafletController {
     private static final String ACCESS =
             "hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
 
-    private final LeafletService leaflets;
+    /** Sprawdzarka etykiet służy też pracownikom z sali: wystarczy dostęp do magazynu i produktów. */
+    private static final String LABEL_CHECK_ACCESS =
+            "(hasAuthority('DATA_ENTRY:VIEW') or hasAuthority('INVENTORY:VIEW')) "
+                    + "and @storeAccess.canAccess(authentication, #storeId)";
 
-    public LeafletController(LeafletService leaflets) {
+    private final LeafletService leaflets;
+    private final LeafletLabelCheckService labelCheck;
+
+    public LeafletController(LeafletService leaflets, LeafletLabelCheckService labelCheck) {
         this.leaflets = leaflets;
+        this.labelCheck = labelCheck;
     }
 
     @GetMapping
@@ -53,6 +62,12 @@ public class LeafletController {
     public LeafletResponse upload(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return leaflets.upload(storeId, file, principal.getId());
+    }
+
+    @GetMapping("/label-check")
+    @PreAuthorize(LABEL_CHECK_ACCESS)
+    public LeafletLabelCheck labelCheck(@PathVariable UUID storeId, @RequestParam String query) {
+        return labelCheck.check(storeId, query);
     }
 
     @GetMapping("/{id}")

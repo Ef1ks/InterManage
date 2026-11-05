@@ -1665,6 +1665,7 @@ export type OverpaymentReference = {
   documentNumber: string
   documentDate: string
   supplierCode: string | null
+  supplierName: string | null
   quantity: number
   purchasePrice: number
 }
@@ -1711,13 +1712,17 @@ export type OverpaymentReport = {
   largeQuantityFactor: number
   documentsCoveredUntil: string | null
   documentsReportGeneratedAt: string | null
+  /** Dostawcy pomijani w raporcie. */
+  excludedSuppliers: ReportSupplier[]
+  /** Lista dostawców sklepu do wyboru. */
+  suppliers: ReportSupplier[]
   deliveries: OverpaymentDelivery[]
 }
 
 /** Skąd wiadomo o promocji w dniu przyjęcia: lista promocji, pliki kasy, gazetka, spadek ceny w sprzedaży. */
 export type LowMarginPromotion = 'LIST' | 'TILL' | 'LEAFLET' | 'SALES'
 
-export type LowMarginSupplier = { code: string; name: string }
+export type ReportSupplier = { code: string; name: string }
 
 export type LowMarginLine = {
   itm8: string
@@ -1765,9 +1770,9 @@ export type LowMarginReport = {
   documentsCoveredUntil: string | null
   documentsReportGeneratedAt: string | null
   /** Dostawcy, których nie dotyczy marża wymagana. */
-  excludedSuppliers: LowMarginSupplier[]
+  excludedSuppliers: ReportSupplier[]
   /** Lista dostawców sklepu do wyboru. */
-  suppliers: LowMarginSupplier[]
+  suppliers: ReportSupplier[]
   deliveries: LowMarginDelivery[]
 }
 
@@ -1886,6 +1891,25 @@ export type DataEntryCatalogProduct = {
    * Artykuł utworzony plikiem CADBEZP, którego nie ma jeszcze w kartotece (czeka na kolejny raport): dane z pliku,
    * jest już w programie sklepu, więc nie jest nowym artykułem.
    */
+  draft: boolean
+}
+
+/** Artykuł w ustawianiu promocji. */
+export type PromotionSetupArticle = {
+  /** Kod, którego szukano (bez zer wiodących). */
+  code: string
+  /** {@code null} dla artykułu ze szkicu CADBEZP ({@code draft}): bez statystyk. */
+  itm8: string | null
+  /** Bieżący EAN z kartoteki, idzie do pliku .PRO. */
+  ean: string | null
+  name: string | null
+  brand: string | null
+  vatPercent: number | null
+  /** Cena sprzedaży brutto bez trwającej promocji. */
+  regularPrice: number | null
+  /** Cena netto sztuki z ostatniego przyjęcia PZ ({@code lastPurchaseDate}), bez przyjęcia z kartoteki (data pusta). */
+  lastPurchasePrice: number | null
+  lastPurchaseDate: string | null
   draft: boolean
 }
 
@@ -2412,6 +2436,8 @@ export type ProductPromotion = {
  * (bez ceny poprzedniej, z dostawcą i fakturą w {@code description}).
  */
 export type ProductPriceChange = {
+  /** Tylko zmiany z kasy; import kartoteki i pliki zmiany cen dotyczą całego artykułu. */
+  ean: string | null
   changedAt: string | null
   source: 'TILL' | 'REPORT' | 'DATA_ENTRY'
   previousSalePrice: number | null
@@ -2425,6 +2451,7 @@ export type ProductPriceChange = {
 }
 
 export type ProductPriceHistory = {
+  mainEan: string | null
   promotions: ProductPromotion[]
   changes: ProductPriceChange[]
 }
@@ -2638,6 +2665,34 @@ export type Leaflet = Omit<LeafletSummary, 'lineCount'> & {
   lines: LeafletLine[]
   /** Kody MEA z gazetki, których jeszcze nie potwierdzono jako wpisane w Mercalys. */
   pendingMeaCodes: string[]
+}
+
+/** CURRENT: promocja trwa dziś, UPCOMING: dopiero się zacznie, NONE: artykułu nie było w gazetkach. */
+export type LeafletLabelStatus = 'CURRENT' | 'UPCOMING' | 'PAST' | 'NONE'
+
+/** Promocja artykułu z gazetki {@code week}/{@code year}; {@code shelfLabel} to OZNACZENIE PRZY PÓŁCE z pliku. */
+export type LeafletLabelLine = {
+  year: number
+  week: number
+  status: LeafletLabelStatus
+  dateFrom: string
+  dateTo: string
+  shelfLabel: string | null
+}
+
+/** Trwające i przyszłe promocje artykułu, a gdy żadna nie trwa, także ostatnia zakończona. */
+export type LeafletLabelArticle = {
+  ean: string | null
+  name: string
+  brand: string | null
+  status: LeafletLabelStatus
+  lines: LeafletLabelLine[]
+}
+
+export type LeafletLabelCheck = {
+  /** Wszystkie trafienia; {@code articles} to najwyżej pierwsze 30. */
+  total: number
+  articles: LeafletLabelArticle[]
 }
 
 /** Artykuł dla EAN-u z gazetki (bez zer wiodących) po zmianie przypięcia. */

@@ -18,13 +18,21 @@ import { PRINT_VARIANT_LABELS, useInvoiceFiles } from './invoice-files'
  * „Drukuj fakturę” z wyborem wariantu (podstawowy: pozycje, opis i dokumenty WZ; pełna faktura) i pobraniem PDF.
  * W tabeli po wczytaniu faktury i w oknie wczytywania.
  */
-export function InvoiceFileActions({ storeId, invoiceId }: { storeId: string; invoiceId: string }) {
+export function InvoiceFileActions({
+  storeId,
+  invoiceId,
+  size = 'sm',
+}: {
+  storeId: string
+  invoiceId: string
+  size?: 'sm' | 'default'
+}) {
   const files = useInvoiceFiles(storeId)
   return (
     <div className="flex items-center" role="group" aria-label="Plik faktury">
       <Button
         variant="outline"
-        size="sm"
+        size={size}
         className="rounded-r-none"
         loading={files.busy === 'print'}
         onClick={() => files.print(invoiceId)}
@@ -43,7 +51,7 @@ export function InvoiceFileActions({ storeId, invoiceId }: { storeId: string; in
           render={
             <Button
               variant="outline"
-              size="icon-sm"
+              size={size === 'sm' ? 'icon-sm' : 'icon'}
               className="-ml-px rounded-l-none"
               aria-label="Wariant wydruku i pobranie faktury"
               loading={files.busy === 'download'}

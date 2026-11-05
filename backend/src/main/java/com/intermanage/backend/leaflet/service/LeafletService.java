@@ -273,6 +273,11 @@ public class LeafletService {
         return catalog;
     }
 
+    /** Artykuły z kartoteki dla kluczy EAN-ów z gazetki (przypięte ręcznie, potem po EAN-ie). */
+    Map<String, CatalogProduct> articles(UUID storeId, Collection<String> keys) {
+        return resolve(storeId, keys).products();
+    }
+
     /** Artykuły dla kluczy EAN-ów, przypięcia i ceny sprzedaży z kartoteki po ITM8. */
     private record Resolved(Map<String, CatalogProduct> products, Map<String, UUID> linkIds,
             Map<String, BigDecimal> regularByItm8) {

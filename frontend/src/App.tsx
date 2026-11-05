@@ -11,8 +11,11 @@ import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { LeafletLabelCheckPage } from '@/features/leaflet/LeafletLabelCheckPage'
 import { LeafletPage } from '@/features/leaflet/LeafletPage'
-import { leafletPath } from '@/features/leaflet/paths'
+import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
+import { PromoSetupPage } from '@/features/promo-setup/PromoSetupPage'
+import { promoSetupPath } from '@/features/promo-setup/paths'
 import { DataEntryPage } from '@/features/data-entry/DataEntryPage'
 import { DeliOrderPage } from '@/features/deli-order/DeliOrderPage'
 import { ProductionPage } from '@/features/deli-production/ProductionPage'
@@ -106,6 +109,22 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <LeafletPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: promoSetupPath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <PromoSetupPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: leafletLabelsPath,
+        element: (
+          <RequireAuth anyCategory={['DATA_ENTRY', 'INVENTORY']}>
+            <LeafletLabelCheckPage />
           </RequireAuth>
         ),
       },

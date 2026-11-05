@@ -10,6 +10,8 @@ import com.intermanage.backend.store.entity.Store;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -18,12 +20,12 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * Dostawca, którego nie dotyczy marża wymagana: jego artykułów nie ma w raporcie za niskich marż (po kodzie dostawcy
- * z linii). Usunięcie z listy to znacznik.
+ * Dostawca pomijany w raporcie weryfikującym zakupy (po kodzie dostawcy z linii). Każdy raport ma własną listę.
+ * Usunięcie z listy to znacznik.
  */
 @Entity
-@Table(name = "low_margin_excluded_suppliers")
-public class LowMarginExcludedSupplier {
+@Table(name = "report_excluded_suppliers")
+public class ReportExcludedSupplier {
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
@@ -32,6 +34,10 @@ public class LowMarginExcludedSupplier {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "store_id", nullable = false, updatable = false)
     private Store store;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, updatable = false)
+    private ReviewedReport report;
 
     @Column(name = "supplier_code", nullable = false, length = 10, updatable = false)
     private String supplierCode;
@@ -53,11 +59,13 @@ public class LowMarginExcludedSupplier {
     @Column(name = "removed_at")
     private Instant removedAt;
 
-    protected LowMarginExcludedSupplier() {
+    protected ReportExcludedSupplier() {
     }
 
-    public LowMarginExcludedSupplier(Store store, String supplierCode, String supplierName, AppUser createdBy) {
+    public ReportExcludedSupplier(Store store, ReviewedReport report, String supplierCode, String supplierName,
+            AppUser createdBy) {
         this.store = store;
+        this.report = report;
         this.supplierCode = supplierCode;
         this.supplierName = supplierName;
         this.createdBy = createdBy;

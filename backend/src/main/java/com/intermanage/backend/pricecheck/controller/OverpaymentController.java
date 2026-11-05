@@ -8,11 +8,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.document.dto.DeliveryReportExcludedSuppliersRequest;
 import com.intermanage.backend.pricecheck.dto.OverpaymentReport;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
@@ -43,6 +45,15 @@ public class OverpaymentController {
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
     public OverpaymentReport report(@PathVariable UUID storeId) {
         return overpaymentService.report(storeId);
+    }
+
+    /** Zastępuje listę dostawców pomijanych w raporcie; zwraca raport po zmianie. */
+    @PutMapping("/excluded-suppliers")
+    @PreAuthorize("hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public OverpaymentReport excludedSuppliers(@PathVariable UUID storeId,
+            @Valid @RequestBody DeliveryReportExcludedSuppliersRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return overpaymentService.setExcludedSuppliers(storeId, request.supplierCodes(), principal.getId());
     }
 
     /** Nowy status wyjaśniania przyjęcia; zwraca historię zmian od najnowszej. */

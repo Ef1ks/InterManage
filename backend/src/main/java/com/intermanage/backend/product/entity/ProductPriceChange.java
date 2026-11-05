@@ -97,14 +97,6 @@ public class ProductPriceChange {
     }
 
     /** Plik TRACEART zmienił cenę albo promocję; stan po zmianie z artykułu. */
-    public static ProductPriceChange fromPriceFile(Product product, PriceFileImport file, BigDecimal previousSalePrice,
-            BigDecimal previousPromoPrice) {
-        ProductPriceChange change = new ProductPriceChange(product, Source.TILL, file.getFileTime(),
-                previousSalePrice, previousPromoPrice);
-        change.priceFile = file;
-        return change;
-    }
-
     /** Import kartoteki zmienił cenę sprzedaży. */
     public static ProductPriceChange fromReport(Product product, ProductImport productImport,
             BigDecimal previousSalePrice) {

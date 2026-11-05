@@ -408,17 +408,19 @@ export function useLowMargins(storeId: string) {
   })
 }
 
-/** Dostawcy, których nie dotyczy marża wymagana; serwer zwraca raport po zmianie, więc podmienia go bez unieważniania. */
-export function useSetLowMarginExcludedSuppliers(storeId: string) {
+export type ExcludedSuppliersReport = 'low-margins' | 'overpayments'
+
+/** Dostawcy pomijani w raporcie; serwer zwraca raport po zmianie, więc podmienia go bez unieważniania. */
+export function useSetExcludedSuppliers(storeId: string, path: ExcludedSuppliersReport) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (supplierCodes: string[]) =>
-      api<LowMarginReport>(`${reportsPath(storeId)}/low-margins/excluded-suppliers`, {
+      api<LowMarginReport | OverpaymentReport>(`${reportsPath(storeId)}/${path}/excluded-suppliers`, {
         method: 'PUT',
         json: { supplierCodes },
       }),
-    onSuccess: (report) => queryClient.setQueryData([...reportsKey(storeId), 'low-margins'], report),
-    scope: { id: `low-margin-excluded-suppliers-${storeId}` },
+    onSuccess: (report) => queryClient.setQueryData([...reportsKey(storeId), path], report),
+    scope: { id: `${path}-excluded-suppliers-${storeId}` },
     meta: { invalidates: false },
   })
 }

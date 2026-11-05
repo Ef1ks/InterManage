@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -37,6 +38,7 @@ import com.intermanage.backend.pricecheck.dto.OverpaymentReport.Delivery;
 import com.intermanage.backend.pricecheck.dto.OverpaymentReport.Line;
 import com.intermanage.backend.pricecheck.dto.OverpaymentReport.Reference;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
+import com.intermanage.backend.pricecheck.dto.ReportSupplier;
 import com.intermanage.backend.pricecheck.entity.PriceCheckReview;
 import com.intermanage.backend.pricecheck.entity.PriceCheckStatus;
 import com.intermanage.backend.pricecheck.entity.ReviewedReport;
@@ -55,7 +57,8 @@ import com.intermanage.backend.sales.repository.SaleRepository;
  * korektą i cena po niej nie jest ceną, po której da się kupić. Sprawdzane przyjęcie liczy się po korektach: korekta od
  * dostawcy zdejmuje przepłacenie z raportu. Mięsa, drobiu, garmażerki, owoców i warzyw raport nie sprawdza, bo wahania
  * cen są tam normalne ({@link #SKIPPED_NOMENCLATURES}), a papierosów, bo kupuje się je tylko z jednego miejsca. Pomija
- * też dostawców z {@link ExcludedSuppliers}.
+ * też dostawców z {@link ExcludedSuppliers} i wybranych przez sklep ({@link ReportExcludedSupplierService}): ich
+ * dostawy nie są sprawdzane ani nie są cenami odniesienia.
  */
 @Service
 public class OverpaymentService {
@@ -87,11 +90,12 @@ public class OverpaymentService {
     private final PriceCheckMapper mapper;
     private final SaleRepository sales;
     private final ExcludedSuppliers excludedSuppliers;
+    private final ReportExcludedSupplierService reportSuppliers;
 
     public OverpaymentService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             PriceCheckReviewRepository reviews, PriceCheckMapper mapper, SaleRepository sales,
-            ExcludedSuppliers excludedSuppliers) {
+            ExcludedSuppliers excludedSuppliers, ReportExcludedSupplierService reportSuppliers) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -100,6 +104,7 @@ public class OverpaymentService {
         this.mapper = mapper;
         this.sales = sales;
         this.excludedSuppliers = excludedSuppliers;
+        this.reportSuppliers = reportSuppliers;
     }
 
     @Transactional(readOnly = true)
@@ -121,7 +126,10 @@ public class OverpaymentService {
         List<DeliveryHistory> history = documentLines.findDeliveryHistory(storeId, oldest.minusDays(HISTORY_DAYS),
                 start, until, reviewed.stream().map(UUID::toString).toArray(String[]::new), SYMBOLIC_PRICE,
                 THRESHOLD_FACTOR);
-        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed, excludedSuppliers.codes(storeId));
+        List<ReportSupplier> skippedSuppliers = reportSuppliers.active(storeId, ReviewedReport.OVERPAYMENT);
+        Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
+        skippedSuppliers.forEach(supplier -> excluded.add(supplier.code()));
+        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed, excluded);
 
         Set<UUID> ids = new LinkedHashSet<>(linesByDelivery.keySet());
         ids.addAll(reviewed);
@@ -147,7 +155,15 @@ public class OverpaymentService {
 
         return new OverpaymentReport(from, to, PERIOD_DAYS, THRESHOLD_PERCENT, REFERENCE_COUNT, LARGE_QUANTITY_FACTOR,
                 documentImports.findLastPeriodTo(storeId).orElse(null),
-                documentImports.findNewestReportGeneratedAt(storeId).orElse(null), result);
+                documentImports.findNewestReportGeneratedAt(storeId).orElse(null), skippedSuppliers,
+                reportSuppliers.options(storeId), result);
+    }
+
+    /** Zastępuje listę dostawców pomijanych w raporcie; zwraca raport po zmianie. */
+    @Transactional
+    public OverpaymentReport setExcludedSuppliers(UUID storeId, List<String> supplierCodes, UUID userId) {
+        reportSuppliers.replace(storeId, ReviewedReport.OVERPAYMENT, supplierCodes, userId);
+        return report(storeId);
     }
 
     /** Przepłacone artykuły po przyjęciach, od największej nadpłaty. Historia od najstarszej dostawy. */
@@ -218,7 +234,8 @@ public class OverpaymentService {
         List<Reference> shown = new ArrayList<>(references.size());
         references.descendingIterator().forEachRemaining(reference -> shown.add(new Reference(
                 reference.getDocumentId(), reference.getDocumentNumber(), reference.getDocumentDate(),
-                reference.getSupplierCode(), reference.getQuantity(), price(reference))));
+                reference.getSupplierCode(), reference.getSupplierName(), reference.getQuantity(),
+                price(reference))));
         return new Line(delivery.getItm8(), delivery.getEan(), delivery.getName(), delivery.getBrand(),
                 regionOf(delivery.getNomenclatureCode()), delivery.getSupplierCode(), quantity, price, value, lowest,
                 percent, excess, delivery.getCorrected(), shown);

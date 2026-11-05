@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  BadgePercentIcon,
   ChefHatIcon,
   CookingPotIcon,
   DatabaseBackupIcon,
@@ -10,6 +11,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   StoreIcon,
+  TagIcon,
   TruckIcon,
   UserCogIcon,
   type LucideIcon,
@@ -17,7 +19,8 @@ import {
 
 import { hasPermission } from '@/features/auth/api'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
-import { leafletPath } from '@/features/leaflet/paths'
+import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
+import { promoSetupPath } from '@/features/promo-setup/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { salesPaths } from '@/features/sales/paths'
@@ -91,6 +94,14 @@ const GROUPS: GroupSpec[] = [
         icon: NewspaperIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
+      {
+        key: 'promo-setup',
+        path: promoSetupPath,
+        label: 'Ustaw promocje',
+        description: 'Kilka promocji naraz: artykuły, okresy, ceny lub przeceny i pliki cen .PRO.',
+        icon: BadgePercentIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
       { category: 'SUPPLIERS' },
       { category: 'MEAT_PURCHASES' },
       { category: 'ORDERS' },
@@ -130,7 +141,18 @@ const GROUPS: GroupSpec[] = [
     label: 'Magazyn i dane',
     description: 'Wgrywanie raportów z systemu sklepu i magazyn.',
     icon: DatabaseIcon,
-    items: [{ category: 'IMPORTS' }, { category: 'INVENTORY' }],
+    items: [
+      { category: 'IMPORTS' },
+      { category: 'INVENTORY' },
+      {
+        key: 'leaflet-labels',
+        path: leafletLabelsPath,
+        label: 'Etykieta z gazetki',
+        description: 'Zeskanuj artykuł: jaką etykietę wydrukować i od kiedy do kiedy obowiązuje.',
+        icon: TagIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'INVENTORY'),
+      },
+    ],
   },
   {
     key: 'store',

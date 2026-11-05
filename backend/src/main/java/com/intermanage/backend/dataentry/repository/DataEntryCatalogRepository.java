@@ -273,23 +273,12 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             String[] nomenclatureName, BigDecimal purchaseFrom, BigDecimal purchaseTo,
             BigDecimal saleFrom, BigDecimal saleTo, String sort, String direction, int limit, int offset);
 
-    interface LastDelivery {
-        String getItm8();
-
-        String getSupplierCode();
-
-        String getSupplierName();
-
-        LocalDateTime getDocumentDate();
-    }
-
     /**
-     * Ostatnie przyjęcie PZ z ilością > 0 każdego z {@code itm8s} (dostawca linii i data dokumentu), do kolumny
-     * „Ostatnia dostawa” listy towarów; liczone tylko dla strony listy. Linia z lokalnym ITM8 dostawcy, którego nie ma
-     * w kartotece, należy do artykułu po EAN-ie (jak {@code DocumentLineRepository.findArticleDeliveries}).
+     * CTE {@code article_lines}: linie dokumentów artykułów {@code :itm8s} ({@code article} = ITM8 z kartoteki). Linia
+     * z lokalnym ITM8 dostawcy, którego nie ma w kartotece, należy do artykułu po EAN-ie.
      */
-    @Query(value = """
-            with article_eans as (
+    String ARTICLE_LINES = """
+            article_eans as (
                 select p.itm8, ltrim(btrim(p.ean), '0') as ean from products p
                 where p.store_id = :storeId and p.itm8 in (:itm8s)
                 union
@@ -306,6 +295,24 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 where length(e.ean) >= 8
                     and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8)
             )
+            """;
+
+    interface LastDelivery {
+        String getItm8();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        LocalDateTime getDocumentDate();
+    }
+
+    /**
+     * Ostatnie przyjęcie PZ z ilością > 0 każdego z {@code itm8s} (dostawca linii i data dokumentu), do kolumny
+     * „Ostatnia dostawa” listy towarów; liczone tylko dla strony listy. Linia z lokalnym ITM8 dostawcy, którego nie ma
+     * w kartotece, należy do artykułu po EAN-ie (jak {@code DocumentLineRepository.findArticleDeliveries}).
+     */
+    @Query(value = "with " + ARTICLE_LINES + """
             select distinct on (a.article) a.article as itm8, l.supplier_code as supplierCode,
                 l.supplier_name as supplierName, d.document_date as documentDate
             from article_lines a

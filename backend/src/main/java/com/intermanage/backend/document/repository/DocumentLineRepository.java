@@ -111,6 +111,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
         String getSupplierCode();
 
+        String getSupplierName();
+
         BigDecimal getQuantity();
 
         BigDecimal getPurchaseValue();
@@ -133,6 +135,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select d.id as document_id, d.number as document_number, d.document_date, l.itm8,
                        max(l.ean) as ean, max(l.name) as name, max(l.brand) as brand,
                        max(l.nomenclature_code) as nomenclature_code, max(l.supplier_code) as supplier_code,
+                       max(l.supplier_name) as supplier_name,
                        sum(l.quantity) as quantity, sum(l.purchase_value) as purchase_value
                 from document_lines l
                 join documents d on d.id = l.document_id
@@ -164,6 +167,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             select h.document_id as documentId, h.document_number as documentNumber,
                    h.document_date as documentDate, h.itm8 as itm8, h.ean as ean, h.name as name, h.brand as brand,
                    h.nomenclature_code as nomenclatureCode, h.supplier_code as supplierCode,
+                   h.supplier_name as supplierName,
                    h.quantity as quantity, h.purchase_value as purchaseValue,
                    h.corrected_quantity as correctedQuantity, h.corrected_value as correctedValue,
                    h.corrected as corrected

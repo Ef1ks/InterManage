@@ -109,7 +109,7 @@ import {
   supplierKey,
   VIEW_LABELS,
   VIEW_REGIONS,
-  viewLines,
+  verificationRows,
   viewRows,
 } from './base-rows'
 import { CarrierDialog } from './CarrierDialog'
@@ -452,12 +452,12 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   }
 
   // Weryfikacja warzyw i mięsa pakowanego idzie we wprowadzaniu danych: tam są ceny sugerowane z dokumentu (cena dla
-  // klienta z bazy), zmiana cen dla dostawcy z bazy i etykiety. Tabela wprowadzania danych jest zastępowana
-  // („Przywróć” w toaście oddaje poprzednią).
+  // klienta z bazy), zmiana cen dla dostawcy z bazy i etykiety. Artykuły w promocji są odrzucane. Tabela wprowadzania
+  // danych jest zastępowana („Przywróć” w toaście oddaje poprzednią).
   const navigate = useNavigate()
   const verify = (target: Exclude<BaseDeliveryView, 'carriers'>) => {
     if (!delivery) return
-    const next = viewRows(delivery, target, [])
+    const { rows: next, skipped } = verificationRows(delivery, target)
     const counts = new Map<string, number>()
     for (const row of next) {
       const key = supplierKey(row.base?.supplierCode) || '538'
@@ -487,7 +487,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     )
     navigate(TOOL_ROUTES.DATA_ENTRY.path)
     toast.success(VIEW_LABELS[target], {
-      description: `${next.length} ${pieces(next.length)} z bonu ${delivery.number} we wprowadzaniu danych. Cena sugerowana to cena z dokumentu bazy: zaznacz wiersze i „Ustaw ceny sugerowane”.`,
+      description: `${next.length} ${pieces(next.length)} z bonu ${delivery.number} we wprowadzaniu danych.${skipped > 0 ? ` Odrzucone, bo w promocji: ${skipped}.` : ''} Cena sugerowana to cena z dokumentu bazy: zaznacz wiersze i „Ustaw ceny sugerowane”.`,
       action:
         before && before.rows.some((row) => row.ean !== '' || row.name !== '')
           ? {
@@ -601,8 +601,8 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     () => ({
       shortDated: delivery?.lines.filter((line) => line.shortDated).length ?? 0,
       regionCounts: {
-        vegetables: delivery ? viewLines(delivery, 'vegetables', []).length : 0,
-        meat: delivery ? viewLines(delivery, 'meat', []).length : 0,
+        vegetables: delivery ? verificationRows(delivery, 'vegetables').rows.length : 0,
+        meat: delivery ? verificationRows(delivery, 'meat').rows.length : 0,
       },
       // „Sprawdź PLU”: EAN-y artykułów z rejonów 32 i 33 całego dokumentu do pliku .lst w folderze z ustawień zapisu.
       plu: delivery ? pluEans(delivery) : [],
@@ -775,7 +775,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
           'Wczytaj dokument z bazy (plik .xls) i wybierz nośniki: ich artykuły trafią do tabeli z ilościami w sztukach. Linie, które nie przyjechały, mają ilość 0.',
           'Sprawdź kaucje (czerwona komórka = inna kaucja w dokumencie niż w kartotece; blokuje zmianę cen i protokół) i ujemne marże na cenach cadencier.',
           'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: plik CADBEZP z danymi z dokumentu. Zmień artykuły: plik CADBEZP z wybranych artykułów tabeli.',
-          'Weryfikuj warzywa / mięso pakowane: przenosi artykuły z całego dokumentu do wprowadzania danych, cena sugerowana z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
+          'Weryfikuj warzywa / mięso pakowane: przenosi artykuły z całego dokumentu (bez tych w promocji) do wprowadzania danych, cena sugerowana z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
           'Filtr w nagłówku każdej kolumny działa jak w Excelu; Ctrl+Z cofa.',
         ]}
       />
@@ -841,7 +841,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                     variant={view === 'vegetables' ? 'secondary' : 'outline'}
                     size="sm"
                     onClick={() => verify('vegetables')}
-                    title={`Wszystkie artykuły z rejonu ${VIEW_REGIONS.vegetables} z całego dokumentu, cena sugerowana z bazy`}
+                    title={`Artykuły z rejonu ${VIEW_REGIONS.vegetables} z całego dokumentu bez tych w promocji, cena sugerowana z bazy`}
                   >
                     <CarrotIcon />
                     Weryfikuj warzywa ({regionCounts.vegetables})
@@ -852,7 +852,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                     variant={view === 'meat' ? 'secondary' : 'outline'}
                     size="sm"
                     onClick={() => verify('meat')}
-                    title={`Mięso pakowane: rejon ${VIEW_REGIONS.meat} z całego dokumentu, cena sugerowana z bazy (cena z opakowania)`}
+                    title={`Mięso pakowane: rejon ${VIEW_REGIONS.meat} z całego dokumentu bez artykułów w promocji, cena sugerowana z bazy (cena z opakowania)`}
                   >
                     <BeefIcon />
                     Weryfikuj mięso pakowane ({regionCounts.meat})

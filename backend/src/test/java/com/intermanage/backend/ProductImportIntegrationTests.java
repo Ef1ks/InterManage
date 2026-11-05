@@ -557,7 +557,8 @@ class ProductImportIntegrationTests {
                 .andExpect(jsonPath("$.changes[0].previousSalePrice").value(9.49))
                 .andExpect(jsonPath("$.changes[0].salePrice").value(8.79))
                 .andExpect(jsonPath("$.changes[1].source").value("TILL"))
-                .andExpect(jsonPath("$.changes[1].previousSalePrice").value(8.99))
+                .andExpect(jsonPath("$.changes[1].ean").value("59" + a.substring(2)))
+                .andExpect(jsonPath("$.changes[1].previousSalePrice").isEmpty())
                 .andExpect(jsonPath("$.changes[1].salePrice").value(9.49))
                 .andExpect(jsonPath("$.changes[1].promoPrice").value(7.99))
                 .andExpect(jsonPath("$.changes[1].promoTo").value("2030-12-31"))
@@ -565,6 +566,55 @@ class ProductImportIntegrationTests {
 
         mvc.perform(get("/api/stores/" + storeId + "/products/9999999999999/prices").cookie(owner))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void tillPriceHistoryIsKeptPerEanAlsoFromFilesOlderThanCatalog() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        String main = "59" + a.substring(2);
+        String label = "13" + a.substring(2);
+        LocalDateTime reportDate = nextReportDate();
+        upload(owner, report(reportDate, product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+
+        // Wszystkie pliki są starsze niż kartoteka, a drugi przyszedł później niż trzeci: liczy się czas z nazwy pliku.
+        uploadPriceFiles(owner, priceFile(reportDate.minusDays(5), priceLine(a, main, "7.00", null, null, null),
+                priceLine(a, label, "3.50", null, null, null)));
+        uploadPriceFiles(owner, priceFile(reportDate.minusDays(1), priceLine(a, main, "7.50", null, null, null),
+                priceLine(a, label, "3.50", null, null, null)));
+        MockMultipartFile second = priceFile(reportDate.minusDays(3), priceLine(a, main, "7.00", null, null, null));
+        uploadPriceFiles(owner, second).andExpect(jsonPath("$.imported[0].olderCount").value(1));
+
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, a))
+                .isEqualTo(new BigDecimal("8.99"));
+        mvc.perform(get("/api/stores/" + storeId + "/products/" + a + "/prices").cookie(owner))
+                .andExpect(jsonPath("$.mainEan").value(main))
+                .andExpect(jsonPath("$.changes.length()").value(3))
+                .andExpect(jsonPath("$.changes[0].ean").value(main))
+                .andExpect(jsonPath("$.changes[0].previousSalePrice").value(7.0))
+                .andExpect(jsonPath("$.changes[0].salePrice").value(7.5))
+                .andExpect(jsonPath("$.changes[1].ean").value(label))
+                .andExpect(jsonPath("$.changes[1].salePrice").value(3.5))
+                .andExpect(jsonPath("$.changes[2].ean").value(main))
+                .andExpect(jsonPath("$.changes[2].salePrice").value(7.0));
+
+        // Plik wczytany przed zapisywaniem cen po EAN-ie: serwer prosi o niego jeszcze raz i bierze tylko ceny.
+        jdbc.update("delete from till_prices where file_time = ?", reportDate.minusDays(3));
+        jdbc.update("update price_file_imports set prices_read = false where file_name = ?",
+                second.getOriginalFilename());
+        mvc.perform(post(priceFilesUrl() + "/pending").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fileNames\":[\"" + second.getOriginalFilename() + "\"]}"))
+                .andExpect(jsonPath("$.fileNames.length()").value(1));
+        uploadPriceFiles(owner, second)
+                .andExpect(jsonPath("$.imported.length()").value(0))
+                .andExpect(jsonPath("$.skipped[0]").value(second.getOriginalFilename()));
+        assertThat(jdbc.queryForObject("select count(*) from till_prices where itm8 = ?", Integer.class, a))
+                .isEqualTo(5);
+        mvc.perform(post(priceFilesUrl() + "/pending").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fileNames\":[\"" + second.getOriginalFilename() + "\"]}"))
+                .andExpect(jsonPath("$.fileNames.length()").value(0));
     }
 
     @Test

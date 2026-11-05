@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Form, FormActions, TextField } from '@/components/form'
-import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -57,7 +56,17 @@ const COLUMNS: {
 }[] = [
   { key: 'itm8', label: 'ITM8', sort: 'itm8', text: { placeholder: 'ITM8' }, className: 'w-32' },
   { key: 'ean', label: 'EAN', sort: 'ean', text: { placeholder: 'EAN' }, className: 'w-36' },
-  { key: 'name', label: 'Nazwa', sort: 'name', text: { placeholder: 'np. excel*o' }, className: 'min-w-60' },
+  {
+    key: 'name',
+    label: 'Nazwa',
+    sort: 'name',
+    text: {
+      placeholder: 'Szukaj: nazwa, marka, EAN, ITM8',
+      title:
+        'Każde słowo, w dowolnej kolejności, trafia w nazwę, markę, EAN albo ITM8 (kab ex 19 znajdzie KABANOSY EXCLUSIVE 190G); gwiazdka to dowolny ciąg znaków',
+    },
+    className: 'min-w-64',
+  },
   { key: 'brand', label: 'Marka', sort: 'brand', text: { placeholder: 'Marka' }, className: 'w-32' },
   {
     key: 'supplier',
@@ -82,6 +91,9 @@ const COLUMNS: {
 ]
 
 const COLUMN_LABELS = new Map(COLUMNS.map((column) => [column.key, column.label]))
+
+/** Pole nad nazwą to główna wyszukiwarka listy: szuka też w marce, EAN-ie i ITM8, więc osobne pole nie jest potrzebne. */
+const filterOf = (key: TextFilter) => (key === 'name' ? 'query' : key)
 
 const HIDDEN_COLUMNS_KEY = 'intermanage.catalogListHiddenColumns'
 
@@ -140,6 +152,7 @@ export function CatalogListDialog({
   inTable,
   onAdd,
   onPick,
+  quickAdd = false,
   initialQuery = '',
   title = 'Lista towarów',
   lastSaleDate,
@@ -153,6 +166,8 @@ export function CatalogListDialog({
   onAdd?: (additions: CatalogAddition[]) => Promise<void>
   /** Zamiast dodawania: plus od razu wybiera artykuł (przypisanie pozycji z faktury). */
   onPick?: (item: DataEntryCatalogArticle) => void
+  /** Plus dodaje od razu, bez pytania o ilość i cenę zakupu (tabela ich nie ma). */
+  quickAdd?: boolean
   /** Początkowe wyszukiwanie (np. „fil kur” z „FILET Z KURCZAKA” z faktury). */
   initialQuery?: string
   title?: string
@@ -386,23 +401,7 @@ export function CatalogListDialog({
       <DialogContent className="gap-4 p-6 sm:max-w-[96rem]">
         <DialogHeader>
           <DialogTitle className="text-lg">{title}</DialogTitle>
-          <DialogDescription>
-            Artykuły z kartoteki sklepu. Wpisz fragmenty słów, w dowolnej kolejności (kab ex 19 znajdzie „KABANOSY
-            EXCLUSIVE 190G”): w polu Szukaj każde słowo trafia w nazwę, markę, EAN albo ITM8 (marka i rodzaj mięsa są w
-            kartotece w marce), nad kolumną tylko w nią. Gwiazdka zastępuje dowolny ciąg znaków, a w ITM8 i EAN-ie
-            wyznacza początek albo koniec kodu (5923532* to kody od 5923532). Dostawca: kod albo nazwa, pokazuje
-            artykuły przyjęte od niego na PZ w ostatnich 6 miesiącach. Nomenklatura: kod (np. 25 44) albo nazwa rejonu,
-            rodziny lub podrodziny. {onPick ? 'Plus wybiera artykuł.' : 'Plus dodaje artykuł do tabeli.'} Oczko przy
-            nagłówku chowa kolumnę.
-          </DialogDescription>
         </DialogHeader>
-
-        <SearchInput
-          value={filters.query}
-          onChange={(query) => setFilters((current) => ({ ...current, query }))}
-          placeholder="Szukaj: nazwa, marka, EAN, ITM8"
-          className="max-w-xl"
-        />
 
         {(hidden.length > 0 || (onAdd && !onPick)) && (
           <div className="-mb-1 flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
@@ -476,8 +475,8 @@ export function CatalogListDialog({
                     {column.text && (
                       <input
                         type="search"
-                        value={filters[column.key as TextFilter]}
-                        onChange={(event) => setFilter(column.key as TextFilter, event.target.value)}
+                        value={filters[filterOf(column.key as TextFilter)]}
+                        onChange={(event) => setFilter(filterOf(column.key as TextFilter), event.target.value)}
                         placeholder={column.text.placeholder}
                         title={column.text.title}
                         aria-label={column.text.title ?? `Filtr: ${column.label}`}
@@ -532,7 +531,8 @@ export function CatalogListDialog({
                         variant="outline"
                         size="icon-sm"
                         onClick={() => {
-                          if (!onPick) setAdding(item)
+                          if (quickAdd) void onAdd?.([{ item, quantity: 1, unitNet: item.purchasePrice }])
+                          else if (!onPick) setAdding(item)
                           else if (item.itm8 !== null) onPick({ ...item, itm8: item.itm8 })
                         }}
                         disabled={!item.ean || (onPick !== undefined && item.itm8 === null)}
@@ -587,8 +587,9 @@ export function CatalogListDialog({
                   Dodać {bulk.items.length} {articlesLabel(bulk.items.length)} do tabeli?
                 </DialogTitle>
                 <DialogDescription>
-                  Wszystkie artykuły pasujące do filtrów, z ilością 1 i ceną zakupu z kartoteki. Ilości i ceny poprawisz
-                  w tabeli.
+                  {quickAdd
+                    ? 'Wszystkie artykuły pasujące do filtrów.'
+                    : 'Wszystkie artykuły pasujące do filtrów, z ilością 1 i ceną zakupu z kartoteki. Ilości i ceny poprawisz w tabeli.'}
                   {bulk.present > 0 && ` Pominięte, bo już są w tabeli: ${bulk.present}.`}
                   {bulk.withoutEan > 0 && ` Pominięte, bo nie mają EAN-u: ${bulk.withoutEan}.`}
                 </DialogDescription>

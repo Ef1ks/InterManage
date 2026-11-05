@@ -93,12 +93,22 @@ export function viewRows(delivery: BaseDelivery, view: BaseDeliveryView, carrier
   return viewLines(delivery, view, carriers).map(rowFromBaseLine)
 }
 
-export function viewLines(delivery: BaseDelivery, view: BaseDeliveryView, carriers: string[]) {
+function viewLines(delivery: BaseDelivery, view: BaseDeliveryView, carriers: string[]) {
   if (view === 'carriers') return delivery.lines.filter((line) => carriers.includes(line.carrier))
   const region = VIEW_REGIONS[view]
   return delivery.lines.filter(
     (line) => line.regionCode === region || (line.product?.subfamilyCode ?? '').startsWith(region),
   )
+}
+
+/**
+ * Wiersze weryfikacji warzyw i mięsa pakowanego: rejon z całego dokumentu bez artykułów w trwającej promocji, bo cena
+ * z dokumentu bazy nie może zastąpić ceny promocyjnej. `skipped` to liczba odrzuconych.
+ */
+export function verificationRows(delivery: BaseDelivery, view: Exclude<BaseDeliveryView, 'carriers'>) {
+  const all = viewRows(delivery, view, [])
+  const rows = all.filter((row) => activePromoPrice(row) === null)
+  return { rows, skipped: all.length - rows.length }
 }
 
 /** Cena dla klienta z dokumentu bazy jako cena sugerowana (widok warzyw i mięsa pakowanego: ceny z opakowania). */

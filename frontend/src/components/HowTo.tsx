@@ -1,8 +1,7 @@
 import { CircleHelpIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { useAppDispatch, useAppSelector } from '@/store'
-import { persistHiddenHints, setHintHidden } from '@/store/uiSlice'
+import { useHiddenHint } from '@/lib/use-hidden-hint'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -12,30 +11,34 @@ type Props = {
   /** Kolejne kroki, od pierwszego. */
   steps: React.ReactNode[]
   className?: string
+  /** Przycisk przywracania stoi w nagłówku strony ({@link HowToButton}), więc schowana podpowiedź nie zajmuje wiersza. */
+  reopenInHeader?: boolean
+}
+
+/** Przywraca schowaną podpowiedź; gdy jest widoczna, nic nie pokazuje. */
+export function HowToButton({ id }: { id: string }) {
+  const [hidden, setHidden] = useHiddenHint(id)
+  if (!hidden) return null
+  return (
+    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setHidden(false)}>
+      <CircleHelpIcon />
+      Jak to działa?
+    </Button>
+  )
 }
 
 /**
  * Podpowiedź "jak to działa" w kilku krokach, dla osób, które pierwszy raz widzą ekran.
  * Po schowaniu zostaje mały przycisk, którym można ją przywrócić.
  */
-export function HowTo({ id, title, steps, className }: Props) {
-  const hiddenHints = useAppSelector((state) => state.ui.hiddenHints)
-  const dispatch = useAppDispatch()
-  const hidden = hiddenHints.includes(id)
-
-  const setHidden = (next: boolean) => {
-    dispatch(setHintHidden({ hint: id, hidden: next }))
-    const others = hiddenHints.filter((hint) => hint !== id)
-    persistHiddenHints(next ? [...others, id] : others)
-  }
+export function HowTo({ id, title, steps, className, reopenInHeader }: Props) {
+  const [hidden, setHidden] = useHiddenHint(id)
 
   if (hidden) {
+    if (reopenInHeader) return null
     return (
       <div className={cn('flex justify-end', className)}>
-        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setHidden(false)}>
-          <CircleHelpIcon />
-          Jak to działa?
-        </Button>
+        <HowToButton id={id} />
       </div>
     )
   }
@@ -43,7 +46,10 @@ export function HowTo({ id, title, steps, className }: Props) {
   return (
     <section
       aria-label={title}
-      className={cn('rounded-xl bg-muted/70 px-4 py-3.5 animate-in fade-in-0 duration-200 motion-reduce:animate-none', className)}
+      className={cn(
+        'rounded-xl bg-muted/70 px-4 py-3.5 animate-in fade-in-0 duration-200 motion-reduce:animate-none',
+        className,
+      )}
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">{title}</h2>

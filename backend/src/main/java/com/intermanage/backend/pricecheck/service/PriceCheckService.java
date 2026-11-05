@@ -266,7 +266,7 @@ public class PriceCheckService {
     }
 
     /** Artykuły z cadencier: po ITM8 i po EAN-ach (EAN -> ITM8 z cadencier). */
-    private record Cadencier(Set<String> itm8s, Map<String, String> itm8ByEan) {
+    record Cadencier(Set<String> itm8s, Map<String, String> itm8ByEan) {
 
         static final Cadencier EMPTY = new Cadencier(Set.of(), Map.of());
 

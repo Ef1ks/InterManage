@@ -132,8 +132,8 @@ export type ProFile = {
   fileName: string
   tariff: string
   lines: ProLine[]
-  withoutProduct: LeafletLine[]
-  withoutPrice: LeafletLine[]
+  withoutProduct: { name: string }[]
+  withoutPrice: { name: string }[]
   conflicts: string[]
 }
 
@@ -141,6 +141,19 @@ const day = (iso: string) => String(Number(iso.slice(8, 10)))
 
 /** Nazwa pliku .PRO z okresu: dzień początku i końca ({@code 29-1.PRO}). */
 export const proFileName = (dateFrom: string, dateTo: string) => `${day(dateFrom)}-${day(dateTo)}.PRO`
+
+/**
+ * Nazwa pliku inna niż w {@code names} (i do nich dopisana): ten sam dzień w różnych miesiącach dostaje też miesiące,
+ * a ten sam okres numer ({@code 2911-0112_2.PRO}).
+ */
+export function uniqueProFileName(dateFrom: string, dateTo: string, names: Set<string>) {
+  const long = `${dateFrom.slice(8, 10)}${dateFrom.slice(5, 7)}-${dateTo.slice(8, 10)}${dateTo.slice(5, 7)}`
+  let fileName = proFileName(dateFrom, dateTo)
+  if (names.has(fileName)) fileName = `${long}.PRO`
+  for (let copy = 2; names.has(fileName); copy += 1) fileName = `${long}_${copy}.PRO`
+  names.add(fileName)
+  return fileName
+}
 
 /**
  * Pliki .PRO z pozycji do opracowania: jeden okres od-do = jeden plik ({@code 29-1.PRO} = od 29. do 1.), od
@@ -173,15 +186,10 @@ export function proFiles(lines: LeafletLine[], week: number, year: number): ProF
           else if (Math.abs(known.price - price) >= 0.005) conflicts.add(known.name)
         }
       }
-      let fileName = proFileName(dateFrom, dateTo)
-      // Ten sam dzień w różnych miesiącach dałby tę samą nazwę.
-      if (names.has(fileName))
-        fileName = `${dateFrom.slice(8, 10)}${dateFrom.slice(5, 7)}-${dateTo.slice(8, 10)}${dateTo.slice(5, 7)}.PRO`
-      names.add(fileName)
       return {
         dateFrom,
         dateTo,
-        fileName,
+        fileName: uniqueProFileName(dateFrom, dateTo, names),
         tariff: `${String(week).padStart(2, '0')}${String(year % 100).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`,
         lines: [...byEan.values()],
         withoutProduct,

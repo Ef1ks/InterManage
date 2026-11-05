@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ApiError, api } from '@/lib/api'
+import { useHiddenHint } from '@/lib/use-hidden-hint'
 
 import type { ProductFilePayload } from './api'
 
@@ -23,6 +24,9 @@ export type NewArticles = { payload: ProductFilePayload; supplierCode: string | 
 export type SavedProductFile = NewArticles & { fileName: string }
 
 type DraftResult = { createdIds: string[]; knownCount: number; withoutEanCount: number }
+
+/** Pytanie wyłączone w ustawieniach zapisu (w tej przeglądarce): działa jak „Tak”, a toast z „Cofnij” zostaje. */
+export const PRODUCT_DRAFT_PROMPT = 'product-draft-prompt'
 
 /**
  * Pytanie po zapisie plików CADBEZP z nowymi artykułami (sama zmiana artykułów z kartoteki o nic nie pyta), czy
@@ -35,24 +39,20 @@ export function useProductDraftConfirm(storeId: string, onChanged?: (eans: strin
   const queryClient = useQueryClient()
   const [files, setFiles] = useState<SavedProductFile[] | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [promptOff] = useHiddenHint(PRODUCT_DRAFT_PROMPT)
   const path = `/stores/${storeId}/data-entry/product-drafts`
 
-  const ask = (saved: SavedProductFile[]) => {
-    if (saved.length > 0) setFiles(saved)
-  }
-
-  const confirm = async () => {
-    if (!files) return
+  const confirm = async (saved: SavedProductFile[]) => {
     setConfirming(true)
     try {
       const results: DraftResult[] = []
-      for (const file of files) {
+      for (const file of saved) {
         results.push(
           await api<DraftResult>(path, { method: 'POST', json: { fileName: file.fileName, file: file.payload } }),
         )
       }
       const ids = results.flatMap((result) => result.createdIds)
-      const eans = files.flatMap((file) => file.payload.rows.flatMap((row) => row.ean ?? []))
+      const eans = saved.flatMap((file) => file.payload.rows.flatMap((row) => row.ean ?? []))
       const changed = () => {
         void queryClient.invalidateQueries()
         onChanged?.(eans)
@@ -96,6 +96,12 @@ export function useProductDraftConfirm(storeId: string, onChanged?: (eans: strin
     }
   }
 
+  const ask = (saved: SavedProductFile[]) => {
+    if (saved.length === 0) return
+    if (promptOff) void confirm(saved)
+    else setFiles(saved)
+  }
+
   const supplierCodes = [...new Set(files?.flatMap((file) => file.supplierCode ?? []) ?? [])]
 
   const dialog = (
@@ -111,7 +117,7 @@ export function useProductDraftConfirm(storeId: string, onChanged?: (eans: strin
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={confirming}>Nie</AlertDialogCancel>
-          <Button loading={confirming} onClick={() => void confirm()}>
+          <Button loading={confirming} onClick={() => files && void confirm(files)}>
             Tak
           </Button>
         </AlertDialogFooter>

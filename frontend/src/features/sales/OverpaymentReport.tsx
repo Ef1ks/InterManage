@@ -11,6 +11,7 @@ import {
   formatQuantity,
 } from '@/features/documents/format'
 import { useOverpayments } from '@/features/sales/api'
+import { ExcludedSuppliersSettings } from '@/features/sales/ExcludedSuppliersSettings'
 import { ReviewedReportPage } from '@/features/sales/ReviewedReportPage'
 import type { OverpaymentDelivery } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -21,13 +22,27 @@ import { cn } from '@/lib/utils'
  * z którymi je porównano. Sprawę wyjaśnia się z dostawcą jak w zakupie bazowym poza bazą, ale statusy są osobne.
  */
 export function OverpaymentReport({ storeId }: { storeId: string }) {
+  const query = useOverpayments(storeId)
   return (
     <ReviewedReportPage
       storeId={storeId}
       report="OVERPAYMENT"
-      query={useOverpayments(storeId)}
+      query={query}
       title="Przepłacone artykuły"
-      intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca, i prasę od Kolportera."
+      intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca, prasę od Kolportera i dostawców wybranych w ustawieniach raportu."
+      actions={
+        query.data && (
+          <ExcludedSuppliersSettings
+            storeId={storeId}
+            path="overpayments"
+            report={query.data}
+            description="Dostawy pomijanych dostawców nie trafiają do raportu i nie są też ceną odniesienia dla innych. Lista obowiązuje w całym sklepie."
+            label="Dostawcy pomijani w raporcie"
+            placeholder="Raport obejmuje wszystkich dostawców. Szukaj po kodzie albo nazwie…"
+            readOnlyLabel="Raport pomija dostawców"
+          />
+        )
+      }
       linesLabel="droższe"
       excessLabel="przepłacone"
       emptyDeliveryText="W tym przyjęciu nie ma już przepłaconych artykułów."
@@ -99,10 +114,17 @@ function LinesTable({ delivery }: { delivery: OverpaymentDelivery }) {
                       </Link>
                       <span className="text-muted-foreground">
                         {formatDocumentDate(reference.documentDate)} · {formatQuantity(reference.quantity)} szt.
-                        {reference.supplierCode && reference.supplierCode !== line.supplierCode
-                          ? ` · dostawca ${reference.supplierCode}`
-                          : ''}
                       </span>
+                      {(reference.supplierCode || reference.supplierName) && (
+                        <span
+                          className={cn(
+                            'text-muted-foreground',
+                            reference.supplierCode !== line.supplierCode && 'font-medium text-foreground',
+                          )}
+                        >
+                          · {[reference.supplierCode, reference.supplierName].filter(Boolean).join(' ')}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

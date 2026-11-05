@@ -100,6 +100,10 @@ public class PromoLeafletLine {
         return id;
     }
 
+    public PromoLeaflet getLeaflet() {
+        return leaflet;
+    }
+
     public int getLineNo() {
         return lineNo;
     }

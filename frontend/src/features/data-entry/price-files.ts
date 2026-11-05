@@ -69,6 +69,10 @@ export function usePriceFileWatch(): PriceFileWatch {
   return useSyncExternalStore(subscribe, () => state)
 }
 
+/** Pliki cen czekają na reakcję: zgoda na odczyt albo błąd sprawdzania. Niewybrany folder to świadomy brak, nie problem. */
+export const priceFilesNeedAttention = (watch: PriceFileWatch, storeId: string) =>
+  watch.storeId === storeId && (watch.access === 'prompt' || watch.access === 'denied' || watch.error !== null)
+
 const overviewKey = (storeId: string) => ['stores', storeId, 'price-files'] as const
 
 export function usePriceFileOverview(storeId: string) {

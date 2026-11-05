@@ -63,6 +63,10 @@ public class PriceFileImport {
     @Column(name = "promotions_read", nullable = false)
     private boolean promotionsRead = true;
 
+    /** {@code false}: plik wczytany, zanim serwer zapisywał ceny po EAN-ie; przeglądarka wyśle go jeszcze raz. */
+    @Column(name = "prices_read", nullable = false)
+    private boolean pricesRead = true;
+
     protected PriceFileImport() {
     }
 
@@ -79,8 +83,20 @@ public class PriceFileImport {
         importedAt = Instant.now();
     }
 
+    public boolean isPromotionsRead() {
+        return promotionsRead;
+    }
+
     public void markPromotionsRead() {
         promotionsRead = true;
+    }
+
+    public boolean isPricesRead() {
+        return pricesRead;
+    }
+
+    public void markPricesRead() {
+        pricesRead = true;
     }
 
     public void recordResult(int articles, int updated, int older, int unknown) {

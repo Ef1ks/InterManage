@@ -7,6 +7,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -194,6 +195,54 @@ class OverpaymentIntegrationTests {
 
         mvc.perform(get(url()).cookie(owner))
                 .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(OVERPAID)));
+    }
+
+    @Test
+    void skipsSuppliersChosenInSettings() throws Exception {
+        jdbc.update("insert into suppliers (store_id, code, name) values (?::uuid, '100', 'Dostawca 100')", store);
+        regularDeliveries(OVERPAID);
+        delivery(OVERPAID, 5, "10", "120.00");
+        regularDeliveries(WITHIN_THRESHOLD);
+        delivery(WITHIN_THRESHOLD, 5, "10", "120.00");
+        jdbc.update("update document_lines set supplier_code = '200' where itm8 = ?", WITHIN_THRESHOLD);
+        // Jedyna tańsza dostawa jest od pomijanego dostawcy, więc po pominięciu cena nie jest już przepłacona.
+        regularDeliveries(CHEAPER);
+        delivery(CHEAPER, 5, "10", "100.00");
+        jdbc.update("update document_lines set supplier_code = '200' where itm8 = ?", CHEAPER);
+        delivery(CHEAPER, 30, "10", "50.00");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.suppliers[0].code").value("100"))
+                .andExpect(jsonPath("$.excludedSuppliers", hasSize(0)))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8",
+                        containsInAnyOrder(OVERPAID, WITHIN_THRESHOLD, CHEAPER)));
+
+        mvc.perform(put(url() + "/excluded-suppliers").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[\"100\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.excludedSuppliers[0].name").value("Dostawca 100"))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(WITHIN_THRESHOLD)));
+
+        // Lista jest osobna dla każdego raportu.
+        mvc.perform(get("/api/stores/" + store + "/reports/low-margins").cookie(owner))
+                .andExpect(jsonPath("$.excludedSuppliers", hasSize(0)));
+
+        mvc.perform(put(url() + "/excluded-suppliers").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[]}"))
+                .andExpect(jsonPath("$.excludedSuppliers", hasSize(0)))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8",
+                        containsInAnyOrder(OVERPAID, WITHIN_THRESHOLD, CHEAPER)));
+    }
+
+    @Test
+    void referenceHasSupplierName() throws Exception {
+        regularDeliveries(OVERPAID);
+        delivery(OVERPAID, 5, "10", "120.00");
+        jdbc.update("update document_lines set supplier_name = 'Dostawca 100' where itm8 = ?", OVERPAID);
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].references[0].supplierCode").value("100"))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].references[0].supplierName").value("Dostawca 100"));
     }
 
     @Test

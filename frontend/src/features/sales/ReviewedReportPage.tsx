@@ -71,7 +71,7 @@ export function ReviewedReportPage<D extends Delivery>({
   query: report,
   title,
   intro,
-  header,
+  actions,
   notice,
   linesLabel,
   excessLabel,
@@ -84,8 +84,8 @@ export function ReviewedReportPage<D extends Delivery>({
   query: UseQueryResult<Report<D>>
   title: string
   intro: ReactNode
-  /** Treść nad zakładkami, gdy raport jest już wczytany. */
-  header?: ReactNode
+  /** Przyciski w prawym rogu nagłówka, np. ustawienia raportu. */
+  actions?: ReactNode
   /** Dodatkowe ostrzeżenie nad kafelkami. */
   notice?: ReactNode
   /** Podpis liczby artykułów w wierszu przyjęcia. */
@@ -162,6 +162,7 @@ export function ReviewedReportPage<D extends Delivery>({
       <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
         {report.data && <ReportFreshness generatedAt={report.data.documentsReportGeneratedAt} />}
+        {actions && <div className="ml-auto">{actions}</div>}
       </div>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">{intro}</p>
 
@@ -178,7 +179,6 @@ export function ReviewedReportPage<D extends Delivery>({
         <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
       ) : (
         <>
-          {header}
           <CategoryTabs
             categories={categories}
             deliveries={filtered}

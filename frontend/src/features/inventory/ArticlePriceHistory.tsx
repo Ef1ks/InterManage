@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
+import { SelectField } from '@/components/form'
 import { formatDocumentDate, formatMoney, formatPercent } from '@/features/documents/format'
 import { useProductPrices } from '@/features/inventory/api'
 import { parseIsoDate, todayIso } from '@/lib/dates'
@@ -13,12 +14,17 @@ const SOURCE_LABELS: Record<ProductPriceChange['source'], string> = {
 }
 
 /**
- * Historia cen artykułu pod wykresem: zmiany ceny sprzedaży (pliki z kasy, importy kartoteki, pliki zmiany cen
- * z wprowadzania danych) i przeceny z listy promocji, od najnowszych.
+ * Historia cen artykułu pod wykresem: zmiany ceny sprzedaży (pliki z kasy po EAN-ie, importy kartoteki, pliki zmiany
+ * cen z wprowadzania danych) i przeceny z listy promocji, od najnowszych. Artykuł z kilkoma EAN-ami (także z etykiet
+ * obniżek) pokazuje jeden naraz, domyślnie główny.
  */
 export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: string }) {
   const prices = useProductPrices(storeId, itm8)
   const data = prices.data
+  const [chosenEan, setChosenEan] = useState<string | null>(null)
+  const eans = [...new Set(data?.changes.flatMap((change) => change.ean ?? []))]
+  const ean = chosenEan ?? (eans.find((code) => code === data?.mainEan) || eans[0]) ?? null
+  const changes = data?.changes.filter((change) => change.ean === null || change.ean === ean) ?? []
 
   return (
     <>
@@ -30,11 +36,26 @@ export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: 
         isPending={prices.isPending}
         empty={
           data?.changes.length === 0
-            ? 'Brak zapisanych zmian ceny. Zmiany z kasy i importów kartoteki zapisujemy od 2 listopada 2026, zmiany z wprowadzania danych od pierwszego pliku zmiany cen.'
+            ? 'Brak zapisanych zmian ceny. Ceny z kasy mamy od stycznia 2026, zmiany z importów kartoteki od 2 listopada 2026, a z wprowadzania danych od pierwszego pliku zmiany cen.'
             : null
         }
+        toolbar={
+          eans.length > 1 && ean ? (
+            <div className="max-w-sm">
+              <SelectField
+                label="EAN"
+                options={eans.map((code) => ({
+                  value: code,
+                  label: code === data?.mainEan ? `${code} (główny)` : code,
+                }))}
+                value={ean}
+                onChange={(next) => setChosenEan(next)}
+              />
+            </div>
+          ) : null
+        }
       >
-        {data && <PriceChangesTable changes={data.changes} />}
+        {data && <PriceChangesTable changes={changes} />}
       </HistorySection>
       <HistorySection
         id="price-promotions"
@@ -57,6 +78,7 @@ function HistorySection({
   isError,
   isPending,
   empty,
+  toolbar,
   children,
 }: {
   id: string
@@ -65,6 +87,7 @@ function HistorySection({
   isError: boolean
   isPending: boolean
   empty: string | null
+  toolbar?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -75,6 +98,7 @@ function HistorySection({
         </h3>
         <p className="text-xs text-muted-foreground">{note}</p>
       </div>
+      {toolbar}
       {isError ? (
         <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
           Nie udało się wczytać historii cen.

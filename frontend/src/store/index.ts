@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import baseDeliveryDraftReducer, { persistBaseDeliveryDrafts } from './baseDeliveryDraftSlice'
 import dataEntryDraftReducer, { persistDataEntryDrafts } from './dataEntryDraftSlice'
 import deliOrderDraftReducer, { persistDrafts } from './deliOrderDraftSlice'
+import promoSetupDraftReducer, { persistPromoSetup } from './promoSetupDraftSlice'
 import uiReducer from './uiSlice'
 
 export const store = configureStore({
@@ -12,6 +13,7 @@ export const store = configureStore({
     deliOrderDraft: deliOrderDraftReducer,
     dataEntryDraft: dataEntryDraftReducer,
     baseDeliveryDraft: baseDeliveryDraftReducer,
+    promoSetupDraft: promoSetupDraftReducer,
   },
 })
 
@@ -42,6 +44,15 @@ store.subscribe(() => {
   if (drafts !== savedBaseDelivery) {
     savedBaseDelivery = drafts
     persistBaseDeliveryDrafts(drafts)
+  }
+})
+
+let savedPromoSetup = store.getState().promoSetupDraft
+store.subscribe(() => {
+  const state = store.getState().promoSetupDraft
+  if (state !== savedPromoSetup) {
+    savedPromoSetup = state
+    persistPromoSetup(state)
   }
 })
 

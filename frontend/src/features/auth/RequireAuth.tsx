@@ -11,11 +11,13 @@ type Props = {
   ownerOnly?: boolean
   /** Wymagane uprawnienie do kategorii narzędzi. */
   permission?: { category: PermissionCategory; level?: PermissionLevel }
+  /** Wystarczy dostęp do którejkolwiek z kategorii. */
+  anyCategory?: PermissionCategory[]
   /** Ekran ustawiania hasła - jedyne miejsce dostępne, dopóki użytkownik nie ustawi własnego hasła. */
   allowPasswordSetup?: boolean
 }
 
-export function RequireAuth({ children, ownerOnly, permission, allowPasswordSetup }: Props) {
+export function RequireAuth({ children, ownerOnly, permission, anyCategory, allowPasswordSetup }: Props) {
   const { data: me, isPending, isError, refetch } = useMe()
   const location = useLocation()
 
@@ -39,7 +41,9 @@ export function RequireAuth({ children, ownerOnly, permission, allowPasswordSetu
   }
 
   const allowed =
-    (!ownerOnly || me.owner) && (!permission || hasPermission(me, permission.category, permission.level))
+    (!ownerOnly || me.owner) &&
+    (!permission || hasPermission(me, permission.category, permission.level)) &&
+    (!anyCategory || anyCategory.some((category) => hasPermission(me, category)))
   if (!allowed) {
     return (
       <FullPageMessage

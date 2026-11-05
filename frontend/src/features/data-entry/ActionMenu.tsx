@@ -13,11 +13,29 @@ export const ACTION_TONES = {
   save: 'border-emerald-800 bg-emerald-700 text-white hover:bg-emerald-800 hover:text-white aria-expanded:bg-emerald-800 aria-expanded:text-white dark:border-emerald-600 dark:bg-emerald-700 dark:text-white dark:hover:bg-emerald-600 dark:hover:text-white dark:aria-expanded:bg-emerald-600 dark:aria-expanded:text-white',
 } as const
 
-/** Przycisk paska z listą działań; bez {@code tone} zwykły obrysowany. */
+/** Szerokość kafelków paska: numer dostawcy i główne działania są tej samej wielkości. */
+export const TILE_WIDTH = 'w-28 shrink-0 min-[106rem]:w-36'
+
+/** Główne działanie paska jako kafelek; wysokość wyrównuje się do paska, a minimalna to dwa rzędy przycisków. */
+export const ACTION_TILE =
+  "h-auto min-h-18 rounded-md p-1.5 text-base font-semibold [&_svg:not([class*='size-'])]:size-6"
+
+/** Ikona nad nazwą; jeden element, bo przycisk w trakcie ładowania chowa treść w wierszu. */
+export function TileContent({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="flex flex-col items-center gap-1">
+      {icon}
+      <span className="flex items-center gap-1">{children}</span>
+    </span>
+  )
+}
+
+/** Przycisk paska z listą działań; bez {@code tone} zwykły obrysowany, z {@code tile} duży kafelek. */
 export function ActionMenu({
   label,
   icon,
   tone,
+  tile,
   loading,
   disabled,
   title,
@@ -27,6 +45,7 @@ export function ActionMenu({
   label: React.ReactNode
   icon: React.ReactNode
   tone?: keyof typeof ACTION_TONES
+  tile?: boolean
   loading?: boolean
   disabled?: boolean
   title?: string
@@ -39,17 +58,25 @@ export function ActionMenu({
         render={
           <Button
             variant="outline"
-            size="sm"
-            className={cn(tone && ACTION_TONES[tone], className)}
+            className={cn(tone && ACTION_TONES[tone], tile && [ACTION_TILE, TILE_WIDTH], className)}
             loading={loading}
             disabled={disabled}
             title={title}
           />
         }
       >
-        {icon}
-        {label}
-        <ChevronDownIcon className="ml-auto" />
+        {tile ? (
+          <TileContent icon={icon}>
+            {label}
+            <ChevronDownIcon className="size-4" />
+          </TileContent>
+        ) : (
+          <>
+            {icon}
+            {label}
+            <ChevronDownIcon className="ml-auto" />
+          </>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-80">{children}</DropdownMenuContent>
     </DropdownMenu>

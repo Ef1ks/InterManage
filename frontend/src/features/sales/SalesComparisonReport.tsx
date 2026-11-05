@@ -1,9 +1,16 @@
-import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronRightIcon,
-  ChevronsDownUpIcon,
-} from 'lucide-react'
+  createContext,
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ChevronRightIcon, ChevronsDownUpIcon } from 'lucide-react'
 
 import { BackLink } from '@/components/BackLink'
 import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
@@ -26,7 +33,14 @@ import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { NomenclatureNav, type NomenclatureNavItem } from '@/features/sales/NomenclatureNav'
 import { salesPaths } from '@/features/sales/paths'
 import { ChartButton, nomenclatureName } from '@/features/sales/report-parts'
-import { lastCompleteDay, MODE_PARAMS, PeriodPicker, rangeError, useReportParams, useReportPeriod } from '@/features/sales/report-period'
+import {
+  lastCompleteDay,
+  MODE_PARAMS,
+  PeriodPicker,
+  rangeError,
+  useReportParams,
+  useReportPeriod,
+} from '@/features/sales/report-period'
 import {
   COMPARE_LABELS,
   type CompareMode,
@@ -82,7 +96,8 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
   const nomenclatures = useSalesNomenclatures(storeId)
   const compare = resolveCompareMode(
     mode,
-    (Object.keys(COMPARE_PARAMS) as CompareMode[]).find((key) => COMPARE_PARAMS[key] === params.get('porownaj')) ?? 'year',
+    (Object.keys(COMPARE_PARAMS) as CompareMode[]).find((key) => COMPARE_PARAMS[key] === params.get('porownaj')) ??
+      'year',
   )
 
   // Bez wybranych dat własne porównanie startuje od roku temu.
@@ -99,9 +114,7 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
     <>
       {/* Tabela ma dużo kolumn, więc raport bierze całą szerokość strony (AppLayout). */}
       <span data-wide-page hidden />
-      <BackLink to={salesPaths.overview}>
-        Wszystkie raporty
-      </BackLink>
+      <BackLink to={deli ? '/garmaz' : salesPaths.overview}>{deli ? 'Garmaż' : 'Wszystkie raporty'}</BackLink>
 
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">{deli ? 'Koszty garmażu' : 'Porównanie sprzedaży'}</h2>
@@ -184,19 +197,21 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
         </PeriodPicker>
 
         {!deli && (
-        <MultiComboboxField
-          label="Nomenklatura"
-          description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
-          options={(nomenclatures.data ?? []).map((item) => ({
-            value: item.code,
-            label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
-            hint: LEVEL_STYLES[item.level].label,
-          }))}
-          value={filter}
-          onChange={(codes) => update({ nom: codes })}
-          placeholder={nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'}
-          className="max-w-3xl"
-        />
+          <MultiComboboxField
+            label="Nomenklatura"
+            description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
+            options={(nomenclatures.data ?? []).map((item) => ({
+              value: item.code,
+              label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
+              hint: LEVEL_STYLES[item.level].label,
+            }))}
+            value={filter}
+            onChange={(codes) => update({ nom: codes })}
+            placeholder={
+              nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
+            }
+            className="max-w-3xl"
+          />
         )}
 
         {valid && (
@@ -257,7 +272,9 @@ function PeriodsSummary({
         {daysLabel(days)} do {daysLabel(comparedDays)}
       </p>
       {days !== comparedDays && (
-        <p className="text-amber-700 dark:text-amber-400">Okresy mają różną liczbę dni, sumy nie są porównywalne wprost</p>
+        <p className="text-amber-700 dark:text-amber-400">
+          Okresy mają różną liczbę dni, sumy nie są porównywalne wprost
+        </p>
       )}
       {lastSaleDate && periods.previous.to > lastSaleDate && (
         <p className="text-amber-700 dark:text-amber-400">
@@ -275,7 +292,9 @@ function PeriodsSummary({
         </p>
       )}
       {costsCoveredUntil === null && (
-        <p className="text-amber-700 dark:text-amber-400">Brak protokołów reprezentacji: wgraj raport dokumentów w Imporcie danych</p>
+        <p className="text-amber-700 dark:text-amber-400">
+          Brak protokołów reprezentacji: wgraj raport dokumentów w Imporcie danych
+        </p>
       )}
       {costsCoveredUntil && (periods.current.to > costsCoveredUntil || periods.previous.to > costsCoveredUntil) && (
         <p className="text-amber-700 dark:text-amber-400">
@@ -287,7 +306,8 @@ function PeriodsSummary({
 }
 
 /** Wartość sprzedaży wg wybranej podstawy: brutto jak na paragonie albo netto, od którego liczy się marża. */
-const saleValue = (figures: SalesFigures, basis: SaleBasis) => (basis === 'gross' ? figures.saleValueGross : figures.saleValueNet)
+const saleValue = (figures: SalesFigures, basis: SaleBasis) =>
+  basis === 'gross' ? figures.saleValueGross : figures.saleValueNet
 
 /** % marży od sprzedaży netto, jak w raporcie systemu sklepu; bez marży (koszty garmażu poniżej rejonu) pusty. */
 const marginPercent = (figures: SalesFigures) =>
@@ -356,7 +376,13 @@ function Comparison({
   lastSaleDate: string
 }) {
   const deli = kind === 'deli'
-  const { data, isPending, isError, refetch, isPlaceholderData } = useSalesComparison(storeId, kind, periods, filter, '')
+  const { data, isPending, isError, refetch, isPlaceholderData } = useSalesComparison(
+    storeId,
+    kind,
+    periods,
+    filter,
+    '',
+  )
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const queryClient = useQueryClient()
   // W kosztach garmażu jest jeden rejon, więc od razu widać jego rodziny.
@@ -466,7 +492,8 @@ function Comparison({
       0,
     )
     container.scrollTo({
-      top: container.scrollTop + row.getBoundingClientRect().top - head.getBoundingClientRect().bottom - ancestorsHeight,
+      top:
+        container.scrollTop + row.getBoundingClientRect().top - head.getBoundingClientRect().bottom - ancestorsHeight,
       behavior,
     })
   }, [])
@@ -566,7 +593,9 @@ function Comparison({
       {empty ? (
         <Card className="items-center px-6 py-10 text-center">
           <p className="font-medium">
-            {deli ? 'Brak sprzedaży garmażu i protokołów reprezentacji w obu okresach' : 'Brak sprzedaży w obu okresach'}
+            {deli
+              ? 'Brak sprzedaży garmażu i protokołów reprezentacji w obu okresach'
+              : 'Brak sprzedaży w obu okresach'}
           </p>
           <p className="max-w-sm text-sm text-muted-foreground">
             {deli
@@ -598,7 +627,11 @@ function Comparison({
           {/* Od xl ściąga nomenklatury stoi w kolumnie obok tabeli, więc niczego nie zasłania. */}
           <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start xl:gap-4">
             <Card ref={cardRef} className="overflow-hidden py-0">
-              <div ref={scrollRef} onScroll={updatePinned} className="relative max-h-[80svh] overflow-auto overscroll-contain">
+              <div
+                ref={scrollRef}
+                onScroll={updatePinned}
+                className="relative max-h-[80svh] overflow-auto overscroll-contain"
+              >
                 {pinnedRows.length > 0 && layout && (
                   // Wysokość 0: przypięte wiersze leżą nad tabelą i niczego nie przesuwają.
                   <div className="pointer-events-none sticky z-20 h-0" style={{ top: layout.headerHeight }}>
@@ -628,11 +661,19 @@ function Comparison({
                               style={{ paddingLeft: indent(entry.depth) }}
                             >
                               <span className="flex items-start gap-1.5">
-                                <ChevronRightIcon aria-hidden className="mt-0.5 size-4 shrink-0 rotate-90 text-foreground" />
+                                <ChevronRightIcon
+                                  aria-hidden
+                                  className="mt-0.5 size-4 shrink-0 rotate-90 text-foreground"
+                                />
                                 <RowLabel row={entry.row} level={entry.level} />
                               </span>
                             </TableCell>
-                            <FigureCells previous={entry.row.previous} current={entry.row.current} basis={basis} strong />
+                            <FigureCells
+                              previous={entry.row.previous}
+                              current={entry.row.current}
+                              basis={basis}
+                              strong
+                            />
                           </TableRow>
                         ))}
                       </tbody>
@@ -643,7 +684,11 @@ function Comparison({
                 <table ref={tableRef} className="w-full caption-bottom text-sm tabular-nums">
                   <TableHeader ref={headRef} className="sticky top-0 z-30 bg-card shadow-[0_1px_0_var(--border)]">
                     <TableRow className="hover:bg-transparent">
-                      <TableHead rowSpan={2} data-column="name" className="sticky left-0 z-10 min-w-64 bg-card pl-4 align-bottom">
+                      <TableHead
+                        rowSpan={2}
+                        data-column="name"
+                        className="sticky left-0 z-10 min-w-64 bg-card pl-4 align-bottom"
+                      >
                         Nomenklatura
                       </TableHead>
                       {GROUPS.map((group) => (
@@ -664,7 +709,10 @@ function Comparison({
                           <TableHead
                             key={`${group.key}-${column}`}
                             data-leaf
-                            className={cn('h-8 text-right text-xs font-normal text-muted-foreground', index === 0 && 'border-l')}
+                            className={cn(
+                              'h-8 text-right text-xs font-normal text-muted-foreground',
+                              index === 0 && 'border-l',
+                            )}
                           >
                             {columnLabel(column, compare)}
                           </TableHead>
@@ -779,9 +827,17 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
   if (isError && !data) {
     return (
       <TableRow className="hover:bg-transparent">
-        <TableCell colSpan={COLUMN_COUNT} className="py-3 text-sm text-muted-foreground" style={{ paddingLeft: indent(depth) }}>
+        <TableCell
+          colSpan={COLUMN_COUNT}
+          className="py-3 text-sm text-muted-foreground"
+          style={{ paddingLeft: indent(depth) }}
+        >
           Nie udało się wczytać.{' '}
-          <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => refetch()}>
+          <button
+            type="button"
+            className="font-medium text-foreground underline underline-offset-4"
+            onClick={() => refetch()}
+          >
             Spróbuj ponownie
           </button>
         </TableCell>
@@ -791,7 +847,11 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
   if (data.rows.length === 0) {
     return (
       <TableRow className="hover:bg-transparent">
-        <TableCell colSpan={COLUMN_COUNT} className="py-3 text-sm text-muted-foreground" style={{ paddingLeft: indent(depth) }}>
+        <TableCell
+          colSpan={COLUMN_COUNT}
+          className="py-3 text-sm text-muted-foreground"
+          style={{ paddingLeft: indent(depth) }}
+        >
           Brak sprzedaży w obu okresach.
         </TableCell>
       </TableRow>
@@ -809,11 +869,17 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
         <TableRow
           data-key={expandable ? key : undefined}
           data-ancestors={ancestors.join(',')}
-          className={cn(expandable && 'cursor-pointer', style ? (open ? style.open : style.row) : 'bg-card hover:bg-muted')}
+          className={cn(
+            expandable && 'cursor-pointer',
+            style ? (open ? style.open : style.row) : 'bg-card hover:bg-muted',
+          )}
           onClick={expandable ? () => toggle(key) : undefined}
         >
           <TableCell
-            className={cn('sticky left-0 z-10 min-w-64 bg-inherit py-2.5 pr-4 whitespace-normal', style && [barClass, style.bar])}
+            className={cn(
+              'sticky left-0 z-10 min-w-64 bg-inherit py-2.5 pr-4 whitespace-normal',
+              style && [barClass, style.bar],
+            )}
             style={{ paddingLeft: indent(depth) }}
           >
             {/* Linie prowadzące: każdy poziom wyżej ma swoją pionową kreskę pod strzałką rodzica. */}
@@ -1075,7 +1141,9 @@ function ChangeLine({
 }) {
   const { label, direction } = change(previous, current)
   return (
-    <span className={cn('block font-medium', large ? 'text-sm' : 'text-xs', directionClass(direction, neutral))}>{label}</span>
+    <span className={cn('block font-medium', large ? 'text-sm' : 'text-xs', directionClass(direction, neutral))}>
+      {label}
+    </span>
   )
 }
 
@@ -1105,7 +1173,9 @@ function TotalTile({
         <>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
             <p className="text-2xl font-semibold tracking-tight tabular-nums">{format(current)}</p>
-            <p className={cn('text-sm font-medium tabular-nums', directionClass(delta!.direction, neutral))}>{delta!.label}</p>
+            <p className={cn('text-sm font-medium tabular-nums', directionClass(delta!.direction, neutral))}>
+              {delta!.label}
+            </p>
           </div>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm text-muted-foreground tabular-nums">
             <p>

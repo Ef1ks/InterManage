@@ -1,4 +1,5 @@
 import { ChevronRightIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -10,7 +11,28 @@ import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import type { DocumentTypeSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-/** Wejście do modułu: kafelek na każdy typ dokumentu, dopiero w nim lista dokumentów tego typu. */
+/** Sekcje strony; kolejność kodów to kolejność kafelków. Kody z backendu (DocumentType.java). */
+const GROUPS = [
+  { title: 'Dokumenty dostaw', codes: ['PZ', 'PK', 'WZ', 'ZW'] },
+  { title: 'Protokoły', codes: ['PL', 'MM', 'RWPO', 'RWREP', 'RWDA'] },
+  { title: 'Przeniesienia stanów', codes: ['PPP'] },
+]
+
+/** Typy rzadkie: kafelek tylko, gdy są dokumenty. */
+const HIDDEN_WHEN_EMPTY = ['RWDA']
+
+/** Typ spoza {@link GROUPS} trafia do „Pozostałe”, żeby nowy typ z backendu nie zniknął ze strony. */
+function typeSections(types: DocumentTypeSummary[]) {
+  const visible = types.filter((type) => type.documentCount > 0 || !HIDDEN_WHEN_EMPTY.includes(type.code))
+  const sections = GROUPS.map(({ title, codes }) => ({
+    title,
+    types: codes.flatMap((code) => visible.filter((type) => type.code === code)),
+  }))
+  const others = visible.filter((type) => !GROUPS.some(({ codes }) => codes.includes(type.code)))
+  return [...sections, { title: 'Pozostałe', types: others }].filter((section) => section.types.length > 0)
+}
+
+/** Wejście do modułu: kafelki typów dokumentów w sekcjach, dopiero w kafelku lista dokumentów tego typu. */
 export function DocumentTypesGrid({ storeId }: { storeId: string }) {
   const { data, isPending, isError, refetch } = useDocumentsOverview(storeId)
 
@@ -28,14 +50,39 @@ export function DocumentTypesGrid({ storeId }: { storeId: string }) {
     <>
       {data && <StaleDataNotice generatedAt={data.lastReportGeneratedAt} />}
       <IncomingTransfersNotice storeId={storeId} />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="space-y-8">
         {isPending
-          ? Array.from({ length: 8 }, (_, index) => (
-              <div key={index} aria-hidden className="h-36 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+          ? GROUPS.map(({ title, codes }) => (
+              <TypeSection key={title} title={title}>
+                {codes
+                  .filter((code) => !HIDDEN_WHEN_EMPTY.includes(code))
+                  .map((code) => (
+                    <div
+                      key={code}
+                      aria-hidden
+                      className="h-36 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"
+                    />
+                  ))}
+              </TypeSection>
             ))
-          : data.types.map((type) => <TypeTile key={type.code} type={type} />)}
+          : typeSections(data.types).map(({ title, types }) => (
+              <TypeSection key={title} title={title}>
+                {types.map((type) => (
+                  <TypeTile key={type.code} type={type} />
+                ))}
+              </TypeSection>
+            ))}
       </div>
     </>
+  )
+}
+
+function TypeSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-3 text-base font-semibold">{title}</h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
+    </section>
   )
 }
 
@@ -65,15 +112,16 @@ function TypeTile({ type }: { type: DocumentTypeSummary }) {
         />
       </div>
       <div className="min-w-0">
-        <h2 className="font-semibold">{type.label}</h2>
+        <h3 className="font-semibold">{type.label}</h3>
         <p className="mt-0.5 text-sm text-muted-foreground">{type.description}</p>
       </div>
       <p className={cn('mt-auto text-sm tabular-nums', empty ? 'text-muted-foreground' : 'font-medium')}>
-        {empty
-          ? 'Brak dokumentów'
-          : `${countFormat.format(type.documentCount)} ${documentsWord(type.documentCount)}`}
+        {empty ? 'Brak dokumentów' : `${countFormat.format(type.documentCount)} ${documentsWord(type.documentCount)}`}
         {type.lastDocumentDate && (
-          <span className="font-normal text-muted-foreground"> · ostatni {formatDocumentDate(type.lastDocumentDate).split(',')[0]}</span>
+          <span className="font-normal text-muted-foreground">
+            {' '}
+            · ostatni {formatDocumentDate(type.lastDocumentDate).split(',')[0]}
+          </span>
         )}
       </p>
     </Link>

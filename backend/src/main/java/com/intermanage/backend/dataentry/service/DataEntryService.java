@@ -346,7 +346,7 @@ public class DataEntryService {
      * {@code ?} jest całym kodem ({@code 5923532*} = początek kodu), bez nich fragmentem. {@code *} = dowolny ciąg,
      * {@code ?} = jeden znak, znaki specjalne LIKE dosłownie. Pusty tekst = pusta tablica.
      */
-    static String[] likePatterns(String text, boolean plain) {
+    public static String[] likePatterns(String text, boolean plain) {
         if (text == null || text.isBlank()) {
             return new String[0];
         }

@@ -16,6 +16,17 @@ type Props = {
   files: ProFile[]
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Teksty okna, gdy pliki nie są z gazetki. */
+  copy?: typeof LEAFLET_COPY
+  /** Ostrzeżenie nad tabelą plików. */
+  notice?: string
+}
+
+const LEAFLET_COPY = {
+  description:
+    'Z pozycji bez kodu MEA (puste albo DDD), jeden plik na każdy okres od-do. W pliku są EAN-y artykułów z kartoteki i ceny z gazetki; artykuł z kilkoma EAN-ami w gazetce trafia do pliku raz. Przy wczytaniu pliku w programie sklepu wpisz jego kod taryfy.',
+  empty: 'Gazetka nie ma pozycji do opracowania.',
+  withoutPrice: 'bez ceny (rabat bez ceny z kartoteki)',
 }
 
 const articles = (count: number) =>
@@ -26,7 +37,7 @@ const articles = (count: number) =>
  * wczytaniu w programie sklepu. Pliki zapisują się w folderze wybranym raz w przeglądarce (N:\ALOA\PRO\IMPORT);
  * bez niego się pobierają.
  */
-export function ProFilesDialog({ files, open, onOpenChange }: Props) {
+export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY, notice }: Props) {
   const [saving, setSaving] = useState(false)
   const ready = files.filter((file) => file.lines.length > 0)
 
@@ -57,15 +68,18 @@ export function ProFilesDialog({ files, open, onOpenChange }: Props) {
       <DialogContent className="gap-5 p-6 sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Pliki cen promocji .PRO</DialogTitle>
-          <DialogDescription>
-            Z pozycji bez kodu MEA (puste albo DDD), jeden plik na każdy okres od-do. W pliku są EAN-y artykułów z
-            kartoteki i ceny z gazetki; artykuł z kilkoma EAN-ami w gazetce trafia do pliku raz. Przy wczytaniu pliku w
-            programie sklepu wpisz jego kod taryfy.
-          </DialogDescription>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
+        {notice && (
+          <p className="flex items-start gap-1.5 text-sm font-medium text-amber-900 dark:text-amber-200">
+            <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <span>{notice}</span>
+          </p>
+        )}
+
         {files.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Gazetka nie ma pozycji do opracowania.</p>
+          <p className="text-sm text-muted-foreground">{copy.empty}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
@@ -100,10 +114,7 @@ export function ProFilesDialog({ files, open, onOpenChange }: Props) {
                     <td className="px-3 py-2 text-right tabular-nums">{articles(file.lines.length)}</td>
                     <td className="px-3 py-2 text-xs">
                       <Skipped label="bez artykułu z kartoteki" names={file.withoutProduct.map((line) => line.name)} />
-                      <Skipped
-                        label="bez ceny (rabat bez ceny z kartoteki)"
-                        names={file.withoutPrice.map((line) => line.name)}
-                      />
+                      <Skipped label={copy.withoutPrice} names={file.withoutPrice.map((line) => line.name)} />
                       <Skipped label="ten sam artykuł w różnych cenach, w pliku pierwsza" names={file.conflicts} />
                       {file.withoutProduct.length + file.withoutPrice.length + file.conflicts.length === 0 && (
                         <span className="text-muted-foreground">–</span>

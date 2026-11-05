@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { Leaflet, LeafletMatch, LeafletSummary } from '@/lib/types'
+import type { Leaflet, LeafletLabelCheck, LeafletMatch, LeafletSummary } from '@/lib/types'
 
 const path = (storeId: string) => `/stores/${storeId}/leaflets`
 const listKey = (storeId: string) => ['stores', storeId, 'leaflets'] as const
@@ -20,6 +20,19 @@ export function useLeaflet(storeId: string, id: string | null) {
     queryKey: [...listKey(storeId), id],
     queryFn: () => api<Leaflet>(`${path(storeId)}/${id}`),
     enabled: id !== null,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+export const MIN_LABEL_QUERY = 3
+
+/** Jaką etykietę ma artykuł i od kiedy do kiedy obowiązuje, po EAN-ie, nazwie, marce albo ITM8. */
+export function useLeafletLabelCheck(storeId: string, query: string) {
+  return useQuery({
+    queryKey: [...listKey(storeId), 'label-check', query],
+    queryFn: () => api<LeafletLabelCheck>(`${path(storeId)}/label-check?query=${encodeURIComponent(query)}`),
+    enabled: query.length >= MIN_LABEL_QUERY,
     staleTime: 60_000,
     retry: false,
   })

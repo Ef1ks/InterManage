@@ -177,6 +177,70 @@ class LeafletIntegrationTests {
     }
 
     @Test
+    void labelCheckTellsLabelAndDatesFromLeaflet() throws Exception {
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Warsaw"));
+        List<List<Object>> rows = List.of(
+                row("1", day(today.minusDays(3)), day(today.plusDays(3)), "DDD", "667810", "8711000517826",
+                        "FM.X.KAWA VELVET 200G INST.", "JACOBS", new BigDecimal("24.99"),
+                        "Karteczka PROMO z GENERATORA OZNACZEŃ"),
+                row("2", day(today.minusDays(3)), day(today.plusDays(3)), "DDD", "667810", "08711000517826",
+                        "FM.X.KAWA VELVET 200G INST.", "JACOBS", new BigDecimal("24.99"),
+                        "Karteczka PROMO z GENERATORA OZNACZEŃ"),
+                row("3", day(today.plusDays(4)), day(today.plusDays(8)), "DDD", null, "2481500000000", "*CIASTO WZ",
+                        null, new BigDecimal("26.99"), "Karteczka Produkt z gazetki z MERKALYS"),
+                row("4", day(today.minusDays(20)), day(today.minusDays(15)), "DDD", null, "2192000000000",
+                        "BANAN Z GAZETKI", null, new BigDecimal("2.99"), "NADSTAWKA PROMO"),
+                row("5", day(today.minusDays(10)), day(today.minusDays(5)), "DDD", null, "2192000000000",
+                        "BANAN Z GAZETKI", null, new BigDecimal("3.49"), "Karteczka PROMO z MERKALYS"),
+                row("6", day(today), day(today), "DDD", null, "5900000000017", "ŁOSOŚ SPOZA KARTOTEKI", null,
+                        new BigDecimal("9.99"), "NADSTAWKA PROMO"));
+        List<XlsxWriter.Column> columns = HEADERS.stream().map(header -> new XlsxWriter.Column(header, 12)).toList();
+        mvc.perform(multipart(path()).file(new MockMultipartFile("file", "gazetka.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        xlsxWriter.write("Arkusz", columns, rows))).cookie(owner).with(csrf()))
+                .andExpect(status().isCreated());
+
+        // Skan: dwa wiersze gazetki tej samej promocji to jedna pozycja.
+        mvc.perform(get(path() + "/label-check").param("query", "8711000517826").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articles", hasSize(1)))
+                .andExpect(jsonPath("$.articles[0].name").value("KAWA VELVET 200G"))
+                .andExpect(jsonPath("$.articles[0].status").value("CURRENT"))
+                .andExpect(jsonPath("$.articles[0].lines", hasSize(1)))
+                .andExpect(jsonPath("$.articles[0].lines[0].week").value(44))
+                .andExpect(jsonPath("$.articles[0].lines[0].dateFrom").value(today.minusDays(3).toString()))
+                .andExpect(jsonPath("$.articles[0].lines[0].dateTo").value(today.plusDays(3).toString()))
+                .andExpect(jsonPath("$.articles[0].lines[0].shelfLabel")
+                        .value("Karteczka PROMO z GENERATORA OZNACZEŃ"));
+
+        // Kod z etykiety wagi prowadzi do artykułu; promocja jeszcze się nie zaczęła.
+        mvc.perform(get(path() + "/label-check").param("query", "2481500012345").cookie(owner))
+                .andExpect(jsonPath("$.articles[0].name").value("CIASTO WZ"))
+                .andExpect(jsonPath("$.articles[0].status").value("UPCOMING"));
+
+        // Po nazwie: tylko ostatnia zakończona promocja, nie obie.
+        mvc.perform(get(path() + "/label-check").param("query", "banan").cookie(owner))
+                .andExpect(jsonPath("$.articles", hasSize(1)))
+                .andExpect(jsonPath("$.articles[0].status").value("PAST"))
+                .andExpect(jsonPath("$.articles[0].lines", hasSize(1)))
+                .andExpect(jsonPath("$.articles[0].lines[0].shelfLabel").value("Karteczka PROMO z MERKALYS"));
+
+        // Pozycja gazetki spoza kartoteki, zapytanie bez polskich znaków.
+        mvc.perform(get(path() + "/label-check").param("query", "losos").cookie(owner))
+                .andExpect(jsonPath("$.articles[0].name").value("ŁOSOŚ SPOZA KARTOTEKI"))
+                .andExpect(jsonPath("$.articles[0].status").value("CURRENT"));
+
+        // Artykuł bez gazetki i za krótkie zapytanie.
+        insertProduct(jdbc.queryForObject("select id::text from product_imports where store_id = ?::uuid",
+                String.class, storeId), "0000006100003", "5901234123457", "MLEKO 1L", "MLECZNA", "3.99");
+        mvc.perform(get(path() + "/label-check").param("query", "mleko").cookie(owner))
+                .andExpect(jsonPath("$.articles[0].status").value("NONE"))
+                .andExpect(jsonPath("$.articles[0].lines", hasSize(0)));
+        mvc.perform(get(path() + "/label-check").param("query", "ab").cookie(owner))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rejectsFileWithoutLeafletColumns() throws Exception {
         MockMultipartFile other = new MockMultipartFile("file", "inny.xlsx", "application/octet-stream",
                 xlsxWriter.write("Arkusz1", List.of(new XlsxWriter.Column("Kod", 10)),
@@ -214,6 +278,10 @@ class LeafletIntegrationTests {
     /** Koniec promocji za tydzień, żeby kod MEA z gazetki był do wpisania bez względu na dzień testu. */
     private static String nextWeek() {
         return LocalDate.now(ZoneId.of("Europe/Warsaw")).plusDays(7).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+    }
+
+    private static String day(LocalDate date) {
+        return date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
     }
 
     /** Dawna gazetka z jedną, zakończoną promocją z kodem MEA 70000. */
