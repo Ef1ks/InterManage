@@ -24,7 +24,7 @@ import {
   ScanBarcodeIcon,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from 'react-redux'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -65,6 +65,7 @@ import {
   netValue,
   productFileRow,
   suggestedPrice,
+  vatMismatch,
   withScannedProduct,
   withTrailingEmptyRow,
 } from '@/features/data-entry/rows'
@@ -101,6 +102,7 @@ import {
   negativeMargin,
   newArticlesBySupplier,
   notDelivered,
+  withDeliveryProduct,
   PLU_FOLDER,
   PLU_REGIONS,
   pluEans,
@@ -164,10 +166,11 @@ const pieces = (count: number) =>
       : 'pozycji'
 
 /**
- * Szybki filtr tabeli: ujemne marże, nowe artykuły, towar, który nie przyjechał, krótkie terminy albo błędy kaucji
+ * Szybki filtr tabeli: ujemne marże, nowe artykuły, towar, który nie przyjechał, krótkie terminy, błędy kaucji albo
+ * błędny VAT
  * (liczniki nad tabelą są przyciskami tych filtrów).
  */
-type QuickFilter = 'negative' | 'new' | 'missing' | 'short' | 'deposit'
+type QuickFilter = 'negative' | 'new' | 'missing' | 'short' | 'deposit' | 'vat'
 
 const QUICK_FILTERS: Record<QuickFilter, (row: DataEntryRow) => boolean> = {
   negative: negativeMargin,
@@ -175,6 +178,7 @@ const QUICK_FILTERS: Record<QuickFilter, (row: DataEntryRow) => boolean> = {
   missing: notDelivered,
   short: (row) => row.base?.shortDated === true,
   deposit: (row) => depositError(row) !== null,
+  vat: vatMismatch,
 }
 
 /** Sortowanie tabeli po kliknięciu nagłówka kolumny. */
@@ -227,6 +231,19 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const queryClient = useQueryClient()
   const deliveryQuery = useBaseDelivery(store.id, draft.delivery?.id ?? null)
   const delivery = deliveryQuery.data ?? null
+  // Tabela ma wiersze z chwili wczytania (też z localStorage), a artykuły po „Dodaj nowe artykuły” i raporcie kartoteki
+  // przestają być nowe dopiero w świeżym dokumencie.
+  useEffect(() => {
+    if (!delivery) return
+    const lines = new Map(delivery.lines.map((line) => [line.id, line]))
+    setRows(
+      (current) => {
+        const next = current.map((row) => (row.base ? withDeliveryProduct(row, lines.get(row.base.lineId)) : row))
+        return next.some((row, index) => row !== current[index]) ? next : current
+      },
+      { record: false },
+    )
+  }, [delivery, setRows])
   const { data: nomenclature = [] } = useDataEntryNomenclature(store.id)
   const names = useMemo(() => nomenclatureNames(nomenclature), [nomenclature])
   const { data: rounding } = usePriceRoundingRules(store.id)
@@ -1115,6 +1132,13 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                 count={depositErrorCount}
                 active={applied?.quick === 'deposit'}
                 onClick={() => toggleQuick('deposit')}
+                tone="red"
+              />
+              <FilterStat
+                label="Błędny VAT"
+                count={quickCounts.vat}
+                active={applied?.quick === 'vat'}
+                onClick={() => toggleQuick('vat')}
                 tone="red"
               />
             </div>

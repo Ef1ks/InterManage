@@ -201,6 +201,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
         BigDecimal getListedPrice();
 
+        BigDecimal getTillPrice();
+
         boolean getLeaflet();
 
         BigDecimal getReferencePrice();
@@ -211,7 +213,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     /**
      * Artykuły przyjęć PZ z datą w [from, until) i przyjęć {@code documentIds}, po korektach, z tym, co wiadomo o cenie
      * sprzedaży w dniu przyjęcia: {@code salePrice} z dokumentu (w promocji to cena promocyjna), {@code listedPrice}
-     * cena zwykła z promocji trwającej tego dnia na liście promocji, {@code leaflet} artykuł w gazetce tego dnia,
+     * cena zwykła z promocji trwającej tego dnia na liście promocji, {@code tillPrice} to samo z plików kasy (promocje
+     * założone ręcznie są tylko tam), {@code leaflet} artykuł w gazetce tego dnia,
      * {@code referencePrice} cena zwykła ze sprzedaży ({@link PromotionReportRepository#REGULAR_PRICES}),
      * {@code catalogPrice} cena z kartoteki. Linie bez wartości (gratis) się nie liczą.
      */
@@ -236,6 +239,12 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 join promotions p on p.store_id = :storeId and p.itm8 = l.itm8
                                  and l.day between p.start_date and p.end_date
                 group by l.document_id, l.itm8
+            ), till as (
+                select l.document_id, l.itm8, max(t.regular_price) as price
+                from lines l
+                join till_promotions t on t.store_id = :storeId and t.itm8 = l.itm8
+                                      and l.day between t.promo_from and t.promo_to
+                group by l.document_id, l.itm8
             ), in_leaflet as (
                 select distinct l.document_id, l.itm8
                 from lines l
@@ -247,12 +256,13 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    l.quantity + coalesce(f.quantity, 0) as correctedQuantity,
                    l.purchase_value + coalesce(f.purchase_value, 0) as correctedValue,
                    f.delivery_id is not null as corrected,
-                   p.price as listedPrice, g.itm8 is not null as leaflet,
+                   p.price as listedPrice, t.price as tillPrice, g.itm8 is not null as leaflet,
                    round(cast(r.price as numeric), 2) as referencePrice,
                    c.sale_price as catalogPrice
             from lines l
             left join fixes f on f.delivery_id = l.document_id and f.itm8 = l.itm8
             left join listed p on p.document_id = l.document_id and p.itm8 = l.itm8
+            left join till t on t.document_id = l.document_id and t.itm8 = l.itm8
             left join in_leaflet g on g.document_id = l.document_id and g.itm8 = l.itm8
             left join reference r on r.itm8 = l.itm8
                                  and r.month = cast(date_trunc('month', l.day) as date)

@@ -161,7 +161,8 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
         Przyjęcia z ostatnich 30 dni, w których artykuł z cadencier (formularza zamówień do bazy) przyszedł od innego
         dostawcy niż baza, rozpoznany po ITM8 albo EAN-ie. Przyjęcia ze statusem wyjaśniania zostają bez względu na
-        datę. Wartości po korektach: korekta przypięta do przyjęcia od razu zmienia raport.
+        datę. Wartości po korektach: korekta przypięta do przyjęcia od razu zmienia raport. Raport pomija prasę od
+        Kolportera.
       </p>
 
       {report.isError ? (

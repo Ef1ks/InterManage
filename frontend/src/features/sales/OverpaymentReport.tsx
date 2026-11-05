@@ -27,7 +27,7 @@ export function OverpaymentReport({ storeId }: { storeId: string }) {
       report="OVERPAYMENT"
       query={useOverpayments(storeId)}
       title="Przepłacone artykuły"
-      intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca."
+      intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca, i prasę od Kolportera."
       linesLabel="droższe"
       excessLabel="przepłacone"
       emptyDeliveryText="W tym przyjęciu nie ma już przepłaconych artykułów."

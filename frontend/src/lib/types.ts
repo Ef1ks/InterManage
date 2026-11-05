@@ -1714,8 +1714,10 @@ export type OverpaymentReport = {
   deliveries: OverpaymentDelivery[]
 }
 
-/** Skąd wiadomo o promocji w dniu przyjęcia: lista promocji, gazetka, spadek ceny w sprzedaży. */
-export type LowMarginPromotion = 'LIST' | 'LEAFLET' | 'SALES'
+/** Skąd wiadomo o promocji w dniu przyjęcia: lista promocji, pliki kasy, gazetka, spadek ceny w sprzedaży. */
+export type LowMarginPromotion = 'LIST' | 'TILL' | 'LEAFLET' | 'SALES'
+
+export type LowMarginSupplier = { code: string; name: string }
 
 export type LowMarginLine = {
   itm8: string
@@ -1762,6 +1764,10 @@ export type LowMarginReport = {
   marginsConfigured: boolean
   documentsCoveredUntil: string | null
   documentsReportGeneratedAt: string | null
+  /** Dostawcy, których nie dotyczy marża wymagana. */
+  excludedSuppliers: LowMarginSupplier[]
+  /** Lista dostawców sklepu do wyboru. */
+  suppliers: LowMarginSupplier[]
   deliveries: LowMarginDelivery[]
 }
 
@@ -1817,7 +1823,8 @@ export type SaleUnit = 'kg' | 'L' | 'szt.'
 /** Artykuł z kartoteki sklepu dla EAN-u ({@code ean} bez zer wiodących); {@code salePrice} brutto sztuki. */
 /** Artykuł z kartoteki w oknie „Lista towarów” we wprowadzaniu danych. */
 export type DataEntryCatalogListItem = {
-  itm8: string
+  /** {@code null} dla artykułu ze szkicu CADBEZP ({@code draft}), którego nie ma jeszcze w kartotece. */
+  itm8: string | null
   ean: string
   name: string | null
   brand: string | null
@@ -1833,7 +1840,11 @@ export type DataEntryCatalogListItem = {
   rotation: number | null
   /** Ostatnie przyjęcie PZ (dostawca z linii dokumentu, nie z kartoteki); tylko w liście towarów. */
   lastDelivery: { supplierCode: string | null; supplierName: string | null; date: string } | null
+  draft: boolean
 }
+
+/** Artykuł z kartoteki, nie szkic: tylko taki da się przypiąć, bo przypięcie idzie po ITM8. */
+export type DataEntryCatalogArticle = DataEntryCatalogListItem & { itm8: string }
 
 export type DataEntryCatalogListPage = {
   items: DataEntryCatalogListItem[]

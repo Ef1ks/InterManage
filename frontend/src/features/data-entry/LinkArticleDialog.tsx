@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatPrice, formatQuantity } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
-import type { DataEntryCatalogListItem, DataEntryCatalogProduct } from '@/lib/types'
+import type { DataEntryCatalogArticle, DataEntryCatalogProduct } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { lookupProducts, useLinkProduct, useLinkSuggestions, useUnlinkProduct } from './api'
@@ -106,7 +106,7 @@ function LinkContent({
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const pick = async (item: DataEntryCatalogListItem) => {
+  const pick = async (item: DataEntryCatalogArticle) => {
     setPending(item.itm8)
     setError(null)
     try {

@@ -1118,7 +1118,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // „Zapisz”: bez braków zapisuje od razu do folderów z ustawień zapisu; z brakami najpierw okno sprawdzenia, a gdy
   // dokument jest już zapisany, pyta o ponowny zapis.
-  const xmlSave = useXmlSave(store.id)
+  // Po „Tak” artykuły z pliku przestają być nowe (po „Cofnij” znów są), więc wiersze szukają ich od nowa.
+  const xmlSave = useXmlSave(store.id, (eans) => {
+    const changed = new Set(eans.map((ean) => ean.replace(/^0+/, '')))
+    onEansChanged(
+      currentDraft()
+        .rows.filter((row) => changed.has(row.ean.replace(/^0+/, '')))
+        .map((row) => row.id),
+    )
+  })
   const runSave = async () => {
     const missing = await xmlSave.missingFolders(productFilePayload, priceControlPayload)
     if (missing.length > 0) {

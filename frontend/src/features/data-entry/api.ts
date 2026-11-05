@@ -3,7 +3,7 @@ import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClie
 import { api } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
 import type {
-  DataEntryCatalogListItem,
+  DataEntryCatalogArticle,
   DataEntryCatalogListPage,
   DataEntryCatalogProduct,
   DataEntryInvoice,
@@ -345,7 +345,7 @@ export function useLinkSuggestions(storeId: string, text: string, sellerNip: str
     queryFn: () => {
       const params = new URLSearchParams({ text })
       if (sellerNip) params.set('sellerNip', sellerNip)
-      return api<DataEntryCatalogListItem[]>(`${path(storeId)}/link-suggestions?${params}`)
+      return api<DataEntryCatalogArticle[]>(`${path(storeId)}/link-suggestions?${params}`)
     },
     enabled: enabled && text.trim() !== '',
   })

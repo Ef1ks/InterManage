@@ -14,7 +14,7 @@ import type { SalesChartTarget } from '@/features/sales/api'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { formatShortDate } from '@/lib/dates'
 import { nextSort, type SortState } from '@/lib/table-sort'
-import type { DataEntryCatalogListItem } from '@/lib/types'
+import type { DataEntryCatalogArticle, DataEntryCatalogListItem } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
@@ -152,7 +152,7 @@ export function CatalogListDialog({
   /** Dodaje artykuły do tabeli: jeden z plusa (z ilością i ceną z okna) albo wszystkie wyfiltrowane. */
   onAdd?: (additions: CatalogAddition[]) => Promise<void>
   /** Zamiast dodawania: plus od razu wybiera artykuł (przypisanie pozycji z faktury). */
-  onPick?: (item: DataEntryCatalogListItem) => void
+  onPick?: (item: DataEntryCatalogArticle) => void
   /** Początkowe wyszukiwanie (np. „fil kur” z „FILET Z KURCZAKA” z faktury). */
   initialQuery?: string
   title?: string
@@ -273,9 +273,21 @@ export function CatalogListDialog({
   )
 
   const cell = (key: ColumnKey, item: DataEntryCatalogListItem): ReactNode => {
+    const { itm8 } = item
     switch (key) {
       case 'itm8':
-        return <td className="px-2.5 py-1 whitespace-nowrap text-muted-foreground">{item.itm8}</td>
+        return (
+          <td className="px-2.5 py-1 whitespace-nowrap text-muted-foreground">
+            {item.itm8 ?? (
+              <span
+                title="Artykuł z pliku nowych artykułów. Resztę danych dopisze kolejny raport kartoteki."
+                className="rounded bg-violet-200 px-1.5 py-0.5 text-xs font-medium text-violet-950 dark:bg-violet-900/60 dark:text-violet-100"
+              >
+                czeka na raport
+              </span>
+            )}
+          </td>
+        )
       case 'ean':
         return <td className="px-2.5 py-1 whitespace-nowrap">{item.ean}</td>
       case 'name':
@@ -283,19 +295,19 @@ export function CatalogListDialog({
           <td className="px-2.5 py-1">
             <span className="flex items-center gap-2">
               <span>{item.name}</span>
-              {lastSaleDate && (
+              {lastSaleDate && itm8 !== null && (
                 <button
                   type="button"
                   onClick={() =>
                     setChartTarget({
                       kind: 'article',
-                      itm8: item.itm8,
-                      name: item.name ?? item.itm8,
+                      itm8,
+                      name: item.name ?? itm8,
                       ean: item.ean,
                       brand: item.brand,
                     })
                   }
-                  aria-label={`Statystyki: ${item.name ?? item.itm8}`}
+                  aria-label={`Statystyki: ${item.name ?? itm8}`}
                   title="Sprzedaż, stan i dostawy artykułu"
                   className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
                 >
@@ -514,15 +526,26 @@ export function CatalogListDialog({
                 <MessageRow span={columns.length + 1}>Nie znaleziono artykułu.</MessageRow>
               ) : (
                 items.map((item) => (
-                  <tr key={item.itm8} className="hover:bg-muted/50">
+                  <tr key={item.itm8 ?? item.ean} className="hover:bg-muted/50">
                     <td className="px-2 py-1">
                       <Button
                         variant="outline"
                         size="icon-sm"
-                        onClick={() => (onPick ? onPick(item) : setAdding(item))}
-                        disabled={!item.ean}
-                        aria-label={`${onPick ? 'Wybierz' : 'Dodaj do tabeli'}: ${item.name ?? item.itm8}`}
-                        title={item.ean ? (onPick ? 'Wybierz ten artykuł' : 'Dodaj do tabeli') : 'Artykuł bez EAN-u'}
+                        onClick={() => {
+                          if (!onPick) setAdding(item)
+                          else if (item.itm8 !== null) onPick({ ...item, itm8: item.itm8 })
+                        }}
+                        disabled={!item.ean || (onPick !== undefined && item.itm8 === null)}
+                        aria-label={`${onPick ? 'Wybierz' : 'Dodaj do tabeli'}: ${item.name ?? item.ean}`}
+                        title={
+                          !item.ean
+                            ? 'Artykuł bez EAN-u'
+                            : !onPick
+                              ? 'Dodaj do tabeli'
+                              : item.itm8 === null
+                                ? 'Artykuł czeka na raport kartoteki'
+                                : 'Wybierz ten artykuł'
+                        }
                       >
                         <PlusIcon />
                       </Button>

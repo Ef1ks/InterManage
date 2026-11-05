@@ -1,5 +1,6 @@
 package com.intermanage.backend.supplier.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +27,10 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
             select count(s) > 0 from Supplier s where s.store.id = :storeId and s.code is null
             and lower(s.name) = lower(:name) and (:exceptId is null or s.id <> :exceptId)""")
     boolean existsManualByName(UUID storeId, String name, UUID exceptId);
+
+    /** Kody dostawców sklepu o podanych NIP-ach; dodani ręcznie nie mają kodu. */
+    @Query("select s.code from Supplier s where s.store.id = :storeId and s.code is not null and s.nip in :nips")
+    List<String> findCodesByNips(UUID storeId, Collection<String> nips);
 
     long countByStoreId(UUID storeId);
 

@@ -182,6 +182,21 @@ class OverpaymentIntegrationTests {
     }
 
     @Test
+    void skipsKolporter() throws Exception {
+        jdbc.update("""
+                insert into suppliers (store_id, code, name, nip)
+                values (?::uuid, '52', 'KOLPORTER SP. Z O.O.', '9591452482')""", store);
+        regularDeliveries(OVERPAID);
+        delivery(OVERPAID, 5, "10", "120.00");
+        regularDeliveries(WITHIN_THRESHOLD);
+        delivery(WITHIN_THRESHOLD, 5, "10", "120.00");
+        jdbc.update("update document_lines set supplier_code = '52' where itm8 = ?", WITHIN_THRESHOLD);
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(OVERPAID)));
+    }
+
+    @Test
     void emptyStoreHasEmptyReport() throws Exception {
         mvc.perform(get(url()).cookie(owner))
                 .andExpect(status().isOk())

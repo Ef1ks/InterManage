@@ -31,6 +31,7 @@ import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.document.repository.DocumentLineRepository.DeliveryHistory;
 import com.intermanage.backend.document.repository.DocumentRepository;
 import com.intermanage.backend.document.service.DeliveryCorrectionService;
+import com.intermanage.backend.pricecheck.component.ExcludedSuppliers;
 import com.intermanage.backend.pricecheck.dto.OverpaymentReport;
 import com.intermanage.backend.pricecheck.dto.OverpaymentReport.Delivery;
 import com.intermanage.backend.pricecheck.dto.OverpaymentReport.Line;
@@ -53,7 +54,8 @@ import com.intermanage.backend.sales.repository.SaleRepository;
  * tańszych, przy zwykłej ilości 3%). Ceny odniesienia są z bonu, sprzed korekt, bo baza oddaje promocję gazetkową
  * korektą i cena po niej nie jest ceną, po której da się kupić. Sprawdzane przyjęcie liczy się po korektach: korekta od
  * dostawcy zdejmuje przepłacenie z raportu. Mięsa, drobiu, garmażerki, owoców i warzyw raport nie sprawdza, bo wahania
- * cen są tam normalne ({@link #SKIPPED_NOMENCLATURES}), a papierosów, bo kupuje się je tylko z jednego miejsca.
+ * cen są tam normalne ({@link #SKIPPED_NOMENCLATURES}), a papierosów, bo kupuje się je tylko z jednego miejsca. Pomija
+ * też dostawców z {@link ExcludedSuppliers}.
  */
 @Service
 public class OverpaymentService {
@@ -84,10 +86,12 @@ public class OverpaymentService {
     private final PriceCheckReviewRepository reviews;
     private final PriceCheckMapper mapper;
     private final SaleRepository sales;
+    private final ExcludedSuppliers excludedSuppliers;
 
     public OverpaymentService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
-            PriceCheckReviewRepository reviews, PriceCheckMapper mapper, SaleRepository sales) {
+            PriceCheckReviewRepository reviews, PriceCheckMapper mapper, SaleRepository sales,
+            ExcludedSuppliers excludedSuppliers) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -95,6 +99,7 @@ public class OverpaymentService {
         this.reviews = reviews;
         this.mapper = mapper;
         this.sales = sales;
+        this.excludedSuppliers = excludedSuppliers;
     }
 
     @Transactional(readOnly = true)
@@ -116,7 +121,7 @@ public class OverpaymentService {
         List<DeliveryHistory> history = documentLines.findDeliveryHistory(storeId, oldest.minusDays(HISTORY_DAYS),
                 start, until, reviewed.stream().map(UUID::toString).toArray(String[]::new), SYMBOLIC_PRICE,
                 THRESHOLD_FACTOR);
-        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed);
+        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed, excludedSuppliers.codes(storeId));
 
         Set<UUID> ids = new LinkedHashSet<>(linesByDelivery.keySet());
         ids.addAll(reviewed);
@@ -147,9 +152,10 @@ public class OverpaymentService {
 
     /** Przepłacone artykuły po przyjęciach, od największej nadpłaty. Historia od najstarszej dostawy. */
     private static Map<UUID, List<Line>> overpaid(List<DeliveryHistory> history, LocalDateTime start,
-            Set<UUID> reviewed) {
+            Set<UUID> reviewed, Set<String> excluded) {
         Map<String, List<DeliveryHistory>> byArticle = history.stream()
                 .filter(delivery -> !skipped(delivery.getNomenclatureCode()))
+                .filter(delivery -> !excluded.contains(delivery.getSupplierCode()))
                 .collect(Collectors.groupingBy(DeliveryHistory::getItm8, LinkedHashMap::new, Collectors.toList()));
         Map<UUID, List<Line>> lines = new HashMap<>();
         for (List<DeliveryHistory> article : byArticle.values()) {

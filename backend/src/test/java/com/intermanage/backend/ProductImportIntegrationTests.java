@@ -159,12 +159,31 @@ class ProductImportIntegrationTests {
                 .andExpect(jsonPath("$[0].salePrice").value(2.99))
                 .andExpect(jsonPath("$[0].purchasePrice").value(1.5));
 
+        // Lista towarów pokazuje szkic bez ITM8; słowo, które do niego nie pasuje, i filtr ITM8 go nie znajdują.
+        String catalogUrl = "/api/stores/" + storeId + "/data-entry/catalog";
+        mvc.perform(get(catalogUrl).param("name", "nowy 1").param("ean", createdEan.replaceFirst("^0+", "")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].draft").value(true))
+                .andExpect(jsonPath("$.items[0].itm8").doesNotExist())
+                .andExpect(jsonPath("$.items[0].ean").value(createdEan.replaceFirst("^0+", "")))
+                .andExpect(jsonPath("$.items[0].salePrice").value(2.99))
+                .andExpect(jsonPath("$.items[0].lastDelivery").doesNotExist());
+        mvc.perform(get(catalogUrl).param("query", "nowy brak").cookie(owner))
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get(catalogUrl).param("name", "nowy 1").param("itm8", created).cookie(owner))
+                .andExpect(jsonPath("$.items.length()").value(0));
+
         // Kolejny raport: nowy artykuł jest w kartotece, drugiego program sklepu nie założył.
         upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"),
                 product(created, "2.99", "0", "NOWY 1")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.draftsMatchedCount").value(1))
                 .andExpect(jsonPath("$.draftsRemovedCount").value(1));
+        mvc.perform(get(catalogUrl).param("name", "nowy 1").param("ean", createdEan.replaceFirst("^0+", "")).cookie(owner))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].draft").value(false))
+                .andExpect(jsonPath("$.items[0].itm8").value(created));
         assertThat(jdbc.queryForObject("""
                 select p.itm8 from product_drafts d join products p on p.id = d.matched_product_id
                 where d.store_id = ?::uuid and d.ean = ? and d.matched_at is not null""", String.class, storeId,
@@ -454,6 +473,53 @@ class ProductImportIntegrationTests {
         mvc.perform(get(priceFilesUrl()).cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.latest[0].fileName").value(file.getOriginalFilename()));
+    }
+
+    @Test
+    void promotionsAreKeptFromFilesOlderThanTheCatalogAndReadAgainFromEarlierImports() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        String b = itm8();
+        LocalDateTime reportDate = nextReportDate();
+        upload(owner, report(reportDate, product(a, "8.99", "1", "A"), product(b, "5.99", "1", "B")))
+                .andExpect(status().isCreated());
+
+        // Plik starszy niż kartoteka nie zmienia ceny, ale promocja zostaje.
+        uploadPriceFiles(owner, priceFile(reportDate.minusDays(3),
+                priceLine(a, "59" + a.substring(2), "7.99", "9.49", "10126", "151026")))
+                .andExpect(jsonPath("$.imported[0].olderCount").value(1));
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, a))
+                .isEqualTo(new BigDecimal("8.99"));
+        assertThat(jdbc.queryForMap("select * from till_promotions where itm8 = ?", a))
+                .containsEntry("promo_from", java.sql.Date.valueOf("2026-01-01"))
+                .containsEntry("promo_to", java.sql.Date.valueOf("2026-10-15"))
+                .containsEntry("promo_price", new BigDecimal("7.99"))
+                .containsEntry("regular_price", new BigDecimal("9.49"));
+
+        // Plik wczytany przed zapisywaniem promocji: serwer prosi o niego jeszcze raz i bierze tylko promocje.
+        MockMultipartFile earlier = priceFile(reportDate.plusMinutes(10),
+                priceLine(b, "59" + b.substring(2), "3.99", "6.49", "10126", "151026"));
+        uploadPriceFiles(owner, earlier);
+        jdbc.update("delete from till_promotions where itm8 = ?", b);
+        jdbc.update("update products set sale_price = 5.99 where itm8 = ?", b);
+        jdbc.update("update price_file_imports set promotions_read = false where file_name = ?",
+                earlier.getOriginalFilename());
+        mvc.perform(post(priceFilesUrl() + "/pending").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fileNames\":[\"" + earlier.getOriginalFilename() + "\"]}"))
+                .andExpect(jsonPath("$.fileNames.length()").value(1));
+
+        uploadPriceFiles(owner, earlier)
+                .andExpect(jsonPath("$.imported.length()").value(0))
+                .andExpect(jsonPath("$.skipped[0]").value(earlier.getOriginalFilename()));
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
+                .isEqualTo(new BigDecimal("5.99"));
+        assertThat(jdbc.queryForObject("select regular_price from till_promotions where itm8 = ?", BigDecimal.class, b))
+                .isEqualTo(new BigDecimal("6.49"));
+        mvc.perform(post(priceFilesUrl() + "/pending").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fileNames\":[\"" + earlier.getOriginalFilename() + "\"]}"))
+                .andExpect(jsonPath("$.fileNames.length()").value(0));
     }
 
     @Test

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -27,9 +28,11 @@ type DraftResult = { createdIds: string[]; knownCount: number; withoutEanCount: 
  * Pytanie po zapisie plików CADBEZP z nowymi artykułami (sama zmiana artykułów z kartoteki o nic nie pyta), czy
  * wprowadzono je w programie sklepu. „Tak” zapisuje je jako szkice w bazie: kolejny raport kartoteki dopisze resztę
  * danych (ITM8, stan…), a artykuł, którego w nim nie będzie, usunie. Zwraca `ask` do wywołania po zapisie i okno do
- * wyrenderowania.
+ * wyrenderowania. Po dodaniu i po „Cofnij” odświeża zapytania, a `onChanged` dostaje EAN-y z plików, żeby tabela bez
+ * zapytania o dokument (wprowadzanie danych) mogła zmienić swoje wiersze.
  */
-export function useProductDraftConfirm(storeId: string) {
+export function useProductDraftConfirm(storeId: string, onChanged?: (eans: string[]) => void) {
+  const queryClient = useQueryClient()
   const [files, setFiles] = useState<SavedProductFile[] | null>(null)
   const [confirming, setConfirming] = useState(false)
   const path = `/stores/${storeId}/data-entry/product-drafts`
@@ -49,6 +52,12 @@ export function useProductDraftConfirm(storeId: string) {
         )
       }
       const ids = results.flatMap((result) => result.createdIds)
+      const eans = files.flatMap((file) => file.payload.rows.flatMap((row) => row.ean ?? []))
+      const changed = () => {
+        void queryClient.invalidateQueries()
+        onChanged?.(eans)
+      }
+      changed()
       const known = results.reduce((sum, result) => sum + result.knownCount, 0)
       setFiles(null)
       toast.success(
@@ -69,7 +78,10 @@ export function useProductDraftConfirm(storeId: string) {
                   label: 'Cofnij',
                   onClick: () =>
                     void api(`${path}/undo`, { method: 'POST', json: { ids } })
-                      .then(() => toast('Cofnięto dodanie artykułów'))
+                      .then(() => {
+                        changed()
+                        toast('Cofnięto dodanie artykułów')
+                      })
                       .catch((error) =>
                         toast.error(error instanceof ApiError ? error.message : 'Nie udało się cofnąć'),
                       ),

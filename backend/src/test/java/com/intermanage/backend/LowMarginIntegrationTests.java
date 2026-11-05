@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -148,6 +149,60 @@ class LowMarginIntegrationTests {
     }
 
     @Test
+    void usesRegularPriceFromTillFilesForManualPromotions() throws Exception {
+        requiredMargin("57", "30");
+        // Promocji założonej ręcznie nie ma na liście ani w gazetce, a cena 11 zł to ponad 85% ceny ze sprzedaży.
+        tillPromotion(LISTED, "15.00", "11.00");
+        monthPrice(LISTED, 12.5);
+        delivery(LISTED, 5, "10", "100.00", "11.00", "570101");
+        // Zwykła cena z kasy też jest za niska.
+        tillPromotion(LISTED_LOW, "12.00", "11.00");
+        delivery(LISTED_LOW, 5, "10", "100.00", "11.00", "570101");
+        // Promocja skończyła się przed przyjęciem, więc liczy się cena z dokumentu.
+        jdbc.update("""
+                insert into till_promotions (store_id, itm8, promo_from, promo_to, promo_price, regular_price, file_time)
+                values (?::uuid, ?, ?::date, ?::date, 11.00, 15.00, now())""",
+                store, SMALL_DROP, today.minusDays(20), today.minusDays(10));
+        delivery(SMALL_DROP, 5, "10", "100.00", "11.00", "570101");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(LISTED_LOW, SMALL_DROP)))
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED_LOW
+                        + "')].lines[0].promotion").value("TILL"))
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED_LOW
+                        + "')].lines[0].salePrice").value(12.0));
+    }
+
+    @Test
+    void suppliersWithoutRequiredMarginAreLeftOutUntilRemovedFromTheList() throws Exception {
+        requiredMargin("57", "30");
+        jdbc.update("insert into suppliers (store_id, code, name) values (?::uuid, '100', 'Dostawca 100')", store);
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
+
+        mvc.perform(put(url() + "/excluded-suppliers").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[\"100\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.excludedSuppliers[0].code").value("100"))
+                .andExpect(jsonPath("$.excludedSuppliers[0].name").value("Dostawca 100"))
+                .andExpect(jsonPath("$.deliveries", hasSize(0)));
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.suppliers[0].code").value("100"))
+                .andExpect(jsonPath("$.deliveries", hasSize(0)));
+
+        mvc.perform(put(url() + "/excluded-suppliers").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[]}"))
+                .andExpect(jsonPath("$.excludedSuppliers", hasSize(0)))
+                .andExpect(jsonPath("$.deliveries", hasSize(1)));
+        assertThat(jdbc.queryForObject("""
+                select count(*) from low_margin_excluded_suppliers where store_id = ?::uuid and removed_at is not null""",
+                Integer.class, store)).isEqualTo(1);
+
+        mvc.perform(put(url() + "/excluded-suppliers").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"supplierCodes\":[\"999\"]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void mostDetailedRequiredMarginWinsAndCountsNetOfVat() throws Exception {
         requiredMargin("57", "30");
         requiredMargin("5701", "10");
@@ -192,6 +247,20 @@ class LowMarginIntegrationTests {
     }
 
     @Test
+    void skipsKolporter() throws Exception {
+        requiredMargin("57", "30");
+        jdbc.update("""
+                insert into suppliers (store_id, code, name, nip)
+                values (?::uuid, '52', 'KOLPORTER SP. Z O.O.', '9591452482')""", store);
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
+        delivery(ABOVE_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
+        jdbc.update("update document_lines set supplier_code = '52' where itm8 = ?", ABOVE_THRESHOLD);
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD)));
+    }
+
+    @Test
     void storeWithoutRequiredMarginsHasEmptyReport() throws Exception {
         delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
 
@@ -232,6 +301,13 @@ class LowMarginIntegrationTests {
                     first_import_id, last_import_id)
                 values (?::uuid, ?, 'Promocja', ?::date, ?::date, ?::numeric, ?::numeric, ?::uuid, ?::uuid)""",
                 store, itm8, today.minusDays(10), today.plusDays(10), regular, promo, importId, importId);
+    }
+
+    private void tillPromotion(String itm8, String regular, String promo) {
+        jdbc.update("""
+                insert into till_promotions (store_id, itm8, promo_from, promo_to, promo_price, regular_price, file_time)
+                values (?::uuid, ?, ?::date, ?::date, ?::numeric, ?::numeric, now())""",
+                store, itm8, today.minusDays(10), today.plusDays(10), promo, regular);
     }
 
     /** Cena zwykła ze sprzedaży w miesiącu przyjęcia. */

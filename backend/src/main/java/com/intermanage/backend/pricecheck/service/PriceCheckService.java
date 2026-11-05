@@ -36,6 +36,7 @@ import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.document.repository.DocumentLineRepository.SupplierPrice;
 import com.intermanage.backend.document.repository.DocumentRepository;
 import com.intermanage.backend.document.service.DeliveryCorrectionService;
+import com.intermanage.backend.pricecheck.component.ExcludedSuppliers;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReport;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReport.Delivery;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReport.Line;
@@ -103,12 +104,14 @@ public class PriceCheckService {
     private final AppUserRepository users;
     private final PriceCheckMapper mapper;
     private final SaleRepository sales;
+    private final ExcludedSuppliers excludedSuppliers;
 
     public PriceCheckService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             ProductRepository products, CadencierImportRepository cadencierImports,
             IncidentImportRepository incidents, PriceCheckSettingsRepository settings, PriceCheckReviewRepository reviews, StoreRepository stores,
-            AppUserRepository users, PriceCheckMapper mapper, SaleRepository sales) {
+            AppUserRepository users, PriceCheckMapper mapper, SaleRepository sales,
+            ExcludedSuppliers excludedSuppliers) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -122,6 +125,7 @@ public class PriceCheckService {
         this.users = users;
         this.mapper = mapper;
         this.sales = sales;
+        this.excludedSuppliers = excludedSuppliers;
     }
 
     /**
@@ -137,6 +141,7 @@ public class PriceCheckService {
                 .orElse(null);
         LocalDateTime start = from.atStartOfDay();
         LocalDateTime end = to.plusDays(1).atStartOfDay();
+        Set<String> excluded = excludedSuppliers.codes(storeId);
 
         CadencierImport cadencierImport = cadencierImports.findNewest(storeId).orElse(null);
         Cadencier cadencier = cadencierImport == null ? Cadencier.EMPTY
@@ -151,7 +156,7 @@ public class PriceCheckService {
         List<Document> deliveries = ids.isEmpty() ? List.of() : documents.findWithLines(storeId, ids).stream()
                 .filter(delivery -> delivery.getType() == DocumentType.PZ)
                 .filter(delivery -> reviewsByDelivery.containsKey(delivery.getId())
-                        || hasCadencierLineFromOtherSupplier(delivery, cadencier))
+                        || hasCadencierLineFromOtherSupplier(delivery, cadencier, excluded))
                 .toList();
         LocalDateTime oldest = deliveries.stream().map(Document::getDocumentDate).min(Comparator.naturalOrder())
                 .orElse(start);
@@ -201,7 +206,7 @@ public class PriceCheckService {
             List<Document> ofDelivery = correctionsByDelivery.get(delivery.getId());
             CorrectedDelivery corrected = correctedByDelivery.get(delivery.getId());
             List<Line> lines = flaggedLines(delivery, corrected, minMargin, cadencier, cadencierPrices, basePrices,
-                    incidentIndex);
+                    incidentIndex, excluded);
             List<PriceCheckReview> history = reviewsByDelivery.getOrDefault(delivery.getId(), List.of());
             if (lines.isEmpty() && history.isEmpty()) {
                 continue;
@@ -235,9 +240,11 @@ public class PriceCheckService {
     }
 
     /** Szybki odsiew przed liczeniem korekt: czy w raporcie przyjęcia jest artykuł z cadencier od innego dostawcy. */
-    private static boolean hasCadencierLineFromOtherSupplier(Document delivery, Cadencier cadencier) {
+    private static boolean hasCadencierLineFromOtherSupplier(Document delivery, Cadencier cadencier,
+            Set<String> excluded) {
         return delivery.getLines().stream().anyMatch(line -> cadencier.itm8Of(line.getItm8(), line.getEan()) != null
-                && !BASE_SUPPLIER_CODES.contains(supplierOf(line, delivery)));
+                && !BASE_SUPPLIER_CODES.contains(supplierOf(line, delivery))
+                && !excluded.contains(supplierOf(line, delivery)));
     }
 
     /** Rejon z kodu nomenklatury linii ("570101" albo "57 01 01" -> "57"). */
@@ -357,7 +364,7 @@ public class PriceCheckService {
      */
     private static List<Line> flaggedLines(Document delivery, CorrectedDelivery corrected, BigDecimal minMargin,
             Cadencier cadencier, Map<String, BigDecimal> cadencierPrices, BasePrices basePrices,
-            Incidents incidents) {
+            Incidents incidents, Set<String> excluded) {
         Map<String, String> supplierByItm8 = new HashMap<>();
         for (DocumentLine line : delivery.getLines()) {
             if (line.getSupplierCode() != null) {
@@ -369,7 +376,8 @@ public class PriceCheckService {
             String supplier = supplierByItm8.getOrDefault(line.itm8(), delivery.getSupplierCode());
             BigDecimal quantity = line.quantity();
             String cadencierItm8 = cadencier.itm8Of(line.itm8(), line.ean());
-            if (cadencierItm8 == null || BASE_SUPPLIER_CODES.contains(supplier) || quantity == null
+            if (cadencierItm8 == null || BASE_SUPPLIER_CODES.contains(supplier) || excluded.contains(supplier)
+                    || quantity == null
                     || quantity.signum() <= 0 || line.purchasePrice() == null) {
                 continue;
             }

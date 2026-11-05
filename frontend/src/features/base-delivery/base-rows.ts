@@ -76,6 +76,18 @@ export function rowFromBaseLine(line: BaseDeliveryLine): DataEntryRow {
   return { ...withCatalogProduct(row, line.product), ean, eanChecked: ean }
 }
 
+/**
+ * Wiersz z tabeli po odświeżeniu dokumentu: artykuł, który od wczytania tabeli trafił do szkiców albo kartoteki (albo
+ * przestał w nich być po cofnięciu), zmienia wiersz jak przy wczytaniu. Ilość, cena zakupu i VAT zostają. Wiersz
+ * z EAN-em zmienionym w tabeli nie należy już do linii dokumentu.
+ */
+export function withDeliveryProduct(row: DataEntryRow, line: BaseDeliveryLine | undefined): DataEntryRow {
+  if (!line || row.known === (line.product !== null)) return row
+  const ean = line.product?.catalogEan ?? line.ean ?? ''
+  if (row.ean.replace(/^0+/, '') !== ean.replace(/^0+/, '')) return row
+  return withCatalogProduct(row, line.product)
+}
+
 /** Wiersze widoku: linie wybranych nośników albo całego dokumentu z rejonu weryfikacji (warzywa, mięso). */
 export function viewRows(delivery: BaseDelivery, view: BaseDeliveryView, carriers: string[]) {
   return viewLines(delivery, view, carriers).map(rowFromBaseLine)

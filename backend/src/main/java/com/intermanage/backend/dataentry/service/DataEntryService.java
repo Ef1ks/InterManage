@@ -324,16 +324,18 @@ public class DataEntryService {
                 byCode ? new String[0] : likePatterns(nomenclature, true), request.purchaseFrom(), request.purchaseTo(),
                 request.saleFrom(), request.saleTo(), sort, direction, CATALOG_PAGE_SIZE + 1, offset);
         List<DataEntryCatalogRepository.CatalogListItem> page = found.stream().limit(CATALOG_PAGE_SIZE).toList();
-        Map<String, CatalogListItem.LastDelivery> deliveries = page.isEmpty() ? Map.of()
-                : catalog.findLastDeliveries(storeId,
-                        page.stream().map(DataEntryCatalogRepository.CatalogListItem::getItm8).toList())
+        List<String> itm8s = page.stream().map(DataEntryCatalogRepository.CatalogListItem::getItm8)
+                .filter(Objects::nonNull).toList();
+        Map<String, CatalogListItem.LastDelivery> deliveries = itm8s.isEmpty() ? Map.of()
+                : catalog.findLastDeliveries(storeId, itm8s)
                         .stream().collect(Collectors.toMap(DataEntryCatalogRepository.LastDelivery::getItm8,
                                 row -> new CatalogListItem.LastDelivery(row.getSupplierCode(), row.getSupplierName(),
                                         row.getDocumentDate().toLocalDate())));
         List<CatalogListItem> items = page.stream()
                 .map(row -> new CatalogListItem(row.getItm8(), row.getEan(), row.getName(), row.getBrand(),
                         row.getSupplier(), row.getSubfamilyCode(), row.getSubfamilyName(), row.getPurchasePrice(),
-                        row.getSalePrice(), row.getStock(), row.getRotation(), deliveries.get(row.getItm8())))
+                        row.getSalePrice(), row.getStock(), row.getRotation(),
+                        row.getItm8() == null ? null : deliveries.get(row.getItm8()), row.getDraft()))
                 .toList();
         return new CatalogListPage(items, found.size() > CATALOG_PAGE_SIZE);
     }

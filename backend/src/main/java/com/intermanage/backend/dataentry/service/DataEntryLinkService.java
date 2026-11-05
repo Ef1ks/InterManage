@@ -69,7 +69,7 @@ public class DataEntryLinkService {
                         Math.max(1, Math.min(2, prefixes.length)), digits(sellerNip), SUGGESTIONS).stream()
                 .map(row -> new CatalogListItem(row.getItm8(), row.getEan(), row.getName(), row.getBrand(),
                         row.getSupplier(), row.getSubfamilyCode(), row.getSubfamilyName(), row.getPurchasePrice(),
-                        row.getSalePrice(), row.getStock(), row.getRotation(), null))
+                        row.getSalePrice(), row.getStock(), row.getRotation(), null, false))
                 .toList();
     }
 

@@ -304,6 +304,33 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[1].lines[0].cadencierItm8").value(CADENCIER_ITEM));
     }
 
+    @Test
+    void skipsKolporter() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String storeNumber = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class, storeId);
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Warsaw"));
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', ?::timestamp, ?::date, ?::date, 2, 2, 2, 0, 0) returning id""",
+                String.class, storeId, today + " 08:00", today.minusDays(60), today);
+        jdbc.update("""
+                insert into suppliers (store_id, code, name, nip)
+                values (?::uuid, '52', 'KOLPORTER SP. Z O.O.', '9591452482')""", storeId);
+        String kolporter = insertDocument(storeId, documentImport, "PZ", "200100", today.minusDays(5), "52");
+        insertLine(kolporter, 1, CADENCIER_ITEM, "52", "10", "35.00", "37.00");
+        String other = insertDocument(storeId, documentImport, "PZ", "200200", today.minusDays(5), "200");
+        insertLine(other, 1, CADENCIER_ITEM, "200", "10", "35.00", "37.00");
+
+        uploadCadencier(storeId, owner, storeNumber, "28/10/2026  15:02:59", CADENCIER_ITEM)
+                .andExpect(status().isCreated());
+
+        mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.deliveries.length()").value(1))
+                .andExpect(jsonPath("$.deliveries[0].id").value(other));
+    }
+
     private static String url(String storeId) {
         return "/api/stores/" + storeId + "/reports/price-check";
     }

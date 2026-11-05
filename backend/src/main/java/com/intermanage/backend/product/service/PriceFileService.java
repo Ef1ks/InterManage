@@ -141,12 +141,20 @@ public class PriceFileService {
         // Ta sama blokada co import kartoteki: oba zmieniają ceny, a kilka kart przeglądarki może wysłać ten sam plik.
         products.lockForImport(ProductImportService.IMPORT_LOCK_PREFIX + storeId);
         Set<String> already = new HashSet<>(imports.findImportedNames(storeId, parsed.keySet()));
+        Map<String, PriceFileImport> withoutPromotions = imports.findWithoutPromotions(storeId, parsed.keySet())
+                .stream().collect(Collectors.toMap(PriceFileImport::getFileName, file -> file));
         AppUser user = userId != null ? users.getReferenceById(userId) : null;
 
         List<PriceFileImportResponse> imported = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
         for (String name : parsed.keySet().stream().sorted(byFileTime()).toList()) {
             if (already.contains(name)) {
+                skipped.add(name);
+                continue;
+            }
+            PriceFileImport earlier = withoutPromotions.get(name);
+            if (earlier != null) {
+                readPromotions(earlier, parsed.get(name));
                 skipped.add(name);
                 continue;
             }
@@ -162,10 +170,8 @@ public class PriceFileService {
     private PriceFileImport apply(Store store, String name, ParsedPriceFile file, AppUser user) {
         PriceFileImport priceFile = imports.save(new PriceFileImport(store, name, file.fileTime(), user,
                 file.totalLines()));
-        Map<String, List<PriceFileLine>> byItm8 = file.lines().stream()
-                .collect(Collectors.groupingBy(PriceFileLine::itm8, LinkedHashMap::new, Collectors.toList()));
-        Map<String, Product> catalog = products.findByStoreIdAndItm8In(store.getId(), byItm8.keySet()).stream()
-                .collect(Collectors.toMap(Product::getItm8, product -> product));
+        Map<String, List<PriceFileLine>> byItm8 = linesByItm8(file);
+        Map<String, Product> catalog = catalog(store.getId(), byItm8);
         int updated = 0;
         int older = 0;
         int unknown = 0;
@@ -191,7 +197,49 @@ public class PriceFileService {
         }
         priceChanges.saveAll(changes);
         priceFile.recordResult(byItm8.size(), updated, older, unknown);
+        savePromotions(store.getId(), file.fileTime(), byItm8, catalog);
         return priceFile;
+    }
+
+    /** Plik wczytany, zanim serwer zapisywał promocje: tylko promocje, ceny zostają. */
+    private void readPromotions(PriceFileImport priceFile, ParsedPriceFile file) {
+        UUID storeId = priceFile.getStore().getId();
+        Map<String, List<PriceFileLine>> byItm8 = linesByItm8(file);
+        savePromotions(storeId, file.fileTime(), byItm8, catalog(storeId, byItm8));
+        priceFile.markPromotionsRead();
+    }
+
+    private static Map<String, List<PriceFileLine>> linesByItm8(ParsedPriceFile file) {
+        return file.lines().stream()
+                .collect(Collectors.groupingBy(PriceFileLine::itm8, LinkedHashMap::new, Collectors.toList()));
+    }
+
+    private Map<String, Product> catalog(UUID storeId, Map<String, List<PriceFileLine>> byItm8) {
+        return products.findByStoreIdAndItm8In(storeId, byItm8.keySet()).stream()
+                .collect(Collectors.toMap(Product::getItm8, product -> product));
+    }
+
+    /**
+     * Promocje z pliku, także starszego niż kartoteka: bieżąca promocja artykułu jest w {@code products}, a raporty
+     * potrzebują tych z dnia dokumentu. Plik bez daty początku promocji zaczyna ją w dniu pliku.
+     */
+    private void savePromotions(UUID storeId, LocalDateTime fileTime, Map<String, List<PriceFileLine>> byItm8,
+            Map<String, Product> catalog) {
+        List<PriceFileLine> promotions = byItm8.entrySet().stream()
+                .filter(entry -> catalog.containsKey(entry.getKey()))
+                .map(entry -> articleLine(catalog.get(entry.getKey()), entry.getValue()))
+                .filter(line -> line.promoPrice() != null)
+                .toList();
+        if (promotions.isEmpty()) {
+            return;
+        }
+        imports.mergeTillPromotions(storeId, fileTime,
+                promotions.stream().map(PriceFileLine::itm8).toArray(String[]::new),
+                promotions.stream().map(line -> line.promoFrom() != null ? line.promoFrom() : fileTime.toLocalDate())
+                        .toArray(LocalDate[]::new),
+                promotions.stream().map(PriceFileLine::promoTo).toArray(LocalDate[]::new),
+                promotions.stream().map(PriceFileLine::promoPrice).toArray(BigDecimal[]::new),
+                promotions.stream().map(PriceFileLine::salePrice).toArray(BigDecimal[]::new));
     }
 
     /** Linia głównego EAN-u artykułu, a bez niej kod z najwyższą ceną na kasie. */

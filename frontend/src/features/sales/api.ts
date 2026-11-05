@@ -408,6 +408,21 @@ export function useLowMargins(storeId: string) {
   })
 }
 
+/** Dostawcy, których nie dotyczy marża wymagana; serwer zwraca raport po zmianie, więc podmienia go bez unieważniania. */
+export function useSetLowMarginExcludedSuppliers(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (supplierCodes: string[]) =>
+      api<LowMarginReport>(`${reportsPath(storeId)}/low-margins/excluded-suppliers`, {
+        method: 'PUT',
+        json: { supplierCodes },
+      }),
+    onSuccess: (report) => queryClient.setQueryData([...reportsKey(storeId), 'low-margins'], report),
+    scope: { id: `low-margin-excluded-suppliers-${storeId}` },
+    meta: { invalidates: false },
+  })
+}
+
 /** Skuteczność promocji kończących się w okresie (najwyżej 92 dni; liczy się kilka sekund). */
 export function usePromotionReport(storeId: string, range: DateRange, enabled: boolean) {
   return useQuery({

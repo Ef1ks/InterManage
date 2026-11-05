@@ -180,6 +180,9 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
         BigDecimal getStock();
 
         BigDecimal getRotation();
+
+        /** Tylko w liście towarów: oczekujący szkic artykułu. */
+        boolean getDraft();
     }
 
     /**
@@ -195,14 +198,25 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * początek kodu podrodziny, {@code nomenclatureName} wzorzec nazwy rejonu, rodziny albo podrodziny artykułu.
      * Ceny w przedziałach z granicami włącznie. Sortowanie po kolumnie {@code sort} (itm8, ean, name, brand,
      * nomenclature, purchase, sale, stock, rotation) w kierunku {@code direction} (asc/desc), puste na końcu, potem po nazwie;
-     * strona {@code limit}.
+     * strona {@code limit}. Razem z kartoteką oczekujące szkice artykułów z CADBEZP ({@code draft}, bez ITM8, stanu
+     * i rotacji), bo są już w programie sklepu; filtr ITM8 i dostawcy z przyjęć ich nie obejmuje.
      */
     @Query(value = """
             select p.itm8 as itm8, p.ean as ean, p.name as name, p.brand as brand, p.supplier as supplier,
                 p.subfamily_code as subfamilyCode, s.name as subfamilyName,
                 p.purchase_price as purchasePrice, p.sale_price as salePrice, p.stock as stock,
-                p.rotation as rotation
-            from products p
+                p.rotation as rotation, p.draft as draft
+            from (
+                select a.store_id, a.itm8, a.ean, a.name, a.brand, a.supplier, a.subfamily_code, a.region_code,
+                    a.family_code, a.purchase_price, a.sale_price, a.stock, a.rotation, false as draft
+                from products a
+                union all
+                select b.store_id, null, b.ean, b.name, b.brand, b.supplier_name, b.subfamily_code,
+                    left(b.subfamily_code, 2), left(b.subfamily_code, 4), b.purchase_price, b.sale_price, null, null,
+                    true
+                from product_drafts b
+                where b.matched_at is null and b.removed_at is null
+            ) p
             left join nomenclatures s on s.store_id = p.store_id and s.code = p.subfamily_code
             where p.store_id = :storeId
                 and not exists (
@@ -210,7 +224,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                         cast(:queryMultiCode as text[])) w(t, c, m)
                     where not (translate(upper(coalesce(p.name, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like w.t
                         or translate(upper(coalesce(p.brand, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like w.t
-                        or coalesce(p.ean, '') like w.c or p.itm8 like w.c
+                        or coalesce(p.ean, '') like w.c or coalesce(p.itm8, '') like w.c
                         or (w.m is not null and exists (
                             select 1 from product_codes pc
                             where pc.store_id = :storeId and pc.current and pc.itm8 = p.itm8 and pc.ean like w.m))))

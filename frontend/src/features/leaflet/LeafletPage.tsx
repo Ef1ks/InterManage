@@ -29,7 +29,7 @@ import { useCan } from '@/features/auth/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
-import type { DataEntryCatalogListItem, LeafletLine, StoreSummary } from '@/lib/types'
+import type { DataEntryCatalogArticle, LeafletLine, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { useLeaflet, useLeafletLink, useLeaflets, useUploadLeaflet } from './api'
@@ -223,7 +223,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
       onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się zmienić artykułu'),
     })
 
-  const pick = (line: LeafletLine, item: DataEntryCatalogListItem) => {
+  const pick = (line: LeafletLine, item: DataEntryCatalogArticle) => {
     setPicking(null)
     runLink({ type: 'link', ean: line.ean, itm8: item.itm8 }, (linkId) =>
       toast.success(`EAN ${line.ean} z gazetki: ${item.name ?? item.itm8}`, {

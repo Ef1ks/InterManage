@@ -59,6 +59,10 @@ public class PriceFileImport {
     @Column(name = "unknown_count", nullable = false)
     private int unknownCount;
 
+    /** {@code false}: plik wczytany, zanim serwer zapisywał promocje; przeglądarka wyśle go jeszcze raz. */
+    @Column(name = "promotions_read", nullable = false)
+    private boolean promotionsRead = true;
+
     protected PriceFileImport() {
     }
 
@@ -75,6 +79,10 @@ public class PriceFileImport {
         importedAt = Instant.now();
     }
 
+    public void markPromotionsRead() {
+        promotionsRead = true;
+    }
+
     public void recordResult(int articles, int updated, int older, int unknown) {
         this.articleCount = articles;
         this.updatedCount = updated;
@@ -84,6 +92,10 @@ public class PriceFileImport {
 
     public UUID getId() {
         return id;
+    }
+
+    public Store getStore() {
+        return store;
     }
 
     public String getFileName() {

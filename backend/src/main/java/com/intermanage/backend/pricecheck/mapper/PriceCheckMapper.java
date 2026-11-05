@@ -5,6 +5,9 @@ import org.mapstruct.Mapping;
 
 import com.intermanage.backend.pricecheck.dto.CadencierImportResponse;
 import com.intermanage.backend.pricecheck.dto.IncidentImportResponse;
+import com.intermanage.backend.pricecheck.dto.LowMarginReport;
+import com.intermanage.backend.pricecheck.entity.LowMarginExcludedSupplier;
+import com.intermanage.backend.supplier.entity.Supplier;
 import com.intermanage.backend.pricecheck.entity.IncidentImport;
 import com.intermanage.backend.pricecheck.dto.PriceCheckCategoryResponse;
 import com.intermanage.backend.pricecheck.entity.PriceCheckCategory;
@@ -27,6 +30,12 @@ public interface PriceCheckMapper {
     IncidentImportResponse toResponse(IncidentImport incidentImport);
 
     PriceCheckCategoryResponse toResponse(PriceCheckCategory category);
+
+    @Mapping(target = "code", source = "supplierCode")
+    @Mapping(target = "name", source = "supplierName")
+    LowMarginReport.Supplier toResponse(LowMarginExcludedSupplier supplier);
+
+    LowMarginReport.Supplier toResponse(Supplier supplier);
 
     /** {@code settings} pusty = sklep jeszcze nie ustawił minimalnej marży. */
     @Mapping(target = "updatedBy", source = "updatedBy.displayName")

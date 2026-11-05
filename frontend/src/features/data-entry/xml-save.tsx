@@ -27,13 +27,13 @@ type SavedFile = { fileName: string; downloaded: boolean }
  * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a gdy w pliku CADBEZP są nowe
  * artykuły, pytanie, czy je wprowadzono (`draftDialog` do wyrenderowania): „Tak” dodaje je do bazy.
  */
-export function useXmlSave(storeId: string) {
+export function useXmlSave(storeId: string, onDraftsChanged?: (eans: string[]) => void) {
   const [saving, setSaving] = useState(false)
   const [savingProducts, setSavingProducts] = useState(false)
   const queryClient = useQueryClient()
   const productFolder = useProductFileFolder(storeId)
   const protoFolder = useProtoFolder(storeId)
-  const drafts = useProductDraftConfirm(storeId)
+  const drafts = useProductDraftConfirm(storeId, onDraftsChanged)
 
   /** Foldery potrzebne do zapisu, których nie wybrano w tej przeglądarce (bez obsługi folderów: żadne). */
   const missingFolders = async (productFile: ProductFilePayload | null, priceControl: PriceControlPayload | null) => {

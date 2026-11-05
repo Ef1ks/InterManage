@@ -10,7 +10,8 @@ import java.util.UUID;
  * Za niskie marże z ostatnich {@code periodDays} dni (wg daty przyjęcia): przyjęcia PZ z artykułem, którego marża
  * z ceny katalogowej (bez promocji) jest o co najmniej {@code marginGap} punktów procentowych niższa niż marża wymagana
  * na jego nomenklaturze, oraz przyjęcia, które już mają status wyjaśniania. {@code marginsConfigured}: sklep ma
- * ustawioną marżę wymaganą.
+ * ustawioną marżę wymaganą. {@code excludedSuppliers}: dostawcy, których nie dotyczy marża, {@code suppliers}: lista do
+ * ich wyboru.
  */
 public record LowMarginReport(
         LocalDate from,
@@ -20,11 +21,17 @@ public record LowMarginReport(
         boolean marginsConfigured,
         LocalDate documentsCoveredUntil,
         LocalDateTime documentsReportGeneratedAt,
+        List<Supplier> excludedSuppliers,
+        List<Supplier> suppliers,
         List<Delivery> deliveries) {
 
     /** Skąd wiadomo, że w dniu przyjęcia trwała promocja. */
     public enum PromotionSource {
-        LIST, LEAFLET, SALES
+        LIST, TILL, LEAFLET, SALES
+    }
+
+    /** Dostawca z listy dostawców sklepu albo pomijany w raporcie. */
+    public record Supplier(String code, String name) {
     }
 
     /**

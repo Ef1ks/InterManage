@@ -71,6 +71,7 @@ export function ReviewedReportPage<D extends Delivery>({
   query: report,
   title,
   intro,
+  header,
   notice,
   linesLabel,
   excessLabel,
@@ -83,6 +84,8 @@ export function ReviewedReportPage<D extends Delivery>({
   query: UseQueryResult<Report<D>>
   title: string
   intro: ReactNode
+  /** Treść nad zakładkami, gdy raport jest już wczytany. */
+  header?: ReactNode
   /** Dodatkowe ostrzeżenie nad kafelkami. */
   notice?: ReactNode
   /** Podpis liczby artykułów w wierszu przyjęcia. */
@@ -175,6 +178,7 @@ export function ReviewedReportPage<D extends Delivery>({
         <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
       ) : (
         <>
+          {header}
           <CategoryTabs
             categories={categories}
             deliveries={filtered}
