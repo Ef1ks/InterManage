@@ -14,6 +14,7 @@ import { useCorrectOrder, useDeleteOrder, useMarkOrderRead, useOrder, useOrders 
 import { DeliveryDateDialog } from '@/features/deli-order/DeliveryDateDialog'
 import { FulfillOrderDialog } from '@/features/deli-order/FulfillOrderDialog'
 import { groupItems } from '@/features/deli-order/group-items'
+import { InsertOrderIntoTable } from '@/features/deli-order/InsertOrderIntoTable'
 import { mergeableGroups, MergeWithSiblings, ordersCount, useMergeWithUndo } from '@/features/deli-order/MergeOrders'
 import { OrderDownloads } from '@/features/deli-order/OrderDownloads'
 import { OrderMovementDocuments } from '@/features/deli-order/OrderMovementDocuments'
@@ -45,6 +46,7 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
   const incoming = order.formStore.id === storeId
   const sender = order.store.id === storeId
   const canEdit = useCan('DELI_ORDERS', 'EDIT')
+  const canUseTable = useCan('DATA_ENTRY', 'VIEW')
   const owner = useMe().data?.owner ?? false
   // Usunięcie działa po jednej stronie: "nasze" ukrywa zamówienie u nas, "ich" widzimy jako status.
   const deletedHere = (sender && order.storeDeletedAt) || (incoming && order.formStoreDeletedAt)
@@ -208,6 +210,14 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
                 Zapisz poprawki ({changed.length})
               </Button>
             )}
+            {canUseTable && (
+              <InsertOrderIntoTable
+                storeId={storeId}
+                order={order}
+                lines={parsed.map(({ item, value }) => ({ item, quantity: value ?? item.quantity }))}
+                disabled={hasErrors}
+              />
+            )}
             <Button size="xl" onClick={() => setFulfilling(true)}>
               <CheckCheckIcon />
               Potwierdź zrealizowanie
@@ -352,6 +362,11 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
               międzymagazynowego</strong>, na którym jedzie, kliknij{' '}
               <strong className="font-semibold text-foreground">Potwierdź zrealizowanie</strong> i wpisz wydane ilości
               (Enter przechodzi do następnego produktu). Plik PROTO6 zapisze się w wybranym folderze i program sklepu sam go wczyta.
+            </>,
+            <>
+              Z garmażem jedzie inny towar? Kliknij <strong className="font-semibold text-foreground">Wstaw do tabeli</strong>,
+              dopisz resztę we wprowadzaniu danych i wygeneruj protokół MM. Pasek nad tabelą zakończy zamówienie ilościami
+              z tabeli, a towary spoza zamówienia pominie.
             </>,
           ]}
         />

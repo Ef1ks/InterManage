@@ -137,7 +137,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
           <h2 className="text-xl font-semibold tracking-tight tabular-nums">
             {document.typeSingular} {document.number}
             <CopyButton value={document.number} label={`Kopiuj numer ${document.number}`} className="ml-1 align-middle" />
-            {document.correctable && (
+            {document.type === 'PZ' && (
               <span className="ml-2 text-base font-normal text-muted-foreground">
                 bon {bonNumber(document.number)}
                 <CopyButton

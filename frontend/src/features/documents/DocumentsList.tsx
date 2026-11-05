@@ -399,7 +399,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                             />
                           </span>
                           <GratisBadge document={document} />
-                          <CorrectionBadge document={document} />
+                          <CorrectionBadge document={document} type={upperType} />
                           <TransferTargetBadge document={document} />
                         </div>
                       </TableCell>

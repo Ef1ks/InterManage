@@ -555,6 +555,81 @@ class DocumentImportIntegrationTests {
         return null;
     }
 
+    @Test
+    void transferCorrectedByTransferWithPlusValues() throws Exception {
+        Cookie owner = login();
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(100_000, 999_999));
+        String store = createStore(number, "Sklep poprawek MM");
+        String wrong = "MM" + docNumber();
+        String other = "MM" + docNumber();
+        String fix = "MM" + docNumber();
+        String secondFix = "MM" + docNumber();
+        String itemA = "0000099042775";
+        String itemB = "0000099042776";
+
+        // Zwykły MM ma ilość na plus i zakup na minus; poprawa odwrotnie, często w podwójnej ilości (zła strona).
+        upload(owner, store, report(number,
+                withItm8(amounts(line("MM", wrong, "", 1, "48", "-24", "-1152")), itemA),
+                withItm8(amounts(line("MM", other, "", 1, "1", "-5", "-5")), itemB),
+                withItm8(amounts(correction(line("MM", fix, "", 1, "-96", "-24", "2304"))), itemA),
+                withSupplier(withItm8(amounts(correction(line("MM", secondFix, "", 1, "-2", "-5", "10"))), itemB),
+                        "108", "RADIX-BIS")))
+                .andExpect(status().isCreated());
+        String wrongId = id(store, "/mm", wrong);
+        String otherId = id(store, "/mm", other);
+        String fixId = id(store, "/mm", fix);
+        String secondFixId = id(store, "/mm", secondFix);
+
+        mvc.perform(get(url(store, "/mm/" + wrongId)).cookie(owner))
+                .andExpect(jsonPath("$.correctable").value(true))
+                .andExpect(jsonPath("$.attachableToDelivery").value(false));
+        mvc.perform(get(url(store, "/mm/" + fixId)).cookie(owner))
+                .andExpect(jsonPath("$.correctable").value(false))
+                .andExpect(jsonPath("$.attachableToDelivery").value(true));
+
+        // Podpowiedzi: same dokumenty na plus, najpierw ze wspólnymi artykułami, także od innego dostawcy.
+        mvc.perform(get(url(store, "/mm/" + wrongId + "/corrections/candidates")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].number").value(fix))
+                .andExpect(jsonPath("$[0].commonItems").value(1));
+        mvc.perform(get(url(store, "/mm/" + fixId + "/corrections/candidates")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].number").value(wrong));
+
+        // Dwa dokumenty na minus nie tworzą pary, inny dostawca nie przeszkadza.
+        mvc.perform(post(url(store, "/mm/" + wrongId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + otherId + "\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(url(store, "/mm/" + wrongId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + fixId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correctionTotals.purchaseValue").value(1152))
+                .andExpect(jsonPath("$.corrected.lines[0].quantity").value(-48))
+                .andExpect(jsonPath("$.corrected.lines[0].originalQuantity").value(48));
+        mvc.perform(post(url(store, "/mm/" + secondFixId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + wrongId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correctionOf.number").value(wrong));
+        mvc.perform(get(url(store, "/mm/" + wrongId)).cookie(owner))
+                .andExpect(jsonPath("$.corrections.length()").value(2))
+                .andExpect(jsonPath("$.corrected.lines.length()").value(2));
+
+        // Poprawa należy do jednego ruchu; wolne podpowiedzi nie pokazują już przypiętych.
+        mvc.perform(post(url(store, "/mm/" + otherId + "/corrections")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"documentId\":\"" + fixId + "\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(get(url(store, "/mm/" + otherId + "/corrections/candidates")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // Lista pokazuje wartości po korektach i poprawiany dokument; odpięcie wraca do stanu z raportu.
+        mvc.perform(get(url(store, "/mm")).cookie(owner))
+                .andExpect(jsonPath("$.documents[?(@.number == '" + wrong + "')].correctionTotals.count").value(2))
+                .andExpect(jsonPath("$.documents[?(@.number == '" + fix + "')].correctionOf.number").value(wrong));
+        mvc.perform(delete(url(store, "/mm/" + wrongId + "/corrections/" + fixId)).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.corrections.length()").value(1));
+    }
+
     /** Id dokumentu o numerze z listy typu. */
     private String id(String store, String typePath, String number) throws Exception {
         String json = mvc.perform(get(url(store, typePath)).param("query", number).cookie(login()))

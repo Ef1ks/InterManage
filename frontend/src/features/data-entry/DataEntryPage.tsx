@@ -101,6 +101,7 @@ import {
 import { nomenclatureNames, pricingOf } from './grid-values'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
+import { DeliOrderBanner } from './DeliOrderBanner'
 import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
@@ -196,7 +197,8 @@ const pieces = (count: number) =>
 function StoreDataEntry({ store }: { store: StoreSummary }) {
   const dispatch = useAppDispatch()
   const reduxStore = useStore<RootState>()
-  const { rows, invoice } = useAppSelector((state) => state.dataEntryDraft.drafts[store.id]) ?? EMPTY_DATA_ENTRY
+  const { rows, invoice, deliOrderId } =
+    useAppSelector((state) => state.dataEntryDraft.drafts[store.id]) ?? EMPTY_DATA_ENTRY
   // Najnowszy szkic prosto ze stanu: kilka zmian w jednym kliknięciu i odpowiedzi z API nie nadpisują się nawzajem.
   const currentDraft = useCallback(
     () => reduxStore.getState().dataEntryDraft.drafts[store.id] ?? EMPTY_DATA_ENTRY,
@@ -361,7 +363,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     }
     // Dostawca ze stałą ceną (Ustawienia sklepu): wczytane artykuły dostają ją od razu jako cenę sprzedaży.
     const fixedPrice = supplierPriceFor(documentSupplier(suppliers, nextInvoice)?.id)
-    setDraft({ invoice: nextInvoice, rows: [...base, ...withSupplierPrice(loaded, fixedPrice)] })
+    setDraft({
+      invoice: nextInvoice,
+      rows: [...base, ...withSupplierPrice(loaded, fixedPrice)],
+      deliOrderId: mode === 'append' ? currentDraft().deliOrderId : null,
+    })
     // Status "wczytana": faktura znika z listy do wczytania (także informacja dla innych sklepów firmy). Plik XML
     // z historii był już wczytany, gdy go zapisywano.
     if (data.invoiceId && !fromXml)
@@ -901,6 +907,19 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     })
   }
 
+  // ---------- zamówienie garmażu wstawione do tabeli
+
+  const forgetDeliOrder = () => setDraft({ ...currentDraft(), deliOrderId: null }, { record: false })
+
+  const keepDeliOrderOpen = () => {
+    const { deliOrderId: orderId } = currentDraft()
+    setDraft({ ...currentDraft(), deliOrderId: null })
+    toast('Zamówienie zostaje otwarte', {
+      description: 'Wiersze zostają w tabeli.',
+      action: { label: 'Przywróć', onClick: () => setDraft({ ...currentDraft(), deliOrderId: orderId }) },
+    })
+  }
+
   // ---------- plik XML
 
   const buildPayload = (): ExportPayload => ({
@@ -1067,6 +1086,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   return (
     <>
+      {deliOrderId && (
+        <DeliOrderBanner
+          storeId={store.id}
+          orderId={deliOrderId}
+          rows={rows}
+          onFulfilled={forgetDeliOrder}
+          onDismiss={keepDeliOrderOpen}
+        />
+      )}
       <PageHeader
         title="Wprowadzanie danych"
         description={
@@ -1719,7 +1747,7 @@ function parseDraft(json: string | null): DataEntryDraft | null {
   try {
     const value = JSON.parse(json) as Partial<DataEntryDraft> | null
     if (!value || !Array.isArray(value.rows) || value.rows.length === 0) return null
-    return { invoice: value.invoice ?? null, rows: value.rows }
+    return { invoice: value.invoice ?? null, rows: value.rows, deliOrderId: value.deliOrderId ?? null }
   } catch {
     return null
   }

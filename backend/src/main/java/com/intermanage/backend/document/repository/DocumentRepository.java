@@ -109,6 +109,12 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     List<Document> findBySupplierWithLines(UUID storeId, Collection<DocumentType> types, String supplierCode,
             LocalDateTime from, LocalDateTime to);
 
+    /** Dokumenty typu z podanego okresu z liniami (podpowiedzi przy przypinaniu poprawek ruchów międzymagazynowych). */
+    @Query("""
+            select distinct d from Document d left join fetch d.lines
+            where d.store.id = :storeId and d.type = :type and d.documentDate between :from and :to""")
+    List<Document> findDatedWithLines(UUID storeId, DocumentType type, LocalDateTime from, LocalDateTime to);
+
     /** Suma wartości zakupu dokumentów jednego dnia. */
     interface DayValue {
         LocalDate getDay();

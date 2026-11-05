@@ -80,9 +80,8 @@ public interface DocumentMapper {
     @Mapping(target = "ksefInvoices", source = "ksefInvoices")
     @Mapping(target = "supplierDocumentNumberEditable",
             expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.PZ)")
-    @Mapping(target = "correctable",
-            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.PZ)")
-    @Mapping(target = "attachableToDelivery", expression = "java(document.getType().isDeliveryCorrection())")
+    @Mapping(target = "correctable", expression = "java(document.isCorrectable())")
+    @Mapping(target = "attachableToDelivery", expression = "java(document.isCorrection())")
     @Mapping(target = "corrections", source = "corrections")
     @Mapping(target = "corrected", source = "corrected")
     @Mapping(target = "correctionTotals", source = "correctionTotals")
@@ -97,7 +96,7 @@ public interface DocumentMapper {
     @Mapping(target = "manualInvoiceAllowed", expression = "java(document.getType().canHaveManualInvoice())")
     @Mapping(target = "manualInvoices", source = "manualInvoices")
     @Mapping(target = "transferTargetAllowed",
-            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.MM)")
+            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.MM && document.isCorrectable())")
     @Mapping(target = "transferTarget", source = "transferTarget")
     DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis,
             List<LinkedKsefInvoice> ksefInvoices, List<DeliveryCorrectionResponse> corrections,

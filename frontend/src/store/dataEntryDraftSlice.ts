@@ -22,8 +22,11 @@ export type DraftInvoice = {
   supplier?: { id: string; name: string; nip: string | null } | null
 }
 
-/** Tabela wprowadzania danych w jednym sklepie, zanim trafi do pliku. */
-export type DataEntryDraft = { invoice: DraftInvoice | null; rows: DataEntryRow[] }
+/**
+ * Tabela wprowadzania danych w jednym sklepie, zanim trafi do pliku. `deliOrderId` to zamówienie garmażu wstawione do
+ * tabeli: pasek nad tabelą kończy je ilościami z wierszy. Brak w starszych szkicach.
+ */
+export type DataEntryDraft = { invoice: DraftInvoice | null; rows: DataEntryRow[]; deliOrderId?: string | null }
 
 /**
  * Ostatni zapis pliku XML tabeli w sklepie: kiedy, nazwa pliku i `signature` (pozycje i nagłówek pliku jako JSON),

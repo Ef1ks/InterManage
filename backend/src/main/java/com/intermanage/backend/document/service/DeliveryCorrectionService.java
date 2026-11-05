@@ -39,6 +39,10 @@ import com.intermanage.backend.document.repository.DocumentSearch;
  * dostawę poprawia korekta, więc przypina się ją ręcznie z obu stron; podpowiedzi są od tego samego dostawcy i od
  * największej liczby wspólnych artykułów. Ilości i kwoty w korektach są ze znakiem, więc przyjęcie po korektach to
  * linie przyjęcia z dodanymi liniami korekt o tym samym ITM8 ({@link #corrected}).
+ *
+ * <p>Tak samo działa ruch międzymagazynowy: błędnie wystawiony MM poprawia się kolejnym MM z zakupem na plus (często
+ * wystawionym w złą stronę, więc z podwójną ilością), a poprawka przypina się do niego jak korekta do przyjęcia.
+ * Dostawca nie musi się zgadzać, bo MM to towar różnych dostawców.
  */
 @Service
 public class DeliveryCorrectionService {
@@ -47,6 +51,8 @@ public class DeliveryCorrectionService {
     static final int DELIVERY_LOOKBACK_DAYS = 120;
     /** Korekty do przyjęcia szukamy najwyżej tyle dni po nim. */
     static final int CORRECTION_LOOKAHEAD_DAYS = 365;
+    /** Poprawek ruchu międzymagazynowego i poprawianego ruchu szukamy najwyżej tyle dni od dokumentu. */
+    static final int TRANSFER_CORRECTION_DAYS = 60;
     private static final int CANDIDATES = 30;
     private static final List<DocumentType> CORRECTION_TYPES = List.of(DocumentType.PK, DocumentType.WZ);
 
@@ -61,11 +67,10 @@ public class DeliveryCorrectionService {
         this.users = users;
     }
 
-    /** Korekty przyjęć PZ spośród podanych dokumentów (same nagłówki korekt), od najstarszej. */
+    /** Korekty przyjęć PZ i ruchów międzymagazynowych spośród podanych dokumentów (same nagłówki), od najstarszej. */
     @Transactional(readOnly = true)
     public Map<UUID, List<DeliveryCorrection>> correctionsOf(Collection<Document> page) {
-        List<UUID> deliveries = page.stream().filter(document -> document.getType() == DocumentType.PZ)
-                .map(Document::getId).toList();
+        List<UUID> deliveries = page.stream().filter(Document::isCorrectable).map(Document::getId).toList();
         if (deliveries.isEmpty()) {
             return Map.of();
         }
@@ -77,8 +82,7 @@ public class DeliveryCorrectionService {
     /** Przyjęcia, do których przypięto korekty spośród podanych dokumentów (klucz: id korekty). */
     @Transactional(readOnly = true)
     public Map<UUID, Document> deliveriesOf(Collection<Document> page) {
-        List<UUID> corrections = page.stream().filter(document -> document.getType().isDeliveryCorrection())
-                .map(Document::getId).toList();
+        List<UUID> corrections = page.stream().filter(Document::isCorrection).map(Document::getId).toList();
         if (corrections.isEmpty()) {
             return Map.of();
         }
@@ -116,23 +120,32 @@ public class DeliveryCorrectionService {
      * Dokumenty do przypięcia: do przyjęcia jego korekty z okresu {@link #CORRECTION_LOOKAHEAD_DAYS} dni po nim, do
      * korekty przyjęcia z {@link #DELIVERY_LOOKBACK_DAYS} dni przed nią. Zawsze od tego samego dostawcy, najpierw te
      * z największą liczbą wspólnych artykułów, potem najbliższe w czasie. Korekty przypięte do innego przyjęcia
-     * odpadają. {@code query}: słowa z numeru dokumentu albo numeru dokumentu dostawcy.
+     * odpadają. {@code query}: słowa z numeru dokumentu albo numeru dokumentu dostawcy. Ruch międzymagazynowy: bez
+     * względu na dostawcę, poprawki z {@link #TRANSFER_CORRECTION_DAYS} dni po nim, a do poprawki ruchy sprzed niej.
      */
     @Transactional(readOnly = true)
     public List<CorrectionCandidate> candidates(UUID storeId, String typeCode, UUID id, String query) {
         Document document = documents.findWithLines(storeId, type(typeCode), id)
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono dokumentu"));
-        String supplierCode = supplierCode(document);
-        if (supplierCode == null) {
-            return List.of();
-        }
         boolean delivery = requireCorrectable(document);
         LocalDateTime day = document.getDocumentDate().toLocalDate().atStartOfDay();
-        List<Document> found = delivery
-                ? documents.findBySupplierWithLines(storeId, CORRECTION_TYPES, supplierCode, day,
-                        day.plusDays(CORRECTION_LOOKAHEAD_DAYS + 1L))
-                : documents.findBySupplierWithLines(storeId, List.of(DocumentType.PZ), supplierCode,
-                        day.minusDays(DELIVERY_LOOKBACK_DAYS), day.plusDays(1));
+        String supplierCode = supplierCode(document);
+        List<Document> found;
+        if (document.getType() == DocumentType.MM) {
+            found = delivery
+                    ? documents.findDatedWithLines(storeId, DocumentType.MM, day,
+                            day.plusDays(TRANSFER_CORRECTION_DAYS + 1L)).stream().filter(Document::isCorrection).toList()
+                    : documents.findDatedWithLines(storeId, DocumentType.MM, day.minusDays(TRANSFER_CORRECTION_DAYS),
+                            day.plusDays(1)).stream().filter(Document::isCorrectable).toList();
+        } else if (supplierCode == null) {
+            return List.of();
+        } else {
+            found = delivery
+                    ? documents.findBySupplierWithLines(storeId, CORRECTION_TYPES, supplierCode, day,
+                            day.plusDays(CORRECTION_LOOKAHEAD_DAYS + 1L))
+                    : documents.findBySupplierWithLines(storeId, List.of(DocumentType.PZ), supplierCode,
+                            day.minusDays(DELIVERY_LOOKBACK_DAYS), day.plusDays(1));
+        }
         Set<UUID> taken = new HashSet<>();
         if (delivery && !found.isEmpty()) {
             links.findActiveByCorrectionIds(found.stream().map(Document::getId).toList())
@@ -165,7 +178,8 @@ public class DeliveryCorrectionService {
         Document correction = pair[1];
         String deliverySupplier = supplierCode(delivery);
         String correctionSupplier = supplierCode(correction);
-        if (deliverySupplier != null && correctionSupplier != null && !deliverySupplier.equals(correctionSupplier)) {
+        if (delivery.getType() == DocumentType.PZ && deliverySupplier != null && correctionSupplier != null
+                && !deliverySupplier.equals(correctionSupplier)) {
             throw ApiException.badRequest(correction.getType().singular() + " " + correction.getNumber()
                     + " jest od innego dostawcy niż przyjęcie (bon " + delivery.bonNumber() + ").");
         }
@@ -174,9 +188,12 @@ public class DeliveryCorrectionService {
             if (current.getDelivery().getId().equals(delivery.getId())) {
                 return;
             }
-            throw ApiException.conflict(correction.getType().singular() + " " + correction.getNumber()
-                    + " jest już przypięta do przyjęcia (bon " + current.getDelivery().bonNumber()
-                    + "). Najpierw ją odepnij.");
+            throw ApiException.conflict(delivery.getType() == DocumentType.MM
+                    ? "Dokument " + correction.getNumber() + " poprawia już ruch międzymagazynowy "
+                            + current.getDelivery().getNumber() + ". Najpierw go odepnij."
+                    : correction.getType().singular() + " " + correction.getNumber()
+                            + " jest już przypięta do przyjęcia (bon " + current.getDelivery().bonNumber()
+                            + "). Najpierw ją odepnij.");
         }
         links.save(new DeliveryCorrection(delivery, correction, userId != null ? users.getReferenceById(userId) : null));
     }
@@ -268,22 +285,24 @@ public class DeliveryCorrectionService {
         Document document = documents.findHeader(storeId, type(typeCode), id)
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono dokumentu"));
         boolean delivery = requireCorrectable(document);
+        boolean transfer = document.getType() == DocumentType.MM;
         Document other = documents.findHeader(storeId, otherId)
-                .filter(found -> delivery ? found.getType().isDeliveryCorrection() : found.getType() == DocumentType.PZ)
-                .orElseThrow(() -> ApiException.notFound(delivery ? "Nie znaleziono korekty"
-                        : "Nie znaleziono przyjęcia towaru"));
+                .filter(found -> (found.getType() == DocumentType.MM) == transfer
+                        && (delivery ? found.isCorrection() : found.isCorrectable()))
+                .orElseThrow(() -> ApiException.notFound(transfer ? "Nie znaleziono ruchu międzymagazynowego"
+                        : delivery ? "Nie znaleziono korekty" : "Nie znaleziono przyjęcia towaru"));
         return delivery ? new Document[] {document, other} : new Document[] {other, document};
     }
 
-    /** {@code true} dla przyjęcia, {@code false} dla korekty; inne typy dają 400. */
+    /** {@code true} dla poprawianego dokumentu, {@code false} dla korekty; inne typy dają 400. */
     private static boolean requireCorrectable(Document document) {
-        if (document.getType() == DocumentType.PZ) {
+        if (document.isCorrectable()) {
             return true;
         }
-        if (document.getType().isDeliveryCorrection()) {
+        if (document.isCorrection()) {
             return false;
         }
-        throw ApiException.badRequest("Korekty przypina się do przyjęć towaru");
+        throw ApiException.badRequest("Korekty przypina się do przyjęć towaru i ruchów międzymagazynowych");
     }
 
     /** Wspólny dostawca dokumentu, a gdy linie mają różnych - dostawca większości linii. */

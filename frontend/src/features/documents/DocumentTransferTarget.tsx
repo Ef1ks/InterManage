@@ -33,7 +33,9 @@ export function TransferTargetBadge({ document }: { document: DocumentSummary })
       )}
     >
       {target.enteredAt ? <CheckCircle2Icon aria-hidden /> : <ArrowRightLeftIcon aria-hidden />}
-      <span className="truncate">Dla {storeLabel(target.store)}</span>
+      <span className="truncate">
+        {target.enteredAt ? 'Dla' : 'Czeka:'} {storeLabel(target.store)}
+      </span>
     </Badge>
   )
 }
@@ -149,7 +151,7 @@ function statusLine(target: TransferTarget) {
   const created = target.createdBy
     ? `wskazał(a) ${target.createdBy}, ${dateFormat.format(new Date(target.createdAt))}`
     : `wskazano ${dateFormat.format(new Date(target.createdAt))}`
-  if (!target.enteredAt) return `Sklep jeszcze go nie wprowadził · ${created}`
+  if (!target.enteredAt) return `Czeka, aż sklep wprowadzi go u siebie · ${created}`
   const entered = dateFormat.format(new Date(target.enteredAt))
   return `Wprowadzony w sklepie ${entered}${target.enteredBy ? ` (${target.enteredBy})` : ''} · ${created}`
 }

@@ -19,7 +19,8 @@ const errorMessage = (error: unknown, fallback: string) => (error instanceof Api
 
 /**
  * Korekty przyjęcia PZ (błędu sklepu i od dostawcy) albo - w korekcie - przyjęcie, którego dotyczy. Przypięta korekta
- * zmienia wartości przyjęcia i wydruk bonu; faktury korekt od dostawcy pojawiają się przy przyjęciu.
+ * zmienia wartości przyjęcia i wydruk bonu; faktury korekt od dostawcy pojawiają się przy przyjęciu. Tak samo ruch
+ * międzymagazynowy: MM na plus to przyjęcie z innego sklepu albo poprawa błędnego MM, o czym decyduje przypięcie.
  */
 export function DeliveryCorrections({ storeId, document }: { storeId: string; document: Document }) {
   if (document.correctable) return <DeliveryCorrectionList storeId={storeId} document={document} />
@@ -42,15 +43,16 @@ function DeliveryCorrectionList({ storeId, document }: { storeId: string; docume
         {canEdit && (
           <Button variant="outline" size="sm" onClick={() => setPicking(true)}>
             <LinkIcon />
-            Przypnij korektę
+            {document.type === 'MM' ? 'Przypnij poprawę' : 'Przypnij korektę'}
           </Button>
         )}
       </div>
 
       {document.corrections.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Brak korekt. Przypnij korektę błędu sklepu albo od dostawcy - wartości przyjęcia i wydruk bonu przeliczą się
-          razem z nią.
+          {document.type === 'MM'
+            ? 'Brak korekt. Dokument był wystawiony błędnie? Przypnij ruch międzymagazynowy na plus, który go poprawia - wartości i linie przeliczą się razem z nim.'
+            : 'Brak korekt. Przypnij korektę błędu sklepu albo od dostawcy - wartości przyjęcia i wydruk bonu przeliczą się razem z nią.'}
         </p>
       ) : (
         <Card className="gap-0 divide-y py-0">
@@ -114,43 +116,46 @@ function CorrectedDelivery({ storeId, document }: { storeId: string; document: D
   const { attach, detach } = useDeliveryCorrections(storeId, document.type, document.id)
   const [picking, setPicking] = useState(false)
   const delivery = document.correctionOf
+  const transfer = document.type === 'MM'
+  const deliveryLabel = delivery && (transfer ? delivery.number : `Bon ${bonNumber(delivery.number)}`)
 
   return (
     <section aria-labelledby="corrected-delivery" className="mb-6">
       <h3 id="corrected-delivery" className="mb-2 text-sm font-semibold">
-        Przyjęcie towaru, którego dotyczy
+        {transfer ? 'Poprawa ruchu międzymagazynowego' : 'Przyjęcie towaru, którego dotyczy'}
       </h3>
       {delivery ? (
         <Card className="flex-row flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 tabular-nums">
           <PackageIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <Link
-              to={documentPaths.document('PZ', delivery.id)}
+              to={documentPaths.document(transfer ? 'MM' : 'PZ', delivery.id)}
               className="font-medium underline-offset-4 hover:underline"
             >
-              Bon {bonNumber(delivery.number)}
+              {deliveryLabel}
             </Link>
             <CopyButton
-              value={bonNumber(delivery.number)}
-              label={`Kopiuj numer bonu ${bonNumber(delivery.number)}`}
+              value={transfer ? delivery.number : bonNumber(delivery.number)}
+              label={`Kopiuj numer ${transfer ? delivery.number : `bonu ${bonNumber(delivery.number)}`}`}
               className="ml-0.5 align-middle"
             />
             <div className="text-xs text-muted-foreground">
               {formatDocumentDate(delivery.documentDate)}
-              {delivery.supplierName && ` · ${delivery.supplierName}`} · nr wewn. {delivery.number}
+              {delivery.supplierName && ` · ${delivery.supplierName}`}
+              {!transfer && ` · nr wewn. ${delivery.number}`}
             </div>
           </div>
           {canEdit && (
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Odepnij od bonu ${bonNumber(delivery.number)}`}
+              aria-label={`Odepnij od ${transfer ? delivery.number : `bonu ${bonNumber(delivery.number)}`}`}
               title="Odepnij"
               loading={detach.isPending}
               onClick={() =>
                 detach.mutate(delivery.id, {
                   onSuccess: () =>
-                    toast.success(`Odpięto od bonu ${bonNumber(delivery.number)}`, {
+                    toast.success(`Odpięto od ${transfer ? delivery.number : `bonu ${bonNumber(delivery.number)}`}`, {
                       action: { label: 'Przywróć', onClick: () => attach.mutate(delivery.id) },
                     }),
                   onError: (error) => toast.error(errorMessage(error, 'Nie udało się odpiąć korekty')),
@@ -164,12 +169,14 @@ function CorrectedDelivery({ storeId, document }: { storeId: string; document: D
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
-            Nieprzypięta. Przypnij ją do bonu - wartości przyjęcia i wydruk bonu przeliczą się razem z nią.
+            {transfer
+              ? 'Dokument na plus to przyjęcie z innego sklepu albo poprawa błędnego ruchu. Jeśli to poprawa, wskaż poprawiany ruch - wartości i linie przeliczą się razem z nią.'
+              : 'Nieprzypięta. Przypnij ją do bonu - wartości przyjęcia i wydruk bonu przeliczą się razem z nią.'}
           </p>
           {canEdit && (
             <Button variant="outline" size="sm" onClick={() => setPicking(true)}>
               <LinkIcon />
-              Przypnij do przyjęcia
+              {transfer ? 'Wskaż poprawiany ruch' : 'Przypnij do przyjęcia'}
             </Button>
           )}
         </div>
@@ -193,6 +200,7 @@ function CorrectionPickerDialog({
 }) {
   const { attach, detach } = useDeliveryCorrections(storeId, document.type, document.id)
   const forDelivery = document.correctable
+  const transfer = document.type === 'MM'
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-4 p-6 sm:max-w-2xl">
@@ -208,9 +216,11 @@ function CorrectionPickerDialog({
                   toast.success(
                     forDelivery
                       ? `Przypięto korektę ${candidate.number}`
-                      : `Przypięto do bonu ${bonNumber(candidate.number)}`,
+                      : `Przypięto do ${transfer ? candidate.number : `bonu ${bonNumber(candidate.number)}`}`,
                     {
-                      description: 'Wartości przyjęcia i wydruk bonu są już po korekcie.',
+                      description: transfer
+                        ? 'Wartości i linie ruchu są już po korekcie.'
+                        : 'Wartości przyjęcia i wydruk bonu są już po korekcie.',
                       action: { label: 'Cofnij', onClick: () => detach.mutate(candidate.id) },
                     },
                   )
@@ -237,34 +247,48 @@ function CorrectionPicker({
   onPick: (candidate: CorrectionCandidate) => void
 }) {
   const [query, setQuery] = useState('')
-  const { data: candidates = [], isPending, isError, isPlaceholderData } = useCorrectionCandidates(
-    storeId,
-    document.type,
-    document.id,
-    query,
-    true,
-  )
+  const {
+    data: candidates = [],
+    isPending,
+    isError,
+    isPlaceholderData,
+  } = useCorrectionCandidates(storeId, document.type, document.id, query, true)
   const forDelivery = document.correctable
+  const transfer = document.type === 'MM'
 
   return (
     <>
       <DialogHeader>
         <DialogTitle className="text-lg">
-          {forDelivery
-            ? `Przypnij korektę do bonu ${bonNumber(document.number)}`
-            : `Przypnij ${document.typeSingular.toLowerCase()} ${document.number} do przyjęcia`}
+          {transfer
+            ? forDelivery
+              ? `Przypnij poprawę do ${document.number}`
+              : `Który ruch poprawia ${document.number}?`
+            : forDelivery
+              ? `Przypnij korektę do bonu ${bonNumber(document.number)}`
+              : `Przypnij ${document.typeSingular.toLowerCase()} ${document.number} do przyjęcia`}
         </DialogTitle>
         <DialogDescription>
-          {forDelivery
-            ? 'Korekty tego dostawcy z roku po przyjęciu, najpierw te z największą liczbą wspólnych artykułów.'
-            : 'Przyjęcia tego dostawcy ze 120 dni przed korektą, najpierw te z największą liczbą wspólnych artykułów.'}
+          {transfer
+            ? forDelivery
+              ? 'Ruchy międzymagazynowe na plus z 60 dni po dokumencie, najpierw te z największą liczbą wspólnych artykułów.'
+              : 'Ruchy międzymagazynowe z 60 dni przed poprawą, najpierw te z największą liczbą wspólnych artykułów.'
+            : forDelivery
+              ? 'Korekty tego dostawcy z roku po przyjęciu, najpierw te z największą liczbą wspólnych artykułów.'
+              : 'Przyjęcia tego dostawcy ze 120 dni przed korektą, najpierw te z największą liczbą wspólnych artykułów.'}
         </DialogDescription>
       </DialogHeader>
 
       <SearchInput
         value={query}
         onChange={setQuery}
-        placeholder={forDelivery ? 'Szukaj: numer korekty' : 'Szukaj: numer bonu, nr dok. dostawcy'}
+        placeholder={
+          transfer
+            ? 'Szukaj: numer dokumentu'
+            : forDelivery
+              ? 'Szukaj: numer korekty'
+              : 'Szukaj: numer bonu, nr dok. dostawcy'
+        }
       />
 
       <div
@@ -279,7 +303,11 @@ function CorrectionPicker({
           <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
         ) : candidates.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-            {forDelivery ? 'Brak wolnych korekt od tego dostawcy.' : 'Brak przyjęć od tego dostawcy.'}
+            {transfer
+              ? 'Brak pasujących ruchów międzymagazynowych.'
+              : forDelivery
+                ? 'Brak wolnych korekt od tego dostawcy.'
+                : 'Brak przyjęć od tego dostawcy.'}
           </p>
         ) : (
           <ul className="divide-y">
@@ -323,14 +351,16 @@ function CorrectionPicker({
   )
 }
 
-/** Plakietka w wierszu listy: przyjęcie z korektami albo korekta przypięta do bonu. */
-export function CorrectionBadge({ document }: { document: DocumentSummary }) {
+/** Plakietka w wierszu listy: dokument z korektami albo korekta przypięta do bonu lub ruchu międzymagazynowego. */
+export function CorrectionBadge({ document, type }: { document: DocumentSummary; type: string }) {
   const label = document.correctionTotals
     ? document.correctionTotals.count === 1
       ? 'Korekta'
       : `Korekty: ${document.correctionTotals.count}`
     : document.correctionOf
-      ? `Bon ${bonNumber(document.correctionOf.number)}`
+      ? type === 'MM'
+        ? `Poprawia ${document.correctionOf.number}`
+        : `Bon ${bonNumber(document.correctionOf.number)}`
       : null
   if (!label) return null
   return (

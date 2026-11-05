@@ -195,6 +195,19 @@ public class Document {
         return number.matches("\\d{3,}00") ? number.substring(0, number.length() - 2) : number;
     }
 
+    /**
+     * Dokument, do którego przypina się korekty: przyjęcie albo ruch międzymagazynowy. Zwykły MM ma zakup z minusem,
+     * a MM na plus to przyjęcie z innego sklepu albo poprawa błędnego ({@link #isCorrection}).
+     */
+    public boolean isCorrectable() {
+        return type == DocumentType.PZ || (type == DocumentType.MM && purchaseValue.signum() <= 0);
+    }
+
+    /** Korekta przyjęcia (błędu sklepu, od dostawcy) albo MM na plus, który można przypiąć jako poprawę innego MM. */
+    public boolean isCorrection() {
+        return type.isDeliveryCorrection() || (type == DocumentType.MM && purchaseValue.signum() > 0);
+    }
+
     public UUID getId() {
         return id;
     }
