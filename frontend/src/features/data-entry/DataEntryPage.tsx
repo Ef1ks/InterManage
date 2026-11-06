@@ -423,6 +423,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         (services > 0 ? `; kaucje i dostawa (${services}) na dole, bez zapisu do pliku XML.` : '.') +
         (fixedPrice !== null ? ` Stała cena dostawcy: ${formatMoney(fixedPrice)}.` : ''),
     })
+    if (previous && data.correction)
+      toast.warning('Korekta dopisana do innej faktury nie ma makra', {
+        description: 'Bon i makro są tylko przy samej korekcie: wczytaj ją jeszcze raz i wybierz „Zastąp”.',
+        duration: 10_000,
+      })
   }
 
   const confirmDocument = (pending: PendingDocument) => {

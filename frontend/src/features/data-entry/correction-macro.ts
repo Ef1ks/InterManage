@@ -4,8 +4,8 @@ import type { DataEntryRow } from './rows'
 
 /**
  * Makro dla odtwarzacza AutoHotkey (InterClicker, F9 czyta schowek linia po linii, jak „Uzupełnij ITM8”): faktura
- * korygująca w programie sklepu. Raz numer bonu i dwa Entery, potem dla każdego artykułu EAN, ilość po korekcie i cena
- * zakupu. Czasy w ms, poprawiamy je tylko tutaj.
+ * korygująca w programie sklepu. Dla każdego artykułu numer bonu i dwa Entery, EAN, ilość po korekcie i cena zakupu.
+ * Czasy w ms, poprawiamy je tylko tutaj.
  */
 export const CORRECTION_MACRO_CONFIG = {
   /** Po wpisaniu numeru bonu i po drugim Enterze program otwiera bon. */
@@ -254,7 +254,7 @@ export const formatMacroQuantity = (value: number) => String(round(value, 3)).re
 
 export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACRO_CONFIG.priceDigits).replace('.', ',')
 
-/** Skrypt makra: numer bonu raz, potem kroki dla każdej pozycji; linie z `#` odtwarzacz pomija. CRLF jak w Windows. */
+/** Skrypt makra: numer bonu i kroki osobno dla każdej pozycji; linie z `#` odtwarzacz pomija. CRLF jak w Windows. */
 export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroItem[]) {
   const c = CORRECTION_MACRO_CONFIG
   const out: string[] = []
@@ -262,10 +262,10 @@ export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroIt
   const enter = (text: string, sleep: number) => out.push(`TEXT|${text}`, 'KEY|{Enter}', `SLEEP|${sleep}`)
 
   out.push(`# Korekta bonu ${bonNumber}: ${items.length} poz.`)
-  enter(bonNumber, c.afterBon)
-  key('{Enter}', c.afterBonSkip)
   for (const item of items) {
     out.push(`# EAN ${item.ean}`)
+    enter(bonNumber, c.afterBon)
+    key('{Enter}', c.afterBonSkip)
     enter(item.ean, c.afterEan)
     enter(formatMacroQuantity(item.quantity), c.afterQuantity)
     key('{Enter}', c.afterSkip)
