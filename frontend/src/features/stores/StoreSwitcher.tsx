@@ -5,7 +5,7 @@ import { useCurrentUser } from '@/features/auth/api'
 import { storeLabel, useCurrentStore, useSelectStore } from '@/features/stores/current-store'
 import type { StoreSummary } from '@/lib/types'
 
-/** Wybór sklepu w menu bocznym. Przy jednym sklepie to tylko informacja, przy kilku lista wyboru. */
+/** Wybór sklepu w menu bocznym. Przy jednym sklepie to tylko informacja, przy kilku lista wyboru. W pasku z ikonami sama ikona. */
 export function StoreSwitcher() {
   const me = useCurrentUser()
   const current = useCurrentStore()
@@ -13,7 +13,7 @@ export function StoreSwitcher() {
 
   if (!current) {
     return (
-      <p className="rounded-xl border border-dashed px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+      <p className="rounded-xl border border-dashed px-3 py-2.5 text-xs leading-relaxed text-muted-foreground rail:hidden">
         {me.owner
           ? 'Nie ma jeszcze żadnego sklepu. Dodaj go w Ustawieniach.'
           : 'Nie masz przypisanego sklepu. Poproś właściciela o dostęp.'}
@@ -23,7 +23,10 @@ export function StoreSwitcher() {
 
   if (me.stores.length === 1) {
     return (
-      <div className="flex items-center gap-2.5 rounded-xl bg-muted/60 py-2.5 pr-2.5 pl-2">
+      <div
+        title={storeLabel(current)}
+        className="flex items-center gap-2.5 rounded-xl bg-muted/60 py-2.5 pr-2.5 pl-2 rail:pr-0"
+      >
         <StoreIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         <CurrentStore store={current} />
       </div>
@@ -36,7 +39,8 @@ export function StoreSwitcher() {
     <Select items={items} value={current.id} onValueChange={(value) => value && selectStore(value)}>
       <SelectTrigger
         aria-label={`Sklep: ${storeLabel(current)}. Zmień sklep`}
-        className="w-full gap-2.5 rounded-xl border-transparent bg-muted/60 py-2.5 pr-2.5 pl-2 hover:bg-muted data-popup-open:bg-muted data-[size=default]:h-auto"
+        title={storeLabel(current)}
+        className="w-full gap-2.5 rounded-xl border-transparent bg-muted/60 py-2.5 pr-2.5 pl-2 hover:bg-muted data-popup-open:bg-muted data-[size=default]:h-auto rail:justify-start rail:pr-0 rail:[&>svg:last-child]:hidden"
       >
         <StoreIcon aria-hidden className="size-4 text-muted-foreground" />
         <CurrentStore store={current} />
@@ -57,8 +61,10 @@ function CurrentStore({ store }: { store: StoreSummary }) {
   // Sklep bez własnej nazwy (np. "Sklep 10023" z migracji) nie powtarza numeru w dwóch liniach.
   const nameIsNumber = store.name.trim() === `Sklep ${store.number}`
   return (
-    <span className="grid min-w-0 flex-1 gap-0.5 text-left">
-      <span className="text-xs leading-4 text-muted-foreground">{nameIsNumber ? 'Sklep' : `Sklep ${store.number}`}</span>
+    <span className="grid min-w-0 flex-1 gap-0.5 text-left rail:hidden">
+      <span className="text-xs leading-4 text-muted-foreground">
+        {nameIsNumber ? 'Sklep' : `Sklep ${store.number}`}
+      </span>
       <span className="truncate text-sm leading-5 font-medium tabular-nums">
         {nameIsNumber ? store.number : store.name}
       </span>

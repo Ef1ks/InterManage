@@ -275,6 +275,234 @@ class PriceCalculationIntegrationTests {
         return "/api/stores/" + storeId + "/price-calculations" + path;
     }
 
+    @Test
+    void importsSelectedDeliProductsAsCalculationsWithoutRecipe() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String path = "/api/stores/" + storeId + "/price-calculations";
+        String salad = insertProduct(storeId, "SALATKA JARZYNOWA", "36 60 01", "kg", "1.000", "10.00");
+        String cake = insertProduct(storeId, "SERNIK DOMOWY", "36 60 02", "kg", "1.000", "10.00");
+        String pierogi = insertProduct(storeId, "PIEROGI RUSKIE", "24 05 01", "kg", "1.000", "8.00");
+
+        send(owner, post(path + "/import"), "{\"productIds\":[\"" + pierogi + "\"]}")
+                .andExpect(status().isBadRequest());
+
+        String created = send(owner, post(path + "/import"), "{\"productIds\":[\"" + salad + "\"]}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ids.length()").value(1))
+                .andExpect(jsonPath("$.skipped").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String calculationId = JsonPath.read(created, "$.ids[0]");
+
+        // Bez przepisu: zero składników, brak ceny wyliczonej, a do eksportu idzie cena z półki.
+        mvc.perform(get(path).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("SALATKA JARZYNOWA"))
+                .andExpect(jsonPath("$[0].itemCount").value(0))
+                .andExpect(jsonPath("$[0].calculatedPrice").doesNotExist())
+                .andExpect(jsonPath("$[0].salePrice").value(9.99))
+                .andExpect(jsonPath("$[0].markupPercent").value(60));
+        mvc.perform(get(path + "/export/xlsx").cookie(owner)).andExpect(status().isOk());
+
+        // Wyrób z kalkulacją jest pomijany, reszta wchodzi.
+        send(owner, post(path + "/import"), "{\"productIds\":[\"" + salad + "\",\"" + cake + "\"]}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ids.length()").value(1))
+                .andExpect(jsonPath("$.skipped").value(1));
+
+        // Kalkulacja bez przepisu nie przeszkadza w odświeżaniu cen.
+        send(owner, post(path + "/refresh-prices"), "{\"calculationId\":null,\"decisions\":[]}")
+                .andExpect(status().isOk());
+
+        send(owner, post(path + "/import/undo"), "{\"ids\":[\"" + calculationId + "\"]}")
+                .andExpect(status().isNoContent());
+        mvc.perform(get(path).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("SERNIK DOMOWY"));
+        // Znacznik: cofnięta kalkulacja nadal jest w bazie.
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from price_calculations where id = ?::uuid and deleted_at is not null",
+                Integer.class, calculationId));
+    }
+
+    @Test
+    void undoKeepsImportedCalculationThatGotRecipe() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String path = "/api/stores/" + storeId + "/price-calculations";
+        String salad = insertProduct(storeId, "SALATKA JARZYNOWA", "36 60 01", "kg", "1.000", "10.00");
+        String flour = insertProduct(storeId, "MAKA TORTOWA 1KG", "01 02 03", "kg", "1.000", "2.00");
+
+        String created = send(owner, post(path + "/import"), "{\"productIds\":[\"" + salad + "\"]}")
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String calculationId = JsonPath.read(created, "$.ids[0]");
+        send(owner, put(path + "/" + calculationId), recipe(salad, flour, null)).andExpect(status().isOk());
+
+        send(owner, post(path + "/import/undo"), "{\"ids\":[\"" + calculationId + "\"]}")
+                .andExpect(status().isNoContent());
+        mvc.perform(get(path).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].itemCount").value(1));
+    }
+
+    @Test
+    void targetMarkupStaysWhenPricesAreRefreshed() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String path = "/api/stores/" + storeId + "/price-calculations";
+        String cake = insertProduct(storeId, "SERNIK DOMOWY", "36 60 01", "kg", "1.000", "10.00");
+        String flour = insertProduct(storeId, "MAKA TORTOWA 1KG", "01 02 03", "kg", "1.000", "10.00");
+
+        // Bez marży docelowej standardowe 60%: 10 zł * 1,6 * 1,05 = 16,80 -> 16,99.
+        String created = send(owner, post(path), recipe(cake, flour, null))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.markupPercent").value(60))
+                .andExpect(jsonPath("$.targetMarkup").doesNotExist())
+                .andExpect(jsonPath("$.calculatedPrice").value(16.99))
+                .andReturn().getResponse().getContentAsString();
+        String calculationId = JsonPath.read(created, "$.id");
+
+        // Marża docelowa 100%: 10 zł * 2 * 1,05 = 21,00 -> 21,99.
+        send(owner, put(path + "/" + calculationId), recipe(cake, flour, "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markupPercent").value(100.0))
+                .andExpect(jsonPath("$.targetMarkup").value(100.0))
+                .andExpect(jsonPath("$.calculatedPrice").value(21.99));
+
+        // Składnik drożeje do 10,50 zł: 10,50 * 2 * 1,05 = 22,05 -> 22,99, nadal z marżą 100%.
+        jdbc.update("update products set purchase_price = 10.50 where id = ?::uuid", flour);
+        send(owner, post(path + "/refresh-prices"), "{\"calculationId\":null,\"decisions\":[]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].targetMarkup").value(100.0))
+                .andExpect(jsonPath("$[0].calculatedPrice").value(22.99));
+
+        // Powrót do standardowej.
+        send(owner, put(path + "/" + calculationId), recipe(cake, flour, null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetMarkup").doesNotExist())
+                .andExpect(jsonPath("$.markupPercent").value(60));
+    }
+
+    @Test
+    void partnerStorePricesAreLinkedToOwnArticlesAndExported() throws Exception {
+        Cookie owner = login();
+        String mine = createStore(owner);
+        String partner = createStore(owner);
+        String stranger = createStore(owner);
+        String partners = "/api/stores/" + mine + "/price-calculations/partners";
+        String partnerCalculations = "/api/stores/" + partner + "/price-calculations";
+
+        mvc.perform(get(partners + "/" + partner).cookie(owner)).andExpect(status().isForbidden());
+        String invitation = send(owner, post("/api/stores/" + mine + "/partners"), "{\"storeId\":\"" + partner + "\"}")
+                .andExpect(status().is2xxSuccessful())
+                .andReturn().getResponse().getContentAsString();
+        send(owner, post("/api/stores/" + partner + "/partners/" + JsonPath.read(invitation, "$.partners[0].id") + "/accept"), "{}")
+                .andExpect(status().is2xxSuccessful());
+        mvc.perform(get(partners).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(partner));
+        mvc.perform(get(partners + "/" + stranger).cookie(owner)).andExpect(status().isForbidden());
+
+        // Sąsiad: z przepisem, bez przepisu (cena z półki 9,99) i wyrób, którego sklep nie ma.
+        String flour = insertProduct(partner, "MAKA TORTOWA 1KG", "01 02 03", "kg", "1.000", "10.00");
+        String salad = insertProduct(partner, "SALATKA JARZYNOWA LUZ", "36 60 01", "kg", "1.000", "10.00");
+        String cake = insertProduct(partner, "SURÓWKA Z MARCHEWKI", "36 60 02", "kg", "1.000", "10.00");
+        String other = insertProduct(partner, "KOTLET WIOSENNY", "36 60 03", "kg", "1.000", "10.00");
+        send(owner, post(partnerCalculations), recipe(salad, flour, null)).andExpect(status().isCreated());
+        send(owner, post(partnerCalculations + "/import"), "{\"productIds\":[\"" + cake + "\",\"" + other + "\"]}")
+                .andExpect(status().isCreated());
+
+        // Sklep ma te same towary pod innymi kodami; nazwy różnią się „LUZ” i polskimi znakami.
+        String mySalad = insertProduct(mine, "SALATKA JARZYNOWA", "36 01 01", "kg", "1.000", "10.00");
+        insertProduct(mine, "SUROWKA Z MARCHEWKI LUZ", "36 01 02", "kg", "1.000", "10.00");
+        String myCutlet = insertProduct(mine, "PASZTET CHLOPSKI", "36 01 03", "kg", "1.000", "10.00");
+        String mySaladItm8 = jdbc.queryForObject("select itm8 from products where id = ?::uuid", String.class, mySalad);
+        String myCutletItm8 = jdbc.queryForObject("select itm8 from products where id = ?::uuid", String.class, myCutlet);
+
+        mvc.perform(get(partners + "/" + partner + "/export/xlsx").cookie(owner)).andExpect(status().isBadRequest());
+
+        String auto = send(owner, post(partners + "/" + partner + "/links/auto"), "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ids.length()").value(2))
+                .andExpect(jsonPath("$.left").value(1))
+                .andReturn().getResponse().getContentAsString();
+        String list = mvc.perform(get(partners + "/" + partner).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[?(@.name == 'KOTLET WIOSENNY')].link").value(Matchers.contains(Matchers.nullValue())))
+                .andExpect(jsonPath("$[?(@.name == 'KOTLET WIOSENNY')].withoutRecipe").value(hasItem(true)))
+                .andExpect(jsonPath("$[?(@.name == 'SALATKA JARZYNOWA LUZ')].link.itm8").value(hasItem(mySaladItm8)))
+                .andExpect(jsonPath("$[?(@.name == 'SALATKA JARZYNOWA LUZ')].link.auto").value(hasItem(true)))
+                .andExpect(jsonPath("$[?(@.name == 'SALATKA JARZYNOWA LUZ')].salePrice").value(hasItem(16.99)))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(get(partners + "/" + partner + "/export/xlsx").cookie(owner)).andExpect(status().isOk());
+
+        // Ręcznie: wyrób bez pary. Artykuł zajęty przez inny wyrób daje 409.
+        String linkBody = "{\"sourceProductId\":\"%s\",\"itm8\":\"%s\"}";
+        send(owner, put(partners + "/" + partner + "/links"), linkBody.formatted(other, mySaladItm8))
+                .andExpect(status().isConflict());
+        send(owner, put(partners + "/" + partner + "/links"), linkBody.formatted(other, myCutletItm8))
+                .andExpect(status().isNoContent());
+
+        // Odpięta para nie wraca z automatu, ale „Cofnij” po automacie pozwala przypisać ją znowu.
+        String saladLink = JsonPath.<java.util.List<String>>read(list,
+                "$[?(@.name == 'SALATKA JARZYNOWA LUZ')].link.id").get(0);
+        send(owner, delete(partners + "/" + partner + "/links/" + saladLink), "").andExpect(status().isNoContent());
+        send(owner, post(partners + "/" + partner + "/links/auto"), "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ids.length()").value(0));
+        send(owner, post(partners + "/" + partner + "/links/" + saladLink + "/restore"), "")
+                .andExpect(status().isNoContent());
+
+        String undoIds = "{\"ids\":" + JsonPath.parse(auto).read("$.ids").toString().replace("'", "\"") + "}";
+        send(owner, post(partners + "/" + partner + "/links/auto/undo"), undoIds).andExpect(status().isNoContent());
+        send(owner, post(partners + "/" + partner + "/links/auto"), "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ids.length()").value(2));
+    }
+
+    @Test
+    void purchaseFileUsesCalculationCostPerSoldItem() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String path = "/api/stores/" + storeId + "/price-calculations";
+        String flour = insertProduct(storeId, "MAKA TORTOWA 1KG", "01 02 03", "kg", "1.000", "10.00");
+        String bucket = insertProduct(storeId, "SALATKA WIADERKO 3KG", "36 60 01", "kg", "3.000", "2.00");
+        String loose = insertProduct(storeId, "SERNIK DOMOWY", "36 60 02", "kg", "1.000", "2.00");
+        String empty = insertProduct(storeId, "PIEROGI RUSKIE", "36 60 03", "kg", "1.000", "2.00");
+        String piece = insertProduct(storeId, "PACZEK", "36 60 04", "szt.", "1.000", "2.00");
+        send(owner, post(path), recipe(bucket, flour, null)).andExpect(status().isCreated());
+        send(owner, post(path), recipe(loose, flour, null)).andExpect(status().isCreated());
+        send(owner, post(path), recipe(piece, flour, null)).andExpect(status().isCreated());
+        send(owner, post(path + "/import"), "{\"productIds\":[\"" + empty + "\"]}").andExpect(status().isCreated());
+
+        // Bez przepisu nie ma ceny zakupu do wstawienia; wiaderko 3 kg to koszt 1 kg razy 3.
+        String lines = mvc.perform(get(path + "/cadbezp").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[?(@.name == 'SALATKA WIADERKO 3KG')].purchasePrice").value(hasItem(30.0)))
+                .andExpect(jsonPath("$[?(@.name == 'SALATKA WIADERKO 3KG')].currentPrice").value(hasItem(2.0)))
+                .andExpect(jsonPath("$[?(@.name == 'SERNIK DOMOWY')].purchasePrice").value(hasItem(10.0)))
+                .andExpect(jsonPath("$[?(@.name == 'PACZEK')].countedInPieces").value(hasItem(true)))
+                .andReturn().getResponse().getContentAsString();
+
+        String ids = "{\"calculationIds\":" + JsonPath.parse(lines).read("$[*].calculationId").toString()
+                .replace("'", "\"") + "}";
+        send(owner, post(path + "/cadbezp"), ids)
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", Matchers.containsString("KALKULACJE")));
+        send(owner, post(path + "/cadbezp"), "{\"calculationIds\":[\"00000000-0000-0000-0000-000000000000\"]}")
+                .andExpect(status().isBadRequest());
+    }
+
+    private static String recipe(String productId, String ingredientId, String targetMarkup) {
+        return """
+                {"productId":"%s","mode":"PER_KG","vatRate":5,"targetMarkup":%s,
+                 "items":[{"productId":"%s","quantity":1}]}""".formatted(productId, targetMarkup, ingredientId);
+    }
+
     private String createStore(Cookie owner) throws Exception {
         String number = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000, 9_999_999_999L));
         String json = send(owner, post("/api/settings/stores"),

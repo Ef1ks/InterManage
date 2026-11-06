@@ -6,6 +6,7 @@ export const pricePaths = {
   list: base,
   create: `${base}/nowa`,
   calculation: (id: string) => `${base}/${id}`,
+  partner: (storeId: string) => `${base}/sklep/${storeId}`,
 }
 
 const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -41,6 +42,18 @@ export function parsePrice(raw: string): { value?: number; error?: string } {
   return { value }
 }
 
+/** Marża docelowa wpisana ręcznie: przecinek albo kropka, najwyżej 2 miejsca po przecinku, poniżej 1000%. */
+export function parseMarkup(raw: string): { value?: number; error?: string } {
+  const text = raw.trim().replace(',', '.')
+  if (text === '') return { error: 'Podaj marżę' }
+  if (!/^\d+(\.\d+)?$/.test(text)) return { error: 'Wpisz liczbę' }
+  if ((text.split('.')[1]?.length ?? 0) > 2) return { error: 'Najwyżej 2 miejsca po przecinku' }
+  const value = Number(text)
+  if (value <= 0) return { error: 'Więcej niż zero' }
+  if (value >= 1000) return { error: 'Mniej niż 1000%' }
+  return { value }
+}
+
 const percentFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1, signDisplay: 'exceptZero' })
 
 /** "+15%", "-3,2%". */
@@ -61,6 +74,14 @@ export function ingredientsWord(count: number) {
   return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? 'składniki' : 'składników'
 }
 
+/** "1 kalkulację", "3 kalkulacje", "5 kalkulacji". */
+export function calculationsWord(count: number) {
+  if (count === 1) return 'kalkulację'
+  const lastTwo = count % 100
+  const last = count % 10
+  return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? 'kalkulacje' : 'kalkulacji'
+}
+
 /**
  * Jednostki wagowe - razem ze sztukami o znanej wadze dają wagę surowców przepisu. To waga przed obróbką, więc
  * nie jest wagą gotowego wyrobu (z 3 kg surowców wychodzi np. 1 kg).
@@ -77,13 +98,13 @@ export function parsePieceWeight(raw: string): { value?: number | null; error?: 
   return parsed.error ? { error: parsed.error } : { value: parsed.value }
 }
 
-/** Narzut, gdy kalkulacja nie jest jeszcze zapisana (zapisana niesie go z serwera). */
+/** Marża standardowa, gdy wyrób nie ma docelowej. */
 export const DEFAULT_MARKUP_PERCENT = 60
 export const VAT_RATES = [0, 5, 8, 23] as const
 export const DEFAULT_VAT_RATE = 5
 
 /**
- * Cena sprzedaży brutto 1 kg jak na serwerze: koszt + narzut + VAT, zaokrąglona w górę do ,99 zł
+ * Cena sprzedaży brutto 1 kg jak na serwerze: koszt + marża + VAT, zaokrąglona w górę do ,99 zł
  * (15,40 -> 15,99; 16,00 -> 16,99). Pusta, gdy nie ma kosztu.
  */
 export function salePrice(costPerKg: number | null, markupPercent: number, vatRate: number): number | null {

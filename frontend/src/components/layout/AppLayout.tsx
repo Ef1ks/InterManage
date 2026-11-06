@@ -132,7 +132,7 @@ export function AppLayout() {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="md:hidden md:group-has-[[data-wide-page]]/layout:inline-flex"
             aria-label="Menu"
             onClick={() => dispatch(toggleMobileNav())}
           >
@@ -159,7 +159,6 @@ export function AppLayout() {
 
 /** Menu boczne: tylko główne kategorie; ich narzędzia są w zakładkach nad stroną i na stronie kategorii. */
 function Sidebar() {
-  const dispatch = useAppDispatch()
   const me = useCurrentUser()
   const { pathname } = useLocation()
   const groups = useNavGroups(me)
@@ -167,22 +166,14 @@ function Sidebar() {
 
   return (
     // Minimalna szerokość: przy rozszerzaniu paska treść od razu ma docelowy układ i odsłania się, zamiast się ściskać.
-    <nav className="flex h-full min-w-52 flex-col gap-6 p-3 rail:min-w-0 rail:items-center rail:gap-4 rail:px-2">
-      <div className="grid gap-5 rail:hidden">
-        <BrandMark className="px-2 pt-1.5" />
-        <StoreSwitcher />
-      </div>
-      <div className="hidden rail:grid rail:justify-items-center rail:gap-3">
-        <BrandMark compact className="pt-1" />
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Rozwiń menu"
-          title="Rozwiń menu"
-          onClick={() => dispatch(toggleMobileNav())}
-        >
-          <MenuIcon />
-        </Button>
+    // Pasek to to samo menu, tylko węższe: wiersze mają stałe wysokości, więc nic nie zmienia miejsca przy rozwijaniu.
+    <nav className="flex h-full min-w-52 flex-col gap-6 p-3 rail:min-w-0">
+      <div className="grid gap-5">
+        <BrandMark className="h-9 px-2 rail:hidden" />
+        <BrandMark compact className="hidden h-9 rail:flex" />
+        <div className="grid min-h-14.5">
+          <StoreSwitcher />
+        </div>
       </div>
 
       <div className="grid gap-1">
@@ -300,7 +291,7 @@ function SidebarLink({
       title={label}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'group/link relative flex items-center gap-2.5 rounded-lg px-2 py-2 rail:size-10 rail:justify-center rail:p-0 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
+        'group/link relative flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
         active && 'bg-muted font-medium text-foreground',
       )}
     >

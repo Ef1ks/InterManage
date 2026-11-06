@@ -1,7 +1,10 @@
 import type { DataEntryRow } from './rows'
 
 /** Najwięcej, ile mieści pole ilości w pliku COMMANDE: 2 cyfry. */
-const MAX_QUANTITY = 99
+export const MAX_QUANTITY = 99
+
+/** Kod, który plik COMMANDE zapisze jako EAN-13 (GTIN-14 z zerem na początku też). */
+export const ORDER_EAN = /^(0\d{13}|\d{8,13})$/
 
 export type OrderLine = { ean: string; quantity: number }
 
@@ -14,7 +17,7 @@ export function orderLines(rows: DataEntryRow[]) {
   const byEan = new Map<string, OrderLine>()
   let skipped = 0
   for (const row of rows) {
-    if (row.eanFallback || !/^(0\d{13}|\d{8,13})$/.test(row.ean) || !row.quantity) {
+    if (row.eanFallback || !ORDER_EAN.test(row.ean) || !row.quantity) {
       skipped += 1
       continue
     }

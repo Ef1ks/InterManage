@@ -16,5 +16,6 @@ public record FinishedProductResponse(
         String nomenclature,
         String unit,
         BigDecimal salePrice,
+        Boolean active,
         UUID calculationId) {
 }

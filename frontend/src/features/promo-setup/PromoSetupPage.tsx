@@ -133,6 +133,19 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
     )
   }
 
+  /** Karta artykułu nie zostaje po usuniętym wierszu. */
+  const closeArticle = (rows: PromoRow[]) => {
+    if (!rows.some((row) => row.article?.itm8 === selected)) return
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete('artykul')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
   /** Dopisuje artykuły do kafelka; artykuł, który już w nim jest, pomija, a nieznany kod zostaje wierszem z błędem. */
   const addCodes = async (tileId: string, entered: string[]) => {
     // Krótki kod to ITM8 albo kod z etykiety wagi bez końca, więc szukamy obu.
@@ -175,6 +188,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
       item.id === tile.id ? { ...item, rows: item.rows.filter((candidate) => candidate.id !== row.id) } : item,
     )
     dispatch(setPromoDraft({ storeId: store.id, draft: { ...draft, tiles } }))
+    closeArticle([row])
     toast.success(`Usunięto: ${row.article?.name ?? row.code}`, {
       action: { label: 'Przywróć', onClick: () => restore(draft) },
     })
@@ -183,6 +197,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
   const removeTile = (tile: PromoTile) => {
     const tiles = draft.tiles.filter((item) => item.id !== tile.id)
     dispatch(setPromoDraft({ storeId: store.id, draft: { ...draft, tiles } }))
+    closeArticle(tile.rows)
     toast.success(`Usunięto promocję ${tile.number}`, {
       action: { label: 'Przywróć', onClick: () => restore(draft) },
     })
@@ -190,6 +205,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
 
   const clear = () => {
     dispatch(setPromoDraft({ storeId: store.id, draft: newPromoDraft() }))
+    closeArticle(draft.tiles.flatMap((tile) => tile.rows))
     toast.success('Wyczyszczono promocje', { action: { label: 'Przywróć', onClick: () => restore(draft) } })
   }
 

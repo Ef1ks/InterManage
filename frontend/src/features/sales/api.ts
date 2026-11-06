@@ -35,6 +35,8 @@ import type {
   TopSalesMetric,
   TopSalesPartner,
   TopSalesReport,
+  SlowMovingReport,
+  ZeroStockReport,
 } from '@/lib/types'
 
 /** Raporty liczą się z zapisanej sprzedaży sklepu, więc sklep jest częścią klucza. */
@@ -315,6 +317,93 @@ export function useGratisReportPdf(storeId: string) {
     }),
     download: useMutation({
       mutationFn: (range: MonthRange) => downloadFile(gratisPdfPath(storeId, range), 'gratisy.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
+}
+
+const zeroStockQuery = (codes: string[]) =>
+  new URLSearchParams(codes.map((code) => ['nomenclatures', code])).toString()
+
+/** Raport zerówek dla potwierdzonego wyboru nomenklatury. */
+export function useZeroStock(storeId: string, codes: string[]) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'zero-stock', codes],
+    enabled: codes.length > 0,
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<ZeroStockReport>(`${reportsPath(storeId)}/zero-stock?${zeroStockQuery(codes)}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+const zeroStockPdfPath = (storeId: string, codes: string[]) =>
+  `${reportsPath(storeId)}/zero-stock/pdf?${zeroStockQuery(codes)}`
+
+/** Wydruk raportu zerówek z kodami kreskowymi: PDF od razu w oknie drukowania albo zapis pliku. */
+export function useZeroStockPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (codes: string[]) => printFile(zeroStockPdfPath(storeId, codes)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (codes: string[]) => downloadFile(zeroStockPdfPath(storeId, codes), 'zerowki.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
+}
+
+export type SlowMovingSort = 'value' | 'name' | 'itm8' | 'supplier' | 'delivery' | 'stock' | 'sold' | 'rotation'
+
+export type SlowMovingQuery = {
+  range: DateRange
+  maxRotation: number
+  nomenclatures: string[]
+  category: string | null
+  supplier: string | null
+  cadencier: 'WITH' | 'WITHOUT' | null
+  minStockValue: number | null
+  query: string
+  withoutDeliveries: boolean
+  withRawMaterials: boolean
+  deliveryDays: number | null
+  sort: SlowMovingSort
+  direction: 'asc' | 'desc'
+}
+
+function slowMovingParams({ range, nomenclatures, ...filters }: SlowMovingQuery) {
+  const params = new URLSearchParams(range)
+  nomenclatures.forEach((code) => params.append('nomenclatures', code))
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value != null && value !== '' && value !== false) params.set(key, String(value))
+  })
+  return params
+}
+
+/** Filtry liczy serwer, żeby wydruk miał dokładnie to, co ekran. */
+export function useSlowMoving(storeId: string, query: SlowMovingQuery, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'slow-moving', query],
+    enabled,
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<SlowMovingReport>(`${reportsPath(storeId)}/slow-moving?${slowMovingParams(query)}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+const slowMovingPdfPath = (storeId: string, query: SlowMovingQuery) =>
+  `${reportsPath(storeId)}/slow-moving/pdf?${slowMovingParams(query)}`
+
+/** Wydruk niesprzedających się artykułów: PDF od razu w oknie drukowania albo zapis pliku. */
+export function useSlowMovingPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (query: SlowMovingQuery) => printFile(slowMovingPdfPath(storeId, query)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (query: SlowMovingQuery) =>
+        downloadFile(slowMovingPdfPath(storeId, query), 'niesprzedajace-sie.pdf'),
       meta: { invalidates: false },
     }),
   }

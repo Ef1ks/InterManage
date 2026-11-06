@@ -14,4 +14,6 @@ export const salesPaths = {
   gratis: `${base}/gratisy`,
   protocols: `${base}/protokoly`,
   promotions: `${base}/promocje`,
+  zeroStock: `${base}/zerowki`,
+  slowMoving: `${base}/niesprzedajace-sie`,
 }

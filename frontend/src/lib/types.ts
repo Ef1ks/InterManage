@@ -1142,6 +1142,7 @@ export type FinishedProduct = {
   unit: string
   /** Obecna cena na półce. */
   salePrice: number | null
+  active: boolean | null
   calculationId: string | null
 }
 
@@ -1154,13 +1155,18 @@ export type PriceCalculationSummary = {
   mode: CalculationMode
   batchYield: number | null
   vatRate: number
+  /** Marża doliczana do kosztu: docelowa wyrobu, a bez niej standardowa. */
+  markupPercent: number
+  /** Marża ustawiona na wyrobie. */
+  targetMarkup: number | null
+  /** 0 = kalkulacja bez przepisu (z automatycznego importu). */
   itemCount: number
   totalCost: number
   /** Pusty, gdy przy całym przepisie brakuje wydajności. */
   costPerKg: number | null
   /** Cena do eksportu: własna, a bez niej wyliczona. */
   salePrice: number | null
-  /** Koszt + narzut + VAT, w górę do ,99 zł. */
+  /** Koszt + marża + VAT, w górę do ,99 zł. */
   calculatedPrice: number | null
   /** Własna cena zamiast wyliczonej. */
   manualPrice: number | null
@@ -1201,9 +1207,63 @@ export type PriceProduct = {
 }
 
 export type PriceCalculation = Omit<PriceCalculationSummary, 'itemCount'> & {
-  /** Narzut na koszt składników, z którym liczy się cena sprzedaży. */
-  markupPercent: number
   items: PriceProduct[]
+}
+
+/** Kalkulacja do pliku CADBEZP: ceny zakupu za sprzedawaną sztukę i dostawca z kartoteki (osobny plik na dostawcę). */
+export type PurchaseFileLine = {
+  calculationId: string
+  name: string
+  ean: string
+  supplier: string | null
+  currentPrice: number | null
+  purchasePrice: number
+  /** Składniki bez ceny: koszt jest zaniżony. */
+  missingPriceCount: number
+  /** Artykuł na sztuki, a koszt kalkulacji jest na 1 kg. */
+  countedInPieces: boolean
+}
+
+/** Sklep zaprzyjaźniony: zakładka u góry kalkulatora. */
+export type PartnerStore = {
+  id: string
+  number: string
+  name: string
+}
+
+/** Kalkulacja sklepu zaprzyjaźnionego z jego ceną i artykułem, do którego sklep ją przypisał. */
+export type PartnerCalculation = {
+  calculationId: string
+  sourceProductId: string
+  name: string
+  ean: string
+  /** Cena sąsiada; przy `withoutRecipe` jego cena z półki. */
+  salePrice: number | null
+  vatRate: number
+  withoutRecipe: boolean
+  link: {
+    id: string
+    /** Z automatycznego przypisania: do sprawdzenia. */
+    auto: boolean
+    itm8: string
+    ean: string
+    name: string | null
+    brand: string | null
+    /** Nasza cena na półce. */
+    salePrice: number | null
+  } | null
+}
+
+/** Automatyczne przypisanie: nowe przypisania ({@code ids}, do cofnięcia) i ile wyrobów zostało bez artykułu. */
+export type AutoLink = {
+  ids: string[]
+  left: number
+}
+
+/** Kalkulacje bez przepisu założone importem ({@code ids}, do cofnięcia) i wyroby pominięte, bo już mają kalkulację. */
+export type CalculationImport = {
+  ids: string[]
+  skipped: number
 }
 
 export type PriceCalculationRequest = {
@@ -1211,6 +1271,8 @@ export type PriceCalculationRequest = {
   mode: CalculationMode
   batchYield: number | null
   vatRate: number
+  /** Marża docelowa w procentach; {@code null} - standardowa. */
+  targetMarkup: number | null
   /** Własna cena sprzedaży 1 kg; {@code null} - wyliczona. */
   manualPrice: number | null
   /** {@code pieceWeight}: waga 1 sztuki w kg, tylko przy składnikach na sztuki; {@code null} ją czyści. */
@@ -1515,6 +1577,72 @@ export type GratisReportTile = {
   regions: { code: string; name: string | null; figures: GratisFigures }[]
   /** {@code saleValueGross} to sprzedaż całego sklepu. */
   total: GratisFigures
+}
+
+/** Artykuł aktywny w cadencier ze stanem 0. */
+export type ZeroStockItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  stock: number | null
+}
+
+/** Rodziny w kolejności kodów; pusty {@code cadencierGeneratedAt} = sklep nie ma listy cadencier. */
+export type ZeroStockReport = {
+  storeNumber: string
+  storeName: string
+  stockReportGeneratedAt: string | null
+  cadencierGeneratedAt: string | null
+  selection: NomenclatureOption[]
+  itemCount: number
+  groups: { code: string; name: string | null; items: ZeroStockItem[] }[]
+}
+
+export type SlowMovingItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  cadencier: boolean
+  stock: number
+  stockValue: number | null
+  soldQuantity: number
+  weeklyRotation: number
+  lastDeliveryDate: string | null
+  supplierCode: string | null
+  supplierName: string | null
+}
+
+export type SlowMovingDelivery = {
+  documentId: string
+  documentNumber: string
+  documentDate: string
+  supplierCode: string | null
+  supplierName: string | null
+  purchaseValue: number
+  items: { itm8: string; quantity: number; purchaseValue: number }[]
+}
+
+/** Sumy i {@code items} po wyborze kategorii; liczby przy zakładkach i lista dostawców przed nim. */
+export type SlowMovingReport = {
+  storeNumber: string
+  storeName: string
+  stockReportGeneratedAt: string | null
+  from: string
+  to: string
+  maxRotation: number
+  itemCount: number
+  unsoldCount: number
+  stockValue: number
+  allCount: number
+  otherCount: number
+  categoryCounts: { id: string; count: number }[]
+  suppliers: { code: string; name: string | null; count: number }[]
+  selection: NomenclatureOption[]
+  items: SlowMovingItem[]
+  deliveries: SlowMovingDelivery[]
 }
 
 export type GratisReport = {

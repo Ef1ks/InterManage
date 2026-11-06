@@ -26,6 +26,7 @@ import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.deliorder.service.DeliOrderFormService;
 import com.intermanage.backend.deliprice.component.IngredientPricing;
+import com.intermanage.backend.deliprice.dto.CalculationImportResponse;
 import com.intermanage.backend.deliprice.dto.FinishedProductResponse;
 import com.intermanage.backend.deliprice.dto.PriceCalculationRequest;
 import com.intermanage.backend.deliprice.dto.PriceCalculationResponse;
@@ -50,7 +51,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * Kalkulator cen garmażu: przepisy na gotowe wyroby z kartoteki (nomenklatury {@link #FINISHED_NOMENCLATURES}).
  * Ceny składników są zapamiętywane przy dodaniu - z ostatniej dostawy PZ, a gdy jej nie ma, z kartoteki - i zmienia
  * je dopiero "Odśwież ceny" (podgląd, a potem zatwierdzenie z decyzjami - patrz {@link #needsDecision}). Z kosztu 1 kg
- * wychodzi cena sprzedaży (narzut, VAT, zaokrąglenie do ,99), którą można zastąpić własną; do Excela z EAN-em idzie
+ * wychodzi cena sprzedaży (marża docelowa albo standardowa, VAT, zaokrąglenie do ,99), którą można zastąpić własną; do Excela z EAN-em idzie
  * własna, a bez niej wyliczona. Usunięcie to znacznik.
  */
 @Service
@@ -58,6 +59,8 @@ public class PriceCalculationService {
 
     /** Działy wyrobów garmażeryjnych w kartotece (dwie pierwsze cyfry NOM). */
     public static final List<String> FINISHED_NOMENCLATURES = List.of("24", "36", "46");
+    /** Nomenklatura automatycznego importu kalkulacji bez przepisu. */
+    public static final String IMPORT_NOMENCLATURE = "36";
     private static final Set<Short> VAT_RATES = Set.of((short) 0, (short) 5, (short) 8, (short) 23);
     private static final int SEARCH_LIMIT = 30;
     private static final Collator POLISH = Collator.getInstance(Locale.of("pl", "PL"));
@@ -132,6 +135,50 @@ public class PriceCalculationService {
         calculations.flush();
         apply(storeId, calculation, request, known, user(userId));
         return mapper.toResponse(calculations.saveAndFlush(calculation));
+    }
+
+    /**
+     * Automatyczny import: zaznaczone wyroby z nomenklatury {@value #IMPORT_NOMENCLATURE} dostają kalkulację bez
+     * przepisu (bez składników, więc z ceną z półki). Wyroby, które mają już kalkulację, są pomijane.
+     */
+    @Transactional
+    public CalculationImportResponse importWithoutRecipe(UUID storeId, List<UUID> productIds, UUID userId) {
+        Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
+        AppUser user = user(userId);
+        Set<UUID> ids = new HashSet<>(productIds);
+        List<Product> found = products.findByIdInAndStoreId(ids, storeId);
+        if (found.size() != ids.size()) {
+            throw ApiException.badRequest("Część wyrobów nie należy do kartoteki tego sklepu");
+        }
+        if (!found.stream().allMatch(product -> product.getNomenclature() != null
+                && product.getNomenclature().startsWith(IMPORT_NOMENCLATURE))) {
+            throw ApiException.badRequest("Import obejmuje tylko wyroby z nomenklatury " + IMPORT_NOMENCLATURE);
+        }
+        Set<UUID> taken = calculations.findActiveWithItems(storeId).stream()
+                .filter(calculation -> calculation.getProduct() != null)
+                .map(calculation -> calculation.getProduct().getId())
+                .collect(Collectors.toSet());
+        List<PriceCalculation> created = found.stream()
+                .filter(product -> !taken.contains(product.getId()))
+                .map(product -> {
+                    PriceCalculation calculation = new PriceCalculation(store, user);
+                    calculation.update(product, CalculationMode.PER_KG, null, PriceCalculation.DEFAULT_VAT_RATE,
+                            List.of(), Map.of(), user);
+                    return calculation;
+                })
+                .toList();
+        List<UUID> createdIds = calculations.saveAll(created).stream().map(PriceCalculation::getId).toList();
+        return new CalculationImportResponse(createdIds, found.size() - created.size());
+    }
+
+    /** Cofnięcie importu to znacznik; kalkulacja, która dostała już przepis, zostaje. */
+    @Transactional
+    public void undoImport(UUID storeId, List<UUID> ids, UUID userId) {
+        AppUser user = user(userId);
+        Set<UUID> imported = new HashSet<>(ids);
+        calculations.findActiveWithItems(storeId).stream()
+                .filter(calculation -> imported.contains(calculation.getId()) && calculation.getItemCount() == 0)
+                .forEach(calculation -> calculation.markDeleted(user));
     }
 
     /**
@@ -317,6 +364,7 @@ public class PriceCalculationService {
                 .toList();
         BigDecimal batchYield = request.mode() == CalculationMode.PER_BATCH ? request.batchYield() : null;
         calculation.update(finished, request.mode(), batchYield, request.vatRate(), ingredients, prices, user);
+        calculation.setTargetMarkup(request.targetMarkup());
         calculation.setManualPrice(request.manualPrice(), user);
     }
 
@@ -325,7 +373,7 @@ public class PriceCalculationService {
         return nomenclature != null && FINISHED_NOMENCLATURES.stream().anyMatch(nomenclature::startsWith);
     }
 
-    private static List<PriceCalculation> sorted(List<PriceCalculation> list) {
+    static List<PriceCalculation> sorted(List<PriceCalculation> list) {
         return list.stream().sorted(Comparator.comparing(PriceCalculation::getName, POLISH)).toList();
     }
 

@@ -1,18 +1,23 @@
 import { useDeferredValue, useMemo, useState } from 'react'
 import { ChevronRightIcon, DownloadIcon, PlusIcon } from 'lucide-react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { TableSkeletonRows } from '@/components/TableSkeleton'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
 import { useCalculations, useExportCalculations } from '@/features/deli-prices/api'
+import { CalculatorTabs } from '@/features/deli-prices/CalculatorTabs'
 import { formatDay, formatMoney, formatQuantity, ingredientsWord, pricePaths } from '@/features/deli-prices/format'
+import { ImportCalculationsButton } from '@/features/deli-prices/ImportCalculationsButton'
+import { InsertPricesIntoTable } from '@/features/deli-prices/InsertPricesIntoTable'
+import { PurchaseFileButton } from '@/features/deli-prices/PurchaseFileButton'
 import { RefreshPricesButton } from '@/features/deli-prices/RefreshPricesButton'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
@@ -20,8 +25,9 @@ import { matchesSearch } from '@/lib/search'
 import type { PriceCalculationSummary, StoreSummary } from '@/lib/types'
 
 /**
- * Kalkulacje sklepu z wyszukiwarką (nazwa, marka, EAN wyrobu). Na górze odświeżenie cen wszystkich składników
- * (ostatnia dostawa PZ, a bez niej kartoteka) i eksport cen sprzedaży do Excela.
+ * Kalkulacje sklepu z wyszukiwarką (nazwa, marka, EAN wyrobu). Na górze automatyczny import wyrobów z nomenklatury 36,
+ * odświeżenie cen wszystkich składników (ostatnia dostawa PZ, a bez niej kartoteka) i eksport cen sprzedaży do Excela.
+ * Kalkulacje bez przepisu mają plakietkę i filtr w adresie ({@code ?przepis=bez}).
  */
 export function CalculationsList({ store }: { store: StoreSummary }) {
   const canEdit = useCan('DELI_PRICES', 'EDIT')
@@ -30,21 +36,39 @@ export function CalculationsList({ store }: { store: StoreSummary }) {
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const withoutRecipeCount = useMemo(() => (calculations ?? []).filter(isWithoutRecipe).length, [calculations])
+  const onlyWithoutRecipe = searchParams.get('przepis') === 'bez' && withoutRecipeCount > 0
+  const toggleWithoutRecipe = () => setSearchParams(onlyWithoutRecipe ? {} : { przepis: 'bez' }, { replace: true })
 
   const visible = useMemo(
     () =>
-      (calculations ?? []).filter((calculation) =>
-        matchesSearch([calculation.name, calculation.product?.brand, calculation.product?.ean], deferredQuery),
+      (calculations ?? []).filter(
+        (calculation) =>
+          (!onlyWithoutRecipe || isWithoutRecipe(calculation)) &&
+          matchesSearch([calculation.name, calculation.product?.brand, calculation.product?.ean], deferredQuery),
       ),
-    [calculations, deferredQuery],
+    [calculations, deferredQuery, onlyWithoutRecipe],
   )
   // Najstarsze odświeżenie mówi, od kiedy najdłużej czeka któraś kalkulacja.
   const oldestRefresh = useMemo(
     () =>
       (calculations ?? [])
+        .filter((calculation) => !isWithoutRecipe(calculation))
         .map((calculation) => calculation.pricesRefreshedAt)
         .filter((value): value is string => value !== null)
         .sort()[0] ?? null,
+    [calculations],
+  )
+  // Cena z kalkulacji inna niż na półce: to trafia do wprowadzania danych.
+  const changed = useMemo(
+    () =>
+      (calculations ?? []).flatMap((calculation) =>
+        calculation.product && calculation.salePrice != null && calculation.salePrice !== calculation.product.salePrice
+          ? [{ ean: calculation.product.ean, salePrice: calculation.salePrice }]
+          : [],
+      ),
     [calculations],
   )
   const open = (calculation: PriceCalculationSummary) => navigate(pricePaths.calculation(calculation.id))
@@ -66,19 +90,28 @@ export function CalculationsList({ store }: { store: StoreSummary }) {
     <>
       <PageHeader
         title="Kalkulator cen garmażu"
-        description={`Ceny sprzedaży wyrobów sklepu ${storeLabel(store)}: koszt składników z ostatnich dostaw, narzut 60% i VAT.`}
+        description={`Ceny sprzedaży wyrobów sklepu ${storeLabel(store)}: koszt składników z ostatnich dostaw, marża docelowa albo standardowa 60% i VAT.`}
         actions={
-          hasCalculations && (
+          (canEdit || hasCalculations) && (
             <>
-              {canEdit && <RefreshPricesButton storeId={store.id} />}
-              <Button variant="outline" loading={exportFile.isPending} onClick={download}>
-                <DownloadIcon />
-                Eksport do Excela
-              </Button>
+              {canEdit && <ImportCalculationsButton storeId={store.id} />}
+              {hasCalculations && (
+                <>
+                  {canEdit && <RefreshPricesButton storeId={store.id} />}
+                  <InsertPricesIntoTable storeId={store.id} lines={changed} />
+                  <PurchaseFileButton storeId={store.id} />
+                  <Button variant="outline" loading={exportFile.isPending} onClick={download}>
+                    <DownloadIcon />
+                    Eksport do Excela
+                  </Button>
+                </>
+              )}
             </>
           )
         }
       />
+
+      <CalculatorTabs storeId={store.id} />
 
       {isError ? (
         <FullPageMessage
@@ -105,6 +138,15 @@ export function CalculationsList({ store }: { store: StoreSummary }) {
                 onChange={setQuery}
                 placeholder="Szukaj wyrobu: nazwa, marka, EAN"
               />
+              {withoutRecipeCount > 0 && (
+                <Button
+                  variant={onlyWithoutRecipe ? 'secondary' : 'outline'}
+                  aria-pressed={onlyWithoutRecipe}
+                  onClick={toggleWithoutRecipe}
+                >
+                  Bez przepisu ({withoutRecipeCount})
+                </Button>
+              )}
               {oldestRefresh && (
                 <span className="text-sm text-muted-foreground tabular-nums">
                   Ceny składników z {formatDay(oldestRefresh)} lub nowsze
@@ -149,11 +191,18 @@ export function CalculationsList({ store }: { store: StoreSummary }) {
                       className="cursor-pointer tabular-nums outline-none focus-visible:bg-muted"
                     >
                       <TableCell className="max-w-96 py-3 pl-4 whitespace-normal">
-                        <div className="font-medium">{calculation.name}</div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-medium">{calculation.name}</span>
+                          {isWithoutRecipe(calculation) && (
+                            <Badge className="bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-100">
+                              bez przepisu
+                            </Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">{describe(calculation)}</div>
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatMoney(calculation.costPerKg)}
+                        {formatMoney(isWithoutRecipe(calculation) ? null : calculation.costPerKg)}
                         {calculation.missingPriceCount > 0 && (
                           <div className="text-xs text-amber-700 dark:text-amber-400">
                             bez ceny: {calculation.missingPriceCount}
@@ -165,7 +214,15 @@ export function CalculationsList({ store }: { store: StoreSummary }) {
                         <div className="text-xs text-muted-foreground">
                           {calculation.manualPrice != null
                             ? `własna · wyliczona ${formatMoney(calculation.calculatedPrice)}`
-                            : `VAT ${calculation.vatRate}%`}
+                            : isWithoutRecipe(calculation)
+                              ? `z półki · VAT ${calculation.vatRate}%`
+                              : [
+                                  calculation.targetMarkup != null &&
+                                    `marża ${formatQuantity(calculation.targetMarkup)}%`,
+                                  `VAT ${calculation.vatRate}%`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
                         </div>
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
@@ -190,8 +247,14 @@ export function CalculationsList({ store }: { store: StoreSummary }) {
   )
 }
 
+/** Kalkulacja założona importem czeka na składniki; do tego czasu nie ma kosztu ani ceny. */
+function isWithoutRecipe(calculation: PriceCalculationSummary) {
+  return calculation.itemCount === 0
+}
+
 /** "EAN 5900… · 4 składniki · przepis na 3 kg" albo "· skład na 1 kg". */
 function describe(calculation: PriceCalculationSummary) {
+  if (isWithoutRecipe(calculation)) return calculation.product ? `EAN ${calculation.product.ean}` : ''
   const parts = [
     calculation.product && `EAN ${calculation.product.ean}`,
     `${calculation.itemCount} ${ingredientsWord(calculation.itemCount)}`,

@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { useCalculation } from '@/features/deli-prices/api'
 import { CalculationEditor } from '@/features/deli-prices/CalculationEditor'
 import { CalculationsList } from '@/features/deli-prices/CalculationsList'
+import { PartnerCalculations } from '@/features/deli-prices/PartnerCalculations'
 import { pricePaths } from '@/features/deli-prices/format'
 import { useCurrentStore } from '@/features/stores/current-store'
 import type { StoreSummary } from '@/lib/types'
@@ -35,6 +36,7 @@ function StoreCalculator({ store }: { store: StoreSummary }) {
     <Routes>
       <Route index element={<CalculationsList store={store} />} />
       <Route path="nowa" element={<CalculationEditor storeId={store.id} />} />
+      <Route path="sklep/:partnerStoreId" element={<PartnerCalculations store={store} />} />
       <Route path=":calculationId" element={<SavedCalculation storeId={store.id} />} />
       <Route path="*" element={<Navigate to={pricePaths.list} replace />} />
     </Routes>

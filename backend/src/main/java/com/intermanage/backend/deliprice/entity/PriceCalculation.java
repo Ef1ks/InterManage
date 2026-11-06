@@ -33,15 +33,16 @@ import jakarta.persistence.Table;
 
 /**
  * Kalkulacja ceny gotowego wyrobu garmażeryjnego z kartoteki ({@link #getProduct()}): składniki z ilościami, na 1 kg
- * albo na cały przepis. Koszt 1 kg + {@value #MARKUP_PERCENT}% narzutu + VAT daje cenę wyliczoną, zaokrągloną w górę
- * do ,99 zł; zamiast niej można ustawić własną ({@link #getManualPrice()}). Ceny składników są zapamiętane
- * ({@link PriceCalculationItem}). Usunięcie to znacznik.
+ * albo na cały przepis. Koszt 1 kg + marża ({@link #getMarkupPercent()}: docelowa wyrobu albo standardowa
+ * {@value #MARKUP_PERCENT}%) + VAT daje cenę wyliczoną, zaokrągloną w górę do ,99 zł; zamiast niej można ustawić
+ * własną ({@link #getManualPrice()}). Ceny składników są zapamiętane ({@link PriceCalculationItem}). Kalkulacja bez
+ * składników (automatyczny import) to wyrób bez przepisu: nie ma kosztu, a ceną jest cena z półki. Usunięcie to znacznik.
  */
 @Entity
 @Table(name = "price_calculations")
 public class PriceCalculation {
 
-    /** Narzut na koszt składników. */
+    /** Standardowa marża doliczana do kosztu składników. */
     public static final int MARKUP_PERCENT = 60;
     public static final short DEFAULT_VAT_RATE = 5;
 
@@ -78,6 +79,10 @@ public class PriceCalculation {
 
     @Column(name = "prices_refreshed_at")
     private Instant pricesRefreshedAt;
+
+    /** Marża docelowa wyrobu zamiast standardowej; każde kolejne przeliczenie ceny (też odświeżenie) liczy z niej. */
+    @Column(name = "target_markup_percent", precision = 5, scale = 2)
+    private BigDecimal targetMarkup;
 
     /** Własna cena sprzedaży 1 kg zamiast wyliczonej; idzie do eksportu. */
     @Column(name = "manual_price", precision = 10, scale = 2)
@@ -166,6 +171,10 @@ public class PriceCalculation {
         items.clear();
     }
 
+    public void setTargetMarkup(BigDecimal targetMarkup) {
+        this.targetMarkup = targetMarkup;
+    }
+
     /** Własna cena sprzedaży albo powrót do wyliczonej ({@code null}); ta sama cena nie zmienia autora. */
     public void setManualPrice(BigDecimal price, AppUser by) {
         if (price == null ? manualPrice == null : manualPrice != null && price.compareTo(manualPrice) == 0) {
@@ -193,13 +202,16 @@ public class PriceCalculation {
         return perKg == null ? null : perKg.setScale(2, RoundingMode.HALF_UP);
     }
 
-    /** Cena sprzedaży 1 kg do eksportu: własna, a bez niej wyliczona. */
+    /** Cena sprzedaży 1 kg do eksportu: własna, a bez niej wyliczona; wyrób bez przepisu zostaje przy cenie z półki. */
     public BigDecimal getSalePrice() {
-        return manualPrice != null ? manualPrice : getCalculatedPrice();
+        if (manualPrice != null) {
+            return manualPrice;
+        }
+        return items.isEmpty() && product != null ? product.getSalePrice() : getCalculatedPrice();
     }
 
     /**
-     * Wyliczona cena sprzedaży brutto 1 kg: koszt + {@value #MARKUP_PERCENT}% narzutu + VAT, zaokrąglona w górę
+     * Wyliczona cena sprzedaży brutto 1 kg: koszt + marża ({@link #getMarkupPercent()}) + VAT, zaokrąglona w górę
      * do ,99 zł (15,40 -> 15,99; 16,00 -> 16,99). Pusta, gdy nie ma kosztu.
      */
     public BigDecimal getCalculatedPrice() {
@@ -223,7 +235,7 @@ public class PriceCalculation {
             return null;
         }
         BigDecimal gross = perKg
-                .multiply(BigDecimal.valueOf(100 + MARKUP_PERCENT)).divide(HUNDRED)
+                .multiply(HUNDRED.add(getMarkupPercent())).divide(HUNDRED)
                 .multiply(BigDecimal.valueOf(100 + vatRate)).divide(HUNDRED);
         BigDecimal price = gross.setScale(0, RoundingMode.CEILING).subtract(CENT);
         return price.compareTo(gross) < 0 ? price.add(BigDecimal.ONE) : price;
@@ -287,6 +299,15 @@ public class PriceCalculation {
 
     public short getVatRate() {
         return vatRate;
+    }
+
+    public BigDecimal getTargetMarkup() {
+        return targetMarkup;
+    }
+
+    /** Marża, z którą liczy się cena: docelowa wyrobu, a bez niej standardowa. */
+    public BigDecimal getMarkupPercent() {
+        return targetMarkup != null ? targetMarkup : BigDecimal.valueOf(MARKUP_PERCENT);
     }
 
     public Instant getPricesRefreshedAt() {

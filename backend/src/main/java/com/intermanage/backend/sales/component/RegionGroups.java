@@ -45,7 +45,15 @@ public final class RegionGroups {
             Group.of("Papierosy", "39"),
             new Group("Pozostałe", List.of(), List.of("40", "90", "91", "61", "99"), true));
 
+    /** Torby i artykuły dla sklepów, artykuły kosztowe, opakowania zwrotne, materiały promocyjne: to nie jest towar. */
+    private static final List<String> NOT_GOODS = List.of("60", "61", "90", "91");
+
     private RegionGroups() {
+    }
+
+    /** Czy artykuł z tej podrodziny należy do rejonu, którego nie ocenia się jak towaru (pusty kod to towar). */
+    public static boolean isNotGoods(String subfamilyCode) {
+        return subfamilyCode != null && NOT_GOODS.stream().anyMatch(subfamilyCode::startsWith);
     }
 
     /** Wszystkie rejony wymienione w grupach, w kolejności wydruku. */

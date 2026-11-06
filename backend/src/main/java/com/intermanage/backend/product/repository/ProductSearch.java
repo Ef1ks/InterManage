@@ -57,6 +57,13 @@ public final class ProductSearch {
                         .toArray(Predicate[]::new)));
     }
 
+    /** Produkty sklepu aktywne w kartotece. */
+    public static Specification<Product> activeInStore(UUID storeId) {
+        return (root, query, cb) -> cb.and(
+                cb.equal(root.get("store").get("id"), storeId),
+                cb.isTrue(root.get("active")));
+    }
+
     public static Specification<Product> inStoreMatching(UUID storeId, List<String> words) {
         return (root, query, cb) -> {
             List<Predicate> all = new ArrayList<>();

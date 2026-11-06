@@ -377,6 +377,14 @@ public class Product {
     }
 
     /** COLI: ile sztuk w kartonie. */
+    public Short getVatCode() {
+        return vatCode;
+    }
+
+    public String getCnCode() {
+        return cnCode;
+    }
+
     public BigDecimal getCaseSize() {
         return caseSize;
     }
@@ -418,6 +426,11 @@ public class Product {
             return pricePerItem.setScale(4, RoundingMode.HALF_UP);
         }
         return pricePerItem.divide(netContent, 4, RoundingMode.HALF_UP);
+    }
+
+    /** Odwrotność {@link #unitCostOf}: cena sprzedawanej sztuki z kosztu jednostki (wiaderko 3 kg to koszt 1 kg razy 3). */
+    public BigDecimal itemCostOf(BigDecimal unitCost) {
+        return netContent == null || netContent.signum() <= 0 ? unitCost : unitCost.multiply(netContent);
     }
 
     /** Czy ilość w przepisie wpisuje się w sztukach - tylko wtedy ma sens {@link #getPieceWeight()}. */

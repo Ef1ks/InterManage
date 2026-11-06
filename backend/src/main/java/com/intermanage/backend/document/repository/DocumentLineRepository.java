@@ -556,6 +556,85 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
         String getSupplierName();
     }
 
+    /**
+     * Linie przyjęć PZ z ilością > 0 przypisane do artykułów sklepu: po ITM8 z kartoteki, a linia z lokalnym ITM8
+     * dostawcy spoza kartoteki ({@code 99…}) po EAN-ie, jak w {@link #ARTICLE_LINE}. Gdy EAN pasuje do kilku
+     * artykułów, wybór ma być powtarzalny, więc bierze najmniejszy ITM8.
+     */
+    String DELIVERED_LINES = """
+            with article_codes as (
+                select ltrim(btrim(p.ean), '0') as ean, p.itm8 from products p where p.store_id = :storeId
+                union
+                select ltrim(btrim(pc.ean), '0'), pc.itm8 from product_codes pc
+                where pc.store_id = :storeId and pc.current
+                union
+                select ltrim(btrim(pe.ean), '0'), p.itm8 from product_eans pe join products p on p.id = pe.product_id
+                where p.store_id = :storeId
+            ), article_eans as (
+                select ean, min(itm8) as itm8 from article_codes where length(ean) >= 8 group by ean
+            ), delivered as (
+                select d.id as document_id, d.number as document_number, d.document_date, l.supplier_code,
+                       l.supplier_name, l.quantity, l.purchase_value, coalesce(p.itm8, e.itm8) as itm8
+                from document_lines l
+                join documents d on d.id = l.document_id
+                left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+                left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
+                where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
+                  and d.document_date >= :since
+            )
+            """;
+
+    /** Ostatnia dostawa artykułu. */
+    interface LastDelivery {
+        String getItm8();
+
+        LocalDateTime getDocumentDate();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+    }
+
+    /** Ostatnia dostawa każdego artykułu sklepu od {@code since} (artykułów bez przyjęcia nie ma w wyniku). */
+    @Query(value = DELIVERED_LINES + """
+            select distinct on (itm8) itm8, document_date, supplier_code, supplier_name
+            from delivered
+            where itm8 is not null
+            order by itm8, document_date desc, document_number desc
+            """, nativeQuery = true)
+    List<LastDelivery> findLastDeliveries(UUID storeId, LocalDateTime since);
+
+    /** Artykuł w przyjęciu: linie tego samego artykułu są zsumowane. */
+    interface DeliveredArticle {
+        UUID getDocumentId();
+
+        String getDocumentNumber();
+
+        LocalDateTime getDocumentDate();
+
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        String getItm8();
+
+        BigDecimal getQuantity();
+
+        BigDecimal getPurchaseValue();
+    }
+
+    /** Artykuły przyjęć PZ od {@code since}, od najnowszego przyjęcia; ilości i kwoty z raportu, bez korekt. */
+    @Query(value = DELIVERED_LINES + """
+            select document_id, document_number, document_date, max(supplier_code) as supplier_code,
+                   max(supplier_name) as supplier_name, itm8, sum(quantity) as quantity,
+                   coalesce(sum(purchase_value), 0) as purchase_value
+            from delivered
+            where itm8 is not null
+            group by document_id, document_number, document_date, itm8
+            order by document_date desc, length(document_number) desc, document_number desc
+            """, nativeQuery = true)
+    List<DeliveredArticle> findDeliveredArticles(UUID storeId, LocalDateTime since);
+
     /** Ostatni dostawca każdego z podanych artykułów z przyjęć PZ (artykułów bez przyjęcia nie ma w wyniku). */
     @Query(value = """
             select distinct on (l.itm8) l.itm8 as itm8, l.supplier_code as supplier_code,

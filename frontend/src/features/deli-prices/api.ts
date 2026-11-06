@@ -2,12 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, downloadFile } from '@/lib/api'
 import type {
+  AutoLink,
+  CalculationImport,
+  DataEntryCatalogArticle,
   FinishedProduct,
+  PartnerCalculation,
+  PartnerStore,
   PriceCalculation,
   PriceCalculationRequest,
   PriceCalculationSummary,
   PriceChange,
   PriceProduct,
+  PurchaseFileLine,
   RefreshChoice,
 } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
@@ -58,7 +64,8 @@ export function useDeleteCalculation(storeId: string) {
       onSuccess: refresh,
     }),
     restore: useMutation({
-      mutationFn: (id: string) => api<PriceCalculation>(`${calculationsPath(storeId)}/${id}/restore`, { method: 'POST' }),
+      mutationFn: (id: string) =>
+        api<PriceCalculation>(`${calculationsPath(storeId)}/${id}/restore`, { method: 'POST' }),
       onSuccess: refresh,
     }),
   }
@@ -91,6 +98,84 @@ export function useFinishedProducts(storeId: string) {
   })
 }
 
+/** Kalkulacje do pliku CADBEZP z ceną zakupu z kartoteki i z przepisu. */
+export function usePurchaseFileLines(storeId: string) {
+  return useQuery({
+    queryKey: [...calculationsKey(storeId), 'cadbezp'],
+    queryFn: () => api<PurchaseFileLine[]>(`${calculationsPath(storeId)}/cadbezp`),
+  })
+}
+
+/** Automatyczny import kalkulacji bez przepisu i jego cofnięcie (toast "Cofnij"). */
+export function useImportCalculations(storeId: string) {
+  return {
+    run: useMutation({
+      mutationFn: (productIds: string[]) =>
+        api<CalculationImport>(`${calculationsPath(storeId)}/import`, { method: 'POST', json: { productIds } }),
+    }),
+    undo: useMutation({
+      mutationFn: (ids: string[]) => api(`${calculationsPath(storeId)}/import/undo`, { method: 'POST', json: { ids } }),
+    }),
+  }
+}
+
+/** Sklepy zaprzyjaźnione: zakładki u góry kalkulatora. */
+export function usePartnerStores(storeId: string) {
+  return useQuery({
+    queryKey: [...calculationsKey(storeId), 'partners'],
+    queryFn: () => api<PartnerStore[]>(`${calculationsPath(storeId)}/partners`),
+  })
+}
+
+export function usePartnerCalculations(storeId: string, partnerStoreId: string) {
+  return useQuery({
+    queryKey: [...calculationsKey(storeId), 'partners', partnerStoreId],
+    queryFn: () => api<PartnerCalculation[]>(`${calculationsPath(storeId)}/partners/${partnerStoreId}`),
+  })
+}
+
+/** Propozycje naszych artykułów dla nazwy wyrobu sąsiada; ten sam mechanizm co we wprowadzaniu danych. */
+export function useCalculationLinkSuggestions(storeId: string, text: string) {
+  return useQuery({
+    queryKey: [...calculationsKey(storeId), 'link-suggestions', text],
+    queryFn: () =>
+      api<DataEntryCatalogArticle[]>(
+        `${calculationsPath(storeId)}/partners/link-suggestions?text=${encodeURIComponent(text)}`,
+      ),
+  })
+}
+
+/** Przypisywanie wyrobów sąsiada do naszych artykułów: ręczne, odpięcie z przywróceniem i automat z cofnięciem. */
+export function useCalculationLinks(storeId: string, partnerStoreId: string) {
+  const links = `${calculationsPath(storeId)}/partners/${partnerStoreId}/links`
+  return {
+    link: useMutation({
+      mutationFn: (request: { sourceProductId: string; itm8: string }) => api(links, { method: 'PUT', json: request }),
+    }),
+    unlink: useMutation({
+      mutationFn: (id: string) => api(`${links}/${id}`, { method: 'DELETE' }),
+    }),
+    restore: useMutation({
+      mutationFn: (id: string) => api(`${links}/${id}/restore`, { method: 'POST' }),
+    }),
+    auto: useMutation({
+      mutationFn: () => api<AutoLink>(`${links}/auto`, { method: 'POST' }),
+    }),
+    undoAuto: useMutation({
+      mutationFn: (ids: string[]) => api(`${links}/auto/undo`, { method: 'POST', json: { ids } }),
+    }),
+  }
+}
+
+/** Excel z cenami sąsiada i naszymi EAN-ami. */
+export function useExportPartnerCalculations(storeId: string, partnerStoreId: string) {
+  return useMutation({
+    mutationFn: () =>
+      downloadFile(`${calculationsPath(storeId)}/partners/${partnerStoreId}/export/xlsx`, 'ceny-garmazu.xlsx'),
+    meta: { invalidates: false },
+  })
+}
+
 /**
  * "Odśwież ceny" w dwóch krokach: {@code preview} pokazuje nowe wyliczone ceny bez zmian w bazie, {@code apply}
  * odświeża ceny składników z decyzjami dla kalkulacji, które o nie pytały. Bez {@code calculationId} - wszystkie.
@@ -111,7 +196,11 @@ export function useRefreshPrices(storeId: string) {
       mutationFn: (request: {
         calculationId: string | null
         decisions: { calculationId: string; choice: RefreshChoice }[]
-      }) => api<PriceCalculationSummary[]>(`${calculationsPath(storeId)}/refresh-prices`, { method: 'POST', json: request }),
+      }) =>
+        api<PriceCalculationSummary[]>(`${calculationsPath(storeId)}/refresh-prices`, {
+          method: 'POST',
+          json: request,
+        }),
       onSuccess: () => queryClient.invalidateQueries({ queryKey: calculationsKey(storeId) }),
     }),
   }

@@ -16,6 +16,7 @@ import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesImportResponse;
+import com.intermanage.backend.sales.dto.ZeroStockReport;
 import com.intermanage.backend.sales.entity.RegionBudget;
 import com.intermanage.backend.sales.entity.SalesImport;
 
@@ -29,6 +30,8 @@ public interface SalesMapper {
     @Mapping(target = "reportGeneratedAt", source = "product.lastSeenImport.reportGeneratedAt")
     @Mapping(target = "nomenclaturePath", source = "path")
     SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path);
+
+    ZeroStockReport.Item toZeroStockItem(Product product);
 
     @Mapping(target = "purchasePrice", expression = "java(unitPrice(delivery))")
     ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery);

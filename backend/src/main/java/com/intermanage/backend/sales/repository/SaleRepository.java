@@ -507,6 +507,45 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             """, nativeQuery = true)
     List<ArticleSales> sumUnassignedArticles(UUID storeId, LocalDate from, LocalDate to);
 
+    /** Artykuł na stanie ze sprzedażą w okresie. */
+    interface SlowMovingArticle {
+        String getItm8();
+
+        String getEan();
+
+        String getName();
+
+        String getBrand();
+
+        String getSubfamilyCode();
+
+        BigDecimal getStock();
+
+        BigDecimal getPurchasePrice();
+
+        BigDecimal getSoldQuantity();
+
+        boolean getCadencier();
+    }
+
+    /**
+     * Aktywne artykuły z dodatnim stanem, których rotacja tygodniowa w okresie nie przekracza progu. Rotacja = ilość
+     * × 7 / dni, a {@code maxWeekly} to próg × dni, żeby porównanie obyło się bez zaokrąglania. Artykuł bez sprzedaży
+     * ma ilość 0, a zwroty mogą dać ilość ujemną.
+     */
+    @Query(value = STORE_PERIOD_ARTICLES + """
+            select p.itm8, p.ean, p.name, p.brand, p.subfamily_code, p.stock, p.purchase_price,
+                   coalesce(a.quantity, 0) as sold_quantity,
+                   exists (select 1 from cadencier_items c
+                           where c.store_id = p.store_id and c.itm8 = p.itm8) as cadencier
+            from products p
+            left join article a on a.itm8 = p.itm8
+            where p.store_id = :storeId and p.active and p.stock > 0
+              and coalesce(a.quantity, 0) * 7 <= :maxWeekly
+              and """ + IN_CODES, nativeQuery = true)
+    List<SlowMovingArticle> findSlowMoving(UUID storeId, LocalDate from, LocalDate to, BigDecimal maxWeekly,
+            String[] codes);
+
     /** Sprzedaż brutto rejonu w miesiącu (pierwszy dzień); pusty kod = artykuły bez nomenklatury. */
     interface MonthRegionSales {
         LocalDate getMonth();

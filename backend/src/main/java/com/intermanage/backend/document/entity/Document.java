@@ -192,6 +192,10 @@ public class Document {
      * (jak {@code bonNumber} we froncie).
      */
     public String bonNumber() {
+        return bonNumber(number);
+    }
+
+    public static String bonNumber(String number) {
         return number.matches("\\d{3,}00") ? number.substring(0, number.length() - 2) : number;
     }
 

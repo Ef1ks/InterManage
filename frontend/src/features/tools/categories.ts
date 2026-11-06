@@ -11,7 +11,7 @@ import {
   FileTextIcon,
   ReceiptTextIcon,
   SheetIcon,
-  TruckIcon,
+  ShoppingCartIcon,
   UsersIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -26,7 +26,7 @@ import type { PermissionCategory, PermissionCategoryInfo } from '@/lib/types'
 export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: LucideIcon }> = {
   SALES: { path: '/sprzedaz', icon: ChartColumnIcon },
   INVENTORY: { path: '/magazyn', icon: BoxesIcon },
-  ORDERS: { path: '/zamowienia', icon: TruckIcon },
+  ORDERS: { path: '/zamowienia', icon: ShoppingCartIcon },
   STAFF: { path: '/pracownicy', icon: UsersIcon },
   IMPORTS: { path: '/import', icon: FileSpreadsheetIcon },
   DELI_ORDERS: { path: '/zamowienie-garmazu', icon: ClipboardListIcon },

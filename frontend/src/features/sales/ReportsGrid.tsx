@@ -2,10 +2,12 @@ import {
   ArrowLeftRightIcon,
   BadgeAlertIcon,
   ChevronRightIcon,
+  CircleOffIcon,
   ClipboardListIcon,
   FileStackIcon,
   GiftIcon,
   type LucideIcon,
+  PackageXIcon,
   ScaleIcon,
   TagIcon,
   TrendingDownIcon,
@@ -13,13 +15,26 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router'
 
+import { hasPermission, useCurrentUser } from '@/features/auth/api'
 import { formatDocumentDate } from '@/features/documents/format'
 import { useSalesReportsOverview } from '@/features/sales/api'
 import { salesPaths } from '@/features/sales/paths'
+import { TOOL_ROUTES } from '@/features/tools/categories'
+import type { PermissionCategory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-/** {@code fromDocuments}: raport liczy się z dokumentów, więc pod kafelkiem zamiast zakresu sprzedaży jest ten opis. */
-type Report = { path: string; title: string; description: string; icon: LucideIcon; fromDocuments?: string }
+/**
+ * {@code fromDocuments}: raport liczy się z dokumentów, więc pod kafelkiem zamiast zakresu sprzedaży jest ten opis.
+ * {@code permission}: narzędzie z własnej kategorii uprawnień, kafelek tylko dla osób, które ją mają.
+ */
+type Report = {
+  path: string
+  title: string
+  description: string
+  icon: LucideIcon
+  fromDocuments?: string
+  permission?: PermissionCategory
+}
 
 /** Raporty sprzedaży w sekcjach; kolejne dopisujemy tutaj jako następne kafelki. */
 const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
@@ -75,6 +90,15 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         icon: TrendingDownIcon,
         fromDocuments: 'Z przyjęć PZ i ich korekt',
       },
+      {
+        path: TOOL_ROUTES.MEAT_PURCHASES.path,
+        title: 'Zakup mięsa',
+        description:
+          'Ceny zakupu mięsa z dokumentów WZ (skan odczytuje AI) i porównanie cen, sprzedaży i marży sklepów.',
+        icon: TOOL_ROUTES.MEAT_PURCHASES.icon,
+        fromDocuments: 'Z papierowych dokumentów WZ',
+        permission: 'MEAT_PURCHASES',
+      },
     ],
   },
   {
@@ -105,9 +129,30 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
       },
     ],
   },
+  {
+    title: 'Stany',
+    reports: [
+      {
+        path: salesPaths.zeroStock,
+        title: 'Raport zerówek',
+        description:
+          'Artykuły aktywne w cadencier ze stanem 0 w wybranej nomenklaturze: wydruk z kodami kreskowymi i plik zamówienia.',
+        icon: CircleOffIcon,
+        fromDocuments: 'Z kartoteki i listy cadencier',
+      },
+      {
+        path: salesPaths.slowMoving,
+        title: 'Niesprzedające się artykuły',
+        description:
+          'Towar na stanie z niską rotacją tygodniową w wybranym okresie, wartość stanu i dostawy z takimi artykułami. Z wydrukiem.',
+        icon: PackageXIcon,
+      },
+    ],
+  },
 ]
 
 export function ReportsGrid({ storeId }: { storeId: string }) {
+  const me = useCurrentUser()
   const { data } = useSalesReportsOverview(storeId)
   const coverage = !data
     ? ' '
@@ -121,31 +166,35 @@ export function ReportsGrid({ storeId }: { storeId: string }) {
         <section key={group.title}>
           <h2 className="mb-3 text-base font-semibold">{group.title}</h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {group.reports.map((report) => (
-              <Link
-                key={report.path}
-                to={report.path}
-                className={cn(
-                  'group flex flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color,box-shadow] duration-150 outline-none',
-                  'hover:border-foreground/20 hover:shadow-[0_2px_8px_-2px_rgb(0_0_0/0.08)] focus-visible:ring-3 focus-visible:ring-ring/50',
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
-                    <report.icon aria-hidden className="size-5" />
-                  </span>
-                  <ChevronRightIcon
-                    aria-hidden
-                    className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold">{report.title}</h3>
-                  <p className="mt-0.5 text-sm text-muted-foreground">{report.description}</p>
-                </div>
-                <p className="mt-auto text-sm text-muted-foreground tabular-nums">{report.fromDocuments ?? coverage}</p>
-              </Link>
-            ))}
+            {group.reports
+              .filter((report) => !report.permission || hasPermission(me, report.permission))
+              .map((report) => (
+                <Link
+                  key={report.path}
+                  to={report.path}
+                  className={cn(
+                    'group flex flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color,box-shadow] duration-150 outline-none',
+                    'hover:border-foreground/20 hover:shadow-[0_2px_8px_-2px_rgb(0_0_0/0.08)] focus-visible:ring-3 focus-visible:ring-ring/50',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground">
+                      <report.icon aria-hidden className="size-5" />
+                    </span>
+                    <ChevronRightIcon
+                      aria-hidden
+                      className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold">{report.title}</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{report.description}</p>
+                  </div>
+                  <p className="mt-auto text-sm text-muted-foreground tabular-nums">
+                    {report.fromDocuments ?? coverage}
+                  </p>
+                </Link>
+              ))}
           </div>
         </section>
       ))}

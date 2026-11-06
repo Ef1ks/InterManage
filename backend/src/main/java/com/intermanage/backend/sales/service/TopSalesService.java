@@ -24,6 +24,7 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.promotion.service.PromotionReportService;
+import com.intermanage.backend.sales.component.RegionGroups;
 import com.intermanage.backend.sales.dto.TopSalesLevel;
 import com.intermanage.backend.sales.dto.TopSalesMetric;
 import com.intermanage.backend.sales.dto.TopSalesReport;
@@ -43,15 +44,13 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * <p>
  * Top ilościowy pomija artykuły z promocji o marży do {@value #MAX_PROMOTION_MARGIN_PERCENT}%, bo taka ilość to efekt
  * ceny, a nie prawdziwy hit. Topy marży pomijają sprzedaż z zerowym kosztem FIFO: marża 100% jest wtedy fałszywa.
- * Żaden top nie liczy rejonów {@link #SKIPPED_REGIONS}, bo to nie jest towar.
+ * Żaden top nie liczy rejonów, które nie są towarem ({@link RegionGroups#isNotGoods}).
  */
 @Service
 public class TopSalesService {
 
     static final int MAX_LIMIT = 1000;
     static final int MAX_PROMOTION_MARGIN_PERCENT = 10;
-    /** Torby i artykuły dla sklepów, artykuły kosztowe, opakowania zwrotne, materiały promocyjne. */
-    private static final List<String> SKIPPED_REGIONS = List.of("60", "61", "90", "91");
     /** Grupa całego sklepu w obliczeniach. */
     private static final String WHOLE_STORE = "*";
     private static final String UNASSIGNED = "";
@@ -160,7 +159,7 @@ public class TopSalesService {
     }
 
     private static boolean matches(String subfamilyCode, List<String> filter) {
-        if (subfamilyCode != null && SKIPPED_REGIONS.stream().anyMatch(subfamilyCode::startsWith)) {
+        if (RegionGroups.isNotGoods(subfamilyCode)) {
             return false;
         }
         return filter.isEmpty() || (subfamilyCode != null && filter.stream().anyMatch(subfamilyCode::startsWith));

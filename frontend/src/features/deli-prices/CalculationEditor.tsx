@@ -38,6 +38,7 @@ import {
   isPieceUnit,
   isWeightUnit,
   parsePieceWeight,
+  parseMarkup,
   parsePrice,
   parseQuantity,
   pricePaths,
@@ -58,10 +59,14 @@ const MODES: { value: CalculationMode; label: string }[] = [
 ]
 
 const VAT_OPTIONS = VAT_RATES.map((rate) => ({ value: String(rate), label: `${rate}%` }))
+const MARKUP_OPTIONS = [
+  { value: 'STANDARD', label: `Standardowa ${DEFAULT_MARKUP_PERCENT}%` },
+  { value: 'TARGET', label: 'Docelowa' },
+]
 
 /**
  * Kreator kalkulacji gotowego wyrobu z kartoteki: sposób wpisywania składu, składniki (panel po prawej) z cenami
- * z ostatniej dostawy PZ albo z kartoteki i ich ilości. Koszt 1 kg i cena sprzedaży (narzut + VAT, w górę do ,99 zł)
+ * z ostatniej dostawy PZ albo z kartoteki i ich ilości. Koszt 1 kg i cena sprzedaży (marża + VAT, w górę do ,99 zł)
  * przeliczają się na bieżąco tym samym wzorem co na serwerze; zamiast wyliczonej można ustawić własną cenę.
  * Ceny składników zostają takie, jak przy dodaniu, dopóki ktoś nie kliknie "Odśwież ceny".
  */
@@ -70,12 +75,13 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
   const navigate = useNavigate()
   const save = useSaveCalculation(storeId)
   const { remove, restore } = useDeleteCalculation(storeId)
-  const markupPercent = calculation?.markupPercent ?? DEFAULT_MARKUP_PERCENT
 
   const [product, setProduct] = useState<FinishedProduct | null>(calculation?.product ?? null)
   const [mode, setMode] = useState<CalculationMode>(calculation?.mode ?? 'PER_KG')
   const [batchYield, setBatchYield] = useState(toInputValue(calculation?.batchYield))
   const [vatRate, setVatRate] = useState(calculation?.vatRate ?? DEFAULT_VAT_RATE)
+  const [ownMarkup, setOwnMarkup] = useState(calculation?.targetMarkup != null)
+  const [targetMarkup, setTargetMarkup] = useState(toInputValue(calculation?.targetMarkup))
   // Pusty tekst = cena wyliczona.
   const [manualPrice, setManualPrice] = useState(toInputValue(calculation?.manualPrice))
   const [editingPrice, setEditingPrice] = useState(false)
@@ -94,7 +100,15 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
   // Po zapisie albo usunięciu przechodzimy dalej bez pytania o niezapisane zmiany.
   const leaving = useRef(false)
 
-  const current = snapshot(product?.productId ?? null, mode, batchYield, vatRate, manualPrice, rows)
+  const current = snapshot(
+    product?.productId ?? null,
+    mode,
+    batchYield,
+    vatRate,
+    ownMarkup ? targetMarkup : '',
+    manualPrice,
+    rows,
+  )
   const [initial] = useState(current)
   const dirty = canEdit && current !== initial
   const blocker = useBlocker(
@@ -132,6 +146,8 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
   }, [rows])
   const costPerKg =
     mode === 'PER_KG' ? totals.total : yieldParsed.value !== undefined ? totals.total / yieldParsed.value : null
+  const markupParsed = parseMarkup(targetMarkup)
+  const markupPercent = ownMarkup ? (markupParsed.value ?? DEFAULT_MARKUP_PERCENT) : DEFAULT_MARKUP_PERCENT
   const calculatedPrice = salePrice(costPerKg, markupPercent, vatRate)
   // Z 3 kg surowców wychodzi np. 1 kg wyrobu (33%); liczymy tylko, gdy znamy wagę wszystkich składników.
   const batchYieldPercent =
@@ -156,6 +172,7 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
 
   const productError = submitted && !product ? 'Wybierz wyrób z kartoteki' : undefined
   const yieldError = submitted && mode === 'PER_BATCH' ? yieldParsed.error : undefined
+  const markupError = submitted && ownMarkup ? markupParsed.error : undefined
   const priceError = hasManualPrice && (submitted || !editingPrice) ? manualParsed.error : undefined
 
   const submit = () => {
@@ -168,6 +185,7 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
     if (
       !product ||
       (mode === 'PER_BATCH' && yieldParsed.error) ||
+      (ownMarkup && markupParsed.error) ||
       (hasManualPrice && manualParsed.error) ||
       quantities.some((q) => q.error) ||
       pieceWeights.some((w) => w.error)
@@ -187,6 +205,7 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
           mode,
           batchYield: mode === 'PER_BATCH' ? (yieldParsed.value ?? null) : null,
           vatRate,
+          targetMarkup: ownMarkup ? (markupParsed.value ?? null) : null,
           manualPrice: hasManualPrice ? (manualParsed.value ?? null) : null,
           items: rows.map((row, index) => ({
             productId: row.product.productId,
@@ -231,13 +250,13 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
 
   return (
     <>
-      <BackLink to={pricePaths.list}>
-        Wszystkie kalkulacje
-      </BackLink>
+      <BackLink to={pricePaths.list}>Wszystkie kalkulacje</BackLink>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{calculation ? calculation.name : 'Nowa kalkulacja'}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {calculation ? calculation.name : 'Nowa kalkulacja'}
+          </h1>
           {calculation?.pricesRefreshedAt && (
             <p className="mt-1 text-sm text-muted-foreground tabular-nums">
               Ceny składników z {formatDay(calculation.pricesRefreshedAt)}
@@ -267,8 +286,8 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
           className="mb-6"
           steps={[
             <>
-              Wybierz <strong className="font-semibold text-foreground">wyrób z kartoteki</strong> (działy 24, 36, 46) - jego
-              EAN trafi do eksportu.
+              Wybierz <strong className="font-semibold text-foreground">wyrób z kartoteki</strong> (działy 24, 36, 46) -
+              jego EAN trafi do eksportu.
             </>,
             <>
               Zdecyduj, czy wpisujesz skład <strong className="font-semibold text-foreground">na 1 kg</strong>, czy{' '}
@@ -281,8 +300,8 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
               surowców.
             </>,
             <>
-              Cena sprzedaży to koszt 1 kg + {markupPercent}% narzutu + VAT, w górę do ,99 zł. Później zaktualizujesz ją
-              przyciskiem „Odśwież ceny”.
+              Cena sprzedaży to koszt 1 kg + marża ({formatQuantity(markupPercent)}%, na wyrobie możesz ustawić
+              docelową) + VAT, w górę do ,99 zł. Później zaktualizujesz ją przyciskiem „Odśwież ceny”, z tą samą marżą.
             </>,
           ]}
         />
@@ -306,12 +325,18 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
               {product && (
                 <p className="text-sm text-muted-foreground tabular-nums">
                   <span className="font-medium text-foreground">{product.name}</span>
-                  {product.brand && ` · ${product.brand}`} · EAN {product.ean} · na półce {formatMoney(product.salePrice)}
+                  {product.brand && ` · ${product.brand}`} · EAN {product.ean} · na półce{' '}
+                  {formatMoney(product.salePrice)}
                 </p>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-              <SegmentedField label="Jak wpisujesz skład" options={MODES} value={mode} onChange={canEdit ? setMode : () => {}} />
+              <SegmentedField
+                label="Jak wpisujesz skład"
+                options={MODES}
+                value={mode}
+                onChange={canEdit ? setMode : () => {}}
+              />
               {mode === 'PER_BATCH' && (
                 <div className="flex items-center gap-2 text-sm animate-in fade-in-0 duration-150 motion-reduce:animate-none">
                   <span className="text-muted-foreground">Z przepisu wychodzi</span>
@@ -340,6 +365,26 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
                 value={String(vatRate)}
                 onChange={(value) => canEdit && setVatRate(Number(value))}
               />
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-muted-foreground">Marża</span>
+              <SegmentedField
+                label="Marża"
+                options={MARKUP_OPTIONS}
+                value={ownMarkup ? 'TARGET' : 'STANDARD'}
+                onChange={(value) => canEdit && setOwnMarkup(value === 'TARGET')}
+              />
+              {ownMarkup && (
+                <NumberInput
+                  label="Marża docelowa"
+                  unit="%"
+                  value={targetMarkup}
+                  onChange={setTargetMarkup}
+                  invalid={markupError !== undefined}
+                  disabled={!canEdit}
+                />
+              )}
+              {markupError && <span className="text-destructive">{markupError}.</span>}
             </div>
           </Card>
 
@@ -473,7 +518,12 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
                 )}
               </dl>
               {canEdit && (
-                <Button size="xl" loading={save.isPending} disabled={!dirty && calculation !== undefined} onClick={submit}>
+                <Button
+                  size="xl"
+                  loading={save.isPending}
+                  disabled={!dirty && calculation !== undefined}
+                  onClick={submit}
+                >
                   {calculation ? 'Zapisz zmiany' : 'Zapisz kalkulację'}
                 </Button>
               )}
@@ -484,7 +534,7 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
               ) : hasManualPrice ? (
                 'Do eksportu idzie Twoja cena. Przy odświeżaniu cen zapytamy, czy ją zostawić, gdy wyliczona się zmieni.'
               ) : (
-                `Koszt 1 kg + ${markupPercent}% narzutu + VAT ${vatRate}%, zaokrąglone w górę do ,99 zł.`
+                `Koszt 1 kg + ${formatQuantity(markupPercent)}% marży${ownMarkup ? ' docelowej' : ''} + VAT ${vatRate}%, zaokrąglone w górę do ,99 zł.${ownMarkup ? ' Marża zostaje przy odświeżaniu cen.' : ''}`
               )}
             </p>
             {totals.unweighed > 0 && totals.weight > 0 && (
@@ -530,6 +580,7 @@ function snapshot(
   mode: CalculationMode,
   batchYield: string,
   vatRate: number,
+  targetMarkup: string,
   manualPrice: string,
   rows: Row[],
 ) {
@@ -538,6 +589,7 @@ function snapshot(
     mode,
     mode === 'PER_BATCH' ? batchYield.trim() : '',
     vatRate,
+    targetMarkup.trim(),
     manualPrice.trim(),
     rows.map((row) => [row.product.productId, row.quantity.trim(), row.pieceWeight.trim()]),
   ])
@@ -582,13 +634,15 @@ function IngredientRow({
   const error = showError || (row.quantity.trim() !== '' && parsed.error) ? parsed.error : undefined
   const cost = parsed.value !== undefined && product.unitCost != null ? product.unitCost * parsed.value : null
   // Małe ilości łatwiej sprawdzić w gramach: 0,015 kg = 15 g.
-  const grams = isWeightUnit(product.unit) && parsed.value !== undefined && parsed.value < 1 ? parsed.value * 1000 : null
+  const grams =
+    isWeightUnit(product.unit) && parsed.value !== undefined && parsed.value < 1 ? parsed.value * 1000 : null
   // Sztuki liczą się w koszcie jak dotąd, a ze średnią wagą sztuki wchodzą też do wagi surowców.
   const pieces = isPieceUnit(product.unit)
   const pieceWeight = parsePieceWeight(row.pieceWeight)
   const pieceWeightError =
     pieceWeight.error && (showError || row.pieceWeight.trim() !== '') ? pieceWeight.error : undefined
-  const piecesWeight = pieces && parsed.value !== undefined && pieceWeight.value ? parsed.value * pieceWeight.value : null
+  const piecesWeight =
+    pieces && parsed.value !== undefined && pieceWeight.value ? parsed.value * pieceWeight.value : null
 
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_6rem_auto]">

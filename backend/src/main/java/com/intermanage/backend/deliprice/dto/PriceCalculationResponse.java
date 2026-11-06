@@ -8,8 +8,8 @@ import java.util.UUID;
 import com.intermanage.backend.deliprice.entity.CalculationMode;
 
 /**
- * Kalkulacja ze składnikami i ich zapamiętanymi cenami. {@code markupPercent} to narzut na koszt, z którym
- * liczy się {@code salePrice} (frontend przelicza z nim na bieżąco w kreatorze).
+ * Kalkulacja ze składnikami i ich zapamiętanymi cenami. {@code markupPercent} to marża doliczana do kosztu, z którą
+ * liczy się {@code salePrice}: {@code targetMarkup} ustawiona na wyrobie, a bez niej standardowa.
  */
 public record PriceCalculationResponse(
         UUID id,
@@ -18,7 +18,8 @@ public record PriceCalculationResponse(
         CalculationMode mode,
         BigDecimal batchYield,
         short vatRate,
-        int markupPercent,
+        BigDecimal markupPercent,
+        BigDecimal targetMarkup,
         BigDecimal totalCost,
         BigDecimal costPerKg,
         /** Cena do eksportu: własna, a bez niej wyliczona. */

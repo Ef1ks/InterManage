@@ -23,13 +23,20 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.dataentry.service.DataEntryService;
+import com.intermanage.backend.deliprice.dto.CalculationImportRequest;
+import com.intermanage.backend.deliprice.dto.CalculationImportResponse;
+import com.intermanage.backend.deliprice.dto.CalculationImportUndoRequest;
 import com.intermanage.backend.deliprice.dto.FinishedProductResponse;
 import com.intermanage.backend.deliprice.dto.PriceCalculationRequest;
 import com.intermanage.backend.deliprice.dto.PriceCalculationResponse;
 import com.intermanage.backend.deliprice.dto.PriceCalculationSummary;
 import com.intermanage.backend.deliprice.dto.PriceChangeResponse;
 import com.intermanage.backend.deliprice.dto.PriceProductResponse;
+import com.intermanage.backend.deliprice.dto.PurchaseFileLine;
+import com.intermanage.backend.deliprice.dto.PurchaseFileRequest;
 import com.intermanage.backend.deliprice.dto.RefreshPricesRequest;
+import com.intermanage.backend.deliprice.service.PriceCalculationFileService;
 import com.intermanage.backend.deliprice.service.PriceCalculationService;
 
 import jakarta.validation.Valid;
@@ -45,9 +52,31 @@ public class PriceCalculationController {
             "hasAuthority('DELI_PRICES:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
 
     private final PriceCalculationService service;
+    private final PriceCalculationFileService fileService;
 
-    public PriceCalculationController(PriceCalculationService service) {
+    public PriceCalculationController(PriceCalculationService service, PriceCalculationFileService fileService) {
         this.service = service;
+        this.fileService = fileService;
+    }
+
+    /** Kalkulacje do pliku CADBEZP: cena zakupu z kartoteki i z kosztu kalkulacji. */
+    @GetMapping("/cadbezp")
+    @PreAuthorize(VIEW)
+    public List<PurchaseFileLine> purchaseFileLines(@PathVariable UUID storeId) {
+        return fileService.lines(storeId);
+    }
+
+    /** Plik CADBEZP jednego dostawcy, który zmienia w kartotece tylko cenę zakupu. */
+    @PostMapping("/cadbezp")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> purchaseFile(@PathVariable UUID storeId,
+            @Valid @RequestBody PurchaseFileRequest request) {
+        DataEntryService.ExportFile file = fileService.file(storeId, request.calculationIds());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType("application/vnd.ms-excel"))
+                .body(file.content());
     }
 
     @GetMapping
@@ -61,6 +90,24 @@ public class PriceCalculationController {
     @PreAuthorize(VIEW)
     public List<FinishedProductResponse> finishedProducts(@PathVariable UUID storeId) {
         return service.finishedProducts(storeId);
+    }
+
+    /** Automatyczny import: zaznaczone wyroby z nomenklatury 36 dostają kalkulacje bez przepisu. */
+    @PostMapping("/import")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(EDIT)
+    public CalculationImportResponse importWithoutRecipe(@PathVariable UUID storeId,
+            @Valid @RequestBody CalculationImportRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.importWithoutRecipe(storeId, request.productIds(), principal.getId());
+    }
+
+    /** Toast "Cofnij" po imporcie; kalkulacje, które dostały już przepis, zostają. */
+    @PostMapping("/import/undo")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(EDIT)
+    public void undoImport(@PathVariable UUID storeId, @Valid @RequestBody CalculationImportUndoRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        service.undoImport(storeId, request.ids(), principal.getId());
     }
 
     /** Ceny sprzedaży wszystkich kalkulacji do Excela: EAN, nazwa, cena brutto, VAT. */

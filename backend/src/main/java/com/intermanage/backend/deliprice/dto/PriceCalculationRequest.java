@@ -23,6 +23,9 @@ public record PriceCalculationRequest(
         @DecimalMin(value = "0", inclusive = false, message = "Podaj, ile kg wychodzi z przepisu")
         @Digits(integer = 9, fraction = 3, message = "Najwyżej 3 miejsca po przecinku") BigDecimal batchYield,
         @NotNull(message = "Wybierz stawkę VAT") Short vatRate,
+        /** Marża docelowa w procentach doliczana do kosztu; {@code null} = standardowa. */
+        @DecimalMin(value = "0", inclusive = false, message = "Marża musi być większa od zera")
+        @Digits(integer = 3, fraction = 2, message = "Najwyżej 3 cyfry i 2 miejsca po przecinku") BigDecimal targetMarkup,
         /** Własna cena sprzedaży 1 kg zamiast wyliczonej; {@code null} = cena wyliczona. */
         @DecimalMin(value = "0", inclusive = false, message = "Cena musi być większa od zera")
         @Digits(integer = 8, fraction = 2, message = "Najwyżej 2 miejsca po przecinku") BigDecimal manualPrice,

@@ -37,6 +37,8 @@ export type NavItem = {
   icon: LucideIcon
   /** Np. licznik nowych zamówień; w menu bocznym przy grupie. */
   badge?: ReactNode
+  /** Nagłówek sekcji na stronie grupy; kolejne narzędzia z tą samą sekcją stoją razem. */
+  section?: string
 }
 
 /** Główna kategoria w menu bocznym. Grupa z jednym dostępnym narzędziem prowadzi prosto do niego. */
@@ -51,12 +53,15 @@ export type NavGroup = {
 
 /** Narzędzie z kategorii uprawnień albo strona z własnym warunkiem dostępu (ustawienia, koszty garmażu). */
 type ItemSpec =
-  | { category: PermissionCategory; label?: string; badge?: (me: Me) => ReactNode }
+  | { category: PermissionCategory; label?: string; badge?: (me: Me) => ReactNode; section?: string }
   | (Omit<NavItem, 'badge'> & { visible: (me: Me) => boolean; badge?: (me: Me) => ReactNode })
 
 type GroupSpec = Omit<NavGroup, 'items'> & { items: ItemSpec[] }
 
 const canEditDocuments = (me: Me) => hasPermission(me, 'DOCUMENTS', 'EDIT')
+
+const DELIVERIES = 'Dokumenty i dostawy'
+const PROMOTIONS = 'Promocje i gazetki'
 
 /** Kolejność grup i narzędzi w menu; kolejne narzędzie dopisujemy do pasującej grupy. */
 const GROUPS: GroupSpec[] = [
@@ -64,30 +69,24 @@ const GROUPS: GroupSpec[] = [
     key: 'purchases',
     path: '/zakupy',
     label: 'Zakupy i dokumenty',
-    description: 'Dokumenty z systemu sklepu, faktury KSeF, wprowadzanie towaru, dostawcy i zakup mięsa.',
+    description: 'Dokumenty z systemu sklepu, wprowadzanie towaru, dostawy z bazy, gazetki i promocje.',
     icon: PackageIcon,
     items: [
-      { category: 'DOCUMENTS', badge: () => <IncomingTransfersBadge /> },
-      { category: 'KSEF_INVOICES' },
-      { category: 'DATA_ENTRY' },
+      { category: 'DOCUMENTS', section: DELIVERIES, badge: () => <IncomingTransfersBadge /> },
+      { category: 'DATA_ENTRY', section: DELIVERIES },
       {
         key: 'base-delivery',
+        section: DELIVERIES,
         path: basePath,
         label: 'Dostawa z bazy',
         description: 'Dokument dostawy z bazy w tabeli: nośniki, krótkie terminy, kaucje, nowe artykuły i ceny.',
         icon: TruckIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
-      {
-        key: 'mea-codes',
-        path: meaPath,
-        label: 'Kody MEA',
-        description: 'Kody MEA z dokumentów bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
-        icon: HashIcon,
-        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
-      },
+      { category: 'ORDERS', section: DELIVERIES },
       {
         key: 'leaflet',
+        section: PROMOTIONS,
         path: leafletPath,
         label: 'Opracowanie gazetki',
         description: 'Gazetka z centrali: artykuły z Mercalys, pliki cen .PRO, etykiety i kody MEA.',
@@ -96,24 +95,47 @@ const GROUPS: GroupSpec[] = [
       },
       {
         key: 'promo-setup',
+        section: PROMOTIONS,
         path: promoSetupPath,
         label: 'Ustaw promocje',
         description: 'Kilka promocji naraz: artykuły, okresy, ceny lub przeceny i pliki cen .PRO.',
         icon: BadgePercentIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
-      { category: 'SUPPLIERS' },
-      { category: 'MEAT_PURCHASES' },
-      { category: 'ORDERS' },
+      {
+        key: 'mea-codes',
+        section: PROMOTIONS,
+        path: meaPath,
+        label: 'Kody MEA',
+        description: 'Kody MEA z dokumentów bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
+        icon: HashIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
     ],
+  },
+  {
+    key: 'ksef',
+    path: TOOL_ROUTES.KSEF_INVOICES.path,
+    label: 'Faktury KSeF',
+    description: 'Faktury zakupowe z Krajowego Systemu e-Faktur.',
+    icon: TOOL_ROUTES.KSEF_INVOICES.icon,
+    items: [{ category: 'KSEF_INVOICES' }],
+  },
+  {
+    key: 'suppliers',
+    path: TOOL_ROUTES.SUPPLIERS.path,
+    label: 'Dostawcy',
+    description: 'Kartoteka dostawców i ich kontakty.',
+    icon: TOOL_ROUTES.SUPPLIERS.icon,
+    items: [{ category: 'SUPPLIERS' }],
   },
   {
     key: 'sales',
     path: TOOL_ROUTES.SALES.path,
     label: 'Sprzedaż i raporty',
-    description: 'Raporty sprzedaży, strat i marży.',
+    description: 'Raporty sprzedaży, strat i marży oraz zakup mięsa.',
     icon: TOOL_ROUTES.SALES.icon,
-    items: [{ category: 'SALES' }],
+    items: [{ category: 'SALES', label: 'Raporty sprzedaży' }, { category: 'MEAT_PURCHASES' }],
   },
   {
     key: 'deli',
@@ -238,6 +260,7 @@ function resolveItem(spec: ItemSpec, me: Me, categories: PermissionCategoryInfo[
       label: spec.label ?? info.label,
       description: info.description,
       badge: spec.badge?.(me),
+      section: spec.section,
     }
   }
   if (!spec.visible(me)) return null

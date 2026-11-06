@@ -168,6 +168,28 @@ export function CategoryTabs({
   value: CategoryKey
   onChange: (key: CategoryKey) => void
 }) {
+  return (
+    <CategoryTabBar
+      categories={categories}
+      countOf={(key) => deliveries.filter((delivery) => inCategory(delivery, key, categories)).length}
+      value={value}
+      onChange={onChange}
+    />
+  )
+}
+
+/** Zakładki własnych kategorii; {@code countOf} to liczba przy zakładce. */
+export function CategoryTabBar({
+  categories,
+  countOf,
+  value,
+  onChange,
+}: {
+  categories: PriceCheckCategory[]
+  countOf: (key: CategoryKey) => number
+  value: CategoryKey
+  onChange: (key: CategoryKey) => void
+}) {
   const canEdit = useCan('SALES', 'EDIT')
   if (categories.length === 0) {
     return canEdit ? (
@@ -191,7 +213,7 @@ export function CategoryTabs({
     <div role="tablist" aria-label="Kategorie własne" className="mb-4 flex flex-wrap gap-1.5">
       {tabs.map((tab) => {
         const selected = tab.key === value
-        const count = deliveries.filter((delivery) => inCategory(delivery, tab.key, categories)).length
+        const count = countOf(tab.key)
         return (
           <button
             key={tab.key}

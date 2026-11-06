@@ -7,12 +7,6 @@ import { parseIsoDate, todayIso } from '@/lib/dates'
 import type { ProductPriceChange, ProductPromotion } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-const SOURCE_LABELS: Record<ProductPriceChange['source'], string> = {
-  TILL: 'Kasa',
-  REPORT: 'Kartoteka',
-  DATA_ENTRY: 'Wprowadzanie danych',
-}
-
 /**
  * Historia cen artykułu pod wykresem: zmiany ceny sprzedaży (pliki z kasy po EAN-ie, importy kartoteki, pliki zmiany
  * cen z wprowadzania danych) i przeceny z listy promocji, od najnowszych. Artykuł z kilkoma EAN-ami (także z etykiet
@@ -120,10 +114,8 @@ function PriceChangesTable({ changes }: { changes: ProductPriceChange[] }) {
       <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
         <tr>
           <th className="px-3 py-2 text-left font-medium">Kiedy</th>
-          <th className="px-3 py-2 text-left font-medium">Skąd</th>
           <th className="px-3 py-2 text-right font-medium">Cena</th>
           <th className="px-3 py-2 text-left font-medium">Promocja</th>
-          <th className="px-3 py-2 text-left font-medium">Szczegóły</th>
         </tr>
       </thead>
       <tbody>
@@ -132,15 +124,11 @@ function PriceChangesTable({ changes }: { changes: ProductPriceChange[] }) {
             <td className="px-3 py-1.5 whitespace-nowrap">
               {change.changedAt ? formatDateTime(change.changedAt) : '—'}
             </td>
-            <td className="px-3 py-1.5 whitespace-nowrap">{SOURCE_LABELS[change.source]}</td>
             <td className="px-3 py-1.5 text-right whitespace-nowrap">
               <PriceStep before={change.previousSalePrice} after={change.salePrice} />
             </td>
             <td className="px-3 py-1.5 whitespace-nowrap">
               <PromoCell change={change} />
-            </td>
-            <td className="max-w-64 truncate px-3 py-1.5 text-muted-foreground" title={details(change)}>
-              {details(change)}
             </td>
           </tr>
         ))}
@@ -188,10 +176,6 @@ function PromoCell({ change }: { change: ProductPriceChange }) {
       )}
     </span>
   )
-}
-
-function details(change: ProductPriceChange) {
-  return [change.description, change.user].filter(Boolean).join(' · ')
 }
 
 function PromotionsTable({ promotions }: { promotions: ProductPromotion[] }) {
