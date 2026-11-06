@@ -165,7 +165,7 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
 
   for (const [id, { line, rows: grouped }] of groups) {
     const first = grouped[0]
-    const ean = line?.ean ?? first.ean
+    const ean = first.ean
     const bonQuantity = line?.quantity ?? null
     const bonPrice = line?.purchasePrice ?? null
     if (hasBeforeRows) {
