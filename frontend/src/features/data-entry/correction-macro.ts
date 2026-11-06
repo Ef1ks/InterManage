@@ -8,10 +8,11 @@ import type { DataEntryRow } from './rows'
  * Czasy w ms, poprawiamy je tylko tutaj.
  */
 export const CORRECTION_MACRO_CONFIG = {
-  /** Po każdym numerze bonu program wyszukuje cały dokument; drugi Enter i EAN idą już bez przerwy. */
+  /** Po każdym numerze bonu program wyszukuje cały dokument; drugi Enter idzie już szybko. */
   afterBon: 1200,
-  afterBonSkip: 0,
-  afterEan: 0,
+  afterBonSkip: 100,
+  /** Po EAN-ie program ładuje linię bonu: bez przerwy wpisana ilość przepadała i zostawała ilość z bonu. */
+  afterEan: 300,
   /** Krócej niż 300 ms program nie nadąża między ilością a ceną. */
   afterQuantity: 300,
   /** Pusty Enter między ilością a ceną. */
