@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeftIcon,
   BadgePercentIcon,
   CheckCheckIcon,
   ClipboardCopyIcon,
@@ -142,6 +143,7 @@ import { SaveSettingsDialog } from './SaveSettingsDialog'
 import { SplitQuantityDialog } from './SplitQuantityDialog'
 import { SupplierChangeDialog } from './SupplierChangeDialog'
 import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
+import { buildTransferMacro, planTransferMacro } from './transfer-macro'
 import {
   cadencierPrice,
   catalogChanges,
@@ -793,6 +795,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // Kaucje i dostawa zostają w tabeli, ale nie są artykułami: bez liczników, sprawdzania i eksportu.
   const filled = rows.filter((row) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null)
+  const transferMacro = planTransferMacro(filled)
   const newCount = filled.filter((row) => !row.known).length
   const changedCount = filled.filter((row) => catalogChanges(row).length > 0).length
   const toCheck = rows.filter((row) => nomenclatureState(row) === 'TO_CHECK').length
@@ -1129,6 +1132,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       ? `Popraw ilości w tabeli: w zamówieniu tylko liczby całkowite od 1 do 99 (${order.invalid.map((line) => line.ean).join(', ')})`
       : null)
   const [savingOrder, setSavingOrder] = useState(false)
+  const copyTransferMacro = async () => {
+    try {
+      await navigator.clipboard.writeText(buildTransferMacro(transferMacro.items))
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+      return
+    }
+    toast.success(`Makro w schowku: ${transferMacro.items.length} poz.`, {
+      description: `Przejdź do programu sklepu i wciśnij F9.${
+        transferMacro.skipped > 0 ? ` Pominięte bez EAN-u albo ilości: ${transferMacro.skipped}.` : ''
+      }`,
+    })
+  }
+
   const saveOrder = async () => {
     setSavingOrder(true)
     try {
@@ -1277,6 +1294,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           invoice={invoice}
           correction={invoice.correction}
           rows={rows}
+          pricing={pricing}
           macroOpen={correctionMacroOpen}
           onMacroOpenChange={setCorrectionMacroOpen}
           onDelivery={chooseCorrectionDelivery}
@@ -1391,6 +1409,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 <DropdownMenuSeparator />
               </>
             )}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Makro</DropdownMenuLabel>
+              <ActionItem
+                icon={<ArrowRightLeftIcon />}
+                label="Przeniesienie"
+                count={transferMacro.items.length}
+                disabled={transferMacro.items.length === 0}
+                hint={
+                  transferMacro.items.length === 0
+                    ? 'Żaden artykuł nie ma EAN-u i ilości'
+                    : 'Do schowka, F9: EAN, Enter, ilość, Enter dla każdego artykułu'
+                }
+                onClick={() => void copyTransferMacro()}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuLabel>Do folderu protokołów</DropdownMenuLabel>
               <ActionItem

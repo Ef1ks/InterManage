@@ -41,6 +41,10 @@ export type CorrectionMacroItem = {
   price: number
   /** Faktura „przed korektą” ma inną ilość niż bon: inna jednostka albo bon już poprawiony. */
   bonDiffers: boolean
+  /** Korekta dopisuje artykuł, którego nie ma na bonie (zamiana artykułu, np. sałata masłowa na lodową). */
+  added: boolean
+  /** Marża poniżej wymaganej w tabeli: program sklepu pokazuje po ilości powiadomienie do zamknięcia dwoma Enterami. */
+  lowMargin: boolean
 }
 
 export type CorrectionMacroProblem<Row extends CorrectionRow = CorrectionRow> = {
@@ -124,11 +128,14 @@ function changedState(row: CorrectionRow) {
  * gdy bonu nie ma w raportach. Korekta z wierszami „przed” (`hasBeforeRows`) podaje stan po korekcie, więc ilość i cenę
  * bierzemy z pozycji. Korekta bez nich podaje różnice: ilość to stan bonu plus pozycja, a cena z bonu, bo jej nie
  * zmienia. Artykułu spoza bonu makro nie wpisuje: program nie znalazłby linii, a kolejne klawisze trafiłyby w złe pola.
+ * Wyjątkiem jest zamiana artykułu (`before.quantity` = 0): korekta sama mówi, że dochodzi do dostawy.
+ * `lowMargin`: czy wiersz tabeli ma marżę poniżej wymaganej.
  */
 export function planCorrectionMacro<Row extends CorrectionRow>(
   rows: Row[],
   hasBeforeRows: boolean,
   lines: CorrectionDeliveryLine[] | null,
+  lowMargin: (row: Row) => boolean = () => false,
 ): CorrectionMacroPlan<Row> {
   const bon = lines ? mergeBonLines(lines) : null
   const plan: CorrectionMacroPlan<Row> = { items: [], problems: [], unchanged: 0 }
@@ -141,7 +148,8 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
       continue
     }
     const line = bon ? bonLineOf(bon, row) : null
-    if (!line && (bon || !/^\d+$/.test(row.ean) || row.eanFallback)) {
+    const added = row.before?.quantity === 0 && /^\d+$/.test(row.ean) && !row.eanFallback
+    if (!line && !added && (bon || !/^\d+$/.test(row.ean) || row.eanFallback)) {
       if (changes) {
         plan.problems.push({
           row,
@@ -172,6 +180,7 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
     const ean = first.ean
     const bonQuantity = line?.quantity ?? null
     const bonPrice = line?.purchasePrice ?? null
+    const low = grouped.some(lowMargin)
     if (hasBeforeRows) {
       if (!grouped.some(changedState)) {
         plan.unchanged += grouped.length
@@ -200,6 +209,8 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
         quantity,
         price: round(quantity === 0 ? (grouped[grouped.length - 1].unitNet ?? 0) : value / quantity, 4),
         bonDiffers: bonQuantity !== null && !same(before, bonQuantity),
+        added: bon !== null && line === null,
+        lowMargin: low,
       })
       continue
     }
@@ -217,7 +228,18 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
     } else if (price < 0) {
       plan.problems.push({ row: first, reason: 'Cena po korekcie jest na minusie', canLink: false })
     } else {
-      plan.items.push({ key: id, ean, name: first.name, bonQuantity, bonPrice, quantity, price, bonDiffers: false })
+      plan.items.push({
+        key: id,
+        ean,
+        name: first.name,
+        bonQuantity,
+        bonPrice,
+        quantity,
+        price,
+        bonDiffers: false,
+        added: false,
+        lowMargin: low,
+      })
     }
   }
   return plan
@@ -279,6 +301,10 @@ export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroIt
     key('{Enter}', c.afterBonSkip)
     enter(item.ean, c.afterEan)
     enter(formatMacroQuantity(item.quantity), c.afterQuantity)
+    if (item.lowMargin) {
+      key('{Enter}', c.afterQuantity)
+      key('{Enter}', c.afterQuantity)
+    }
     key('{Enter}', c.afterSkip)
     enter(formatMacroPrice(item.price), c.afterPrice)
   }

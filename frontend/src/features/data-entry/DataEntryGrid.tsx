@@ -1309,7 +1309,7 @@ function CellContent({
           {service && (
             <Tag className="bg-background text-muted-foreground ring-1 ring-border">{SERVICE_LABELS[service]}</Tag>
           )}
-          {onLinkArticle && !service && row.ean && (row.link || !row.known) && (
+          {onLinkArticle && !service && row.ean && (row.link || !row.known || error) && (
             <button
               type="button"
               onClick={() => onLinkArticle(row)}

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -74,6 +75,7 @@ public class DataEntryService {
     private static final BigDecimal VALUE_TOLERANCE = new BigDecimal("0.01");
     private static final Pattern RATE = Pattern.compile("^(\\d+(?:[.,]\\d+)?)\\s*%");
     private static final Pattern XML_EAN = Pattern.compile("\\d{8,14}");
+    private static final Pattern FULL_EAN = Pattern.compile("\\d{8}|\\d{12,14}");
     static final int CATALOG_PAGE_SIZE = 100;
     /** {@code eanSource} pozycji wczytanej z przypięcia kodu dostawcy do artykułu. */
     static final String LINK_SOURCE = "LINK";
@@ -175,13 +177,26 @@ public class DataEntryService {
 
         // Pozycje i ich kody idą w tej samej kolejności FaWiersz; wiersze "przed korektą" pomijamy.
         Map<Integer, Integer> beforeRows = CorrectionRows.pairs(codes);
+        Set<Integer> addedRows = CorrectionRows.added(codes, beforeRows);
         List<KsefInvoiceReader.Line> lines = new ArrayList<>();
         List<KsefInvoiceReader.Line> linesBefore = new ArrayList<>();
         List<KsefInvoiceReader.LineCodes> lineCodes = new ArrayList<>();
+        // Wiersz "przed" bez pary to artykuł, który odszedł z dostawy: w tabeli jest z ilością 0.
+        Set<Integer> removedLines = new HashSet<>();
+        Set<Integer> addedLines = new HashSet<>();
         for (int i = 0; i < invoice.lines().size(); i++) {
-            if (withBeforeCorrection || !invoice.lines().get(i).beforeCorrection()) {
-                lines.add(invoice.lines().get(i));
-                linesBefore.add(beforeRows.containsKey(i) ? invoice.lines().get(beforeRows.get(i)) : null);
+            KsefInvoiceReader.Line current = invoice.lines().get(i);
+            boolean removed = !withBeforeCorrection && current.beforeCorrection() && !beforeRows.containsValue(i);
+            if (withBeforeCorrection || !current.beforeCorrection() || removed) {
+                if (removed) {
+                    removedLines.add(lines.size());
+                }
+                if (addedRows.contains(i)) {
+                    addedLines.add(lines.size());
+                }
+                lines.add(current);
+                linesBefore.add(removed ? current
+                        : beforeRows.containsKey(i) ? invoice.lines().get(beforeRows.get(i)) : null);
                 lineCodes.add(codes.get(i));
             }
         }
@@ -207,7 +222,7 @@ public class DataEntryService {
             fallbacks.add(fallback);
             String code = ean != null ? ean : fallback != null ? fallback.code() : null;
             List<String> codesOfLine = new ArrayList<>();
-            if (code != null && (ean == null || !known.containsKey(key(ean)))) {
+            if (code != null && (ean == null || !known.containsKey(key(ean)) || incompleteEan(ean))) {
                 codesOfLine.add(DataEntryLinkService.code(code));
                 ProductCodeSources.rawCodes(lineCodes.get(i), keys).stream().map(DataEntryLinkService::code)
                         .filter(other -> !codesOfLine.contains(other)).forEach(codesOfLine::add);
@@ -235,7 +250,7 @@ public class DataEntryService {
             BigDecimal vat = vatPercent(line.rate());
             CatalogProduct product = ean != null ? known.get(key(ean)) : null;
             DataEntryProductLinkRepository.ActiveLink link = null;
-            if (product == null) {
+            if (product == null || incompleteEan(ean)) {
                 link = linkCodes.get(i).stream().map(linked::get).filter(Objects::nonNull).findFirst().orElse(null);
                 CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
                 if (linkedProduct != null) {
@@ -254,19 +269,27 @@ public class DataEntryService {
             }
             rows.add(new DataEntryLine(line.number(), ean, eanSource,
                     fallback != null ? fallback.code() : null, fallback != null ? fallback.source() : null,
-                    line.quantity(), unitNet(line, vat),
+                    removedLines.contains(i) ? BigDecimal.ZERO : line.quantity(), unitNet(line, vat),
                     line.name() != null ? line.name().strip() : null, line.unit(), vat, product, measure.unit(),
                     measure.netContent(), link != null ? link.getId() : null, link != null ? link.getCode() : null,
-                    lineCodes.get(i).index(), lineCodes.get(i).cn(), before != null ? before.quantity() : null,
-                    before != null ? unitNet(before, vatPercent(before.rate())) : null));
+                    lineCodes.get(i).index(), lineCodes.get(i).cn(),
+                    before != null ? before.quantity() : addedLines.contains(i) ? BigDecimal.ZERO : null,
+                    before != null ? unitNet(before, vatPercent(before.rate()))
+                            : addedLines.contains(i) ? unitNet(line, vat) : null));
+        }
+        List<KsefInvoiceReader.Line> counted = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            if (!removedLines.contains(i)) {
+                counted.add(lines.get(i));
+            }
         }
         return new LoadedInvoice(new DataEntryInvoice(summary.id(), summary.invoiceNumber(), summary.sellerName(),
                 summary.sellerNip(), summary.issueDate(), chosen, ProductCodeSources.sources(lineCodes, inCatalog).stream()
                         .map(item -> new DataEntryInvoice.CodeSource(item.key(), item.label(), item.filled(),
                                 item.matched()))
                         .toList(),
-                rows, total(invoice, lines, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
-                total(invoice, lines, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat), correction), lines);
+                rows, total(invoice, counted, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
+                total(invoice, counted, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat), correction), lines);
     }
 
     private static DataEntryInvoice.Correction correction(KsefInvoiceReader.Invoice invoice,
@@ -604,6 +627,14 @@ public class DataEntryService {
     private static String xmlEan(String ean) {
         String code = ean == null ? "" : ean.strip();
         return XML_EAN.matcher(code).matches() ? code : null;
+    }
+
+    /**
+     * Kod z faktury o 9-11 cyfrach trafia w artykuł z kartoteki po zerach wiodących, ale jako EAN blokuje plik, więc
+     * pozycję przypina się do artykułu, a przypięcie ma pierwszeństwo przed takim trafieniem.
+     */
+    private static boolean incompleteEan(String ean) {
+        return ean != null && !FULL_EAN.matcher(ean).matches();
     }
 
     private static String digits(String value) {

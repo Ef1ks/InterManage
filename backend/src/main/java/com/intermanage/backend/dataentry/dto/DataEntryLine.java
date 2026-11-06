@@ -12,7 +12,8 @@ import java.util.UUID;
  * opis, GTIN, który nie jest EAN-em) albo nazwa, a {@code fallbackSource} opis pola, z którego pochodzi. Pozycja
  * wczytana z przypięcia kodu dostawcy do artykułu ma {@code eanSource} = LINK, {@code linkId} i {@code linkedCode}
  * (przypięty kod). Przy korekcie {@code beforeQuantity} i {@code beforeUnitNet} to stan z wiersza "przed korektą" tej
- * pozycji ({@code null}: pozycja bez takiego wiersza).
+ * pozycji ({@code null}: pozycja bez takiego wiersza). Zamiana artykułu w korekcie: artykuł, który odszedł, ma
+ * {@code quantity} 0 i stan sprzed korekty, a ten, który doszedł, {@code beforeQuantity} 0.
  */
 public record DataEntryLine(String number, String ean, String eanSource, String fallbackCode, String fallbackSource,
         BigDecimal quantity, BigDecimal unitNet, String invoiceName,

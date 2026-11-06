@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793957150.3553429,
-    "seen": 1793957209.4702516,
-    "ast_hash": "c56ae3702412d5f95ff1a9db79aceed9",
+    "mtime": 1793971627.1692815,
+    "seen": 1793971682.5031528,
+    "ast_hash": "7e2ce347fc99607d8e4d93449ed2b559",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4404,9 +4404,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/DataEntryLine.java": {
-    "mtime": 1793956590.7100203,
-    "seen": 1793957209.2901738,
-    "ast_hash": "e0178654558686ebf61c3f82f8488f83",
+    "mtime": 1793968809.34834,
+    "seen": 1793971682.321073,
+    "ast_hash": "319466839cfea296b9c0d2f5385c19d3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/ExportRequest.java": {
@@ -4458,9 +4458,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryService.java": {
-    "mtime": 1793956606.3503592,
-    "seen": 1793957209.3001773,
-    "ast_hash": "a29f4fea1628a6117114483d19961c71",
+    "mtime": 1793968854.9890976,
+    "seen": 1793971682.3312275,
+    "ast_hash": "37927851575a461553a2f0b000a6e9e9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntrySuggestionService.java": {
@@ -4470,9 +4470,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1793956643.9355803,
-    "seen": 1793957209.4059944,
-    "ast_hash": "823c81d53960799785fb19fbf456fc12",
+    "mtime": 1793968809.3498945,
+    "seen": 1793971682.4321122,
+    "ast_hash": "a586ee0670ab990cbf24d4177c9ce2b0",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -4488,15 +4488,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryGrid.tsx": {
-    "mtime": 1793899085.1952672,
-    "seen": 1793899255.9003212,
-    "ast_hash": "82e54814766f23200fb99a91b67c170b",
+    "mtime": 1793967429.9997113,
+    "seen": 1793971682.4539702,
+    "ast_hash": "15fa140ca9b22bf80ff496fb8046c5e3",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1793956888.6609454,
-    "seen": 1793957209.4245183,
-    "ast_hash": "1c773022ed4cf31154a44c67b4193afc",
+    "mtime": 1793971626.371091,
+    "seen": 1793971682.4539702,
+    "ast_hash": "bbf9fe117839ce340c114fe3fe59d0e8",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4512,9 +4512,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/api.ts": {
-    "mtime": 1793956837.9198773,
-    "seen": 1793957209.426518,
-    "ast_hash": "68f4e0a8abd391d0c6a7d6acd50934fb",
+    "mtime": 1793965647.1754575,
+    "seen": 1793971682.4559703,
+    "ast_hash": "f5a7475405355adc68edbedfde0a44ca",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/grid-values.ts": {
@@ -7704,9 +7704,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/CorrectionRows.java": {
-    "mtime": 1793956586.2399638,
-    "seen": 1793957209.2876637,
-    "ast_hash": "42d891c7b5fce039421e001e06e96835",
+    "mtime": 1793968806.4627614,
+    "seen": 1793971682.3170648,
+    "ast_hash": "8ba696a1d5c4855b7ca72820dedb399b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CorrectionDelivery.java": {
@@ -7728,15 +7728,21 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/CorrectionBanner.tsx": {
-    "mtime": 1793957127.383711,
-    "seen": 1793957209.4245183,
-    "ast_hash": "86b6cb267ffaa4f6969534b0a4873855",
+    "mtime": 1793968809.3493798,
+    "seen": 1793971682.4539702,
+    "ast_hash": "d4d68873a60fffddb8efbb3515e15933",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/correction-macro.ts": {
-    "mtime": 1793956938.426706,
-    "seen": 1793957209.426518,
-    "ast_hash": "fde0dc5ffde551cb65fa917b4220fc9c",
+    "mtime": 1793968809.3488586,
+    "seen": 1793971682.4559703,
+    "ast_hash": "6af74db889f276a86857f16fe049f12a",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/data-entry/transfer-macro.ts": {
+    "mtime": 1793971622.391578,
+    "seen": 1793971682.4584756,
+    "ast_hash": "e79ae738026156ba99dc177bed36e3de",
     "semantic_hash": ""
   }
 }

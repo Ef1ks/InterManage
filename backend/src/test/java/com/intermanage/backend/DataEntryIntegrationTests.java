@@ -419,6 +419,36 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void linkReplacesCatalogHitOfIncompleteEan() throws Exception {
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        insertProduct(productImport, "0000000000901", "0001234567890", "PACZEK KROTKI KOD", "SOFIAN", "szt", "1",
+                "1.99", "25 42 01");
+        jdbc.update("""
+                update ksef_invoice_xml set content = ? where invoice_id = ?::uuid""",
+                invoiceXml().replace("<GTIN>05900000000012</GTIN>", "<GTIN>1234567890</GTIN>")
+                        .getBytes(StandardCharsets.UTF_8), UUID.fromString(invoiceId));
+
+        // Kod z 10 cyframi trafia w kartotekę, ale jako EAN jest niepełny.
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[0].ean").value("1234567890"))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000901"));
+
+        mvc.perform(post(url("/links")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sellerNip":"%s","code":"1234567890","itm8":"0000000000101"}""".formatted(SELLER_NIP)))
+                .andExpect(status().isOk());
+
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[0].ean").value("5900000000012"))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000101"))
+                .andExpect(jsonPath("$.lines[0].eanSource").value("LINK"))
+                .andExpect(jsonPath("$.lines[0].linkedCode").value("1234567890"));
+    }
+
+    @Test
     void looksUpScaleLabelCodesWithPurchasePriceAndVat() throws Exception {
         String productImport = jdbc.queryForObject("""
                 insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
@@ -1139,8 +1169,16 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.correction.reason").value("Zwrot"))
                 .andExpect(jsonPath("$.correction.hasBeforeRows").value(true))
                 .andExpect(jsonPath("$.correction.corrected[0].number").value("FV/77/2026"))
-                .andExpect(jsonPath("$.lines.length()").value(2))
+                .andExpect(jsonPath("$.lines.length()").value(4))
                 .andExpect(jsonPath("$.lines[0].beforeQuantity").doesNotExist())
+                // Zamiana artykułu pod jednym numerem: masło odchodzi, jogurt dochodzi.
+                .andExpect(jsonPath("$.lines[2].ean").value("5900000000043"))
+                .andExpect(jsonPath("$.lines[2].quantity").value(0))
+                .andExpect(jsonPath("$.lines[2].beforeQuantity").value(3))
+                .andExpect(jsonPath("$.lines[2].beforeUnitNet").value(6.0))
+                .andExpect(jsonPath("$.lines[3].quantity").value(2))
+                .andExpect(jsonPath("$.lines[3].beforeQuantity").value(0))
+                .andExpect(jsonPath("$.lines[3].beforeUnitNet").value(3.0))
                 .andExpect(jsonPath("$.lines[1].quantity").value(4))
                 .andExpect(jsonPath("$.lines[1].beforeQuantity").value(6))
                 .andExpect(jsonPath("$.lines[1].beforeUnitNet").value(2.0));
@@ -1236,6 +1274,11 @@ class DataEntryIntegrationTests {
                       <StanPrzed>1</StanPrzed></FaWiersz>
                     <FaWiersz><NrWierszaFa>3</NrWierszaFa><P_7>Mleko 3,2%% 1 l</P_7><GTIN>5900000000012</GTIN>
                       <P_8A>szt.</P_8A><P_8B>4</P_8B><P_9A>2.00</P_9A><P_11>8.00</P_11><P_12>5</P_12></FaWiersz>
+                    <FaWiersz><NrWierszaFa>4</NrWierszaFa><P_7>Masło ekstra 200g</P_7><GTIN>5900000000043</GTIN>
+                      <P_8A>szt.</P_8A><P_8B>3</P_8B><P_9A>6.00</P_9A><P_11>18.00</P_11><P_12>5</P_12>
+                      <StanPrzed>1</StanPrzed></FaWiersz>
+                    <FaWiersz><NrWierszaFa>4</NrWierszaFa><P_7>Jogurt naturalny 400g</P_7><GTIN>5900000000029</GTIN>
+                      <P_8A>szt.</P_8A><P_8B>2</P_8B><P_9A>3.00</P_9A><P_11>6.00</P_11><P_12>5</P_12></FaWiersz>
                   </Fa>
                 </Faktura>""".formatted();
     }

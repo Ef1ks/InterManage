@@ -21,7 +21,7 @@ import type { DraftCorrection, DraftInvoice } from '@/store/dataEntryDraftSlice'
 
 import { useCorrectionDeliveries, useCorrectionDeliveryLines } from './api'
 import { buildCorrectionMacro, planCorrectionMacro } from './correction-macro'
-import { type DataEntryRow, serviceKind } from './rows'
+import { belowRequiredMargin, type DataEntryRow, type Pricing, serviceKind } from './rows'
 
 type Delivery = NonNullable<DraftCorrection['delivery']>
 
@@ -44,6 +44,7 @@ export function CorrectionBanner({
   invoice,
   correction,
   rows,
+  pricing,
   macroOpen,
   onMacroOpenChange,
   onDelivery,
@@ -53,6 +54,7 @@ export function CorrectionBanner({
   invoice: DraftInvoice
   correction: DraftCorrection
   rows: DataEntryRow[]
+  pricing: Pricing
   macroOpen: boolean
   onMacroOpenChange: (open: boolean) => void
   /** `auto`: bon podpięty sam, bez kroku cofania. */
@@ -156,6 +158,7 @@ export function CorrectionBanner({
           delivery={delivery}
           hasBeforeRows={correction.hasBeforeRows}
           rows={rows}
+          pricing={pricing}
           open={macroOpen}
           onOpenChange={onMacroOpenChange}
           onLinkRow={onLinkRow}
@@ -278,6 +281,7 @@ function MacroDialog({
   delivery,
   hasBeforeRows,
   rows,
+  pricing,
   open,
   onOpenChange,
   onLinkRow,
@@ -287,6 +291,7 @@ function MacroDialog({
   delivery: Delivery
   hasBeforeRows: boolean
   rows: DataEntryRow[]
+  pricing: Pricing
   open: boolean
   onOpenChange: (open: boolean) => void
   onLinkRow: (row: DataEntryRow) => void
@@ -298,8 +303,11 @@ function MacroDialog({
   )
   const waiting = delivery.id !== null && (lines.isPending || lines.isError)
   const plan = useMemo(
-    () => (waiting ? null : planCorrectionMacro(articles, hasBeforeRows, lines.data ?? null)),
-    [waiting, articles, hasBeforeRows, lines.data],
+    () =>
+      waiting
+        ? null
+        : planCorrectionMacro(articles, hasBeforeRows, lines.data ?? null, (row) => belowRequiredMargin(row, pricing)),
+    [waiting, articles, hasBeforeRows, lines.data, pricing],
   )
 
   const copy = async () => {
@@ -353,6 +361,16 @@ function MacroDialog({
                         <td className="max-w-0 px-3 py-1.5">
                           <span className="block truncate font-medium">{item.name}</span>
                           <span className="block text-xs text-muted-foreground tabular-nums">{item.ean}</span>
+                          {item.added && (
+                            <span className="mt-0.5 mr-1 inline-block rounded-md bg-sky-300 px-1.5 py-0.5 text-xs font-semibold text-sky-950 dark:bg-sky-800 dark:text-sky-50">
+                              dochodzi do bonu
+                            </span>
+                          )}
+                          {item.lowMargin && (
+                            <span className="mt-0.5 inline-block rounded-md bg-red-300 px-1.5 py-0.5 text-xs font-semibold text-red-950 dark:bg-red-900 dark:text-red-50">
+                              za niska marża, 2 × Enter po ilości
+                            </span>
+                          )}
                         </td>
                         <td
                           className={cn(
