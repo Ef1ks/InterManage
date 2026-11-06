@@ -8,8 +8,9 @@ import type { DataEntryRow } from './rows'
  * Czasy w ms, poprawiamy je tylko tutaj.
  */
 export const CORRECTION_MACRO_CONFIG = {
-  /** Po każdym numerze bonu program wyszukuje cały dokument; drugi Enter idzie już szybko. */
-  afterBon: 1200,
+  /** Po wpisaniu numeru bonu, przed oboma Enterami: program wyszukuje cały dokument. */
+  afterBonText: 800,
+  /** Po drugim Enterze, przed EAN-em. */
   afterBonSkip: 100,
   /** Po EAN-ie program ładuje linię bonu: bez przerwy wpisana ilość przepadała i zostawała ilość z bonu. */
   afterEan: 300,
@@ -274,7 +275,7 @@ export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroIt
   out.push(`# Korekta bonu ${bonNumber}: ${items.length} poz.`)
   for (const item of items) {
     out.push(`# EAN ${item.ean}`)
-    enter(bonNumber, c.afterBon)
+    out.push(`TEXT|${bonNumber}`, `SLEEP|${c.afterBonText}`, 'KEY|{Enter}')
     key('{Enter}', c.afterBonSkip)
     enter(item.ean, c.afterEan)
     enter(formatMacroQuantity(item.quantity), c.afterQuantity)

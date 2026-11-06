@@ -96,7 +96,8 @@ export function useCorrectionDeliveries(storeId: string, invoiceId: string | nul
         `${path(storeId)}/invoices/${invoiceId}/correction-deliveries?query=${encodeURIComponent(query)}`,
       ),
     enabled: enabled && invoiceId !== null,
-    placeholderData: keepPreviousData,
+    // Przy zmianie wyszukiwania poprzedni wynik zostaje na ekranie, przy innej fakturze nie: podpiąłby się jej bon.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[4] === invoiceId ? previous : undefined),
   })
 }
 
@@ -105,9 +106,7 @@ export function useCorrectionDeliveryLines(storeId: string, invoiceId: string | 
   return useQuery({
     queryKey: ['stores', storeId, 'data-entry', 'correction-delivery-lines', invoiceId, documentId],
     queryFn: () =>
-      api<CorrectionDeliveryLine[]>(
-        `${path(storeId)}/invoices/${invoiceId}/correction-deliveries/${documentId}/lines`,
-      ),
+      api<CorrectionDeliveryLine[]>(`${path(storeId)}/invoices/${invoiceId}/correction-deliveries/${documentId}/lines`),
     enabled: invoiceId !== null && documentId !== null,
   })
 }

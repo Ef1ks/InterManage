@@ -1272,6 +1272,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
       {invoice?.correction && invoice.id && canLoadInvoices && (
         <CorrectionBanner
+          key={invoice.id}
           storeId={store.id}
           invoice={invoice}
           correction={invoice.correction}
