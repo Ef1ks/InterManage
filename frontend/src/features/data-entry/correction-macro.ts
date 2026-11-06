@@ -12,9 +12,10 @@ export const CORRECTION_MACRO_CONFIG = {
   afterBon: 1200,
   afterBonSkip: 0,
   afterEan: 0,
-  afterQuantity: 100,
+  /** Krócej niż 300 ms program nie nadąża między ilością a ceną. */
+  afterQuantity: 300,
   /** Pusty Enter między ilością a ceną. */
-  afterSkip: 100,
+  afterSkip: 300,
   /** Po ostatnim Enterze program zapisuje pozycję: przy krótszej przerwie nie nadążał z kolejnym numerem bonu. */
   afterPrice: 1000,
   /** Program sklepu dostaje cenę z taką liczbą miejsc po przecinku. */
