@@ -7,8 +7,8 @@ import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDocumentDate } from '@/features/documents/format'
-import { saveBlob } from '@/lib/api'
-import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
+import { ApiError, saveBlob } from '@/lib/api'
+import { ensureFolderAccess, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
 
 import { PRO_FOLDER, type ProFile, proContent } from './leaflet-rows'
 
@@ -20,6 +20,8 @@ type Props = {
   copy?: typeof LEAFLET_COPY
   /** Ostrzeżenie nad tabelą plików. */
   notice?: string
+  /** Plik etykiet zapisywany razem z plikami .PRO; {@code save} zwraca opis do komunikatu. */
+  labels?: { folder: SavedFolderSpec; save: (files: ProFile[], folderReady: boolean) => Promise<string> }
 }
 
 const LEAFLET_COPY = {
@@ -35,9 +37,9 @@ const articles = (count: number) =>
 /**
  * Pliki cen promocji .PRO z pozycji do opracowania: jeden okres = jeden plik, z kodem taryfy do wpisania przy
  * wczytaniu w programie sklepu. Pliki zapisują się w folderze wybranym raz w przeglądarce (N:\ALOA\PRO\IMPORT);
- * bez niego się pobierają.
+ * bez niego się pobierają. Z {@code labels} zapis tworzy też plik etykiet; jego błąd nie cofa zapisanych plików .PRO.
  */
-export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY, notice }: Props) {
+export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY, notice, labels }: Props) {
   const [saving, setSaving] = useState(false)
   const ready = files.filter((file) => file.lines.length > 0)
 
@@ -46,6 +48,7 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
     try {
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu.
       const folderReady = await ensureFolderAccess(PRO_FOLDER.key)
+      const labelsFolderReady = labels ? await ensureFolderAccess(labels.folder.key) : false
       for (const file of ready) {
         if (folderReady) await saveToFolder(PRO_FOLDER.key, file.fileName, proContent(file))
         else saveBlob(proContent(file), file.fileName)
@@ -56,6 +59,13 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
         }`,
         duration: 10_000,
       })
+      if (labels) {
+        try {
+          toast.success('Zapisano plik etykiet', { description: await labels.save(ready, labelsFolderReady) })
+        } catch (error) {
+          toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku etykiet')
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać plików .PRO')
     } finally {
@@ -130,9 +140,10 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
         <div className="flex flex-wrap items-center gap-3">
           <Button size="xl" loading={saving} disabled={ready.length === 0} onClick={save}>
             <FileOutputIcon />
-            Zapisz pliki .PRO ({ready.length})
+            Zapisz pliki .PRO{labels ? ' i etykiety' : ''} ({ready.length})
           </Button>
           <SavedFolder folder={PRO_FOLDER} />
+          {labels && <SavedFolder folder={labels.folder} />}
         </div>
       </DialogContent>
     </Dialog>

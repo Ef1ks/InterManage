@@ -17,6 +17,7 @@ import { groupItems } from '@/features/deli-order/group-items'
 import { InsertOrderIntoTable } from '@/features/deli-order/InsertOrderIntoTable'
 import { mergeableGroups, MergeWithSiblings, ordersCount, useMergeWithUndo } from '@/features/deli-order/MergeOrders'
 import { OrderDownloads } from '@/features/deli-order/OrderDownloads'
+import { OrderPrintMenu } from '@/features/deli-order/OrderPrintMenu'
 import { OrderMovementDocuments } from '@/features/deli-order/OrderMovementDocuments'
 import { OrderStatusBadge } from '@/features/deli-order/OrderStatusBadge'
 import { deliPaths } from '@/features/deli-order/paths'
@@ -202,6 +203,7 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <OrderDownloads storeId={storeId} orderId={order.id} />
+          <OrderPrintMenu storeId={storeId} orderId={order.id} />
           {editable && (
             <>
             {changed.length > 0 && (

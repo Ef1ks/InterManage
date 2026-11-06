@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.deliorder.component.DeliOrderDocuments;
 import com.intermanage.backend.deliorder.dto.AddDeliOrderItemsRequest;
 import com.intermanage.backend.deliorder.dto.ChangeDeliveryDateRequest;
 import com.intermanage.backend.deliorder.dto.CorrectDeliOrderRequest;
@@ -99,8 +100,10 @@ public class DeliOrderController {
     @GetMapping("/orders/{orderId}/export/{format}")
     @PreAuthorize(VIEW)
     public ResponseEntity<byte[]> export(@PathVariable UUID storeId, @PathVariable UUID orderId,
-            @PathVariable String format, @AuthenticationPrincipal AppUserPrincipal principal) {
-        ExportFile file = orderService.export(storeId, orderId, format, principal.getUsername());
+            @PathVariable String format,
+            @RequestParam(defaultValue = "ORDER") DeliOrderDocuments.PrintVariant variant,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        ExportFile file = orderService.export(storeId, orderId, format, variant, principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())

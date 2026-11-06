@@ -66,6 +66,37 @@ public class DeliOrderDocuments {
         this.bold = fonts.bold();
     }
 
+    /**
+     * Wariant wydruku. Pracownicy dopisują długopisem to, co pojechało ponad zamówienie, więc oprócz samego zamówienia
+     * jest wydruk bez ilości i wydruk wszystkich pozycji formularza, bez ilości albo z zamówionymi.
+     */
+    public enum PrintVariant {
+        ORDER("", ""),
+        ORDER_BLANK(" · in blanco", "-in-blanco"),
+        FORM_BLANK(" · cały formularz in blanco", "-formularz-in-blanco"),
+        FORM_WITH_QUANTITIES(" · cały formularz", "-formularz");
+
+        private final String title;
+        private final String fileSuffix;
+
+        PrintVariant(String title, String fileSuffix) {
+            this.title = title;
+            this.fileSuffix = fileSuffix;
+        }
+
+        public boolean wholeForm() {
+            return this == FORM_BLANK || this == FORM_WITH_QUANTITIES;
+        }
+
+        public String fileSuffix() {
+            return fileSuffix;
+        }
+
+        boolean withQuantities() {
+            return this == ORDER || this == FORM_WITH_QUANTITIES;
+        }
+    }
+
     /** Zamówienie w postaci potrzebnej do plików; {@code lines} w kolejności formularza. */
     public record OrderDocument(
             UUID id,
@@ -117,7 +148,8 @@ public class DeliOrderDocuments {
                 new XlsxWriter.Column("Ilość", 10)), rows);
     }
 
-    public byte[] pdf(OrderDocument order) {
+    /** {@code formLines}: wszystkie pozycje formularza, używane w wariantach z {@link PrintVariant#wholeForm()}. */
+    public byte[] pdf(OrderDocument order, PrintVariant variant, List<Line> formLines) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 36, 36, 36, 54);
         try {
@@ -127,9 +159,10 @@ public class DeliOrderDocuments {
             document.addTitle("Zamówienie garmażu " + order.storeNumber() + " na " + order.deliveryDate());
             document.open();
 
-            Map<String, Map<String, List<Line>>> sections = bySection(order.orderedLines());
+            Map<String, Map<String, List<Line>>> sections =
+                    bySection(variant.wholeForm() ? formLines : order.orderedLines());
             if (sections.isEmpty()) {
-                writeHeader(document, order, null);
+                writeHeader(document, order, null, variant);
             }
             // Każdy dział na osobnej kartce: trafia do innego działu sklepu, więc nie może dzielić strony z innym.
             boolean first = true;
@@ -139,11 +172,11 @@ public class DeliOrderDocuments {
                 }
                 first = false;
                 footer.startSection(section.getKey(), writer.getPageNumber());
-                writeHeader(document, order, section.getKey());
+                writeHeader(document, order, section.getKey(), variant);
                 int number = 1;
                 for (Map.Entry<String, List<Line>> category : section.getValue().entrySet()) {
                     number = writeCategory(document, writer.getDirectContent(), category.getKey(), category.getValue(),
-                            number);
+                            number, variant.withQuantities());
                 }
                 writeSignatures(document);
             }
@@ -155,11 +188,13 @@ public class DeliOrderDocuments {
     }
 
     /** Nagłówek kartki działu: nazwa działu dużą czcionką, pod nią sklep, dostawca i daty. */
-    private void writeHeader(Document document, OrderDocument order, String section) throws DocumentException {
+    private void writeHeader(Document document, OrderDocument order, String section, PrintVariant variant)
+            throws DocumentException {
         PdfPTable header = new PdfPTable(new float[] {1, 1});
         header.setWidthPercentage(100);
 
-        PdfPCell kicker = cell(new Phrase("Zamówienie garmażu · nr " + order.id(), font(regular, 9, MUTED)));
+        PdfPCell kicker = cell(new Phrase("Zamówienie garmażu · nr " + order.id() + variant.title,
+                font(regular, 9, MUTED)));
         kicker.setColspan(2);
         header.addCell(kicker);
         PdfPCell title = cell(new Phrase(section != null ? section : "Zamówienie garmażu", font(bold, 22, INK)));
@@ -187,8 +222,8 @@ public class DeliOrderDocuments {
         return cell;
     }
 
-    private int writeCategory(Document document, PdfContentByte canvas, String heading, List<Line> lines, int firstNumber)
-            throws DocumentException {
+    private int writeCategory(Document document, PdfContentByte canvas, String heading, List<Line> lines, int firstNumber,
+            boolean withQuantities) throws DocumentException {
         PdfPTable table = new PdfPTable(new float[] {5, 41, 14, 15, 25});
         table.setWidthPercentage(100);
         table.setSpacingBefore(18);
@@ -215,7 +250,9 @@ public class DeliOrderDocuments {
             table.addCell(bodyCell(new Phrase(String.valueOf(number++), font(regular, 9, MUTED)), Element.ALIGN_CENTER));
             table.addCell(bodyCell(new Phrase(line.name() != null ? line.name() : "-", font(regular, 10, INK)),
                     Element.ALIGN_LEFT));
-            table.addCell(bodyCell(new Phrase(quantity(line), font(bold, 10, INK)), Element.ALIGN_CENTER));
+            table.addCell(withQuantities && line.quantity().signum() > 0
+                    ? bodyCell(new Phrase(quantity(line), font(bold, 10, INK)), Element.ALIGN_CENTER)
+                    : blankQuantityCell(line));
             // Puste pole: odbierający wpisuje długopisem, ile faktycznie przyszło.
             table.addCell(bodyCell(new Phrase(" "), Element.ALIGN_CENTER));
             PdfPCell code = new PdfPCell(PdfBarcodes.image(canvas, line.ean(), 118, 34), false);
@@ -228,6 +265,11 @@ public class DeliOrderDocuments {
         }
         document.add(table);
         return number;
+    }
+
+    /** Pole do wpisania długopisem; sama jednostka z prawej, żeby nie przeszkadzała w pisaniu. */
+    private PdfPCell blankQuantityCell(Line line) {
+        return bodyCell(new Phrase(unit(line), font(regular, 8, MUTED)), Element.ALIGN_RIGHT);
     }
 
     private void writeSignatures(Document document) throws DocumentException {
@@ -265,7 +307,11 @@ public class DeliOrderDocuments {
 
     private static String quantity(Line line) {
         DecimalFormat format = new DecimalFormat("#,##0.###", DecimalFormatSymbols.getInstance(POLISH));
-        return format.format(line.quantity()) + (line.unit() == OrderUnit.KG ? " kg" : " szt.");
+        return format.format(line.quantity()) + " " + unit(line);
+    }
+
+    private static String unit(Line line) {
+        return line.unit() == OrderUnit.KG ? "kg" : "szt.";
     }
 
     /** Dział → kategoria → pozycje, w kolejności pierwszego wystąpienia (pozycje są w kolejności formularza). */

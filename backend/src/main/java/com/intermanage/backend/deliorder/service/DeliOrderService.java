@@ -39,6 +39,7 @@ import com.intermanage.backend.deliorder.entity.DeliOrder;
 import com.intermanage.backend.deliorder.entity.DeliOrderItem;
 import com.intermanage.backend.deliorder.entity.DeliOrderStatus;
 import com.intermanage.backend.deliorder.entity.InvitationStatus;
+import com.intermanage.backend.deliorder.entity.OrderCategory;
 import com.intermanage.backend.deliorder.entity.OrderCategoryProduct;
 import com.intermanage.backend.deliorder.entity.OrderSection;
 import com.intermanage.backend.deliorder.entity.OrderUnit;
@@ -247,8 +248,12 @@ public class DeliOrderService {
      * gdzie pochodzenie to numer sklepu zamawiającego, a czas to chwila wygenerowania pliku.
      */
     @Transactional(readOnly = true)
-    public ExportFile export(UUID storeId, UUID orderId, String format, String username) {
+    public ExportFile export(UUID storeId, UUID orderId, String format, DeliOrderDocuments.PrintVariant variant,
+            String username) {
         DeliOrder order = loadVisible(storeId, orderId);
+        if (variant.wholeForm()) {
+            ensureCanOrderFrom(storeId, order.getFormStore().getId());
+        }
         DeliOrderDocuments.OrderDocument document = new DeliOrderDocuments.OrderDocument(order.getId(),
                 order.getStore().getNumber(), order.getStore().getName(), order.getFormStore().getNumber(),
                 order.getFormStore().getName(), order.getSubmittedAt(),
@@ -264,11 +269,69 @@ public class DeliOrderService {
             case "lst" -> new ExportFile(baseName + ".LST", "text/plain;charset=US-ASCII", documents.lst(document));
             case "xlsx" -> new ExportFile(baseName + ".xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", documents.xlsx(document));
-            case "pdf" -> new ExportFile(baseName + ".pdf", "application/pdf", documents.pdf(document));
+            case "pdf" -> new ExportFile(baseName + variant.fileSuffix() + ".pdf", "application/pdf",
+                    documents.pdf(document, variant, variant.wholeForm() ? formLines(order) : List.of()));
             case "proto" -> new ExportFile(ProtoFile.fileName(6, order.getStore().getNumber(), username),
                     ProtoFile.CONTENT_TYPE, documents.proto(document));
             default -> throw ApiException.notFound("Nieznany format pliku: " + format);
         };
+    }
+
+    /**
+     * Wszystkie pozycje bieżącego formularza z ilościami z zamówienia (bez pozycji zamówienia: 0). Pozycja zamówienia
+     * trafia najpierw do tej samej kategorii, a po zmianie nazwy kategorii do tego samego produktu w formularzu.
+     * Reszta (spoza formularza, usunięte z niego) idzie na koniec, bo niczego zamówionego nie może zabraknąć.
+     */
+    private List<DeliOrderDocuments.Line> formLines(DeliOrder order) {
+        record Position(OrderSection section, OrderCategory category, OrderCategoryProduct product) {
+        }
+        List<Position> positions = new ArrayList<>();
+        for (OrderSection section : sections.findByStoreId(order.getFormStore().getId())) {
+            for (OrderCategory category : section.getCategories()) {
+                for (OrderCategoryProduct product : category.getProducts()) {
+                    positions.add(new Position(section, category, product));
+                }
+            }
+        }
+        List<DeliOrderItem> remaining = new ArrayList<>(order.getItems());
+        Map<Position, DeliOrderItem> matched = new HashMap<>();
+        for (Position position : positions) {
+            remaining.stream()
+                    .filter(item -> item.getProduct().getId().equals(position.product().getProduct().getId())
+                            && item.getSectionName().equals(position.section().getName())
+                            && item.getCategoryName().equals(position.category().getName()))
+                    .findFirst()
+                    .ifPresent(item -> {
+                        matched.put(position, item);
+                        remaining.remove(item);
+                    });
+        }
+        for (Position position : positions) {
+            if (matched.containsKey(position)) {
+                continue;
+            }
+            remaining.stream()
+                    .filter(item -> item.getProduct().getId().equals(position.product().getProduct().getId()))
+                    .findFirst()
+                    .ifPresent(item -> {
+                        matched.put(position, item);
+                        remaining.remove(item);
+                    });
+        }
+        List<DeliOrderDocuments.Line> lines = new ArrayList<>();
+        for (Position position : positions) {
+            DeliOrderItem item = matched.get(position);
+            lines.add(new DeliOrderDocuments.Line(position.section().getName(), position.category().getName(),
+                    position.product().getProduct().getEan(), position.product().getProduct().getName(),
+                    position.product().getProduct().getBrand(),
+                    item != null ? item.getUnit() : position.product().getOrderUnit(),
+                    item != null ? item.getQuantity() : BigDecimal.ZERO));
+        }
+        remaining.stream().filter(item -> item.getQuantity().signum() > 0).forEach(item -> lines.add(
+                new DeliOrderDocuments.Line(item.getSectionName(), item.getCategoryName(), item.getProduct().getEan(),
+                        item.getProduct().getName(), item.getProduct().getBrand(), item.getUnit(),
+                        item.getQuantity())));
+        return lines;
     }
 
     /**

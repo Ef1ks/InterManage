@@ -17,6 +17,7 @@ import { useSalesReportsOverview } from '@/features/sales/api'
 import { ArticleSalesPanel } from '@/features/sales/SalesChartDialog'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { addDays, todayIso } from '@/lib/dates'
+import { useProtoFolder } from '@/lib/proto-files'
 import type { StoreSummary } from '@/lib/types'
 import { store as reduxStore, useAppDispatch, useAppSelector } from '@/store'
 import {
@@ -33,14 +34,14 @@ import {
   updatePromoTile,
 } from '@/store/promoSetupDraftSlice'
 
-import { fetchPromoArticles } from './api'
+import { fetchPromoArticles, savePromoLabels } from './api'
 import { DiscountLevelsDialog } from './DiscountLevelsDialog'
 import { codeKey, discountedPrice, hasPeriod, promoFiles, tileTariff } from './promo-rows'
 import { PromoTileCard } from './PromoTileCard'
 
 const PRO_COPY = {
   description:
-    'Jeden plik na każdą promocję: EAN-y artykułów z kartoteki i ceny promocji. Przy wczytaniu pliku w programie sklepu wpisz jego kod taryfy.',
+    'Jeden plik na każdą promocję: EAN-y artykułów z kartoteki i ceny promocji. Przy wczytaniu pliku w programie sklepu wpisz jego kod taryfy. Razem z nimi zapisze się plik etykiet PRO_PRO_FOR_67: po jednej na każdy artykuł z plików.',
   empty: 'Żadna promocja nie ma artykułów i okresu.',
   withoutPrice: 'bez ceny promocji',
 }
@@ -74,6 +75,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
   const [listFor, setListFor] = useState<{ tileId: string; query: string } | null>(null)
   const [levelsOpen, setLevelsOpen] = useState(false)
   const [generated, setGenerated] = useState<ProFile[] | null>(null)
+  const labelsFolder = useProtoFolder(store.id)
 
   const canSeeSales = useCan('SALES')
   const canSeeInventory = useCan('INVENTORY')
@@ -326,6 +328,10 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
         open={generated !== null}
         onOpenChange={(open) => !open && setGenerated(null)}
         copy={PRO_COPY}
+        labels={{
+          folder: labelsFolder,
+          save: (files, folderReady) => savePromoLabels(store.id, files, labelsFolder.key, folderReady),
+        }}
         notice={
           generated !== null && generated.length > 1 && incomplete.length > 0
             ? `Bez okresu, nie trafią do plików: ${incomplete.map((tile) => `promocja ${tile.number}`).join(', ')}.`

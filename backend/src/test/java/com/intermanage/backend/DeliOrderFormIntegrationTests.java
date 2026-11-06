@@ -158,6 +158,21 @@ class DeliOrderFormIntegrationTests {
         mvc.perform(get(url(storeB, "/form")).cookie(owner)).andExpect(jsonPath("$.sections.length()").value(0));
     }
 
+    private String orderPdfText(Cookie owner, String storeId, String orderId, String variant) throws Exception {
+        byte[] pdf = mvc.perform(get(url(storeId, "/orders/" + orderId + "/export/pdf")).param("variant", variant)
+                        .cookie(owner))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var reader = new com.lowagie.text.pdf.PdfReader(pdf)) {
+            var extractor = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader);
+            StringBuilder text = new StringBuilder();
+            for (int page = 1; page <= reader.getNumberOfPages(); page++) {
+                text.append(extractor.getTextFromPage(page)).append('\n');
+            }
+            return text.toString();
+        }
+    }
+
     @Test
     void invitedStoreOrdersAndSupplierCorrectsAndFulfills() throws Exception {
         Cookie owner = login();
@@ -247,6 +262,18 @@ class DeliOrderFormIntegrationTests {
                 .andExpect(header().string("Content-Type", "application/pdf"))
                 .andReturn().getResponse().getContentAsByteArray();
         assertThat(new String(pdf, 0, 4)).isEqualTo("%PDF");
+
+        // Warianty wydruku: pozycji formularza spoza zamówienia nie ma w zwykłym wydruku, ilości tylko tam, gdzie mają być.
+        String salatka = insertProduct(supplier, "SALATKA 1KG", "kg");
+        send(owner, post(url(supplier, "/categories/" + category + "/products")), "{\"productId\":\"" + salatka + "\"}");
+        assertThat(orderPdfText(owner, supplier, orderId, "ORDER"))
+                .contains("KABANOSY", "1,25 kg", "2 szt.").doesNotContain("SALATKA");
+        assertThat(orderPdfText(owner, supplier, orderId, "ORDER_BLANK"))
+                .contains("KABANOSY", "in blanco").doesNotContain("1,25", "SALATKA");
+        assertThat(orderPdfText(owner, shop, orderId, "FORM_BLANK"))
+                .contains("KABANOSY", "SALATKA", "cały formularz in blanco").doesNotContain("1,25");
+        assertThat(orderPdfText(owner, supplier, orderId, "FORM_WITH_QUANTITIES"))
+                .contains("KABANOSY", "1,25 kg", "2 szt.", "SALATKA");
         mvc.perform(get(url(shop, "/orders/" + orderId + "/export/doc")).cookie(owner)).andExpect(status().isNotFound());
         mvc.perform(get(url(supplier, "/orders/incoming")).cookie(owner))
                 .andExpect(jsonPath("$[0].id").value(orderId))

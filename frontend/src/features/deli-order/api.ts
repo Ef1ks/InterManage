@@ -418,6 +418,12 @@ export function useFulfillOrder(storeId: string, orderId: string) {
 export const orderExportPath = (storeId: string, orderId: string, format: 'pdf' | 'xlsx' | 'lst' | 'proto') =>
   `${basePath(storeId)}/orders/${orderId}/export/${format}`
 
+export type OrderPrintVariant = 'ORDER' | 'ORDER_BLANK' | 'FORM_BLANK' | 'FORM_WITH_QUANTITIES'
+
+/** Ścieżka wydruku PDF w wybranym wariancie. */
+export const orderPrintPath = (storeId: string, orderId: string, variant: OrderPrintVariant) =>
+  `${orderExportPath(storeId, orderId, 'pdf')}?variant=${variant}`
+
 /**
  * Usunięcie niezrealizowanego zamówienia (zrealizowanego: tylko właściciel) po stronie tego sklepu i jego przywrócenie. Nic nie jest kasowane: zamówienie
  * znika z naszej listy, druga strona widzi je jako usunięte. Odświeżenie list jest w hooku (a nie w mutate),
