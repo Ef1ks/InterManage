@@ -9,13 +9,14 @@ import type { DataEntryRow } from './rows'
  */
 export const CORRECTION_MACRO_CONFIG = {
   /** Po wpisaniu numeru bonu i po drugim Enterze program otwiera bon. */
-  afterBon: 800,
-  afterBonSkip: 800,
+  afterBon: 1500,
+  afterBonSkip: 1500,
   afterEan: 400,
   afterQuantity: 300,
   /** Pusty Enter między ilością a ceną. */
   afterSkip: 300,
-  afterPrice: 400,
+  /** Po ostatnim Enterze program zapisuje pozycję: przy krótszej przerwie nie nadążał z kolejnym numerem bonu. */
+  afterPrice: 1500,
   /** Program sklepu dostaje cenę z taką liczbą miejsc po przecinku. */
   priceDigits: 2,
 } as const
