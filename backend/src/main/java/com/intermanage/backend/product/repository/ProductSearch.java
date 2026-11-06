@@ -16,6 +16,7 @@ import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.entity.ProductCode;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
@@ -24,9 +25,10 @@ import jakarta.persistence.criteria.Subquery;
 /**
  * Wyszukiwarka kartoteki sklepu. Zapytanie dzielimy na słowa i każde musi pasować do produktu, w dowolnej kolejności
  * i jako fragment: "fil swie" znajdzie "FILET SWIEZY KL A". Słowo pasuje do fragmentu nazwy lub marki, początku EAN
- * (głównego z kartoteki albo każdego obowiązującego z multikodów) albo fragmentu ITM8. {@code *} w słowie to dowolny
- * ciąg znaków, {@code ?} jeden znak; w EAN-ie i ITM8 słowo z nimi jest całym kodem jak w Excelu ({@code 5923532*} =
- * kody od 5923532). Wielkość liter nie ma znaczenia.
+ * (głównego z kartoteki albo każdego obowiązującego z multikodów, z zerami wiodącymi i bez, bo EAN-8 i krótkie kody
+ * są w bazie dopełnione zerami do 13 znaków) albo fragmentu ITM8. {@code *} w słowie to dowolny ciąg znaków,
+ * {@code ?} jeden znak; w EAN-ie i ITM8 słowo z nimi jest całym kodem jak w Excelu ({@code 5923532*} = kody od
+ * 5923532). Wielkość liter nie ma znaczenia.
  */
 public final class ProductSearch {
 
@@ -79,13 +81,15 @@ public final class ProductSearch {
                         cb.like(root.get("ean"), eanPattern),
                         cb.like(root.get("itm8"), wildcard ? pattern : contains)));
                 if (DIGITS.matcher(word).matches()) {
+                    any.add(cb.like(withoutLeadingZeros(cb, root.get("ean")), eanPattern));
                     Subquery<Integer> code = query.subquery(Integer.class);
                     Root<ProductCode> c = code.from(ProductCode.class);
                     code.select(cb.literal(1)).where(
                             cb.equal(c.get("storeId"), storeId),
                             cb.isTrue(c.get("current")),
                             cb.equal(c.get("itm8"), root.get("itm8")),
-                            cb.like(c.get("ean"), eanPattern));
+                            cb.or(cb.like(c.get("ean"), eanPattern),
+                                    cb.like(withoutLeadingZeros(cb, c.get("ean")), eanPattern)));
                     any.add(cb.exists(code));
                 }
                 all.add(cb.or(any.toArray(Predicate[]::new)));
@@ -131,6 +135,10 @@ public final class ProductSearch {
                     cb.equal(c.get("itm8"), root.get("itm8")));
             return present ? cb.exists(item) : cb.not(cb.exists(item));
         };
+    }
+
+    private static Expression<String> withoutLeadingZeros(CriteriaBuilder cb, Path<String> ean) {
+        return cb.function("ltrim", String.class, ean, cb.literal("0"));
     }
 
     private static List<Predicate> between(CriteriaBuilder cb, Path<BigDecimal> value, BigDecimal from,

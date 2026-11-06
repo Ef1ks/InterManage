@@ -289,6 +289,43 @@ class SalesReportIntegrationTests {
     }
 
     @Test
+    void listsDeliveriesOfBulkArticleWithShortEanAndLocalItm8() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        String article = insertProduct(storeId, productImport, "PIETRUSZKA KORZEN LUZ", "14 01 01");
+        jdbc.update("update products set ean = '0000000219394' where store_id = ?::uuid and itm8 = ?",
+                storeId, article);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-10-03 08:00:00', date '2026-09-01',
+                    date '2026-10-02', 2, 2, 2, 0, 0) returning id""", String.class, storeId);
+        // Towar luzem ma w kartotece krótki kod, a dostawca przywozi go pod lokalnym ITM8.
+        String local = insertDocument(storeId, documentImport, "PZ", "1000100", "2026-09-20 10:00");
+        insertDeliveryLine(local, 1, "0000099014271", "5", "20");
+        jdbc.update("update document_lines set ean = '0000000219394' where document_id = ?::uuid", local);
+        // EAN z samych zer to brak kodu, nie artykuł z pustym kodem.
+        String withoutCode = insertProduct(storeId, productImport, "STOJAK", "14 01 01");
+        jdbc.update("update products set ean = '0000000000000' where store_id = ?::uuid and itm8 = ?",
+                storeId, withoutCode);
+        String noCode = insertDocument(storeId, documentImport, "PZ", "1000200", "2026-09-21 10:00");
+        insertDeliveryLine(noCode, 1, "0000099000001", "3", "9");
+        jdbc.update("update document_lines set ean = '0000000000000' where document_id = ?::uuid", noCode);
+
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/deliveries").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documentId").value(local));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + withoutCode + "/deliveries").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
     void listsArticleProtocolsWithoutDeliveriesAndCorrections() throws Exception {
         Cookie owner = login();
         String storeId = createStore(owner);

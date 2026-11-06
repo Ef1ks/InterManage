@@ -246,6 +246,17 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void catalogListFindsShortCodeByWholeCodeWithoutLeadingZeros() throws Exception {
+        jdbc.update("update products set ean = '0000059030300' where store_id = ?::uuid and itm8 = '0000000000301'",
+                storeId);
+
+        mvc.perform(get(url("/catalog?ean=5903*")).cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("CHIPSY PAPRYKOWE 100G")));
+        mvc.perform(get(url("/catalog")).param("query", "5903*").cookie(owner))
+                .andExpect(jsonPath("$.items[*].name").value(contains("CHIPSY PAPRYKOWE 100G")));
+    }
+
+    @Test
     void catalogListFiltersEachColumnWithWildcards() throws Exception {
         // Dostawca z kartoteki bywa błędny, więc filtr idzie po przyjęciach PZ z 6 miesięcy.
         jdbc.update("update products set supplier = 'INNY DOSTAWCA' where store_id = ?::uuid and brand = 'LAKA'",

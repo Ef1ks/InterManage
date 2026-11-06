@@ -224,14 +224,19 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                         cast(:queryMultiCode as text[])) w(t, c, m)
                     where not (translate(upper(coalesce(p.name, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like w.t
                         or translate(upper(coalesce(p.brand, '')), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like w.t
-                        or coalesce(p.ean, '') like w.c or coalesce(p.itm8, '') like w.c
+                        or coalesce(p.ean, '') like w.c or ltrim(coalesce(p.ean, ''), '0') like w.c
+                        or coalesce(p.itm8, '') like w.c
                         or (w.m is not null and exists (
                             select 1 from product_codes pc
-                            where pc.store_id = :storeId and pc.current and pc.itm8 = p.itm8 and pc.ean like w.m))))
+                            where pc.store_id = :storeId and pc.current and pc.itm8 = p.itm8
+                                and (pc.ean like w.m or ltrim(pc.ean, '0') like w.m)))))
                 and (cardinality(cast(:itm8 as text[])) = 0 or p.itm8 like all (cast(:itm8 as text[])))
                 and (cardinality(cast(:ean as text[])) = 0 or p.ean like all (cast(:ean as text[]))
+                    or ltrim(p.ean, '0') like all (cast(:ean as text[]))
                     or p.itm8 in (select c.itm8 from product_codes c
-                                  where c.store_id = :storeId and c.current and c.ean like all (cast(:ean as text[]))))
+                                  where c.store_id = :storeId and c.current
+                                      and (c.ean like all (cast(:ean as text[]))
+                                          or ltrim(c.ean, '0') like all (cast(:ean as text[])))))
                 and (cardinality(cast(:name as text[])) = 0
                     or translate(upper(p.name), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like all (cast(:name as text[])))
                 and (cardinality(cast(:brand as text[])) = 0
@@ -292,7 +297,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 union
                 select e.itm8, l.id from article_eans e
                 join document_lines l on ltrim(btrim(l.ean), '0') = e.ean
-                where length(e.ean) >= 8
+                where e.ean <> ''
                     and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8)
             )
             """;

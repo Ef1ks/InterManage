@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793942104.0076952,
-    "seen": 1793942202.973452,
-    "ast_hash": "79731b40fa13067a8ce255d0116f1e7c",
+    "mtime": 1793945127.1033683,
+    "seen": 1793945230.9893312,
+    "ast_hash": "171da8543d501a6273da21d2bbe31b5c",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductImportIntegrationTests.java": {
-    "mtime": 1793894576.7494216,
-    "seen": 1793895304.6910012,
-    "ast_hash": "5b69afca9dd54dfea4dda613ab5f06f2",
+    "mtime": 1793945191.5555663,
+    "seen": 1793945230.9274967,
+    "ast_hash": "4463afabf8793e35453db2130185a39d",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
@@ -1596,9 +1596,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/SalesReportIntegrationTests.java": {
-    "mtime": 1793808637.9616733,
-    "seen": 1793808732.7125573,
-    "ast_hash": "df516461d3b0645e13d14a3a08f2dc28",
+    "mtime": 1793944820.073327,
+    "seen": 1793944853.5571725,
+    "ast_hash": "1fb7c8b4e5ecd6596cffc834e263e53a",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ReportsGrid.tsx": {
@@ -2640,9 +2640,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/repository/DocumentLineRepository.java": {
-    "mtime": 1793941529.980635,
-    "seen": 1793941919.8797243,
-    "ast_hash": "df1e3b24253f4327dd892d98539eb853",
+    "mtime": 1793944734.7661154,
+    "seen": 1793944853.4899013,
+    "ast_hash": "1d4edfe0f9929485eda50ff894a31479",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/repository/DocumentRepository.java": {
@@ -3186,9 +3186,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/repository/ProductSearch.java": {
-    "mtime": 1793940774.8960037,
-    "seen": 1793941338.1806266,
-    "ast_hash": "e1d41afcfcbfc5da142ad94df5e1c641",
+    "mtime": 1793945080.434022,
+    "seen": 1793945230.9004118,
+    "ast_hash": "ba6d01524def141aead4b72bfdfc20d9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/service/ProductImportService.java": {
@@ -4446,9 +4446,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/repository/DataEntryCatalogRepository.java": {
-    "mtime": 1793902755.341785,
-    "seen": 1793903419.7655673,
-    "ast_hash": "eb904e822be0f1aeea728b08cb43d921",
+    "mtime": 1793945080.4345453,
+    "seen": 1793945230.824554,
+    "ast_hash": "aecc31c8c7d4561a7bdb0bdc45bcb87d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/repository/DataEntrySuggestionRepository.java": {
@@ -4470,9 +4470,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1793865709.552588,
-    "seen": 1793866067.1273468,
-    "ast_hash": "b77b4075c1e93cff8b0efce48f256ead",
+    "mtime": 1793945109.9692314,
+    "seen": 1793945230.9229927,
+    "ast_hash": "dbb8101ae075284208b8158d7aeb1a01",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -7362,9 +7362,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/component/ZeroStockPdf.java": {
-    "mtime": 1793942104.0054562,
-    "seen": 1793942202.8932421,
-    "ast_hash": "e35b887014660dba88b194098cea2528",
+    "mtime": 1793942254.0691075,
+    "seen": 1793944853.534855,
+    "ast_hash": "63c0eebc5cb833f88a31e56071ab78c5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/controller/ZeroStockController.java": {
@@ -7386,8 +7386,8 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ZeroStockIntegrationTests.java": {
-    "mtime": 1793942130.0834274,
-    "seen": 1793942202.9162798,
+    "mtime": 1793942243.1823356,
+    "seen": 1793944853.5586843,
     "ast_hash": "4bfb0a788f4d67654cff9ebb134efc7f",
     "semantic_hash": ""
   },

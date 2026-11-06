@@ -278,8 +278,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     /**
      * Linie artykułu {@code :itm8}. Dostawca spoza bazy przywozi towar pod własnym, lokalnym ITM8 ({@code 99…}),
      * którego nie ma w kartotece, więc taka linia należy do artykułu po EAN-ie (główny, dawne pary, multikody; bez zer
-     * wiodących, od 8 cyfr). Linia z ITM8 z kartoteki należy tylko do swojego artykułu, bo EAN-y bywają przenoszone
-     * między artykułami. Warunek {@link #ARTICLE_LINE} korzysta z {@link #ARTICLE_EANS}.
+     * wiodących, też krótkie kody towaru luzem, np. 219394). Linia z ITM8 z kartoteki należy tylko do swojego
+     * artykułu, bo EAN-y bywają przenoszone między artykułami. Warunek {@link #ARTICLE_LINE} korzysta z {@link #ARTICLE_EANS}.
      */
     String ARTICLE_EANS = """
             with article_eans as (
@@ -295,7 +295,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
     String ARTICLE_LINE = """
             (l.itm8 = :itm8
-             or ltrim(btrim(l.ean), '0') in (select ean from article_eans where length(ean) >= 8)
+             or ltrim(btrim(l.ean), '0') in (select ean from article_eans where ean <> '')
                 and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8))
             """;
 
@@ -571,7 +571,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select ltrim(btrim(pe.ean), '0'), p.itm8 from product_eans pe join products p on p.id = pe.product_id
                 where p.store_id = :storeId
             ), article_eans as (
-                select ean, min(itm8) as itm8 from article_codes where length(ean) >= 8 group by ean
+                select ean, min(itm8) as itm8 from article_codes where ean <> '' group by ean
             ), delivered as (
                 select d.id as document_id, d.number as document_number, d.document_date, l.supplier_code,
                        l.supplier_name, l.quantity, l.purchase_value, coalesce(p.itm8, e.itm8) as itm8

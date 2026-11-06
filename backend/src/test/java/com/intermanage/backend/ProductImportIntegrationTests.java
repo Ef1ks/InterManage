@@ -1,6 +1,7 @@
 package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -520,6 +521,22 @@ class ProductImportIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fileNames\":[\"" + earlier.getOriginalFilename() + "\"]}"))
                 .andExpect(jsonPath("$.fileNames.length()").value(0));
+    }
+
+    @Test
+    void searchFindsEan8WithAndWithoutLeadingZeros() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        String ean = "5" + a.substring(6);
+        jdbc.update("update products set ean = ? where store_id = ?::uuid and itm8 = ?", "00000" + ean,
+                storeId, a);
+
+        for (String query : List.of(ean, "00000" + ean, ean.substring(0, 4))) {
+            mvc.perform(get("/api/stores/" + storeId + "/products").param("query", query).cookie(owner))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[*].itm8").value(hasItem(a)));
+        }
     }
 
     @Test
