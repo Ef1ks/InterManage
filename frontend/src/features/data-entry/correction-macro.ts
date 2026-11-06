@@ -8,13 +8,13 @@ import type { DataEntryRow } from './rows'
  * Czasy w ms, poprawiamy je tylko tutaj.
  */
 export const CORRECTION_MACRO_CONFIG = {
-  /** Po każdym numerze bonu program wyszukuje cały dokument; drugi Enter i EAN idą już szybko. */
+  /** Po każdym numerze bonu program wyszukuje cały dokument; drugi Enter i EAN idą już bez przerwy. */
   afterBon: 1200,
-  afterBonSkip: 100,
-  afterEan: 100,
-  afterQuantity: 300,
+  afterBonSkip: 0,
+  afterEan: 0,
+  afterQuantity: 100,
   /** Pusty Enter między ilością a ceną. */
-  afterSkip: 300,
+  afterSkip: 100,
   /** Po ostatnim Enterze program zapisuje pozycję: przy krótszej przerwie nie nadążał z kolejnym numerem bonu. */
   afterPrice: 1000,
   /** Program sklepu dostaje cenę z taką liczbą miejsc po przecinku. */
@@ -259,8 +259,15 @@ export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACR
 export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroItem[]) {
   const c = CORRECTION_MACRO_CONFIG
   const out: string[] = []
-  const key = (name: string, sleep: number) => out.push(`KEY|${name}`, `SLEEP|${sleep}`)
-  const enter = (text: string, sleep: number) => out.push(`TEXT|${text}`, 'KEY|{Enter}', `SLEEP|${sleep}`)
+  // Odtwarzacz sam czeka 50 ms po każdej linii, więc przerwa 0 to brak linii SLEEP.
+  const key = (name: string, sleep: number) => {
+    out.push(`KEY|${name}`)
+    if (sleep > 0) out.push(`SLEEP|${sleep}`)
+  }
+  const enter = (text: string, sleep: number) => {
+    out.push(`TEXT|${text}`)
+    key('{Enter}', sleep)
+  }
 
   out.push(`# Korekta bonu ${bonNumber}: ${items.length} poz.`)
   for (const item of items) {
