@@ -129,6 +129,23 @@ public class DeliveryKsefCorrectionService {
         return new DeliveryKsefCorrections(result, pending);
     }
 
+    /** Korekty widoczne w sklepie, które korygują podane faktury, od najstarszej. */
+    @Transactional(readOnly = true)
+    public List<KsefInvoice> correctionsOfInvoices(UUID storeId, List<UUID> invoiceIds) {
+        String nip = ksefLinks.nip(storeId);
+        return nip == null || invoiceIds.isEmpty() ? List.of()
+                : correctionsOf(storeId, nip, invoices.findAllById(invoiceIds));
+    }
+
+    /** Ile korekt dostawcy o tym NIP-ie czeka na pobranie XML (dopiero wtedy wiadomo, co korygują). */
+    @Transactional(readOnly = true)
+    public long pendingCorrections(UUID storeId, String sellerNip) {
+        String nip = ksefLinks.nip(storeId);
+        return nip == null || sellerNip == null || sellerNip.isBlank()
+                || KsefCorrectedInvoiceService.IGNORED_SELLER_NIPS.contains(sellerNip) ? 0
+                        : invoices.countUnreadCorrections(nip, Set.of(sellerNip));
+    }
+
     /**
      * Przypina korektę z KSeF przyjęcia do korekty od dostawcy (WZ), a WZ do przyjęcia, jeśli jeszcze nie jest.
      * Zwraca, czy WZ została przypięta do przyjęcia teraz (cofnięcie wtedy ją odpina).

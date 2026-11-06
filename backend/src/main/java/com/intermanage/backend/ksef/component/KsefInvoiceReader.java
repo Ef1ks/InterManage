@@ -249,6 +249,15 @@ public class KsefInvoiceReader {
             Map<String, String> extras, String cn) {
     }
 
+    /** Teksty z pól WZ faktury, tak jak je wystawił dostawca (np. "DD nr 14803/10/2026/DD (2026-10-21)", "1497"). */
+    public List<String> deliveryNotes(byte[] xml) {
+        Xml root = parse(xml);
+        if (!"Faktura".equals(root.name())) {
+            throw new InvalidInvoiceException("To nie jest faktura KSeF (" + root.name() + ")", null);
+        }
+        return root.child("Fa").children("WZ").stream().map(Xml::text).filter(Objects::nonNull).toList();
+    }
+
     /** Kody pozycji faktury w kolejności {@code FaWiersz}, tej samej co {@link Invoice#lines()}. */
     public List<LineCodes> lineCodes(byte[] xml) {
         Xml root = parse(xml);

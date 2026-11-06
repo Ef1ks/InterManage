@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +30,7 @@ import com.intermanage.backend.deliorder.dto.ChangeDeliveryDateRequest;
 import com.intermanage.backend.deliorder.dto.CorrectDeliOrderRequest;
 import com.intermanage.backend.deliorder.dto.DeliDocumentCandidate;
 import com.intermanage.backend.deliorder.dto.DeliInvitationResponse;
+import com.intermanage.backend.deliorder.dto.DeliOrderPrintSections;
 import com.intermanage.backend.deliorder.dto.DeliOrderResponse;
 import com.intermanage.backend.deliorder.dto.DeliOrderSummaryResponse;
 import com.intermanage.backend.deliorder.dto.DeliOverviewResponse;
@@ -97,13 +99,22 @@ public class DeliOrderController {
     }
 
     /** Plik zamówienia: {@code lst} (EAN-y), {@code xlsx} (EAN, nazwa, ilość) albo {@code pdf} (wydruk). */
+    @GetMapping("/orders/{orderId}/print-sections")
+    @PreAuthorize(VIEW)
+    public DeliOrderPrintSections printSections(@PathVariable UUID storeId, @PathVariable UUID orderId) {
+        return orderService.printSections(storeId, orderId);
+    }
+
     @GetMapping("/orders/{orderId}/export/{format}")
     @PreAuthorize(VIEW)
     public ResponseEntity<byte[]> export(@PathVariable UUID storeId, @PathVariable UUID orderId,
             @PathVariable String format,
             @RequestParam(defaultValue = "ORDER") DeliOrderDocuments.PrintVariant variant,
+            @RequestParam MultiValueMap<String, String> params,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        ExportFile file = orderService.export(storeId, orderId, format, variant, principal.getUsername());
+        // Z mapy, bo pojedynczy parametr List<String> Spring dzieli po przecinkach, a nazwa działu może je mieć.
+        List<String> sections = params.getOrDefault("section", List.of());
+        ExportFile file = orderService.export(storeId, orderId, format, variant, sections, principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())

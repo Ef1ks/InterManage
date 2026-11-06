@@ -3,6 +3,7 @@ import {
   BadgePercentIcon,
   ChefHatIcon,
   CookingPotIcon,
+  CroissantIcon,
   DatabaseBackupIcon,
   DatabaseIcon,
   HashIcon,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react'
 
 import { hasPermission } from '@/features/auth/api'
+import { bakeryPath } from '@/features/bakery-check/paths'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
@@ -82,6 +84,16 @@ const GROUPS: GroupSpec[] = [
         description: 'Dokument dostawy z bazy w tabeli: nośniki, krótkie terminy, kaucje, nowe artykuły i ceny.',
         icon: TruckIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
+      {
+        key: 'bakery-check',
+        section: DELIVERIES,
+        path: bakeryPath,
+        label: 'Weryfikacja piekarni',
+        description: 'Ilości z dokumentów WZ kontra faktura z korektami i bon po korektach.',
+        icon: CroissantIcon,
+        visible: (me) =>
+          hasPermission(me, 'DATA_ENTRY') && hasPermission(me, 'DOCUMENTS') && hasPermission(me, 'KSEF_INVOICES'),
       },
       { category: 'ORDERS', section: DELIVERIES },
       {

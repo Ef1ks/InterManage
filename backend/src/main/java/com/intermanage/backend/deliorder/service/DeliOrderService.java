@@ -28,6 +28,7 @@ import com.intermanage.backend.deliorder.component.DeliOrderDocuments;
 import com.intermanage.backend.deliorder.dto.AddDeliOrderItemsRequest;
 import com.intermanage.backend.deliorder.dto.CorrectDeliOrderRequest;
 import com.intermanage.backend.deliorder.dto.DeliDocumentCandidate;
+import com.intermanage.backend.deliorder.dto.DeliOrderPrintSections;
 import com.intermanage.backend.deliorder.dto.DeliOrderResponse;
 import com.intermanage.backend.deliorder.dto.DeliOrderSummaryResponse;
 import com.intermanage.backend.deliorder.dto.DeliOverviewResponse;
@@ -249,7 +250,7 @@ public class DeliOrderService {
      */
     @Transactional(readOnly = true)
     public ExportFile export(UUID storeId, UUID orderId, String format, DeliOrderDocuments.PrintVariant variant,
-            String username) {
+            List<String> onlySections, String username) {
         DeliOrder order = loadVisible(storeId, orderId);
         if (variant.wholeForm()) {
             ensureCanOrderFrom(storeId, order.getFormStore().getId());
@@ -270,11 +271,26 @@ public class DeliOrderService {
             case "xlsx" -> new ExportFile(baseName + ".xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", documents.xlsx(document));
             case "pdf" -> new ExportFile(baseName + variant.fileSuffix() + ".pdf", "application/pdf",
-                    documents.pdf(document, variant, variant.wholeForm() ? formLines(order) : List.of()));
+                    documents.pdf(document, variant, variant.wholeForm() ? formLines(order) : List.of(), onlySections));
             case "proto" -> new ExportFile(ProtoFile.fileName(6, order.getStore().getNumber(), username),
                     ProtoFile.CONTENT_TYPE, documents.proto(document));
             default -> throw ApiException.notFound("Nieznany format pliku: " + format);
         };
+    }
+
+    /** Działy do wyboru przy wydruku. Bez dostępu do formularza dostawcy lista formularza jest pusta. */
+    @Transactional(readOnly = true)
+    public DeliOrderPrintSections printSections(UUID storeId, UUID orderId) {
+        DeliOrder order = loadVisible(storeId, orderId);
+        List<String> ordered = order.getItems().stream()
+                .filter(item -> item.getQuantity().signum() > 0)
+                .map(DeliOrderItem::getSectionName)
+                .distinct()
+                .toList();
+        List<String> form = canOrderFrom(storeId, order.getFormStore().getId())
+                ? formLines(order).stream().map(DeliOrderDocuments.Line::sectionName).distinct().toList()
+                : List.of();
+        return new DeliOrderPrintSections(ordered, form);
     }
 
     /**
@@ -713,12 +729,14 @@ public class DeliOrderService {
 
     /** Ze swojego formularza sklep zamawia zawsze, z cudzego tylko po przyjęciu zaproszenia. */
     private void ensureCanOrderFrom(UUID storeId, UUID formStoreId) {
-        boolean own = storeId.equals(formStoreId);
-        boolean invited = !own && invitations.existsByFormStoreIdAndStoreIdAndStatus(formStoreId, storeId,
-                InvitationStatus.ACCEPTED) && stores.findById(formStoreId).map(Store::isActive).orElse(false);
-        if (!own && !invited) {
+        if (!canOrderFrom(storeId, formStoreId)) {
             throw ApiException.notFound("Nie masz dostępu do formularza tego sklepu");
         }
+    }
+
+    private boolean canOrderFrom(UUID storeId, UUID formStoreId) {
+        return storeId.equals(formStoreId) || invitations.existsByFormStoreIdAndStoreIdAndStatus(formStoreId, storeId,
+                InvitationStatus.ACCEPTED) && stores.findById(formStoreId).map(Store::isActive).orElse(false);
     }
 
     private static void ensureFits(OrderUnit unit, BigDecimal quantity, String productName) {

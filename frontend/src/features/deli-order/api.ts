@@ -420,9 +420,21 @@ export const orderExportPath = (storeId: string, orderId: string, format: 'pdf' 
 
 export type OrderPrintVariant = 'ORDER' | 'ORDER_BLANK' | 'FORM_BLANK' | 'FORM_WITH_QUANTITIES'
 
-/** Ścieżka wydruku PDF w wybranym wariancie. */
-export const orderPrintPath = (storeId: string, orderId: string, variant: OrderPrintVariant) =>
-  `${orderExportPath(storeId, orderId, 'pdf')}?variant=${variant}`
+/** Ścieżka wydruku PDF w wybranym wariancie; bez {@code sections} wszystkie działy. */
+export function orderPrintPath(storeId: string, orderId: string, variant: OrderPrintVariant, sections: string[] = []) {
+  const params = new URLSearchParams({ variant })
+  sections.forEach((section) => params.append('section', section))
+  return `${orderExportPath(storeId, orderId, 'pdf')}?${params}`
+}
+
+/** Działy do wyboru przy wydruku: z pozycji zamówienia i z całego formularza (pusta lista = brak dostępu). */
+export function useOrderPrintSections(storeId: string, orderId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...orderKey(storeId, orderId), 'print-sections'],
+    queryFn: () => api<{ order: string[]; form: string[] }>(`${basePath(storeId)}/orders/${orderId}/print-sections`),
+    enabled,
+  })
+}
 
 /**
  * Usunięcie niezrealizowanego zamówienia (zrealizowanego: tylko właściciel) po stronie tego sklepu i jego przywrócenie. Nic nie jest kasowane: zamówienie

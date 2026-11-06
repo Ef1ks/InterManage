@@ -163,6 +163,10 @@ class DeliOrderFormIntegrationTests {
                         .cookie(owner))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray();
+        return pdfText(pdf);
+    }
+
+    private static String pdfText(byte[] pdf) throws Exception {
         try (var reader = new com.lowagie.text.pdf.PdfReader(pdf)) {
             var extractor = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader);
             StringBuilder text = new StringBuilder();
@@ -274,6 +278,22 @@ class DeliOrderFormIntegrationTests {
                 .contains("KABANOSY", "SALATKA", "cały formularz in blanco").doesNotContain("1,25");
         assertThat(orderPdfText(owner, supplier, orderId, "FORM_WITH_QUANTITIES"))
                 .contains("KABANOSY", "1,25 kg", "2 szt.", "SALATKA");
+        // Wybrany dział: przecinek w nazwie nie może jej rozdzielić.
+        String bakery = id(send(owner, post(url(supplier, "/sections")), "{\"name\":\"Piekarnia, ciasta\"}")
+                .andReturn().getResponse().getContentAsString(), "$.sections[1].id");
+        String cakes = id(send(owner, post(url(supplier, "/sections/" + bakery + "/categories")), "{\"name\":\"Ciasta\"}")
+                .andReturn().getResponse().getContentAsString(), "$.sections[1].categories[0].id");
+        send(owner, post(url(supplier, "/categories/" + cakes + "/products")),
+                "{\"productId\":\"" + insertProduct(supplier, "SERNIK 1KG", "kg") + "\"}");
+        mvc.perform(get(url(shop, "/orders/" + orderId + "/print-sections")).cookie(owner))
+                .andExpect(jsonPath("$.order.length()").value(1))
+                .andExpect(jsonPath("$.order[0]").value("Garmaż"))
+                .andExpect(jsonPath("$.form[1]").value("Piekarnia, ciasta"));
+        byte[] oneSection = mvc.perform(get(url(supplier, "/orders/" + orderId + "/export/pdf"))
+                        .param("variant", "FORM_BLANK").param("section", "Piekarnia, ciasta").cookie(owner))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertThat(pdfText(oneSection)).contains("SERNIK").doesNotContain("KABANOSY");
+        assertThat(orderPdfText(owner, supplier, orderId, "FORM_BLANK")).contains("SERNIK", "KABANOSY");
         mvc.perform(get(url(shop, "/orders/" + orderId + "/export/doc")).cookie(owner)).andExpect(status().isNotFound());
         mvc.perform(get(url(supplier, "/orders/incoming")).cookie(owner))
                 .andExpect(jsonPath("$[0].id").value(orderId))

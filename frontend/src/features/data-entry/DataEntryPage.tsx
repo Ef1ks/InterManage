@@ -162,6 +162,7 @@ import {
   type QuantitySplit,
   withCatalogProduct,
   withCurrentPromo,
+  withRefreshedCatalog,
   withLinkedProduct,
   withScannedProduct,
   withServicesLast,
@@ -420,6 +421,32 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     }
   }
 
+  // Zapis tymczasowy bywa sprzed kilku dni: artykuły założone od tamtej pory są już w kartotece. Poza krokiem cofania,
+  // bo dane z kartoteki należą do wczytania.
+  const refreshFromCatalog = (saved: DataEntryRow[]) => {
+    const wanted = saved.filter((row) => row.ean !== '' && !row.eanFallback && serviceKind(row) === null)
+    const eans = [...new Set(wanted.map((row) => row.ean))]
+    if (eans.length === 0) return
+    const requested = new Map(wanted.map((row) => [row.id, row.ean]))
+    lookupByKey(eans)
+      .then((byKey) => {
+        const found = wanted.filter((row) => !row.known && byKey.has(row.ean.replace(/^0+/, ''))).length
+        setRows(
+          (current) => {
+            const next = current.map((row) =>
+              requested.get(row.id) === row.ean
+                ? withRefreshedCatalog(row, byKey.get(row.ean.replace(/^0+/, '')) ?? null, weightIn24)
+                : row,
+            )
+            return next.some((row, index) => row !== current[index]) ? next : current
+          },
+          { record: false },
+        )
+        if (found > 0) toast.info(`Już w kartotece: ${found} ${pieces(found)} z zapisu tymczasowego`)
+      })
+      .catch(() => toast.error('Nie udało się odświeżyć artykułów z kartoteki'))
+  }
+
   const confirmXml = (xml: DataEntryXmlDocument) => {
     // Zapis tymczasowy oddaje całą tabelę taką, jaka była (nazwy, nomenklatura, propozycje AI); plik XML tylko gdy
     // tabeli z zapisu nie da się odczytać.
@@ -430,6 +457,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       setRowFilter(null)
       forgetSaved()
       setDraft(draft)
+      refreshFromCatalog(draft.rows)
       const replaced = before.rows.some((row) => row.ean !== '' || row.name !== '')
       toast.success(`Wczytano zapis tymczasowy ${xml.document.invoiceNumber ?? ''}`.trim(), {
         description: replaced ? 'Zastąpił tabelę.' : undefined,

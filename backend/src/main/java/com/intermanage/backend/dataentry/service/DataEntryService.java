@@ -129,6 +129,31 @@ public class DataEntryService {
      */
     @Transactional
     public DataEntryInvoice invoice(UUID storeId, UUID invoiceId, String source) {
+        return load(storeId, invoiceId, source, false).invoice();
+    }
+
+    /** Pozycja faktury z artykułem z kartoteki razem z pozycją z XML (kwota netto, wiersz "przed korektą", kaucja). */
+    public record InvoiceLine(DataEntryLine row, KsefInvoiceReader.Line source) {
+    }
+
+    /**
+     * Wszystkie pozycje faktury z artykułami, źródło EAN-u automatyczne. W przeciwieństwie do {@link #invoice} z wierszami
+     * "przed korektą", bo weryfikacja dokumentów liczy, o ile korekta zmieniła ilości, a nie jaki jest stan po niej.
+     */
+    @Transactional
+    public List<InvoiceLine> invoiceLines(UUID storeId, UUID invoiceId) {
+        LoadedInvoice loaded = load(storeId, invoiceId, ProductCodeSources.AUTO, true);
+        List<InvoiceLine> result = new ArrayList<>();
+        for (int i = 0; i < loaded.lines().size(); i++) {
+            result.add(new InvoiceLine(loaded.invoice().lines().get(i), loaded.lines().get(i)));
+        }
+        return result;
+    }
+
+    private record LoadedInvoice(DataEntryInvoice invoice, List<KsefInvoiceReader.Line> lines) {
+    }
+
+    private LoadedInvoice load(UUID storeId, UUID invoiceId, String source, boolean withBeforeCorrection) {
         KsefInvoiceSummary summary = ksefInvoices.summary(storeId, invoiceId);
         byte[] xml = ksefInvoices.xml(storeId, invoiceId).content();
         KsefInvoiceReader.Invoice invoice;
@@ -149,7 +174,7 @@ public class DataEntryService {
         List<KsefInvoiceReader.Line> lines = new ArrayList<>();
         List<KsefInvoiceReader.LineCodes> lineCodes = new ArrayList<>();
         for (int i = 0; i < invoice.lines().size(); i++) {
-            if (!invoice.lines().get(i).beforeCorrection()) {
+            if (withBeforeCorrection || !invoice.lines().get(i).beforeCorrection()) {
                 lines.add(invoice.lines().get(i));
                 lineCodes.add(codes.get(i));
             }
@@ -227,13 +252,13 @@ public class DataEntryService {
                     measure.netContent(), link != null ? link.getId() : null, link != null ? link.getCode() : null,
                     lineCodes.get(i).index(), lineCodes.get(i).cn()));
         }
-        return new DataEntryInvoice(summary.id(), summary.invoiceNumber(), summary.sellerName(), summary.sellerNip(),
-                summary.issueDate(), chosen, ProductCodeSources.sources(lineCodes, inCatalog).stream()
+        return new LoadedInvoice(new DataEntryInvoice(summary.id(), summary.invoiceNumber(), summary.sellerName(),
+                summary.sellerNip(), summary.issueDate(), chosen, ProductCodeSources.sources(lineCodes, inCatalog).stream()
                         .map(item -> new DataEntryInvoice.CodeSource(item.key(), item.label(), item.filled(),
                                 item.matched()))
                         .toList(),
                 rows, total(invoice, lines, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
-                total(invoice, lines, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat));
+                total(invoice, lines, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat)), lines);
     }
 
     /**

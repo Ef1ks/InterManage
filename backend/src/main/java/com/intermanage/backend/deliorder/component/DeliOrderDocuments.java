@@ -41,7 +41,8 @@ import com.lowagie.text.pdf.PdfWriter;
 
 /**
  * Pliki zamówienia garmażu do pobrania: lista EAN (.lst) dla czytników i kas, arkusz Excel oraz PDF do wydruku
- * z kodami kreskowymi i miejscem na wpisanie długopisem ilości zrealizowanej. Pozycje z ilością 0 są pomijane.
+ * z kodami kreskowymi i miejscem na wpisanie długopisem ilości zrealizowanej, podpisu i daty produkcji. Pozycje
+ * z ilością 0 są pomijane.
  */
 @Component
 public class DeliOrderDocuments {
@@ -148,8 +149,11 @@ public class DeliOrderDocuments {
                 new XlsxWriter.Column("Ilość", 10)), rows);
     }
 
-    /** {@code formLines}: wszystkie pozycje formularza, używane w wariantach z {@link PrintVariant#wholeForm()}. */
-    public byte[] pdf(OrderDocument order, PrintVariant variant, List<Line> formLines) {
+    /**
+     * {@code formLines}: wszystkie pozycje formularza, używane w wariantach z {@link PrintVariant#wholeForm()}.
+     * {@code onlySections}: nazwy działów do wydruku, puste = wszystkie.
+     */
+    public byte[] pdf(OrderDocument order, PrintVariant variant, List<Line> formLines, List<String> onlySections) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 36, 36, 36, 54);
         try {
@@ -161,6 +165,9 @@ public class DeliOrderDocuments {
 
             Map<String, Map<String, List<Line>>> sections =
                     bySection(variant.wholeForm() ? formLines : order.orderedLines());
+            if (!onlySections.isEmpty()) {
+                sections.keySet().retainAll(onlySections);
+            }
             if (sections.isEmpty()) {
                 writeHeader(document, order, null, variant);
             }
@@ -224,7 +231,7 @@ public class DeliOrderDocuments {
 
     private int writeCategory(Document document, PdfContentByte canvas, String heading, List<Line> lines, int firstNumber,
             boolean withQuantities) throws DocumentException {
-        PdfPTable table = new PdfPTable(new float[] {5, 41, 14, 15, 25});
+        PdfPTable table = new PdfPTable(new float[] {5, 27, 12, 15, 21, 20});
         table.setWidthPercentage(100);
         table.setSpacingBefore(18);
         // Nazwa kategorii i nagłówek kolumn powtarzają się, gdy tabela przechodzi na kolejną stronę.
@@ -233,10 +240,10 @@ public class DeliOrderDocuments {
         table.setSplitRows(false);
 
         PdfPCell title = cell(new Phrase(heading, font(bold, 11, INK)));
-        title.setColspan(5);
+        title.setColspan(6);
         title.setPaddingBottom(7);
         table.addCell(title);
-        for (String label : List.of("Lp.", "Towar", "Zamówiono", "Zrealizowano", "Kod")) {
+        for (String label : List.of("Lp.", "Towar", "Zamówiono", "Zrealizowano", "Kod", "Podpis / data prod.")) {
             PdfPCell cell = new PdfPCell(new Phrase(label, font(bold, 8, MUTED)));
             cell.setBackgroundColor(BAND);
             cell.setBorderColor(RULE);
@@ -255,13 +262,15 @@ public class DeliOrderDocuments {
                     : blankQuantityCell(line));
             // Puste pole: odbierający wpisuje długopisem, ile faktycznie przyszło.
             table.addCell(bodyCell(new Phrase(" "), Element.ALIGN_CENTER));
-            PdfPCell code = new PdfPCell(PdfBarcodes.image(canvas, line.ean(), 118, 34), false);
+            PdfPCell code = new PdfPCell(PdfBarcodes.image(canvas, line.ean(), 100, 34), false);
             code.setBorderColor(RULE);
             code.setPadding(4);
             code.setHorizontalAlignment(Element.ALIGN_CENTER);
             code.setVerticalAlignment(Element.ALIGN_MIDDLE);
             code.setMinimumHeight(40);
             table.addCell(code);
+            // Puste pole na podpis i datę produkcji, jedna kolumna, bo na dwie nie ma miejsca na A4 w pionie.
+            table.addCell(bodyCell(new Phrase(" "), Element.ALIGN_CENTER));
         }
         document.add(table);
         return number;

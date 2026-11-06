@@ -750,6 +750,32 @@ export function withCurrentPromo(row: DataEntryRow, product: DataEntryCatalogPro
   }
 }
 
+/**
+ * Wiersz z zapisu tymczasowego po sprawdzeniu w bieżącej kartotece: artykuł założony od czasu zapisu przestaje być
+ * nowy (dane jak po wpisaniu EAN-u, ilość i cena zakupu zostają), a znany dostaje stan, cadencier i ceny z kasy
+ * z poprawkami z tabeli. Wiersza bez artykułu w kartotece nie zmienia.
+ */
+export function withRefreshedCatalog(
+  row: DataEntryRow,
+  product: DataEntryCatalogProduct | null,
+  weightIn24 = false,
+): DataEntryRow {
+  if (!product) return row
+  if (!row.known) return withScannedProduct(row, product, weightIn24)
+  return withCurrentPromo(
+    {
+      ...row,
+      itm8: product.itm8,
+      stock: product.stock,
+      rotation: product.rotation,
+      catalogVat: product.catalogVat,
+      cadencier: product.cadencier,
+      cadencierPrice: product.cadencierPrice,
+    },
+    product,
+  )
+}
+
 /** Cena promocyjna z kasy, póki promocja trwa (szkic z localStorage bywa z poprzednich dni). */
 export function activePromoPrice(row: DataEntryRow) {
   if (!row.known || row.promoPrice == null || !row.promoTo || row.promoTo < todayIso()) return null

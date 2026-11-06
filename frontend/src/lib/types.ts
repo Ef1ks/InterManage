@@ -2830,3 +2830,135 @@ export type LeafletMatch = {
   product: DataEntryCatalogProduct | null
   regularPrice: number | null
 }
+
+/** Artykuł z kartoteki w tabeli WZ (weryfikacja piekarni). */
+export type BakeryArticle = {
+  productId: string
+  itm8: string
+  ean: string
+  name: string | null
+  brand: string | null
+}
+
+/** Przyjęcie PZ dostawcy; {@code checkId}: weryfikacja, w której już jest. */
+export type BakeryBon = {
+  id: string
+  number: string
+  bonNumber: string
+  documentDate: string
+  supplierDocumentNumber: string | null
+  purchaseValue: number
+  correctedValue: number | null
+  correctionCount: number
+  invoices: string[]
+  checkId: string | null
+}
+
+export type BakeryInvoice = {
+  id: string
+  invoiceNumber: string
+  issueDate: string
+  netAmount: number
+  correction: boolean
+  pinned: boolean
+}
+
+export type BakeryInvoiceCandidate = {
+  id: string
+  invoiceNumber: string
+  issueDate: string
+  netAmount: number
+  correction: boolean
+  correctedInvoices: string[] | null
+}
+
+export type BakeryWzLine = {
+  article: BakeryArticle
+  quantity: number | null
+  scannedQuantity: number | null
+  manual: boolean
+}
+
+export type BakeryWz = {
+  id: string
+  number: string | null
+  deliveryDate: string | null
+  dateEstimated: boolean
+  sourceInvoice: string | null
+  scanId: string | null
+  scanFileName: string | null
+  scanContentType: string | null
+  lines: BakeryWzLine[]
+}
+
+export type BakeryCheck = {
+  id: string
+  supplierId: string
+  supplierName: string
+  supplierNip: string | null
+  bons: BakeryBon[]
+  invoices: BakeryInvoice[]
+  wz: BakeryWz[]
+  articles: BakeryArticle[]
+  scanReading: boolean
+  notices: string[]
+}
+
+export type BakeryCheckSummary = {
+  id: string
+  createdAt: string
+  createdBy: string | null
+  bons: string[]
+  invoices: string[]
+  wzCount: number
+  filledWz: number
+  from: string | null
+  to: string | null
+}
+
+export type BakeryRowStatus = 'OK' | 'WZ' | 'BON' | 'NO_ARTICLE'
+
+export type BakeryComparisonRow = {
+  key: string
+  itm8: string | null
+  ean: string | null
+  name: string | null
+  wzQuantity: number
+  invoiceQuantity: number | null
+  correctionQuantity: number | null
+  finalQuantity: number | null
+  price: number | null
+  invoiceValue: number | null
+  bonQuantity: number | null
+  bonValue: number | null
+  difference: number | null
+  differenceValue: number | null
+  status: BakeryRowStatus
+  linkCode: string | null
+  invoiceUnit: string | null
+}
+
+export type BakeryComparison = {
+  rows: BakeryComparisonRow[]
+  totals: {
+    wzValue: number
+    invoiceValue: number
+    correctionValue: number
+    finalValue: number
+    bonValue: number
+    differenceValue: number
+    differences: number
+  }
+  unavailable: { invoiceNumber: string; reason: string }[]
+  pendingCorrections: number
+  hasBon: boolean
+  sellerNip: string | null
+  sellerName: string | null
+}
+
+/** Odczyt skanu WZ przez AI: propozycja ilości do tabeli. */
+export type BakeryScanReading = {
+  number: string | null
+  deliveryDate: string | null
+  lines: { name: string | null; quantity: number | null; note: string | null; productId: string | null }[]
+}

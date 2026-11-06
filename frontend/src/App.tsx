@@ -8,6 +8,8 @@ import { ActivationPage } from '@/features/auth/ActivationPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
+import { BakeryCheckPage } from '@/features/bakery-check/BakeryCheckPage'
+import { bakeryPath } from '@/features/bakery-check/paths'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
@@ -86,6 +88,15 @@ const router = createBrowserRouter([
       // Główne kategorie z menu: kafelki narzędzi grupy (uprawnienia sprawdza każde narzędzie osobno).
       ...NAV_GROUP_PATHS.map((path) => ({ path, element: <NavGroupPage /> })),
       ...toolRoutes,
+      {
+        // Weryfikacja piekarni: te same faktury i przypięcia kodów co wprowadzanie danych.
+        path: `${bakeryPath}/*`,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <BakeryCheckPage />
+          </RequireAuth>
+        ),
+      },
       {
         // Dostawa z bazy i kody MEA: kto wprowadza faktury, wprowadza też dokumenty z bazy.
         path: `${basePath}/*`,
