@@ -29,6 +29,7 @@ import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.dataentry.component.CorrectionRows;
 import com.intermanage.backend.dataentry.component.InvoiceXml;
 import com.intermanage.backend.dataentry.component.Measure;
 import com.intermanage.backend.dataentry.component.ProductCodeSources;
@@ -158,9 +159,11 @@ public class DataEntryService {
         byte[] xml = ksefInvoices.xml(storeId, invoiceId).content();
         KsefInvoiceReader.Invoice invoice;
         List<KsefInvoiceReader.LineCodes> codes;
+        DataEntryInvoice.Correction correction;
         try {
             invoice = reader.read(xml);
             codes = reader.lineCodes(xml);
+            correction = invoice.correction() ? correction(invoice, codes, reader.correctedInvoices(xml)) : null;
         } catch (KsefInvoiceReader.InvalidInvoiceException e) {
             throw ApiException.badRequest("Nie udało się odczytać faktury z KSeF: " + e.getMessage());
         }
@@ -171,11 +174,14 @@ public class DataEntryService {
         }
 
         // Pozycje i ich kody idą w tej samej kolejności FaWiersz; wiersze "przed korektą" pomijamy.
+        Map<Integer, Integer> beforeRows = CorrectionRows.pairs(codes);
         List<KsefInvoiceReader.Line> lines = new ArrayList<>();
+        List<KsefInvoiceReader.Line> linesBefore = new ArrayList<>();
         List<KsefInvoiceReader.LineCodes> lineCodes = new ArrayList<>();
         for (int i = 0; i < invoice.lines().size(); i++) {
             if (withBeforeCorrection || !invoice.lines().get(i).beforeCorrection()) {
                 lines.add(invoice.lines().get(i));
+                linesBefore.add(beforeRows.containsKey(i) ? invoice.lines().get(beforeRows.get(i)) : null);
                 lineCodes.add(codes.get(i));
             }
         }
@@ -221,6 +227,7 @@ public class DataEntryService {
         List<DataEntryLine> rows = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             KsefInvoiceReader.Line line = lines.get(i);
+            KsefInvoiceReader.Line before = linesBefore.get(i);
             ProductCodeSources.Pick pick = picks.get(i);
             ProductCodeSources.Pick fallback = fallbacks.get(i);
             String ean = ean(pick.code());
@@ -250,7 +257,8 @@ public class DataEntryService {
                     line.quantity(), unitNet(line, vat),
                     line.name() != null ? line.name().strip() : null, line.unit(), vat, product, measure.unit(),
                     measure.netContent(), link != null ? link.getId() : null, link != null ? link.getCode() : null,
-                    lineCodes.get(i).index(), lineCodes.get(i).cn()));
+                    lineCodes.get(i).index(), lineCodes.get(i).cn(), before != null ? before.quantity() : null,
+                    before != null ? unitNet(before, vatPercent(before.rate())) : null));
         }
         return new LoadedInvoice(new DataEntryInvoice(summary.id(), summary.invoiceNumber(), summary.sellerName(),
                 summary.sellerNip(), summary.issueDate(), chosen, ProductCodeSources.sources(lineCodes, inCatalog).stream()
@@ -258,7 +266,17 @@ public class DataEntryService {
                                 item.matched()))
                         .toList(),
                 rows, total(invoice, lines, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
-                total(invoice, lines, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat)), lines);
+                total(invoice, lines, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat), correction), lines);
+    }
+
+    private static DataEntryInvoice.Correction correction(KsefInvoiceReader.Invoice invoice,
+            List<KsefInvoiceReader.LineCodes> codes, List<KsefInvoiceReader.CorrectedInvoice> corrected) {
+        String reason = invoice.correctionDetails().stream().filter(entry -> "Przyczyna korekty".equals(entry.label()))
+                .map(KsefInvoiceReader.Entry::value).findFirst().orElse(null);
+        return new DataEntryInvoice.Correction(reason,
+                codes.stream().anyMatch(KsefInvoiceReader.LineCodes::beforeCorrection),
+                corrected.stream().map(item -> new DataEntryInvoice.CorrectedInvoice(item.number(), item.issueDate(),
+                        item.ksefNumber())).toList());
     }
 
     /**
@@ -566,7 +584,7 @@ public class DataEntryService {
             rows.add(new DataEntryLine(String.valueOf(i + 1), ean, eanSource, fallback ? name : null,
                     fallback ? "nazwa z pliku XML" : null, line.quantity(), line.unitNet(), name, null,
                     line.vatPercent(), product, measure.unit(), measure.netContent(),
-                    link != null ? link.getId() : null, link != null ? link.getCode() : null, null, null));
+                    link != null ? link.getId() : null, link != null ? link.getCode() : null, null, null, null, null));
         }
         InvoiceXml.Header header = document.header();
         return new DataEntryInvoice(invoice != null ? invoice.id() : null,
@@ -576,7 +594,7 @@ public class DataEntryService {
                 invoice != null && invoice.issueDate() != null ? invoice.issueDate() : header.date(), XML_SOURCE,
                 List.of(), rows,
                 invoice != null ? invoice.netAmount() : document.netValue(),
-                invoice != null ? invoice.vatAmount() : null);
+                invoice != null ? invoice.vatAmount() : null, null);
     }
 
     private static String blankToNull(String value) {

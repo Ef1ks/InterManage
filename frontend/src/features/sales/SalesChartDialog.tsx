@@ -492,6 +492,7 @@ function ArticleFacts({
         {article.supplier && <Detail label="Dostawca">{article.supplier}</Detail>}
         {path && <Detail label="Nomenklatura">{path}</Detail>}
         {article.caseSize != null && <Detail label="W kartonie">{formatQuantity(article.caseSize)}</Detail>}
+        {article.vatPercent != null && <Detail label="VAT">{article.vatPercent}%</Detail>}
         {article.active === false && <Detail label="Status">nieaktywny w kartotece</Detail>}
       </dl>
       <ReportFreshness generatedAt={article.reportGeneratedAt} className="justify-self-start" />

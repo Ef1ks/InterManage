@@ -177,7 +177,12 @@ public class SalesReportService {
                         .map(nomenclatureMapper::toOption)
                         .sorted(Comparator.comparing(NomenclatureOption::code))
                         .toList();
-        return salesMapper.toArticle(product, path);
+        BigDecimal vatPercent = product.vatPercent();
+        if (vatPercent == null) {
+            Short rate = documentLines.findLatestVatRate(storeId, product.getItm8());
+            vatPercent = rate == null ? null : BigDecimal.valueOf(rate);
+        }
+        return salesMapper.toArticle(product, path, vatPercent);
     }
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej, najwyżej {@link #DELIVERY_LIMIT}. */

@@ -317,6 +317,16 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, int limit);
 
+    /** Stawka VAT (%) z najnowszej linii dokumentu artykułu, która ją ma. */
+    @Query(value = """
+            select l.vat_rate from document_lines l
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and l.itm8 = :itm8 and l.vat_rate is not null
+            order by d.document_date desc
+            limit 1
+            """, nativeQuery = true)
+    Short findLatestVatRate(UUID storeId, String itm8);
+
     /** Protokół z artykułem: dokument z sumą ilości jego linii i tym, czy jest zarejestrowanym gratisem. */
     interface ArticleProtocol {
         UUID getDocumentId();

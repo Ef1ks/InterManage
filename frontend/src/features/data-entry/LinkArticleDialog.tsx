@@ -12,11 +12,12 @@ import {
 } from '@/components/ui/dialog'
 import { formatPrice, formatQuantity } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
-import type { DataEntryCatalogArticle, DataEntryCatalogProduct } from '@/lib/types'
+import type { CorrectionDeliveryLine, DataEntryCatalogArticle, DataEntryCatalogProduct } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { lookupProducts, useLinkProduct, useLinkSuggestions, useUnlinkProduct } from './api'
 import { CatalogListDialog } from './CatalogListDialog'
+import { bonLineSuggestions } from './correction-macro'
 import type { DataEntryRow, RowLink } from './rows'
 
 /**
@@ -42,7 +43,7 @@ export type LinkTarget = { row: DataEntryRow; sellerNip: string | null; sellerNa
  * Przypisanie pozycji bez EAN-u (np. „JABŁKO” z faktury) albo spoza kartoteki do artykułu z kartoteki: propozycje
  * podobnych nazw, a gdy żadna nie pasuje, wyszukiwanie w liście towarów. Z fakturą przypięcie jest zapamiętane dla
  * dostawcy (NIP) i kodu z kolumny EAN, więc kolejne faktury wczytują ten artykuł od razu; bez faktury dotyczy tylko
- * tabeli.
+ * tabeli. Przy korekcie z wybranym bonem na górze są jego pozycje (`bonLines`): mięso ma na fakturze inny kod i nazwę.
  */
 export function LinkArticleDialog({
   storeId,
@@ -52,6 +53,7 @@ export function LinkArticleDialog({
   onUnlinked,
   inTable,
   lastSaleDate,
+  bonLines,
 }: {
   storeId: string
   target: LinkTarget | null
@@ -60,6 +62,7 @@ export function LinkArticleDialog({
   onUnlinked: (row: DataEntryRow) => void
   inTable: Set<string>
   lastSaleDate: string | null
+  bonLines?: CorrectionDeliveryLine[]
 }) {
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
@@ -73,6 +76,7 @@ export function LinkArticleDialog({
             onUnlinked={onUnlinked}
             inTable={inTable}
             lastSaleDate={lastSaleDate}
+            bonLines={bonLines}
           />
         )}
       </DialogContent>
@@ -87,6 +91,7 @@ function LinkContent({
   onUnlinked,
   inTable,
   lastSaleDate,
+  bonLines,
 }: {
   storeId: string
   target: LinkTarget
@@ -94,6 +99,7 @@ function LinkContent({
   onUnlinked: (row: DataEntryRow) => void
   inTable: Set<string>
   lastSaleDate: string | null
+  bonLines?: CorrectionDeliveryLine[]
 }) {
   const { row, sellerNip, sellerName } = target
   // Przypięty wiersz ma już EAN artykułu; szukamy po nazwie z faktury albo przypiętym kodzie.
@@ -106,7 +112,7 @@ function LinkContent({
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const pick = async (item: DataEntryCatalogArticle) => {
+  const pick = async (item: Pick<DataEntryCatalogArticle, 'itm8' | 'ean'>) => {
     setPending(item.itm8)
     setError(null)
     try {
@@ -135,6 +141,9 @@ function LinkContent({
   }
 
   const list = suggestions.data ?? []
+  const fromBon = bonLines
+    ? bonLineSuggestions(bonLines, row.invoiceName ?? row.name, row.before?.unitNet ?? row.unitNet)
+    : []
 
   return (
     <>
@@ -177,6 +186,39 @@ function LinkContent({
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {fromBon.length > 0 && (
+        <div className="max-h-[30svh] overflow-y-auto rounded-xl border">
+          <p className="sticky top-0 bg-popover px-4 py-2 text-xs font-medium text-muted-foreground">Pozycje z bonu</p>
+          <ul className="divide-y">
+            {fromBon.map((line) => {
+              const itm8 = line.articleItm8 ?? ''
+              return (
+                <li key={line.itm8} className="flex items-center gap-4 px-4 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{line.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                      {[line.brand, `EAN ${line.ean}`].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  <span className="text-right text-sm whitespace-nowrap tabular-nums">
+                    {line.quantity !== null && formatQuantity(line.quantity)}
+                    {line.purchasePrice !== null && ` × ${formatPrice(line.purchasePrice)} zł`}
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => pick({ itm8, ean: line.articleEan ?? '' })}
+                    loading={pending === itm8}
+                    disabled={pending !== null && pending !== itm8}
+                  >
+                    Przypisz
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="max-h-[50svh] min-h-32 overflow-y-auto rounded-xl border">
         {suggestions.isError ? (

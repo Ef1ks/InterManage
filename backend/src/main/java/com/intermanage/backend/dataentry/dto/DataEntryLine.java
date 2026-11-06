@@ -11,10 +11,12 @@ import java.util.UUID;
  * automatycznym wyborze różne dla pozycji. Bez EAN-u {@code fallbackCode} to inny kod z faktury (Indeks, dodatkowy
  * opis, GTIN, który nie jest EAN-em) albo nazwa, a {@code fallbackSource} opis pola, z którego pochodzi. Pozycja
  * wczytana z przypięcia kodu dostawcy do artykułu ma {@code eanSource} = LINK, {@code linkId} i {@code linkedCode}
- * (przypięty kod).
+ * (przypięty kod). Przy korekcie {@code beforeQuantity} i {@code beforeUnitNet} to stan z wiersza "przed korektą" tej
+ * pozycji ({@code null}: pozycja bez takiego wiersza).
  */
 public record DataEntryLine(String number, String ean, String eanSource, String fallbackCode, String fallbackSource,
         BigDecimal quantity, BigDecimal unitNet, String invoiceName,
         String invoiceUnit, BigDecimal vatPercent, CatalogProduct product, String unit, BigDecimal netContent,
-        UUID linkId, String linkedCode, String supplierCode, String cn) {
+        UUID linkId, String linkedCode, String supplierCode, String cn, BigDecimal beforeQuantity,
+        BigDecimal beforeUnitNet) {
 }

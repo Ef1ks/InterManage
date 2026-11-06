@@ -1119,6 +1119,127 @@ class DataEntryIntegrationTests {
         mvc.perform(get(url("/invoices")).cookie(owner)).andExpect(jsonPath("$.invoices.length()").value(1));
     }
 
+    @Test
+    void correctionShowsCorrectedInvoiceAndItsDeliveryWithLines() throws Exception {
+        String correctionId = jdbc.queryForObject("""
+                insert into ksef_invoices (id, ksef_number, invoice_number, issue_date, invoicing_date,
+                    permanent_storage_date, seller_nip, seller_name, net_amount, gross_amount, vat_amount, currency,
+                    invoice_type, has_attachment, created_at, updated_at, nip)
+                select gen_random_uuid(), ?, 'KOR/1/2026', date '2026-11-02', now(), now(), seller_nip, seller_name,
+                    -4, -4.2, -0.2, 'PLN', 'Kor', false, now(), now(), nip
+                from ksef_invoices where id = ?::uuid returning id""", String.class,
+                SELLER_NIP + "-20261102-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(),
+                UUID.fromString(invoiceId));
+        jdbc.update("insert into ksef_invoice_xml (invoice_id, content, downloaded_at) values (?::uuid, ?, now())",
+                UUID.fromString(correctionId), correctionXml().getBytes(StandardCharsets.UTF_8));
+
+        // Numery wierszy po kolei (jak Kuchnia Polki): para po GTIN-ie, pozycja bez pary jest bez zmian.
+        mvc.perform(get(url("/invoices/" + correctionId)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correction.reason").value("Zwrot"))
+                .andExpect(jsonPath("$.correction.hasBeforeRows").value(true))
+                .andExpect(jsonPath("$.correction.corrected[0].number").value("FV/77/2026"))
+                .andExpect(jsonPath("$.lines.length()").value(2))
+                .andExpect(jsonPath("$.lines[0].beforeQuantity").doesNotExist())
+                .andExpect(jsonPath("$.lines[1].quantity").value(4))
+                .andExpect(jsonPath("$.lines[1].beforeQuantity").value(6))
+                .andExpect(jsonPath("$.lines[1].beforeUnitNet").value(2.0));
+        // Zwykła faktura nie jest korektą.
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.correction").doesNotExist());
+
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
+                    updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', 1, 1, 1, 0, 0) returning id""", String.class, storeId);
+        String bon = correctionDocument("PZ", "1050000", "FV/77/2026", "16.00", documentImport);
+        // Mięso i towar lokalny: linia pod ITM8 99…, artykuł z kartoteki idzie po EAN-ie.
+        correctionLine(bon, "0000099000001", "05900000000012", "8", "2.00", "16.00");
+        String other = correctionDocument("PZ", "1060000", "FV/INNA", "10.00", documentImport);
+        correctionLine(other, "0000099000002", "5900000000050", "5", "2.00", "10.00");
+        String earlier = correctionDocument("PK", "PK1", null, "-4.00", documentImport);
+        correctionLine(earlier, "0000099000001", "05900000000012", "-2", "2.00", "-4.00");
+        String thisOne = correctionDocument("WZ", "WZ1", null, "-2.00", documentImport);
+        correctionLine(thisOne, "0000099000001", "05900000000012", "-1", "2.00", "-2.00");
+        for (String correction : new String[] {earlier, thisOne}) {
+            jdbc.update("""
+                    insert into delivery_corrections (id, delivery_id, correction_id, linked_at)
+                    values (gen_random_uuid(), ?::uuid, ?::uuid, now())""", UUID.fromString(bon),
+                    UUID.fromString(correction));
+        }
+        jdbc.update("""
+                insert into document_ksef_invoices (id, document_id, invoice_id, linked_at)
+                values (gen_random_uuid(), ?::uuid, ?::uuid, now())""", UUID.fromString(thisOne),
+                UUID.fromString(correctionId));
+
+        // Bon faktury korygowanej sam, inny dopiero z wyszukiwarki, także po numerze spoza dostawcy.
+        mvc.perform(get(url("/invoices/" + correctionId + "/correction-deliveries")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(bon))
+                .andExpect(jsonPath("$[0].number").value("1050000"))
+                .andExpect(jsonPath("$[0].matched").value(true));
+        mvc.perform(get(url("/invoices/" + correctionId + "/correction-deliveries?query=1060000")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[1].id").value(other))
+                .andExpect(jsonPath("$[1].matched").value(false));
+
+        // Wcześniejsza korekta zmniejsza bon, a korekta z tą fakturą nie: to ją właśnie wprowadzamy.
+        mvc.perform(get(url("/invoices/" + correctionId + "/correction-deliveries/" + bon + "/lines")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].ean").value("05900000000012"))
+                .andExpect(jsonPath("$[0].quantity").value(6))
+                .andExpect(jsonPath("$[0].purchasePrice").value(2.0))
+                .andExpect(jsonPath("$[0].articleItm8").value("0000000000101"))
+                .andExpect(jsonPath("$[0].articleEan").value("5900000000012"));
+    }
+
+    private String correctionDocument(String type, String number, String invoiceNumber, String value,
+            String importId) {
+        return jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                    sale_value_gross, supplier_document_number, first_import_id, last_import_id)
+                values (?::uuid, ?, ?, timestamp '2026-10-20', 1, ?::numeric, 0, ?, ?::uuid, ?::uuid)
+                returning id::text""", String.class, storeId, type, number, value, invoiceNumber, importId, importId);
+    }
+
+    private void correctionLine(String documentId, String itm8, String ean, String quantity, String price,
+            String value) {
+        jdbc.update("""
+                insert into document_lines (document_id, line_number, itm8, ean, name, quantity, purchase_price,
+                    purchase_value)
+                values (?::uuid, 1, ?, ?, 'POZYCJA', ?::numeric, ?::numeric, ?::numeric)""",
+                UUID.fromString(documentId), itm8, ean, quantity, price, value);
+    }
+
+    private static String correctionXml() {
+        return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza></Naglowek>
+                  <Podmiot1><DaneIdentyfikacyjne><NIP>1111111111</NIP><Nazwa>SERY I CHIPSY SA</Nazwa>
+                    </DaneIdentyfikacyjne></Podmiot1>
+                  <Podmiot2><DaneIdentyfikacyjne><NIP>5265877635</NIP><Nazwa>TRYTOMA</Nazwa></DaneIdentyfikacyjne>
+                    </Podmiot2>
+                  <Fa>
+                    <KodWaluty>PLN</KodWaluty><P_1>2026-11-02</P_1><P_2>KOR/1/2026</P_2><P_15>-4.20</P_15>
+                    <RodzajFaktury>KOR</RodzajFaktury><PrzyczynaKorekty>Zwrot</PrzyczynaKorekty>
+                    <DaneFaKorygowanej><DataWystFaKorygowanej>2026-10-20</DataWystFaKorygowanej>
+                      <NrFaKorygowanej>FV/77/2026</NrFaKorygowanej><NrKSeF>1</NrKSeF>
+                      <NrKSeFFaKorygowanej>1111111111-20261020-AAAAAAAAAAAA-AA</NrKSeFFaKorygowanej>
+                    </DaneFaKorygowanej>
+                    <FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>Kefir 400g</P_7><GTIN>5900000000050</GTIN>
+                      <P_8A>szt.</P_8A><P_8B>5</P_8B><P_9A>2.00</P_9A><P_11>10.00</P_11><P_12>5</P_12></FaWiersz>
+                    <FaWiersz><NrWierszaFa>2</NrWierszaFa><P_7>Mleko 3,2%% 1 l</P_7><GTIN>5900000000012</GTIN>
+                      <P_8A>szt.</P_8A><P_8B>6</P_8B><P_9A>2.00</P_9A><P_11>12.00</P_11><P_12>5</P_12>
+                      <StanPrzed>1</StanPrzed></FaWiersz>
+                    <FaWiersz><NrWierszaFa>3</NrWierszaFa><P_7>Mleko 3,2%% 1 l</P_7><GTIN>5900000000012</GTIN>
+                      <P_8A>szt.</P_8A><P_8B>4</P_8B><P_9A>2.00</P_9A><P_11>8.00</P_11><P_12>5</P_12></FaWiersz>
+                  </Fa>
+                </Faktura>""".formatted();
+    }
+
     private ResultActions mark(String kind) throws Exception {
         return mvc.perform(post(url("/invoices/" + invoiceId + "/marks")).with(csrf()).cookie(owner)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"" + kind + "\"}"))

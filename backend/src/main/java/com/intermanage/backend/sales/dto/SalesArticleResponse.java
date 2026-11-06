@@ -9,6 +9,7 @@ import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 /**
  * Artykuł z kartoteki sklepu w raporcie sprzedaży: dane, ceny, stan i rotacja z ostatniego raportu kartoteki, w którym
  * był ({@code reportGeneratedAt}), oraz jego rejon, rodzina i podrodzina ({@code nomenclaturePath}, od rejonu).
+ * {@code vatPercent}: z kodu stawki z kartoteki, bez niego z ostatniego dokumentu artykułu; pusty, gdy nieznany.
  */
 public record SalesArticleResponse(
         String itm8,
@@ -20,6 +21,7 @@ public record SalesArticleResponse(
         Boolean active,
         BigDecimal salePrice,
         BigDecimal purchasePrice,
+        BigDecimal vatPercent,
         BigDecimal stock,
         BigDecimal rotation,
         BigDecimal caseSize,

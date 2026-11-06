@@ -29,7 +29,7 @@ public interface SalesMapper {
 
     @Mapping(target = "reportGeneratedAt", source = "product.lastSeenImport.reportGeneratedAt")
     @Mapping(target = "nomenclaturePath", source = "path")
-    SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path);
+    SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path, BigDecimal vatPercent);
 
     ZeroStockReport.Item toZeroStockItem(Product product);
 

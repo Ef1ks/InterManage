@@ -987,6 +987,8 @@ export type SalesArticle = {
   active: boolean | null
   salePrice: number | null
   purchasePrice: number | null
+  /** Z kodu stawki z kartoteki, bez niego z ostatniego dokumentu artykułu. */
+  vatPercent: number | null
   /** STAN, może być ujemny. */
   stock: number | null
   rotation: number | null
@@ -2064,6 +2066,39 @@ export type DataEntryLine = {
   /** Indeks dostawcy i kod CN z pozycji faktury (do pliku CADBEZP). */
   supplierCode: string | null
   cn: string | null
+  /** Przy korekcie stan z wiersza „przed korektą” tej pozycji; `null`: pozycja bez takiego wiersza. */
+  beforeQuantity: number | null
+  beforeUnitNet: number | null
+}
+
+/** Co koryguje faktura korygująca. `hasBeforeRows`: pozycje podają stan po korekcie, bez tego różnice do bonu. */
+export type DataEntryCorrection = {
+  reason: string | null
+  hasBeforeRows: boolean
+  corrected: { number: string | null; issueDate: string | null; ksefNumber: string | null }[]
+}
+
+/** Przyjęcie PZ do faktury korygującej; `matched`: przyjęcie faktury, którą korekta koryguje. */
+export type CorrectionDelivery = {
+  id: string
+  number: string
+  documentDate: string
+  supplierName: string | null
+  supplierDocumentNumber: string | null
+  purchaseValue: number
+  matched: boolean
+}
+
+/** Linia przyjęcia po wcześniejszych korektach, z artykułem z kartoteki (`null`: nie ma go w kartotece). */
+export type CorrectionDeliveryLine = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  quantity: number | null
+  purchasePrice: number | null
+  articleItm8: string | null
+  articleEan: string | null
 }
 
 export type DataEntryInvoice = {
@@ -2079,6 +2114,8 @@ export type DataEntryInvoice = {
   /** Sumy netto i VAT z dokumentu (podsumowanie stawek albo pozycje); {@code null}, gdy faktura ich nie podaje. */
   netTotal: number | null
   vatTotal: number | null
+  /** Tylko faktura korygująca z KSeF. */
+  correction: DataEntryCorrection | null
 }
 
 /**

@@ -167,13 +167,15 @@ class SalesReportIntegrationTests {
         mvc.perform(get(historyUrl(storeId) + "&unassigned=true").cookie(owner))
                 .andExpect(jsonPath("$.total.saleValueGross").value(1.08));
 
-        jdbc.update("update products set stock = 12.5, rotation = 3, supplier = 'WASA' where itm8 = ?", bread);
+        jdbc.update("update products set stock = 12.5, rotation = 3, supplier = 'WASA', vat_code = 2 where itm8 = ?",
+                bread);
         mvc.perform(get(reportsUrl(storeId) + "/articles/" + bread).cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("PIECZYWO WASA"))
                 .andExpect(jsonPath("$.stock").value(12.5))
                 .andExpect(jsonPath("$.rotation").value(3))
                 .andExpect(jsonPath("$.supplier").value("WASA"))
+                .andExpect(jsonPath("$.vatPercent").value(8))
                 .andExpect(jsonPath("$.nomenclaturePath.length()").value(3))
                 .andExpect(jsonPath("$.nomenclaturePath[0].name").value("01_DELIKATESY"))
                 .andExpect(jsonPath("$.nomenclaturePath[2].code").value("010101"));
@@ -286,6 +288,13 @@ class SalesReportIntegrationTests {
                 .andExpect(jsonPath("$[0].documentId").value(local))
                 .andExpect(jsonPath("$[0].purchasePrice").value(3.0))
                 .andExpect(jsonPath("$[1].documentId").value(own));
+
+        // Bez kodu stawki w kartotece VAT idzie z ostatniego dokumentu artykułu.
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article).cookie(owner))
+                .andExpect(jsonPath("$.vatPercent").doesNotExist());
+        jdbc.update("update document_lines set vat_rate = 5 where document_id = ?::uuid", own);
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article).cookie(owner))
+                .andExpect(jsonPath("$.vatPercent").value(5));
     }
 
     @Test

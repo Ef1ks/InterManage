@@ -5,6 +5,8 @@ import type { SortState } from '@/lib/table-sort'
 import type {
   DataEntryCatalogArticle,
   DataEntryCatalogListPage,
+  CorrectionDelivery,
+  CorrectionDeliveryLine,
   DataEntryCatalogProduct,
   DataEntryInvoice,
   DataEntryInvoiceItem,
@@ -82,6 +84,31 @@ export function useInvoiceLines(storeId: string, invoiceId: string | null, sourc
     placeholderData: (previous) => (previous?.invoiceId === invoiceId ? previous : undefined),
     staleTime: 60_000,
     retry: false,
+  })
+}
+
+/** Bony do faktury korygującej: najpierw faktur korygowanych, potem pasujące do `query` (bez niego dostawcy korekty). */
+export function useCorrectionDeliveries(storeId: string, invoiceId: string | null, query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'data-entry', 'correction-deliveries', invoiceId, query],
+    queryFn: () =>
+      api<CorrectionDelivery[]>(
+        `${path(storeId)}/invoices/${invoiceId}/correction-deliveries?query=${encodeURIComponent(query)}`,
+      ),
+    enabled: enabled && invoiceId !== null,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Linie bonu po wcześniejszych korektach; `documentId` puste = bon spoza raportów albo jeszcze nie potrzebne. */
+export function useCorrectionDeliveryLines(storeId: string, invoiceId: string | null, documentId: string | null) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'data-entry', 'correction-delivery-lines', invoiceId, documentId],
+    queryFn: () =>
+      api<CorrectionDeliveryLine[]>(
+        `${path(storeId)}/invoices/${invoiceId}/correction-deliveries/${documentId}/lines`,
+      ),
+    enabled: invoiceId !== null && documentId !== null,
   })
 }
 

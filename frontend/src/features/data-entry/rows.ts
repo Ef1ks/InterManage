@@ -78,6 +78,8 @@ export type DataEntryRow = {
   link?: RowLink | null
   /** Linia dokumentu dostawy z bazy, z której jest wiersz (tylko w „Dostawie z bazy”). */
   base?: BaseLineInfo | null
+  /** Stan z wiersza „przed korektą” faktury korygującej. Brak przy pozycji bez takiego wiersza. */
+  before?: { quantity: number | null; unitNet: number | null } | null
 }
 
 export type RowLink = { id: string; code: string }
@@ -267,6 +269,7 @@ export function rowFromLine(line: DataEntryLine): DataEntryRow {
     rotation: product?.rotation ?? null,
     nameFromInvoice: product === null && Boolean(line.invoiceName),
     link: line.linkId && line.linkedCode ? { id: line.linkId, code: line.linkedCode } : null,
+    before: line.beforeQuantity !== null ? { quantity: line.beforeQuantity, unitNet: line.beforeUnitNet } : null,
   }
   return product ? snapshot(row) : row
 }

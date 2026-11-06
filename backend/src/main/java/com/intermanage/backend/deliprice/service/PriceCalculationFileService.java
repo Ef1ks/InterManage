@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,9 +30,6 @@ public class PriceCalculationFileService {
 
     /** Słowo w nazwie pliku w miejscu numeru faktury. */
     private static final String FILE_LABEL = "KALKULACJE";
-    /** Kod stawki z kartoteki na procent, sprawdzone z liniami dokumentów (jak we wprowadzaniu danych). */
-    private static final Map<Short, BigDecimal> VAT_BY_CODE = Map.of((short) 1, BigDecimal.valueOf(23),
-            (short) 2, BigDecimal.valueOf(8), (short) 6, BigDecimal.valueOf(5));
 
     private final PriceCalculationRepository calculations;
     private final DataEntryProductFileService productFiles;
@@ -90,8 +86,7 @@ public class PriceCalculationFileService {
 
     /** Stawka z kartoteki; artykuł bez znanego kodu stawki bierze ją z kalkulacji. */
     private static BigDecimal vatPercent(PriceCalculation calculation) {
-        Short code = calculation.getProduct().getVatCode();
-        BigDecimal percent = code == null ? null : VAT_BY_CODE.get(code);
+        BigDecimal percent = calculation.getProduct().vatPercent();
         return percent != null ? percent : BigDecimal.valueOf(calculation.getVatRate());
     }
 }

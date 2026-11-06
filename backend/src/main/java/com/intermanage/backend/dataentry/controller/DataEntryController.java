@@ -42,6 +42,8 @@ import com.intermanage.backend.dataentry.dto.InvoiceBulkUndoRequest;
 import com.intermanage.backend.dataentry.dto.InvoiceMarkRequest;
 import com.intermanage.backend.dataentry.dto.SkippedSupplier;
 import com.intermanage.backend.dataentry.dto.SkippedSupplierRequest;
+import com.intermanage.backend.dataentry.dto.CorrectionDelivery;
+import com.intermanage.backend.dataentry.dto.CorrectionDeliveryLine;
 import com.intermanage.backend.dataentry.dto.ExportRequest;
 import com.intermanage.backend.dataentry.dto.NomenclatureItem;
 import com.intermanage.backend.dataentry.dto.ProductLink;
@@ -64,6 +66,7 @@ import com.intermanage.backend.dataentry.dto.XmlDocument;
 import com.intermanage.backend.dataentry.dto.XmlExportItem;
 import com.intermanage.backend.dataentry.entity.DataEntryPriceControlFile;
 import com.intermanage.backend.dataentry.entity.DataEntryXmlExport;
+import com.intermanage.backend.dataentry.service.DataEntryCorrectionService;
 import com.intermanage.backend.dataentry.service.DataEntryInvoiceService;
 import com.intermanage.backend.dataentry.service.DataEntryLinkService;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService;
@@ -100,11 +103,13 @@ public class DataEntryController {
     private final DataEntryXmlService xmlService;
     private final DataEntryProductFileService productFileService;
     private final DataEntryPriceControlService priceControlService;
+    private final DataEntryCorrectionService corrections;
 
     public DataEntryController(DataEntryService service, DataEntrySuggestionService suggestionService,
             DataEntryProtocolService protocolService, DataEntryLinkService linkService,
             DataEntryInvoiceService invoiceService, DataEntryXmlService xmlService,
-            DataEntryProductFileService productFileService, DataEntryPriceControlService priceControlService) {
+            DataEntryProductFileService productFileService, DataEntryPriceControlService priceControlService,
+            DataEntryCorrectionService corrections) {
         this.service = service;
         this.suggestionService = suggestionService;
         this.protocolService = protocolService;
@@ -113,6 +118,7 @@ public class DataEntryController {
         this.xmlService = xmlService;
         this.productFileService = productFileService;
         this.priceControlService = priceControlService;
+        this.corrections = corrections;
     }
 
     private static final String INVOICES = VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')";
@@ -223,6 +229,22 @@ public class DataEntryController {
     public DataEntryInvoice invoice(@PathVariable UUID storeId, @PathVariable UUID invoiceId,
             @RequestParam(required = false) String source) {
         return service.invoice(storeId, invoiceId, source);
+    }
+
+    /** Przyjęcia do faktury korygującej: faktur korygowanych i pasujące do {@code query}. */
+    @GetMapping("/invoices/{invoiceId}/correction-deliveries")
+    @PreAuthorize(INVOICES)
+    public List<CorrectionDelivery> correctionDeliveries(@PathVariable UUID storeId, @PathVariable UUID invoiceId,
+            @RequestParam(required = false) String query) {
+        return corrections.deliveries(storeId, invoiceId, query);
+    }
+
+    /** Linie przyjęcia wybranego do faktury korygującej, z artykułami z kartoteki. */
+    @GetMapping("/invoices/{invoiceId}/correction-deliveries/{documentId}/lines")
+    @PreAuthorize(INVOICES)
+    public List<CorrectionDeliveryLine> correctionDeliveryLines(@PathVariable UUID storeId,
+            @PathVariable UUID invoiceId, @PathVariable UUID documentId) {
+        return corrections.lines(storeId, invoiceId, documentId);
     }
 
     /** Artykuły z kartoteki dla wpisanych EAN-ów albo ITM8 ({@code ?ean=…&ean=…}). */

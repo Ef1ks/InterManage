@@ -381,6 +381,16 @@ public class Product {
         return vatCode;
     }
 
+    /** Stawka VAT z kodu z kartoteki (1 = 23%, 2 = 8%, 6 = 5%); inne kody są niepewne (np. 7 przy kaucjach). */
+    public BigDecimal vatPercent() {
+        return vatCode == null ? null : switch (vatCode) {
+            case 1 -> BigDecimal.valueOf(23);
+            case 2 -> BigDecimal.valueOf(8);
+            case 6 -> BigDecimal.valueOf(5);
+            default -> null;
+        };
+    }
+
     public String getCnCode() {
         return cnCode;
     }

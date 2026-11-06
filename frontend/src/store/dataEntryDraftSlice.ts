@@ -1,7 +1,16 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 import type { DataEntryRow } from '@/features/data-entry/rows'
+import type { DataEntryCorrection } from '@/lib/types'
 import { isUuid } from '@/lib/uuid'
+
+/**
+ * Korekta wczytana do tabeli: co koryguje i bon, do którego należy. `delivery`: `undefined` = jeszcze nie wybrany
+ * (bon faktury korygowanej podpina się sam), `null` = do wybrania, `id` puste = numer wpisany ręcznie, spoza raportów.
+ */
+export type DraftCorrection = DataEntryCorrection & {
+  delivery?: { id: string | null; number: string; date: string | null; supplierName: string | null } | null
+}
 
 /**
  * Faktura, z której pochodzą wiersze (do nazwy pliku i podpowiedzi dostawcy dla AI). Sumy netto i VAT z dokumentu
@@ -20,6 +29,7 @@ export type DraftInvoice = {
   netTotal?: number | null
   vatTotal?: number | null
   supplier?: { id: string; name: string; nip: string | null } | null
+  correction?: DraftCorrection | null
 }
 
 /**

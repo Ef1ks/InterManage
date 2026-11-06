@@ -1,6 +1,7 @@
 import {
   BadgePercentIcon,
   CheckCheckIcon,
+  ClipboardCopyIcon,
   ChevronDownIcon,
   CircleCheckIcon,
   CombineIcon,
@@ -89,6 +90,7 @@ import type {
 import { type RootState, useAppDispatch, useAppSelector } from '@/store'
 import {
   type DataEntryDraft,
+  type DraftCorrection,
   EMPTY_DATA_ENTRY,
   setDataEntryDraft,
   setDataEntrySaved,
@@ -101,6 +103,7 @@ import {
   lookupProducts,
   useDataEntryNomenclature,
   useLinkProduct,
+  useCorrectionDeliveryLines,
   useLoadedKsefInvoice,
   useMarkInvoice,
   useSaveTemporaryXml,
@@ -118,6 +121,7 @@ import {
 import { nomenclatureNames, pricingOf } from './grid-values'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
+import { CorrectionBanner } from './CorrectionBanner'
 import { DeliOrderBanner } from './DeliOrderBanner'
 import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
 import { documentSupplier } from './document-supplier'
@@ -322,6 +326,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // Kody 24 z wagą zamiast ceny (24…05000 = 5 kg). Celowo bez zapamiętania: po odświeżeniu wraca zwykłe działanie.
   const [weightIn24, setWeightIn24] = useState(false)
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null)
+  const [correctionMacroOpen, setCorrectionMacroOpen] = useState(false)
   const [splitTarget, setSplitTarget] = useState<DataEntryRow | null>(null)
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
@@ -349,6 +354,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [supplierOpen, setSupplierOpen] = useState(false)
   const { data: suppliers } = useSuppliers(store.id)
   const supplier = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
+  const correctionLines = useCorrectionDeliveryLines(
+    store.id,
+    canLoadInvoices ? (invoice?.id ?? null) : null,
+    invoice?.correction?.delivery?.id ?? null,
+  )
   const { data: supplierPrices } = useSupplierSalePrices(store.id)
   // Stała cena sprzedaży dostawcy (Ustawienia sklepu): cena sugerowana wszystkich artykułów dokumentu.
   const supplierPriceFor = useCallback(
@@ -387,6 +397,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       fromXml,
       netTotal: previous ? addTotals(previous.netTotal, data.netTotal) : data.netTotal,
       vatTotal: previous ? addTotals(previous.vatTotal, data.vatTotal) : data.vatTotal,
+      // Korekta dopisana do innych wierszy nie ma jednego bonu.
+      correction: !previous && data.correction ? { ...data.correction } : null,
     }
     // Dostawca ze stałą ceną (Ustawienia sklepu): wczytane artykuły dostają ją od razu jako cenę sprzedaży.
     const fixedPrice = supplierPriceFor(documentSupplier(suppliers, nextInvoice)?.id)
@@ -971,6 +983,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     })
   }
 
+  // ---------- bon faktury korygującej
+
+  const chooseCorrectionDelivery = useCallback(
+    (delivery: NonNullable<DraftCorrection['delivery']> | null, auto = false) => {
+      const before = currentDraft()
+      if (!before.invoice?.correction) return
+      setDraft(
+        { ...before, invoice: { ...before.invoice, correction: { ...before.invoice.correction, delivery } } },
+        { record: !auto },
+      )
+    },
+    [currentDraft, setDraft],
+  )
+
   // ---------- zamówienie garmażu wstawione do tabeli
 
   const forgetDeliOrder = () => setDraft({ ...currentDraft(), deliOrderId: null }, { record: false })
@@ -1239,6 +1265,19 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         ]}
       />
 
+      {invoice?.correction && invoice.id && canLoadInvoices && (
+        <CorrectionBanner
+          storeId={store.id}
+          invoice={invoice}
+          correction={invoice.correction}
+          rows={rows}
+          macroOpen={correctionMacroOpen}
+          onMacroOpenChange={setCorrectionMacroOpen}
+          onDelivery={chooseCorrectionDelivery}
+          onLinkRow={openLink}
+        />
+      )}
+
       <CommandBar onHeightChange={setToolbarHeight}>
         {(invoice || rows.length > 0) && (
           <SupplierNumber
@@ -1330,6 +1369,21 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <p className="mb-1 rounded-md bg-amber-200 px-2 py-1.5 text-xs font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-50">
                 {badEanTitle}
               </p>
+            )}
+            {invoice?.correction && invoice.id && canLoadInvoices && (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Korekta</DropdownMenuLabel>
+                  <ActionItem
+                    icon={<ClipboardCopyIcon />}
+                    label="Makro korekty"
+                    disabled={!invoice.correction.delivery}
+                    hint={invoice.correction.delivery ? 'Podgląd i makro do programu sklepu' : 'Najpierw wybierz bon'}
+                    onClick={() => setCorrectionMacroOpen(true)}
+                  />
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+              </>
             )}
             <DropdownMenuGroup>
               <DropdownMenuLabel>Do folderu protokołów</DropdownMenuLabel>
@@ -1877,6 +1931,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onUnlinked={onUnlinked}
         inTable={tableEans}
         lastSaleDate={canSeeSales ? (salesOverview.data?.lastSaleDate ?? addDays(todayIso(), -1)) : null}
+        bonLines={correctionLines.data}
       />
 
       <SplitQuantityDialog row={splitTarget} onClose={() => setSplitTarget(null)} onSplit={splitRow} />
