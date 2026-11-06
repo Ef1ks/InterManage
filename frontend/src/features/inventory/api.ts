@@ -25,6 +25,11 @@ export function useProductList(storeId: string, query: string, filters: string) 
   })
 }
 
+/** Pierwsza strona artykułów pasujących do kodu, bez filtrów listy. */
+export function findProducts(storeId: string, code: string) {
+  return api<ProductListPage>(`${path(storeId)}?${new URLSearchParams({ query: code })}`)
+}
+
 /** Przeceny (lista promocji) i zmiany ceny sprzedaży artykułu. */
 export function useProductPrices(storeId: string, itm8: string) {
   return useQuery({

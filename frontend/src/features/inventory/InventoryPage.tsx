@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, PackageSearchIcon, SlidersHorizontalIcon } from 'lucide-react'
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { type ClipboardEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -8,7 +8,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatMoney, formatQuantity } from '@/features/documents/format'
-import { useProductList } from '@/features/inventory/api'
+import { findProducts, useProductList } from '@/features/inventory/api'
 import {
   activeFilterCount,
   filterParams,
@@ -31,7 +31,8 @@ import { cn } from '@/lib/utils'
 /**
  * Magazyn i produkty: po lewej cała kartoteka sklepu z wyszukiwarką, po prawej karta wybranego artykułu (dane
  * z kartoteki, wykres sprzedaży i dostawy jak w raportach sprzedaży, historia cen i przecen). Wyszukiwanie i wybrany
- * artykuł są w adresie ({@code ?szukaj=&artykul=}).
+ * artykuł są w adresie ({@code ?szukaj=&artykul=}). Poniżej {@code lg} lista i karta są osobno, więc nad kartą jest
+ * pole na kod następnego artykułu ({@link ArticleJump}), bez wracania do listy.
  */
 export function InventoryPage() {
   const store = useCurrentStore()
@@ -56,6 +57,15 @@ function StoreInventory({ store }: { store: StoreSummary }) {
   const selected = params.get('artykul')
   const filters = readFilters(params)
   const overview = useSalesReportsOverview(store.id)
+  const jumped = useRef(false)
+
+  // Po przejściu z pola kodu nowa karta zaczyna się od góry. W efekcie, bo ScrollRestoration przywraca pozycję
+  // po każdej zmianie adresu na tej samej ścieżce.
+  useEffect(() => {
+    if (!jumped.current) return
+    jumped.current = false
+    window.scrollTo({ top: 0 })
+  }, [selected])
 
   const setParam = (key: string, value: string | null) =>
     setParams(
@@ -94,23 +104,40 @@ function StoreInventory({ store }: { store: StoreSummary }) {
         />
         <section className={cn('min-w-0', !selected && 'max-lg:hidden')} aria-label="Karta artykułu">
           {selected ? (
-            <Card className="gap-5 px-5 py-5 sm:px-6">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="-ml-2 justify-self-start lg:hidden"
-                onClick={() => setParam('artykul', null)}
-              >
-                <ArrowLeftIcon />
-                Lista artykułów
-              </Button>
-              <ArticleSalesPanel
-                storeId={store.id}
-                target={{ kind: 'article', itm8: selected, name: null, ean: null, brand: null }}
-                lastSaleDate={lastSaleDate}
-              />
-              <ArticlePriceHistory key={selected} storeId={store.id} itm8={selected} />
-            </Card>
+            <>
+              <div className="sticky top-14 z-10 mb-3 grid justify-items-start gap-1 bg-background py-2 lg:hidden">
+                <Button variant="ghost" size="sm" className="-ml-2" onClick={() => setParam('artykul', null)}>
+                  <ArrowLeftIcon />
+                  Lista artykułów
+                </Button>
+                <ArticleJump
+                  storeId={store.id}
+                  onFound={(itm8) => {
+                    jumped.current = true
+                    setParam('artykul', itm8)
+                  }}
+                  onSeveral={(code) =>
+                    setParams(
+                      (current) => {
+                        const next = new URLSearchParams(current)
+                        next.delete('artykul')
+                        next.set('szukaj', code)
+                        return next
+                      },
+                      { replace: true },
+                    )
+                  }
+                />
+              </div>
+              <Card className="gap-5 px-5 py-5 sm:px-6">
+                <ArticleSalesPanel
+                  storeId={store.id}
+                  target={{ kind: 'article', itm8: selected, name: null, ean: null, brand: null }}
+                  lastSaleDate={lastSaleDate}
+                />
+                <ArticlePriceHistory key={selected} storeId={store.id} itm8={selected} />
+              </Card>
+            </>
           ) : (
             <Card className="h-full min-h-80 items-center justify-center gap-2 px-6 py-12 text-center">
               <PackageSearchIcon aria-hidden className="size-8 text-muted-foreground" />
@@ -123,6 +150,81 @@ function StoreInventory({ store }: { store: StoreSummary }) {
         </section>
       </div>
     </>
+  )
+}
+
+const withoutLeadingZeros = (code: string | null) => code?.replace(/^0+/, '') ?? ''
+
+/**
+ * Pole na EAN nad kartą artykułu: wklejony albo zeskanowany kod (Enter) od razu otwiera artykuł. Główny EAN ma
+ * pierwszeństwo, bo krótki kod bywa też początkiem dłuższych; gdy kilka artykułów pasuje, wybiera się je na liście.
+ */
+function ArticleJump({
+  storeId,
+  onFound,
+  onSeveral,
+}: {
+  storeId: string
+  onFound: (itm8: string) => void
+  onSeveral: (code: string) => void
+}) {
+  const [code, setCode] = useState('')
+  const [message, setMessage] = useState<string | null>(null)
+  const input = useRef<HTMLInputElement>(null)
+  const lastSearch = useRef(0)
+
+  const search = async (text: string) => {
+    const wanted = text.trim()
+    if (!wanted) return
+    const current = ++lastSearch.current
+    setMessage(null)
+    try {
+      const page = await findProducts(storeId, wanted)
+      if (current !== lastSearch.current) return
+      const match =
+        page.items.find((item) => withoutLeadingZeros(item.ean) === withoutLeadingZeros(wanted)) ??
+        (page.total === 1 ? page.items[0] : undefined)
+      if (match) {
+        setCode('')
+        // Na telefonie klawiatura zasłoniłaby kartę; przy czytniku kodów pole zostaje gotowe na kolejny kod.
+        if (window.matchMedia('(pointer: coarse)').matches) input.current?.blur()
+        onFound(match.itm8)
+      } else if (page.total > 1) {
+        onSeveral(wanted)
+      } else {
+        setMessage(`Nie znaleziono artykułu z kodem ${wanted}.`)
+      }
+    } catch {
+      if (current === lastSearch.current) setMessage('Nie udało się sprawdzić kodu. Spróbuj ponownie.')
+    }
+  }
+
+  const paste = (event: ClipboardEvent<HTMLDivElement>) => {
+    const pasted = event.clipboardData.getData('text')
+    if (!pasted.trim()) return
+    event.preventDefault()
+    setCode(pasted.trim())
+    void search(pasted)
+  }
+
+  return (
+    <div className="grid w-full gap-1" onPaste={paste}>
+      <SearchInput
+        inputRef={input}
+        value={code}
+        onChange={(value) => {
+          setCode(value)
+          setMessage(null)
+        }}
+        onEnter={() => void search(code)}
+        placeholder="Wklej lub zeskanuj EAN następnego artykułu"
+      />
+      {message && (
+        <p role="alert" className="px-1 text-xs text-destructive">
+          {message}
+        </p>
+      )}
+    </div>
   )
 }
 
