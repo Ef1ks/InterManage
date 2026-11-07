@@ -5,6 +5,7 @@ import {
   FileOutputIcon,
   HandshakeIcon,
   type LucideIcon,
+  PanelLeftIcon,
   PercentIcon,
   ScaleIcon,
   StoreIcon,
@@ -22,7 +23,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useCan } from '@/features/auth/api'
+import { useCan, useCurrentUser } from '@/features/auth/api'
 import { countFormat } from '@/features/documents/format'
 import { useCadencier, usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
 import {
@@ -39,6 +40,7 @@ import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCatego
 import { PriceCheckSettingsForm } from '@/features/store-settings/PriceCheckSettingsForm'
 import { ProtoSettingsForm } from '@/features/store-settings/ProtoSettingsForm'
 import { RegionBudgets } from '@/features/store-settings/RegionBudgets'
+import { hasCustomSidebarOrder, SidebarOrderEditor } from '@/features/store-settings/SidebarOrderEditor'
 import { SupplierSalePrices } from '@/features/store-settings/SupplierSalePrices'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
@@ -225,6 +227,26 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        <Route
+          path="menu-boczne"
+          element={
+            <section aria-labelledby="sidebar-heading" className="grid gap-4">
+              <BackToSettings />
+              <div>
+                <h2 id="sidebar-heading" className="text-lg font-semibold tracking-tight">
+                  Menu boczne
+                </h2>
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  Przeciągnij kategorie w kolejności, w jakiej mają stać w menu. Kolejność obowiązuje wszystkich
+                  w tym sklepie; każdy widzi tylko kategorie, do których ma dostęp.
+                </p>
+              </div>
+              <div className="max-w-md">
+                <SidebarOrderEditor key={store.id} storeId={store.id} />
+              </div>
+            </section>
+          }
+        />
         <Route path="*" element={<Navigate to={paths.overview} replace />} />
       </Routes>
     </>
@@ -261,6 +283,7 @@ function SettingsGrid({
   canEditProto: boolean
   canEditDataEntry: boolean
 }) {
+  const me = useCurrentUser()
   const budgets = useRegionBudgets(storeId, canEditSales)
   const priceCheck = usePriceCheckSettings(storeId, canEditSales)
   const cadencier = useCadencier(storeId, canEditSales)
@@ -360,6 +383,13 @@ function SettingsGrid({
           status={proto.data ? `${proto.data.folderPath} · protokoły: ${visibleProtocols} z ${PROTOCOLS.length}` : ' '}
         />
       )}
+      <SettingsTile
+        to={paths.sidebar}
+        icon={PanelLeftIcon}
+        title="Menu boczne"
+        description="Kolejność kategorii w menu, wspólna dla całego sklepu."
+        status={hasCustomSidebarOrder(me.sidebarOrders[storeId]) ? 'Własna kolejność' : 'Kolejność domyślna'}
+      />
     </div>
   )
 }

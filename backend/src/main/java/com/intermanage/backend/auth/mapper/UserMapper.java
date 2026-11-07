@@ -2,6 +2,7 @@ package com.intermanage.backend.auth.mapper;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.mapstruct.Mapper;
@@ -20,7 +21,8 @@ public interface UserMapper {
     @Mapping(target = "owner", source = "user.role.owner")
     @Mapping(target = "permissions", expression = "java(user.getRole().effectivePermissions())")
     @Mapping(target = "stores", source = "stores")
-    MeResponse toMeResponse(AppUser user, List<StoreSummary> stores);
+    @Mapping(target = "sidebarOrders", source = "sidebarOrders")
+    MeResponse toMeResponse(AppUser user, List<StoreSummary> stores, Map<UUID, List<String>> sidebarOrders);
 
     @Mapping(target = "roleId", source = "role.id")
     @Mapping(target = "roleName", source = "role.name")

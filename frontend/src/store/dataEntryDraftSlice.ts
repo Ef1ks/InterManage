@@ -16,8 +16,8 @@ export type DraftCorrection = DataEntryCorrection & {
  * Faktura, z której pochodzą wiersze (do nazwy pliku i podpowiedzi dostawcy dla AI). Sumy netto i VAT z dokumentu
  * porównujemy z sumami tabeli; przy dopisaniu kolejnej faktury się sumują. Brak w starszych szkicach. Dokument
  * wczytany z pliku XML bez faktury z KSeF ma `id` null, a numer, NIP i datę z pliku (`fromXml` = nazwa pliku).
- * `supplier` to dostawca z listy sklepu wybrany zamiast sprzedawcy: idzie do pliku XML, a numer faktury jest wtedy
- * pusty; `sellerNip` zostaje NIP-em sprzedawcy z faktury (przypięcia kodów pozycji są u niego).
+ * `supplier` to dostawca z listy sklepu wybrany zamiast sprzedawcy: idzie do pliku XML, a `number` to wtedy numer wpisany
+ * ręcznie albo pusty; `sellerNip` zostaje NIP-em sprzedawcy z faktury (przypięcia kodów pozycji są u niego).
  */
 export type DraftInvoice = {
   id: string | null
@@ -40,10 +40,11 @@ export type DataEntryDraft = { invoice: DraftInvoice | null; rows: DataEntryRow[
 
 /**
  * Ostatni zapis pliku XML tabeli w sklepie: kiedy, nazwa pliku i `signature` (pozycje i nagłówek pliku jako JSON),
- * po którym widać zmiany po zapisie. Osobno od szkicu, żeby cofanie zmian (Ctrl+Z) nie gubiło informacji o zapisie;
- * znika po wczytaniu innego dokumentu albo wyczyszczeniu tabeli.
+ * po którym widać zmiany po zapisie. `document` to dostawca i numer dokumentu z chwili zapisu: po ich zmianie tabela jest
+ * innym dokumentem i zapis jej nie dotyczy (brak w starszych zapisach). Osobno od szkicu, żeby cofanie zmian (Ctrl+Z)
+ * nie gubiło informacji o zapisie; znika po wczytaniu innego dokumentu albo wyczyszczeniu tabeli.
  */
-export type SavedXml = { at: string; fileName: string; signature: string }
+export type SavedXml = { at: string; fileName: string; signature: string; document?: string }
 
 type DraftState = { drafts: Record<string, DataEntryDraft>; saved: Record<string, SavedXml> }
 

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useBakeryBons, useBakeryChecks, useCreateBakeryCheck } from '@/features/bakery-check/api'
 import { bakeryCheckPath } from '@/features/bakery-check/paths'
+import { WzArticlesButton } from '@/features/bakery-check/WzArticlesButton'
 import { useSuppliers } from '@/features/documents/api'
 import { formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { SearchPicker } from '@/features/meat/SearchPicker'
@@ -85,10 +86,15 @@ export function CheckStart({ storeId }: { storeId: string }) {
           <section>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Bony dostawcy</h2>
-              <Button variant="outline" onClick={() => start(null)} loading={create.isPending}>
-                <PlusIcon />
-                Weryfikacja bez bonu
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {supplier && (
+                  <WzArticlesButton storeId={storeId} supplierId={supplier.id} supplierName={supplier.name} />
+                )}
+                <Button variant="outline" onClick={() => start(null)} loading={create.isPending}>
+                  <PlusIcon />
+                  Weryfikacja bez bonu
+                </Button>
+              </div>
             </div>
             {bons.isPending ? (
               <div aria-hidden className="h-32 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />

@@ -88,7 +88,6 @@ public class BakeryCheckService {
     /** Bonów i faktur do wyboru szukamy tyle dni wstecz. */
     static final int LOOKBACK_DAYS = 120;
     private static final int LIST_SIZE = 50;
-    private static final int MIN_SUPPLIER_NAME = 3;
 
     private final BakeryCheckRepository checks;
     private final BakeryCheckDocumentRepository checkDocuments;
@@ -96,6 +95,7 @@ public class BakeryCheckService {
     private final BakeryWzRepository wzs;
     private final BakeryWzScanRepository scans;
     private final BakeryCatalogRepository catalog;
+    private final BakerySupplierArticleService supplierArticles;
     private final BakeryScanReader scanReader;
     private final BakeryMapper mapper;
     private final SupplierRepository suppliers;
@@ -112,8 +112,8 @@ public class BakeryCheckService {
 
     public BakeryCheckService(BakeryCheckRepository checks, BakeryCheckDocumentRepository checkDocuments,
             BakeryCheckInvoiceRepository checkInvoices, BakeryWzRepository wzs, BakeryWzScanRepository scans,
-            BakeryCatalogRepository catalog, BakeryScanReader scanReader, BakeryMapper mapper,
-            SupplierRepository suppliers, DocumentRepository documents, DeliveryCorrectionService corrections,
+            BakeryCatalogRepository catalog, BakerySupplierArticleService supplierArticles, BakeryScanReader scanReader,
+            BakeryMapper mapper, SupplierRepository suppliers, DocumentRepository documents, DeliveryCorrectionService corrections,
             DeliveryKsefCorrectionService ksefCorrections, DocumentKsefLinkService ksefLinks,
             KsefInvoiceService ksefInvoices, KsefInvoiceRepository invoices, KsefInvoiceReader invoiceReader,
             ProductRepository products, AppUserRepository users, PlatformTransactionManager transactionManager) {
@@ -123,6 +123,7 @@ public class BakeryCheckService {
         this.wzs = wzs;
         this.scans = scans;
         this.catalog = catalog;
+        this.supplierArticles = supplierArticles;
         this.scanReader = scanReader;
         this.mapper = mapper;
         this.suppliers = suppliers;
@@ -522,19 +523,14 @@ public class BakeryCheckService {
                 invoice.getNetAmount(), invoice.isCorrection(), pinned);
     }
 
-    /** Artykuły dostawcy z kartoteki i z przypiętych przyjęć (kartoteka bywa nieaktualna), po nazwie. */
+    /**
+     * Artykuły dostawcy z kartoteki bez odznaczonych i artykuły z przypiętych przyjęć, po nazwie. Przyjęcie ma
+     * pierwszeństwo przed odznaczeniem, bo pokazuje, że towar przyjechał (a kartoteka bywa nieaktualna).
+     */
     private List<BakeryArticle> articles(UUID storeId, BakeryCheck check) {
-        String supplierName = DataEntryLinkService.code(check.getSupplier().getName());
-        // products.supplier to nazwa ucięta do 30 znaków i czasem bez polskich liter.
-        List<String> names = catalog.findSupplierNames(storeId).stream()
-                .filter(name -> {
-                    String plain = DataEntryLinkService.code(name);
-                    return plain.length() >= MIN_SUPPLIER_NAME && supplierName.startsWith(plain);
-                }).toList();
         Map<UUID, Product> found = new HashMap<>();
-        if (!names.isEmpty()) {
-            catalog.findActiveOfSuppliers(storeId, names).forEach(product -> found.put(product.getId(), product));
-        }
+        supplierArticles.shownInCatalog(storeId, check.getSupplier())
+                .forEach(product -> found.put(product.getId(), product));
         List<Document> pinned = checks.findDocuments(List.of(check.getId())).stream()
                 .map(BakeryCheckDocument::getDocument).toList();
         if (!pinned.isEmpty()) {

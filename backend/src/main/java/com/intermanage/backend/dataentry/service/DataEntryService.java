@@ -70,6 +70,8 @@ import com.intermanage.backend.supplier.repository.SupplierRepository;
 public class DataEntryService {
 
     private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
+    /** Numer dokumentu bez numeru: program sklepu nie przyjmuje pliku z pustym NR_DOKUMENTU. */
+    private static final DateTimeFormatter AUTO_DOCUMENT_NUMBER = DateTimeFormatter.ofPattern("'WPR/'yyyyMMdd/HHmmss");
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     /** Ilość × cena może różnić się od wartości pozycji o zaokrąglenie; więcej to rabat albo cena sprzed korekty. */
     private static final BigDecimal VALUE_TOLERANCE = new BigDecimal("0.01");
@@ -511,9 +513,10 @@ public class DataEntryService {
      * Plik XML faktury dla programu sklepu ({@link InvoiceXml}), bez zapisu czegokolwiek. Nagłówek z faktury KSeF
      * wczytanej do tabeli (numer, data wystawienia, NIP sprzedawcy), a bez niej z dokumentu wczytanego z pliku XML
      * (bez daty: dzisiaj); dostawca to nazwa z listy dostawców sklepu po NIP-ie, bez niej nazwa sprzedawcy. Dostawca
-     * wybrany w tabeli ({@code supplierId}) zastępuje sprzedawcę: nazwa, NIP i kod z listy, numer z tabeli. EAN tylko
-     * z cyfr (8-14), inny kod (np. zastępczy z faktury) daje 13 zer. Nazwa pliku: numer sklepu, kod dostawcy (albo
-     * NIP), nazwa dostawcy, numer faktury.
+     * wybrany w tabeli ({@code supplierId}) zastępuje sprzedawcę: nazwa, NIP i kod z listy, numer z tabeli. Dokument
+     * bez numeru dostaje numer z czasu zapisu ({@link #AUTO_DOCUMENT_NUMBER}). EAN tylko z cyfr (8-14), inny kod (np.
+     * zastępczy z faktury) daje 13 zer. Nazwa pliku: numer sklepu, kod dostawcy (albo NIP), nazwa dostawcy, numer
+     * faktury, a bez numeru nazwa dostawcy i czas zapisu.
      */
     @Transactional(readOnly = true)
     XmlFile buildXml(UUID storeId, ExportRequest request) {
@@ -533,13 +536,15 @@ public class DataEntryService {
                 : invoice != null ? invoice.sellerName() : blankToNull(request.sellerName());
         LocalDate date = invoice != null && invoice.issueDate() != null ? invoice.issueDate()
                 : request.issueDate() != null ? request.issueDate() : LocalDate.now(WARSAW);
+        LocalDateTime now = LocalDateTime.now(WARSAW);
+        String documentNumber = number != null ? number : now.format(AUTO_DOCUMENT_NUMBER);
 
         List<InvoiceXml.Line> lines = request.rows().stream()
                 .map(row -> new InvoiceXml.Line(row.name(), xmlEan(row.ean()), row.unitNet(), row.vatPercent(),
                         row.quantity()))
                 .toList();
         byte[] content = InvoiceXml.write(
-                new InvoiceXml.Header(number, date, supplierName, store.getNumber(), nip), lines);
+                new InvoiceXml.Header(documentNumber, date, supplierName, store.getNumber(), nip), lines);
 
         String supplierPart = supplier != null && supplier.getCode() != null ? supplier.getCode() : nip;
         String supplierLabel = ProductFile.supplierPart(supplierName);
@@ -547,10 +552,10 @@ public class DataEntryService {
                 ? String.join("_", store.getNumber(), supplierPart != null ? supplierPart : "", supplierLabel,
                         number.strip())
                 : store.getNumber() + (supplierLabel.isEmpty() ? "" : "_" + supplierLabel) + "_wprowadzanie_"
-                        + LocalDateTime.now(WARSAW).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+                        + now.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         fileName = fileName.replaceAll("[\\\\/:*?\"<>|()\\p{Cntrl}\\s]+", "_").replaceAll("_+", "_") + ".xml";
-        return new XmlFile(fileName, content, invoice != null ? invoice.id() : null, number, date, supplierName, nip,
-                lines.size(), InvoiceXml.netValue(lines));
+        return new XmlFile(fileName, content, invoice != null ? invoice.id() : null, documentNumber, date,
+                supplierName, nip, lines.size(), InvoiceXml.netValue(lines));
     }
 
     /**

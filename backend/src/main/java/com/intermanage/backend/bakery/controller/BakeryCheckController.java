@@ -30,13 +30,16 @@ import com.intermanage.backend.bakery.dto.BakeryCheckRequest;
 import com.intermanage.backend.bakery.dto.BakeryCheckResponse;
 import com.intermanage.backend.bakery.dto.BakeryCheckSummary;
 import com.intermanage.backend.bakery.dto.BakeryComparison;
+import com.intermanage.backend.bakery.dto.BakeryHiddenArticlesRequest;
 import com.intermanage.backend.bakery.dto.BakeryInvoiceCandidate;
 import com.intermanage.backend.bakery.dto.BakeryLinkRequest;
 import com.intermanage.backend.bakery.dto.BakeryScanReading;
+import com.intermanage.backend.bakery.dto.BakerySupplierArticles;
 import com.intermanage.backend.bakery.dto.BakeryWzRequest;
 import com.intermanage.backend.bakery.dto.BakeryWzResponse;
 import com.intermanage.backend.bakery.service.BakeryCheckService;
 import com.intermanage.backend.bakery.service.BakeryComparisonService;
+import com.intermanage.backend.bakery.service.BakerySupplierArticleService;
 import com.intermanage.backend.document.service.DocumentService;
 
 import jakarta.validation.Valid;
@@ -54,16 +57,34 @@ public class BakeryCheckController {
 
     private final BakeryCheckService service;
     private final BakeryComparisonService comparison;
+    private final BakerySupplierArticleService supplierArticles;
 
-    public BakeryCheckController(BakeryCheckService service, BakeryComparisonService comparison) {
+    public BakeryCheckController(BakeryCheckService service, BakeryComparisonService comparison,
+            BakerySupplierArticleService supplierArticles) {
         this.service = service;
         this.comparison = comparison;
+        this.supplierArticles = supplierArticles;
     }
 
     @GetMapping("/deliveries")
     @PreAuthorize(ACCESS)
     public List<BakeryBon> deliveries(@PathVariable UUID storeId, @RequestParam UUID supplierId) {
         return service.deliveries(storeId, supplierId);
+    }
+
+    /** Artykuły dostawcy z zaznaczeniem, które są domyślnie na WZ. */
+    @GetMapping("/suppliers/{supplierId}/articles")
+    @PreAuthorize(ACCESS)
+    public BakerySupplierArticles supplierArticles(@PathVariable UUID storeId, @PathVariable UUID supplierId) {
+        return supplierArticles.get(storeId, supplierId);
+    }
+
+    @PutMapping("/suppliers/{supplierId}/articles")
+    @PreAuthorize(ACCESS)
+    public BakerySupplierArticles updateSupplierArticles(@PathVariable UUID storeId, @PathVariable UUID supplierId,
+            @Valid @RequestBody BakeryHiddenArticlesRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return supplierArticles.update(storeId, supplierId, request.hiddenProductIds(), principal.getId());
     }
 
     @GetMapping("/articles/{itm8}")

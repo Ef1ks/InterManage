@@ -564,6 +564,8 @@ class DataEntryIntegrationTests {
                 String.class, chipsId)).isEqualTo("CHIPSY PAPRYKA 150G");
     }
 
+    private static final String AUTO_NUMBER = "(?s).*<NR_DOKUMENTU>WPR/\\d{8}/\\d{6}</NR_DOKUMENTU>.*";
+
     @Test
     void invoiceXmlFile() throws Exception {
         String number = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class, storeId);
@@ -626,7 +628,8 @@ class DataEntryIntegrationTests {
                 </DOKUMENT>
                 """.formatted(number, SELLER_NIP, CHIPS_EAN).replace("\n", "\r\n"));
 
-        // Inny dostawca niż sprzedawca z faktury: nazwa i NIP z listy dostawców, numer faktury znika, data zostaje.
+        // Inny dostawca niż sprzedawca z faktury: nazwa i NIP z listy dostawców, numer faktury zastępuje numer z czasu
+        // zapisu (program sklepu nie przyjmuje pustego), data zostaje.
         String otherSupplier = jdbc.queryForObject("""
                 insert into suppliers (store_id, code, keyword, name, nip)
                 values (?::uuid, '771', 'HURT', 'HURTOWNIA SP. Z O.O.', '5260250995') returning id::text""",
@@ -638,12 +641,12 @@ class DataEntryIntegrationTests {
                 .andExpect(header().string("Content-Disposition",
                         matchesPattern(".*filename=\"" + number
                                 + "_HURTOWNIA_SP\\._Z_O\\.O\\._wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
-                .andExpect(content().string(containsString("<NR_DOKUMENTU />")))
+                .andExpect(content().string(matchesPattern(AUTO_NUMBER)))
                 .andExpect(content().string(containsString("<DATA_DOKUMENTU>2026.10.30</DATA_DOKUMENTU>")))
                 .andExpect(content().string(containsString("<KOD_DOSTAWCY>HURTOWNIA SP. Z O.O.</KOD_DOSTAWCY>")))
                 .andExpect(content().string(containsString("<NIP_DOSTAWCY>5260250995</NIP_DOSTAWCY>")));
 
-        // Tabela bez faktury: bez numeru i dostawcy, nazwa pliku z datą.
+        // Tabela bez faktury: numer z czasu zapisu, bez dostawcy, nazwa pliku z datą.
         mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rows\":[{\"ean\":\"%s\",\"quantity\":1,\"unitNet\":2,\"name\":\"CHIPSY\",\"known\":false}]}"
@@ -651,7 +654,7 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         matchesPattern(".*filename=\"" + number + "_wprowadzanie_\\d{8}_\\d{6}\\.xml\".*")))
-                .andExpect(content().string(containsString("<NR_DOKUMENTU />")));
+                .andExpect(content().string(matchesPattern(AUTO_NUMBER)));
 
         // Do historii trafia tylko plik, którego zapis na dysku przeglądarka potwierdziła; niepotwierdzony nie istnieje.
         mvc.perform(get(url("/xml-history")).cookie(owner))

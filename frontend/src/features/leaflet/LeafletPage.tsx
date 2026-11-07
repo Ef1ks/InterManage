@@ -1,5 +1,6 @@
 import {
   ChevronDownIcon,
+  EraserIcon,
   FileInputIcon,
   FileOutputIcon,
   HashIcon,
@@ -119,10 +120,32 @@ function searchFilter(name: string) {
     .join(' ')
 }
 
+const clearedKey = (storeId: string) => `intermanage.leafletCleared.${storeId}`
+
+/** Najnowsza gazetka w chwili wyczyszczenia panelu: dopóki nie przyjdzie nowsza, panel zostaje pusty. */
+function readClearedLeaflet(storeId: string) {
+  try {
+    return localStorage.getItem(clearedKey(storeId))
+  } catch {
+    return null
+  }
+}
+
+function persistClearedLeaflet(storeId: string, id: string | null) {
+  try {
+    if (id === null) localStorage.removeItem(clearedKey(storeId))
+    else localStorage.setItem(clearedKey(storeId), id)
+  } catch {
+    // Bez localStorage najnowsza gazetka wróci na panel po odświeżeniu strony.
+  }
+}
+
 function StoreLeaflet({ store }: { store: StoreSummary }) {
   const [params, setParams] = useSearchParams()
   const list = useLeaflets(store.id)
-  const leafletId = params.get('gazetka') ?? list.data?.[0]?.id ?? null
+  const [clearedId, setClearedId] = useState(() => readClearedLeaflet(store.id))
+  const newestId = list.data?.[0]?.id ?? null
+  const leafletId = params.get('gazetka') ?? (newestId === clearedId ? null : newestId)
   const leaflet = useLeaflet(store.id, leafletId)
   const upload = useUploadLeaflet(store.id)
   const link = useLeafletLink(store.id, leafletId)
@@ -148,6 +171,35 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
       },
       { replace: true },
     )
+
+  const rememberCleared = (id: string | null) => {
+    setClearedId(id)
+    persistClearedLeaflet(store.id, id)
+  }
+
+  const resetFilters = () => {
+    setFilters({})
+    setWithoutProduct(false)
+  }
+
+  const openLeaflet = (id: string) => {
+    resetFilters()
+    rememberCleared(null)
+    setParam('gazetka', id)
+  }
+
+  /** Opróżnia tylko panel: gazetka zostaje wgrana, w raportach i w „Wgrane wcześniej”. */
+  const clearPanel = () => {
+    const current = leaflet.data
+    if (!current) return
+    resetFilters()
+    rememberCleared(newestId)
+    setParam('gazetka', null)
+    toast(`Wyczyszczono panel z gazetki ${current.week}/${current.year}`, {
+      description: 'Gazetka zostaje w „Wgrane wcześniej” i w raportach.',
+      action: { label: 'Przywróć', onClick: () => openLeaflet(current.id) },
+    })
+  }
 
   const lines = useMemo(() => leaflet.data?.lines ?? [], [leaflet.data])
   const processLines = useMemo(() => lines.filter(toProcess), [lines])
@@ -201,9 +253,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
         toast.success(`Wgrano gazetkę ${loaded.week}/${loaded.year}`, {
           description: `${loaded.lines.length} pozycji, do opracowania: ${loaded.lines.filter(toProcess).length}`,
         })
-        setFilters({})
-        setWithoutProduct(false)
-        setParam('gazetka', loaded.id)
+        openLeaflet(loaded.id)
       },
       onError: (error) => {
         const rowErrors =
@@ -312,14 +362,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-80">
                 {(list.data ?? []).map((item) => (
-                  <DropdownMenuItem
-                    key={item.id}
-                    onClick={() => {
-                      setFilters({})
-                      setWithoutProduct(false)
-                      setParam('gazetka', item.id)
-                    }}
-                  >
+                  <DropdownMenuItem key={item.id} onClick={() => openLeaflet(item.id)}>
                     <span className="flex min-w-0 flex-col">
                       <span className={cn('font-medium', item.id === leafletId && 'text-blue-700 dark:text-blue-300')}>
                         Gazetka {item.week}/{item.year}
@@ -357,6 +400,17 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
               <HashIcon />
               Kody MEA{data && data.pendingMeaCodes.length > 0 && ` (${data.pendingMeaCodes.length})`}
             </Button>
+            {data && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearPanel}
+                title="Opróżnia panel. Gazetka zostaje w „Wgrane wcześniej” i w raportach."
+              >
+                <EraserIcon />
+                Wyczyść
+              </Button>
+            )}
           </div>
           {data && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Widok tabeli">
@@ -389,14 +443,7 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
                 Bez artykułu ({missing})
               </Button>
               {filtersActive && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => {
-                    setFilters({})
-                    setWithoutProduct(false)
-                  }}
-                >
+                <Button variant="ghost" size="xs" onClick={resetFilters}>
                   Wyczyść filtry
                 </Button>
               )}
@@ -421,9 +468,10 @@ function StoreLeaflet({ store }: { store: StoreSummary }) {
 
       {leafletId === null && !list.isPending ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center">
-          <p className="text-base font-medium">Brak wgranej gazetki</p>
+          <p className="text-base font-medium">{newestId ? 'Panel jest pusty' : 'Brak wgranej gazetki'}</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            Wczytaj plik gazetki z centrali (UTRZYMYWANIE CEN Gazetka nr … + ceny.xlsx).
+            Wczytaj plik gazetki z centrali (UTRZYMYWANIE CEN Gazetka nr … + ceny.xlsx)
+            {newestId ? ' albo wybierz ją z „Wgrane wcześniej”.' : '.'}
           </p>
           <Button className="mt-2" loading={upload.isPending} onClick={() => fileInput.current?.click()}>
             <FileInputIcon />

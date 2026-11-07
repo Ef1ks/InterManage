@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 
-import { Form, FormActions, FormNote } from '@/components/form'
+import { Form, FormActions, FormNote, TextField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
@@ -16,12 +16,12 @@ type Props = {
   invoice: DraftInvoice | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onChange: (supplier: Supplier) => void
+  onChange: (supplier: Supplier, number: string | null) => void
 }
 
 /**
- * Dostawca, dla którego jest dokument: wybór z listy dostawców sklepu zamiast sprzedawcy z faktury. Zmiana usuwa
- * numer faktury z nagłówka pliku XML.
+ * Dostawca i numer dokumentu: wybór z listy dostawców sklepu zamiast sprzedawcy z faktury. Numer faktury znika z nagłówka
+ * pliku XML, a numer wpisuje się tutaj; pusty nadaje serwer z czasu zapisu.
  */
 export function SupplierChangeDialog({ open, onOpenChange, ...props }: Props) {
   return (
@@ -45,10 +45,15 @@ function SupplierChangeBody({
   const canAdd = canAddSupplier || canAddInDocuments
   const [adding, setAdding] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
+  // Numer faktury należy do sprzedawcy, więc w polu jest tylko numer wpisany przy wybranym dostawcy.
+  const ownNumber = invoice?.supplier ? (invoice.number ?? '') : ''
+  const [number, setNumber] = useState(ownNumber)
 
   const current = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
   const selectedId = picked ?? current?.id ?? null
   const selected = suppliers?.find((supplier) => supplier.id === selectedId) ?? null
+  const supplierChanged = selected?.id !== current?.id
+  const typedNumber = number.trim()
 
   if (adding != null) {
     return (
@@ -68,13 +73,14 @@ function SupplierChangeBody({
     <Form
       onSubmit={(event) => {
         event.preventDefault()
-        if (selected) onChange(selected)
+        if (selected) onChange(selected, typedNumber || null)
       }}
     >
       <DialogHeader>
-        <DialogTitle className="text-lg">Zmień dostawcę dokumentu</DialogTitle>
+        <DialogTitle className="text-lg">Dostawca i numer dokumentu</DialogTitle>
         <DialogDescription>
-          Dostawca trafia do nagłówka pliku XML (nazwa, NIP) i do nazwy pliku (kod dostawcy).
+          Dostawca trafia do nagłówka pliku XML (nazwa, NIP) i do nazwy pliku (kod dostawcy), a numer do nagłówka i
+          nazwy pliku.
         </DialogDescription>
       </DialogHeader>
 
@@ -86,10 +92,19 @@ function SupplierChangeBody({
         onAdd={canAdd ? setAdding : undefined}
       />
 
-      {invoice?.number && (
+      <TextField
+        label="Numer dokumentu"
+        value={number}
+        maxLength={100}
+        autoComplete="off"
+        onChange={(event) => setNumber(event.target.value)}
+        hint="Puste pole: numer z czasu zapisu (WPR/…)."
+      />
+
+      {invoice?.number && !invoice.supplier && (
         <FormNote>
-          Zmiana dostawcy usuwa numer faktury {invoice.number} z nagłówka. Ctrl+Z albo „Cofnij” przywraca poprzedniego
-          dostawcę razem z numerem.
+          Wybrany dostawca zastępuje numer faktury {invoice.number} numerem z tego pola. Ctrl+Z albo „Cofnij” przywraca
+          poprzedniego dostawcę razem z numerem.
         </FormNote>
       )}
 
@@ -97,8 +112,8 @@ function SupplierChangeBody({
         <Button type="button" variant="outline" size="lg" onClick={onCancel}>
           Anuluj
         </Button>
-        <Button type="submit" size="lg" disabled={!selected || selected.id === current?.id}>
-          Zmień dostawcę
+        <Button type="submit" size="lg" disabled={!selected || (!supplierChanged && typedNumber === ownNumber)}>
+          {supplierChanged ? 'Zmień dostawcę' : 'Zapisz numer'}
         </Button>
       </FormActions>
     </Form>

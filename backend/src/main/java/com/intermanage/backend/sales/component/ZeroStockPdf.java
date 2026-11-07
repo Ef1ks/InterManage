@@ -33,9 +33,9 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 
 /**
- * Wydruk raportu zerówek: A4 pionowo, artykuły po rodzinach, z EAN-em i ITM8 tekstem i kodami kreskowymi do skanowania
- * przy półce. Kolumna ITM8 jest bez zer wiodących, a kod kreskowy ma pełne 13 cyfr: tabela wprowadzania danych krótki
- * kod od 21-29 bierze za kod z etykiety wagi. Wiersze nie dzielą się między strony.
+ * Wydruk raportu zerówek: A4 pionowo, artykuły po rodzinach, ITM8 po lewej i EAN po prawej: kod kreskowy do skanowania
+ * przy półce, a liczba pod nim. Liczba pod ITM8 jest bez zer wiodących, a kod kreskowy ma pełne 13 cyfr: tabela
+ * wprowadzania danych krótki kod od 21-29 bierze za kod z etykiety wagi. Wiersze nie dzielą się między strony.
  */
 @Component
 public class ZeroStockPdf {
@@ -50,10 +50,10 @@ public class ZeroStockPdf {
 
     private static final float MARGIN = 24;
     private static final float MARGIN_BOTTOM = 40;
-    private static final String[] HEADERS = {"ITM8", "EAN", "Nazwa", "Marka", "Stan", "Kod EAN", "Kod ITM8"};
-    private static final float[] WIDTHS = {40, 78, 126, 54, 32, 110, 110};
+    private static final String[] HEADERS = {"ITM8", "Nazwa", "Marka", "Stan", "EAN"};
+    private static final float[] WIDTHS = {112, 201, 90, 32, 112};
     private static final float BARCODE_MAX_WIDTH = 102;
-    private static final float BARCODE_MAX_HEIGHT = 34;
+    private static final float BARCODE_MAX_HEIGHT = 26;
 
     private final BaseFont regular;
     private final BaseFont bold;
@@ -108,6 +108,9 @@ public class ZeroStockPdf {
         for (String title : HEADERS) {
             PdfPCell cell = cell(new Phrase(title, font(bold, 7, MUTED)));
             cell.setBackgroundColor(BAND);
+            if (title.equals(HEADERS[0]) || title.equals(HEADERS[HEADERS.length - 1])) {
+                cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+            }
             table.addCell(cell);
         }
         for (Group group : report.groups()) {
@@ -124,27 +127,31 @@ public class ZeroStockPdf {
     }
 
     private void addArticle(PdfPTable table, Item item, PdfContentByte canvas) {
-        table.addCell(text(withoutLeadingZeros(item.itm8())));
-        table.addCell(text(item.ean()));
+        table.addCell(barcode(item.itm8(), withoutLeadingZeros(item.itm8()), canvas));
         table.addCell(text(item.name()));
         table.addCell(text(item.brand()));
         table.addCell(text(stock(item.stock())));
-        table.addCell(barcode(item.ean(), canvas));
-        table.addCell(barcode(item.itm8(), canvas));
+        table.addCell(barcode(item.ean(), item.ean(), canvas));
     }
 
     private PdfPCell text(String value) {
         return cell(new Phrase(value != null ? value : "", font(regular, 7.5f, INK)));
     }
 
-    private PdfPCell barcode(String code, PdfContentByte canvas) {
+    /** Kod kreskowy z {@code label} pod spodem. */
+    private PdfPCell barcode(String code, String label, PdfContentByte canvas) {
         if (code == null || code.isBlank()) {
             return text(null);
         }
-        Image image = PdfBarcodes.image(canvas, code, BARCODE_MAX_WIDTH, BARCODE_MAX_HEIGHT);
-        PdfPCell cell = new PdfPCell(image, false);
+        Image image = PdfBarcodes.bars(canvas, code, BARCODE_MAX_WIDTH, BARCODE_MAX_HEIGHT);
+        image.setAlignment(Image.MIDDLE);
+        Paragraph number = new Paragraph(label, font(regular, 7.5f, INK));
+        number.setAlignment(Element.ALIGN_CENTER);
+        number.setLeading(9);
+        PdfPCell cell = new PdfPCell();
         style(cell);
-        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.addElement(image);
+        cell.addElement(number);
         return cell;
     }
 

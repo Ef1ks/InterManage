@@ -177,6 +177,7 @@ import {
   withTrailingEmptyRow,
 } from './rows'
 import { useUndoHistory, useUndoShortcuts } from './undo-history'
+import { MercalysCodesDialog } from './MercalysCodesDialog'
 import { XmlOpenDialog, type XmlSource } from './XmlOpenDialog'
 import { XmlSaveDialog } from './XmlSaveDialog'
 import { useXmlSave } from './xml-save'
@@ -329,6 +330,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [weightIn24, setWeightIn24] = useState(false)
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null)
   const [correctionMacroOpen, setCorrectionMacroOpen] = useState(false)
+  const [mercalysCodesOpen, setMercalysCodesOpen] = useState(false)
   const [splitTarget, setSplitTarget] = useState<DataEntryRow | null>(null)
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
@@ -348,7 +350,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     open: false,
     missing: [],
   })
-  const saved = useAppSelector((state) => state.dataEntryDraft.saved[store.id]) ?? null
+  const lastSaved = useAppSelector((state) => state.dataEntryDraft.saved[store.id]) ?? null
   const forgetSaved = useCallback(
     () => dispatch(setDataEntrySaved({ storeId: store.id, saved: null })),
     [dispatch, store.id],
@@ -967,25 +969,30 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // ---------- dostawca dokumentu
 
-  // Dokument dla innego dostawcy niż sprzedawca z faktury: numer faktury znika z nagłówka pliku.
-  const changeSupplier = (supplier: Supplier) => {
+  // Dokument dla innego dostawcy niż sprzedawca z faktury: numer faktury zastępuje numer wpisany w oknie, a pusty
+  // numer nadaje serwer z czasu zapisu. Sama zmiana numeru zostawia ceny w tabeli.
+  const changeSupplier = (supplier: Supplier, number: string | null) => {
     setSupplierOpen(false)
     const before = currentDraft()
-    const fixedPrice = supplierPriceFor(supplier.id)
+    const supplierChanged = supplier.id !== documentSupplier(suppliers, before.invoice)?.id
+    const fixedPrice = supplierChanged ? supplierPriceFor(supplier.id) : null
     setDraft({
       ...before,
       invoice: {
         ...(before.invoice ?? { id: null, sellerName: null, sellerNip: null }),
-        number: null,
+        number,
         supplier: { id: supplier.id, name: supplier.name, nip: supplier.nip },
       },
-      rows: withSupplierPrice(before.rows, fixedPrice),
+      rows: supplierChanged ? withSupplierPrice(before.rows, fixedPrice) : before.rows,
     })
     const notes = [
-      before.invoice?.number && `Usunięto numer faktury ${before.invoice.number}`,
+      !before.invoice?.supplier &&
+        before.invoice?.number &&
+        before.invoice.number !== number &&
+        `Usunięto numer faktury ${before.invoice.number}`,
       fixedPrice !== null && `Stała cena dostawcy ${formatMoney(fixedPrice)} wpisana w artykułach`,
     ].filter(Boolean)
-    toast(`Dostawca dokumentu: ${supplier.name}`, {
+    toast(supplierChanged ? `Dostawca dokumentu: ${supplier.name}` : `Numer dokumentu: ${number ?? 'z czasu zapisu'}`, {
       description: notes.length ? `${notes.join('. ')}.` : undefined,
       action: { label: 'Cofnij', onClick: () => setDraft(before) },
     })
@@ -1049,6 +1056,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const payload = buildPayload()
   // Po tym widać, czy tabela zmieniła się od ostatniego zapisu pliku XML.
   const signature = JSON.stringify(payload)
+  // Inny dostawca albo numer to inny dokument: zapis poprzedniego go nie dotyczy, a Ctrl+Z przywraca znacznik.
+  const documentKey = JSON.stringify([invoice?.supplier?.id ?? null, invoice?.number ?? null])
+  const saved = lastSaved && (lastSaved.document ?? documentKey) === documentKey ? lastSaved : null
   const savedState = saved ? (saved.signature === signature ? 'saved' : 'changed') : null
 
   // Nowe i zmienione artykuły (bez samej zmiany ceny) idą razem z plikiem XML do pliku CADBEZP dla programu sklepu.
@@ -1222,7 +1232,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     const fileName = await xmlSave.save(payload, productFilePayload, priceControlPayload, newArticles)
     if (!fileName) return
     setCheckOpen(false)
-    dispatch(setDataEntrySaved({ storeId: store.id, saved: { at: nowIso(), fileName, signature } }))
+    dispatch(
+      setDataEntrySaved({ storeId: store.id, saved: { at: nowIso(), fileName, signature, document: documentKey } }),
+    )
   }
   // „Zmień artykuły”: plik CADBEZP z artykułów wybranych w oknie, także niezmienionych.
   const saveChosenArticles = async (chosen: DataEntryRow[]) => {
@@ -1259,7 +1271,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         title="Wprowadzanie danych"
         description={
           invoice ? (
-            <DocumentHeading storeId={store.id} invoice={invoice} canSeeKsef={canLoadInvoices} />
+            <DocumentHeading
+              storeId={store.id}
+              invoice={invoice}
+              canSeeKsef={canLoadInvoices}
+              onEditNumber={() => setSupplierOpen(true)}
+            />
           ) : (
             storeLabel(store)
           )
@@ -1422,6 +1439,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                     : 'Do schowka, F9: EAN, Enter, ilość, Enter dla każdego artykułu'
                 }
                 onClick={() => void copyTransferMacro()}
+              />
+              <ActionItem
+                icon={<ClipboardCopyIcon />}
+                label="Tworzenie kodu w Mercalys"
+                hint="Bony z zapisanych plików XML, do schowka"
+                onClick={() => setMercalysCodesOpen(true)}
               />
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -1983,6 +2006,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onConfirm={(data) => confirmDocument({ data })}
       />
 
+      <MercalysCodesDialog storeId={store.id} open={mercalysCodesOpen} onOpenChange={setMercalysCodesOpen} />
+
       <XmlOpenDialog
         storeId={store.id}
         source={xmlSource}
@@ -2107,21 +2132,25 @@ type PendingDocument = { data: DataEntryDocument; fromXml?: string }
 /**
  * Wczytany dokument pod tytułem: duży numer faktury (kopiowanie i „Wyszukaj”, który otwiera przyjęcia PZ albo przy
  * korekcie korekty od dostawcy z tym numerem w wyszukiwarce), dostawca i plik. Faktura, która ma już dokument
- * w systemie sklepu, jest „zakończona”, żeby nie wprowadzić jej drugi raz. Same elementy liniowe, bo opis nagłówka
- * jest akapitem.
+ * w systemie sklepu, jest „zakończona”, żeby nie wprowadzić jej drugi raz. Przy dostawcy wybranym ręcznie to już inny
+ * dokument niż faktura, więc bez sprawdzania KSeF, a numer da się wpisać. Same elementy liniowe, bo opis nagłówka jest
+ * akapitem.
  */
 function DocumentHeading({
   storeId,
   invoice,
   canSeeKsef,
+  onEditNumber,
 }: {
   storeId: string
   invoice: NonNullable<DataEntryDraft['invoice']>
   canSeeKsef: boolean
+  onEditNumber: () => void
 }) {
   const navigate = useNavigate()
   const canSeeDocuments = useCan('DOCUMENTS', 'VIEW')
-  const ksef = useLoadedKsefInvoice(storeId, canSeeKsef ? invoice.id : null, invoice.number)
+  const ownDocument = Boolean(invoice.supplier)
+  const ksef = useLoadedKsefInvoice(storeId, canSeeKsef && !ownDocument ? invoice.id : null, invoice.number)
   const documents = ksef.data?.deliveries ?? []
   const correction = ksef.data?.correction ?? false
   const seller = invoice.supplier ? `dla ${invoice.supplier.name}` : (invoice.sellerName ?? invoice.sellerNip)
@@ -2133,10 +2162,21 @@ function DocumentHeading({
       {number ? (
         <>
           <span className="text-muted-foreground">
-            {invoice.id ? (correction ? 'Korekta' : 'Faktura') : 'Dokument'}
+            {invoice.id && !ownDocument ? (correction ? 'Korekta' : 'Faktura') : 'Dokument'}
           </span>
           <span className="text-xl font-semibold tracking-tight text-foreground tabular-nums">{number}</span>
           <CopyButton value={number} label="Kopiuj numer faktury" />
+          {ownDocument && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Zmień numer dokumentu"
+              title="Zmień numer dokumentu"
+              onClick={onEditNumber}
+            >
+              <PencilIcon />
+            </Button>
+          )}
           {canSeeDocuments && (
             <Button
               variant="outline"
@@ -2152,7 +2192,15 @@ function DocumentHeading({
           )}
         </>
       ) : (
-        <span className="text-foreground">Dokument bez numeru</span>
+        <>
+          <span className="text-foreground">Dokument bez numeru</span>
+          {ownDocument && (
+            <Button variant="outline" size="xs" onClick={onEditNumber}>
+              <PencilIcon />
+              Wpisz numer
+            </Button>
+          )}
+        </>
       )}
       {documents.length > 0 && (
         <span

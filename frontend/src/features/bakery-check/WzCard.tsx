@@ -395,7 +395,7 @@ export function WzCard({
 
         {rows.length === 0 ? (
           <p className="mt-3 rounded-lg border px-3 py-6 text-center text-sm text-muted-foreground">
-            Kartoteka nie ma artykułów tego dostawcy. Dodaj je przyciskiem „Dodaj artykuł”.
+            Na liście nie ma artykułów. Zaznacz je w „Artykuły na WZ” albo dodaj przyciskiem „Dodaj artykuł”.
           </p>
         ) : visible.length === 0 ? (
           <p className="mt-3 px-3 py-6 text-center text-sm text-muted-foreground">Nic nie pasuje do wyszukiwania.</p>

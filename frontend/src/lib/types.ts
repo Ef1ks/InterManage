@@ -31,6 +31,8 @@ export type Me = {
   passwordChangeRequired: boolean
   /** Sklepy do wyboru w przełączniku: właściciel wszystkie aktywne, pracownik przypisane aktywne. */
   stores: StoreSummary[]
+  /** Kolejność kategorii menu bocznego sklepów, które ją zapisały (id sklepu → klucze grup). */
+  sidebarOrders: Record<string, string[]>
 }
 
 export type StoreSummary = {
@@ -2877,6 +2879,12 @@ export type BakeryArticle = {
   brand: string | null
 }
 
+/** Artykuły dostawcy; {@code hiddenProductIds}: odznaczone, domyślnie poza listą WZ. */
+export type BakerySupplierArticles = {
+  articles: BakeryArticle[]
+  hiddenProductIds: string[]
+}
+
 /** Przyjęcie PZ dostawcy; {@code checkId}: weryfikacja, w której już jest. */
 export type BakeryBon = {
   id: string
@@ -2998,4 +3006,85 @@ export type BakeryScanReading = {
   number: string | null
   deliveryDate: string | null
   lines: { name: string | null; quantity: number | null; note: string | null; productId: string | null }[]
+}
+
+export type StocktakeBucket = 'RECOUNT' | 'SYSTEM_STOCK' | 'PRODUCTION' | 'REST'
+
+export type StocktakeReason =
+  | 'SOLD_WHEN_ZERO'
+  | 'SOLD_MORE_THAN_COUNTED'
+  | 'SWAP_STRONG'
+  | 'SWAP_POSSIBLE'
+  | 'DIGITS_SWAPPED'
+  | 'WRONG_SCALE'
+  | 'NOT_COUNTED'
+  | 'LARGE_DIFFERENCE'
+
+export type StocktakeSummary = {
+  id: string
+  number: string
+  name: string
+  stocktakeDate: string
+  lineCount: number
+  netValue: number
+  lastImportAt: string | null
+}
+
+export type StocktakeLine = {
+  itm8: string
+  ean: string | null
+  name: string
+  brand: string | null
+  regionCode: string | null
+  regionName: string | null
+  realQuantity: number
+  theoreticalQuantity: number
+  differenceQuantity: number
+  value: number
+  firstValue: number
+  articleKind: string | null
+  blockType: string | null
+  soldAfter: number
+  deliveredAfter: number
+  bucket: StocktakeBucket
+  reasons: StocktakeReason[]
+}
+
+export type StocktakePair = {
+  plusItm8: string
+  minusItm8: string
+  strength: 'SWAP_STRONG' | 'SWAP_POSSIBLE'
+}
+
+export type StocktakeImport = {
+  id: string
+  stocktakeId: string
+  fileName: string
+  selection: string | null
+  wholeStore: boolean
+  reportGeneratedAt: string
+  lineCount: number
+  differenceValue: number
+  createdCount: number
+  updatedCount: number
+  resolvedCount: number
+  importedBy: string | null
+  importedAt: string
+}
+
+export type Stocktake = {
+  id: string
+  number: string
+  name: string
+  stocktakeDate: string
+  salesThrough: string | null
+  lineCount: number
+  resolvedCount: number
+  netValue: number
+  absoluteValue: number
+  firstAbsoluteValue: number
+  buckets: { bucket: StocktakeBucket; lineCount: number; absoluteValue: number }[]
+  lines: StocktakeLine[]
+  pairs: StocktakePair[]
+  imports: StocktakeImport[]
 }

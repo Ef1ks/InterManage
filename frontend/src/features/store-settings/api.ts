@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { meQueryKey } from '@/features/auth/api'
 import { api } from '@/lib/api'
 import type {
+  Me,
   NomenclatureMargin,
   NomenclatureMarginImport,
   PriceRoundingRule,
@@ -44,6 +46,21 @@ export function useStorePartnerActions(storeId: string) {
       onSuccess,
     }),
   }
+}
+
+/** Kolejność kategorii menu bocznego sklepu; pusta lista = domyślna. Menu czyta ją z zalogowanego użytkownika. */
+export function useSaveSidebarOrder(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (groups: string[]) =>
+      api<{ groups: string[] }>(`/stores/${storeId}/sidebar-order`, { method: 'PUT', json: { groups } }),
+    onSuccess: ({ groups }) =>
+      queryClient.setQueryData<Me | null>(meQueryKey, (me) =>
+        me ? { ...me, sidebarOrders: { ...me.sidebarOrders, [storeId]: groups } } : me,
+      ),
+    meta: { invalidates: false },
+    scope: { id: `sidebar-order:${storeId}` },
+  })
 }
 
 /** Marża wymagana na nomenklaturze: cała nomenklatura sklepu z marżą ustawioną i obowiązującą. */

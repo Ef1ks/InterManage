@@ -14,6 +14,8 @@ import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { LeafletLabelCheckPage } from '@/features/leaflet/LeafletLabelCheckPage'
+import { stocktakePath } from '@/features/stocktake/paths'
+import { StocktakePage } from '@/features/stocktake/StocktakePage'
 import { LeafletPage } from '@/features/leaflet/LeafletPage'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { PromoSetupPage } from '@/features/promo-setup/PromoSetupPage'
@@ -136,6 +138,14 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth anyCategory={['DATA_ENTRY', 'INVENTORY']}>
             <LeafletLabelCheckPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: `${stocktakePath}/*`,
+        element: (
+          <RequireAuth permission={{ category: 'INVENTORY' }}>
+            <StocktakePage />
           </RequireAuth>
         ),
       },

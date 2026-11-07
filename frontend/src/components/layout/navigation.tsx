@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import {
   BadgePercentIcon,
   ChefHatIcon,
+  ClipboardCheckIcon,
   CookingPotIcon,
   CroissantIcon,
   DatabaseBackupIcon,
@@ -26,7 +27,9 @@ import { promoSetupPath } from '@/features/promo-setup/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { salesPaths } from '@/features/sales/paths'
+import { stocktakePath } from '@/features/stocktake/paths'
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
+import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import type { Me, PermissionCategory, PermissionCategoryInfo } from '@/lib/types'
 
@@ -62,19 +65,26 @@ type GroupSpec = Omit<NavGroup, 'items'> & { items: ItemSpec[] }
 
 const canEditDocuments = (me: Me) => hasPermission(me, 'DOCUMENTS', 'EDIT')
 
-const DELIVERIES = 'Dokumenty i dostawy'
+const DELIVERIES = 'Dostawy'
 const PROMOTIONS = 'Promocje i gazetki'
 
 /** Kolejność grup i narzędzi w menu; kolejne narzędzie dopisujemy do pasującej grupy. */
 const GROUPS: GroupSpec[] = [
   {
+    key: 'documents',
+    path: TOOL_ROUTES.DOCUMENTS.path,
+    label: 'Dokumenty',
+    description: 'Dokumenty magazynowe z systemu sklepu.',
+    icon: TOOL_ROUTES.DOCUMENTS.icon,
+    items: [{ category: 'DOCUMENTS', badge: () => <IncomingTransfersBadge /> }],
+  },
+  {
     key: 'purchases',
     path: '/zakupy',
-    label: 'Zakupy i dokumenty',
-    description: 'Dokumenty z systemu sklepu, wprowadzanie towaru, dostawy z bazy, gazetki i promocje.',
+    label: 'Zakupy',
+    description: 'Wprowadzanie towaru, dostawy z bazy, gazetki i promocje.',
     icon: PackageIcon,
     items: [
-      { category: 'DOCUMENTS', section: DELIVERIES, badge: () => <IncomingTransfersBadge /> },
       { category: 'DATA_ENTRY', section: DELIVERIES },
       {
         key: 'base-delivery',
@@ -186,6 +196,14 @@ const GROUPS: GroupSpec[] = [
         icon: TagIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'INVENTORY'),
       },
+      {
+        key: 'stocktake',
+        path: stocktakePath,
+        label: 'Weryfikacja inwentury',
+        description: 'Co przeliczyć przed zamknięciem inwentury: pomyłki plus/minus, niepoliczony towar i literówki.',
+        icon: ClipboardCheckIcon,
+        visible: (me) => hasPermission(me, 'INVENTORY'),
+      },
     ],
   },
   {
@@ -255,6 +273,19 @@ const GROUPS: GroupSpec[] = [
   },
 ]
 
+/** Wszystkie kategorie menu do ustawienia kolejności, także te, których ta osoba nie widzi. */
+export type SidebarGroup = Pick<GroupSpec, 'key' | 'label' | 'icon'>
+export const SIDEBAR_GROUPS: SidebarGroup[] = GROUPS.map(({ key, label, icon }) => ({ key, label, icon }))
+
+/** Układa kategorie według zapisanej kolejności; kategorie spoza niej (np. nowe) idą na koniec w kolejności z `GROUPS`. */
+export function orderByKeys<T extends { key: string }>(groups: T[], order: string[] = []): T[] {
+  const place = (group: T) => {
+    const index = order.indexOf(group.key)
+    return index === -1 ? order.length : index
+  }
+  return [...groups].sort((a, b) => place(a) - place(b))
+}
+
 /** Ścieżki stron grup (bez grup, których ścieżka to od razu narzędzie, np. Sprzedaż). */
 export const NAV_GROUP_PATHS = GROUPS.filter((group) =>
   group.items.every((item) => !('category' in item) || TOOL_ROUTES[item.category].path !== group.path),
@@ -280,13 +311,16 @@ function resolveItem(spec: ItemSpec, me: Me, categories: PermissionCategoryInfo[
   return { ...item, badge: badge?.(me) }
 }
 
-/** Grupy z narzędziami dostępnymi dla użytkownika; puste grupy są pominięte. */
+/** Grupy z narzędziami dostępnymi dla użytkownika w kolejności sklepu; puste grupy są pominięte. */
 export function useNavGroups(me: Me): NavGroup[] {
   const { data: categories = [] } = usePermissionCategories()
-  return GROUPS.map((group) => ({
-    ...group,
-    items: group.items.map((spec) => resolveItem(spec, me, categories)).filter((item) => item !== null),
-  })).filter((group) => group.items.length > 0)
+  const store = useCurrentStore()
+  return orderByKeys(GROUPS, store ? me.sidebarOrders[store.id] : undefined)
+    .map((group) => ({
+      ...group,
+      items: group.items.map((spec) => resolveItem(spec, me, categories)).filter((item) => item !== null),
+    }))
+    .filter((group) => group.items.length > 0)
 }
 
 /** Grupa i narzędzie, w których jest ścieżka: najdłuższa pasująca ścieżka narzędzia (koszty garmażu leżą pod /sprzedaz). */

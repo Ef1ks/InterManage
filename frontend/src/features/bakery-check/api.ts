@@ -9,6 +9,7 @@ import type {
   BakeryComparison,
   BakeryInvoiceCandidate,
   BakeryScanReading,
+  BakerySupplierArticles,
   BakeryWz,
 } from '@/lib/types'
 
@@ -56,6 +57,24 @@ export function useInvoiceCandidates(storeId: string, id: string, query: string,
     queryFn: () =>
       api<BakeryInvoiceCandidate[]>(`${path(storeId)}/${id}/invoice-candidates?query=${encodeURIComponent(query)}`),
     enabled,
+  })
+}
+
+export function useBakerySupplierArticles(storeId: string, supplierId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...bakeryKey(storeId), 'supplier-articles', supplierId],
+    queryFn: () => api<BakerySupplierArticles>(`${path(storeId)}/suppliers/${supplierId}/articles`),
+    enabled,
+  })
+}
+
+export function useSaveHiddenArticles(storeId: string, supplierId: string) {
+  return useMutation({
+    mutationFn: (hiddenProductIds: string[]) =>
+      api<BakerySupplierArticles>(`${path(storeId)}/suppliers/${supplierId}/articles`, {
+        method: 'PUT',
+        json: { hiddenProductIds },
+      }),
   })
 }
 

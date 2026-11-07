@@ -645,6 +645,22 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<DeliveredArticle> findDeliveredArticles(UUID storeId, LocalDateTime since);
 
+    /** Dostarczona ilość artykułu. */
+    interface DeliveredQuantity {
+        String getItm8();
+
+        BigDecimal getQuantity();
+    }
+
+    /** Ile przyjechało każdego artykułu w okresie (przyjęcia PZ, także pod lokalnym ITM8 dostawcy, po EAN-ie). */
+    @Query(value = DELIVERED_LINES + """
+            select itm8, sum(quantity) as quantity
+            from delivered
+            where itm8 is not null and document_date < :until
+            group by itm8
+            """, nativeQuery = true)
+    List<DeliveredQuantity> sumDeliveredBetween(UUID storeId, LocalDateTime since, LocalDateTime until);
+
     /** Ostatni dostawca każdego z podanych artykułów z przyjęć PZ (artykułów bez przyjęcia nie ma w wyniku). */
     @Query(value = """
             select distinct on (l.itm8) l.itm8 as itm8, l.supplier_code as supplier_code,

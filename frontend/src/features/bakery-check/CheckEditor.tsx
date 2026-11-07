@@ -23,6 +23,7 @@ import {
 } from '@/features/bakery-check/api'
 import { ComparisonPanel } from '@/features/bakery-check/ComparisonPanel'
 import { bakeryPath } from '@/features/bakery-check/paths'
+import { WzArticlesButton } from '@/features/bakery-check/WzArticlesButton'
 import { WzCard } from '@/features/bakery-check/WzCard'
 import { formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
@@ -70,7 +71,7 @@ export function CheckEditor({ storeId }: { storeId: string }) {
   const firstEmpty = check.wz.find((wz) => wz.lines.length === 0)?.id
 
   return (
-    <div data-wide-page>
+    <div>
       <BackLink to={`${bakeryPath}?dostawca=${check.supplierId}`}>Weryfikacja piekarni</BackLink>
       <PageHeader
         title={check.supplierName}
@@ -89,6 +90,7 @@ export function CheckEditor({ storeId }: { storeId: string }) {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Dokumenty WZ ({check.wz.length})</h2>
           <div className="flex flex-wrap gap-2">
+            <WzArticlesButton storeId={storeId} supplierId={check.supplierId} supplierName={check.supplierName} />
             {hasPinnedInvoice && (
               <Button
                 variant="outline"

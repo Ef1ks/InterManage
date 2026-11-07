@@ -19,5 +19,7 @@ public record MeResponse(
         /** Frontend wpuszcza tylko na ekran ustawienia hasła, backend blokuje resztę API. */
         boolean passwordChangeRequired,
         /** Sklepy do wyboru w przełączniku: właściciel wszystkie aktywne, pracownik przypisane aktywne. */
-        List<StoreSummary> stores) {
+        List<StoreSummary> stores,
+        /** Kolejność kategorii menu bocznego sklepów, które ją zapisały (klucze grup z frontu). */
+        Map<UUID, List<String>> sidebarOrders) {
 }

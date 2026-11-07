@@ -1,5 +1,6 @@
 package com.intermanage.backend.auth.service;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -13,7 +14,9 @@ import com.intermanage.backend.auth.mapper.UserMapper;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.store.dto.StoreSummary;
 import com.intermanage.backend.store.service.StoreService;
+import com.intermanage.backend.store.service.StoreSidebarService;
 
 @Service
 public class AuthService {
@@ -26,14 +29,16 @@ public class AuthService {
     private final ActivationService activationService;
     private final UserMapper userMapper;
     private final StoreService storeService;
+    private final StoreSidebarService sidebarService;
 
     public AuthService(AppUserRepository users, PasswordEncoder passwordEncoder, ActivationService activationService,
-            UserMapper userMapper, StoreService storeService) {
+            UserMapper userMapper, StoreService storeService, StoreSidebarService sidebarService) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.activationService = activationService;
         this.userMapper = userMapper;
         this.storeService = storeService;
+        this.sidebarService = sidebarService;
     }
 
     /** Zużywa link aktywacyjny i zwraca principal do zalogowania (z obowiązkiem ustawienia hasła). */
@@ -66,7 +71,9 @@ public class AuthService {
     @Transactional(readOnly = true)
     public MeResponse me(UUID userId) {
         AppUser user = load(userId);
-        return userMapper.toMeResponse(user, storeService.accessibleStores(user));
+        List<StoreSummary> stores = storeService.accessibleStores(user);
+        return userMapper.toMeResponse(user, stores,
+                sidebarService.orders(stores.stream().map(StoreSummary::id).toList()));
     }
 
     /** Zmienia własne hasło i zwraca nowy principal, dla którego trzeba wystawić nowy token. */

@@ -22,6 +22,16 @@ public final class PdfBarcodes {
 
     /** Jak {@link #image(PdfContentByte, String, float, float)}, z szerokością modułu (najwęższej kreski) w punktach. */
     public static Image image(PdfContentByte canvas, String code, float moduleWidth, float maxWidth, float maxHeight) {
+        return create(canvas, code, moduleWidth, maxWidth, maxHeight, true);
+    }
+
+    /** Same kreski, bez cyfr: wydruk podpisuje kod sam, gdy liczba pod nim ma być inna niż treść kodu. */
+    public static Image bars(PdfContentByte canvas, String code, float maxWidth, float maxHeight) {
+        return create(canvas, code, 0.85f, maxWidth, maxHeight, false);
+    }
+
+    private static Image create(PdfContentByte canvas, String code, float moduleWidth, float maxWidth, float maxHeight,
+            boolean digits) {
         Barcode barcode;
         if (isValidEan(code)) {
             BarcodeEAN ean = new BarcodeEAN();
@@ -36,6 +46,9 @@ public final class PdfBarcodes {
         barcode.setX(moduleWidth);
         barcode.setSize(7);
         barcode.setBaseline(7);
+        if (!digits) {
+            barcode.setFont(null);
+        }
         Image image = barcode.createImageWithBarcode(canvas, null, null);
         image.scaleToFit(maxWidth, maxHeight);
         return image;

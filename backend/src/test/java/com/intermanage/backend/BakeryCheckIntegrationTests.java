@@ -32,6 +32,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.bakery.component.BakeryScanReader;
@@ -260,6 +261,49 @@ class BakeryCheckIntegrationTests {
     }
 
     @Test
+    void uncheckedArticlesStayOffWzListsOfThatSupplierOnly() throws Exception {
+        String articles = url("/suppliers/" + supplierId + "/articles");
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articles[*].name", contains("BULKA KAJZERKA", "CHLEB KROJONY 350G")))
+                .andExpect(jsonPath("$.hiddenProductIds", hasSize(0)));
+        hide(articles, "\"" + rollId + "\"")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articles", hasSize(2)))
+                .andExpect(jsonPath("$.hiddenProductIds", contains(rollId)));
+
+        // Nowa weryfikacja nie ma odznaczonego artykułu, a przyjęcie, na którym przyjechał, oddaje go na listę.
+        String created = mvc.perform(post(url("")).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"supplierId\":\"" + supplierId + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.articles[*].name", contains("CHLEB KROJONY 350G")))
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(created, "$.id");
+        String bonId = bon("999400", "BEZ-FAKTURY", new String[][] {
+                {"1", "0000000001113", ROLL_EAN, "BULKA KAJZERKA", "5", "5.00"}});
+        mvc.perform(post(url("/" + id + "/documents")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"id\":\"" + bonId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articles[*].name", contains("BULKA KAJZERKA", "CHLEB KROJONY 350G")));
+
+        // Lista jest osobna dla każdego dostawcy.
+        String other = jdbc.queryForObject("""
+                insert into suppliers (store_id, code, keyword, name) values (?::uuid, '51', 'INNY', 'INNY DOSTAWCA')
+                returning id::text""", String.class, storeId);
+        mvc.perform(get(url("/suppliers/" + other + "/articles")).cookie(owner))
+                .andExpect(jsonPath("$.articles[*].name", contains("MLEKO")))
+                .andExpect(jsonPath("$.hiddenProductIds", hasSize(0)));
+
+        // Ponowne zaznaczenie zostawia znacznik, a kolejne odznaczenie działa mimo starego wpisu.
+        hide(articles, "").andExpect(jsonPath("$.hiddenProductIds", hasSize(0)));
+        hide(articles, "\"" + rollId + "\"").andExpect(jsonPath("$.hiddenProductIds", contains(rollId)));
+        assertThat(jdbc.queryForObject("select count(*) from bakery_hidden_articles where supplier_id = ?::uuid",
+                Long.class, UUID.fromString(supplierId))).isEqualTo(2);
+
+        hide(articles, "\"" + UUID.randomUUID() + "\"").andExpect(status().isBadRequest());
+    }
+
+    @Test
     void deliveryNotesFromInvoiceFields() {
         // Sikora: numer i data w polu WZ.
         assertThat(DeliveryNotes.parse(List.of("DD nr 14858/10/2026/DD (2026-10-22)",
@@ -281,6 +325,11 @@ class BakeryCheckIntegrationTests {
                         .content("{\"supplierId\":\"" + supplierId + "\",\"documentId\":\"" + bonId + "\"}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
+    }
+
+    private ResultActions hide(String articles, String ids) throws Exception {
+        return mvc.perform(put(articles).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hiddenProductIds\":[" + ids + "]}"));
     }
 
     private void saveWz(String id, String wzId, String number, String date, String lines) throws Exception {
