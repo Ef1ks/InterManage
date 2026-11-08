@@ -32,6 +32,7 @@ import com.intermanage.backend.document.repository.DocumentLineRepository.LastDe
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.pricecheck.entity.PriceCheckCategory;
 import com.intermanage.backend.pricecheck.repository.PriceCheckCategoryRepository;
+import com.intermanage.backend.pricecheck.service.PriceCheckService;
 import com.intermanage.backend.product.repository.ProductImportRepository;
 import com.intermanage.backend.sales.component.RegionGroups;
 import com.intermanage.backend.sales.component.SlowMovingPdf;
@@ -44,15 +45,18 @@ import com.intermanage.backend.sales.dto.SlowMovingReport.SupplierCount;
 import com.intermanage.backend.sales.dto.SlowMovingRequest;
 import com.intermanage.backend.sales.repository.SaleRepository;
 import com.intermanage.backend.sales.repository.SaleRepository.SlowMovingArticle;
+import com.intermanage.backend.sales.repository.SlowMovingExcludedArticleRepository;
 import com.intermanage.backend.sales.service.PeriodSummaryService.ExportFile;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
- * Niesprzedające się artykuły: aktywne, na stanie, z rotacją tygodniową (sprzedana ilość × 7 / dni okresu) nie wyższą
+ * Niesprzedające się artykuły: na stanie, z rotacją tygodniową (sprzedana ilość × 7 / dni okresu) nie wyższą
  * niż próg. Bez rejonów, które nie są towarem. Stany i ceny zakupu są z ostatniego raportu kartoteki, więc wartość
  * stanu to zamrożony w towarze zakup. Z wybranym okresem dostaw raport pokazuje też przyjęcia z takimi artykułami,
- * żeby było widać, co dalej zamawiamy mimo braku sprzedaży.
+ * żeby było widać, co dalej zamawiamy mimo braku sprzedaży. Artykuły z listy pomijanych sklepu nie wchodzą do raportu,
+ * tak samo nowy towar: pierwsza dostawa musi być co najmniej miesiąc przed dniem sprawdzania, bo inaczej artykuł nie
+ * miał kiedy się sprzedać.
  */
 @Service
 @Transactional(readOnly = true)
@@ -60,11 +64,13 @@ public class SlowMovingService {
 
     public static final BigDecimal DEFAULT_MAX_ROTATION = new BigDecimal("0.25");
     public static final String OTHER_CATEGORY = "OTHER";
+    private static final String BASE_ORIGIN = "BASE";
 
     /** Mięso i garmaż: surowce schodzą na produkcję, nie przez kasę, więc wyglądałyby na niesprzedający się towar. */
     private static final List<String> RAW_MATERIAL_REGIONS = List.of("24", "36");
     private static final Set<Integer> DELIVERY_DAYS = Set.of(1, 7, 30);
     private static final LocalDateTime ALL_HISTORY = LocalDate.of(2000, 1, 1).atStartOfDay();
+    private static final int NEW_ARTICLE_MONTHS = 1;
     private static final int REGION_CODE_LENGTH = 2;
     private static final int DAYS_IN_WEEK = 7;
     private static final int ROTATION_SCALE = 3;
@@ -78,10 +84,12 @@ public class SlowMovingService {
     private final AppUserRepository users;
     private final SalesReportService salesReports;
     private final SlowMovingPdf reportPdf;
+    private final SlowMovingExcludedArticleRepository excluded;
 
     public SlowMovingService(SaleRepository sales, DocumentLineRepository documentLines,
             PriceCheckCategoryRepository categories, ProductImportRepository productImports, StoreRepository stores,
-            AppUserRepository users, SalesReportService salesReports, SlowMovingPdf reportPdf) {
+            AppUserRepository users, SalesReportService salesReports, SlowMovingPdf reportPdf,
+            SlowMovingExcludedArticleRepository excluded) {
         this.sales = sales;
         this.documentLines = documentLines;
         this.categories = categories;
@@ -90,6 +98,7 @@ public class SlowMovingService {
         this.users = users;
         this.salesReports = salesReports;
         this.reportPdf = reportPdf;
+        this.excluded = excluded;
     }
 
     public SlowMovingReport report(UUID storeId, SlowMovingRequest request) {
@@ -108,9 +117,13 @@ public class SlowMovingService {
         long days = request.from().datesUntil(request.to()).count() + 1;
         Map<String, LastDelivery> lastDeliveries = documentLines.findLastDeliveries(storeId, ALL_HISTORY).stream()
                 .collect(Collectors.toMap(LastDelivery::getItm8, Function.identity()));
+        Set<String> excludedArticles = new HashSet<>(excluded.findActiveItm8s(storeId));
+        excludedArticles.addAll(documentLines.findFirstDeliveredSince(storeId, ALL_HISTORY,
+                LocalDate.now(StoreTime.ZONE).minusMonths(NEW_ARTICLE_MONTHS).plusDays(1).atStartOfDay()));
         List<Item> articles = sales.findSlowMoving(storeId, request.from(), request.to(),
                 maxRotation.multiply(BigDecimal.valueOf(days)), nomenclatures.toArray(String[]::new)).stream()
                 .filter(article -> !RegionGroups.isNotGoods(article.getSubfamilyCode()))
+                .filter(article -> !excludedArticles.contains(article.getItm8()))
                 .map(article -> item(article, days, lastDeliveries.get(article.getItm8())))
                 .filter(article -> !hidesRawMaterials(request, nomenclatures) || !isRawMaterial(article))
                 .filter(filters(request))
@@ -190,9 +203,19 @@ public class SlowMovingService {
         return item -> (request.cadencier() == null || item.cadencier() == "WITH".equals(request.cadencier()))
                 && (request.minStockValue() == null || (item.stockValue() != null
                         && item.stockValue().compareTo(request.minStockValue()) >= 0))
+                && matchesOrigin(item, request.origin())
                 && !(Boolean.TRUE.equals(request.withoutDeliveries()) && item.lastDeliveryDate() != null
                         && !item.lastDeliveryDate().isBefore(request.from()))
                 && words.stream().allMatch(word -> matches(item, word));
+    }
+
+    /** Skąd towar przyszedł mówi ostatnia dostawa; artykuł bez dostawy nie jest ani z bazy, ani spoza niej. */
+    private static boolean matchesOrigin(Item item, String origin) {
+        if (origin == null) {
+            return true;
+        }
+        return item.supplierCode() != null
+                && PriceCheckService.BASE_SUPPLIER_CODES.contains(item.supplierCode()) == BASE_ORIGIN.equals(origin);
     }
 
     private static boolean matches(Item item, String word) {
@@ -288,6 +311,11 @@ public class SlowMovingService {
     /** Filtry opisane na wydruku, żeby kartka mówiła, co na niej jest. */
     private List<String> filterNotes(UUID storeId, SlowMovingRequest request, SlowMovingReport report) {
         List<String> notes = new ArrayList<>();
+        int excludedCount = excluded.findActiveItm8s(storeId).size();
+        if (excludedCount > 0) {
+            notes.add("Bez artykułów pomijanych (" + excludedCount + ")");
+        }
+        notes.add("Bez artykułów z pierwszą dostawą w ostatnim miesiącu");
         if (hidesRawMaterials(request, report.selection().stream().map(NomenclatureOption::code).toList())) {
             notes.add("Bez rejonów surowców " + String.join(" i ", RAW_MATERIAL_REGIONS));
         }
@@ -308,6 +336,9 @@ public class SlowMovingService {
         }
         if (request.cadencier() != null) {
             notes.add("WITH".equals(request.cadencier()) ? "Tylko z cadencier" : "Tylko spoza cadencier");
+        }
+        if (request.origin() != null) {
+            notes.add(BASE_ORIGIN.equals(request.origin()) ? "Ostatnia dostawa z bazy" : "Ostatnia dostawa spoza bazy");
         }
         if (request.minStockValue() != null) {
             notes.add("Wartość stanu od " + request.minStockValue().toPlainString() + " zł");

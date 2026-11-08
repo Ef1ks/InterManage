@@ -1,16 +1,147 @@
 #Requires AutoHotkey v2.0
+;@Ahk2Exe-SetMainIcon player.ico
+;@Ahk2Exe-SetName Intermanage Makra
+;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
+;@Ahk2Exe-SetCompanyName Intermanage
+;@Ahk2Exe-SetVersion 35.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 11 ; podbijamy przy każdej zmianie, widać go w oknie startowym i w raporcie F7
+global PlayerVersion := 35 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
-TrayTip "Odtwarzacz Makr gotowy!", "F7 = Przyciski strony | F8 = Test | F9 = Start ze Schowka | ESC = Wyłącz", 1
-MsgBox "Plik .exe działa poprawnie! Wersja " PlayerVersion "`n`nSkróty:`n[F7] - Lista przycisków strony pod kursorem (do Schowka)`n[F8] - Test ruchu myszy i pisania`n[F9] - Wykonaj makro ze Schowka`n[ESC] - Awaryjne wyłączenie", "Test środowiska OK", "Iconi"
+global MacroRunning := false ; Esc działa tylko w trakcie makra
+global ScanMode := false ; Alt+R: następny klik skanuje okno zamiast w nie trafić
+global AutostartKey := "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
+global AutostartName := "IntermanageMakra"
+global SettingsKey := "HKCU\Software\Intermanage\Makra"
+global IdleTip := "Intermanage Makra " PlayerVersion
 
-; Najedź na okno Internet Explorera i naciśnij F7: wynik trafia do Schowka (zastępuje skopiowane makro).
-F7:: {
+SetupTray()
+if A_IsCompiled {
+    SyncAutostart()
+    SyncClipboardPrivacy()
+}
+; Przy starcie z Windows bez komunikatu; po ręcznym uruchomieniu trzeba wiedzieć, że program już działa.
+if (A_Args.Length = 0 || A_Args[1] != "autostart")
+    TrayTip "Działa w tle, ikona jest przy zegarze.`nSkopiuj makro ze strony i naciśnij Alt+E.", "Intermanage Makra", 1
+
+; --- Praca w tle: menu przy zegarze i start z Windows ---
+
+SetupTray() {
+    A_IconTip := IdleTip
+    tray := A_TrayMenu
+    tray.Delete()
+    tray.Add("Intermanage Makra, wersja " PlayerVersion, ShowHelp)
+    tray.Add()
+    tray.Add("Uruchamiaj z Windows", ToggleAutostart)
+    tray.Add()
+    tray.Add("Zakończ", (*) => ExitApp())
+    tray.Default := "Intermanage Makra, wersja " PlayerVersion
+    if !A_IsCompiled
+        tray.Disable("Uruchamiaj z Windows")
+    else if AutostartEnabled()
+        tray.Check("Uruchamiaj z Windows")
+}
+
+ShowHelp(*) {
+    MsgBox "Program działa w tle i nie trzeba go uruchamiać przed makrem.`n`n"
+        . "Alt+E: wykonuje makro skopiowane ze strony. Makro działa raz, potem Schowek jest pusty.`n"
+        . "Esc w trakcie makra: zatrzymuje makro.`n"
+        . "Alt+R nad oknem Mercalys: tryb skanowania, klik w okno daje listę przycisków strony w Schowku, Esc anuluje.", "Intermanage Makra " PlayerVersion, "Iconi"
+}
+
+AutostartEnabled() => RegRead(AutostartKey, AutostartName, "") != ""
+
+; Start z Windows jest domyślnie włączony, a ścieżka odświeża się po przeniesieniu programu. Wyłączenie zostaje zapamiętane.
+SyncAutostart() {
+    if (RegRead(SettingsKey, "AutostartOff", 0) = 1)
+        return
+    try {
+        RegWrite "`"" A_ScriptFullPath "`" autostart", "REG_SZ", AutostartKey, AutostartName
+        A_TrayMenu.Check("Uruchamiaj z Windows")
+    }
+}
+
+; Makro skopiowane w przeglądarce trafia do Historii Schowka (Win+V) i do chmury Microsoftu, więc samo
+; A_Clipboard := "" w odtwarzaczu go stamtąd nie usuwa. Na stacji wyłączamy jedno i drugie, żeby makro nie
+; zostawało nigdzie poza jednym wklejeniem. Wyłączenie Historii czyści też wpisy już w niej zebrane.
+SyncClipboardPrivacy() {
+    ClipKey := "HKCU\Software\Microsoft\Clipboard"
+    try RegWrite 0, "REG_DWORD", ClipKey, "EnableClipboardHistory"
+    try RegWrite 0, "REG_DWORD", ClipKey, "CloudClipboardAutomaticUpload"
+}
+
+SetAutostart(enabled) {
+    if enabled {
+        RegWrite 0, "REG_DWORD", SettingsKey, "AutostartOff"
+        RegWrite "`"" A_ScriptFullPath "`" autostart", "REG_SZ", AutostartKey, AutostartName
+    } else {
+        RegWrite 1, "REG_DWORD", SettingsKey, "AutostartOff"
+        try RegDelete AutostartKey, AutostartName
+    }
+}
+
+ToggleAutostart(name, *) {
+    try {
+        SetAutostart(!AutostartEnabled())
+        A_TrayMenu.ToggleCheck(name)
+    } catch as problem
+        MsgBox "Nie udało się zmienić startu z Windows: " problem.Message, "Intermanage Makra", "Icon!"
+}
+
+; --- Skróty: program działa stale, więc poza swoimi przypadkami nie może zabierać klawiszy innym programom ---
+
+; Makro z pierwszej linii poleceń; inny tekst w Schowku zostawia Alt+E programowi, w którym się go nacisnęło.
+IsMacro(text) => RegExMatch(text, "i)^(\s*(#[^\n]*)?\r?\n)*\s*(#[^\n]*\r?\n\s*)*(ASK|CLICK|TEXT|KEY|SLEEP|WEB[A-Z]+|WIN[A-Z]+)\s*[|;]") = 1
+
+ClipboardHasMacro() {
+    try return IsMacro(A_Clipboard)
+    return false
+}
+
+MouseOverMercalys() {
+    try {
+        MouseGetPos , , &hwnd
+        return WinGetProcessName(hwnd) = "Mercalys.exe"
+    }
+    return false
+}
+
+; Alt+R nad oknem Mercalys włącza tryb skanowania. Klik jest przechwycony, więc nie uruchomi przycisku pod kursorem.
+#HotIf !MacroRunning && !ScanMode && MouseOverMercalys()
+<!r:: {
+    global ScanMode := true
+    KeyWait "LAlt"
+    SetTimer ShowScanTip, 50
+}
+
+#HotIf ScanMode
+LButton:: {
+    EndScan()
+    KeyWait "LButton"
+    ScanWindow()
+}
+
+Esc:: EndScan()
+#HotIf
+
+ShowScanTip() {
+    CoordMode "ToolTip", "Screen"
+    MouseGetPos &x, &y
+    ToolTip "Kliknij okno do zeskanowania. Esc anuluje.", x + 18, y + 18
+}
+
+EndScan() {
+    global ScanMode := false
+    SetTimer ShowScanTip, 0
+    ToolTip
+}
+
+; Wynik trafia do Schowka (zastępuje skopiowane makro).
+ScanWindow() {
     MouseGetPos , , &hwnd
     report := "Odtwarzacz w wersji " PlayerVersion "`nOkno: " WinGetTitle(hwnd) "`nKlasa: " WinGetClass(hwnd) "`nProgram: " WinGetProcessName(hwnd) "`n"
     docs := HtmlDocuments(hwnd)
@@ -22,6 +153,10 @@ F7:: {
             if IsShown(element)
                 visible .= DescribeElement(element) "`n"
         }
+        for element in FormElements(doc) {
+            if IsShown(element)
+                visible .= DescribeField(element) "`n"
+        }
         if (visible != "")
             report .= "`nStrona: " WebProp(doc, "URL") "`n" visible
     }
@@ -29,25 +164,39 @@ F7:: {
     MsgBox report, "Przyciski strony (skopiowano do Schowka)"
 }
 
-F8:: {
-    MouseGetPos &startX, &startY
-    MouseMove startX + 80, startY + 80, 10
-    Sleep 300
-    MouseMove startX, startY, 10
-    SendText "TEST_AHK_OK_123"
-    Sleep 100
-    Send "{Enter}"
+; Lewy Alt+E na jedną rękę; AltGr+E zostaje literą ę. Makro działa raz: przypadkowy skrót w innym programie nie może
+; powtórzyć zamknięcia dostawy ani przeceny.
+#HotIf !MacroRunning && ClipboardHasMacro()
+<!e:: {
+    global MacroRunning
+    macro := Trim(A_Clipboard)
+    A_Clipboard := ""
+    MacroRunning := true
+    KeyWait "LAlt" ; wciśnięty Alt zmieszałby się z klawiszami makra
+    KeyWait "e"
+    A_IconTip := "Intermanage Makra: makro w toku, Esc zatrzymuje"
+    try PlayMacro(macro)
+    finally {
+        MacroRunning := false
+        A_IconTip := IdleTip
+    }
 }
 
-F9:: {
-    rawClip := Trim(A_Clipboard)
-    if (rawClip = "") {
-        MsgBox "Schowek jest pusty! Skopiuj makro ze strony webowej.", "Błąd", "Icon!"
-        return
-    }
+; Stop awaryjny: okno wstrzymuje makro, a ponowne uruchomienie programu je kończy, nawet gdy czeka na stronę.
+#HotIf MacroRunning
+Esc:: {
+    MsgBox "Makro zatrzymane. Sprawdź w Mercalys, co zostało zrobione.", "Makro zatrzymane", "Icon!" AlwaysOnTop
+    Reload
+}
+#HotIf
 
+PlayMacro(rawClip) {
     lines := StrSplit(rawClip, "`n", "`r")
     wanted := Map() ; bony z linii WEBLIST
+    results := Map() ; Nr Zamów bonów z listy, z WEBROWS
+    report := "" ; podsumowania etapów, pokazane na końcu makra
+    closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
+    closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
 
     for index, line in lines {
         line := Trim(line)
@@ -114,7 +263,8 @@ F9:: {
                     number .= (A_Index > 1 ? "|" : "") piece
                 wanted[ListKey(number, code)] := {number: Trim(number), code: Trim(code)}
             case "WEBROWS":
-                ; WEBROWS|okno|siatka|kolumna od 0|przycisk|następna strona|najwyżej ile wierszy: wiersz z listy WEBLIST i pustą kolumną dostaje kliknięcie przycisku
+                ; WEBROWS|okno|siatka|kolumna od 0|przycisk|następna strona|najwyżej ile wierszy|okno potwierdzenia|oczekiwany tekst|przycisk potwierdzenia:
+                ; wiersz z listy WEBLIST i pustą kolumną dostaje kliknięcie przycisku; trzy ostatnie pola są opcjonalne
                 if (parts.Length < 7) {
                     MsgBox "Linia WEBROWS wymaga okna, siatki, kolumny, przycisku, następnej strony i limitu.", "Błąd makra", "Icon!"
                     return
@@ -123,8 +273,131 @@ F9:: {
                     MsgBox "Makro nie ma listy bonów (linie WEBLIST), więc niczego nie kliknie.", "Błąd makra", "Icon!"
                     return
                 }
-                MsgBox WebEachRow(Trim(parts[2]), Trim(parts[3]), Integer(Trim(parts[4])), Trim(parts[5]), Trim(parts[6]), Integer(Trim(parts[7])), wanted), "Makro zakończone", "Iconi"
-                return
+                confirm := parts.Length >= 10 ? {title: Trim(parts[8]), expected: Trim(parts[9]), button: Trim(parts[10])} : ""
+                summary := WebEachRow(Trim(parts[2]), Trim(parts[3]), Integer(Trim(parts[4])), Trim(parts[5]), Trim(parts[6]), Integer(Trim(parts[7])), wanted, confirm, results)
+                report .= summary "`n"
+                ; Kolejne etapy tylko, gdy każdy bon z listy ma numer: reszta makra potrzebuje wszystkich par.
+                if (results.Count < wanted.Count) {
+                    MsgBox report, "Makro zakończone", "Iconi" AlwaysOnTop
+                    return
+                }
+            case "ASK":
+                ; ASK|pytanie: Tak idzie dalej, Nie kończy makro bez błędu, np. pracownik sprawdza dokument przed zamknięciem
+                if (parts.Length < 2) {
+                    MsgBox "Linia ASK wymaga pytania.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                if (MsgBox(report Trim(parts[2]), "Intermanage Makra", "YesNo Icon?" AlwaysOnTop) != "Yes") {
+                    TrayTip "Makro zakończone bez tego kroku.", "Intermanage Makra", 1
+                    return
+                }
+            case "WINOPEN":
+                ; WINOPEN|okno: program już uruchomiony wraca z paska zadań na wierzch; bez niego makro staje
+                problem := parts.Length < 2 ? "Linia WINOPEN wymaga okna." : WinOpen(Trim(parts[2]))
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WINCLOSEALL":
+                ; WINCLOSEALL|okno|limit w ms: zamyka wszystkie takie okna. Po WEBCLOSE czeka najpierw na ostatni PDF,
+                ; a gdy żadna dostawa się nie zamknęła (np. odpowiedź Nie), zostawia okna. Bez WEBCLOSE czeka tylko z podanym limitem.
+                if (parts.Length >= 2 && (!closingRan || closedCount > 0)) {
+                    text := WinCloseAll(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : closingRan ? 20000 : 0)
+                    if (text != "")
+                        report .= "`n" text "`n"
+                }
+            case "WINMIN":
+                ; WINMIN|okno: chowa program na pasek zadań; brak okna nie jest błędem, bo praca jest już skończona
+                if (parts.Length >= 2) {
+                    for hwnd in WinGetList(Trim(parts[2]))
+                        try WinMinimize hwnd
+                }
+            case "WEBENSURE":
+                ; WEBENSURE|okno|element|przycisk: klika przycisk tylko, gdy elementu nie widać, np. zakładka menu pod innym ekranem
+                problem := parts.Length < 4 ? "Linia WEBENSURE wymaga okna, elementu i przycisku." : WebEnsure(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]))
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBOPEN":
+                ; WEBOPEN|okno|rozwinięcie menu|pozycja menu: rozwija tylko, gdy pozycji nie widać, bo drugie kliknięcie zwinęłoby menu
+                problem := parts.Length < 4 ? "Linia WEBOPEN wymaga okna, rozwinięcia i pozycji." : WebOpen(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]))
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBHEADERS":
+                ; WEBHEADERS|okno|siatka|kolumna numeru|kolumna identyfikacji|przycisk nagłówka|pole|zapis|okno pytania|tekst pytania|odpowiedź|pierwsza strona|następna strona
+                if (parts.Length < 11 || results.Count = 0) {
+                    MsgBox report "Linia WEBHEADERS wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
+                    return
+                }
+                step := {title: Trim(parts[2]), grid: Trim(parts[3]), numberColumn: Integer(Trim(parts[4])), fieldColumn: Integer(Trim(parts[5])),
+                    open: Trim(parts[6]), field: Trim(parts[7]), save: Trim(parts[8]), dialog: Trim(parts[9]), dialogText: Trim(parts[10]), dialogButton: Trim(parts[11]),
+                    firstPage: parts.Length >= 13 ? Trim(parts[12]) : "", nextPage: parts.Length >= 13 ? Trim(parts[13]) : ""}
+                summary := WebHeaders(step, wanted, results)
+                report .= "`n" summary.text "`n"
+                if !summary.finished {
+                    MsgBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBPICK":
+                ; WEBPICK|okno|siatka|kolumna od 0|tekst|limit w ms: zaznacza wiersz z tym tekstem w kolumnie
+                problem := parts.Length < 5 ? "Linia WEBPICK wymaga okna, siatki, kolumny i tekstu."
+                    : WebPickRow(Trim(parts[2]), Trim(parts[3]), Integer(Trim(parts[4])), Trim(parts[5]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 10000)
+                if (problem != "") {
+                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBSET":
+                ; WEBSET|okno|id pola albo listy|wartość|limit w ms: wpisuje wartość, a lista wybiera pozycję i wywołuje swoją zmianę
+                problem := parts.Length < 4 ? "Linia WEBSET wymaga okna, pola i wartości."
+                    : WebSetValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
+                if (problem != "") {
+                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBWAIT":
+                ; WEBWAIT|okno|element|tekst na stronie (opcjonalny, kilka możliwych po średniku)|limit w ms: czeka, aż element będzie widoczny, a strona ma ten tekst
+                problem := parts.Length < 3 ? "Linia WEBWAIT wymaga okna i elementu."
+                    : WebWait(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Trim(parts[4]) : "", parts.Length >= 5 ? Integer(Trim(parts[5])) : 15000)
+                if (problem != "") {
+                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBVALUE":
+                ; WEBVALUE|okno|pole|wyrażenie regularne|limit w ms: czeka, aż pole ma pasującą wartość (pole wyboru: tak / nie), bo WEBWAIT nie widzi wartości pól
+                problem := parts.Length < 4 ? "Linia WEBVALUE wymaga okna, pola i wyrażenia."
+                    : WebValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 5000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBKEY":
+                ; WEBKEY|okno|pole|klawisze|limit w ms: ustawia fokus w polu i naciska prawdziwe klawisze (np. {Enter}, {Tab})
+                problem := parts.Length < 4 ? "Linia WEBKEY wymaga okna, pola i klawiszy."
+                    : WebKey(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBCLOSE":
+                ; WEBCLOSE|okno|siatka|kolumna numeru|kolumna identyfikacji|przycisk zamknięcia|okno pytania|tekst pytania|odpowiedź|pole wydruku|zatwierdzenie|pierwsza strona|następna strona
+                if (parts.Length < 11 || results.Count = 0) {
+                    MsgBox report "Linia WEBCLOSE wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
+                    return
+                }
+                step := {title: Trim(parts[2]), grid: Trim(parts[3]), numberColumn: Integer(Trim(parts[4])), fieldColumn: Integer(Trim(parts[5])),
+                    close: Trim(parts[6]), dialog: Trim(parts[7]), dialogText: Trim(parts[8]), dialogButton: Trim(parts[9]), tick: Trim(parts[10]), save: Trim(parts[11]),
+                    firstPage: parts.Length >= 13 ? Trim(parts[12]) : "", nextPage: parts.Length >= 13 ? Trim(parts[13]) : ""}
+                summary := WebCloseRows(step, wanted, results)
+                closingRan := true
+                closedCount += summary.closed
+                report .= "`n" summary.text "`n"
+                if !summary.finished {
+                    MsgBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    return
+                }
             case "WEBSHOW":
                 ; WEBSHOW|fragment tytułu okna|elementy po przecinku: tylko pokazuje ich HTML (do Schowka), niczego nie klika
                 if (parts.Length >= 3)
@@ -137,12 +410,12 @@ F9:: {
         Sleep 50
     }
     
-    TrayTip "Zakończono", "Makro ze schowka zostało wykonane.", 1
+    if (report != "")
+        MsgBox report, "Makro zakończone", "Iconi" AlwaysOnTop
+    else
+        TrayTip "Zakończono", "Makro ze schowka zostało wykonane.", 1
 }
 
-Esc:: {
-    ExitApp
-}
 
 ; --- Strony w Internet Explorerze: czekanie na okno i klikanie przycisków przez HTML, bez współrzędnych ---
 
@@ -153,16 +426,15 @@ WebClick(title, button, timeoutMs, onlyTick := false) {
     Loop {
         for hwnd in WinGetList(title) {
             windowFound := true
-            for doc in HtmlDocuments(hwnd) {
-                for element in ClickableElements(doc) {
-                    if (IsButton(element, button) && !WebProp(element, "disabled") && IsShown(element)) {
-                        if (onlyTick && WebProp(element, "checked"))
-                            return ""
-                        try WinActivate hwnd
-                        try {
-                            ClickWithoutWaiting(doc, element)
-                            return ""
-                        }
+            for item in FindElements(HtmlDocuments(hwnd), button) {
+                element := item.element
+                if (!WebProp(element, "disabled") && IsShown(element)) {
+                    if (onlyTick && WebProp(element, "checked"))
+                        return ""
+                    try WinActivate hwnd
+                    try {
+                        ClickWithoutWaiting(item.doc, element)
+                        return ""
                     }
                 }
             }
@@ -192,8 +464,10 @@ WebSelectRow(title, grid, column, timeoutMs, &key := "", handled := Map(), accep
                         if handled.Has(key)
                             return "Wiersz " key " nadal jest pusty po kliknięciu."
                         try WinActivate hwnd
-                        ClickWithoutWaiting(doc, item.row)
-                        return WaitForSelection(doc, grid, item, deadline)
+                        try {
+                            ClickWithoutWaiting(doc, item.row)
+                            return WaitForSelection(doc, grid, item, deadline)
+                        }
                     }
                 }
             }
@@ -206,11 +480,476 @@ WebSelectRow(title, grid, column, timeoutMs, &key := "", handled := Map(), accep
     }
 }
 
+; Ostatni PDF przychodzi po chwili: zamykamy dopiero, gdy okna i ich tytuły nie zmieniają się przez 4 sekundy.
+WinCloseAll(title, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    last := ""
+    changedAt := A_TickCount
+    Loop {
+        signature := ""
+        for hwnd in WinGetList(title)
+            try signature .= hwnd ":" WinGetTitle(hwnd) "`n"
+        if (signature != last) {
+            last := signature
+            changedAt := A_TickCount
+        }
+        if ((signature != "" && A_TickCount - changedAt >= 4000) || A_TickCount >= deadline)
+            break
+        Sleep 200
+    }
+    found := WinGetList(title)
+    for hwnd in found
+        try WinClose hwnd
+    left := 0
+    for hwnd in found {
+        if !WinWaitClose("ahk_id " hwnd, , 3)
+            left += 1
+    }
+    return left = 0 ? "" : "Acrobat nie zamknął się sam, zamknij PDF-y ręcznie."
+}
+
+WinOpen(title) {
+    hwnd := WinExist(title)
+    if !hwnd
+        return "Nie znaleziono okna `"" title "`". Uruchom program i spróbuj ponownie."
+    if (WinGetMinMax(hwnd) = -1)
+        WinRestore hwnd
+    WinActivate hwnd
+    return WinWaitActive("ahk_id " hwnd, , 5) ? "" : "Okno `"" title "`" nie stało się aktywne."
+}
+
+WebEnsure(title, element, button) {
+    if (WebWait(title, element, "", 500) = "")
+        return ""
+    problem := WebClick(title, button, 10000)
+    return problem != "" ? problem : WebWait(title, element, "", 30000)
+}
+
+WebOpen(title, expander, target) {
+    if (WebWait(title, target, "", 500) != "") {
+        problem := WebClick(title, expander, 10000)
+        if (problem != "")
+            return problem
+    }
+    return WebClick(title, target, 10000)
+}
+
+; Wpisuje Nr BL do nagłówka każdej dostawy z listy. Wiersz z tym samym numerem jest pomijany, więc makro można powtórzyć,
+; a innej identyfikacji nie nadpisuje. Wpis idzie dopiero, gdy nagłówek pokazuje właściwy numer, a po zapisie lista musi go mieć.
+WebHeaders(step, wanted, results) {
+    written := ""
+    existing := ""
+    others := ""
+    Done(ending, finished) => {finished: finished, text: "Nagłówki wpisane: " (written = "" ? "brak`n" : "`n" written)
+        . (existing != "" ? "Już były: `n" existing : "") . (others != "" ? "INNA identyfikacja, nie zmieniono:`n" others : "") . ending}
+    for key, item in wanted {
+        order := results[key]
+        problem := WebWait(step.title, step.open, "", 30000)
+        if (problem = "")
+            problem := ShowOrderRow(step, order)
+        if (problem != "")
+            return Done("ZATRZYMANE przy " order ": " problem, false)
+        current := GridCell(step, order, step.fieldColumn)
+        if (current = "?")
+            return Done("ZATRZYMANE: nie ma dostawy " order " na liście.", false)
+        if (ListKey(current, "") = ListKey(item.number, "")) {
+            existing .= order " " item.number "`n"
+            continue
+        }
+        if (current != "") {
+            others .= order ": jest " current ", miało być " item.number "`n"
+            continue
+        }
+        problem := WriteHeader(step, order, item.number)
+        if (problem = "")
+            problem := ShowOrderRow(step, order)
+        if (problem != "")
+            return Done("ZATRZYMANE przy " order ": " problem, false)
+        current := GridCell(step, order, step.fieldColumn)
+        if (ListKey(current, "") != ListKey(item.number, ""))
+            return Done("ZATRZYMANE przy " order ": po zapisie lista pokazuje `"" current "`" zamiast " item.number ".", false)
+        written .= order " " item.number "`n"
+    }
+    return Done(others = "" ? "Wszystkie nagłówki są wpisane." : "Sprawdź dostawy z inną identyfikacją.", others = "")
+}
+
+WriteHeader(step, order, number) {
+    problem := WebPickRow(step.title, step.grid, step.numberColumn, order, 10000)
+    if (problem = "")
+        problem := WebClick(step.title, step.open, 10000)
+    if (problem = "")
+        problem := WebWait(step.title, step.field, order, 30000)
+    if (problem = "")
+        problem := WebSetValue(step.title, step.field, number, 10000)
+    if (problem = "")
+        problem := WebClick(step.title, step.save, 10000)
+    if (problem = "")
+        problem := WebWait(step.dialog, step.dialogButton, step.dialogText, 30000)
+    if (problem = "")
+        problem := WebClick(step.dialog, step.dialogButton, 10000)
+    if (problem = "")
+        problem := WebWait(step.title, step.open, "", 30000)
+    return problem
+}
+
+; Zamyka dostawy z tego przebiegu z poprawnym nagłówkiem, po jednym potwierdzeniu, bo zamknięcia nie da się cofnąć.
+; Dostawa musi zniknąć z listy: inaczej pętla staje, a kolejne zostają otwarte.
+WebCloseRows(step, wanted, results) {
+    names := ""
+    for key, item in wanted
+        names .= results[key] " " item.number "`n"
+    if (MsgBox("Zamknąć dostawy: " wanted.Count "?`nTego nie da się cofnąć.`n`n" names, "Zamknięcie dostaw", "YesNo Icon? Default2" AlwaysOnTop) != "Yes")
+        return {finished: true, closed: 0, text: "Zamknięcia pominięte na życzenie."}
+    closed := ""
+    skipped := ""
+    count := 0
+    Done(ending, finished) => {finished: finished, closed: count, text: "Zamknięte: " (closed = "" ? "brak`n" : "`n" closed)
+        . (skipped != "" ? "POMINIĘTE:`n" skipped : "") . ending}
+    for key, item in wanted {
+        order := results[key]
+        problem := WebWait(step.title, step.close, "", 30000)
+        if (problem = "")
+            problem := ShowOrderRow(step, order)
+        if (problem != "")
+            return Done("ZATRZYMANE przy " order ": " problem, false)
+        current := GridCell(step, order, step.fieldColumn)
+        if (current = "?") {
+            skipped .= order ": nie ma na liście`n"
+            continue
+        }
+        if (ListKey(current, "") != ListKey(item.number, "")) {
+            skipped .= order ": w nagłówku jest `"" current "`" zamiast " item.number "`n"
+            continue
+        }
+        problem := CloseRow(step, order)
+        if (problem != "")
+            return Done("ZATRZYMANE przy " order ": " problem, false)
+        closed .= order " " item.number "`n"
+        count += 1
+    }
+    return Done(skipped = "" ? "Wszystkie dostawy z listy są zamknięte." : "Sprawdź pominięte dostawy.", skipped = "")
+}
+
+CloseRow(step, order) {
+    problem := WebPickRow(step.title, step.grid, step.numberColumn, order, 10000)
+    marked := problem = "" && MarkPage(step.title, step.tick)
+    if (problem = "")
+        problem := WebClick(step.title, step.close, 10000)
+    if (problem = "")
+        problem := WebWait(step.dialog, step.dialogButton, step.dialogText, 30000)
+    if (problem = "")
+        problem := WebClick(step.dialog, step.dialogButton, 10000)
+    if (problem = "")
+        problem := TickAfterReload(step.title, step.tick, 30000, marked)
+    if (problem = "")
+        problem := WebClick(step.title, step.save, 10000)
+    if (problem = "")
+        problem := WaitForRowGone(step, order, 60000)
+    return problem
+}
+
+; Pole i przycisk panelu są na stronie także przed jego otwarciem, a przeładowanie kasuje zaznaczenie.
+; Znacznik na stronie mówi, kiedy przeładowanie już było: wtedy wystarczy krótkie sprawdzenie zaznaczenia.
+; Bez wykrytego przeładowania panel uznajemy za gotowy dopiero po 4 sekundach; za krótko = klik przed otwarciem panelu.
+TickAfterReload(title, box, timeoutMs, marked) {
+    deadline := A_TickCount + timeoutMs
+    reloaded := marked && WaitForReload(title, box, 5000)
+    checks := reloaded ? 1 : 4
+    pause := reloaded ? 200 : 1000
+    stable := 0
+    Loop {
+        problem := WebClick(title, box, 5000, true)
+        if (problem != "")
+            return problem
+        Sleep pause
+        stable := IsTicked(title, box) ? stable + 1 : 0
+        if (stable >= checks)
+            return ""
+        if (A_TickCount >= deadline)
+            return "Pole `"" box "`" nie zostaje zaznaczone."
+    }
+}
+
+MarkPage(title, box) {
+    marked := false
+    for doc in PagesWith(title, box) {
+        try {
+            doc.body.setAttribute("macroMark", "1")
+            marked := true
+        }
+    }
+    return marked
+}
+
+WaitForReload(title, box, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for doc in PagesWith(title, box) {
+            try {
+                if (WebProp(doc.body, "macroMark") = "")
+                    return true
+            }
+        }
+        if (A_TickCount >= deadline)
+            return false
+        Sleep 50
+    }
+}
+
+; Wczytane strony z tym elementem, także gdy jest jeszcze niewidoczny.
+PagesWith(title, name) {
+    pages := []
+    for hwnd in WinGetList(title) {
+        for item in FindElements(HtmlDocuments(hwnd), name) {
+            if PageLoaded(item.doc)
+                pages.Push(item.doc)
+        }
+    }
+    return pages
+}
+
+; Strona w trakcie przeładowania odmawia dostępu: to znaczy tylko, że jeszcze jej nie ma.
+PageLoaded(doc) {
+    try return doc.readyState = "complete"
+    return false
+}
+
+; Najpierw po id: przegląd wszystkich elementów to osobne zapytanie o każdy i na Mercalys zajmuje sekundy.
+; Pełny przegląd zostaje dla przycisków szukanych po napisie albo wartości.
+FindElements(docs, name) {
+    found := []
+    for doc in docs {
+        try {
+            element := doc.getElementById(name)
+            if (WebProp(element, "tagName") != "")
+                found.Push({doc: doc, element: element})
+        }
+    }
+    if (found.Length > 0)
+        return found
+    for doc in docs {
+        for element in AllElements(doc) {
+            if IsButton(element, name)
+                found.Push({doc: doc, element: element})
+        }
+    }
+    return found
+}
+
+IsTicked(title, box) {
+    for hwnd in WinGetList(title) {
+        for item in FindElements(HtmlDocuments(hwnd), box) {
+            if WebProp(item.element, "checked")
+                return true
+        }
+    }
+    return false
+}
+
+WaitForRowGone(step, order, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        if (WebWait(step.title, step.close, "", 500) = "" && GridCell(step, order, step.numberColumn) = "?")
+            return ""
+        if (A_TickCount >= deadline)
+            return "Dostawa nie zniknęła z listy po zatwierdzeniu."
+        Sleep 300
+    }
+}
+
+; Dostawa bywa na innej stronie listy, a lista zostaje na stronie, na której była. Szukamy od pierwszej, bo dostawa może
+; być przed bieżącą. "" też wtedy, gdy nie ma jej na żadnej stronie: to rozstrzyga GridCell w miejscu wywołania.
+ShowOrderRow(step, order) {
+    if (step.firstPage = "" || GridCell(step, order, step.numberColumn) != "?")
+        return ""
+    if PagerAvailable(step.title, step.firstPage) {
+        problem := TurnPage(step, step.firstPage)
+        if (problem != "")
+            return problem
+    }
+    Loop {
+        if (GridCell(step, order, step.numberColumn) != "?" || !PagerAvailable(step.title, step.nextPage))
+            return ""
+        problem := TurnPage(step, step.nextPage)
+        if (problem != "")
+            return problem
+    }
+}
+
+; Na pierwszej stronie nie ma przycisku pierwszej, a na ostatniej następnej.
+PagerAvailable(title, button) {
+    for hwnd in WinGetList(title) {
+        for item in FindElements(HtmlDocuments(hwnd), button) {
+            if (!WebProp(item.element, "disabled") && IsShown(item.element))
+                return true
+        }
+    }
+    return false
+}
+
+TurnPage(step, button) {
+    first := FirstRowKey(step.title, step.grid)
+    problem := WebClick(step.title, button, 5000)
+    if (problem != "")
+        return problem
+    return WaitForNewPage(step.title, step.grid, first, 15000) ? "" : "Lista nie przeszła na inną stronę."
+}
+
+; Wartość kolumny w wierszu z numerem; "?", gdy takiego wiersza nie ma.
+GridCell(step, order, column) {
+    for hwnd in WinGetList(step.title) {
+        for doc in HtmlDocuments(hwnd) {
+            for item in GridRows(doc, step.grid) {
+                if (ListKey(CellText(item.row, step.numberColumn), "") = ListKey(order, ""))
+                    return CellText(item.row, column)
+            }
+        }
+    }
+    return "?"
+}
+
+; Pola własne Mercalys reagują na klawisze, a nie na zmianę wartości: potrzebny jest fokus i prawdziwe naciśnięcie.
+WebKey(title, field, keys, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                for element in FormElements(doc) {
+                    if ((WebProp(element, "id") = field || WebProp(element, "name") = field) && IsShown(element)) {
+                        try {
+                            WinActivate hwnd
+                            ; Klawisze idą do aktywnego okna: bez tego trafiłyby np. w otwarty PDF.
+                            if !WinWaitActive("ahk_id " hwnd, , 2)
+                                return "Okno `"" title "`" nie stało się aktywne, klawisze trafiłyby w inne okno."
+                            element.focus()
+                            Sleep 100
+                            Send keys
+                            return ""
+                        }
+                    }
+                }
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie ma pola `"" field "`" w oknie `"" title "`"."
+        Sleep 100
+    }
+}
+
+; Sprawdza wartość pola po wyrażeniu regularnym. Mercalys formatuje pola po wyjściu z nich, więc wzorzec dopuszcza oba zapisy.
+WebValue(title, field, pattern, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    last := "(brak pola)"
+    Loop {
+        for hwnd in WinGetList(title) {
+            for item in FindElements(HtmlDocuments(hwnd), field) {
+                if !(PageLoaded(item.doc) && IsShown(item.element))
+                    continue
+                last := WebProp(item.element, "type") = "checkbox"
+                    ? (WebProp(item.element, "checked") ? "tak" : "nie")
+                    : Trim(WebProp(item.element, "value"))
+                if RegExMatch(last, pattern)
+                    return ""
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Pole `"" field "`" ma wartość `"" last "`", a miało pasować do `"" pattern "`"."
+        Sleep 100
+    }
+}
+
+; Czeka na element i tekst na tej samej stronie: po przeładowaniu stara strona ma jeszcze stare wiersze, a nagłówek
+; złej dostawy wygląda tak samo jak właściwej. Liczba w tekście musi stać osobno: 10851 nie pasuje do 108510.
+; Kilka tekstów po średniku: wystarczy jeden z nich, np. różne pytania tego samego okna.
+WebWait(title, element, text, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    pattern := "i)(?<!\d)(?:\Q" StrReplace(text, ";", "\E|\Q") "\E)(?!\d)"
+    Loop {
+        for hwnd in WinGetList(title) {
+            for item in FindElements(HtmlDocuments(hwnd), element) {
+                if !(PageLoaded(item.doc) && IsShown(item.element))
+                    continue
+                if (text = "")
+                    return ""
+                try {
+                    if RegExMatch(item.doc.body.innerText, pattern)
+                        return ""
+                }
+            }
+        }
+        if (A_TickCount >= deadline)
+            return text = "" ? "Nie pojawił się element `"" element "`"."
+                : "Nie pojawił się element `"" element "`" z tekstem `"" text "`"."
+        Sleep 100
+    }
+}
+
+; Zaznacza wiersz z tekstem w kolumnie (bez spacji i wielkości liter) i sprawdza, że zaznaczenie się przyjęło.
+WebPickRow(title, grid, column, text, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    wanted := ListKey(text, "")
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                for item in GridRows(doc, grid) {
+                    if (ListKey(CellText(item.row, column), "") = wanted) {
+                        try WinActivate hwnd
+                        try {
+                            ClickWithoutWaiting(doc, item.row)
+                            return WaitForSelection(doc, grid, item, deadline)
+                        }
+                    }
+                }
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie ma wiersza `"" text "`" na liście `"" grid "`"."
+        Sleep 100
+    }
+}
+
+; Ustawia pole albo listę i sprawdza wynik; lista bez takiej pozycji to błąd, nie cicha zmiana na inną.
+WebSetValue(title, field, value, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                for element in FormElements(doc) {
+                    if (WebProp(element, "id") != field && WebProp(element, "name") != field)
+                        continue
+                    if (WebProp(element, "disabled") || !IsShown(element))
+                        continue
+                    if (WebProp(element, "value") = value)
+                        return ""
+                    limit := WebProp(element, "maxLength")
+                    if (limit != "" && limit > 0 && limit < 100000 && StrLen(value) > limit)
+                        return "Wartość `"" value "`" jest dłuższa niż pole `"" field "`" (najwyżej " limit " znaków)."
+                    try {
+                        previous := WebProp(element, "value")
+                        element.value := value
+                        if (WebProp(element, "value") != value) {
+                            element.value := previous ; lista bez tej pozycji zostałaby pusta
+                            return "Pole `"" field "`" nie przyjęło wartości `"" value "`"."
+                        }
+                        try WinActivate hwnd
+                        window := doc.parentWindow
+                        window.__macroTarget := element
+                        window.setTimeout("window.__macroTarget.fireEvent('onchange')", 0, "JScript")
+                        return ""
+                    }
+                }
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie ma pola `"" field "`" w oknie `"" title "`"."
+        Sleep 100
+    }
+}
+
 ; Obsługuje bony z listy strona po stronie: tylko wiersz z listy i z pustą kolumną dostaje kliknięcie, najwyżej raz, a pętla
 ; czeka na wpisanie wyniku. Kończy się, gdy każdy bon z listy ma wynik, po czym podsumowanie mówi, czego nie było.
-WebEachRow(title, grid, column, button, nextPage, maxCount, wanted) {
+WebEachRow(title, grid, column, button, nextPage, maxCount, wanted, confirm := "", results := Map()) {
     handled := Map()
-    results := Map() ; klucz z listy -> wartość kolumny
     count := 0
     Accepts(row) => WantedKey(row, wanted) != ""
     Summary(ending) => ListSummary(wanted, handled, results, count, ending)
@@ -237,8 +976,40 @@ WebEachRow(title, grid, column, button, nextPage, maxCount, wanted) {
             return Summary("ZATRZYMANE: " problem)
         handled[key] := true
         count += 1
+        if IsObject(confirm) {
+            problem := ConfirmDialog(confirm.title, confirm.expected, confirm.button, 30000)
+            if (problem != "")
+                return Summary("ZATRZYMANE przy wierszu " key ": " problem)
+        }
         if !WaitForRowResult(title, grid, column, key, 30000)
             return Summary("ZATRZYMANE: nie widać wyniku przy wierszu " key ". Sprawdź go ręcznie, makro nie kliknie go ponownie.")
+    }
+}
+
+; Okno z wynikiem blokuje główną stronę. Zamyka je tylko oczekiwany komunikat, każdy inny zatrzymuje pętlę, żeby było widać, co się stało.
+ConfirmDialog(title, expected, button, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                text := ""
+                try {
+                    if (doc.readyState = "complete")
+                        text := Trim(doc.body.innerText)
+                }
+                if (text = "")
+                    continue
+                if !InStr(text, expected)
+                    return "Mercalys pokazał inny komunikat: " text
+                problem := WebClick(title, button, 5000)
+                if (problem != "")
+                    return problem
+                return WinWaitClose("ahk_id " hwnd, , 10) ? "" : "Okno potwierdzenia się nie zamknęło."
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie pojawiło się okno potwierdzenia `"" expected "`"."
+        Sleep 100
     }
 }
 
@@ -354,7 +1125,7 @@ WaitForSelection(doc, grid, item, deadline) {
 GridRows(doc, grid) {
     rows := []
     try {
-        if (doc.readyState != "complete")
+        if (doc.readyState != "complete" || WebProp(doc.getElementById(grid "_hiddenFocus"), "tagName") = "")
             return rows
         found := doc.getElementsByTagName("tr")
         Loop found.length {
@@ -382,7 +1153,7 @@ WebShow(title, buttons) {
         found := false
         for hwnd in WinGetList(title) {
             for doc in HtmlDocuments(hwnd) {
-                for element in ClickableElements(doc) {
+                for element in AllElements(doc) {
                     if IsButton(element, Trim(button)) {
                         found := true
                         holder := element
@@ -483,7 +1254,46 @@ ClickableElements(doc) {
     return elements
 }
 
-; Linia raportu F7. Przyciski Mercalys to ikony bez tekstu, więc opis bywa tylko w title albo w obrazku.
+AllElements(doc) {
+    elements := ClickableElements(doc)
+    elements.Push(FormElements(doc)*)
+    return elements
+}
+
+; Pola do wypełniania: skanowanie pokazuje je obok przycisków, a WEBSET szuka w nich po id albo name.
+FormElements(doc) {
+    elements := []
+    try {
+        for tag in ["select", "input", "textarea"] {
+            found := doc.getElementsByTagName(tag)
+            Loop found.length {
+                element := found.item(A_Index - 1)
+                if (tag != "input" || InStr(" text password ", " " StrLower(WebProp(element, "type")) " "))
+                    elements.Push(element)
+            }
+        }
+    }
+    return elements
+}
+
+DescribeField(element) {
+    line := StrLower(WebProp(element, "tagName")) " " WebProp(element, "type") " | id=" WebProp(element, "id")
+        . " | name=" WebProp(element, "name") " | value=" WebProp(element, "value")
+    maxLength := WebProp(element, "maxLength")
+    if (maxLength != "" && maxLength < 100000)
+        line .= " | max=" maxLength
+    try {
+        options := element.options
+        line .= " | pozycje="
+        Loop options.length {
+            option := options.item(A_Index - 1)
+            line .= WebProp(option, "value") "=" WebProp(option, "text") "; "
+        }
+    }
+    return line
+}
+
+; Linia raportu skanowania. Przyciski Mercalys to ikony bez tekstu, więc opis bywa tylko w title albo w obrazku.
 DescribeElement(element) {
     line := StrLower(WebProp(element, "tagName")) " " WebProp(element, "type") " | id=" WebProp(element, "id")
         . " | name=" WebProp(element, "name") " | value=" WebProp(element, "value")

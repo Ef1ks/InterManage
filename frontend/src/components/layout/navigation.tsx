@@ -7,6 +7,7 @@ import {
   CroissantIcon,
   DatabaseBackupIcon,
   DatabaseIcon,
+  DownloadIcon,
   HashIcon,
   NewspaperIcon,
   PackageIcon,
@@ -16,6 +17,7 @@ import {
   TagIcon,
   TruckIcon,
   UserCogIcon,
+  UsersIcon,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -24,11 +26,13 @@ import { bakeryPath } from '@/features/bakery-check/paths'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
+import { downloadsPath } from '@/features/downloads/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { salesPaths } from '@/features/sales/paths'
 import { stocktakePath } from '@/features/stocktake/paths'
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
+import { TimeAttentionBadge } from '@/features/staff-time/TimeAttentionBadge'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import type { Me, PermissionCategory, PermissionCategoryInfo } from '@/lib/types'
@@ -65,10 +69,19 @@ type GroupSpec = Omit<NavGroup, 'items'> & { items: ItemSpec[] }
 
 const canEditDocuments = (me: Me) => hasPermission(me, 'DOCUMENTS', 'EDIT')
 
-const DELIVERIES = 'Dostawy'
-const PROMOTIONS = 'Promocje i gazetki'
+const RECEIVING = 'Przyjęcie towaru'
+const PURCHASE_CHECKS = 'Weryfikacja zakupów'
+const SUPPLIER_LIST = 'Dostawcy'
+const STOCK = 'Towar'
+const STORE_DATA = 'Dane z systemu sklepu'
+const STORE_SCOPE = 'Wybrany sklep'
+const COMPANY_SCOPE = 'Firma'
 
-/** Kolejność grup i narzędzi w menu; kolejne narzędzie dopisujemy do pasującej grupy. */
+/**
+ * Kolejność grup i narzędzi w menu; kolejne narzędzie dopisujemy do pasującej grupy.
+ * Klucze grup są zapisane w kolejności menu sklepu (`store_sidebar_settings`), więc istniejących nie zmieniamy.
+ * Zamówienia do dostawców (`ORDERS`) nie mają jeszcze modułu, więc nie stoją w menu.
+ */
 const GROUPS: GroupSpec[] = [
   {
     key: 'documents',
@@ -82,22 +95,23 @@ const GROUPS: GroupSpec[] = [
     key: 'purchases',
     path: '/zakupy',
     label: 'Zakupy',
-    description: 'Wprowadzanie towaru, dostawy z bazy, gazetki i promocje.',
+    description: 'Przyjęcie towaru z faktur i z bazy, faktury KSeF, weryfikacja zakupów i dostawcy.',
     icon: PackageIcon,
     items: [
-      { category: 'DATA_ENTRY', section: DELIVERIES },
+      { category: 'DATA_ENTRY', section: RECEIVING },
       {
         key: 'base-delivery',
-        section: DELIVERIES,
+        section: RECEIVING,
         path: basePath,
         label: 'Dostawa z bazy',
         description: 'Dokument dostawy z bazy w tabeli: nośniki, krótkie terminy, kaucje, nowe artykuły i ceny.',
         icon: TruckIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
+      { category: 'KSEF_INVOICES', section: RECEIVING },
       {
         key: 'bakery-check',
-        section: DELIVERIES,
+        section: PURCHASE_CHECKS,
         path: bakeryPath,
         label: 'Weryfikacja piekarni',
         description: 'Ilości z dokumentów WZ kontra faktura z korektami i bon po korektach.',
@@ -105,10 +119,19 @@ const GROUPS: GroupSpec[] = [
         visible: (me) =>
           hasPermission(me, 'DATA_ENTRY') && hasPermission(me, 'DOCUMENTS') && hasPermission(me, 'KSEF_INVOICES'),
       },
-      { category: 'ORDERS', section: DELIVERIES },
+      { category: 'MEAT_PURCHASES', section: PURCHASE_CHECKS },
+      { category: 'SUPPLIERS', section: SUPPLIER_LIST },
+    ],
+  },
+  {
+    key: 'promotions',
+    path: '/promocje',
+    label: 'Promocje',
+    description: 'Gazetki z centrali, własne promocje, etykiety przy półce i kody MEA.',
+    icon: BadgePercentIcon,
+    items: [
       {
         key: 'leaflet',
-        section: PROMOTIONS,
         path: leafletPath,
         label: 'Opracowanie gazetki',
         description: 'Gazetka z centrali: artykuły z Mercalys, pliki cen .PRO, etykiety i kody MEA.',
@@ -117,7 +140,6 @@ const GROUPS: GroupSpec[] = [
       },
       {
         key: 'promo-setup',
-        section: PROMOTIONS,
         path: promoSetupPath,
         label: 'Ustaw promocje',
         description: 'Kilka promocji naraz: artykuły, okresy, ceny lub przeceny i pliki cen .PRO.',
@@ -125,8 +147,15 @@ const GROUPS: GroupSpec[] = [
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
       {
+        key: 'leaflet-labels',
+        path: leafletLabelsPath,
+        label: 'Etykieta z gazetki',
+        description: 'Zeskanuj artykuł: jaką etykietę wydrukować i od kiedy do kiedy obowiązuje.',
+        icon: TagIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'INVENTORY'),
+      },
+      {
         key: 'mea-codes',
-        section: PROMOTIONS,
         path: meaPath,
         label: 'Kody MEA',
         description: 'Kody MEA z dokumentów bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
@@ -136,28 +165,12 @@ const GROUPS: GroupSpec[] = [
     ],
   },
   {
-    key: 'ksef',
-    path: TOOL_ROUTES.KSEF_INVOICES.path,
-    label: 'Faktury KSeF',
-    description: 'Faktury zakupowe z Krajowego Systemu e-Faktur.',
-    icon: TOOL_ROUTES.KSEF_INVOICES.icon,
-    items: [{ category: 'KSEF_INVOICES' }],
-  },
-  {
-    key: 'suppliers',
-    path: TOOL_ROUTES.SUPPLIERS.path,
-    label: 'Dostawcy',
-    description: 'Kartoteka dostawców i ich kontakty.',
-    icon: TOOL_ROUTES.SUPPLIERS.icon,
-    items: [{ category: 'SUPPLIERS' }],
-  },
-  {
     key: 'sales',
     path: TOOL_ROUTES.SALES.path,
-    label: 'Sprzedaż i raporty',
-    description: 'Raporty sprzedaży, strat i marży oraz zakup mięsa.',
+    label: 'Raporty',
+    description: 'Sprzedaż, marża i straty, weryfikacja zakupów, promocje, braki i zerówki.',
     icon: TOOL_ROUTES.SALES.icon,
-    items: [{ category: 'SALES', label: 'Raporty sprzedaży' }, { category: 'MEAT_PURCHASES' }],
+    items: [{ category: 'SALES', label: 'Raporty' }],
   },
   {
     key: 'deli',
@@ -183,56 +196,45 @@ const GROUPS: GroupSpec[] = [
     key: 'data',
     path: '/dane',
     label: 'Magazyn i dane',
-    description: 'Wgrywanie raportów z systemu sklepu i magazyn.',
+    description: 'Kartoteka towarów, weryfikacja inwentury i codzienne raporty z systemu sklepu.',
     icon: DatabaseIcon,
     items: [
-      { category: 'IMPORTS' },
-      { category: 'INVENTORY' },
-      {
-        key: 'leaflet-labels',
-        path: leafletLabelsPath,
-        label: 'Etykieta z gazetki',
-        description: 'Zeskanuj artykuł: jaką etykietę wydrukować i od kiedy do kiedy obowiązuje.',
-        icon: TagIcon,
-        visible: (me) => hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'INVENTORY'),
-      },
+      { category: 'INVENTORY', section: STOCK },
       {
         key: 'stocktake',
+        section: STOCK,
         path: stocktakePath,
         label: 'Weryfikacja inwentury',
         description: 'Co przeliczyć przed zamknięciem inwentury: pomyłki plus/minus, niepoliczony towar i literówki.',
         icon: ClipboardCheckIcon,
         visible: (me) => hasPermission(me, 'INVENTORY'),
       },
+      { category: 'IMPORTS', section: STORE_DATA },
     ],
   },
   {
     key: 'store',
-    path: '/sklep',
-    label: 'Sklep',
-    description: 'Pracownicy i grafik oraz sklepy firmy.',
-    icon: StoreIcon,
+    path: '/zespol',
+    label: 'Zespół',
+    description: 'Pracownicy, grafik, czas pracy i kadry.',
+    icon: UsersIcon,
     items: [
       { category: 'STAFF' },
-      {
-        key: 'stores',
-        path: '/ustawienia/sklepy',
-        label: 'Sklepy',
-        description: 'Sklepy firmy: numer, nazwa, adres, NIP.',
-        icon: StoreIcon,
-        visible: (me) => me.owner,
-      },
+      { category: 'STAFF_SCHEDULE' },
+      { category: 'STAFF_TIME', badge: () => <TimeAttentionBadge /> },
+      { category: 'STAFF_RECORDS' },
     ],
   },
   {
     key: 'settings',
     path: '/ustawienia',
     label: 'Ustawienia',
-    description: 'Ustawienia wybranego sklepu, role, użytkownicy i kopia zapasowa.',
+    description: 'Ustawienia wybranego sklepu oraz sklepy, użytkownicy, role, kopia zapasowa i pliki do pobrania.',
     icon: SettingsIcon,
     items: [
       {
         key: 'store-settings',
+        section: STORE_SCOPE,
         path: '/ustawienia-sklepu',
         label: 'Ustawienia sklepu',
         description: 'Budżet rejonów, marże, ceny dostawców, sklepy zaprzyjaźnione, protokoły i zmiana cen.',
@@ -246,15 +248,17 @@ const GROUPS: GroupSpec[] = [
         badge: (me) => canEditDocuments(me) && <PartnerInvitationsBadge />,
       },
       {
-        key: 'roles',
-        path: '/ustawienia/role',
-        label: 'Role i uprawnienia',
-        description: 'Co wolno każdej roli w poszczególnych narzędziach.',
-        icon: ShieldIcon,
+        key: 'stores',
+        section: COMPANY_SCOPE,
+        path: '/ustawienia/sklepy',
+        label: 'Sklepy',
+        description: 'Sklepy firmy: numer, nazwa, adres, NIP.',
+        icon: StoreIcon,
         visible: (me) => me.owner,
       },
       {
         key: 'users',
+        section: COMPANY_SCOPE,
         path: '/ustawienia/uzytkownicy',
         label: 'Użytkownicy',
         description: 'Zaproszenia, role i sklepy pracowników.',
@@ -262,16 +266,39 @@ const GROUPS: GroupSpec[] = [
         visible: (me) => me.owner,
       },
       {
+        key: 'roles',
+        section: COMPANY_SCOPE,
+        path: '/ustawienia/role',
+        label: 'Role i uprawnienia',
+        description: 'Co wolno każdej roli w poszczególnych narzędziach.',
+        icon: ShieldIcon,
+        visible: (me) => me.owner,
+      },
+      {
         key: 'backup',
+        section: COMPANY_SCOPE,
         path: '/ustawienia/kopia-zapasowa',
         label: 'Kopia zapasowa',
         description: 'Codzienna kopia bazy na Dysk Google.',
         icon: DatabaseBackupIcon,
         visible: (me) => me.owner,
       },
+      {
+        key: 'downloads',
+        section: COMPANY_SCOPE,
+        path: downloadsPath,
+        label: 'Do pobrania',
+        description: 'Programy do zainstalowania na komputerze, np. AutoJob.',
+        icon: DownloadIcon,
+        // Pobiera każdy zalogowany, więc Ustawienia widzi każdy (z samym tym kafelkiem bez innych uprawnień).
+        visible: () => true,
+      },
     ],
   },
 ]
+
+/** Dawne adresy stron grup (zakładki, historia przeglądarki) i dokąd prowadzą teraz. */
+export const MOVED_GROUP_PATHS: Record<string, string> = { '/sklep': '/zespol' }
 
 /** Wszystkie kategorie menu do ustawienia kolejności, także te, których ta osoba nie widzi. */
 export type SidebarGroup = Pick<GroupSpec, 'key' | 'label' | 'icon'>
@@ -288,7 +315,7 @@ export function orderByKeys<T extends { key: string }>(groups: T[], order: strin
 
 /** Ścieżki stron grup (bez grup, których ścieżka to od razu narzędzie, np. Sprzedaż). */
 export const NAV_GROUP_PATHS = GROUPS.filter((group) =>
-  group.items.every((item) => !('category' in item) || TOOL_ROUTES[item.category].path !== group.path),
+  group.items.every((item) => ('category' in item ? TOOL_ROUTES[item.category].path : item.path) !== group.path),
 ).map((group) => group.path)
 
 function resolveItem(spec: ItemSpec, me: Me, categories: PermissionCategoryInfo[]): NavItem | null {

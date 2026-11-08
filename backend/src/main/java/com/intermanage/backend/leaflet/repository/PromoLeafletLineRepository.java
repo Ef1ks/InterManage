@@ -34,7 +34,8 @@ public interface PromoLeafletLineRepository extends JpaRepository<PromoLeafletLi
 
     /**
      * Pozycje aktywnych gazetek sklepu należące do artykułów, tak jak w {@link PromoLeafletRepository#ARTICLE_PERIODS}:
-     * artykuł przypięty ręcznie, a bez przypięcia ITM 8 z pliku i każdy EAN artykułu (bieżący, z multikodów, dawne pary).
+     * artykuł przypięty ręcznie, a bez przypięcia ITM 8 z pliku i każdy EAN artykułu (bieżący, z multikodów, dawne pary),
+     * do tego zawsze ITM 8 PROMO z pliku, a towar na wagę po początku kodu z etykiety wagi.
      */
     @Query(value = """
             with wanted as (
@@ -50,8 +51,13 @@ public interface PromoLeafletLineRepository extends JpaRepository<PromoLeafletLi
                 union
                 select w.itm8, ltrim(e.ean, '0')
                 from product_eans e join wanted w on w.id = e.product_id
+            ), scales as (
+                select c.itm8, left(c.ean, 7) as scale from codes c where c.ean ~ '^2[1-9][0-9]{10,11}$'
+                union
+                select c.itm8, left(c.ean, 6) from codes c where c.ean ~ '^2[1-9][0-9]{4}$'
             ), leaflet_lines as (
-                select x.id, x.itm8, ltrim(x.ean, '0') as ean, k.product_id as linked_product_id
+                select x.id, x.itm8, x.promo_itm8, ltrim(x.ean, '0') as ean, k.product_id as linked_product_id,
+                       case when x.ean ~ '^2[1-9][0-9]{10,11}$' then left(x.ean, 7) end as scale
                 from promo_leaflet_lines x
                 join promo_leaflets f on f.id = x.leaflet_id
                 left join promo_leaflet_links k on k.store_id = f.store_id and k.ean = ltrim(x.ean, '0')
@@ -66,8 +72,16 @@ public interface PromoLeafletLineRepository extends JpaRepository<PromoLeafletLi
             where x.linked_product_id is null and x.itm8 ~ '^[0-9]+$'
               and lpad(x.itm8, 13, '0') = any(cast(:itm8s as text[]))
             union
+            select x.id, lpad(x.promo_itm8, 13, '0')
+            from leaflet_lines x
+            where x.promo_itm8 ~ '^[0-9]+$' and lpad(x.promo_itm8, 13, '0') = any(cast(:itm8s as text[]))
+            union
             select x.id, c.itm8
             from leaflet_lines x join codes c on c.ean = x.ean
+            where x.linked_product_id is null
+            union
+            select x.id, s.itm8
+            from leaflet_lines x join scales s on s.scale = x.scale or s.scale = left(x.scale, 6)
             where x.linked_product_id is null""", nativeQuery = true)
     List<ArticleLine> findArticleLines(UUID storeId, String[] itm8s);
 

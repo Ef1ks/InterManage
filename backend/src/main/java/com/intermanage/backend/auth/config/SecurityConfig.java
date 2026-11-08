@@ -11,7 +11,6 @@ import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.authorization.AuthorizationManagers;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -46,9 +45,11 @@ public class SecurityConfig {
 
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .csrf(CsrfConfigurer::spa)
+                // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
+                .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**"))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/activate").permitAll()
+                        .requestMatchers("/api/time-clock/**").permitAll()
                         // Jedyne endpointy dostępne, zanim użytkownik ustawi własne hasło.
                         .requestMatchers("/api/auth/me", "/api/auth/password/setup").authenticated()
                         .requestMatchers("/api/settings/**").hasAuthority(AppUserPrincipal.OWNER_AUTHORITY)

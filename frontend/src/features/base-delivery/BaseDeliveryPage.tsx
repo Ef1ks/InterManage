@@ -34,7 +34,6 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import { useCan } from '@/features/auth/api'
 import {
   type PriceControlPayload,
   type ProductFilePayload,
@@ -73,6 +72,7 @@ import { SaveSettingsDialog } from '@/features/data-entry/SaveSettingsDialog'
 import { useSuppliers } from '@/features/documents/api'
 import { formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
+import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules } from '@/features/store-settings/api'
 import { TOOL_ROUTES } from '@/features/tools/categories'
@@ -261,7 +261,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const gridRef = useRef<GridHandle>(null)
   const [toolbarHeight, setToolbarHeight] = useState(0)
 
-  const canSeeSales = useCan('SALES', 'VIEW')
+  const canSeeSales = useCanSeeArticleStats()
   const salesOverview = useSalesReportsOverview(store.id, canSeeSales)
   const [chartTarget, setChartTarget] = useState<SalesChartTarget | null>(null)
   const showArticle = useCallback(
@@ -877,7 +877,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                   size="sm"
                   disabled={!delivery}
                   onClick={() => setItm8MacroOpen(true)}
-                  title="Makro AutoHotkey do schowka: wpisanie kodów ITM8 artykułom z dokumentu w programie sklepu (F9 w odtwarzaczu)"
+                  title="Makro AutoHotkey do schowka: wpisanie kodów ITM8 artykułom z dokumentu w programie sklepu (Alt+E w odtwarzaczu)"
                 >
                   <KeyboardIcon />
                   Uzupełnij ITM8

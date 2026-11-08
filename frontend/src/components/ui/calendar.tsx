@@ -28,6 +28,8 @@ export function Calendar({ value, onChange, min, max, className }: CalendarProps
   const today = todayIso()
   const [focused, setFocused] = useState(value || (min && min > today ? min : max && max < today ? max : today))
   const [month, setMonth] = useState(() => monthStart(focused))
+  // Pierwszy rok widocznej siatki lat; pusty = widać dni. Dawne daty (urodzenie) nie wymagają klikania po miesiącu.
+  const [yearsFrom, setYearsFrom] = useState<number | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
   const days = useMemo(() => monthGrid(month), [month])
@@ -58,20 +60,72 @@ export function Calendar({ value, onChange, min, max, className }: CalendarProps
   return (
     <div className={cn('w-72 select-none', className)}>
       <div className="mb-3 flex items-center justify-between gap-2 px-1">
-        <p className="text-sm font-semibold capitalize" aria-live="polite">
-          {monthTitle.format(parseIsoDate(month))}
-        </p>
-        <div className="flex gap-1">
-          <MonthButton label="Poprzedni miesiąc" disabled={!canGoBack} onClick={() => setMonth(shiftMonth(month, -1))}>
-            <ChevronLeftIcon />
-          </MonthButton>
-          <MonthButton label="Następny miesiąc" disabled={!canGoForward} onClick={() => setMonth(shiftMonth(month, 1))}>
-            <ChevronRightIcon />
-          </MonthButton>
-        </div>
+        <button
+          type="button"
+          aria-live="polite"
+          title="Wybierz rok"
+          onClick={() => setYearsFrom(yearsFrom === null ? Number(month.slice(0, 4)) - 7 : null)}
+          className="-mx-1 rounded-lg px-1 py-0.5 text-sm font-semibold capitalize transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {yearsFrom === null ? monthTitle.format(parseIsoDate(month)) : `${yearsFrom} – ${yearsFrom + 11}`}
+        </button>
+        {yearsFrom === null ? (
+          <div className="flex gap-1">
+            <MonthButton
+              label="Poprzedni miesiąc"
+              disabled={!canGoBack}
+              onClick={() => setMonth(shiftMonth(month, -1))}
+            >
+              <ChevronLeftIcon />
+            </MonthButton>
+            <MonthButton
+              label="Następny miesiąc"
+              disabled={!canGoForward}
+              onClick={() => setMonth(shiftMonth(month, 1))}
+            >
+              <ChevronRightIcon />
+            </MonthButton>
+          </div>
+        ) : (
+          <div className="flex gap-1">
+            <MonthButton label="Wcześniejsze lata" onClick={() => setYearsFrom(yearsFrom - 12)}>
+              <ChevronLeftIcon />
+            </MonthButton>
+            <MonthButton label="Późniejsze lata" onClick={() => setYearsFrom(yearsFrom + 12)}>
+              <ChevronRightIcon />
+            </MonthButton>
+          </div>
+        )}
       </div>
 
-      <div role="grid" ref={gridRef} onKeyDown={onKeyDown} className="grid grid-cols-7 gap-y-1">
+      {yearsFrom !== null && (
+        <div className="grid grid-cols-3 gap-1">
+          {Array.from({ length: 12 }, (_, index) => yearsFrom + index).map((year) => (
+            <button
+              key={year}
+              type="button"
+              aria-pressed={String(year) === month.slice(0, 4)}
+              onClick={() => {
+                setMonth(`${year}${month.slice(4)}`)
+                setYearsFrom(null)
+              }}
+              className={cn(
+                'h-10 rounded-lg text-sm tabular-nums transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
+                String(year) === month.slice(0, 4) && 'bg-muted font-semibold',
+              )}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div
+        role="grid"
+        ref={gridRef}
+        onKeyDown={onKeyDown}
+        className={cn('grid grid-cols-7 gap-y-1', yearsFrom !== null && 'hidden')}
+      >
         {WEEKDAYS.map((weekday, index) => (
           <div
             key={weekday}
@@ -105,17 +159,15 @@ export function Calendar({ value, onChange, min, max, className }: CalendarProps
                 'hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95 motion-reduce:active:scale-100',
                 !inMonth && 'text-muted-foreground/60',
                 disabled && 'pointer-events-none text-muted-foreground/35 line-through decoration-muted-foreground/30',
-                selected && 'bg-brand font-semibold text-brand-foreground shadow-[0_2px_8px_-2px_var(--brand)] hover:bg-brand',
+                selected &&
+                  'bg-brand font-semibold text-brand-foreground shadow-[0_2px_8px_-2px_var(--brand)] hover:bg-brand',
               )}
             >
               {parseIsoDate(day).getDate()}
               {day === today && (
                 <span
                   aria-hidden
-                  className={cn(
-                    'absolute bottom-1 size-1 rounded-full',
-                    selected ? 'bg-brand-foreground' : 'bg-brand',
-                  )}
+                  className={cn('absolute bottom-1 size-1 rounded-full', selected ? 'bg-brand-foreground' : 'bg-brand')}
                 />
               )}
             </button>

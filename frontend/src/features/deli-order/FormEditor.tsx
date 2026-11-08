@@ -18,7 +18,13 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CheckIcon, ClipboardPasteIcon, GripVerticalIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -39,13 +45,20 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
-import { type MoveChange, useChangeOrderForm, useMoveInOrderForm, useOrderForm, usePasteOrderProducts } from '@/features/deli-order/api'
+import {
+  type MoveChange,
+  useChangeOrderForm,
+  useMoveInOrderForm,
+  useOrderForm,
+  usePasteOrderProducts,
+} from '@/features/deli-order/api'
 import { CATEGORY_NAV_GRID, CategoryNav, categoryAnchorId } from '@/features/deli-order/CategoryNav'
 import { InvitationsPanel } from '@/features/deli-order/InvitationsPanel'
 import { NameDialog, type NameDialogState } from '@/features/deli-order/NameDialog'
 import { type PasteDialogState, PasteProductsDialog } from '@/features/deli-order/PasteProductsDialog'
 import { ProductSearchField } from '@/features/deli-order/ProductSearchField'
 import { UNIT_LABELS, UnitToggle } from '@/features/deli-order/QuantityInput'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import type { OrderCategory, OrderProduct, OrderSection, OrderUnit, StoreSummary } from '@/lib/types'
@@ -112,21 +125,22 @@ export function FormEditor({ store }: { store: StoreSummary }) {
           className="mb-6"
           steps={[
             <>
-              Dodaj <strong className="font-semibold text-foreground">dział</strong> (np. Rzeźnia). Każdy dział to osobna
-              zakładka i osobna kartka zamówienia.
+              Dodaj <strong className="font-semibold text-foreground">dział</strong> (np. Rzeźnia). Każdy dział to
+              osobna zakładka i osobna kartka zamówienia.
             </>,
             <>
-              W dziale dodaj <strong className="font-semibold text-foreground">kategorię</strong> (np. Wędliny) i wyszukaj
-              produkty z kartoteki po nazwie, EAN albo ITM8.
+              W dziale dodaj <strong className="font-semibold text-foreground">kategorię</strong> (np. Wędliny) i
+              wyszukaj produkty z kartoteki po nazwie, EAN albo ITM8.
             </>,
             <>
-              Przy produkcie wybierz, czy zamawia się go w <strong className="font-semibold text-foreground">kg czy
-              sztukach</strong>. Kolejność zmienisz, <strong className="font-semibold text-foreground">przeciągając
-              za uchwyt</strong> kategorię albo produkt, także do innej kategorii działu.
+              Przy produkcie wybierz, czy zamawia się go w{' '}
+              <strong className="font-semibold text-foreground">kg czy sztukach</strong>. Kolejność zmienisz,{' '}
+              <strong className="font-semibold text-foreground">przeciągając za uchwyt</strong> kategorię albo produkt,
+              także do innej kategorii działu.
             </>,
             <>
-              <strong className="font-semibold text-foreground">Zaproś sklepy</strong> poniżej, żeby mogły zamawiać z tego
-              formularza.
+              <strong className="font-semibold text-foreground">Zaproś sklepy</strong> poniżej, żeby mogły zamawiać z
+              tego formularza.
             </>,
           ]}
         />
@@ -226,7 +240,8 @@ export function FormEditor({ store }: { store: StoreSummary }) {
                         label: 'Nazwa kategorii',
                         initialName: category.name,
                         submitLabel: 'Zapisz',
-                        onSubmit: (name) => change.mutateAsync({ type: 'renameCategory', categoryId: category.id, name }),
+                        onSubmit: (name) =>
+                          change.mutateAsync({ type: 'renameCategory', categoryId: category.id, name }),
                       })
                     }
                     onDeleteCategory={(category) =>
@@ -235,11 +250,17 @@ export function FormEditor({ store }: { store: StoreSummary }) {
                         description: `Z formularza zniknie lista ${category.products.length} produktów tej kategorii. Produkty zostają w kartotece.`,
                         confirmLabel: 'Usuń kategorię',
                         onConfirm: () =>
-                          change.mutate({ type: 'deleteCategory', categoryId: category.id }, { onError: onChangeError }),
+                          change.mutate(
+                            { type: 'deleteCategory', categoryId: category.id },
+                            { onError: onChangeError },
+                          ),
                       })
                     }
                     onAddProduct={(category, productId) =>
-                      change.mutate({ type: 'addProduct', categoryId: category.id, productId }, { onError: onChangeError })
+                      change.mutate(
+                        { type: 'addProduct', categoryId: category.id, productId },
+                        { onError: onChangeError },
+                      )
                     }
                     onPasteProducts={(category, initialText) =>
                       setPasteDialog({
@@ -249,7 +270,10 @@ export function FormEditor({ store }: { store: StoreSummary }) {
                       })
                     }
                     onRemoveProduct={(category, itemId) =>
-                      change.mutate({ type: 'removeProduct', categoryId: category.id, itemId }, { onError: onChangeError })
+                      change.mutate(
+                        { type: 'removeProduct', categoryId: category.id, itemId },
+                        { onError: onChangeError },
+                      )
                     }
                     onSetUnit={(category, itemId, orderUnit) =>
                       change.mutate(
@@ -261,7 +285,11 @@ export function FormEditor({ store }: { store: StoreSummary }) {
                       form &&
                       move(
                         moveChange,
-                        { sections: sections.map((other) => (other.id === section.id ? { ...section, categories } : other)) },
+                        {
+                          sections: sections.map((other) =>
+                            other.id === section.id ? { ...section, categories } : other,
+                          ),
+                        },
                         onChangeError,
                       )
                     }
@@ -430,7 +458,8 @@ function SectionPanel({
   const onDragStart = ({ active }: DragStartEvent) => {
     const type = dragType(active.data) === 'category' ? 'category' : 'product'
     if (type === 'category') {
-      anchorTop.current = document.getElementById(categoryAnchorId(String(active.id)))?.getBoundingClientRect().top ?? null
+      anchorTop.current =
+        document.getElementById(categoryAnchorId(String(active.id)))?.getBoundingClientRect().top ?? null
     } else {
       setColumns(columnsOf(section))
     }
@@ -479,7 +508,12 @@ function SectionPanel({
     const container = containerOf(itemId, current)
     if (!container) return
     let list = current[container]
-    if (over && over.id !== active.id && containerOf(over.id, current) === container && !String(over.id).startsWith(DROP_PREFIX)) {
+    if (
+      over &&
+      over.id !== active.id &&
+      containerOf(over.id, current) === container &&
+      !String(over.id).startsWith(DROP_PREFIX)
+    ) {
       list = arrayMove(
         list,
         list.findIndex((product) => product.id === itemId),
@@ -525,7 +559,9 @@ function SectionPanel({
         <Card className="items-center px-6 py-10 text-center">
           <p className="font-medium">Dział {section.name} nie ma jeszcze kategorii</p>
           <p className="text-sm text-muted-foreground">
-            {editing ? 'Dodaj kategorię, np. Wędliny, i przypnij do niej produkty.' : 'Formularz tego działu jest w przygotowaniu.'}
+            {editing
+              ? 'Dodaj kategorię, np. Wędliny, i przypnij do niej produkty.'
+              : 'Formularz tego działu jest w przygotowaniu.'}
           </p>
         </Card>
       ) : (
@@ -540,7 +576,10 @@ function SectionPanel({
           onDragEnd={onDragEnd}
           onDragCancel={reset}
         >
-          <SortableContext items={section.categories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext
+            items={section.categories.map((category) => category.id)}
+            strategy={verticalListSortingStrategy}
+          >
             {section.categories.map((category) => (
               <CategoryCard
                 key={category.id}
@@ -659,7 +698,13 @@ function CategoryCard({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn('scroll-mt-20', isDragging && 'opacity-40')}
     >
-      <div className={cn('flex items-center gap-2', !collapsed && 'mb-2', collapsed && 'rounded-xl border bg-card px-2 py-1.5')}>
+      <div
+        className={cn(
+          'flex items-center gap-2',
+          !collapsed && 'mb-2',
+          collapsed && 'rounded-xl border bg-card px-2 py-1.5',
+        )}
+      >
         {editing && (
           <DragHandle
             ref={setActivatorNodeRef}
@@ -673,7 +718,13 @@ function CategoryCard({
         <span className="text-sm text-muted-foreground tabular-nums">{products.length}</span>
         {editing && !collapsed && (
           <div className="ml-auto flex gap-1">
-            <Button variant="ghost" size="icon-sm" aria-label={`Zmień nazwę kategorii ${category.name}`} title="Zmień nazwę" onClick={onRename}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Zmień nazwę kategorii ${category.name}`}
+              title="Zmień nazwę"
+              onClick={onRename}
+            >
               <PencilIcon />
             </Button>
             <Button
@@ -691,10 +742,7 @@ function CategoryCard({
       </div>
 
       {!collapsed && (
-        <Card
-          ref={setDropRef}
-          className={cn('gap-0 py-0 transition-shadow', isOver && 'ring-2 ring-ring/40')}
-        >
+        <Card ref={setDropRef} className={cn('gap-0 py-0 transition-shadow', isOver && 'ring-2 ring-ring/40')}>
           {products.length > 0 && (
             <Table className="min-w-[36rem] table-fixed">
               {/* Stały układ kolumn: każda kategoria to osobna tabela, a kolumny mają się pokrywać między nimi. */}
@@ -794,16 +842,14 @@ function ProductRow({
     >
       {editing && (
         <TableCell className="py-2.5 pl-2">
-          <DragHandle
-            ref={setActivatorNodeRef}
-            label={`Przeciągnij ${label}`}
-            {...attributes}
-            {...listeners}
-          />
+          <DragHandle ref={setActivatorNodeRef} label={`Przeciągnij ${label}`} {...attributes} {...listeners} />
         </TableCell>
       )}
       <TableCell className={cn('py-2.5 whitespace-normal', editing ? 'pl-1' : 'pl-4')}>
-        <div className="font-medium">{product.name ?? 'Bez nazwy'}</div>
+        <div className="font-medium">
+          {product.name ?? 'Bez nazwy'}
+          <ArticleStatsButton article={product} className="ml-1" />
+        </div>
         <div className="text-xs text-muted-foreground">
           {product.brand && `${product.brand} · `}ITM8 {product.itm8}
           {product.active === false && ' · nieaktywny w systemie sklepu'}

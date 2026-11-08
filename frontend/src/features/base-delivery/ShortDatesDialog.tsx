@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { formatDocumentDate, formatQuantity } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError, downloadFile, printFile } from '@/lib/api'
 import type { BaseDelivery } from '@/lib/types'
 
@@ -83,8 +84,17 @@ export function ShortDatesDialog({ storeId, delivery, open, onOpenChange }: Prop
                   <tr key={line.id}>
                     <td className="px-2 py-1.5">{line.carrier}</td>
                     <td className="px-2 py-1.5">{line.itm8}</td>
-                    <td className="max-w-64 truncate px-2 py-1.5" title={line.name}>
-                      {line.name}
+                    <td className="max-w-64 px-2 py-1.5">
+                      <span className="flex items-center gap-1">
+                        <span className="min-w-0 truncate" title={line.name}>
+                          {line.name}
+                        </span>
+                        {line.product?.itm8 && (
+                          <ArticleStatsButton
+                            article={{ itm8: line.product.itm8, name: line.name, ean: line.ean, brand: line.brand }}
+                          />
+                        )}
+                      </span>
                     </td>
                     <td className="px-2 py-1.5 text-right">{formatQuantity(line.quantity)}</td>
                     <td className="px-2 py-1.5">

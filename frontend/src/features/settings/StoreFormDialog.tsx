@@ -3,6 +3,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Form, FormActions, SwitchField, TextField } from '@/components/form'
+import { GusButton } from '@/components/GusButton'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useSaveStore } from '@/features/settings/api'
@@ -55,6 +56,8 @@ function StoreFormBody({ store, onDone }: { store?: Store; onDone: () => void })
     control,
     handleSubmit,
     setError,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<StoreForm>({
     defaultValues: {
@@ -113,22 +116,33 @@ function StoreFormBody({ store, onDone }: { store?: Store; onDone: () => void })
         })}
       />
 
+      <div className="flex items-start gap-2">
+        <TextField
+          label="NIP firmy (opcjonalnie)"
+          inputMode="numeric"
+          autoComplete="off"
+          className="min-w-0 flex-1"
+          hint="Sklepy z tym samym NIP-em dzielą połączenie z KSeF - certyfikat wgrywa się raz dla całej firmy."
+          error={errors.nip?.message}
+          {...register('nip', {
+            validate: (value) => isValidNip(value) || 'Nieprawidłowy NIP',
+          })}
+        />
+        {/* Nazwa sklepu to jego nazwa w przełączniku, nie nazwa firmy, więc GUS uzupełnia tylko adres. */}
+        <GusButton
+          nip={watch('nip')}
+          onFound={(company) => {
+            setValue('nip', company.nip, { shouldDirty: true, shouldValidate: true })
+            setValue('address', company.address ?? '', { shouldDirty: true, shouldValidate: true })
+          }}
+        />
+      </div>
+
       <TextField
         label="Adres (opcjonalnie)"
         autoComplete="off"
         error={errors.address?.message}
         {...register('address', { maxLength: { value: 255, message: 'Maksymalnie 255 znaków' } })}
-      />
-
-      <TextField
-        label="NIP firmy (opcjonalnie)"
-        inputMode="numeric"
-        autoComplete="off"
-        hint="Sklepy z tym samym NIP-em dzielą połączenie z KSeF - certyfikat wgrywa się raz dla całej firmy."
-        error={errors.nip?.message}
-        {...register('nip', {
-          validate: (value) => isValidNip(value) || 'Nieprawidłowy NIP',
-        })}
       />
 
       {!isNew && (

@@ -35,7 +35,11 @@ import type {
   TopSalesMetric,
   TopSalesPartner,
   TopSalesReport,
+  SlowMovingExcludedItem,
   SlowMovingReport,
+  StockGapReport,
+  NegativeStockDelivery,
+  NegativeStockReport,
   ZeroStockReport,
 } from '@/lib/types'
 
@@ -322,8 +326,7 @@ export function useGratisReportPdf(storeId: string) {
   }
 }
 
-const zeroStockQuery = (codes: string[]) =>
-  new URLSearchParams(codes.map((code) => ['nomenclatures', code])).toString()
+const zeroStockQuery = (codes: string[]) => new URLSearchParams(codes.map((code) => ['nomenclatures', code])).toString()
 
 /** Raport zerówek dla potwierdzonego wyboru nomenklatury. */
 export function useZeroStock(storeId: string, codes: string[]) {
@@ -353,6 +356,57 @@ export function useZeroStockPdf(storeId: string) {
   }
 }
 
+export type StockGapQuery = {
+  minWeekly: number
+  maxStock: number
+  noDeliveryDays: number
+  nomenclatures: string[]
+}
+
+/** Braki towaru: zakładki, wyszukiwarkę i sortowanie robi strona, bo pozycji jest najwyżej kilkaset. */
+export function useStockGaps(storeId: string, query: StockGapQuery, enabled: boolean) {
+  const { nomenclatures, ...thresholds } = query
+  const search = new URLSearchParams(Object.entries(thresholds).map(([key, value]) => [key, String(value)]))
+  nomenclatures.forEach((code) => search.append('nomenclatures', code))
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'stock-gaps', query],
+    enabled,
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<StockGapReport>(`${reportsPath(storeId)}/stock-gaps?${search}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export type NegativeStockQuery = {
+  delivery: NegativeStockDelivery
+  days: number
+  from: string | null
+  to: string | null
+  withProduction: boolean
+  nomenclatures: string[]
+}
+
+/** Ujemne stany: sortowanie i wyszukiwanie robi strona, bo artykułów jest 2-3 tys. */
+export function useNegativeStock(storeId: string, query: NegativeStockQuery, enabled: boolean) {
+  const search = new URLSearchParams({
+    delivery: query.delivery,
+    days: String(query.days),
+    withProduction: String(query.withProduction),
+  })
+  if (query.delivery === 'DELIVERED_IN' && query.from && query.to) {
+    search.set('from', query.from)
+    search.set('to', query.to)
+  }
+  query.nomenclatures.forEach((code) => search.append('nomenclatures', code))
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'negative-stock', query],
+    enabled,
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<NegativeStockReport>(`${reportsPath(storeId)}/negative-stock?${search}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
 export type SlowMovingSort = 'value' | 'name' | 'itm8' | 'supplier' | 'delivery' | 'stock' | 'sold' | 'rotation'
 
 export type SlowMovingQuery = {
@@ -362,6 +416,7 @@ export type SlowMovingQuery = {
   category: string | null
   supplier: string | null
   cadencier: 'WITH' | 'WITHOUT' | null
+  origin: 'BASE' | 'OUTSIDE' | null
   minStockValue: number | null
   query: string
   withoutDeliveries: boolean
@@ -402,11 +457,33 @@ export function useSlowMovingPdf(storeId: string) {
       meta: { invalidates: false },
     }),
     download: useMutation({
-      mutationFn: (query: SlowMovingQuery) =>
-        downloadFile(slowMovingPdfPath(storeId, query), 'niesprzedajace-sie.pdf'),
+      mutationFn: (query: SlowMovingQuery) => downloadFile(slowMovingPdfPath(storeId, query), 'niesprzedajace-sie.pdf'),
       meta: { invalidates: false },
     }),
   }
+}
+
+const slowMovingExcludedPath = (storeId: string) => `${reportsPath(storeId)}/slow-moving/excluded`
+
+/** Artykuły pominięte w raporcie niesprzedających się, wspólne dla całego sklepu. */
+export function useSlowMovingExcluded(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'slow-moving-excluded'],
+    queryFn: () => api<SlowMovingExcludedItem[]>(slowMovingExcludedPath(storeId)),
+  })
+}
+
+export function useExcludeSlowMoving(storeId: string) {
+  return useMutation({
+    mutationFn: (itm8: string) =>
+      api<SlowMovingExcludedItem>(slowMovingExcludedPath(storeId), { method: 'POST', json: { itm8 } }),
+  })
+}
+
+export function useRemoveSlowMovingExcluded(storeId: string) {
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`${slowMovingExcludedPath(storeId)}/${id}`, { method: 'DELETE' }),
+  })
 }
 
 /** Budżet rejonów (docelowa marża i max straty) z ustawień sklepu. */
@@ -482,10 +559,11 @@ export function useTopSalesPartners(storeId: string) {
 }
 
 /** Przepłacone artykuły: przyjęcia z ostatnich 30 dni droższe niż poprzednie dostawy. */
-export function useOverpayments(storeId: string) {
+export function useOverpayments(storeId: string, maxReferenceDays: number) {
   return useQuery({
-    queryKey: [...reportsKey(storeId), 'overpayments'],
-    queryFn: () => api<OverpaymentReport>(`${reportsPath(storeId)}/overpayments`),
+    queryKey: [...reportsKey(storeId), 'overpayments', maxReferenceDays],
+    queryFn: () => api<OverpaymentReport>(`${reportsPath(storeId)}/overpayments?maxReferenceDays=${maxReferenceDays}`),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -499,7 +577,7 @@ export function useLowMargins(storeId: string) {
 
 export type ExcludedSuppliersReport = 'low-margins' | 'overpayments'
 
-/** Dostawcy pomijani w raporcie; serwer zwraca raport po zmianie, więc podmienia go bez unieważniania. */
+/** Dostawcy pomijani w raporcie. Raport ma w kluczu swoje filtry, więc pobieramy go od nowa, a reszty nie ruszamy. */
 export function useSetExcludedSuppliers(storeId: string, path: ExcludedSuppliersReport) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -508,7 +586,7 @@ export function useSetExcludedSuppliers(storeId: string, path: ExcludedSuppliers
         method: 'PUT',
         json: { supplierCodes },
       }),
-    onSuccess: (report) => queryClient.setQueryData([...reportsKey(storeId), path], report),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...reportsKey(storeId), path] }),
     scope: { id: `${path}-excluded-suppliers-${storeId}` },
     meta: { invalidates: false },
   })

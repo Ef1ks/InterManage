@@ -672,6 +672,37 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$[0].supplierName").value("SERY I CHIPSY SP. Z O.O."))
                 .andExpect(jsonPath("$[0].lineCount").value(2))
                 .andExpect(jsonPath("$[0].netValue").value(30.01));
+
+        // Zapisany plik trafia do kolejki faktur do zamknięcia; ta sama faktura zapisana ponownie nie daje drugiego wpisu.
+        String secondExportId = mvc.perform(post(url("/export/xml")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(table))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("X-Xml-Export-Id");
+        mvc.perform(post(url("/xml-history/" + secondExportId + "/saved")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(table))
+                .andExpect(status().isNoContent());
+        String closingId = JsonPath.read(mvc.perform(get(url("/invoice-closings")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documentNumber").value("FV/77/2026"))
+                .andExpect(jsonPath("$[0].generatedAt").doesNotExist())
+                .andReturn().getResponse().getContentAsString(), "$[0].id");
+        String closingIds = "{\"ids\":[\"" + closingId + "\"]}";
+        mvc.perform(post(url("/invoice-closings/generated")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(closingIds))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].generatedAt").exists());
+        // Wygenerowana faktura zostaje na liście, a usunięcie ma "Przywróć".
+        mvc.perform(post(url("/invoice-closings/delete")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(closingIds))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(url("/invoice-closings/restore")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(closingIds))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].generatedAt").exists());
+
         mvc.perform(get(url("/xml-history/" + exportId + "/file")).cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(file));
@@ -717,7 +748,7 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.length()").value(10))
                 .andExpect(jsonPath("$[0].id").value(newest));
         // Zapisy tymczasowe nie są w historii zapisanych na dysku.
-        mvc.perform(get(url("/xml-history")).cookie(owner)).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get(url("/xml-history")).cookie(owner)).andExpect(jsonPath("$.length()").value(2));
 
         // Plik z dysku: faktura z KSeF po NIP-ie i numerze; plik innego sklepu jest oznaczony.
         mvc.perform(multipart(url("/xml-documents"))
@@ -1349,6 +1380,60 @@ class DataEntryIntegrationTests {
 
     private String url(String path) {
         return "/api/stores/" + storeId + "/data-entry" + path;
+    }
+
+    @Test
+    void priceMarkdownsQueueLabelsUntilTheFileIsSaved() throws Exception {
+        String markdowns = "/api/stores/" + storeId + "/price-markdowns";
+        String milk = "\"itm8\":\"0000000000101\",\"newPrice\":2.49,\"validFrom\":\"2026-11-10\"";
+        mvc.perform(post(markdowns).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + milk + ",\"validTo\":\"2026-11-09\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(markdowns).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itm8\":\"9999999999999\",\"newPrice\":2.49,\"validFrom\":\"2026-11-10\","
+                                + "\"validTo\":\"2026-11-11\"}"))
+                .andExpect(status().isNotFound());
+
+        // Dwie przeceny tego samego artykułu: na liście obie, w pliku jedna cenówka.
+        mvc.perform(post(markdowns).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + milk + ",\"validTo\":\"2026-11-12\"}"))
+                .andExpect(status().isOk());
+        String created = mvc.perform(post(markdowns).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + milk + ",\"validTo\":\"2026-11-13\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].ean").value("5900000000012"))
+                .andExpect(jsonPath("$[0].regularPrice").value(3.49))
+                .andExpect(jsonPath("$[0].newPrice").value(2.49))
+                .andExpect(jsonPath("$[0].labelsGeneratedAt").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(created, "$[*].id");
+        String body = "{\"ids\":[\"" + String.join("\",\"", ids) + "\"]}";
+
+        mvc.perform(post(markdowns + "/labels-file").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("_PROPROFOR67_")))
+                .andExpect(content().bytes("59000000000120001\r\n".getBytes(StandardCharsets.US_ASCII)));
+        // Sam plik nic nie oznacza: dopiero zapis na dysku.
+        mvc.perform(get(markdowns).cookie(owner))
+                .andExpect(jsonPath("$[0].labelsGeneratedAt").doesNotExist());
+        mvc.perform(post(markdowns + "/labels-generated").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].labelsGeneratedAt").exists());
+
+        mvc.perform(post(markdowns + "/delete").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(markdowns + "/labels-file").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(markdowns + "/restore").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
     }
 
     private String createStore() throws Exception {

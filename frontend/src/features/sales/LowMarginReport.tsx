@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatMoney, formatPercent, formatPrice, formatQuantity } from '@/features/documents/format'
 import { useLowMargins } from '@/features/sales/api'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ExcludedSuppliersSettings } from '@/features/sales/ExcludedSuppliersSettings'
 import { ReviewedReportPage } from '@/features/sales/ReviewedReportPage'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
@@ -101,6 +102,7 @@ function LinesTable({ delivery }: { delivery: LowMarginDelivery }) {
                       *
                     </span>
                   )}
+                  <ArticleStatsButton article={line} className="ml-1" />
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`].filter(Boolean).join(' · ')}

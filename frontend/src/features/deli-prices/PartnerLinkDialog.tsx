@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCalculationLinks, useCalculationLinkSuggestions, usePriceProductSearch } from '@/features/deli-prices/api'
 import { formatMoney } from '@/features/deli-prices/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import type { PartnerCalculation } from '@/lib/types'
 
@@ -152,6 +153,7 @@ function LinkContent({
                       {[item.brand, `EAN ${item.ean}`].filter(Boolean).join(' · ')}
                     </span>
                   </span>
+                  <ArticleStatsButton article={item} />
                   <Button
                     size="sm"
                     variant={current ? 'outline' : 'default'}

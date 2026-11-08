@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -39,6 +40,8 @@ import com.intermanage.backend.deliproduction.mapper.ProductionMapper;
 import com.intermanage.backend.deliproduction.repository.ProductionArticleRepository;
 import com.intermanage.backend.deliproduction.repository.ProductionCardSettingsRepository;
 import com.intermanage.backend.deliproduction.repository.ProductionSchemaRepository;
+import com.intermanage.backend.gus.dto.GusCompany;
+import com.intermanage.backend.gus.service.GusService;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 
@@ -59,10 +62,11 @@ public class ProductionBaseService {
     private final ProductionBaseParser parser;
     private final ProductionPdf pdf;
     private final ProductionMapper mapper;
+    private final GusService gus;
 
     public ProductionBaseService(ProductionSchemaRepository schemas, ProductionArticleRepository articles,
             ProductionCardSettingsRepository settings, StoreRepository stores, AppUserRepository users,
-            ProductionBaseParser parser, ProductionPdf pdf, ProductionMapper mapper) {
+            ProductionBaseParser parser, ProductionPdf pdf, ProductionMapper mapper, GusService gus) {
         this.schemas = schemas;
         this.articles = articles;
         this.settings = settings;
@@ -71,6 +75,7 @@ public class ProductionBaseService {
         this.parser = parser;
         this.pdf = pdf;
         this.mapper = mapper;
+        this.gus = gus;
     }
 
     @Transactional(readOnly = true)
@@ -86,7 +91,7 @@ public class ProductionBaseService {
                 custom != null ? custom : defaultStamp(store(storeId)), custom != null);
     }
 
-    /** Linie pieczątki na karcie: zapisana w sklepie albo nazwa sklepu i NIP. */
+    /** Linie pieczątki na karcie: zapisana w sklepie albo nazwa firmy z GUS, adres i NIP. */
     @Transactional(readOnly = true)
     public List<String> stamp(UUID storeId) {
         String stamp = settings.findById(storeId).map(ProductionCardSettings::getStamp)
@@ -367,10 +372,16 @@ public class ProductionBaseService {
         return String.join(" · ", parts);
     }
 
-    private static String defaultStamp(Store store) {
-        StringBuilder stamp = new StringBuilder(store.getName());
-        if (store.getAddress() != null && !store.getAddress().isBlank()) {
-            stamp.append('\n').append(store.getAddress().strip());
+    /**
+     * Pieczątka zakładu bez zapisanej: firma z GUS po NIP-ie sklepu (nazwa i adres), a bez niej sam adres sklepu.
+     * Nazwa sklepu w aplikacji jest wewnętrzna, więc na pieczątkę nie trafia.
+     */
+    private String defaultStamp(Store store) {
+        Optional<GusCompany> company = gus.ofStore(store);
+        String address = company.map(GusCompany::address).orElse(store.getAddress());
+        StringBuilder stamp = new StringBuilder(company.map(GusCompany::name).orElse(""));
+        if (address != null && !address.isBlank()) {
+            stamp.append('\n').append(address.strip());
         }
         if (store.getNip() != null) {
             String nip = store.getNip();
@@ -378,6 +389,6 @@ public class ProductionBaseService {
                     ? nip.substring(0, 3) + " " + nip.substring(3, 5) + " " + nip.substring(5, 7) + " " + nip.substring(7)
                     : nip);
         }
-        return stamp.toString();
+        return stamp.toString().strip();
     }
 }

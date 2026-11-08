@@ -205,6 +205,7 @@ class LeafletIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.articles", hasSize(1)))
                 .andExpect(jsonPath("$.articles[0].name").value("KAWA VELVET 200G"))
+                .andExpect(jsonPath("$.articles[0].itm8").isNotEmpty())
                 .andExpect(jsonPath("$.articles[0].status").value("CURRENT"))
                 .andExpect(jsonPath("$.articles[0].lines", hasSize(1)))
                 .andExpect(jsonPath("$.articles[0].lines[0].week").value(44))
@@ -228,6 +229,7 @@ class LeafletIntegrationTests {
         // Pozycja gazetki spoza kartoteki, zapytanie bez polskich znaków.
         mvc.perform(get(path() + "/label-check").param("query", "losos").cookie(owner))
                 .andExpect(jsonPath("$.articles[0].name").value("ŁOSOŚ SPOZA KARTOTEKI"))
+                .andExpect(jsonPath("$.articles[0].itm8").doesNotExist())
                 .andExpect(jsonPath("$.articles[0].status").value("CURRENT"));
 
         // Artykuł bez gazetki i za krótkie zapytanie.

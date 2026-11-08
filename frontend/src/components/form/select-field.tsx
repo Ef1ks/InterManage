@@ -63,7 +63,8 @@ export function SelectField({
             'flex h-12 items-center justify-between gap-2 py-0 pr-3 text-left data-[size=default]:h-12 data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/30',
           )}
         >
-          <SelectValue className="truncate pt-3.5" />
+          {/* Długa wartość (np. pełna nazwa sklepu) kończy się wielokropkiem w polu, zamiast wychodzić poza nie. */}
+          <SelectValue className="block! min-w-0 flex-1 truncate pt-3.5" />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false} sideOffset={6}>
           {options.map((option) => (

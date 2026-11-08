@@ -45,6 +45,7 @@ import {
   type DailyReport,
 } from '@/features/imports/import-sources'
 import { ReportHelp } from '@/features/imports/ReportHelp'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { ApiError } from '@/lib/api'
@@ -1121,7 +1122,10 @@ function EanChangesPanel({
                 changes.map((change) => (
                   <TableRow key={`${change.itm8}-${change.ean}`} className="tabular-nums">
                     <TableCell className="py-3 pl-4">
-                      <div className="font-medium">{change.name ?? 'Bez nazwy'}</div>
+                      <div className="font-medium">
+                        {change.name ?? 'Bez nazwy'}
+                        <ArticleStatsButton article={change} className="ml-1" />
+                      </div>
                       <div className="text-xs text-muted-foreground">ITM8 {change.itm8}</div>
                     </TableCell>
                     <TableCell>{change.ean}</TableCell>

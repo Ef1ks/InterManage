@@ -13,14 +13,26 @@ export const formatPercent = (value: number | null) => (value == null ? '–' : 
 export const nomenclatureName = (name: string) => name.replace(/^\d+_/, '')
 
 /** Ikonka wykresu przy nazwie wiersza; nie rozwija wiersza. */
-export function ChartButton({ onClick }: { onClick: () => void }) {
+export function ChartButton({
+  onClick,
+  label = 'Wykres sprzedaży',
+  tabIndex,
+  className,
+}: {
+  onClick: () => void
+  label?: string
+  tabIndex?: number
+  className?: string
+}) {
   return (
     <Button
       variant="ghost"
       size="icon-xs"
-      aria-label="Wykres sprzedaży"
-      title="Wykres sprzedaży"
-      className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+      type="button"
+      aria-label={label}
+      title={label}
+      tabIndex={tabIndex}
+      className={cn('-my-0.5 shrink-0 text-muted-foreground hover:text-foreground', className)}
       onClick={(event) => {
         event.stopPropagation()
         onClick()

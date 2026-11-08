@@ -2,11 +2,13 @@ import {
   ArrowLeftRightIcon,
   BadgeAlertIcon,
   ChevronRightIcon,
+  CircleMinusIcon,
   CircleOffIcon,
   ClipboardListIcon,
   FileStackIcon,
   GiftIcon,
   type LucideIcon,
+  PackageSearchIcon,
   PackageXIcon,
   ScaleIcon,
   TagIcon,
@@ -146,6 +148,20 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         description:
           'Towar na stanie z niską rotacją tygodniową w wybranym okresie, wartość stanu i dostawy z takimi artykułami. Z wydrukiem.',
         icon: PackageXIcon,
+      },
+      {
+        path: salesPaths.stockGaps,
+        title: 'Braki towaru',
+        description:
+          'Artykuły, które regularnie się sprzedają, a skończyły się albo zaraz skończą: ile dni bez sprzedaży i ile marży na tydzień.',
+        icon: PackageSearchIcon,
+      },
+      {
+        path: salesPaths.negativeStock,
+        title: 'Ujemne stany',
+        description:
+          'Towar ze stanem na minusie bez dostawy od 14 dni (albo w ogóle, albo z dostawą w okresie): sprzedaż pod złym EAN-em i pomieszane stany.',
+        icon: CircleMinusIcon,
       },
     ],
   },

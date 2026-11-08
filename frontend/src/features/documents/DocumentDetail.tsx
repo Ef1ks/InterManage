@@ -31,6 +31,7 @@ import {
   formatQuantity,
   showsSupplier,
 } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import { useLoadMore } from '@/lib/use-load-more'
@@ -128,15 +129,17 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
 
   return (
     <>
-      <BackLink to={documentPaths.list(document.type)}>
-        {document.typeLabel}
-      </BackLink>
+      <BackLink to={documentPaths.list(document.type)}>{document.typeLabel}</BackLink>
 
       <div className="mb-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="text-xl font-semibold tracking-tight tabular-nums">
             {document.typeSingular} {document.number}
-            <CopyButton value={document.number} label={`Kopiuj numer ${document.number}`} className="ml-1 align-middle" />
+            <CopyButton
+              value={document.number}
+              label={`Kopiuj numer ${document.number}`}
+              className="ml-1 align-middle"
+            />
             {document.type === 'PZ' && (
               <span className="ml-2 text-base font-normal text-muted-foreground">
                 bon {bonNumber(document.number)}
@@ -171,7 +174,9 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
           <dt className="text-muted-foreground">Linie</dt>
           <dd className="tabular-nums">
             {countFormat.format(document.lineCount)}
-            {emptyCount > 0 && <span className="text-muted-foreground"> (z ilością 0: {countFormat.format(emptyCount)})</span>}
+            {emptyCount > 0 && (
+              <span className="text-muted-foreground"> (z ilością 0: {countFormat.format(emptyCount)})</span>
+            )}
           </dd>
           <dt className="text-muted-foreground">Zakup</dt>
           <dd className="font-medium tabular-nums">
@@ -221,7 +226,9 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
             setQuery(value)
             setLimit(PAGE_SIZE)
           }}
-          placeholder={perLineSupplier ? 'Szukaj: nazwa, marka, EAN, ITM8, dostawca' : 'Szukaj: nazwa, marka, EAN, ITM8'}
+          placeholder={
+            perLineSupplier ? 'Szukaj: nazwa, marka, EAN, ITM8, dostawca' : 'Szukaj: nazwa, marka, EAN, ITM8'
+          }
         />
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {corrected && (
@@ -283,6 +290,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
                   <TableCell className="max-w-96 py-2.5 whitespace-normal">
                     <div className="flex flex-wrap items-center gap-2 font-medium">
                       {line.name ?? 'Bez nazwy'}
+                      <ArticleStatsButton article={line} />
                       {line.corrected && (
                         <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[0.7rem] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                           {line.originalQuantity == null ? 'Dopisane korektą' : 'Po korekcie'}
@@ -290,19 +298,34 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`, perLineSupplier && line.supplierName]
+                      {[
+                        line.brand,
+                        line.ean && `EAN ${line.ean}`,
+                        `ITM8 ${line.itm8}`,
+                        perLineSupplier && line.supplierName,
+                      ]
                         .filter(Boolean)
                         .join(' · ')}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     {formatQuantity(line.quantity)}
-                    <WasValue line={line} value={line.originalQuantity} current={line.quantity} format={formatQuantity} />
+                    <WasValue
+                      line={line}
+                      value={line.originalQuantity}
+                      current={line.quantity}
+                      format={formatQuantity}
+                    />
                   </TableCell>
                   <TableCell className="text-right">{formatPrice(line.purchasePrice)}</TableCell>
                   <TableCell className="text-right">
                     {formatMoney(line.purchaseValue)}
-                    <WasValue line={line} value={line.originalPurchaseValue} current={line.purchaseValue} format={formatMoney} />
+                    <WasValue
+                      line={line}
+                      value={line.originalPurchaseValue}
+                      current={line.purchaseValue}
+                      format={formatMoney}
+                    />
                   </TableCell>
                   <TableCell className="text-right">{formatPrice(line.salePriceDocument)}</TableCell>
                   <TableCell className="text-right">{line.vatRate != null ? `${line.vatRate}%` : ''}</TableCell>
@@ -346,5 +369,7 @@ function WasValue({
   format: (value: number) => string
 }) {
   if (!line.corrected || value == null || value === current) return null
-  return <div className="text-xs text-muted-foreground line-through decoration-muted-foreground/50">{format(value)}</div>
+  return (
+    <div className="text-xs text-muted-foreground line-through decoration-muted-foreground/50">{format(value)}</div>
+  )
 }

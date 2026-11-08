@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { formatDocumentDate, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { todayIso } from '@/lib/dates'
 import type { CorrectionDelivery } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { cn } from '@/lib/utils'
@@ -313,13 +314,13 @@ function MacroDialog({
   const copy = async () => {
     if (!plan) return
     try {
-      await navigator.clipboard.writeText(buildCorrectionMacro(delivery.number, plan.items))
+      await navigator.clipboard.writeText(buildCorrectionMacro(delivery.number, plan.items, todayIso()))
     } catch {
       toast.error('Nie udało się skopiować makra do schowka')
       return
     }
     toast.success(`Makro w schowku: ${plan.items.length} poz.`, {
-      description: `Przejdź do programu sklepu i wciśnij F9.${
+      description: `Naciśnij Alt+E, a odtwarzacz sam otworzy Mercalys i zapyta przed zakończeniem.${
         plan.problems.length > 0 ? ` Pominięte: ${plan.problems.length}.` : ''
       }`,
     })
@@ -334,7 +335,9 @@ function MacroDialog({
           <DialogDescription>
             {hasBeforeRows
               ? 'Korekta podaje stan po zmianie: ilości i ceny są z faktury.'
-              : 'Korekta podaje różnice: ilość to stan bonu po doliczeniu różnicy, cena jest z bonu.'}
+              : 'Korekta podaje różnice: ilość to stan bonu po doliczeniu różnicy, cena jest z bonu.'}{' '}
+            Makro samo założy protokół w Mercalys, wpisze pozycje i zapyta przed zakończeniem. Każde uruchomienie to
+            nowy protokół.
           </DialogDescription>
         </DialogHeader>
 

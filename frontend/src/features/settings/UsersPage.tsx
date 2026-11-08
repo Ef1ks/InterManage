@@ -80,7 +80,10 @@ export function UsersPage() {
                       {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{user.username}</TableCell>
-                    <TableCell>{user.roleName}</TableCell>
+                    <TableCell>
+                      {user.roleName}
+                      {user.positionName && <div className="text-xs text-muted-foreground">{user.positionName}</div>}
+                    </TableCell>
                     <TableCell>
                       <UserStores user={user} stores={stores} />
                     </TableCell>

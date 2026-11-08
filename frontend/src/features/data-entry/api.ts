@@ -14,6 +14,7 @@ import type {
   DataEntrySkippedSupplier,
   DataEntryXmlDocument,
   DataEntryXmlExport,
+  InvoiceClosing,
   InvoiceBulkResult,
   InvoiceMarkKind,
   KsefInvoice,
@@ -117,6 +118,28 @@ export function useXmlHistory(storeId: string, enabled: boolean) {
     queryKey: ['stores', storeId, 'data-entry', 'xml-history'],
     queryFn: () => api<DataEntryXmlExport[]>(`${path(storeId)}/xml-history`),
     enabled,
+  })
+}
+
+const closingsKey = (storeId: string) => ['stores', storeId, 'data-entry', 'invoice-closings'] as const
+
+/** Faktury z zapisanych plików XML: do zamknięcia i już wygenerowane do skryptu. */
+export function useInvoiceClosings(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: closingsKey(storeId),
+    queryFn: () => api<InvoiceClosing[]>(`${path(storeId)}/invoice-closings`),
+    enabled,
+  })
+}
+
+/** Oznaczenie wygenerowanych, usunięcie (znacznik) i „Przywróć”; każda zmiana zwraca listę. */
+export function useInvoiceClosingChange(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ action, ids }: { action: 'generated' | 'delete' | 'restore'; ids: string[] }) =>
+      api<InvoiceClosing[]>(`${path(storeId)}/invoice-closings/${action}`, { method: 'POST', json: { ids } }),
+    onSuccess: (list) => queryClient.setQueryData(closingsKey(storeId), list),
+    meta: { invalidates: false },
   })
 }
 

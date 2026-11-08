@@ -20,6 +20,7 @@ import {
 import { CatalogListDialog } from '@/features/data-entry/CatalogListDialog'
 import { formatQuantity } from '@/features/documents/format'
 import { prepareScan } from '@/features/meat/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import { formatShortDate } from '@/lib/dates'
 import { matchesSearch } from '@/lib/search'
@@ -416,6 +417,7 @@ export function WzCard({
                         .join(' · ')}
                     </span>
                   </span>
+                  <ArticleStatsButton article={row} skipTab />
                   {manualIds.has(row.productId) && (
                     <Button
                       variant="ghost"

@@ -150,6 +150,22 @@ public class DataEntryXmlExport {
         return fileName;
     }
 
+    public String getDocumentNumber() {
+        return documentNumber;
+    }
+
+    public LocalDate getDocumentDate() {
+        return documentDate;
+    }
+
+    public String getSupplierName() {
+        return supplierName;
+    }
+
+    public BigDecimal getNetValue() {
+        return netValue;
+    }
+
     public byte[] getContent() {
         return content;
     }

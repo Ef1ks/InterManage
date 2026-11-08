@@ -54,6 +54,11 @@ public class Store {
         createdAt = Instant.now();
     }
 
+    /** Firma sklepu: NIP, a sklep bez NIP-u jest firmą sam dla siebie. */
+    public String companyKey() {
+        return nip != null ? nip : "store:" + id;
+    }
+
     public UUID getId() {
         return id;
     }

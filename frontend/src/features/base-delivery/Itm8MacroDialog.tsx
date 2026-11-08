@@ -25,7 +25,7 @@ type Props = {
 
 /**
  * „Uzupełnij ITM8”: wklejone kody ITM8 parują się z liniami dokumentu z bazy (EAN, dostawca, sztuk w kartonie),
- * a makro dla odtwarzacza AutoHotkey (F9) trafia do schowka.
+ * a makro dla odtwarzacza AutoHotkey (Alt+E) trafia do schowka.
  */
 export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
   const [text, setText] = useState('')
@@ -54,7 +54,7 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
       return
     }
     toast.success(`Makro w schowku: ${plan.items.length} poz.`, {
-      description: `Przejdź do programu sklepu i wciśnij F9.${skipped.length > 0 ? ` Pominięte: ${skipped.length}.` : ''}`,
+      description: `Przejdź do programu sklepu i wciśnij Alt+E.${skipped.length > 0 ? ` Pominięte: ${skipped.length}.` : ''}`,
     })
     onOpenChange(false)
   }

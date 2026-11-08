@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { incomingTransferExportPath, useReceiveTransfer } from '@/features/documents/api'
 import { formatQuantity } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError, downloadFile } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveApiFileToFolder } from '@/lib/saved-folders'
@@ -144,7 +145,12 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
           return (
             <div key={line.id} className="flex items-center gap-3 py-2">
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{line.name ?? `EAN ${line.ean ?? line.itm8}`}</div>
+                <div className="flex items-center gap-1">
+                  <div className="min-w-0 truncate text-sm font-medium">
+                    {line.name ?? `EAN ${line.ean ?? line.itm8}`}
+                  </div>
+                  <ArticleStatsButton article={line} foreign skipTab />
+                </div>
                 <div className="text-xs text-muted-foreground tabular-nums">
                   w dokumencie {formatQuantity(Math.abs(line.quantity))}
                   {line.ean ? ` · ${line.ean}` : ' · bez EAN, nie trafi do PROTO6'}
@@ -184,15 +190,22 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
         <Button type="button" variant="outline" size="lg" onClick={onDone}>
           Anuluj
         </Button>
-        <Button ref={confirmRef} type="button" size="lg" loading={submitting} disabled={errors + missing > 0} onClick={confirm}>
+        <Button
+          ref={confirmRef}
+          type="button"
+          size="lg"
+          loading={submitting}
+          disabled={errors + missing > 0}
+          onClick={confirm}
+        >
           <CheckCheckIcon />
           {errors > 0
             ? `Popraw ilości (${errors})`
             : missing > 0
               ? `Uzupełnij ilości (${missing})`
               : changed > 0
-              ? `Zapisz przyjęcie (${changed} różnic)`
-              : 'Zapisz przyjęcie'}
+                ? `Zapisz przyjęcie (${changed} różnic)`
+                : 'Zapisz przyjęcie'}
         </Button>
       </FormActions>
     </>

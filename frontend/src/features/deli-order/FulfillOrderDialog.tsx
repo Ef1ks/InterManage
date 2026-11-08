@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { orderExportPath, useFulfillOrder } from '@/features/deli-order/api'
 import { groupItems } from '@/features/deli-order/group-items'
 import { QuantityInput, formatQuantity, parseQuantity } from '@/features/deli-order/QuantityInput'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError, downloadFile } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveApiFileToFolder } from '@/lib/saved-folders'
@@ -34,7 +35,12 @@ export function FulfillOrderDialog({ open, onOpenChange, ...props }: Props) {
   )
 }
 
-function FulfillForm({ storeId, order, initial, onDone }: Omit<Props, 'open' | 'onOpenChange'> & { onDone: () => void }) {
+function FulfillForm({
+  storeId,
+  order,
+  initial,
+  onDone,
+}: Omit<Props, 'open' | 'onOpenChange'> & { onDone: () => void }) {
   const protoFolder = useProtoFolder(storeId)
   const fulfill = useFulfillOrder(storeId, order.id)
   const [draft, setDraft] = useState(initial)
@@ -116,7 +122,10 @@ function FulfillForm({ storeId, order, initial, onDone }: Omit<Props, 'open' | '
                   return (
                     <div key={item.id} className="flex items-center gap-3 py-1">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{item.name ?? `EAN ${item.ean}`}</div>
+                        <div className="flex items-center gap-1">
+                          <div className="min-w-0 truncate text-sm font-medium">{item.name ?? `EAN ${item.ean}`}</div>
+                          <ArticleStatsButton article={item} skipTab />
+                        </div>
                         <div className="text-xs text-muted-foreground tabular-nums">
                           zamówiono {formatQuantity(item.orderedQuantity, item.unit)}
                           {error && <span className="text-destructive"> · {error}</span>}

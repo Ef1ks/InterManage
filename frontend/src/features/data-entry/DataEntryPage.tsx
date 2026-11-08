@@ -72,6 +72,7 @@ import { useSuppliers } from '@/features/documents/api'
 import { bonNumber, documentPaths, formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { documentPrice } from '@/features/base-delivery/base-rows'
+import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -177,7 +178,7 @@ import {
   withTrailingEmptyRow,
 } from './rows'
 import { useUndoHistory, useUndoShortcuts } from './undo-history'
-import { MercalysCodesDialog } from './MercalysCodesDialog'
+import { CloseInvoicesDialog } from './CloseInvoicesDialog'
 import { XmlOpenDialog, type XmlSource } from './XmlOpenDialog'
 import { XmlSaveDialog } from './XmlSaveDialog'
 import { useXmlSave } from './xml-save'
@@ -307,7 +308,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   }, [store.id, currentDraft, applyDraft, focusFirstEan])
 
   // Okno sprzedaży i dostaw artykułu jak w raportach; wymaga dostępu do raportów sprzedaży.
-  const canSeeSales = useCan('SALES', 'VIEW')
+  const canSeeSales = useCanSeeArticleStats()
   const salesOverview = useSalesReportsOverview(store.id, canSeeSales)
   const [chartTarget, setChartTarget] = useState<SalesChartTarget | null>(null)
   const showArticle = useCallback(
@@ -330,7 +331,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [weightIn24, setWeightIn24] = useState(false)
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null)
   const [correctionMacroOpen, setCorrectionMacroOpen] = useState(false)
-  const [mercalysCodesOpen, setMercalysCodesOpen] = useState(false)
+  const [closeInvoicesOpen, setCloseInvoicesOpen] = useState(false)
   const [splitTarget, setSplitTarget] = useState<DataEntryRow | null>(null)
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
@@ -1150,7 +1151,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       return
     }
     toast.success(`Makro w schowku: ${transferMacro.items.length} poz.`, {
-      description: `Przejdź do programu sklepu i wciśnij F9.${
+      description: `Naciśnij Alt+E, a odtwarzacz sam otworzy Mercalys i przeniesie stany.${
         transferMacro.skipped > 0 ? ` Pominięte bez EAN-u albo ilości: ${transferMacro.skipped}.` : ''
       }`,
     })
@@ -1436,15 +1437,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 hint={
                   transferMacro.items.length === 0
                     ? 'Żaden artykuł nie ma EAN-u i ilości'
-                    : 'Do schowka, F9: EAN, Enter, ilość, Enter dla każdego artykułu'
+                    : 'Do schowka, Alt+E: Przesunięcie stanu w Mercalys, wszystkie artykuły, przeniesienie i wydruk'
                 }
                 onClick={() => void copyTransferMacro()}
               />
               <ActionItem
                 icon={<ClipboardCopyIcon />}
-                label="Tworzenie kodu w Mercalys"
-                hint="Bony z zapisanych plików XML, do schowka"
-                onClick={() => setMercalysCodesOpen(true)}
+                label="Zamknij faktury"
+                hint="Faktury z zapisanych plików XML, skrypt do schowka"
+                onClick={() => setCloseInvoicesOpen(true)}
               />
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -2006,7 +2007,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onConfirm={(data) => confirmDocument({ data })}
       />
 
-      <MercalysCodesDialog storeId={store.id} open={mercalysCodesOpen} onOpenChange={setMercalysCodesOpen} />
+      <CloseInvoicesDialog storeId={store.id} open={closeInvoicesOpen} onOpenChange={setCloseInvoicesOpen} />
 
       <XmlOpenDialog
         storeId={store.id}

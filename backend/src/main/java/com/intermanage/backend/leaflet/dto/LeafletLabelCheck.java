@@ -17,8 +17,9 @@ public record LeafletLabelCheck(int total, List<Article> articles) {
     /**
      * Artykuł z kartoteki, a bez niego pozycja gazetki, której EAN-u kartoteka nie zna. {@code lines}: trwające
      * i przyszłe promocje, a gdy żadna nie trwa, także ostatnia zakończona. {@code status} to status pierwszej z nich.
+     * {@code itm8} tylko z kartoteki, do statystyk artykułu.
      */
-    public record Article(String ean, String name, String brand, Status status, List<Line> lines) {
+    public record Article(String itm8, String ean, String name, String brand, Status status, List<Line> lines) {
     }
 
     /** Promocja z gazetki {@code week}/{@code year}; {@code shelfLabel} to OZNACZENIE PRZY PÓŁCE z pliku. */

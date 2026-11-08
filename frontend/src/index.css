@@ -217,3 +217,50 @@
     text-wrap: balance;
     }
 }
+/* Animacja logo przy pierwszym wejściu (components/SplashScreen). Kawałki czekają niewidoczne, aż wczytają się wszystkie. */
+.splash-piece {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+/* Litery wjeżdżają z boku, pochylone w stronę jazdy, i prostują się przy hamowaniu. */
+.splash:not([data-phase='loading']) [data-motion='left'] {
+  animation: splash-from-left 760ms cubic-bezier(0.16, 1, 0.3, 1) var(--splash-delay) both;
+}
+.splash:not([data-phase='loading']) [data-motion='right'] {
+  animation: splash-from-right 760ms cubic-bezier(0.16, 1, 0.3, 1) var(--splash-delay) both;
+}
+.splash [data-motion='bar'] {
+  transform-origin: left center;
+}
+.splash:not([data-phase='loading']) [data-motion='bar'] {
+  animation: splash-bar 620ms cubic-bezier(0.16, 1, 0.3, 1) var(--splash-delay) both;
+}
+.splash:not([data-phase='loading']) [data-motion='accent'] {
+  animation: splash-accent 420ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--splash-delay) both;
+}
+.splash[data-phase='exit'] {
+  opacity: 0;
+  transition: opacity 420ms cubic-bezier(0.4, 0, 1, 1);
+}
+.splash[data-phase='exit'] .splash-logo {
+  transform: scale(1.04);
+  transition: transform 420ms cubic-bezier(0.4, 0, 1, 1);
+}
+@keyframes splash-from-left {
+  0% { opacity: 0; transform: translateX(-70vw) skewX(-14deg); }
+  25% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes splash-from-right {
+  0% { opacity: 0; transform: translateX(70vw) skewX(14deg); }
+  25% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes splash-bar {
+  0% { opacity: 1; transform: scaleX(0); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes splash-accent {
+  0% { opacity: 0; transform: translateY(-160%); }
+  100% { opacity: 1; transform: none; }
+}

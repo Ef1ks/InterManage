@@ -99,7 +99,10 @@ public class SupplierDirectoryService {
         Store store = store(storeId);
         String name = singleLine(request.name());
         requireFreeName(storeId, name, null);
-        Supplier supplier = suppliers.save(Supplier.manual(store, name, nip(request.nip()), user(userId)));
+        Supplier manual = Supplier.manual(store, name, nip(request.nip()), user(userId));
+        manual.updateManualData(name, manual.getNip(), singleLine(request.address()), singleLine(request.postalCode()),
+                singleLine(request.city()));
+        Supplier supplier = suppliers.save(manual);
         SupplierProfile profile = existingProfile(supplier);
         List<SupplierContact> own = profile == null ? List.of() : contacts.findActive(profile.getId());
         return mapper.toResponse(supplier, profile, own.size(), representative(own));
@@ -223,9 +226,8 @@ public class SupplierDirectoryService {
         return profile;
     }
 
-    /** Firma sklepu: NIP, a sklep bez NIP-u jest firmą sam dla siebie. */
     private static String companyKey(Store store) {
-        return store.getNip() != null ? store.getNip() : "store:" + store.getId();
+        return store.companyKey();
     }
 
     /** Ten sam dostawca w sklepach firmy: kod z systemu sklepu, u dodanego ręcznie NIP albo nazwa. */

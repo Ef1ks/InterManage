@@ -73,6 +73,8 @@ export function ReviewedReportPage<D extends Delivery>({
   intro,
   actions,
   notice,
+  filters,
+  filterParams = [],
   linesLabel,
   excessLabel,
   emptyDeliveryText,
@@ -88,6 +90,10 @@ export function ReviewedReportPage<D extends Delivery>({
   actions?: ReactNode
   /** Dodatkowe ostrzeżenie nad kafelkami. */
   notice?: ReactNode
+  /** Filtry tego raportu, w wierszu z okresem. */
+  filters?: ReactNode
+  /** Parametry adresu filtrów z `filters`: czyści je „Wyczyść filtry”. */
+  filterParams?: string[]
   /** Podpis liczby artykułów w wierszu przyjęcia. */
   linesLabel: string
   /** Podpis kwoty `excessValue`. */
@@ -141,7 +147,8 @@ export function ReviewedReportPage<D extends Delivery>({
           search,
         )),
   )
-  const filtersActive = search !== '' || supplier !== ALL_SUPPLIERS || period !== '30'
+  const filtersActive =
+    search !== '' || supplier !== ALL_SUPPLIERS || period !== '30' || filterParams.some((key) => params.has(key))
   const categoryParam = params.get('kategoria')
   const category =
     categories.find((item) => item.id === categoryParam)?.id ??
@@ -220,6 +227,7 @@ export function ReviewedReportPage<D extends Delivery>({
                   onChange={(next) => setParam('okres', next === '30' ? null : next)}
                 />
               </span>
+              {filters}
               {filtersActive && (
                 <Button
                   variant="ghost"
@@ -228,7 +236,7 @@ export function ReviewedReportPage<D extends Delivery>({
                     setParams(
                       (current) => {
                         const updated = new URLSearchParams(current)
-                        for (const key of ['szukaj', 'dostawca', 'okres']) updated.delete(key)
+                        for (const key of ['szukaj', 'dostawca', 'okres', ...filterParams]) updated.delete(key)
                         return updated
                       },
                       { replace: true },

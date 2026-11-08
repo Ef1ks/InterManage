@@ -24,16 +24,10 @@ import {
 } from '@/features/meat/api'
 import { formatPrice, parsePrice } from '@/features/meat/format'
 import { SearchPicker } from '@/features/meat/SearchPicker'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
-import type {
-  MeatArticle,
-  MeatDelivery,
-  MeatLineMatch,
-  MeatScanResult,
-  StoreSummary,
-  Supplier,
-} from '@/lib/types'
+import type { MeatArticle, MeatDelivery, MeatLineMatch, MeatScanResult, StoreSummary, Supplier } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** Wybór „bez artykułu”: pozycja to sam zakup (np. surowiec), raport pokaże jej cenę zakupu bez sprzedaży. */
@@ -429,7 +423,15 @@ function Editor({ store, initial, saved }: { store: StoreSummary; initial: Draft
  * Skan obok formularza: zdjęcie albo PDF w ramce; na telefonie nad formularzem i niższy. PDF idzie przez adres blob,
  * bo backend nie pozwala osadzać swoich odpowiedzi w ramkach (X-Frame-Options), jak przy drukowaniu faktur.
  */
-function ScanPreview({ storeId, scanId, contentType }: { storeId: string; scanId: string; contentType: string | null }) {
+function ScanPreview({
+  storeId,
+  scanId,
+  contentType,
+}: {
+  storeId: string
+  scanId: string
+  contentType: string | null
+}) {
   const url = scanFileUrl(storeId, scanId)
   const pdf = contentType === 'application/pdf'
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -461,7 +463,12 @@ function ScanPreview({ storeId, scanId, contentType }: { storeId: string; scanId
             <div className="h-[60svh] w-full animate-pulse lg:h-[calc(100svh-7rem)] motion-reduce:animate-none" />
           )
         ) : (
-          <a href={url} target="_blank" rel="noreferrer" className="block max-h-[60svh] overflow-auto lg:max-h-[calc(100svh-7rem)]">
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="block max-h-[60svh] overflow-auto lg:max-h-[calc(100svh-7rem)]"
+          >
             <img src={url} alt="Skan dokumentu WZ" className="w-full" />
           </a>
         )}
@@ -491,9 +498,11 @@ function SupplierField({
   invalid: boolean
   disabled: boolean
 }) {
-  const read = info && [info.readSupplierName, info.readNip && `NIP ${info.readNip}`, info.readVetNumber && `wet. ${info.readVetNumber}`]
-    .filter(Boolean)
-    .join(' · ')
+  const read =
+    info &&
+    [info.readSupplierName, info.readNip && `NIP ${info.readNip}`, info.readVetNumber && `wet. ${info.readVetNumber}`]
+      .filter(Boolean)
+      .join(' · ')
   const untouched = info?.supplier != null && supplier?.id === info.supplier.id
   return (
     <div className="space-y-1.5">
@@ -527,7 +536,9 @@ function SupplierField({
         <p
           className={cn(
             'text-xs',
-            untouched && info.supplierMatch === 'MODEL' ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground',
+            untouched && info.supplierMatch === 'MODEL'
+              ? 'text-amber-700 dark:text-amber-300'
+              : 'text-muted-foreground',
           )}
         >
           {!info.supplier
@@ -611,40 +622,43 @@ function LineRow({
         </Button>
       ) : null}
 
-      <div className="min-w-0 [grid-area:article]">
-        {readOnly ? (
-          <p className="text-sm text-muted-foreground">
-            {line.article && line.article !== NO_ARTICLE
-              ? [line.article.name, line.article.brand].filter(Boolean).join(' · ')
-              : 'Bez artykułu – sam zakup'}
-          </p>
-        ) : (
-          <SearchPicker
-            label="Artykuł z kartoteki"
-            items={articles}
-            value={line.article}
-            onChange={(article) => onChange({ article, match: null })}
-            itemKey={(item) => item.id}
-            itemLabel={(item) => (item === NO_ARTICLE ? item.name ?? '' : `${item.name} · ${item.brand ?? ''}`)}
-            searchFields={(item) => [item.name, item.brand, item.ean, item.itm8]}
-            renderItem={(item) =>
-              item === NO_ARTICLE ? (
-                <span className="font-medium text-muted-foreground">{item.name}</span>
-              ) : (
-                <span className="grid grid-cols-[1fr_auto] items-center gap-x-3">
-                  <span className="min-w-0 truncate">
-                    <span className="font-medium">{item.name}</span>
-                    {item.brand && <span className="ml-2 text-muted-foreground">{item.brand}</span>}
+      <div className="flex min-w-0 items-center gap-1 [grid-area:article]">
+        <div className="min-w-0 flex-1">
+          {readOnly ? (
+            <p className="text-sm text-muted-foreground">
+              {line.article && line.article !== NO_ARTICLE
+                ? [line.article.name, line.article.brand].filter(Boolean).join(' · ')
+                : 'Bez artykułu – sam zakup'}
+            </p>
+          ) : (
+            <SearchPicker
+              label="Artykuł z kartoteki"
+              items={articles}
+              value={line.article}
+              onChange={(article) => onChange({ article, match: null })}
+              itemKey={(item) => item.id}
+              itemLabel={(item) => (item === NO_ARTICLE ? (item.name ?? '') : `${item.name} · ${item.brand ?? ''}`)}
+              searchFields={(item) => [item.name, item.brand, item.ean, item.itm8]}
+              renderItem={(item) =>
+                item === NO_ARTICLE ? (
+                  <span className="font-medium text-muted-foreground">{item.name}</span>
+                ) : (
+                  <span className="grid grid-cols-[1fr_auto] items-center gap-x-3">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium">{item.name}</span>
+                      {item.brand && <span className="ml-2 text-muted-foreground">{item.brand}</span>}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{formatPrice(item.salePrice)}</span>
                   </span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{formatPrice(item.salePrice)}</span>
-                </span>
-              )
-            }
-            placeholder="Wybierz artykuł: nazwa, gatunek, EAN"
-            emptyText="Nie ma takiego mięsa w kartotece"
-            invalid={line.article == null}
-          />
-        )}
+                )
+              }
+              placeholder="Wybierz artykuł: nazwa, gatunek, EAN"
+              emptyText="Nie ma takiego mięsa w kartotece"
+              invalid={line.article == null}
+            />
+          )}
+        </div>
+        {line.article && line.article !== NO_ARTICLE && <ArticleStatsButton article={line.article} skipTab />}
       </div>
       <LineBadges line={line} />
     </li>
@@ -676,7 +690,11 @@ function LineBadges({ line }: { line: EditorLine }) {
   return (
     <div className="-mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 [grid-area:badges]">
       {badges.map((badge) => (
-        <span key={badge.text} title={badge.title} className={cn('rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap', badge.className)}>
+        <span
+          key={badge.text}
+          title={badge.title}
+          className={cn('rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap', badge.className)}
+        >
           {badge.text}
         </span>
       ))}

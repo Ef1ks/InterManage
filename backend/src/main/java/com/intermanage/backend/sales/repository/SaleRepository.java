@@ -540,7 +540,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                            where c.store_id = p.store_id and c.itm8 = p.itm8) as cadencier
             from products p
             left join article a on a.itm8 = p.itm8
-            where p.store_id = :storeId and p.active and p.stock > 0
+            where p.store_id = :storeId and p.stock > 0
               and coalesce(a.quantity, 0) * 7 <= :maxWeekly
               and """ + IN_CODES, nativeQuery = true)
     List<SlowMovingArticle> findSlowMoving(UUID storeId, LocalDate from, LocalDate to, BigDecimal maxWeekly,

@@ -44,6 +44,7 @@ public interface LeafletMapper {
     LeafletLabelCheck.Line toLabelLine(PromoLeafletLine line, LeafletLabelCheck.Status status);
 
     @Mapping(target = "ean", source = "product.ean")
+    @Mapping(target = "itm8", source = "product.itm8")
     @Mapping(target = "name", source = "product.name")
     @Mapping(target = "brand", source = "product.brand")
     @Mapping(target = "status", source = "status")
@@ -52,6 +53,7 @@ public interface LeafletMapper {
             List<LeafletLabelCheck.Line> lines);
 
     /** Pozycja gazetki, której EAN-u kartoteka nie zna: EAN, nazwa i marka z pliku. */
+    @Mapping(target = "itm8", ignore = true)
     @Mapping(target = "ean", source = "line.ean")
     @Mapping(target = "name", source = "line.name")
     @Mapping(target = "brand", source = "line.brand")

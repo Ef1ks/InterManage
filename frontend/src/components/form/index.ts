@@ -5,4 +5,5 @@ export { SegmentedField, type SegmentOption } from '@/components/form/segmented-
 export { SelectField, type SelectOption } from '@/components/form/select-field'
 export { SwitchField } from '@/components/form/switch-field'
 export { TextField } from '@/components/form/text-field'
+export { TimeField } from '@/components/form/time-field'
 export { TextareaField } from '@/components/form/textarea-field'

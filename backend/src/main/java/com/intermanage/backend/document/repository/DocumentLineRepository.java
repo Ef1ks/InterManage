@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -571,7 +572,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * dostawcy spoza kartoteki ({@code 99…}) po EAN-ie, jak w {@link #ARTICLE_LINE}. Gdy EAN pasuje do kilku
      * artykułów, wybór ma być powtarzalny, więc bierze najmniejszy ITM8.
      */
-    String DELIVERED_LINES = """
+    String STORE_ARTICLE_EANS = """
             with article_codes as (
                 select ltrim(btrim(p.ean), '0') as ean, p.itm8 from products p where p.store_id = :storeId
                 union
@@ -582,7 +583,11 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 where p.store_id = :storeId
             ), article_eans as (
                 select ean, min(itm8) as itm8 from article_codes where ean <> '' group by ean
-            ), delivered as (
+            )
+            """;
+
+    String DELIVERED_LINES = STORE_ARTICLE_EANS + """
+            , delivered as (
                 select d.id as document_id, d.number as document_number, d.document_date, l.supplier_code,
                        l.supplier_name, l.quantity, l.purchase_value, coalesce(p.itm8, e.itm8) as itm8
                 from document_lines l
@@ -613,6 +618,15 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             order by itm8, document_date desc, document_number desc
             """, nativeQuery = true)
     List<LastDelivery> findLastDeliveries(UUID storeId, LocalDateTime since);
+
+    /** Artykuły, których pierwsza dostawa w historii {@code since} była {@code firstFrom} albo później. */
+    @Query(value = DELIVERED_LINES + """
+            select itm8 from delivered
+            where itm8 is not null
+            group by itm8
+            having min(document_date) >= :firstFrom
+            """, nativeQuery = true)
+    Set<String> findFirstDeliveredSince(UUID storeId, LocalDateTime since, LocalDateTime firstFrom);
 
     /** Artykuł w przyjęciu: linie tego samego artykułu są zsumowane. */
     interface DeliveredArticle {

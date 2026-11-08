@@ -8,6 +8,7 @@ import { useBakeryComparison } from '@/features/bakery-check/api'
 import { LinkArticleDialog, type LinkTarget } from '@/features/data-entry/LinkArticleDialog'
 import { emptyRow } from '@/features/data-entry/rows'
 import { formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import type { BakeryComparison, BakeryComparisonRow, BakeryRowStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -111,8 +112,11 @@ export function ComparisonPanel({ storeId, checkId }: { storeId: string; checkId
                 {rows.map((row) => (
                   <TableRow key={row.key}>
                     <TableCell className="max-w-72">
-                      <span className="block truncate font-medium" title={row.name ?? undefined}>
-                        {row.name}
+                      <span className="flex items-center gap-1">
+                        <span className="min-w-0 truncate font-medium" title={row.name ?? undefined}>
+                          {row.name}
+                        </span>
+                        {row.itm8 && <ArticleStatsButton article={{ itm8: row.itm8, name: row.name, ean: row.ean }} />}
                       </span>
                       <span className="block truncate text-xs text-muted-foreground tabular-nums">
                         {row.ean ?? row.linkCode}

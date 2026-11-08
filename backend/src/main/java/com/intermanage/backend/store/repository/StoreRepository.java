@@ -16,6 +16,10 @@ public interface StoreRepository extends JpaRepository<Store, UUID> {
     @Query("select s from Store s where s.active = true order by s.number")
     List<Store> findActiveOrdered();
 
+    /** Aktywne sklepy firmy. */
+    @Query("select s from Store s where s.active = true and s.nip = :nip order by s.number")
+    List<Store> findActiveByNip(String nip);
+
     boolean existsByNumber(String number);
 
     boolean existsByNumberAndIdNot(String number, UUID id);

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronRightIcon, DownloadIcon, PrinterIcon } from 'lucide-react'
+import { ChevronRightIcon, DownloadIcon, EyeOffIcon, PrinterIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 
@@ -18,7 +18,9 @@ import {
   type SalesChartTarget,
   type SlowMovingQuery,
   type SlowMovingSort,
+  useExcludeSlowMoving,
   usePriceCheckCategories,
+  useRemoveSlowMovingExcluded,
   useSalesNomenclatures,
   useSalesReportsOverview,
   useSlowMoving,
@@ -43,6 +45,7 @@ import {
   useReportPeriod,
 } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { SlowMovingExcludedDialog } from '@/features/sales/SlowMovingExcludedDialog'
 import { ApiError } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
 import { nextSort } from '@/lib/table-sort'
@@ -63,6 +66,12 @@ const CADENCIER = [
   { value: 'all', label: 'Wszystkie', param: null, api: null },
   { value: 'with', label: 'W cadencier', param: 'tak', api: 'WITH' },
   { value: 'without', label: 'Poza', param: 'nie', api: 'WITHOUT' },
+] as const
+
+const ORIGINS = [
+  { value: 'all', label: 'Wszystkie', param: null, api: null },
+  { value: 'base', label: 'Z bazy', param: 'baza', api: 'BASE' },
+  { value: 'outside', label: 'Spoza bazy', param: 'poza', api: 'OUTSIDE' },
 ] as const
 
 const DELIVERY_WINDOWS = [
@@ -121,6 +130,7 @@ export function SlowMovingReport({ storeId }: { storeId: string }) {
   const category: CategoryKey = params.get('kategoria') ?? ALL_CATEGORIES
   const supplier = params.get('dostawca') ?? ALL_SUPPLIERS
   const cadencier = CADENCIER.find((option) => option.param === params.get('cadencier')) ?? CADENCIER[0]
+  const origin = ORIGINS.find((option) => option.param === params.get('zakup')) ?? ORIGINS[0]
   const deliveries = DELIVERY_WINDOWS.find((option) => option.param === params.get('dostawy')) ?? DELIVERY_WINDOWS[0]
   const withoutDeliveries = params.get('bez_dostaw') === 'tak' && deliveries.days == null
   const withRawMaterials = params.get('surowce') === 'tak'
@@ -138,6 +148,7 @@ export function SlowMovingReport({ storeId }: { storeId: string }) {
     category: category === ALL_CATEGORIES ? null : category === OTHER_CATEGORY ? 'OTHER' : category,
     supplier: supplier === ALL_SUPPLIERS ? null : supplier,
     cadencier: cadencier.api,
+    origin: origin.api,
     minStockValue: minValue,
     query: searchField.debounced,
     withoutDeliveries,
@@ -173,8 +184,9 @@ export function SlowMovingReport({ storeId }: { storeId: string }) {
         {report.data && <ReportFreshness generatedAt={report.data.stockReportGeneratedAt} />}
       </div>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
-        Aktywne artykuły na stanie, które sprzedają się najwyżej w podanej ilości na tydzień: sprzedana ilość z okresu ×
-        7 / liczba dni. Stany i ceny zakupu z raportu kartoteki.
+        Artykuły na stanie, które sprzedają się najwyżej w podanej ilości na tydzień: sprzedana ilość z okresu × 7 /
+        liczba dni. Bez nowego towaru: pierwsza dostawa musi być co najmniej miesiąc temu. Stany i ceny zakupu z raportu
+        kartoteki.
       </p>
 
       <Card className="mb-4 gap-4 p-4">
@@ -242,6 +254,12 @@ export function SlowMovingReport({ storeId }: { storeId: string }) {
             options={CADENCIER.map(({ value, label }) => ({ value, label }))}
             value={cadencier.value}
             onChange={(next) => update({ cadencier: CADENCIER.find((option) => option.value === next)?.param ?? null })}
+          />
+          <SegmentedField
+            label="Ostatnia dostawa"
+            options={ORIGINS.map(({ value, label }) => ({ value, label }))}
+            value={origin.value}
+            onChange={(next) => update({ zakup: ORIGINS.find((option) => option.value === next)?.param ?? null })}
           />
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Pokaż dostawy z takimi artykułami</span>
@@ -327,6 +345,9 @@ function Results({
   lastSaleDate: string
 }) {
   const pdf = useSlowMovingPdf(storeId)
+  const canEdit = useCan('SALES', 'EDIT')
+  const exclude = useExcludeSlowMoving(storeId)
+  const removeExcluded = useRemoveSlowMovingExcluded(storeId)
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const onPdfError = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
@@ -335,6 +356,20 @@ function Results({
   const days = dayCount({ from: report.from, to: report.to })
   const openChart = (item: SlowMovingItem) =>
     setChart({ kind: 'article', itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand })
+  const onExcludeError = (error: unknown) =>
+    toast.error(error instanceof ApiError ? error.message : 'Nie udało się zmienić listy pomijanych')
+  const excludeArticle = (item: SlowMovingItem) =>
+    exclude.mutate(item.itm8, {
+      onError: onExcludeError,
+      onSuccess: (excluded) =>
+        toast.success(`Pominięto w raporcie: ${item.name ?? itm8Label(item.itm8)}`, {
+          action: {
+            label: 'Cofnij',
+            onClick: () => removeExcluded.mutate(excluded.id, { onError: onExcludeError }),
+          },
+        }),
+    })
+  const rowActions: RowActions = { onChart: openChart, onExclude: canEdit ? excludeArticle : null }
 
   return (
     <>
@@ -356,6 +391,7 @@ function Results({
       </div>
 
       <div className="mb-3 flex flex-wrap justify-end gap-2">
+        <SlowMovingExcludedDialog storeId={storeId} />
         <Button
           variant="outline"
           size="lg"
@@ -385,9 +421,9 @@ function Results({
             : 'Żaden artykuł nie spełnia tych filtrów.'}
         </p>
       ) : showsDeliveries ? (
-        <DeliveriesList report={report} onChart={openChart} />
+        <DeliveriesList report={report} actions={rowActions} />
       ) : (
-        <ArticlesTable items={report.items} sort={sort} onSort={onSort} onChart={openChart} />
+        <ArticlesTable items={report.items} sort={sort} onSort={onSort} actions={rowActions} />
       )}
 
       <SalesChartDialog
@@ -403,7 +439,14 @@ function Results({
   )
 }
 
-function ArticleName({ item, onChart }: { item: SlowMovingItem; onChart: (item: SlowMovingItem) => void }) {
+/** Działania przy artykule; {@code onExclude} puste bez prawa zmian. */
+type RowActions = {
+  onChart: (item: SlowMovingItem) => void
+  onExclude: ((item: SlowMovingItem) => void) | null
+}
+
+function ArticleName({ item, actions }: { item: SlowMovingItem; actions: RowActions }) {
+  const { onChart, onExclude } = actions
   return (
     <div className="flex items-center gap-1.5">
       <span className="min-w-0">
@@ -416,6 +459,18 @@ function ArticleName({ item, onChart }: { item: SlowMovingItem; onChart: (item: 
         </span>
       )}
       <ChartButton onClick={() => onChart(item)} />
+      {onExclude && (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Pomijaj w raporcie: ${item.name ?? itm8Label(item.itm8)}`}
+          title="Pomijaj w raporcie"
+          className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={() => onExclude(item)}
+        >
+          <EyeOffIcon />
+        </Button>
+      )}
     </div>
   )
 }
@@ -424,12 +479,12 @@ function ArticlesTable({
   items,
   sort,
   onSort,
-  onChart,
+  actions,
 }: {
   items: SlowMovingItem[]
   sort: SortState<SlowMovingSort>
   onSort: (column: SlowMovingSort) => void
-  onChart: (item: SlowMovingItem) => void
+  actions: RowActions
 }) {
   const [shown, setShown] = useState(PAGE)
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < items.length, shown)
@@ -474,7 +529,7 @@ function ArticlesTable({
                 <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
                 <TableCell className="tabular-nums">{item.ean}</TableCell>
                 <TableCell className="whitespace-normal">
-                  <ArticleName item={item} onChart={onChart} />
+                  <ArticleName item={item} actions={actions} />
                 </TableCell>
                 <TableCell className="max-w-56 truncate text-muted-foreground" title={item.supplierName ?? undefined}>
                   {item.supplierName ?? '–'}
@@ -498,7 +553,7 @@ function ArticlesTable({
   )
 }
 
-function DeliveriesList({ report, onChart }: { report: Report; onChart: (item: SlowMovingItem) => void }) {
+function DeliveriesList({ report, actions }: { report: Report; actions: RowActions }) {
   const [shown, setShown] = useState(PAGE)
   const loadMore = useLoadMore<HTMLDivElement>(
     () => setShown((count) => count + PAGE),
@@ -510,7 +565,7 @@ function DeliveriesList({ report, onChart }: { report: Report; onChart: (item: S
   return (
     <div className="grid gap-2">
       {report.deliveries.slice(0, shown).map((delivery) => (
-        <DeliveryCard key={delivery.documentId} delivery={delivery} items={items} onChart={onChart} />
+        <DeliveryCard key={delivery.documentId} delivery={delivery} items={items} actions={actions} />
       ))}
       <div ref={loadMore} />
     </div>
@@ -520,11 +575,11 @@ function DeliveriesList({ report, onChart }: { report: Report; onChart: (item: S
 function DeliveryCard({
   delivery,
   items,
-  onChart,
+  actions,
 }: {
   delivery: SlowMovingDelivery
   items: Map<string, SlowMovingItem>
-  onChart: (item: SlowMovingItem) => void
+  actions: RowActions
 }) {
   const [open, setOpen] = useState(false)
   const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
@@ -586,7 +641,7 @@ function DeliveryCard({
                       <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
                       <TableCell className="tabular-nums">{item.ean}</TableCell>
                       <TableCell className="whitespace-normal">
-                        <ArticleName item={item} onChart={onChart} />
+                        <ArticleName item={item} actions={actions} />
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{formatQuantity(line.quantity)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(line.purchaseValue)}</TableCell>

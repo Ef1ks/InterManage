@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.common.component.StoreTime;
+import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentType;
@@ -58,7 +59,9 @@ import com.intermanage.backend.sales.repository.SaleRepository;
  * dostawcy zdejmuje przepłacenie z raportu. Mięsa, drobiu, garmażerki, owoców i warzyw raport nie sprawdza, bo wahania
  * cen są tam normalne ({@link #SKIPPED_NOMENCLATURES}), a papierosów, bo kupuje się je tylko z jednego miejsca. Pomija
  * też dostawców z {@link ExcludedSuppliers} i wybranych przez sklep ({@link ReportExcludedSupplierService}): ich
- * dostawy nie są sprawdzane ani nie są cenami odniesienia.
+ * dostawy nie są sprawdzane ani nie są cenami odniesienia. Ceną odniesienia jest tylko dostawa z ostatnich
+ * {@code maxReferenceDays} dni przed przyjęciem: po dawnej dostawie wzrost ceny jest czymś zwykłym, a artykuł bez
+ * takiej dostawy nie ma z czym się porównać i nie trafia do raportu.
  */
 @Service
 public class OverpaymentService {
@@ -68,7 +71,7 @@ public class OverpaymentService {
     static final int THRESHOLD_PERCENT = 5;
     static final int LARGE_QUANTITY_FACTOR = 5;
     /** Ceny odniesienia szukamy w dostawach najwyżej tyle dni przed przyjęciem. */
-    static final int HISTORY_DAYS = 180;
+    public static final int HISTORY_DAYS = 180;
     /** Z mniejszej liczby dostaw nie widać, jaka ilość jest zwykła. */
     private static final int MIN_DELIVERIES_FOR_MEDIAN = 3;
     /** Cena do 5 gr to cena symboliczna (towar za 0,01 zł), a nie cena zakupu. */
@@ -108,7 +111,10 @@ public class OverpaymentService {
     }
 
     @Transactional(readOnly = true)
-    public OverpaymentReport report(UUID storeId) {
+    public OverpaymentReport report(UUID storeId, int maxReferenceDays) {
+        if (maxReferenceDays < 1 || maxReferenceDays > HISTORY_DAYS) {
+            throw ApiException.badRequest("Poprzednia dostawa może być sprzed najwyżej " + HISTORY_DAYS + " dni");
+        }
         sales.tuneForReport();
         LocalDate to = LocalDate.now(StoreTime.ZONE);
         LocalDate from = to.minusDays(PERIOD_DAYS - 1L);
@@ -129,7 +135,8 @@ public class OverpaymentService {
         List<ReportSupplier> skippedSuppliers = reportSuppliers.active(storeId, ReviewedReport.OVERPAYMENT);
         Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
         skippedSuppliers.forEach(supplier -> excluded.add(supplier.code()));
-        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed, excluded);
+        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed, excluded,
+                maxReferenceDays);
 
         Set<UUID> ids = new LinkedHashSet<>(linesByDelivery.keySet());
         ids.addAll(reviewed);
@@ -163,12 +170,12 @@ public class OverpaymentService {
     @Transactional
     public OverpaymentReport setExcludedSuppliers(UUID storeId, List<String> supplierCodes, UUID userId) {
         reportSuppliers.replace(storeId, ReviewedReport.OVERPAYMENT, supplierCodes, userId);
-        return report(storeId);
+        return report(storeId, HISTORY_DAYS);
     }
 
     /** Przepłacone artykuły po przyjęciach, od największej nadpłaty. Historia od najstarszej dostawy. */
     private static Map<UUID, List<Line>> overpaid(List<DeliveryHistory> history, LocalDateTime start,
-            Set<UUID> reviewed, Set<String> excluded) {
+            Set<UUID> reviewed, Set<String> excluded, int maxReferenceDays) {
         Map<String, List<DeliveryHistory>> byArticle = history.stream()
                 .filter(delivery -> !skipped(delivery.getNomenclatureCode()))
                 .filter(delivery -> !excluded.contains(delivery.getSupplierCode()))
@@ -185,7 +192,7 @@ public class OverpaymentService {
                 }
                 boolean checked = !delivery.getDocumentDate().isBefore(start)
                         || reviewed.contains(delivery.getDocumentId());
-                Line line = checked ? overpaidLine(delivery, references) : null;
+                Line line = checked ? overpaidLine(delivery, references, maxReferenceDays) : null;
                 if (line != null) {
                     lines.computeIfAbsent(delivery.getDocumentId(), id -> new ArrayList<>()).add(line);
                 }
@@ -217,25 +224,32 @@ public class OverpaymentService {
     }
 
     /** Linia raportu, gdy cena po korektach przekracza próg ponad najniższą cenę odniesienia, inaczej {@code null}. */
-    private static Line overpaidLine(DeliveryHistory delivery, Deque<DeliveryHistory> references) {
+    private static Line overpaidLine(DeliveryHistory delivery, Deque<DeliveryHistory> references,
+            int maxReferenceDays) {
         BigDecimal quantity = delivery.getCorrectedQuantity();
         BigDecimal value = delivery.getCorrectedValue();
-        if (references.isEmpty() || quantity.signum() <= 0 || value.signum() <= 0) {
+        LocalDate oldest = delivery.getDocumentDate().toLocalDate().minusDays(maxReferenceDays);
+        List<DeliveryHistory> recent = new ArrayList<>(references.size());
+        references.descendingIterator().forEachRemaining(reference -> {
+            if (!reference.getDocumentDate().toLocalDate().isBefore(oldest)) {
+                recent.add(reference);
+            }
+        });
+        if (recent.isEmpty() || quantity.signum() <= 0 || value.signum() <= 0) {
             return null;
         }
         BigDecimal price = value.divide(quantity, 4, RoundingMode.HALF_UP);
-        BigDecimal lowest = references.stream().map(OverpaymentService::price).min(Comparator.naturalOrder())
+        BigDecimal lowest = recent.stream().map(OverpaymentService::price).min(Comparator.naturalOrder())
                 .orElseThrow();
         if (price.compareTo(lowest.multiply(THRESHOLD_FACTOR)) <= 0) {
             return null;
         }
         BigDecimal percent = price.subtract(lowest).multiply(HUNDRED).divide(lowest, 1, RoundingMode.HALF_UP);
         BigDecimal excess = price.subtract(lowest).multiply(quantity).setScale(2, RoundingMode.HALF_UP);
-        List<Reference> shown = new ArrayList<>(references.size());
-        references.descendingIterator().forEachRemaining(reference -> shown.add(new Reference(
+        List<Reference> shown = recent.stream().map(reference -> new Reference(
                 reference.getDocumentId(), reference.getDocumentNumber(), reference.getDocumentDate(),
                 reference.getSupplierCode(), reference.getSupplierName(), reference.getQuantity(),
-                price(reference))));
+                price(reference))).toList();
         return new Line(delivery.getItm8(), delivery.getEan(), delivery.getName(), delivery.getBrand(),
                 regionOf(delivery.getNomenclatureCode()), delivery.getSupplierCode(), quantity, price, value, lowest,
                 percent, excess, delivery.getCorrected(), shown);

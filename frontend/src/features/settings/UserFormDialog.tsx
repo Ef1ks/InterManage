@@ -88,6 +88,7 @@ function UserFormBody({
   })
   const selectedRoleId = useWatch({ control, name: 'roleId' })
   const ownerRoleSelected = roles.some((role) => role.id === selectedRoleId && role.owner)
+  const roleFromPosition = user?.positionName != null && !user.owner
 
   const onError = (error: unknown) =>
     setFormError(
@@ -208,6 +209,10 @@ function UserFormBody({
             onChange={field.onChange}
             onBlur={field.onBlur}
             error={errors.roleId?.message}
+            disabled={roleFromPosition}
+            hint={
+              roleFromPosition ? `Rolę ustala stanowisko ${user?.positionName}. Zmienisz je w Pracownikach.` : undefined
+            }
           />
         )}
       />

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import type { DataEntryRow } from '@/features/data-entry/rows'
 import { formatDocumentDate, formatPrice, formatQuantity } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import type { TemporaryNote } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -190,8 +191,21 @@ export function DifferencesDialog({ storeId, rows, open, onOpenChange }: Props) 
                             </td>
                             <td className="px-2 py-1.5">{difference.itm8?.replace(/^0+/, '')}</td>
                             <td className="px-2 py-1.5">{difference.ean}</td>
-                            <td className="max-w-64 truncate px-2 py-1.5" title={difference.name}>
-                              {difference.name}
+                            <td className="max-w-64 px-2 py-1.5">
+                              <span className="flex items-center gap-1">
+                                <span className="min-w-0 truncate" title={difference.name}>
+                                  {difference.name}
+                                </span>
+                                {difference.articleItm8 && (
+                                  <ArticleStatsButton
+                                    article={{
+                                      itm8: difference.articleItm8,
+                                      name: difference.name,
+                                      ean: difference.ean,
+                                    }}
+                                  />
+                                )}
+                              </span>
                             </td>
                             <td className="px-2 py-1.5">{difference.carriers.join(', ')}</td>
                             <td className="px-2 py-1.5 text-right">{formatQuantity(difference.sheetQuantity)}</td>

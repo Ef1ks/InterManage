@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { MAX_QUANTITY, ORDER_EAN, type OrderLine } from '@/features/data-entry/order-file'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
@@ -145,6 +146,7 @@ function OrderList({ storeId, items, onDone }: { storeId: string; items: ZeroSto
                   {item.brand && <span className="text-muted-foreground"> · {item.brand}</span>}
                 </span>
               </label>
+              <ArticleStatsButton article={item} skipTab />
               <Input
                 aria-label={`Ilość: ${item.name}`}
                 inputMode="numeric"

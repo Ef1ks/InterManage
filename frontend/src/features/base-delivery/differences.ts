@@ -16,6 +16,8 @@ export type Difference = {
   key: string
   kinds: DifferenceKind[]
   itm8: string | null
+  /** ITM8 z kartoteki albo z programu sklepu do statystyk; {@code itm8} bywa kodem z pliku bazy. */
+  articleItm8: string | null
   ean: string | null
   name: string
   carriers: string[]
@@ -147,6 +149,7 @@ export function findDifferences(rows: DataEntryRow[], notes: TemporaryNote[]) {
         key: `q:${group[0].keys[0]}`,
         kinds: [kind],
         itm8: first ? (first.itm8 ?? first.base?.itm8 ?? null) : program[0].itm8,
+        articleItm8: first?.itm8 ?? program[0]?.itm8 ?? null,
         ean: first ? first.ean || null : program[0].ean,
         name: first ? first.name : program[0].name,
         carriers: [...new Set(sheet.flatMap((row) => (row.base?.carrier ? [row.base.carrier] : [])))],
@@ -170,6 +173,7 @@ export function findDifferences(rows: DataEntryRow[], notes: TemporaryNote[]) {
         key: `p:${row.id}`,
         kinds: ['price'],
         itm8: row.base?.itm8 ?? row.itm8,
+        articleItm8: row.itm8 ?? program[0]?.itm8 ?? null,
         ean: row.ean || null,
         name: row.name,
         carriers: row.base?.carrier ? [row.base.carrier] : [],

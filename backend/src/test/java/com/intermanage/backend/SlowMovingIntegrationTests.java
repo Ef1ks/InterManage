@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -98,7 +99,6 @@ class SlowMovingIntegrationTests {
         product(OTHER_REGION, OTHER_REGION_EAN, "SER", "02 01 01", "1", "2", true);
         product(FAST, "5900000000048", "HIT", "01 01 01", "5", "1", true);
         product(NO_STOCK, "5900000000055", "BRAK", "01 01 01", "0", "1", true);
-        product(INACTIVE, "5900000000062", "WYCOFANY", "01 01 01", "5", "1", false);
         product(BAG, "5900000000079", "TORBA", "60 01 01", "5", "1", true);
         sale(from, SLOW, "1");
         sale(to, FAST, "2");
@@ -110,7 +110,9 @@ class SlowMovingIntegrationTests {
                 insert into cadencier_items (store_id, itm8, ean, import_id)
                 values (?::uuid, ?, null, (select id from cadencier_imports where store_id = ?::uuid))""",
                 store, UNSOLD, store);
+        delivery("90", today.minusMonths(2), SLOW, null, "1", "5");
         delivery("100", today.minusDays(3), SLOW, null, "4", "20");
+        delivery("190", today.minusMonths(2), LOCAL_ITM8, OTHER_REGION_EAN, "1", "2");
         delivery("200", today.minusDays(20), LOCAL_ITM8, OTHER_REGION_EAN, "1", "2");
     }
 
@@ -194,6 +196,82 @@ class SlowMovingIntegrationTests {
     }
 
     @Test
+    void articleInactiveInCatalogStaysInReport() throws Exception {
+        product(INACTIVE, "5900000000062", "WYCOFANY", "01 01 01", "5", "1", false);
+
+        mvc.perform(report()).andExpect(jsonPath("$.items[*].itm8",
+                containsInAnyOrder(UNSOLD, SLOW, OTHER_REGION, INACTIVE)));
+    }
+
+    @Test
+    void filtersByOriginOfLastDelivery() throws Exception {
+        jdbc.update("""
+                update document_lines set supplier_code = '538'
+                where itm8 = ? and document_id in (select id from documents where store_id = ?::uuid)""",
+                SLOW, store);
+
+        mvc.perform(report().param("origin", "OUTSIDE"))
+                .andExpect(jsonPath("$.items[*].itm8", contains(OTHER_REGION)));
+        mvc.perform(report().param("origin", "BASE"))
+                .andExpect(jsonPath("$.items[*].itm8", contains(SLOW)));
+    }
+
+    @Test
+    void firstDeliveryMustBeAtLeastMonthOld() throws Exception {
+        String monthOld = "0000000000511";
+        String tooNew = "0000000000512";
+        String newLocal = "9900000000512";
+        String newLocalArticle = "0000000000513";
+        product(monthOld, "5900000000086", "MIESIAC", "01 01 01", "1", "1", true);
+        product(tooNew, "5900000000093", "NOWY", "01 01 01", "1", "1", true);
+        product(newLocalArticle, "5900000000109", "NOWY LOKALNY", "01 01 01", "1", "1", true);
+        delivery("301", today.minusMonths(1), monthOld, null, "1", "1");
+        delivery("302", today.minusMonths(1).plusDays(1), tooNew, null, "1", "1");
+        // Pierwsza dostawa pod lokalnym ITM8 dostawcy też się liczy.
+        delivery("303", today.minusDays(2), newLocal, "5900000000109", "1", "1");
+
+        mvc.perform(report())
+                .andExpect(jsonPath("$.items[*].itm8",
+                        containsInAnyOrder(UNSOLD, SLOW, OTHER_REGION, monthOld)));
+    }
+
+    @Test
+    void excludedArticlesLeaveReportAndCanReturn() throws Exception {
+        String excluded = mvc.perform(exclude(SLOW))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itm8").value(SLOW))
+                .andExpect(jsonPath("$.name").value("BUDYN"))
+                .andExpect(jsonPath("$.excludedBy").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(excluded, "$.id");
+
+        // Drugie kliknięcie zostawia ten sam wpis.
+        mvc.perform(exclude(SLOW)).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(id));
+        mvc.perform(report())
+                .andExpect(jsonPath("$.itemCount").value(2))
+                .andExpect(jsonPath("$.items[*].itm8", contains(UNSOLD, OTHER_REGION)));
+        mvc.perform(get(excludedPath()).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].itm8", contains(SLOW)));
+
+        mvc.perform(delete(excludedPath() + "/" + id).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(excludedPath()).cookie(owner)).andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(report()).andExpect(jsonPath("$.itemCount").value(3));
+        // Wpis ze znacznikiem zostaje jako historia, a artykuł da się pominąć ponownie.
+        assertThat(jdbc.queryForObject(
+                "select count(*) from slow_moving_excluded_articles where id = ?::uuid and removed_at is not null",
+                Long.class, id)).isEqualTo(1);
+        mvc.perform(exclude(SLOW)).andExpect(status().isOk());
+        mvc.perform(report()).andExpect(jsonPath("$.itemCount").value(2));
+    }
+
+    @Test
+    void articleOutsideStoreCatalogCannotBeExcluded() throws Exception {
+        mvc.perform(exclude("0000000000999")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void printsPdf() throws Exception {
         for (String deliveryDays : new String[] {"", "30"}) {
             byte[] pdf = mvc.perform(get(url() + "/pdf").cookie(owner).param("from", from.toString())
@@ -213,6 +291,15 @@ class SlowMovingIntegrationTests {
 
     private String url() {
         return "/api/stores/" + store + "/reports/slow-moving";
+    }
+
+    private String excludedPath() {
+        return "/api/stores/" + store + "/reports/slow-moving/excluded";
+    }
+
+    private MockHttpServletRequestBuilder exclude(String itm8) {
+        return post(excludedPath()).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"itm8\":\"" + itm8 + "\"}");
     }
 
     private void product(String itm8, String ean, String name, String nomenclature, String stock, String price,

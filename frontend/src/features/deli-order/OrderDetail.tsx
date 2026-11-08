@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCheckIcon, MergeIcon, PencilIcon, PlusIcon, RotateCcwIcon, SaveIcon, SplitIcon, Trash2Icon } from 'lucide-react'
+import {
+  CheckCheckIcon,
+  MergeIcon,
+  PencilIcon,
+  PlusIcon,
+  RotateCcwIcon,
+  SaveIcon,
+  SplitIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -22,6 +31,7 @@ import { OrderMovementDocuments } from '@/features/deli-order/OrderMovementDocum
 import { OrderStatusBadge } from '@/features/deli-order/OrderStatusBadge'
 import { deliPaths } from '@/features/deli-order/paths'
 import { QuantityInput, formatQuantity, parseQuantity } from '@/features/deli-order/QuantityInput'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { formatLongDate, formatShortDate } from '@/lib/dates'
@@ -34,7 +44,9 @@ export function OrderDetail({ storeId }: { storeId: string }) {
   const { data: order, isPending, isError } = useOrder(storeId, orderId)
 
   if (isError) {
-    return <FullPageMessage title="Nie znaleziono zamówienia" description="Mogło zostać złożone w innym sklepie." inline />
+    return (
+      <FullPageMessage title="Nie znaleziono zamówienia" description="Mogło zostać złożone w innym sklepie." inline />
+    )
   }
   if (isPending) {
     return <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
@@ -72,8 +84,9 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
   // Inne zamówienia tego sklepu na ten sam dzień, z którymi dostawca może połączyć to.
   const incomingOrders = useOrders(storeId, 'incoming').data
   const siblings = editable
-    ? (mergeableGroups(incomingOrders ?? []).find((group) => group.some((other) => other.id === order.id)) ?? [])
-        .filter((other) => other.id !== order.id)
+    ? (
+        mergeableGroups(incomingOrders ?? []).find((group) => group.some((other) => other.id === order.id)) ?? []
+      ).filter((other) => other.id !== order.id)
     : []
 
   // Pierwsze otwarcie u dostawcy zmienia status z "nowe" na "odczytane" (raz na wejście).
@@ -118,9 +131,10 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
     remove.mutate(undefined, {
       onSuccess: () => {
         toast.success('Zamówienie usunięte', {
-          description: incoming && !sender
-            ? `Zniknęło z Twojej listy. Zamawiający (${storeLabel(order.store)}) zobaczy je jako usunięte.`
-            : `Zniknęło z Twojej listy. Dostawca (${storeLabel(order.formStore)}) zobaczy je jako usunięte.`,
+          description:
+            incoming && !sender
+              ? `Zniknęło z Twojej listy. Zamawiający (${storeLabel(order.store)}) zobaczy je jako usunięte.`
+              : `Zniknęło z Twojej listy. Dostawca (${storeLabel(order.formStore)}) zobaczy je jako usunięte.`,
           action: { label: 'Przywróć', onClick: restoreOrder },
           duration: 10_000,
         })
@@ -162,7 +176,8 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
               {order.deliveryDate !== order.orderedDeliveryDate && (
                 <div className="text-xs text-muted-foreground tabular-nums">
                   złożone na {formatShortDate(order.orderedDeliveryDate)}
-                  {order.deliveryDateChangedAt && `, zmienione ${dateTime.format(new Date(order.deliveryDateChangedAt))}`}
+                  {order.deliveryDateChangedAt &&
+                    `, zmienione ${dateTime.format(new Date(order.deliveryDateChangedAt))}`}
                   {order.deliveryDateChangedBy && ` · ${order.deliveryDateChangedBy}`}
                 </div>
               )}
@@ -206,31 +221,37 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
           <OrderPrintMenu storeId={storeId} orderId={order.id} />
           {editable && (
             <>
-            {changed.length > 0 && (
-              <Button variant="outline" size="xl" loading={correct.isPending} disabled={hasErrors} onClick={saveCorrections}>
-                <SaveIcon />
-                Zapisz poprawki ({changed.length})
+              {changed.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="xl"
+                  loading={correct.isPending}
+                  disabled={hasErrors}
+                  onClick={saveCorrections}
+                >
+                  <SaveIcon />
+                  Zapisz poprawki ({changed.length})
+                </Button>
+              )}
+              {canUseTable && (
+                <InsertOrderIntoTable
+                  storeId={storeId}
+                  order={order}
+                  lines={parsed.map(({ item, value }) => ({ item, quantity: value ?? item.quantity }))}
+                  disabled={hasErrors}
+                />
+              )}
+              <Button size="xl" onClick={() => setFulfilling(true)}>
+                <CheckCheckIcon />
+                Potwierdź zrealizowanie
               </Button>
-            )}
-            {canUseTable && (
-              <InsertOrderIntoTable
+              <FulfillOrderDialog
                 storeId={storeId}
                 order={order}
-                lines={parsed.map(({ item, value }) => ({ item, quantity: value ?? item.quantity }))}
-                disabled={hasErrors}
+                initial={draft}
+                open={fulfilling}
+                onOpenChange={setFulfilling}
               />
-            )}
-            <Button size="xl" onClick={() => setFulfilling(true)}>
-              <CheckCheckIcon />
-              Potwierdź zrealizowanie
-            </Button>
-            <FulfillOrderDialog
-              storeId={storeId}
-              order={order}
-              initial={draft}
-              open={fulfilling}
-              onOpenChange={setFulfilling}
-            />
             </>
           )}
           {deletable && (
@@ -277,7 +298,10 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
             {order.mergedFrom.map((source, index) => (
               <span key={source.id}>
                 {index > 0 && ', '}
-                <Link to={deliPaths.orderDetail(source.id)} className="underline underline-offset-2 hover:text-foreground">
+                <Link
+                  to={deliPaths.orderDetail(source.id)}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
                   złożone {dateTime.format(new Date(source.submittedAt))}
                 </Link>
               </span>
@@ -292,7 +316,10 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
             <p className="text-sm font-medium">Połączone z {ordersCount(order.mergedFrom.length)}</p>
             <p className="text-xs text-muted-foreground tabular-nums">
               {order.mergedFrom
-                .map((source) => `${dateTime.format(new Date(source.submittedAt))}${source.submittedBy ? ` · ${source.submittedBy}` : ''} (${source.itemCount} poz.)`)
+                .map(
+                  (source) =>
+                    `${dateTime.format(new Date(source.submittedAt))}${source.submittedBy ? ` · ${source.submittedBy}` : ''} (${source.itemCount} poz.)`,
+                )
                 .join(', ')}
               {order.mergedAt && `. Połączono ${dateTime.format(new Date(order.mergedAt))}`}
               {order.mergedBy && ` · ${order.mergedBy}`}.
@@ -314,8 +341,10 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">Usunięto to zamówienie u Ciebie</p>
             <p className="text-xs text-muted-foreground tabular-nums">
-              {deletionNote(sender ? order.storeDeletedAt : order.formStoreDeletedAt,
-                sender ? order.storeDeletedBy : order.formStoreDeletedBy)}{' '}
+              {deletionNote(
+                sender ? order.storeDeletedAt : order.formStoreDeletedAt,
+                sender ? order.storeDeletedBy : order.formStoreDeletedBy,
+              )}{' '}
               Nie widać go na liście, a druga strona widzi je jako usunięte.
             </p>
           </div>
@@ -360,95 +389,101 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
               <strong className="font-semibold text-foreground">Zapisz poprawki</strong>.
             </>,
             <>
-              Gdy towar jest wydany, <strong className="font-semibold text-foreground">przypnij dokument ruchu
-              międzymagazynowego</strong>, na którym jedzie, kliknij{' '}
-              <strong className="font-semibold text-foreground">Potwierdź zrealizowanie</strong> i wpisz wydane ilości
-              (Enter przechodzi do następnego produktu). Plik PROTO6 zapisze się w wybranym folderze i program sklepu sam go wczyta.
+              Gdy towar jest wydany,{' '}
+              <strong className="font-semibold text-foreground">przypnij dokument ruchu międzymagazynowego</strong>, na
+              którym jedzie, kliknij <strong className="font-semibold text-foreground">Potwierdź zrealizowanie</strong>{' '}
+              i wpisz wydane ilości (Enter przechodzi do następnego produktu). Plik PROTO6 zapisze się w wybranym
+              folderze i program sklepu sam go wczyta.
             </>,
             <>
-              Z garmażem jedzie inny towar? Kliknij <strong className="font-semibold text-foreground">Wstaw do tabeli</strong>,
-              dopisz resztę we wprowadzaniu danych i wygeneruj protokół MM. Pasek nad tabelą zakończy zamówienie ilościami
-              z tabeli, a towary spoza zamówienia pominie.
+              Z garmażem jedzie inny towar? Kliknij{' '}
+              <strong className="font-semibold text-foreground">Wstaw do tabeli</strong>, dopisz resztę we wprowadzaniu
+              danych i wygeneruj protokół MM. Pasek nad tabelą zakończy zamówienie ilościami z tabeli, a towary spoza
+              zamówienia pominie.
             </>,
           ]}
         />
       )}
       {!incoming && active && (
         <p className="mb-6 text-sm text-muted-foreground">
-          Zamówienie czeka na realizację w sklepie {storeLabel(order.formStore)}. Jeśli zmieni ilości, zobaczysz je tutaj
-          jako przekreślone. Zapomniałeś o czymś? Dopisz to plusem przy kategorii.
+          Zamówienie czeka na realizację w sklepie {storeLabel(order.formStore)}. Jeśli zmieni ilości, zobaczysz je
+          tutaj jako przekreślone. Zapomniałeś o czymś? Dopisz to plusem przy kategorii.
         </p>
       )}
       {!deleted && !replaced && <OrderMovementDocuments storeId={storeId} order={order} />}
 
       <div className="grid grid-cols-1 gap-6">
         {/* Pozycja poprawiona do zera nie zostanie dostarczona - poza edycją jej nie pokazujemy. */}
-        {groupItems(editable ? order.items : order.items.filter((item) => item.quantity > 0)).map(({ section, categories }) => (
-          <section key={section} aria-label={section}>
-            <h3 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section}</h3>
-            <div className="grid grid-cols-1 gap-4">
-              {categories.map(({ category, items }) => (
-                <div key={category}>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <h4 className="text-base font-semibold">{category}</h4>
-                    {canAddItems && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Dopisz produkt do kategorii ${category}`}
-                        onClick={() => setAdding({ section, category })}
-                      >
-                        <PlusIcon />
-                        Dopisz
-                      </Button>
-                    )}
-                  </div>
-                  <Card className="gap-0 divide-y py-0">
-                    {items.map((item) => {
-                      const error = parsed.find((p) => p.item.id === item.id)?.error
-                      return (
-                        <div key={item.id} className="flex items-center gap-4 px-4 py-2.5">
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium">{item.name ?? 'Bez nazwy'}</div>
-                            <div className="truncate text-xs text-muted-foreground tabular-nums">
-                              {item.brand && `${item.brand} · `}EAN {item.ean}
+        {groupItems(editable ? order.items : order.items.filter((item) => item.quantity > 0)).map(
+          ({ section, categories }) => (
+            <section key={section} aria-label={section}>
+              <h3 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{section}</h3>
+              <div className="grid grid-cols-1 gap-4">
+                {categories.map(({ category, items }) => (
+                  <div key={category}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <h4 className="text-base font-semibold">{category}</h4>
+                      {canAddItems && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Dopisz produkt do kategorii ${category}`}
+                          onClick={() => setAdding({ section, category })}
+                        >
+                          <PlusIcon />
+                          Dopisz
+                        </Button>
+                      )}
+                    </div>
+                    <Card className="gap-0 divide-y py-0">
+                      {items.map((item) => {
+                        const error = parsed.find((p) => p.item.id === item.id)?.error
+                        return (
+                          <div key={item.id} className="flex items-center gap-4 px-4 py-2.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1">
+                                <div className="min-w-0 truncate text-sm font-medium">{item.name ?? 'Bez nazwy'}</div>
+                                <ArticleStatsButton article={item} foreign={!incoming} skipTab />
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground tabular-nums">
+                                {item.brand && `${item.brand} · `}EAN {item.ean}
+                              </div>
+                              {/* Dopisek pod nazwą, a nie obok pola: prawa strona ma stałą szerokość w każdym wierszu. */}
+                              {editable && item.quantity !== item.orderedQuantity && (
+                                <div className="text-xs text-muted-foreground tabular-nums">
+                                  zamówiono {formatQuantity(item.orderedQuantity, item.unit)}
+                                </div>
+                              )}
+                              {item.addedAt && (
+                                <div className="text-xs text-muted-foreground tabular-nums">
+                                  dopisane {dateTime.format(new Date(item.addedAt))}
+                                  {item.addedBy && ` · ${item.addedBy}`}
+                                </div>
+                              )}
+                              {error && <div className="text-xs text-destructive">{error}</div>}
                             </div>
-                            {/* Dopisek pod nazwą, a nie obok pola: prawa strona ma stałą szerokość w każdym wierszu. */}
-                            {editable && item.quantity !== item.orderedQuantity && (
-                              <div className="text-xs text-muted-foreground tabular-nums">
-                                zamówiono {formatQuantity(item.orderedQuantity, item.unit)}
-                              </div>
+                            {editable ? (
+                              <QuantityInput
+                                unit={item.unit}
+                                value={draft[item.id] ?? ''}
+                                invalid={Boolean(error)}
+                                label={item.name ?? item.ean}
+                                onChange={(next) => setEdits((current) => ({ ...current, [item.id]: next }))}
+                              />
+                            ) : (
+                              <QuantityView item={item} />
                             )}
-                            {item.addedAt && (
-                              <div className="text-xs text-muted-foreground tabular-nums">
-                                dopisane {dateTime.format(new Date(item.addedAt))}
-                                {item.addedBy && ` · ${item.addedBy}`}
-                              </div>
-                            )}
-                            {error && <div className="text-xs text-destructive">{error}</div>}
                           </div>
-                          {editable ? (
-                            <QuantityInput
-                              unit={item.unit}
-                              value={draft[item.id] ?? ''}
-                              invalid={Boolean(error)}
-                              label={item.name ?? item.ean}
-                              onChange={(next) => setEdits((current) => ({ ...current, [item.id]: next }))}
-                            />
-                          ) : (
-                            <QuantityView item={item} />
-                          )}
-                        </div>
-                      )
-                    })}
-                  </Card>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
+                        )
+                      })}
+                    </Card>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ),
+        )}
       </div>
-
     </>
   )
 }

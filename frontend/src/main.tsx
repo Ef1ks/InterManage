@@ -6,6 +6,7 @@ import { Provider } from 'react-redux'
 import { ThemeProvider } from 'next-themes'
 
 import { App } from '@/App'
+import { SplashScreen } from '@/components/SplashScreen'
 import { Toaster } from '@/components/ui/sonner'
 import { queryClient } from '@/lib/query-client'
 import { THEME_STORAGE_KEY } from '@/lib/theme'
@@ -17,10 +18,17 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Klasa .dark na <html>; domyślnie motyw z systemu. disableTransitionOnChange: przejścia kolorów w komponentach
         nie ciągną się przy zmianie, całość przenika useThemeChoice. */}
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey={THEME_STORAGE_KEY} disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      storageKey={THEME_STORAGE_KEY}
+      disableTransitionOnChange
+    >
       <Provider store={store}>
         <QueryClientProvider client={queryClient}>
           <App />
+          <SplashScreen />
           <Toaster position="top-right" richColors />
           <ReactQueryDevtools buttonPosition="bottom-left" />
         </QueryClientProvider>

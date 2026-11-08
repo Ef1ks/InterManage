@@ -48,16 +48,18 @@ public class DataEntryXmlService {
     private final KsefInvoiceService ksefInvoices;
     private final StoreRepository stores;
     private final AppUserRepository users;
+    private final DataEntryInvoiceClosingService closings;
 
     public DataEntryXmlService(DataEntryXmlExportRepository exports, DataEntryXmlExportMapper mapper,
             DataEntryService dataEntry, KsefInvoiceService ksefInvoices, StoreRepository stores,
-            AppUserRepository users) {
+            AppUserRepository users, DataEntryInvoiceClosingService closings) {
         this.exports = exports;
         this.mapper = mapper;
         this.dataEntry = dataEntry;
         this.ksefInvoices = ksefInvoices;
         this.stores = stores;
         this.users = users;
+        this.closings = closings;
     }
 
     /** Plik do zapisu na dysku; {@code id} to wpis, który {@link #confirmSaved} doda do historii. */
@@ -73,8 +75,8 @@ public class DataEntryXmlService {
     }
 
     /**
-     * Przeglądarka zapisała plik na dysku: wpis trafia do historii, a wiersze z propozycji AI zapisują wartości
-     * z pliku przy propozycji. Ponowne potwierdzenie niczego nie zmienia.
+     * Przeglądarka zapisała plik na dysku: wpis trafia do historii i kolejki faktur do zamknięcia, a wiersze z propozycji
+     * AI zapisują wartości z pliku przy propozycji. Ponowne potwierdzenie niczego nie zmienia.
      */
     @Transactional
     public void confirmSaved(UUID storeId, UUID id, ExportRequest request, UUID userId) {
@@ -84,6 +86,7 @@ public class DataEntryXmlService {
         if (export.getSavedAt() == null) {
             export.markSaved();
             dataEntry.saveExported(storeId, request.rows(), userId);
+            closings.register(export, userId);
         }
     }
 

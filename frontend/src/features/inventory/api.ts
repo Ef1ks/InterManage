@@ -1,7 +1,7 @@
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { ProductListPage, ProductPriceHistory } from '@/lib/types'
+import type { PriceMarkdown, ProductListPage, ProductPriceHistory } from '@/lib/types'
 
 const path = (storeId: string) => `/stores/${storeId}/products`
 const productsKey = (storeId: string) => ['stores', storeId, 'products'] as const
@@ -37,3 +37,37 @@ export function useProductPrices(storeId: string, itm8: string) {
     queryFn: () => api<ProductPriceHistory>(`${path(storeId)}/${itm8}/prices`),
   })
 }
+
+const markdownsPath = (storeId: string) => `/stores/${storeId}/price-markdowns`
+const markdownsKey = (storeId: string) => ['stores', storeId, 'price-markdowns'] as const
+
+/** Lista cenówek: przeceny z karty artykułu, od najnowszej. */
+export function usePriceMarkdowns(storeId: string) {
+  return useQuery({
+    queryKey: markdownsKey(storeId),
+    queryFn: () => api<PriceMarkdown[]>(markdownsPath(storeId)),
+  })
+}
+
+export function useCreatePriceMarkdown(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (markdown: { itm8: string; newPrice: number; validFrom: string; validTo: string }) =>
+      api<PriceMarkdown[]>(markdownsPath(storeId), { method: 'POST', json: markdown }),
+    onSuccess: (list) => queryClient.setQueryData(markdownsKey(storeId), list),
+    meta: { invalidates: false },
+  })
+}
+
+/** Znacznik „w pliku” po zapisie na dysku, usunięcie (znacznik) i „Przywróć”; każda zmiana zwraca listę. */
+export function usePriceMarkdownChange(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ action, ids }: { action: 'labels-generated' | 'delete' | 'restore'; ids: string[] }) =>
+      api<PriceMarkdown[]>(`${markdownsPath(storeId)}/${action}`, { method: 'POST', json: { ids } }),
+    onSuccess: (list) => queryClient.setQueryData(markdownsKey(storeId), list),
+    meta: { invalidates: false },
+  })
+}
+
+export const priceLabelsFilePath = (storeId: string) => `${markdownsPath(storeId)}/labels-file`

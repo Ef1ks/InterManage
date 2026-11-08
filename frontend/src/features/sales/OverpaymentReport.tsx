@@ -1,5 +1,6 @@
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
+import { SegmentedField } from '@/components/form'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   bonNumber,
@@ -11,10 +12,21 @@ import {
   formatQuantity,
 } from '@/features/documents/format'
 import { useOverpayments } from '@/features/sales/api'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ExcludedSuppliersSettings } from '@/features/sales/ExcludedSuppliersSettings'
 import { ReviewedReportPage } from '@/features/sales/ReviewedReportPage'
 import type { OverpaymentDelivery } from '@/lib/types'
 import { cn } from '@/lib/utils'
+
+const REFERENCE_PARAM = 'poprzednia_dostawa'
+const ALL_REFERENCES = '180'
+const REFERENCE_FILTERS = [
+  { value: '30', label: '30 dni' },
+  { value: '60', label: '60 dni' },
+  { value: '90', label: '90 dni' },
+  { value: '120', label: '120 dni' },
+  { value: ALL_REFERENCES, label: 'pół roku' },
+]
 
 /**
  * Przepłacone artykuły: przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej
@@ -22,14 +34,17 @@ import { cn } from '@/lib/utils'
  * z którymi je porównano. Sprawę wyjaśnia się z dostawcą jak w zakupie bazowym poza bazą, ale statusy są osobne.
  */
 export function OverpaymentReport({ storeId }: { storeId: string }) {
-  const query = useOverpayments(storeId)
+  const [params, setParams] = useSearchParams()
+  const referenceDays =
+    REFERENCE_FILTERS.find((option) => option.value === params.get(REFERENCE_PARAM))?.value ?? ALL_REFERENCES
+  const query = useOverpayments(storeId, Number(referenceDays))
   return (
     <ReviewedReportPage
       storeId={storeId}
       report="OVERPAYMENT"
       query={query}
       title="Przepłacone artykuły"
-      intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca, prasę od Kolportera i dostawców wybranych w ustawieniach raportu."
+      intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Poprzednia dostawa liczy się tylko z okresu wybranego w filtrze, bo po długiej przerwie wzrost ceny jest czymś zwykłym, a artykuł bez takiej dostawy nie trafia do raportu. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca, prasę od Kolportera i dostawców wybranych w ustawieniach raportu."
       actions={
         query.data && (
           <ExcludedSuppliersSettings
@@ -42,6 +57,28 @@ export function OverpaymentReport({ storeId }: { storeId: string }) {
             readOnlyLabel="Raport pomija dostawców"
           />
         )
+      }
+      filterParams={[REFERENCE_PARAM]}
+      filters={
+        <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          Poprzednia dostawa nie dawniej niż
+          <SegmentedField
+            label="Poprzednia dostawa nie dawniej niż"
+            options={REFERENCE_FILTERS}
+            value={referenceDays}
+            onChange={(next) =>
+              setParams(
+                (current) => {
+                  const updated = new URLSearchParams(current)
+                  if (next === ALL_REFERENCES) updated.delete(REFERENCE_PARAM)
+                  else updated.set(REFERENCE_PARAM, next)
+                  return updated
+                },
+                { replace: true },
+              )
+            }
+          />
+        </span>
       }
       linesLabel="droższe"
       excessLabel="przepłacone"
@@ -82,6 +119,7 @@ function LinesTable({ delivery }: { delivery: OverpaymentDelivery }) {
                       *
                     </span>
                   )}
+                  <ArticleStatsButton article={line} className="ml-1" />
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`].filter(Boolean).join(' · ')}

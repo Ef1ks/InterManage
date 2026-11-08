@@ -14,6 +14,7 @@ import { CATEGORY_NAV_GRID, CategoryNav, categoryAnchorId } from '@/features/del
 import { deliPaths } from '@/features/deli-order/paths'
 import { ProductSearchField } from '@/features/deli-order/ProductSearchField'
 import { QuantityInput, UnitToggle, parseQuantity } from '@/features/deli-order/QuantityInput'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { formatLongDate, todayIso } from '@/lib/dates'
@@ -65,12 +66,12 @@ export function OrderTab({ store }: { store: StoreSummary }) {
             produktach. Puste pola się nie liczą.
           </>,
           <>
-            Brakuje czegoś? Na dole działu w polu <strong className="font-semibold text-foreground">Spoza formularza</strong>{' '}
-            wyszukaj produkt i dopisz ilość.
+            Brakuje czegoś? Na dole działu w polu{' '}
+            <strong className="font-semibold text-foreground">Spoza formularza</strong> wyszukaj produkt i dopisz ilość.
           </>,
           <>
-            Na dole strony wybierz <strong className="font-semibold text-foreground">datę dostawy</strong> i kliknij Wyślij
-            zamówienie. Każdy dział dostaje osobną kartkę.
+            Na dole strony wybierz <strong className="font-semibold text-foreground">datę dostawy</strong> i kliknij
+            Wyślij zamówienie. Każdy dział dostaje osobną kartkę.
           </>,
         ]}
       />
@@ -98,7 +99,15 @@ export function OrderTab({ store }: { store: StoreSummary }) {
   )
 }
 
-function SupplierChip({ supplier, selected, onSelect }: { supplier: DeliSupplier; selected: boolean; onSelect: () => void }) {
+function SupplierChip({
+  supplier,
+  selected,
+  onSelect,
+}: {
+  supplier: DeliSupplier
+  selected: boolean
+  onSelect: () => void
+}) {
   return (
     <button
       type="button"
@@ -111,7 +120,9 @@ function SupplierChip({ supplier, selected, onSelect }: { supplier: DeliSupplier
       )}
     >
       <span className="block font-medium tabular-nums">{storeLabel(supplier.store)}</span>
-      <span className="block text-xs text-muted-foreground">{supplier.own ? 'Twój formularz' : 'Formularz innego sklepu'}</span>
+      <span className="block text-xs text-muted-foreground">
+        {supplier.own ? 'Twój formularz' : 'Formularz innego sklepu'}
+      </span>
     </button>
   )
 }
@@ -262,15 +273,23 @@ function SupplierOrder({ storeId, supplier }: { storeId: string; supplier: DeliS
                     <h2 className="mb-2 text-base font-semibold">{category.name}</h2>
                     <Card className="gap-0 divide-y py-0">
                       {category.products.length === 0 && (
-                        <p className="px-4 py-5 text-center text-sm text-muted-foreground">Brak produktów w tej kategorii.</p>
+                        <p className="px-4 py-5 text-center text-sm text-muted-foreground">
+                          Brak produktów w tej kategorii.
+                        </p>
                       )}
                       {category.products.map((product) => {
                         const value = quantities[product.id] ?? ''
-                        const error = showErrors && value.trim() !== '' ? parseQuantity(value, product.orderUnit).error : undefined
+                        const error =
+                          showErrors && value.trim() !== '' ? parseQuantity(value, product.orderUnit).error : undefined
                         return (
                           <div key={product.id} className="flex items-center gap-4 px-4 py-2.5">
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium">{product.name ?? 'Bez nazwy'}</div>
+                              <div className="flex items-center gap-1">
+                                <div className="min-w-0 truncate text-sm font-medium">
+                                  {product.name ?? 'Bez nazwy'}
+                                </div>
+                                <ArticleStatsButton article={product} foreign={!supplier.own} skipTab />
+                              </div>
                               <div className="truncate text-xs text-muted-foreground tabular-nums">
                                 {product.brand && `${product.brand} · `}EAN {product.ean}
                               </div>
@@ -393,39 +412,44 @@ function ExtrasSection({
         {storeLabel(supplier.store)}.
       </p>
       <Card className="gap-0 divide-y py-0">
-        {extras.filter((extra) => extra.sectionId === sectionId).map((extra) => {
-          const error =
-            showErrors && extra.quantity.trim() !== '' ? parseQuantity(extra.quantity, extra.unit).error : undefined
-          const label = extra.product.name ?? extra.product.ean
-          return (
-            <div key={extra.product.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{extra.product.name ?? 'Bez nazwy'}</div>
-                <div className="truncate text-xs text-muted-foreground tabular-nums">
-                  {extra.product.brand && `${extra.product.brand} · `}EAN {extra.product.ean}
+        {extras
+          .filter((extra) => extra.sectionId === sectionId)
+          .map((extra) => {
+            const error =
+              showErrors && extra.quantity.trim() !== '' ? parseQuantity(extra.quantity, extra.unit).error : undefined
+            const label = extra.product.name ?? extra.product.ean
+            return (
+              <div key={extra.product.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1">
+                    <div className="min-w-0 truncate text-sm font-medium">{extra.product.name ?? 'Bez nazwy'}</div>
+                    <ArticleStatsButton article={extra.product} foreign={!supplier.own} skipTab />
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground tabular-nums">
+                    {extra.product.brand && `${extra.product.brand} · `}EAN {extra.product.ean}
+                  </div>
+                  {error && <div className="text-xs text-destructive">{error}</div>}
                 </div>
-                {error && <div className="text-xs text-destructive">{error}</div>}
+                <UnitToggle value={extra.unit} label={label} onChange={(unit) => update(extra.product.id, { unit })} />
+                <QuantityInput
+                  unit={extra.unit}
+                  value={extra.quantity}
+                  invalid={Boolean(error)}
+                  label={label}
+                  onChange={(quantity) => update(extra.product.id, { quantity })}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Usuń ${label} z zamówienia`}
+                  title="Usuń"
+                  onClick={() => onChange(extras.filter((item) => item.product.id !== extra.product.id))}
+                >
+                  <XIcon />
+                </Button>
               </div>
-              <UnitToggle value={extra.unit} label={label} onChange={(unit) => update(extra.product.id, { unit })} />
-              <QuantityInput
-                unit={extra.unit}
-                value={extra.quantity}
-                invalid={Boolean(error)}
-                label={label}
-                onChange={(quantity) => update(extra.product.id, { quantity })}
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Usuń ${label} z zamówienia`}
-                title="Usuń"
-                onClick={() => onChange(extras.filter((item) => item.product.id !== extra.product.id))}
-              >
-                <XIcon />
-              </Button>
-            </div>
-          )
-        })}
+            )
+          })}
         <div className="p-3">
           <ProductSearchField
             source={{ storeId, supplierId: supplier.store.id }}

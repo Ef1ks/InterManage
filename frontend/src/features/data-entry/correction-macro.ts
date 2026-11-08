@@ -1,11 +1,12 @@
 import type { CorrectionDeliveryLine } from '@/lib/types'
 
+import { correctionBonLine, correctionFinishLines, correctionStartLines } from './mercalys-macro'
 import type { DataEntryRow } from './rows'
 
 /**
- * Makro dla odtwarzacza AutoHotkey (InterClicker, F9 czyta schowek linia po linii, jak „Uzupełnij ITM8”): faktura
- * korygująca w programie sklepu. Dla każdego artykułu numer bonu i dwa Entery, EAN, ilość po korekcie i cena zakupu.
- * Czasy w ms, poprawiamy je tylko tutaj.
+ * Makro dla odtwarzacza AutoHotkey (InterClicker, Alt+E czyta schowek linia po linii): faktura korygująca w programie
+ * sklepu od otwarcia Mercalys do zamknięcia PDF-a. Dla każdego artykułu numer bonu i dwa Entery, EAN, ilość po korekcie
+ * i cena zakupu. Czasy w ms, poprawiamy je tylko tutaj.
  */
 export const CORRECTION_MACRO_CONFIG = {
   /** Po numerze bonu i pierwszym Enterze program wyszukuje cały dokument; drugi Enter dopiero po tej przerwie. */
@@ -280,8 +281,11 @@ export const formatMacroQuantity = (value: number) => String(round(value, 3)).re
 
 export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACRO_CONFIG.priceDigits).replace('.', ',')
 
-/** Skrypt makra: numer bonu i kroki osobno dla każdej pozycji; linie z `#` odtwarzacz pomija. CRLF jak w Windows. */
-export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroItem[]) {
+/**
+ * Skrypt makra: nowy protokół, numer bonu i kroki osobno dla każdej pozycji, po potwierdzeniu pracownika zakończenie;
+ * linie z `#` odtwarzacz pomija. `today`: termin płatności, RRRR-MM-DD. CRLF jak w Windows.
+ */
+export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroItem[], today: string) {
   const c = CORRECTION_MACRO_CONFIG
   const out: string[] = []
   // Odtwarzacz sam czeka 50 ms po każdej linii, więc przerwa 0 to brak linii SLEEP.
@@ -294,10 +298,9 @@ export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroIt
     key('{Enter}', sleep)
   }
 
-  out.push(`# Korekta bonu ${bonNumber}: ${items.length} poz.`)
+  out.push(`# Korekta bonu ${bonNumber}: ${items.length} poz.`, ...correctionStartLines(today))
   for (const item of items) {
-    out.push(`# EAN ${item.ean}`)
-    enter(bonNumber, c.afterBon)
+    out.push(`# EAN ${item.ean}`, correctionBonLine(bonNumber), `SLEEP|${c.afterBon}`)
     key('{Enter}', c.afterBonSkip)
     enter(item.ean, c.afterEan)
     enter(formatMacroQuantity(item.quantity), c.afterQuantity)
@@ -308,5 +311,6 @@ export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroIt
     key('{Enter}', c.afterSkip)
     enter(formatMacroPrice(item.price), c.afterPrice)
   }
+  out.push(...correctionFinishLines(bonNumber, items.length))
   return out.join('\r\n') + '\r\n'
 }

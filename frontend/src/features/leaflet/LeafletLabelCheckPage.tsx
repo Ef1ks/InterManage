@@ -6,6 +6,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { Card } from '@/components/ui/card'
 import { formatDocumentDate } from '@/features/documents/format'
 import { MIN_LABEL_QUERY, useLeafletLabelCheck } from '@/features/leaflet/api'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import type { LeafletLabelArticle, LeafletLabelLine, LeafletLabelStatus, StoreSummary } from '@/lib/types'
 import { useSearchParamText } from '@/lib/use-search-param-text'
@@ -87,7 +88,15 @@ function ArticleCard({ article }: { article: LeafletLabelArticle }) {
   return (
     <Card className="gap-3 p-4">
       <div className="min-w-0">
-        <p className="font-medium break-words">{article.name}</p>
+        <p className="font-medium break-words">
+          {article.name}
+          {article.itm8 && (
+            <ArticleStatsButton
+              article={{ itm8: article.itm8, name: article.name, ean: article.ean, brand: article.brand }}
+              className="ml-1"
+            />
+          )}
+        </p>
         <p className="text-sm text-muted-foreground tabular-nums">
           {[article.brand, article.ean].filter(Boolean).join(' · ')}
         </p>

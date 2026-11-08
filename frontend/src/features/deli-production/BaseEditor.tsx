@@ -194,7 +194,13 @@ function SchemasSection({
             </span>
             {canEdit && (
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" aria-label={`Zmień schemat ${schema.name}`} title="Zmień" onClick={() => onEdit(schema)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Zmień schemat ${schema.name}`}
+                  title="Zmień"
+                  onClick={() => onEdit(schema)}
+                >
                   <PencilIcon />
                 </Button>
                 <Button
@@ -313,7 +319,12 @@ function ArticlesSection({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput className="w-full sm:w-80" value={query} onChange={setQuery} placeholder="Szukaj: nazwa albo kod" />
+        <SearchInput
+          className="w-full sm:w-80"
+          value={query}
+          onChange={setQuery}
+          placeholder="Szukaj: nazwa albo kod"
+        />
         <Select items={filterItems} value={schemaFilter} onValueChange={(value) => value && setSchemaFilter(value)}>
           <SelectTrigger aria-label="Schemat" className="h-9 max-w-full sm:max-w-96">
             <SelectValue />
@@ -429,9 +440,14 @@ function ArticlesSection({
                     <Select
                       items={schemaItems}
                       value={article.schemaId}
-                      onValueChange={(value) => value && value !== article.schemaId && changeSchema([article.id], value)}
+                      onValueChange={(value) =>
+                        value && value !== article.schemaId && changeSchema([article.id], value)
+                      }
                     >
-                      <SelectTrigger aria-label={`Schemat: ${article.name}`} className="h-8 w-full max-w-96 border-transparent bg-transparent hover:bg-muted">
+                      <SelectTrigger
+                        aria-label={`Schemat: ${article.name}`}
+                        className="h-8 w-full max-w-96 border-transparent bg-transparent hover:bg-muted"
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -449,10 +465,22 @@ function ArticlesSection({
                 {canEdit && (
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" aria-label={`Zmień ${article.name}`} title="Zmień" onClick={() => onEdit(article)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Zmień ${article.name}`}
+                        title="Zmień"
+                        onClick={() => onEdit(article)}
+                      >
                         <PencilIcon />
                       </Button>
-                      <Button variant="ghost" size="icon" aria-label={`Usuń ${article.name}`} title="Usuń" onClick={() => remove(article)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Usuń ${article.name}`}
+                        title="Usuń"
+                        onClick={() => remove(article)}
+                      >
                         <Trash2Icon />
                       </Button>
                     </div>
@@ -483,7 +511,8 @@ function StampSection({
       <div>
         <h2 className="text-base font-semibold">Pieczątka na karcie</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Lewy górny róg karty, pod „Pieczątka zakładu pracy:”. Puste pole = nazwa sklepu i NIP.
+          Lewy górny róg karty, pod „Pieczątka zakładu pracy:”. Puste pole = nazwa firmy i adres z GUS (po NIP-ie
+          sklepu) i NIP.
         </p>
       </div>
       <div className="grid gap-3 rounded-xl border bg-card p-5 sm:grid-cols-[1fr_auto] sm:items-end">

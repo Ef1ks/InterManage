@@ -246,6 +246,39 @@ class OverpaymentIntegrationTests {
     }
 
     @Test
+    void oldDeliveriesAreNotReferencesWhenLimited() throws Exception {
+        // Ostatnia dostawa pół roku temu: wzrost ceny nie jest przepłaceniem.
+        delivery(OVERPAID, 165, "10", "100.00");
+        delivery(OVERPAID, 5, "10", "120.00");
+
+        // Świeższa dostawa zostaje, a przepłacenie liczy się już tylko od niej.
+        delivery(LOWEST_NOT_LAST, 150, "10", "50.00");
+        delivery(LOWEST_NOT_LAST, 30, "10", "100.00");
+        delivery(LOWEST_NOT_LAST, 5, "10", "120.00");
+
+        // Stara cena była najniższa, ale nowsza jest bliska sprawdzanej.
+        delivery(WITHIN_THRESHOLD, 150, "10", "50.00");
+        delivery(WITHIN_THRESHOLD, 30, "10", "100.00");
+        delivery(WITHIN_THRESHOLD, 5, "10", "104.00");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8",
+                        containsInAnyOrder(OVERPAID, LOWEST_NOT_LAST, WITHIN_THRESHOLD)));
+        mvc.perform(get(url()).param("maxReferenceDays", "90").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(LOWEST_NOT_LAST)))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].referencePrice").value(10.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].excessValue").value(20.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].references", hasSize(1)));
+    }
+
+    @Test
+    void referenceDaysMustFitHistory() throws Exception {
+        mvc.perform(get(url()).param("maxReferenceDays", "0").cookie(owner)).andExpect(status().isBadRequest());
+        mvc.perform(get(url()).param("maxReferenceDays", "181").cookie(owner)).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void emptyStoreHasEmptyReport() throws Exception {
         mvc.perform(get(url()).cookie(owner))
                 .andExpect(status().isOk())

@@ -8,6 +8,7 @@ import { BackLink } from '@/components/BackLink'
 import { CopyButton } from '@/components/CopyButton'
 import { Form, FormActions, FormNote, SelectField, TextareaField, TextField } from '@/components/form'
 import { FullPageMessage } from '@/components/FullPageMessage'
+import { GusButton } from '@/components/GusButton'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -29,6 +30,7 @@ import {
 } from '@/features/suppliers/format'
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
+import { fillFromGus } from '@/lib/gus'
 import type { SupplierContact, SupplierDetails } from '@/lib/types'
 
 /**
@@ -260,7 +262,10 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 
 function PhoneLink({ phone }: { phone: string }) {
   return (
-    <a href={phoneHref(phone)} className="inline-flex items-center gap-1.5 tabular-nums underline-offset-4 hover:underline">
+    <a
+      href={phoneHref(phone)}
+      className="inline-flex items-center gap-1.5 tabular-nums underline-offset-4 hover:underline"
+    >
       <PhoneIcon aria-hidden className="size-4 text-muted-foreground" />
       {phone}
     </a>
@@ -270,7 +275,10 @@ function PhoneLink({ phone }: { phone: string }) {
 function EmailLink({ email }: { email: string }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
-      <a href={`mailto:${email}`} className="inline-flex min-w-0 items-center gap-1.5 underline-offset-4 hover:underline">
+      <a
+        href={`mailto:${email}`}
+        className="inline-flex min-w-0 items-center gap-1.5 underline-offset-4 hover:underline"
+      >
         <MailIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         <span className="truncate">{email}</span>
       </a>
@@ -316,7 +324,13 @@ function ContactItem({
           <Button variant="ghost" size="icon" aria-label={`Zmień kontakt ${title}`} onClick={onEdit}>
             <PencilIcon />
           </Button>
-          <Button variant="ghost" size="icon" aria-label={`Usuń kontakt ${title}`} disabled={removing} onClick={onRemove}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Usuń kontakt ${title}`}
+            disabled={removing}
+            onClick={onRemove}
+          >
             <Trash2Icon />
           </Button>
         </div>
@@ -343,6 +357,8 @@ function DetailsForm({
     register,
     handleSubmit,
     setError,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<SupplierDetailsForm>({
     defaultValues: {
@@ -381,6 +397,19 @@ function DetailsForm({
 
       {supplier.manual && (
         <>
+          <div className="flex items-start gap-2">
+            <TextField
+              label="NIP"
+              inputMode="numeric"
+              autoComplete="off"
+              className="min-w-0 flex-1"
+              error={errors.nip?.message}
+              {...register('nip', {
+                pattern: { value: /^[\d\s-]{0,20}$/, message: 'NIP to same cyfry, np. 9291243024' },
+              })}
+            />
+            <GusButton nip={watch('nip')} onFound={(company) => fillFromGus(setValue, company)} />
+          </div>
           <TextField
             label="Nazwa dostawcy"
             autoComplete="off"
@@ -388,15 +417,6 @@ function DetailsForm({
             {...register('name', {
               validate: (value) => value.trim() !== '' || 'Podaj nazwę dostawcy',
               maxLength: { value: 200, message: 'Maksymalnie 200 znaków' },
-            })}
-          />
-          <TextField
-            label="NIP"
-            inputMode="numeric"
-            autoComplete="off"
-            error={errors.nip?.message}
-            {...register('nip', {
-              pattern: { value: /^[\d\s-]{0,20}$/, message: 'NIP to same cyfry, np. 9291243024' },
             })}
           />
           <TextField label="Adres" autoComplete="off" error={errors.address?.message} {...register('address')} />

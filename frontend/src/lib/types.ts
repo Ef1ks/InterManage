@@ -14,6 +14,9 @@ export type PermissionCategory =
   | 'SUPPLIERS'
   | 'MEAT_PURCHASES'
   | 'DELI_PRODUCTION'
+  | 'STAFF_RECORDS'
+  | 'STAFF_SCHEDULE'
+  | 'STAFF_TIME'
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -94,7 +97,203 @@ export type User = {
   /** Zaproszony, ale jeszcze nie kliknął linku aktywacyjnego. */
   pendingActivation: boolean
   storeIds: string[]
+  /** Stanowisko z panelu Pracownicy; to ono ustala rolę konta. */
+  positionName: string | null
   createdAt: string
+}
+
+export type StaffDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY'
+
+/** Godziny pracy jako GG:MM; koniec przed początkiem to zmiana przez północ. */
+export type StaffShift = {
+  dayOfWeek: StaffDay
+  start: string
+  end: string
+}
+
+export type StaffPosition = {
+  id: string
+  departmentId: string
+  name: string
+  roleId: string
+  roleName: string
+  /** Godziny do wyboru przy pracowniku, w sklepie z adresu (każdy sklep ma swoje). */
+  shifts: StaffShift[]
+  employeeCount: number
+}
+
+export type StaffDepartment = {
+  id: string
+  name: string
+  positions: StaffPosition[]
+}
+
+export type StaffEmployee = {
+  id: string
+  userId: string
+  displayName: string
+  username: string
+  email: string | null
+  enabled: boolean
+  pendingActivation: boolean
+  /** Konto właściciela: stanowisko nie zmienia jego roli. */
+  ownerAccount: boolean
+  roleName: string
+  /** Sklep firmy, w którym pracuje teraz. */
+  storeId: string
+  storeNumber: string
+  storeName: string
+  departmentId: string
+  departmentName: string
+  positionId: string
+  positionName: string
+  /** Stałe godziny; mogą być spoza godzin stanowiska. */
+  shifts: StaffShift[]
+  createdAt: string
+  /** Koniec pracy w sklepie; da się cofnąć. */
+  endedAt: string | null
+}
+
+export type ContractKind = 'EMPLOYMENT' | 'MANDATE' | 'B2B'
+export type EmploymentType = 'TRIAL' | 'FIXED' | 'INDEFINITE'
+export type DisabilityDegree = 'LIGHT' | 'MODERATE' | 'SEVERE'
+export type WorkPeriodKind = 'EMPLOYMENT' | 'MANDATE' | 'BUSINESS' | 'ABROAD'
+export type EducationLevel =
+  'NONE' | 'VOCATIONAL' | 'SECONDARY_VOCATIONAL' | 'GENERAL_SECONDARY' | 'POST_SECONDARY' | 'HIGHER'
+export type LeaveKind =
+  'ANNUAL' | 'ON_DEMAND' | 'CHILD_CARE' | 'FORCE_MAJEURE' | 'CARE' | 'REHABILITATION' | 'OCCASIONAL' | 'UNPAID'
+
+export type StaffWarning = { severity: 'ERROR' | 'WARNING' | 'INFO'; message: string; basis: string | null }
+
+/** Pracownik na liście Kadr; pola umowy puste, gdy nie ma obowiązującej. */
+export type StaffRecordRow = {
+  employeeId: string
+  displayName: string
+  storeId: string
+  storeNumber: string
+  storeName: string
+  departmentId: string
+  departmentName: string
+  positionName: string
+  endedAt: string | null
+  contractKind: ContractKind | null
+  employmentType: EmploymentType | null
+  contractEnd: string | null
+  fteNumerator: number | null
+  fteDenominator: number | null
+  /** Tylko przy umowie o pracę. */
+  remainingLeave: number | null
+  warningCount: number
+  worstWarning: StaffWarning['severity'] | null
+}
+
+export type StaffProfile = {
+  birthDate: string | null
+  educationLevel: EducationLevel | null
+  educationEndDate: string | null
+  firstJob: boolean
+  medicalExamUntil: string | null
+  bhpTrainingUntil: string | null
+  sanitaryUntil: string | null
+}
+
+export type StaffContract = {
+  id: string
+  kind: ContractKind
+  employmentType: EmploymentType | null
+  startDate: string
+  endDate: string | null
+  fteNumerator: number
+  fteDenominator: number
+  /** Wyjątek z art. 25¹ § 4 KP: nie liczy się do limitu 33 miesięcy. */
+  fixedTermExempt: boolean
+  /** Aneksy: etat od wskazanego dnia, od najwcześniejszego. {@code fteNumerator} to etat z chwili zawarcia. */
+  changes: StaffContractChange[]
+}
+
+export type StaffContractChange = { id: string; validFrom: string; fteNumerator: number; fteDenominator: number }
+
+export type StaffWorkPeriod = {
+  id: string
+  kind: WorkPeriodKind
+  employer: string | null
+  startDate: string
+  endDate: string
+  documented: boolean
+}
+
+export type StaffDisability = {
+  id: string
+  degree: DisabilityDegree
+  startDate: string
+  /** Puste = orzeczenie na stałe. */
+  endDate: string | null
+  doctorConsent: boolean
+}
+
+export type StaffLeave = { id: string; kind: LeaveKind; startDate: string; endDate: string; days: number }
+
+export type SeniorityLength = { years: number; months: number; days: number }
+
+export type StaffRecord = {
+  person: {
+    employeeId: string
+    displayName: string
+    username: string
+    email: string | null
+    storeNumber: string
+    storeName: string
+    departmentName: string
+    positionName: string
+    roleName: string
+    endedAt: string | null
+    /** Numer karty RCP nadany w aplikacji, do wpisania w Symfonii. */
+    rcpNumber: number | null
+  }
+  profile: StaffProfile | null
+  contracts: StaffContract[]
+  workPeriods: StaffWorkPeriod[]
+  disabilities: StaffDisability[]
+  /** Z wybranego roku. */
+  leaves: StaffLeave[]
+  opening: { year: number; days: number } | null
+  seniority: {
+    work: SeniorityLength
+    inCompany: SeniorityLength
+    forLeave: SeniorityLength
+    /** Dzień 10 lat stażu urlopowego; pusty bez trwającej umowy o pracę. */
+    higherLeaveFrom: string | null
+  }
+  leaveYear: {
+    year: number
+    /** 20 albo 26 dni z art. 154 KP, przed etatem i częścią roku. */
+    fullDays: number
+    annualDays: number
+    additionalDays: number
+    carriedDays: number
+    usedDays: number
+    remainingDays: number
+    usage: Partial<Record<LeaveKind, number>>
+  }
+  warnings: StaffWarning[]
+  /** Uprawnienia z ustawy o rehabilitacji wynikające z orzeczenia. */
+  rights: string[]
+}
+
+/** Konto bez stanowiska, które można podpiąć jako pracownika. */
+export type StaffAccount = {
+  id: string
+  displayName: string
+  username: string
+  roleName: string
+  owner: boolean
+}
+
+/** {@code grantable}: wybierający sam ma wszystkie uprawnienia tej roli. */
+export type StaffRoleOption = {
+  id: string
+  name: string
+  grantable: boolean
 }
 
 export type CreateUserRequest = {
@@ -1603,6 +1802,78 @@ export type ZeroStockReport = {
   groups: { code: string; name: string | null; items: ZeroStockItem[] }[]
 }
 
+export type StockGapKind = 'MISSING' | 'ONE_OFF' | 'RUNNING_OUT' | 'WRONG_STOCK'
+
+export type StockGapItem = {
+  kind: StockGapKind
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  cadencier: boolean
+  stock: number
+  typicalWeek: number
+  weeksSold: number
+  lastSale: string
+  silentDays: number
+  missedQuantity: number
+  coverDays: number | null
+  weeklyMargin: number
+  lastDeliveryDate: string | null
+  recentDeliveries: number
+  supplierCode: string | null
+  supplierName: string | null
+}
+
+export type StockGapReport = {
+  storeNumber: string
+  storeName: string
+  stockReportGeneratedAt: string | null
+  lastSaleDate: string | null
+  minWeekly: number
+  maxStock: number
+  noDeliveryDays: number
+  items: StockGapItem[]
+}
+
+export type NegativeStockDelivery = 'NO_DELIVERY_SINCE' | 'NEVER' | 'DELIVERED_IN' | 'ANY'
+
+export type NegativeStockItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  cadencier: boolean
+  active: boolean
+  stock: number
+  stockValue: number
+  soldQuantity: number
+  soldGross: number
+  lastSale: string | null
+  lastDeliveryDate: string | null
+  daysSinceDelivery: number | null
+  deliveryDays: number
+  periodDeliveries: number
+  supplierCode: string | null
+  supplierName: string | null
+}
+
+export type NegativeStockReport = {
+  storeNumber: string
+  storeName: string
+  stockReportGeneratedAt: string | null
+  lastSaleDate: string | null
+  salesFrom: string
+  today: string
+  delivery: NegativeStockDelivery
+  days: number
+  from: string | null
+  to: string | null
+  items: NegativeStockItem[]
+}
+
 export type SlowMovingItem = {
   itm8: string
   ean: string | null
@@ -1617,6 +1888,17 @@ export type SlowMovingItem = {
   lastDeliveryDate: string | null
   supplierCode: string | null
   supplierName: string | null
+}
+
+/** Artykuł z listy pomijanych w raporcie niesprzedających się. */
+export type SlowMovingExcludedItem = {
+  id: string
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  excludedBy: string | null
+  excludedAt: string
 }
 
 export type SlowMovingDelivery = {
@@ -2145,6 +2427,18 @@ export type DataEntryXmlExport = {
   createdBy: string | null
 }
 
+/** Faktura w kolejce do zamknięcia w programie sklepu; `generatedAt`: poszła już do skryptu. */
+export type InvoiceClosing = {
+  id: string
+  supplierCode: string
+  documentNumber: string
+  supplierName: string | null
+  documentDate: string
+  netValue: number
+  createdAt: string
+  generatedAt: string | null
+}
+
 /**
  * Plik XML faktury odczytany do wczytania; `otherStore`: odbiorca w pliku to inny sklep niż wybrany. Zapis tymczasowy
  * ma też `draft`: całą tabelę z przeglądarki (JSON) z chwili zapisu.
@@ -2567,6 +2861,20 @@ export type ProductionCard = {
   editable: boolean
 }
 
+/** Przecena na liście cenówek; {@code labelsGeneratedAt}: artykuł był już w pliku ETIQUETTE. */
+export type PriceMarkdown = {
+  id: string
+  itm8: string
+  ean: string
+  name: string | null
+  regularPrice: number | null
+  newPrice: number
+  validFrom: string
+  validTo: string
+  createdAt: string
+  labelsGeneratedAt: string | null
+}
+
 /** Artykuł na liście Magazynu i produktów; {@code promoPrice}: cena trwającej promocji z kasy. */
 export type ProductListItem = {
   itm8: string
@@ -2849,6 +3157,8 @@ export type LeafletLabelLine = {
 
 /** Trwające i przyszłe promocje artykułu, a gdy żadna nie trwa, także ostatnia zakończona. */
 export type LeafletLabelArticle = {
+  /** Pusty przy pozycji gazetki, której EAN-u kartoteka nie zna. */
+  itm8: string | null
   ean: string | null
   name: string
   brand: string | null
@@ -3087,4 +3397,249 @@ export type Stocktake = {
   lines: StocktakeLine[]
   pairs: StocktakePair[]
   imports: StocktakeImport[]
+}
+
+export type ScheduleDayOffKind = 'WN' | 'W5'
+
+export type ScheduleDepartment = { id: string; name: string; canEdit: boolean }
+
+/** Godziny jako GG:MM. {@code store}: numer innego sklepu, gdy ten dzień jest poza tym grafikiem. */
+export type ScheduleCell = {
+  date: string
+  start: string | null
+  end: string | null
+  storeId: string | null
+  store: string | null
+  absent: boolean
+  /** Rodzaj nieobecności; bez dostępu do Kadr urlop wypoczynkowy i na żądanie, a resztę jako {@code OTHER}. */
+  absence: LeaveKind | 'OTHER' | null
+  /** Oznaczony dzień wolny; przy WN {@code forDate} to niedziela albo święto, za które przysługuje. */
+  dayOff: ScheduleDayOffKind | null
+  forDate: string | null
+  /** Wpis nieobecności z Kadr; tylko z dostępem do Kadr, żeby dało się go poprawić albo usunąć z grafiku. */
+  leave: StaffLeave | null
+  /** Czas wolny za nadgodziny tego dnia w minutach (art. 151² KP); tylko dla układającego. */
+  timeOffMinutes: number | null
+  timeOffInitiative: TimeOffInitiative | null
+}
+
+/** Na wniosek pracownika godzina za godzinę, z inicjatywy pracodawcy półtorej godziny za godzinę (art. 151² KP). */
+export type TimeOffInitiative = 'EMPLOYEE' | 'EMPLOYER'
+
+/** Saldo okresu pracownika do okna decyzji o nadgodzinach, liczone jak w grafiku. */
+export type TimeBalance = {
+  periodStart: string
+  periodEnd: string
+  workedMinutes: number
+  normMinutes: number | null
+  dailyOvertimeMinutes: number
+  toCompensateMinutes: number
+  actualUntil: string | null
+  dailyLimitMinutes: number
+}
+
+export type ScheduleWarning = { date: string | null; message: string; basis: string }
+
+/** {@code guest}: spoza działu albo sklepu, ma tu dni. Liczby w minutach; bez prawa układania albo umowy o pracę puste. */
+export type ScheduleRow = {
+  employeeId: string
+  name: string
+  positionId: string
+  positionName: string
+  groupId: string | null
+  homeStore: string
+  guest: boolean
+  contract: string | null
+  monthMinutes: number | null
+  monthNormMinutes: number | null
+  periodMinutes: number | null
+  periodNormMinutes: number | null
+  fixedShifts: StaffShift[]
+  cells: ScheduleCell[]
+  warnings: ScheduleWarning[]
+  /** Przepracowane niedziele i święta bez WN. */
+  owedDays: string[]
+  /** Dni miesiąca bez żadnej umowy; pusta, gdy Kadry nie mają umów tej osoby. */
+  outOfContractDays: string[]
+  /**
+   * Ile zaplanować w tym miesiącu, żeby okres zamknął się w wymiarze: wymiar okresu minus to, co przepracowano
+   * i zaplanowano poza tym miesiącem. Godziny miesiąca i okresu liczą się za dni, które minęły, z kart czasu pracy.
+   */
+  monthTargetMinutes: number | null
+  /** Saldo wcześniejszych miesięcy okresu (na plusie: ponad wymiar); pusty w pierwszym miesiącu okresu. */
+  carriedMinutes: number | null
+  /** Nadgodziny dobowe z kart w okresie (ponad 8 h albo 7 h), poza saldem: do odebrania czasem wolnym albo zapłaty. */
+  dailyOvertimeMinutes: number | null
+  /** Ostatni dzień, za który godziny są z kart czasu pracy; pusty bez odbić. */
+  actualUntil: string | null
+  /** Czas wolny za nadgodziny ułożony w okresie; liczy się do wymiaru jak praca. */
+  timeOffMinutes: number | null
+  /** Nadgodziny dobowe bez czasu wolnego (na minusie: czasu wolnego za dużo); pusty bez umowy o pracę. */
+  toCompensateMinutes: number | null
+  /** Wiersz godzin na umowie zlecenia, pod wierszem umowy o pracę tej samej osoby. */
+  civil: boolean
+  /** Stawka za godzinę od tego miesiąca; pusta bez stawki albo gdy dział nie liczy wynagrodzeń. */
+  hourlyRate: number | null
+  /**
+   * Szacowane wynagrodzenie miesiąca: godziny (z kart za dni, które minęły) razy stawka, z dodatkiem 50% za
+   * nieodebrane nadgodziny dobowe. Tylko dla układającego grafik działu, który liczy wynagrodzenia.
+   */
+  pay: number | null
+  overtimeSupplement: number | null
+}
+
+export type ScheduleDay = { date: string; holiday: string | null; closed: boolean }
+
+/** {@code counts}: obsada kolejnych dni miesiąca. {@code minCount} i {@code targetCount}: najmniejsza i docelowa. */
+export type SchedulePosition = {
+  id: string
+  name: string
+  minCount: number | null
+  targetCount: number | null
+  shifts: StaffShift[]
+  counts: number[]
+}
+
+/** {@code late}: pierwsza wersja przekazana później niż tydzień przed miesiącem (art. 129 § 3 KP). */
+export type ScheduleVersion = { number: number; publishedAt: string; publishedBy: string | null; late: boolean }
+
+export type Schedule = {
+  departmentId: string
+  month: string
+  status: 'DRAFT' | 'PUBLISHED' | 'CHANGED'
+  canEdit: boolean
+  canConfigure: boolean
+  viewedVersion: number | null
+  periodStart: string
+  periodEnd: string
+  versions: ScheduleVersion[]
+  days: ScheduleDay[]
+  positions: SchedulePosition[]
+  /** Własne grupy; bez nich tabela dzieli ludzi według stanowisk. */
+  groups: { id: string; name: string }[]
+  rows: ScheduleRow[]
+  stores: StoreSummary[]
+  /** Dział liczy wynagrodzenia, a oglądający układa jego grafik. */
+  showsPay: boolean
+}
+
+export type ScheduleSettings = {
+  managerIds: string[]
+  people: { userId: string; name: string; positionName: string }[]
+  minimums: { positionId: string; positionName: string; minCount: number | null; targetCount: number | null }[]
+  /** Przerwy działu w tym sklepie (GG:MM). Grafik ich nie pokazuje, posłużą rejestracji czasu pracy. */
+  breaks: ScheduleBreak[]
+  /** Tolerancja kart czasu pracy: odcinki do tylu minut nie czekają na decyzję. */
+  toleranceMinutes: number
+  /** Grafik liczy wynagrodzenia (widzą je tylko układający grafik działu). */
+  payEnabled: boolean
+}
+
+export type ScheduleBreak = { start: string; end: string; paid: boolean }
+
+/** Odcinek karty czasu pracy: praca w grafiku, przerwa niepłatna, czas poza grafikiem, brak czasu z grafiku. */
+export type TimeSegmentPart = 'WORK' | 'BREAK' | 'OVERTIME' | 'SHORTFALL'
+
+export type TimeSegmentStatus =
+  | 'OK'
+  | 'BREAK'
+  | 'TOLERATED_OVERTIME'
+  | 'TOLERATED_SHORTFALL'
+  | 'PENDING'
+  | 'EMPLOYER_ORDER'
+  | 'EMPLOYEE_REQUEST'
+  | 'REJECTED'
+  | 'UNEXCUSED'
+  | 'JUSTIFIED'
+  | 'OFFSET_SHORTFALL'
+  | 'OFFSET_OVERTIME'
+
+export type TimeDecisionKind = 'EMPLOYER_ORDER' | 'EMPLOYEE_REQUEST' | 'REJECTED' | 'JUSTIFIED' | 'OFFSET'
+
+/** Dni do reakcji kierownika (czeka na decyzję, brak, brak wyjścia) z ostatnich 31 dni, po działach. */
+export type TimeAttention = { total: number; departments: { departmentId: string; count: number }[] }
+
+/** Czas lokalny sklepu jako RRRR-MM-DDTGG:MM(:SS). */
+export type TimeSegment = {
+  part: TimeSegmentPart
+  start: string
+  end: string
+  minutes: number
+  status: TimeSegmentStatus
+  decisionId: string | null
+  decidedBy: string | null
+  note: string | null
+  /** Podpisane polecenie albo wniosek o nadgodziny dołączony do decyzji. */
+  signedFile: { id: string; fileName: string } | null
+}
+
+export type TimeDayCard = {
+  date: string
+  plannedStart: string | null
+  plannedEnd: string | null
+  absence: LeaveKind | 'OTHER' | null
+  punches: { id: string; at: string; source: 'READER' | 'SIMULATED' }[]
+  /** Wejście bez wyjścia; {@code missingExit}: ponad 16 h temu, czyli zapomniane wyjście. */
+  openSince: string | null
+  missingExit: boolean
+  segments: TimeSegment[]
+  planned: number
+  worked: number
+  overtime: number
+  pending: number
+  shortfall: number
+  /** Godziny zlecenia z grafiku: odbicia w nich nie wchodzą do karty umowy o pracę. */
+  civilStart: string | null
+  civilEnd: string | null
+}
+
+export type TimeTotals = { planned: number; worked: number; overtime: number; pending: number; shortfall: number }
+
+export type TimeCardRow = {
+  employeeId: string
+  name: string
+  positionName: string
+  cardUid: string | null
+  /** Numer karty RCP do Symfonii (nadany w aplikacji), inny niż karta NFC. */
+  rcpNumber: number | null
+  /** Ewidencja godzin zlecenia: same odbicia, bez decyzji; osoba z obiema umowami ma dwa wiersze. */
+  civil: boolean
+  days: TimeDayCard[]
+  totals: TimeTotals
+}
+
+export type TimeCards = {
+  departmentId: string
+  from: string
+  to: string
+  canDecide: boolean
+  canConfigure: boolean
+  canSimulate: boolean
+  toleranceMinutes: number
+  days: { date: string; holiday: string | null }[]
+  rows: TimeCardRow[]
+  /** Osoby z działu bez karty i bez ewidencji zlecenia w okresie (B2B, bez umowy) z powodem. */
+  withoutCard: { name: string; positionName: string; reason: string }[]
+}
+
+export type TimeSettings = {
+  employer: {
+    name: string | null
+    address: string | null
+    nip: string | null
+    regon: string | null
+    representative: string | null
+    saved: boolean
+    /** Bez zapisanych danych podpowiedź z GUS po NIP-ie sklepu. */
+    fromGus: boolean
+  }
+  /** {@code token}: klucz czytnika, tylko zaraz po dodaniu. */
+  readers: { id: string; name: string; createdAt: string; token: string | null }[]
+  cards: {
+    employeeId: string
+    name: string
+    departmentName: string
+    cardUid: string | null
+    rcpNumber: number | null
+  }[]
 }

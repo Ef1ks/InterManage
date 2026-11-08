@@ -17,5 +17,7 @@ public record UserResponse(
         boolean pendingActivation,
         /** Przypisane sklepy, posortowane po id. */
         List<UUID> storeIds,
+        /** Stanowisko w panelu Pracownicy; to ono ustala rolę konta. */
+        String positionName,
         Instant createdAt) {
 }

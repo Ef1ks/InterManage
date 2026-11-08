@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { formatPrice, formatQuantity } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import type { CorrectionDeliveryLine, DataEntryCatalogArticle, DataEntryCatalogProduct } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -201,6 +202,7 @@ function LinkContent({
                       {[line.brand, `EAN ${line.ean}`].filter(Boolean).join(' · ')}
                     </span>
                   </span>
+                  {itm8 && <ArticleStatsButton article={{ itm8, name: line.name, ean: line.ean, brand: line.brand }} />}
                   <span className="text-right text-sm whitespace-nowrap tabular-nums">
                     {line.quantity !== null && formatQuantity(line.quantity)}
                     {line.purchasePrice !== null && ` × ${formatPrice(line.purchasePrice)} zł`}
@@ -241,6 +243,7 @@ function LinkContent({
                       {[item.brand, `EAN ${item.ean}`, item.supplier].filter(Boolean).join(' · ')}
                     </span>
                   </span>
+                  <ArticleStatsButton article={item} />
                   <span className="text-right text-xs text-muted-foreground tabular-nums">
                     {item.purchasePrice !== null && (
                       <span className="block text-sm text-foreground" title="Cena zakupu netto z kartoteki">

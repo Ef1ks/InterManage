@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 
 import { AppLayout } from '@/components/layout/AppLayout'
-import { NAV_GROUP_PATHS } from '@/components/layout/navigation'
+import { MOVED_GROUP_PATHS, NAV_GROUP_PATHS } from '@/components/layout/navigation'
 import { AccountPage } from '@/features/auth/AccountPage'
 import { ActivationPage } from '@/features/auth/ActivationPage'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -31,9 +31,15 @@ import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
 import { MeatPurchasesPage } from '@/features/meat/MeatPurchasesPage'
 import { BackupPage } from '@/features/settings/BackupPage'
+import { downloadsPath } from '@/features/downloads/paths'
+import { DownloadsPage } from '@/features/downloads/DownloadsPage'
 import { RolesPage } from '@/features/settings/RolesPage'
 import { StoreSettingsPage } from '@/features/store-settings/StoreSettingsPage'
 import { StoresPage } from '@/features/settings/StoresPage'
+import { SchedulePage } from '@/features/staff-schedule/SchedulePage'
+import { TimePage } from '@/features/staff-time/TimePage'
+import { StaffPage } from '@/features/staff/StaffPage'
+import { StaffRecordsPage } from '@/features/staff-records/StaffRecordsPage'
 import { SuppliersPage } from '@/features/suppliers/SuppliersPage'
 import { UsersPage } from '@/features/settings/UsersPage'
 import { TOOL_ROUTES } from '@/features/tools/categories'
@@ -55,6 +61,10 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   SUPPLIERS: <SuppliersPage />,
   MEAT_PURCHASES: <MeatPurchasesPage />,
   DELI_PRODUCTION: <ProductionPage />,
+  STAFF: <StaffPage />,
+  STAFF_RECORDS: <StaffRecordsPage />,
+  STAFF_SCHEDULE: <SchedulePage />,
+  STAFF_TIME: <TimePage />,
 }
 
 const toolRoutes = (Object.keys(TOOL_ROUTES) as PermissionCategory[]).map((category) => ({
@@ -87,8 +97,11 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: '/konto', element: <AccountPage /> },
+      // Dla każdego zalogowanego; pozycje zmienia tylko właściciel.
+      { path: downloadsPath, element: <DownloadsPage /> },
       // Główne kategorie z menu: kafelki narzędzi grupy (uprawnienia sprawdza każde narzędzie osobno).
       ...NAV_GROUP_PATHS.map((path) => ({ path, element: <NavGroupPage /> })),
+      ...Object.entries(MOVED_GROUP_PATHS).map(([path, to]) => ({ path, element: <Navigate to={to} replace /> })),
       ...toolRoutes,
       {
         // Weryfikacja piekarni: te same faktury i przypięcia kodów co wprowadzanie danych.

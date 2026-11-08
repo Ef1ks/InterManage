@@ -16,4 +16,6 @@ export const salesPaths = {
   promotions: `${base}/promocje`,
   zeroStock: `${base}/zerowki`,
   slowMoving: `${base}/niesprzedajace-sie`,
+  stockGaps: `${base}/braki`,
+  negativeStock: `${base}/ujemne-stany`,
 }

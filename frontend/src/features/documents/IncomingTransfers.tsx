@@ -47,6 +47,7 @@ import {
   formatPrice,
   formatQuantity,
 } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError, downloadFile } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
@@ -141,11 +142,7 @@ export function IncomingTransfersPage({ storeId }: { storeId: string }) {
         <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
       ) : (
         <div className="grid gap-6">
-          <TransferGroup
-            title="Do wprowadzenia"
-            transfers={data.pending}
-            empty="Nic nie czeka na wprowadzenie."
-          />
+          <TransferGroup title="Do wprowadzenia" transfers={data.pending} empty="Nic nie czeka na wprowadzenie." />
           {data.entered.length > 0 && <TransferGroup title="Ostatnio potwierdzone" transfers={data.entered} />}
         </div>
       )}
@@ -185,11 +182,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
   const deferredQuery = useDeferredValue(query)
   const [receiving, setReceiving] = useState(false)
 
-  const back = (
-    <BackLink to={documentPaths.incoming}>
-      Od innych sklepów
-    </BackLink>
-  )
+  const back = <BackLink to={documentPaths.incoming}>Od innych sklepów</BackLink>
 
   if (isError) {
     return (
@@ -238,19 +231,24 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
           <p className="text-sm text-muted-foreground">Ruch międzymagazynowy od {storeLabel(transfer.fromStore)}</p>
           <h2 className="text-xl font-semibold tracking-tight tabular-nums">
             {transfer.number}
-            <CopyButton value={transfer.number} label={`Kopiuj numer ${transfer.number}`} className="ml-1 align-middle" />
+            <CopyButton
+              value={transfer.number}
+              label={`Kopiuj numer ${transfer.number}`}
+              className="ml-1 align-middle"
+            />
           </h2>
           <p className="text-sm text-muted-foreground tabular-nums">
             {formatDocumentDate(transfer.documentDate)} · {countFormat.format(transfer.lineCount)} linii · zakup{' '}
-            {formatMoney(Math.abs(transfer.purchaseValue))} zł · sprzedaż brutto {formatMoney(transfer.saleValueGross)} zł
+            {formatMoney(Math.abs(transfer.purchaseValue))} zł · sprzedaż brutto {formatMoney(transfer.saleValueGross)}{' '}
+            zł
           </p>
         </div>
       </div>
 
       {transfer.corrections.length > 0 && (
         <p className="mb-4 rounded-xl bg-violet-200 px-4 py-3 text-sm font-medium text-violet-950 dark:bg-violet-950/60 dark:text-violet-100">
-          Sklep wysyłający poprawił ten dokument ({transfer.corrections.join(', ')}). Ilości, wartości, pliki i wydruk są
-          już po poprawie.
+          Sklep wysyłający poprawił ten dokument ({transfer.corrections.join(', ')}). Ilości, wartości, pliki i wydruk
+          są już po poprawie.
         </p>
       )}
       <div
@@ -343,6 +341,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
                     <TableCell className="pl-4 text-muted-foreground">{line.lineNumber}</TableCell>
                     <TableCell className="max-w-80 whitespace-normal">
                       {line.name ?? '–'}
+                      <ArticleStatsButton article={line} foreign className="ml-1" />
                       {line.brand && <span className="block text-xs text-muted-foreground">{line.brand}</span>}
                     </TableCell>
                     <TableCell>{line.ean ?? '–'}</TableCell>
@@ -350,9 +349,15 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
                     <TableCell className="text-right">{formatQuantity(Math.abs(line.quantity))}</TableCell>
                     <ReceivedCell sent={Math.abs(line.quantity)} received={received.get(line.id)} />
 
-                    <TableCell className="text-right">{formatOptional(unsigned(line.purchasePrice), formatPrice)}</TableCell>
-                    <TableCell className="text-right">{formatOptional(unsigned(line.purchaseValue), formatMoney)}</TableCell>
-                    <TableCell className="pr-4 text-right">{formatOptional(line.salePriceDocument, formatPrice)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatOptional(unsigned(line.purchasePrice), formatPrice)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatOptional(unsigned(line.purchaseValue), formatMoney)}
+                    </TableCell>
+                    <TableCell className="pr-4 text-right">
+                      {formatOptional(line.salePriceDocument, formatPrice)}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -459,4 +464,5 @@ function TransferDownloads({ storeId, transferId }: { storeId: string; transferI
   )
 }
 
-const formatOptional =(value: number | null, format: (value: number) => string) => (value == null ? '–' : format(value))
+const formatOptional = (value: number | null, format: (value: number) => string) =>
+  value == null ? '–' : format(value)

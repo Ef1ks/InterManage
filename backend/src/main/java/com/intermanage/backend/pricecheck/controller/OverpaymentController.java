@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
@@ -40,11 +41,15 @@ public class OverpaymentController {
         this.priceCheckService = priceCheckService;
     }
 
-    /** Przyjęcia z ostatnich {@value OverpaymentService#PERIOD_DAYS} dni. */
+    /**
+     * Przyjęcia z ostatnich {@value OverpaymentService#PERIOD_DAYS} dni, porównane z dostawami z {@code maxReferenceDays}
+     * dni przed przyjęciem.
+     */
     @GetMapping
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
-    public OverpaymentReport report(@PathVariable UUID storeId) {
-        return overpaymentService.report(storeId);
+    public OverpaymentReport report(@PathVariable UUID storeId,
+            @RequestParam(defaultValue = "" + OverpaymentService.HISTORY_DAYS) int maxReferenceDays) {
+        return overpaymentService.report(storeId, maxReferenceDays);
     }
 
     /** Zastępuje listę dostawców pomijanych w raporcie; zwraca raport po zmianie. */

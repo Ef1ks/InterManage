@@ -54,8 +54,8 @@ const COLUMNS: {
   align?: 'right'
   className?: string
 }[] = [
-  { key: 'itm8', label: 'ITM8', sort: 'itm8', text: { placeholder: 'ITM8' }, className: 'w-32' },
-  { key: 'ean', label: 'EAN', sort: 'ean', text: { placeholder: 'EAN' }, className: 'w-36' },
+  { key: 'itm8', label: 'ITM8', sort: 'itm8', text: { placeholder: 'ITM8' }, className: 'w-24' },
+  { key: 'ean', label: 'EAN', sort: 'ean', text: { placeholder: 'EAN' }, className: 'w-34' },
   {
     key: 'name',
     label: 'Nazwa',
@@ -65,9 +65,9 @@ const COLUMNS: {
       title:
         'Każde słowo, w dowolnej kolejności, trafia w nazwę, markę, EAN albo ITM8 (kab ex 19 znajdzie KABANOSY EXCLUSIVE 190G); gwiazdka to dowolny ciąg znaków',
     },
-    className: 'min-w-64',
+    className: 'min-w-60',
   },
-  { key: 'brand', label: 'Marka', sort: 'brand', text: { placeholder: 'Marka' }, className: 'w-32' },
+  { key: 'brand', label: 'Marka', sort: 'brand', text: { placeholder: 'Marka' }, className: 'w-28' },
   {
     key: 'supplier',
     label: 'Ostatnia dostawa',
@@ -75,17 +75,17 @@ const COLUMNS: {
       placeholder: 'Dostawca (6 mies.)',
       title: 'Kod albo nazwa dostawcy: artykuły, które przyjechały od niego w przyjęciach PZ z ostatnich 6 miesięcy',
     },
-    className: 'w-48',
+    className: 'w-40',
   },
   {
     key: 'nomenclature',
     label: 'Nomenklatura',
     sort: 'nomenclature',
     text: { placeholder: 'kod albo nazwa' },
-    className: 'w-44',
+    className: 'w-36',
   },
   { key: 'purchase', label: 'Zakup netto', sort: 'purchase', range: ['purchaseFrom', 'purchaseTo'], align: 'right' },
-  { key: 'sale', label: 'Sprzedaż brutto', sort: 'sale', range: ['saleFrom', 'saleTo'], align: 'right' },
+  { key: 'sale', label: 'Cena sprz.', sort: 'sale', range: ['saleFrom', 'saleTo'], align: 'right' },
   { key: 'stock', label: 'Stan', sort: 'stock', align: 'right' },
   { key: 'rotation', label: 'Rotacja', sort: 'rotation', align: 'right' },
 ]
@@ -118,12 +118,23 @@ function storeHiddenColumns(columns: ColumnKey[]) {
 const BULK_LIMIT = 500
 
 const filterInputClass =
-  'h-8 w-full min-w-0 rounded-lg border border-input bg-background dark:bg-input/30 px-2 text-sm text-foreground transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-3 focus:ring-ring/30 aria-invalid:border-destructive [&::-webkit-search-cancel-button]:hidden'
+  'h-8 w-full min-w-0 rounded-md border border-input bg-background dark:bg-input/30 px-2 text-sm text-foreground transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-3 focus:ring-ring/30 aria-invalid:border-destructive [&::-webkit-search-cancel-button]:hidden'
 
 const DEFAULT_SORT: SortState<CatalogSortKey> = { key: 'name', direction: 'asc' }
 
 /** Nagłówek z sortowaniem; mniejszy niż w zwykłych tabelach, bo nad nim są pola filtrów. */
-const headClass = 'group/head h-auto px-2.5 py-1 text-xs'
+const headClass = 'group/head h-auto px-2 py-1 text-xs'
+
+/** Komórka listy: jedna linia, żeby wiersze miały równą wysokość (pełna treść w podpowiedzi). */
+const cellClass = 'px-2 py-1.5 whitespace-nowrap'
+
+/**
+ * ITM8 bez zer wiodących, jak w Mercalys i na wydrukach (13 cyfr zabierało miejsce nazwie); pełny kod w podpowiedzi.
+ * Filtr ITM8 szuka fragmentu, więc numer bez zer też trafia.
+ */
+function Itm8({ value }: { value: string }) {
+  return <span title={value}>{value.replace(/^0+(?=\d)/, '')}</span>
+}
 
 /** "250401" -> "25 04 01" jak w kartotece. */
 const formatCode = (code: string) => code.replace(/(\d{2})(?=\d)/g, '$1 ')
@@ -281,7 +292,7 @@ export function CatalogListDialog({
           placeholder={key === from ? 'od' : 'do'}
           aria-label={`${label} ${key === from ? 'od' : 'do'}`}
           aria-invalid={parseNumber(filters[key]) === undefined || undefined}
-          className={cn(filterInputClass, 'w-16 text-right')}
+          className={cn(filterInputClass, 'w-12 px-1.5 text-right')}
         />
       ))}
     </div>
@@ -292,24 +303,19 @@ export function CatalogListDialog({
     switch (key) {
       case 'itm8':
         return (
-          <td className="px-2.5 py-1 whitespace-nowrap text-muted-foreground">
-            {item.itm8 ?? (
-              <span
-                title="Artykuł z pliku nowych artykułów. Resztę danych dopisze kolejny raport kartoteki."
-                className="rounded bg-violet-200 px-1.5 py-0.5 text-xs font-medium text-violet-950 dark:bg-violet-900/60 dark:text-violet-100"
-              >
-                czeka na raport
-              </span>
-            )}
+          <td className={cn(cellClass, 'text-muted-foreground')}>
+            {item.itm8 !== null ? <Itm8 value={item.itm8} /> : <Missing />}
           </td>
         )
       case 'ean':
-        return <td className="px-2.5 py-1 whitespace-nowrap">{item.ean}</td>
+        return <td className={cellClass}>{item.ean}</td>
       case 'name':
         return (
-          <td className="px-2.5 py-1">
-            <span className="flex items-center gap-2">
-              <span>{item.name}</span>
+          <td className={cn(cellClass, 'max-w-0')}>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate font-medium" title={item.name ?? undefined}>
+                {item.name}
+              </span>
               {lastSaleDate && itm8 !== null && (
                 <button
                   type="button"
@@ -324,13 +330,22 @@ export function CatalogListDialog({
                   }
                   aria-label={`Statystyki: ${item.name ?? itm8}`}
                   title="Sprzedaż, stan i dostawy artykułu"
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-60 transition-[opacity,color,background-color,scale] duration-150 ease-snappy outline-none group-hover/row:opacity-100 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-90"
                 >
                   <ChartColumnIcon className="size-4" />
                 </button>
               )}
+              {/* Szkic z pliku nowych artykułów: ITM8 jeszcze nie ma, więc plakietka stoi przy nazwie, nie w wąskiej kolumnie ITM8. */}
+              {item.itm8 === null && (
+                <span
+                  title="Artykuł z pliku nowych artykułów. Resztę danych dopisze kolejny raport kartoteki."
+                  className="shrink-0 rounded-md bg-violet-200 px-1.5 py-0.5 text-[0.7rem] font-medium text-violet-950 dark:bg-violet-900 dark:text-violet-50"
+                >
+                  czeka na raport
+                </span>
+              )}
               {inTable.has(withoutZeros(item.ean)) && (
-                <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-200 px-1.5 py-0.5 text-[0.7rem] font-medium text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50">
+                <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-200 px-1.5 py-0.5 text-[0.7rem] font-medium text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50">
                   <CheckIcon className="size-3" aria-hidden />w tabeli
                 </span>
               )}
@@ -338,10 +353,14 @@ export function CatalogListDialog({
           </td>
         )
       case 'brand':
-        return <td className="px-2.5 py-1">{item.brand}</td>
+        return (
+          <td className={cn(cellClass, 'max-w-28 truncate')} title={item.brand ?? undefined}>
+            {item.brand}
+          </td>
+        )
       case 'supplier':
         return (
-          <td className="max-w-56 px-2.5 py-1">
+          <td className={cn(cellClass, 'max-w-40')}>
             {item.lastDelivery && (
               <span
                 className="flex items-baseline gap-1.5"
@@ -360,7 +379,7 @@ export function CatalogListDialog({
           ? `${formatCode(item.subfamilyCode)} ${item.subfamilyName ?? ''}`.trim()
           : undefined
         return (
-          <td className="max-w-52 truncate px-2.5 py-1" title={nomenclature}>
+          <td className={cn(cellClass, 'max-w-36 truncate')} title={nomenclature}>
             {item.subfamilyCode && (
               <>
                 <span className="text-muted-foreground">{formatCode(item.subfamilyCode)}</span> {item.subfamilyName}
@@ -371,26 +390,34 @@ export function CatalogListDialog({
       }
       case 'purchase':
         return (
-          <td className="px-2.5 py-1 text-right whitespace-nowrap">
-            {item.purchasePrice !== null && `${formatPrice(item.purchasePrice)} zł`}
+          <td className={cn(cellClass, 'text-right')}>
+            {item.purchasePrice !== null ? `${formatPrice(item.purchasePrice)} zł` : <Missing />}
           </td>
         )
       case 'sale':
         return (
-          <td className="px-2.5 py-1 text-right whitespace-nowrap">
-            {item.salePrice !== null && `${formatMoney(item.salePrice)} zł`}
+          <td className={cn(cellClass, 'text-right font-medium')}>
+            {item.salePrice !== null ? `${formatMoney(item.salePrice)} zł` : <Missing />}
           </td>
         )
       case 'stock':
+        // Brak towaru szary, stan ujemny czerwony (jak w tabeli wprowadzania danych).
         return (
-          <td className="px-2.5 py-1 text-right whitespace-nowrap">
-            {item.stock !== null && formatQuantity(item.stock)}
+          <td
+            className={cn(
+              cellClass,
+              'text-right',
+              item.stock !== null && item.stock < 0 && 'font-medium text-destructive',
+              item.stock === 0 && 'text-muted-foreground',
+            )}
+          >
+            {item.stock !== null ? formatQuantity(item.stock) : <Missing />}
           </td>
         )
       case 'rotation':
         return (
-          <td className="px-2.5 py-1 text-right whitespace-nowrap">
-            {item.rotation !== null && formatQuantity(item.rotation)}
+          <td className={cn(cellClass, 'text-right text-muted-foreground')}>
+            {item.rotation !== null ? formatQuantity(item.rotation) : <Missing />}
           </td>
         )
     }
@@ -398,55 +425,57 @@ export function CatalogListDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-4 p-6 sm:max-w-[96rem]">
-        <DialogHeader>
-          <DialogTitle className="text-lg">{title}</DialogTitle>
-        </DialogHeader>
-
-        {(hidden.length > 0 || (onAdd && !onPick)) && (
-          <div className="-mb-1 flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
-            {hidden.length > 0 && (
-              <>
-                <span className="text-muted-foreground">Ukryte kolumny:</span>
-                {COLUMNS.filter((column) => hidden.includes(column.key)).map((column) => (
-                  <button
-                    key={column.key}
-                    type="button"
-                    onClick={() => changeHidden(hidden.filter((key) => key !== column.key))}
-                    title="Pokaż kolumnę"
-                    className="inline-flex h-7 items-center gap-1 rounded-md border bg-background px-2 text-xs transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
-                  >
-                    <EyeIcon className="size-3.5 text-muted-foreground" aria-hidden />
-                    {column.label}
-                  </button>
-                ))}
-                {hidden.length > 1 && (
-                  <Button variant="ghost" size="sm" onClick={() => changeHidden([])}>
-                    Pokaż wszystkie
-                  </Button>
-                )}
-              </>
-            )}
-            {onAdd && !onPick && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto"
-                onClick={collectFiltered}
-                loading={collecting}
-                disabled={!filtered || list.isPending || items.length === 0}
-                title={
-                  filtered
-                    ? 'Dodaj do tabeli wszystkie artykuły pasujące do filtrów (ilość 1, cena z kartoteki)'
-                    : 'Najpierw zawęź listę filtrami'
-                }
-              >
-                <ListPlusIcon />
-                Dodaj wszystkie wyfiltrowane
-              </Button>
-            )}
-          </div>
-        )}
+      <DialogContent className="gap-3 p-6 sm:max-w-384">
+        {/* Tytuł, ukryte kolumny i „Dodaj wszystkie” w jednym wierszu (pr-10 zostawia miejsce na krzyżyk okna). */}
+        <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1.5 pr-10 text-sm">
+          <DialogHeader className="mr-2">
+            <DialogTitle className="text-lg">{title}</DialogTitle>
+          </DialogHeader>
+          {(hidden.length > 0 || (onAdd && !onPick)) && (
+            <div className="contents">
+              {hidden.length > 0 && (
+                <>
+                  <span className="text-muted-foreground">Ukryte kolumny:</span>
+                  {COLUMNS.filter((column) => hidden.includes(column.key)).map((column) => (
+                    <button
+                      key={column.key}
+                      type="button"
+                      onClick={() => changeHidden(hidden.filter((key) => key !== column.key))}
+                      title="Pokaż kolumnę"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border bg-background px-2 text-xs transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
+                    >
+                      <EyeIcon className="size-3.5 text-muted-foreground" aria-hidden />
+                      {column.label}
+                    </button>
+                  ))}
+                  {hidden.length > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => changeHidden([])}>
+                      Pokaż wszystkie
+                    </Button>
+                  )}
+                </>
+              )}
+              {onAdd && !onPick && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={collectFiltered}
+                  loading={collecting}
+                  disabled={!filtered || list.isPending || items.length === 0}
+                  title={
+                    filtered
+                      ? 'Dodaj do tabeli wszystkie artykuły pasujące do filtrów (ilość 1, cena z kartoteki)'
+                      : 'Najpierw zawęź listę filtrami'
+                  }
+                >
+                  <ListPlusIcon />
+                  Dodaj wszystkie wyfiltrowane
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
 
         <div
           className={cn(
@@ -525,11 +554,16 @@ export function CatalogListDialog({
                 <MessageRow span={columns.length + 1}>Nie znaleziono artykułu.</MessageRow>
               ) : (
                 items.map((item) => (
-                  <tr key={item.itm8 ?? item.ean} className="hover:bg-muted/50">
+                  <tr
+                    key={item.itm8 ?? item.ean}
+                    className="group/row transition-colors duration-100 hover:bg-muted/60"
+                  >
                     <td className="px-2 py-1">
+                      {/* Plus bez ramki: rząd ramek w każdym wierszu był głośniejszy od danych. Pod kursorem pełny. */}
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="icon-sm"
+                        className="text-muted-foreground group-hover/row:bg-background group-hover/row:text-foreground group-hover/row:shadow-xs group-hover/row:ring-1 group-hover/row:ring-border active:scale-90 dark:group-hover/row:bg-input/30"
                         onClick={() => {
                           if (quickAdd) void onAdd?.([{ item, quantity: 1, unitNet: item.purchasePrice }])
                           else if (!onPick) setAdding(item)
@@ -628,6 +662,11 @@ function articlesLabel(count: number) {
   const tens = count % 100
   const ones = count % 10
   return ones >= 2 && ones <= 4 && (tens < 12 || tens > 14) ? 'artykuły' : 'artykułów'
+}
+
+/** Brak wartości w kartotece: szara kreska, żeby pusta komórka nie wyglądała jak błąd wczytania. */
+function Missing() {
+  return <span className="text-muted-foreground/60">–</span>
 }
 
 function MessageRow({ span, className, children }: { span: number; className?: string; children: ReactNode }) {

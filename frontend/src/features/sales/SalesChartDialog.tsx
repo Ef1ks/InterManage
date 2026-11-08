@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
 import { bonNumber, documentPaths, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
 import {
   type ReportKind,
   type SalesChartTarget,
@@ -452,6 +453,7 @@ function ArticleFacts({
   rangeLabel: string
 }) {
   const cover = useStockCover(storeId, target, lastSaleDate, history, rangeLabel)
+  const canMarkDown = useCan('INVENTORY', 'EDIT')
   if (isPending)
     return <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
   if (!article) {
@@ -483,7 +485,12 @@ function ArticleFacts({
           )}
         </Fact>
         <Fact label="Rotacja">{article.rotation == null ? '—' : formatQuantity(article.rotation)}</Fact>
-        <Fact label="Cena sprzedaży">{article.salePrice == null ? '—' : `${formatMoney(article.salePrice)} zł`}</Fact>
+        <Fact
+          label="Cena sprzedaży"
+          action={canMarkDown && article.ean ? <PriceMarkdownButton storeId={storeId} article={article} /> : undefined}
+        >
+          {article.salePrice == null ? '—' : `${formatMoney(article.salePrice)} zł`}
+        </Fact>
         <Fact label="Cena zakupu">
           {article.purchasePrice == null ? '—' : `${formatPrice(article.purchasePrice)} zł`}
         </Fact>
@@ -703,11 +710,12 @@ function PriceChange({ delivery, previous }: { delivery: ArticleDelivery; previo
   )
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+function Fact({ label, action, children }: { label: string; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="bg-card px-4 py-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-semibold tabular-nums">{children}</p>
+      {action}
     </div>
   )
 }

@@ -26,6 +26,9 @@ services:
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
       # Propozycje AI we Wprowadzaniu danych; pusty klucz = propozycje tylko z kartoteki sklepu.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Dane firmy po NIP-ie z GUS (BIR); pusty klucz = „Pobierz z GUS” niedostępne.
+      GUS_API_URL: ${GUS_API_URL:-https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc}
+      GUS_API_KEY: ${GUS_API_KEY:-}
       # Kopia zapasowa bazy na Dysk Google; puste = połączenie z Google niedostępne.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}

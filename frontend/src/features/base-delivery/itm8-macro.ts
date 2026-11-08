@@ -3,7 +3,7 @@ import type { BaseDelivery, BaseDeliveryLine } from '@/lib/types'
 import { supplierKey } from './base-rows'
 
 /**
- * Makro dla odtwarzacza AutoHotkey (InterClicker, F9 czyta schowek linia po linii): wpisanie kodów ITM8 artykułom
+ * Makro dla odtwarzacza AutoHotkey (InterClicker, Alt+E czyta schowek linia po linii): wpisanie kodów ITM8 artykułom
  * z dokumentu dostawy z bazy w programie sklepu. Myszy używamy tylko tam, gdzie nie da się dojść klawiaturą
  * (kliknięcia są zawodne, gdy okno albo lista się przesunie). Współrzędne są względem całego ekranu stanowiska
  * (F6 w odtwarzaczu pokazuje bieżące X, Y), czasy w ms. Poprawiamy je tylko tutaj.

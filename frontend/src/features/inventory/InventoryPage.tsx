@@ -18,6 +18,7 @@ import {
 } from '@/features/inventory/filters'
 import { ProductFiltersPanel } from '@/features/inventory/ProductFiltersPanel'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
+import { PriceLabelsButton } from '@/features/inventory/PriceLabelsDialog'
 import { useSalesReportsOverview } from '@/features/sales/api'
 import { ArticleSalesPanel } from '@/features/sales/SalesChartDialog'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -89,6 +90,7 @@ function StoreInventory({ store }: { store: StoreSummary }) {
       <PageHeader
         title="Magazyn i produkty"
         description={`Kartoteka sklepu ${storeLabel(store)}: stan, sprzedaż, dostawy i historia cen każdego artykułu.`}
+        actions={<PriceLabelsButton storeId={store.id} />}
       />
       <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[26rem_minmax(0,1fr)]">
         <ProductList

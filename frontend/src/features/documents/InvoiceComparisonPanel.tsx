@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useCan } from '@/features/auth/api'
 import { documentsKey, useInvoiceComparison, useInvoiceComparisonMatches } from '@/features/documents/api'
 import { formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import type { InvoiceAmountCheck, InvoiceComparisonRow, InvoiceComparisonStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -263,6 +264,7 @@ function ComparisonRow({
       <TableCell className={cn('max-w-96 py-2.5 whitespace-normal', !selectable && 'pl-4')}>
         <div className="flex flex-wrap items-center gap-2 font-medium">
           {label}
+          {row.itm8 && <ArticleStatsButton article={{ itm8: row.itm8, name: row.name, ean: row.ean }} />}
           <span
             className={cn(
               'rounded-md px-1.5 py-0.5 text-[0.7rem] font-medium',

@@ -27,6 +27,7 @@ import { CommandBar } from '@/features/data-entry/DataEntryPage'
 import { formatDocumentDate, formatMoney, formatQuantity } from '@/features/documents/format'
 import { useSalesReportsOverview } from '@/features/sales/api'
 import { useCan } from '@/features/auth/api'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
@@ -638,6 +639,11 @@ function Row({
               <span className="font-medium">brak w kartotece</span>
             )}
           </span>
+          {product?.itm8 && (
+            <ArticleStatsButton
+              article={{ itm8: product.itm8, name: product.name, ean: product.catalogEan, brand: product.brand }}
+            />
+          )}
           <Button
             variant="ghost"
             size="icon-xs"

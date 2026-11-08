@@ -528,7 +528,7 @@ export function useSuggestedSupplier(storeId: string, code: string | null) {
 export function useCreateSupplier(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (request: { name: string; nip: string }) =>
+    mutationFn: (request: { name: string; nip: string; address?: string; postalCode?: string; city?: string }) =>
       api<Supplier>(`/stores/${storeId}/suppliers`, { method: 'POST', json: request }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: suppliersKey(storeId) }),
   })

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { useMe } from '@/features/auth/api'
 import { useMeatReport } from '@/features/meat/api'
 import { formatPercent, formatPrice, margin } from '@/features/meat/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { addDays, formatShortDate, todayIso } from '@/lib/dates'
 import type { MeatReport, MeatReportCell, MeatReportMode, MeatReportRow, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -89,13 +90,7 @@ export function MeatReportView({ store }: { store: StoreSummary }) {
           </Button>
         </div>
         <div className="grid w-full gap-2 sm:flex sm:w-auto">
-          <DateField
-            label="Od"
-            value={from}
-            onChange={(value) => update({ od: value })}
-            max={to}
-            className="sm:w-64"
-          />
+          <DateField label="Od" value={from} onChange={(value) => update({ od: value })} max={to} className="sm:w-64" />
           <DateField label="Do" value={to} onChange={(value) => update({ do: value })} min={from} className="sm:w-64" />
         </div>
         <SegmentedField
@@ -244,7 +239,9 @@ function ReportTable({
           <TableBody>
             {report.rows.map((row) => {
               const values = row.cells.map((cell) => valueOf(kind, row, cell))
-              const compared = values.filter((item, index) => item.value != null && !item.fallback && row.cells[index].purchasePrice != null)
+              const compared = values.filter(
+                (item, index) => item.value != null && !item.fallback && row.cells[index].purchasePrice != null,
+              )
               const numbers = compared.map((item) => item.value!)
               const min = numbers.length > 1 ? Math.min(...numbers) : null
               const max = numbers.length > 1 ? Math.max(...numbers) : null
@@ -252,8 +249,13 @@ function ReportTable({
                 <TableRow key={row.key}>
                   <TableCell className="font-medium">
                     {row.name ?? '–'}
-                    {row.itm8 == null && (
+                    {row.itm8 == null ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">bez artykułu</span>
+                    ) : (
+                      <ArticleStatsButton
+                        article={{ itm8: row.itm8, name: row.name, brand: row.brand }}
+                        className="ml-1"
+                      />
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{row.brand ?? '–'}</TableCell>

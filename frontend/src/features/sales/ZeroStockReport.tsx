@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatQuantity } from '@/features/documents/format'
 import { useSalesNomenclatures, useZeroStock, useZeroStockPdf } from '@/features/sales/api'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { salesPaths } from '@/features/sales/paths'
 import { nomenclatureName } from '@/features/sales/report-parts'
 import { ZeroStockOrderDialog } from '@/features/sales/ZeroStockOrderDialog'
@@ -337,7 +338,12 @@ function Results({ storeId, codes, report }: { storeId: string; codes: string[];
                   <TableRow key={item.itm8}>
                     <TableCell className="tabular-nums">{item.itm8.replace(/^0+/, '')}</TableCell>
                     <TableCell className="tabular-nums">{item.ean}</TableCell>
-                    <TableCell>{item.name}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1">
+                        {item.name}
+                        <ArticleStatsButton article={item} />
+                      </span>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{item.brand}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatQuantity(item.stock ?? 0)}</TableCell>
                   </TableRow>

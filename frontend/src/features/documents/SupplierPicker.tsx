@@ -7,12 +7,14 @@ import { Link } from 'react-router'
 import { toast } from 'sonner'
 
 import { Form, FormActions, TextField } from '@/components/form'
+import { GusButton } from '@/components/GusButton'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCreateSupplier, useSuppliers } from '@/features/documents/api'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { applyServerErrors } from '@/lib/form-errors'
+import { fillFromGus } from '@/lib/gus'
 import { matchesSearch } from '@/lib/search'
 import type { Supplier } from '@/lib/types'
 
@@ -114,15 +116,16 @@ function EmptySuppliers({ searching, canAdd }: { searching: boolean; canAdd: boo
   return (
     <div className="grid h-full place-content-center gap-1 px-6 text-center text-sm">
       {searching ? (
-        <p className="text-muted-foreground">
-          Żaden dostawca nie pasuje.{canAdd && ' Możesz dodać go poniżej.'}
-        </p>
+        <p className="text-muted-foreground">Żaden dostawca nie pasuje.{canAdd && ' Możesz dodać go poniżej.'}</p>
       ) : (
         <>
           <p className="font-medium">Nie ma jeszcze listy dostawców</p>
           <p className="text-muted-foreground">
             Wgraj raport „Lista dostawców” w{' '}
-            <Link to={TOOL_ROUTES.IMPORTS.path} className="font-medium text-foreground underline-offset-4 hover:underline">
+            <Link
+              to={TOOL_ROUTES.IMPORTS.path}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
               Imporcie danych
             </Link>
             {canAdd ? ' albo dodaj dostawcę ręcznie.' : '.'}
@@ -133,7 +136,7 @@ function EmptySuppliers({ searching, canAdd }: { searching: boolean; canAdd: boo
   )
 }
 
-type SupplierForm = { name: string; nip: string }
+type SupplierForm = { name: string; nip: string; address: string; postalCode: string; city: string }
 
 /** Dostawca, którego nie ma w systemie sklepu (np. przedstawiciel z gratisami) - zostaje tylko w aplikacji. */
 export function AddSupplierForm({
@@ -153,8 +156,12 @@ export function AddSupplierForm({
     register,
     handleSubmit,
     setError,
+    setValue,
+    watch,
     formState: { errors },
-  } = useForm<SupplierForm>({ defaultValues: { name: initialName, nip: '' } })
+  } = useForm<SupplierForm>({
+    defaultValues: { name: initialName, nip: '', address: '', postalCode: '', city: '' },
+  })
 
   const onSubmit = handleSubmit((values) => {
     setFormError(null)
@@ -163,7 +170,8 @@ export function AddSupplierForm({
         toast.success(`Dodano dostawcę ${supplier.name}`)
         onAdded(supplier)
       },
-      onError: (error) => setFormError(applyServerErrors(error, setError, ['name', 'nip'])),
+      onError: (error) =>
+        setFormError(applyServerErrors(error, setError, ['name', 'nip', 'address', 'postalCode', 'city'])),
     })
   })
 
@@ -176,10 +184,25 @@ export function AddSupplierForm({
         </DialogDescription>
       </DialogHeader>
 
+      <div className="flex items-start gap-2">
+        <TextField
+          label="NIP (opcjonalnie)"
+          inputMode="numeric"
+          autoComplete="off"
+          autoFocus={initialName === ''}
+          className="min-w-0 flex-1"
+          hint="Z NIP-em nazwę i adres uzupełni GUS."
+          error={errors.nip?.message}
+          {...register('nip', {
+            pattern: { value: /^[\d\s-]{0,20}$/, message: 'NIP to same cyfry, np. 9291243024' },
+          })}
+        />
+        <GusButton nip={watch('nip')} onFound={(company) => fillFromGus(setValue, company)} />
+      </div>
       <TextField
         label="Nazwa dostawcy"
         autoComplete="off"
-        autoFocus
+        autoFocus={initialName !== ''}
         error={errors.name?.message}
         {...register('name', {
           validate: (value) => value.trim() !== '' || 'Podaj nazwę dostawcy',
@@ -187,14 +210,25 @@ export function AddSupplierForm({
         })}
       />
       <TextField
-        label="NIP (opcjonalnie)"
-        inputMode="numeric"
+        label="Adres (opcjonalnie)"
         autoComplete="off"
-        error={errors.nip?.message}
-        {...register('nip', {
-          pattern: { value: /^[\d\s-]{0,20}$/, message: 'NIP to same cyfry, np. 9291243024' },
-        })}
+        error={errors.address?.message}
+        {...register('address', { maxLength: { value: 255, message: 'Maksymalnie 255 znaków' } })}
       />
+      <div className="grid gap-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
+        <TextField
+          label="Kod pocztowy"
+          autoComplete="off"
+          error={errors.postalCode?.message}
+          {...register('postalCode', { maxLength: { value: 10, message: 'Maksymalnie 10 znaków' } })}
+        />
+        <TextField
+          label="Miejscowość"
+          autoComplete="off"
+          error={errors.city?.message}
+          {...register('city', { maxLength: { value: 100, message: 'Maksymalnie 100 znaków' } })}
+        />
+      </div>
 
       <FormActions>
         <Button type="button" variant="outline" size="lg" onClick={onBack}>

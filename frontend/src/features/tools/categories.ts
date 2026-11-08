@@ -4,14 +4,17 @@ import {
   BookUserIcon,
   BoxesIcon,
   CalculatorIcon,
+  CalendarDaysIcon,
   ChartColumnIcon,
   ClipboardCheckIcon,
   ClipboardListIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
+  IdCardIcon,
   ReceiptTextIcon,
   SheetIcon,
   ShoppingCartIcon,
+  TimerIcon,
   UsersIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -37,6 +40,9 @@ export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: Lucid
   SUPPLIERS: { path: '/dostawcy', icon: BookUserIcon },
   MEAT_PURCHASES: { path: '/zakup-miesa', icon: BeefIcon },
   DELI_PRODUCTION: { path: '/karty-produkcji', icon: ClipboardCheckIcon },
+  STAFF_RECORDS: { path: '/kadry', icon: IdCardIcon },
+  STAFF_SCHEDULE: { path: '/grafik', icon: CalendarDaysIcon },
+  STAFF_TIME: { path: '/czas-pracy', icon: TimerIcon },
 }
 
 export function usePermissionCategories() {

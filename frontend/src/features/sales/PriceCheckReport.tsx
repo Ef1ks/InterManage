@@ -28,6 +28,7 @@ import {
   formatQuantity,
 } from '@/features/documents/format'
 import { usePriceCheck, usePriceCheckCategories } from '@/features/sales/api'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { IncidentUpload } from '@/features/sales/IncidentUpload'
 import { salesPaths } from '@/features/sales/paths'
 import {
@@ -542,6 +543,7 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
                       *
                     </span>
                   )}
+                  <ArticleStatsButton article={{ ...line, itm8: line.cadencierItm8 ?? line.itm8 }} className="ml-1" />
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {[line.brand, line.ean && `EAN ${line.ean}`, `ITM8 ${line.itm8}`].filter(Boolean).join(' · ')}

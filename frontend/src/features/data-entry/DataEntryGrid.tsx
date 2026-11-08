@@ -137,6 +137,18 @@ const SELECTION_FILL = 'after:bg-blue-600/25 dark:after:bg-blue-400/30'
 /** Nagłówek wiersza albo kolumny w zaznaczeniu. */
 const SELECTED_HEADER = 'bg-blue-200 text-blue-950 dark:bg-blue-900 dark:text-blue-50'
 
+/**
+ * Linie siatki przyciemniają (w ciemnym rozjaśniają) tło komórki zamiast mieć stały szary kolor, więc na kolorowych
+ * wierszach nie wyglądają jak białe szczeliny. Pod nagłówkiem kolumn i za przyklejoną kolumną EAN linia jest mocniejsza.
+ */
+const CELL_RULES = 'border-r border-b border-foreground/10'
+const HEADER_RULE = 'border-b-foreground/20'
+const FROZEN_RULE = 'border-r-foreground/20'
+
+/** Przycisk w komórce (wykres, przypięcie, podział): kolor tekstu wiersza, nie szary na kolorowym tle; nacisk go wciska. */
+const CELL_BUTTON =
+  'grid size-6 shrink-0 place-items-center rounded text-current opacity-55 transition-[opacity,scale,background-color] duration-150 ease-snappy hover:bg-foreground/10 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-blue-700 active:scale-90 dark:focus-visible:outline-blue-400'
+
 /** Blok wierszy przeniesiony przed wiersz {@code to} (indeks sprzed przeniesienia). */
 function moveRows<T>(rows: T[], start: number, count: number, to: number) {
   const block = rows.slice(start, start + count)
@@ -782,10 +794,11 @@ export function DataEntryGrid({
       onBlur={() => {
         if (!commitEdit(editing)) setEditing(null)
       }}
+      // Pole edycji w kolorze zaznaczenia (niebieskie jak aktywna komórka) i lekko uniesione nad siatką.
       className={cn(
-        'absolute inset-0 z-10 w-full bg-background px-2 font-normal text-foreground outline-2 -outline-offset-2 outline-primary',
+        'absolute inset-0 z-10 w-full bg-background px-2 font-normal text-foreground caret-blue-700 shadow-[0_2px_8px_rgb(0_0_0/0.18)] outline-2 -outline-offset-2 outline-blue-700 selection:bg-blue-600/30 dark:bg-popover dark:caret-blue-300 dark:outline-blue-400',
         columns[editing.c].align === 'right' && 'text-right',
-        editing.error && 'outline-destructive',
+        editing.error && 'outline-destructive dark:outline-destructive',
       )}
     />
   ) : null
@@ -851,7 +864,10 @@ export function DataEntryGrid({
           </colgroup>
           <thead>
             <tr>
-              <th className="sticky top-(--header-top) left-0 z-30 h-9 border-r border-b bg-muted" aria-hidden />
+              <th
+                className={cn('sticky top-(--header-top) left-0 z-30 h-9 bg-muted', CELL_RULES, HEADER_RULE)}
+                aria-hidden
+              />
               {columns.map((column, index) => (
                 <th
                   key={column.key}
@@ -868,10 +884,12 @@ export function DataEntryGrid({
                   }
                   onClick={onSort ? () => onSort(column.key) : undefined}
                   className={cn(
-                    'group/th sticky top-(--header-top) z-20 h-9 truncate border-r border-b bg-muted px-2 text-left font-medium whitespace-nowrap text-muted-foreground',
-                    onSort && 'cursor-pointer hover:text-foreground',
+                    'group/th sticky top-(--header-top) z-20 h-9 truncate bg-muted px-2 text-left font-medium whitespace-nowrap text-muted-foreground',
+                    CELL_RULES,
+                    HEADER_RULE,
+                    onSort && 'cursor-pointer transition-colors duration-150 hover:text-foreground',
                     column.align === 'right' && 'text-right',
-                    index === 0 && 'left-(--sticky-left) z-30',
+                    index === 0 && cn('left-(--sticky-left) z-30', FROZEN_RULE),
                     index >= range.left && index <= range.right && SELECTED_HEADER,
                     column.key === 'name' &&
                       tooLongNames > 0 &&
@@ -957,9 +975,13 @@ export function DataEntryGrid({
                     <tr aria-hidden>
                       <td
                         colSpan={columns.length + 1}
-                        className="h-8 border-b bg-muted px-3 text-xs font-medium text-muted-foreground"
+                        className={cn(
+                          'h-8 bg-muted px-3 text-xs font-medium text-muted-foreground',
+                          CELL_RULES,
+                          HEADER_RULE,
+                        )}
                       >
-                        <span className="sticky left-3">Kaucje i dostawa · nie trafiają do Excela</span>
+                        <span className="sticky left-3">Kaucje i dostawa · nie trafiają do pliku XML</span>
                       </td>
                     </tr>
                   )}
@@ -996,7 +1018,8 @@ export function DataEntryGrid({
           variant="outline"
           size="sm"
           onClick={scrollToTop}
-          className="fixed right-6 bottom-6 z-40 shadow-md"
+          // Wchodzi od dołu z przenikaniem (200 ms, mocny ease-out); przy ograniczonym ruchu samo przenikanie.
+          className="fixed right-6 bottom-6 z-40 shadow-md transition-[opacity,translate] duration-200 ease-snappy starting:translate-y-2 starting:opacity-0 motion-reduce:starting:translate-y-0"
           title="Przewiń na górę strony (Ctrl+Home przenosi też zaznaczenie)"
         >
           <ArrowUpIcon />
@@ -1108,6 +1131,8 @@ const GridRow = memo(function GridRow({
   const changes = catalogChanges(row)
   const changedColumns = new Set(changes.flatMap((field) => CHANGED_COLUMNS[field]))
   const filled = row.ean !== '' || row.name !== ''
+  // Pusty wiersz na kolejny EAN: bez wartości domyślnych (szt., 1,000, „—”), które wyglądałyby jak dane.
+  const blank = !filled && !service && row.quantity === null && row.unitNet === null && row.salePrice === null
   // Szary: zapisany w kartotece; pomarańczowy: z kartoteki, ale zmieniony w tabeli; fioletowy: nowy artykuł.
   const rowTint = service
     ? 'bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300'
@@ -1131,7 +1156,8 @@ const GridRow = memo(function GridRow({
         scope="row"
         data-row-header={index}
         className={cn(
-          'group/header sticky left-0 z-10 h-8 cursor-default border-r hover:z-20 border-b bg-muted px-1 text-center text-[0.86em] font-normal text-muted-foreground',
+          'group/header sticky left-0 z-10 h-8 cursor-default bg-muted px-1 text-center text-[0.86em] font-normal text-muted-foreground hover:z-20',
+          CELL_RULES,
           rangeLeft >= 0 && SELECTED_HEADER,
           tooLong && 'bg-destructive font-medium text-white',
           dropLine,
@@ -1153,7 +1179,7 @@ const GridRow = memo(function GridRow({
               data-row-insert={index}
               aria-label="Wstaw wiersz poniżej"
               title="Wstaw wiersz poniżej (Ctrl + plus wstawia nad bieżącym)"
-              className="absolute -bottom-2 left-1/2 hidden size-4 -translate-x-1/2 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground group-hover/header:grid"
+              className="absolute -bottom-2 left-1/2 hidden size-4 -translate-x-1/2 cursor-pointer place-items-center rounded-full bg-blue-700 text-white shadow-sm ring-2 ring-background transition-transform duration-100 ease-snappy group-hover/header:grid hover:scale-115 active:scale-95 dark:bg-blue-500"
             >
               <PlusIcon aria-hidden className="size-3" />
             </button>
@@ -1177,13 +1203,14 @@ const GridRow = memo(function GridRow({
             role="gridcell"
             aria-selected={selected}
             className={cn(
-              'group/cell relative h-8 scroll-mt-(--scroll-top) scroll-ml-(--sticky-width) truncate border-r border-b px-2 whitespace-nowrap',
+              'group/cell relative h-8 scroll-mt-(--scroll-top) scroll-ml-(--sticky-width) truncate px-2 whitespace-nowrap',
+              CELL_RULES,
               column.align === 'right' && 'text-right',
-              c === 0 && 'sticky left-(--sticky-left) z-[5] bg-card',
+              c === 0 && cn('sticky left-(--sticky-left) z-5 bg-card', FROZEN_RULE),
               rowTint,
               list && 'pr-6',
               list && isActive && !service && 'cursor-pointer',
-              nomenclature && NOMENCLATURE_TINTS[state],
+              nomenclature && !blank && NOMENCLATURE_TINTS[state],
               changedColumns.has(column.key) && ROW_TINTS.changedCell,
               // Za długa nazwa: cały wiersz na czerwono, a komórka nazwy najmocniej.
               tooLong &&
@@ -1203,18 +1230,20 @@ const GridRow = memo(function GridRow({
               dropLine,
             )}
           >
-            <CellContent
-              row={row}
-              column={column.key}
-              names={names}
-              pricing={pricing}
-              state={state}
-              service={service}
-              onShowArticle={onShowArticle}
-              onLinkArticle={onLinkArticle}
-              onSplitQuantity={onSplitQuantity}
-              active={isActive}
-            />
+            {(!blank || column.key === 'ean') && (
+              <CellContent
+                row={row}
+                column={column.key}
+                names={names}
+                pricing={pricing}
+                state={state}
+                service={service}
+                onShowArticle={onShowArticle}
+                onLinkArticle={onLinkArticle}
+                onSplitQuantity={onSplitQuantity}
+                active={isActive}
+              />
+            )}
             {list && !service && isActive && (
               // Zaznaczona komórka z listą wygląda jak pole wyboru: kliknięcie w nie otwiera listę.
               <span
@@ -1223,11 +1252,13 @@ const GridRow = memo(function GridRow({
               />
             )}
             {list && !service && (
+              // Strzałka jak w Excelu: tylko w zaznaczonej komórce i pod kursorem, żeby pięć strzałek w każdym wierszu
+              // nie zagłuszało kodów. Bez animacji, bo pojawia się przy każdym ruchu po tabeli.
               <ChevronDownIcon
                 aria-hidden
                 className={cn(
                   'absolute top-1/2 right-1.5 size-3.5 -translate-y-1/2',
-                  isActive ? 'text-foreground' : 'text-muted-foreground/70',
+                  isActive ? 'text-current' : 'hidden text-current opacity-55 group-hover/cell:block',
                 )}
               />
             )}
@@ -1252,7 +1283,13 @@ const weightFormat = new Intl.NumberFormat('pl-PL', {
 
 function Tag({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <span className={cn('ml-1.5 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium', className)} title={title}>
+    <span
+      className={cn(
+        'ml-1.5 shrink-0 rounded px-1 py-px align-[0.08em] text-[0.78em] font-medium whitespace-nowrap',
+        className,
+      )}
+      title={title}
+    >
       {children}
     </span>
   )
@@ -1320,8 +1357,9 @@ function CellContent({
               }
               aria-label={row.link ? `Przypięte: ${row.link.code}` : `Przypisz do artykułu: ${row.ean}`}
               className={cn(
-                '-my-1 -mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded hover:bg-foreground/10 hover:text-foreground',
-                row.link ? 'text-sky-700 dark:text-sky-300' : 'text-muted-foreground',
+                CELL_BUTTON,
+                '-my-1 -mr-1.5 ml-auto',
+                row.link && 'text-sky-800 opacity-100 dark:text-sky-300',
               )}
             >
               <Link2Icon className="size-[1.15em]" />
@@ -1340,10 +1378,7 @@ function CellContent({
             onClick={() => onSplitQuantity(row)}
             title="Podziel ilość: opakowanie na sztuki, cena przeliczona (np. 10 × 10 kg na 100 × 1 kg)"
             aria-label={`Podziel ilość: ${row.name || row.ean}`}
-            className={cn(
-              '-my-1 -ml-1.5 mr-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground focus-visible:opacity-100',
-              active ? 'opacity-100' : 'opacity-0 group-hover/cell:opacity-100',
-            )}
+            className={cn(CELL_BUTTON, '-my-1 -ml-1.5 mr-auto', !active && 'opacity-0 group-hover/cell:opacity-55')}
           >
             <SplitIcon className="size-[1.05em]" />
           </button>
@@ -1385,7 +1420,7 @@ function CellContent({
               onClick={() => onShowArticle(row)}
               title="Sprzedaż i dostawy artykułu"
               aria-label={`Sprzedaż i dostawy: ${row.name}`}
-              className="-my-1 -mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+              className={cn(CELL_BUTTON, '-my-1 -mr-1.5 ml-auto')}
             >
               <ChartColumnIcon className="size-[1.15em]" />
             </button>
@@ -1529,7 +1564,7 @@ function CellContent({
         if (service) return null
         if (row.nomenclaturePrefix)
           return (
-            <span className="text-muted-foreground" title="Wybierz podrodzinę">
+            <span className="opacity-70" title="Wybierz podrodzinę">
               wybierz
             </span>
           )
@@ -1540,7 +1575,7 @@ function CellContent({
             </span>
           )
         }
-        return row.known ? null : <span className="text-muted-foreground">—</span>
+        return row.known ? null : <span className="opacity-50">—</span>
       }
       // Tylko własne cyfry poziomu (rejon 66, rodzina 10, podrodzina 17); pełny kod i nazwa w podpowiedzi.
       return <span title={`${code} ${names.get(code) ?? ''}`}>{code.slice(-2)}</span>

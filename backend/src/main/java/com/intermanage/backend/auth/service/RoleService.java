@@ -17,6 +17,7 @@ import com.intermanage.backend.auth.mapper.RoleMapper;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.repository.RoleRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.staff.repository.StaffPositionRepository;
 
 @Service
 public class RoleService {
@@ -24,11 +25,14 @@ public class RoleService {
     private final RoleRepository roles;
     private final AppUserRepository users;
     private final RoleMapper roleMapper;
+    private final StaffPositionRepository positions;
 
-    public RoleService(RoleRepository roles, AppUserRepository users, RoleMapper roleMapper) {
+    public RoleService(RoleRepository roles, AppUserRepository users, RoleMapper roleMapper,
+            StaffPositionRepository positions) {
         this.roles = roles;
         this.users = users;
         this.roleMapper = roleMapper;
+        this.positions = positions;
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +83,11 @@ public class RoleService {
         if (assigned > 0) {
             throw ApiException.conflict(
                     "Nie można usunąć roli przypisanej do użytkowników (" + assigned + "). Najpierw zmień im rolę.");
+        }
+        long onPositions = positions.countActiveWithRole(id);
+        if (onPositions > 0) {
+            throw ApiException.conflict(
+                    "Nie można usunąć roli przypisanej do stanowisk (" + onPositions + "). Najpierw zmień im rolę.");
         }
         roles.delete(role);
     }

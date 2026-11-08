@@ -46,6 +46,7 @@ import {
   toInputValue,
   VAT_RATES,
 } from '@/features/deli-prices/format'
+import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import type { CalculationMode, FinishedProduct, PriceCalculation, PriceProduct } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -327,6 +328,7 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
                   <span className="font-medium text-foreground">{product.name}</span>
                   {product.brand && ` · ${product.brand}`} · EAN {product.ean} · na półce{' '}
                   {formatMoney(product.salePrice)}
+                  <ArticleStatsButton article={product} className="ml-1" />
                 </p>
               )}
             </div>
@@ -647,9 +649,12 @@ function IngredientRow({
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_6rem_auto]">
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium" title={product.name ?? undefined}>
-          {product.name ?? 'Bez nazwy'}
-          {product.brand && <span className="ml-1.5 font-normal text-muted-foreground">{product.brand}</span>}
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 truncate text-sm font-medium" title={product.name ?? undefined}>
+            {product.name ?? 'Bez nazwy'}
+            {product.brand && <span className="ml-1.5 font-normal text-muted-foreground">{product.brand}</span>}
+          </div>
+          <ArticleStatsButton article={product} skipTab />
         </div>
         <div
           className="text-xs text-muted-foreground tabular-nums"
