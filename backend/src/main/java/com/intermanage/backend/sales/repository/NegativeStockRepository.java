@@ -104,7 +104,7 @@ public interface NegativeStockRepository extends Repository<Sale, Sale.Key> {
             ), lines as (
                 select d.type, d.document_date, l.supplier_code, l.supplier_name, l.itm8, l.ean
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type in ('PZ', 'MM')
                   and ((d.type = 'PZ' and l.quantity > 0) or (d.type = 'MM' and l.quantity < 0))
             ), received as (

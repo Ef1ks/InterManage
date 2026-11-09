@@ -567,6 +567,8 @@ export type DocumentSummary = {
   reportClosing: DocumentReportClosing | null
   /** Ruch międzymagazynowy: sklep zaprzyjaźniony, dla którego go wystawiono. */
   transferTarget: TransferTarget | null
+  /** Przyjęcie oznaczone jako błąd (na liście tylko z filtrem „Oznaczone jako błąd”). */
+  errorMarkedAt: string | null
 }
 
 /** Zamknięty raport przyjęć, w którym przyjęcie poszło razem ze swoim okresem (daty RRRR-MM-DD). */
@@ -1218,6 +1220,8 @@ export type ArticleDelivery = {
   originalQuantity: number | null
   originalPurchasePrice: number | null
   originalPurchaseValue: number | null
+  /** Kody MEA artykułu z dostawy z bazy tego przyjęcia (Nr_Bl = nr dok. dostawcy), pusta bez dostawy z bazy. */
+  meaCodes: string[]
 }
 
 /** Protokół artykułu: dokument inny niż przyjęcie i korekta; {@code label} to rodzaj do pokazania. */
@@ -1315,6 +1319,10 @@ export type Document = DocumentSummary & {
   supplierDocumentNumberEditedBy: string | null
   /** Numer dokumentu dostawcy można poprawić (przyjęcia PZ). */
   supplierDocumentNumberEditable: boolean
+  /** Przyjęcie PZ można oznaczyć jako błąd: znika z listy dokumentów i z raportów. */
+  errorMarkable: boolean
+  /** Kto oznaczył dokument jako błąd ({@code errorMarkedAt} w podsumowaniu). */
+  errorMarkedBy: string | null
   updatedAt: string
   lines: DocumentLine[]
   /** Zamówienia garmażu jadące na tym dokumencie (tylko ruchy międzymagazynowe). */

@@ -82,6 +82,14 @@ public class Document {
     @JoinColumn(name = "supplier_document_number_edited_by")
     private AppUser supplierDocumentNumberEditedBy;
 
+    /** Przyjęcie oznaczone jako błąd: nie ma go na listach ani w raportach, zostaje pod swoim adresem. */
+    @Column(name = "error_marked_at")
+    private Instant errorMarkedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "error_marked_by")
+    private AppUser errorMarkedBy;
+
     @Column(name = "line_count", nullable = false)
     private int lineCount;
 
@@ -158,6 +166,26 @@ public class Document {
         supplierDocumentNumber = reportSupplierDocumentNumber;
         supplierDocumentNumberEditedAt = null;
         supplierDocumentNumberEditedBy = null;
+    }
+
+    /**
+     * Oznacza dokument jako błąd. Zmienia też {@code updatedAt}, więc zamknięty raport przyjęć dostaje zmianę
+     * (przyjęcie wypada z niego), tak samo przy cofnięciu.
+     */
+    public void markAsError(AppUser user) {
+        errorMarkedAt = Instant.now();
+        errorMarkedBy = user;
+        updatedAt = errorMarkedAt;
+    }
+
+    public void unmarkError() {
+        errorMarkedAt = null;
+        errorMarkedBy = null;
+        updatedAt = Instant.now();
+    }
+
+    public boolean isMarkedAsError() {
+        return errorMarkedAt != null;
     }
 
     /** Linia z pliku: nowa albo zaktualizowana. {@code true}, gdy coś się zmieniło. */
@@ -254,6 +282,14 @@ public class Document {
 
     public AppUser getSupplierDocumentNumberEditedBy() {
         return supplierDocumentNumberEditedBy;
+    }
+
+    public Instant getErrorMarkedAt() {
+        return errorMarkedAt;
+    }
+
+    public AppUser getErrorMarkedBy() {
+        return errorMarkedBy;
     }
 
     public int getLineCount() {

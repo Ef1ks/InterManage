@@ -14,6 +14,7 @@ import { deliPaths } from '@/features/deli-order/paths'
 import { DocumentProductionCards } from '@/features/deli-production/TransferProductionCards'
 import { documentPrintPath, useDocument } from '@/features/documents/api'
 import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
+import { ErrorMarkBanner, MarkAsErrorButton } from '@/features/documents/DocumentErrorMark'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
 import { DocumentPrintMenu } from '@/features/documents/DocumentPrintMenu'
@@ -130,6 +131,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
   return (
     <>
       <BackLink to={documentPaths.list(document.type)}>{document.typeLabel}</BackLink>
+      <ErrorMarkBanner storeId={storeId} document={document} />
 
       <div className="mb-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -151,7 +153,13 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
               </span>
             )}
           </h2>
-          <DocumentPrintMenu path={(format) => documentPrintPath(storeId, document, format)} number={document.number} />
+          <div className="flex flex-wrap items-center gap-2">
+            <MarkAsErrorButton storeId={storeId} document={document} />
+            <DocumentPrintMenu
+              path={(format) => documentPrintPath(storeId, document, format)}
+              number={document.number}
+            />
+          </div>
         </div>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr_auto_1fr]">
           <dt className="text-muted-foreground">Data</dt>

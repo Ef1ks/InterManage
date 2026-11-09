@@ -200,6 +200,7 @@ public final class KsefInvoiceSearch {
         subquery.select(cb.literal(1)).where(
                 document.get("store").get("id").in(companyStores(query, cb, nip)),
                 cb.equal(document.get("type"), DocumentType.PZ),
+                cb.isNull(document.get("errorMarkedAt")),
                 cb.equal(cb.upper(document.get("supplierDocumentNumber")), cb.upper(root.get("invoiceNumber"))));
         return subquery;
     }
@@ -212,6 +213,7 @@ public final class KsefInvoiceSearch {
         subquery.select(cb.literal(1)).where(
                 cb.equal(link.get("invoice"), root),
                 link.get("document").get("store").get("id").in(companyStores(query, cb, nip)),
+                cb.isNull(link.get("document").get("errorMarkedAt")),
                 cb.isNull(link.get("unlinkedAt")));
         return subquery;
     }

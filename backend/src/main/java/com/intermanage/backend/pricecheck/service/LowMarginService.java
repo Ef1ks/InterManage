@@ -128,7 +128,7 @@ public class LowMarginService {
         Set<UUID> ids = new LinkedHashSet<>(linesByDelivery.keySet());
         ids.addAll(reviewed);
         List<Document> deliveries = ids.isEmpty() ? List.of() : documents.findAllById(ids).stream()
-                .filter(delivery -> delivery.getType() == DocumentType.PZ).toList();
+                .filter(delivery -> delivery.getType() == DocumentType.PZ && !delivery.isMarkedAsError()).toList();
         Map<UUID, List<DeliveryCorrection>> links = corrections.correctionsOf(deliveries);
 
         List<Delivery> result = new ArrayList<>();

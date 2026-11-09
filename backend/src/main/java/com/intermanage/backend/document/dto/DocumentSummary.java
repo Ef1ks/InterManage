@@ -1,6 +1,7 @@
 package com.intermanage.backend.document.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -34,5 +35,7 @@ public record DocumentSummary(
         /** Przyjęcie w aktywnym zamkniętym raporcie okresowym ({@code null}, gdy jeszcze w żadnym). */
         DocumentReportClosing reportClosing,
         /** Ruch międzymagazynowy: sklep zaprzyjaźniony, dla którego go wystawiono. */
-        TransferTargetResponse transferTarget) {
+        TransferTargetResponse transferTarget,
+        /** Przyjęcie oznaczone jako błąd (widać je tylko z filtrem „Oznaczone jako błąd”). */
+        Instant errorMarkedAt) {
 }

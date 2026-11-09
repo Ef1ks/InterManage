@@ -185,6 +185,19 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
     dispatch(updatePromoRow({ storeId: store.id, tileId: tile.id, rowId: row.id, changes: { price, discount } }))
   }
 
+  /** Ten sam stopień przeceny dla wszystkich artykułów kafelka; ręcznie wpisane ceny też są zastępowane. */
+  const setTileDiscount = (tile: PromoTile, discount: number) => {
+    const rows = tile.rows.map((row) =>
+      row.article ? { ...row, discount, price: discountedPrice(row.article.regularPrice, discount) } : row,
+    )
+    const tiles = draft.tiles.map((item) => (item.id === tile.id ? { ...item, rows } : item))
+    dispatch(setPromoDraft({ storeId: store.id, draft: { ...draft, tiles } }))
+    const count = rows.filter((row) => row.article).length
+    toast.success(`Promocja ${tile.number}: przecena -${String(discount).replace('.', ',')}% dla ${count} art.`, {
+      action: { label: 'Przywróć', onClick: () => restore(draft) },
+    })
+  }
+
   const removeRow = (tile: PromoTile, row: PromoRow) => {
     const tiles = draft.tiles.map((item) =>
       item.id === tile.id ? { ...item, rows: item.rows.filter((candidate) => candidate.id !== row.id) } : item,
@@ -256,6 +269,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
                 onList={() => setListFor({ tileId: tile.id, query: '' })}
                 onPrice={(row, price) => setPrice(tile, row, price)}
                 onDiscount={(row, discount) => setDiscount(tile, row, discount)}
+                onTileDiscount={(discount) => setTileDiscount(tile, discount)}
                 onRemoveRow={(row) => removeRow(tile, row)}
                 onRemove={() => removeTile(tile)}
                 onGenerate={() => file && setGenerated([file])}

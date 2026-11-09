@@ -126,7 +126,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                     (select mode() within group (order by l.vat_rate)
                      from products q
                      join document_lines l on l.itm8 = q.itm8
-                     join documents d on d.id = l.document_id and d.store_id = :storeId
+                     join documents d on d.id = l.document_id and d.error_marked_at is null and d.store_id = :storeId
                      where q.store_id = :storeId and q.subfamily_code = p.subfamily_code
                          and l.vat_rate is not null)) as vatPercent,
                 v.rate as catalogVat,
@@ -147,7 +147,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
             cross join lateral (select coalesce(
                 case p.vat_code when 1 then 23 when 2 then 8 when 6 then 5 end,
-                (select l.vat_rate from document_lines l join documents d on d.id = l.document_id
+                (select l.vat_rate from document_lines l join documents d on d.id = l.document_id and d.error_marked_at is null
                  where d.store_id = :storeId and l.itm8 = p.itm8 and l.vat_rate is not null
                  order by d.document_date desc limit 1)) as rate) v
             left join lateral (
@@ -242,7 +242,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 and (cardinality(cast(:brand as text[])) = 0
                     or translate(upper(p.brand), 'ĄĆĘŁŃÓŚŹŻ', 'ACELNOSZZ') like all (cast(:brand as text[])))
                 and (cardinality(cast(:supplier as text[])) = 0 or p.itm8 in (
-                    select l.itm8 from documents d join document_lines l on l.document_id = d.id
+                    select l.itm8 from documents d join document_lines l on l.document_id = d.id and d.error_marked_at is null
                     where d.store_id = :storeId and d.type = 'PZ' and d.document_date >= cast(:deliveredSince as timestamp)
                         and l.quantity > 0
                         and (l.supplier_code = cast(:supplierCode as text)
@@ -322,7 +322,7 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 l.supplier_name as supplierName, d.document_date as documentDate
             from article_lines a
             join document_lines l on l.id = a.id
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
             order by a.article, d.document_date desc, d.number desc""", nativeQuery = true)
     List<LastDelivery> findLastDeliveries(UUID storeId, Collection<String> itm8s);

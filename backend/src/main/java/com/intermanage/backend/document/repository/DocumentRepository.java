@@ -30,10 +30,10 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
         LocalDateTime getLastDocumentDate();
     }
 
-    /** Bez przyjęć za 0 zł, których lista nie pokazuje ({@link DocumentSearch#withoutZeroDeliveries}). */
+    /** Bez przyjęć za 0 zł, których lista nie pokazuje ({@link DocumentSearch#withoutZeroDeliveries}), i bez błędnych. */
     @Query("""
             select d.type as type, count(d) as documentCount, max(d.documentDate) as lastDocumentDate
-            from Document d where d.store.id = :storeId
+            from Document d where d.store.id = :storeId and d.errorMarkedAt is null
             and not (d.type = com.intermanage.backend.document.entity.DocumentType.PZ and d.purchaseValue = 0)
             group by d.type""")
     List<TypeCount> countByType(UUID storeId);
@@ -56,13 +56,13 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     /** Przyjęcia PZ z numerem dokumentu dostawcy spośród podanych (wielkimi literami) - faktury KSeF już wprowadzone. */
     @Query("""
             select d from Document d where d.store.id = :storeId and d.type = com.intermanage.backend.document.entity.DocumentType.PZ
-            and upper(d.supplierDocumentNumber) in :numbers order by d.documentDate""")
+            and d.errorMarkedAt is null and upper(d.supplierDocumentNumber) in :numbers order by d.documentDate""")
     List<Document> findDeliveriesBySupplierDocument(UUID storeId, Collection<String> numbers);
 
     /** Jak wyżej, w podanych sklepach (sklepach firmy), razem ze sklepem. */
     @Query("""
             select d from Document d join fetch d.store where d.store.id in :storeIds
-            and d.type = com.intermanage.backend.document.entity.DocumentType.PZ
+            and d.type = com.intermanage.backend.document.entity.DocumentType.PZ and d.errorMarkedAt is null
             and upper(d.supplierDocumentNumber) in :numbers order by d.documentDate""")
     List<Document> findCompanyDeliveriesBySupplierDocument(Collection<UUID> storeIds, Collection<String> numbers);
 
@@ -73,6 +73,7 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     @Query("""
             select distinct d from Document d left join fetch d.lines
             where d.store.id = :storeId and d.type = :type and d.documentDate >= :from and d.documentDate < :to
+              and d.errorMarkedAt is null
             order by d.documentDate, d.number""")
     List<Document> findWithLinesBetween(UUID storeId, DocumentType type, LocalDateTime from, LocalDateTime to);
 
@@ -104,7 +105,7 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     @Query("""
             select distinct d from Document d left join fetch d.lines
             where d.store.id = :storeId and d.type in :types and d.documentDate between :from and :to
-              and (d.supplierCode = :supplierCode or (d.supplierCode is null and exists (
+              and d.errorMarkedAt is null and (d.supplierCode = :supplierCode or (d.supplierCode is null and exists (
                   select 1 from DocumentLine l where l.document = d and l.supplierCode = :supplierCode)))""")
     List<Document> findBySupplierWithLines(UUID storeId, Collection<DocumentType> types, String supplierCode,
             LocalDateTime from, LocalDateTime to);
@@ -112,7 +113,8 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     /** Dokumenty typu z podanego okresu z liniami (podpowiedzi przy przypinaniu poprawek ruchów międzymagazynowych). */
     @Query("""
             select distinct d from Document d left join fetch d.lines
-            where d.store.id = :storeId and d.type = :type and d.documentDate between :from and :to""")
+            where d.store.id = :storeId and d.type = :type and d.documentDate between :from and :to
+              and d.errorMarkedAt is null""")
     List<Document> findDatedWithLines(UUID storeId, DocumentType type, LocalDateTime from, LocalDateTime to);
 
     /** Suma wartości zakupu dokumentów jednego dnia. */
@@ -129,7 +131,7 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     @Query(value = """
             select cast(d.document_date as date) as day, sum(d.purchase_value) as purchase_value
             from documents d
-            where d.store_id = :storeId and d.type = :type
+            where d.store_id = :storeId and d.type = :type and d.error_marked_at is null
               and d.document_date >= cast(:from as timestamp) and d.document_date < cast(:to as timestamp) + interval '1 day'
             group by 1
             order by 1

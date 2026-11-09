@@ -81,6 +81,9 @@ public interface DocumentMapper {
     @Mapping(target = "typeSingular", expression = "java(document.getType().singular())")
     @Mapping(target = "gratisAllowed", expression = "java(document.getType().canBeGratis())")
     @Mapping(target = "supplierDocumentNumberEditedBy", source = "document.supplierDocumentNumberEditedBy.displayName")
+    @Mapping(target = "errorMarkedBy", source = "document.errorMarkedBy.displayName")
+    @Mapping(target = "errorMarkable",
+            expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.PZ)")
     @Mapping(target = "ksefLinkable", expression = "java(document.getType().canLinkKsefInvoice())")
     @Mapping(target = "ksefInvoices", source = "ksefInvoices")
     @Mapping(target = "supplierDocumentNumberEditable",

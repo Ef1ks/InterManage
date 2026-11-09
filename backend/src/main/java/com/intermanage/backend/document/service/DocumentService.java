@@ -160,15 +160,18 @@ public class DocumentService {
      * Strona listy dokumentów typu; wyszukiwanie, filtry i sortowanie w bazie ({@link DocumentSearch}). {@code product}
      * szuka artykułu w liniach, {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
      * i {@code closed} (w zamkniętym raporcie okresowym) w przyjęciach. {@code hiddenSuppliers}: kody dostawców,
-     * których dokumentów lista nie pokazuje.
+     * których dokumentów lista nie pokazuje. {@code markedAsError}: tylko przyjęcia oznaczone jako błąd (bez tego
+     * lista ich nie pokazuje).
      */
     @Transactional(readOnly = true)
     public DocumentPage list(UUID storeId, String typeCode, int page, String query, String product,
             DocumentSearch.Presence invoice, DocumentSearch.Presence withCorrections, DocumentSearch.Presence closed,
             DocumentSearch.GratisFilter withGratis, DocumentSearch.ValueField hiddenValueField, BigDecimal hiddenValueFrom,
-            BigDecimal hiddenValueTo, Collection<String> hiddenSuppliers, String sort, String direction) {
+            BigDecimal hiddenValueTo, Collection<String> hiddenSuppliers, boolean markedAsError, String sort,
+            String direction) {
         DocumentType type = type(typeCode);
-        Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query))
+        Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query),
+                        markedAsError && type == DocumentType.PZ)
                 .and(DocumentSearch.withProduct(DocumentSearch.words(product)))
                 .and(DocumentSearch.withoutSuppliers(hiddenSuppliers))
                 .and(DocumentSearch.withoutZeroDeliveries())
@@ -312,6 +315,40 @@ public class DocumentService {
         // Po nowym numerze przyjęcie może mieć fakturę, której korekty czekają na przyjęcie.
         ksefLinks.attachPendingCorrections(storeId, userId);
         return document(storeId, typeCode, id);
+    }
+
+    /**
+     * Oznacza przyjęcie PZ jako błąd: znika z listy, liczników i raportów (także z zamkniętego raportu przyjęć, który
+     * dostaje je jako zmianę), zostaje pod swoim adresem. Przypięte faktury i korekty zostają przy nim.
+     */
+    @Transactional
+    public DocumentResponse markAsError(UUID storeId, String typeCode, UUID id, UUID userId) {
+        Document document = errorMarkable(storeId, typeCode, id);
+        if (!document.isMarkedAsError()) {
+            document.markAsError(userId != null ? users.getReferenceById(userId) : null);
+            documents.flush();
+        }
+        return document(storeId, typeCode, id);
+    }
+
+    /** Cofa oznaczenie jako błąd: przyjęcie wraca na listę i do raportów. */
+    @Transactional
+    public DocumentResponse unmarkError(UUID storeId, String typeCode, UUID id) {
+        Document document = errorMarkable(storeId, typeCode, id);
+        if (document.isMarkedAsError()) {
+            document.unmarkError();
+            documents.flush();
+        }
+        return document(storeId, typeCode, id);
+    }
+
+    private Document errorMarkable(UUID storeId, String typeCode, UUID id) {
+        Document document = documents.findHeader(storeId, type(typeCode), id)
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono dokumentu"));
+        if (document.getType() != DocumentType.PZ) {
+            throw ApiException.badRequest("Jako błąd można oznaczyć tylko przyjęcie towaru");
+        }
+        return document;
     }
 
     /** Cofa ręczną poprawkę: obowiązuje znowu numer z raportu. */

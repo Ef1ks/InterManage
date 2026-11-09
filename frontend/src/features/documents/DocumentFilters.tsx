@@ -5,7 +5,13 @@ import { MultiComboboxField, SegmentedField, TextField, type ComboboxOption } fr
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { type GratisFilter, type HiddenValueRange, type Presence, type ValueField, useSuppliers } from '@/features/documents/api'
+import {
+  type GratisFilter,
+  type HiddenValueRange,
+  type Presence,
+  type ValueField,
+  useSuppliers,
+} from '@/features/documents/api'
 import { parseAmount } from '@/features/documents/format'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useAppDispatch, useAppSelector } from '@/store'
@@ -53,6 +59,11 @@ const GRATIS_OPTIONS: { value: GratisFilter; label: string }[] = [
   { value: 'without', label: 'Nieoznaczone' },
 ]
 
+const ERROR_OPTIONS: { value: 'counted' | 'error'; label: string }[] = [
+  { value: 'counted', label: 'Liczone' },
+  { value: 'error', label: 'Oznaczone jako błąd' },
+]
+
 const VALUE_FIELD_OPTIONS: { value: ValueField; label: string }[] = [
   { value: 'purchase', label: 'Zakup' },
   { value: 'sale', label: 'Sprzedaż brutto' },
@@ -69,6 +80,8 @@ type Props = {
   corrections: PresenceFilter
   closed: PresenceFilter
   gratis: { value: GratisFilter; onChange: (value: GratisFilter) => void } | null
+  /** Przyjęcia oznaczone jako błąd zamiast liczonych; {@code null} = niedostępny dla tego typu. */
+  markedAsError: { value: boolean; onChange: (value: boolean) => void } | null
   hiddenValues: HiddenValueRange
   onHiddenValuesChange: (range: HiddenValueRange) => void
   hiddenSuppliers: string[]
@@ -86,6 +99,7 @@ export function DocumentFilters({
   corrections,
   closed,
   gratis,
+  markedAsError,
   hiddenValues,
   onHiddenValuesChange,
   hiddenSuppliers,
@@ -97,7 +111,8 @@ export function DocumentFilters({
   const active =
     [invoice, corrections, closed, gratis].filter((filter) => filter && filter.value !== 'all').length +
     (hiddenValues.from !== null || hiddenValues.to !== null ? 1 : 0) +
-    (hiddenSuppliers.length > 0 ? 1 : 0)
+    (hiddenSuppliers.length > 0 ? 1 : 0) +
+    (markedAsError?.value ? 1 : 0)
 
   const options = useMemo<ComboboxOption[]>(() => {
     const listed = (suppliers ?? [])
@@ -125,19 +140,32 @@ export function DocumentFilters({
         <DialogContent className="gap-5 p-6 sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-lg">Filtry listy</DialogTitle>
-            <DialogDescription>Lista zmienia się od razu. Ukryci dostawcy dotyczą tylko tego typu dokumentów i zostają zapamiętani w tej przeglądarce.</DialogDescription>
+            <DialogDescription>
+              Lista zmienia się od razu. Ukryci dostawcy dotyczą tylko tego typu dokumentów i zostają zapamiętani w tej
+              przeglądarce.
+            </DialogDescription>
           </DialogHeader>
 
-          {(invoice || corrections || closed || gratis) && (
+          {(invoice || corrections || closed || gratis || markedAsError) && (
             <div className="grid gap-4">
               {closed && (
                 <FilterRow label="Raport okresowy" hint="Zakończone poszły w zamkniętym raporcie za okres.">
-                  <SegmentedField label="Raport okresowy" options={CLOSED_OPTIONS} value={closed.value} onChange={closed.onChange} />
+                  <SegmentedField
+                    label="Raport okresowy"
+                    options={CLOSED_OPTIONS}
+                    value={closed.value}
+                    onChange={closed.onChange}
+                  />
                 </FilterRow>
               )}
               {invoice && (
                 <FilterRow label="Faktura">
-                  <SegmentedField label="Faktura" options={INVOICE_OPTIONS} value={invoice.value} onChange={invoice.onChange} />
+                  <SegmentedField
+                    label="Faktura"
+                    options={INVOICE_OPTIONS}
+                    value={invoice.value}
+                    onChange={invoice.onChange}
+                  />
                 </FilterRow>
               )}
               {corrections && (
@@ -150,9 +178,24 @@ export function DocumentFilters({
                   />
                 </FilterRow>
               )}
+              {markedAsError && (
+                <FilterRow label="Przyjęcia" hint="Oznaczonych jako błąd nie ma na liście ani w raportach.">
+                  <SegmentedField
+                    label="Przyjęcia"
+                    options={ERROR_OPTIONS}
+                    value={markedAsError.value ? 'error' : 'counted'}
+                    onChange={(value) => markedAsError.onChange(value === 'error')}
+                  />
+                </FilterRow>
+              )}
               {gratis && (
                 <FilterRow label="Gratis" hint="Może być gratisem: jeszcze nieoznaczone, z pozycją GRATIS.">
-                  <SegmentedField label="Gratis" options={GRATIS_OPTIONS} value={gratis.value} onChange={gratis.onChange} />
+                  <SegmentedField
+                    label="Gratis"
+                    options={GRATIS_OPTIONS}
+                    value={gratis.value}
+                    onChange={gratis.onChange}
+                  />
                 </FilterRow>
               )}
             </div>
@@ -199,7 +242,13 @@ function FilterRow({ label, hint, children }: { label: string; hint?: string; ch
  * Jedna granica wystarczy: samo "do 0" chowa dokumenty bez wartości i ujemne. Pola trafiają do listy po chwili bez
  * pisania; wyczyszczenie filtrów z zewnątrz czyści też pola.
  */
-function ValueRangeFilter({ value, onChange }: { value: HiddenValueRange; onChange: (range: HiddenValueRange) => void }) {
+function ValueRangeFilter({
+  value,
+  onChange,
+}: {
+  value: HiddenValueRange
+  onChange: (range: HiddenValueRange) => void
+}) {
   const [from, setFrom] = useState(() => amountText(value.from))
   const [to, setTo] = useState(() => amountText(value.to))
   const [applied, setApplied] = useState(value)

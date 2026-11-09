@@ -232,7 +232,7 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
             ), losses as (
                 select l.itm8, cast(d.document_date as date) as day, -sum(l.purchase_value) as value
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PL'
                   and d.document_date >= cast(:dataFrom as timestamp)
                   and d.document_date < cast(:dataTo as timestamp) + interval '1 day'

@@ -38,7 +38,7 @@ public interface PromotionSetupRepository extends JpaRepository<PromotionImport,
                     d.document_date as document_date
                 from article_lines a
                 join document_lines l on l.id = a.id
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
                 order by a.article, d.document_date desc, d.number desc
             )

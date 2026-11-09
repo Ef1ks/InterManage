@@ -46,7 +46,8 @@ public interface SalesMapper {
                 quantity, unitPrice(value, quantity), value, delivery.getCorrected(),
                 changed ? originalQuantity : null,
                 changed ? unitPrice(originalValue, originalQuantity) : null,
-                changed ? originalValue : null);
+                changed ? originalValue : null,
+                delivery.getMeaCodes() == null ? List.of() : List.of(delivery.getMeaCodes().split(",")));
     }
 
     @Mapping(target = "label", expression = "java(protocolLabel(protocol))")

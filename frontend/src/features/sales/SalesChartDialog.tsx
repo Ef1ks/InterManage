@@ -3,6 +3,7 @@ import { Fragment, type ReactNode, useEffect, useId, useLayoutEffect, useRef, us
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 
+import { CopyButton } from '@/components/CopyButton'
 import { SegmentedField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
@@ -576,6 +577,9 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
   const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
   const list = deliveries.data
 
+  // Kolumna kodów MEA tylko, gdy któraś dostawa jest z bazy z kodem (towar spoza bazy by jej nie miał).
+  const withMea = list?.some((delivery) => delivery.meaCodes.length > 0) ?? false
+
   return (
     // min-w-0: element siatki okna nie może rozpychać go szerokością tabeli.
     <section className="grid min-w-0 gap-2" aria-labelledby="article-deliveries">
@@ -607,6 +611,7 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
             <colgroup>
               <col className="w-28" />
               <col className="w-20" />
+              {withMea && <col className="w-28" />}
               <col />
               <col className="w-20" />
               <col className="w-52" />
@@ -616,6 +621,14 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Data</th>
                 <th className="px-3 py-2 text-left font-medium">Bon</th>
+                {withMea && (
+                  <th
+                    className="px-3 py-2 text-left font-medium"
+                    title="Kod MEA z dostawy z bazy (Nr BL = nr dok. dostawcy przyjęcia)"
+                  >
+                    Kod MEA
+                  </th>
+                )}
                 <th className="px-3 py-2 text-left font-medium">Dostawca</th>
                 <th className="px-3 py-2 text-right font-medium">Ilość</th>
                 <th className="px-3 py-2 text-right font-medium">Cena zakupu</th>
@@ -641,6 +654,22 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
                       <span title={`Przyjęcie ${delivery.documentNumber}`}>{bonNumber(delivery.documentNumber)}</span>
                     )}
                   </td>
+                  {withMea && (
+                    <td className="px-3 py-1">
+                      {delivery.meaCodes.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          {delivery.meaCodes.map((code) => (
+                            <span key={code} className="inline-flex items-center whitespace-nowrap">
+                              {code}
+                              <CopyButton value={code} label={`Kopiuj kod MEA ${code}`} />
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  )}
                   <td className="truncate px-3 py-1.5" title={delivery.supplierName ?? undefined}>
                     {delivery.supplierName ?? delivery.supplierCode ?? '—'}
                   </td>

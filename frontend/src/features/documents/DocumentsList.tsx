@@ -9,10 +9,18 @@ import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
 import { TableSkeletonRows } from '@/components/TableSkeleton'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { type DocumentColumn, type GratisFilter, type HiddenValueRange, type Presence, type ValueField, useDocuments } from '@/features/documents/api'
+import {
+  type DocumentColumn,
+  type GratisFilter,
+  type HiddenValueRange,
+  type Presence,
+  type ValueField,
+  useDocuments,
+} from '@/features/documents/api'
 import { AutoInvoiceMatching } from '@/features/documents/AutoInvoiceMatching'
 import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
@@ -20,7 +28,15 @@ import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { TransferTargetBadge } from '@/features/documents/DocumentTransferTarget'
 import { DocumentFilters, useHiddenSuppliers } from '@/features/documents/DocumentFilters'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
-import { countFormat, documentPaths, documentsWord, formatDocumentDate, formatMoney, parseAmount, showsSupplier } from '@/features/documents/format'
+import {
+  countFormat,
+  documentPaths,
+  documentsWord,
+  formatDocumentDate,
+  formatMoney,
+  parseAmount,
+  showsSupplier,
+} from '@/features/documents/format'
 import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { StaleDataNotice } from '@/features/documents/StaleDataNotice'
 import { isReportFresh } from '@/lib/report-freshness'
@@ -58,15 +74,14 @@ function ClosedLock({ closing }: { closing: DocumentReportClosing }) {
 function hiddenRangeLabel({ from, to }: HiddenValueRange) {
   const low = from !== null && to !== null ? Math.min(from, to) : from
   const high = from !== null && to !== null ? Math.max(from, to) : to
-  return [low !== null && `od ${formatMoney(low)}`, high !== null && `do ${formatMoney(high)}`].filter(Boolean).join(' ') + ' zł'
+  return (
+    [low !== null && `od ${formatMoney(low)}`, high !== null && `do ${formatMoney(high)}`].filter(Boolean).join(' ') +
+    ' zł'
+  )
 }
 
 export function BackToTypes() {
-  return (
-    <BackLink to={documentPaths.overview}>
-      Wszystkie dokumenty
-    </BackLink>
-  )
+  return <BackLink to={documentPaths.overview}>Wszystkie dokumenty</BackLink>
 }
 
 /** Filtry „ma / nie ma” w adresie strony: `?faktura=z|bez` itd.; `all` = brak parametru. */
@@ -132,6 +147,8 @@ export function DocumentsList({ storeId }: { storeId: string }) {
   const corrections = presenceOf(params.get('korekty'))
   const closed = presenceOf(params.get('raport'))
   const gratis: GratisFilter = params.get('gratis') === 'moze' ? 'candidate' : presenceOf(params.get('gratis'))
+  const markedAsError = upperType === 'PZ' && params.get('bledne') === 'tak'
+  const setMarkedAsError = (value: boolean) => updateParams({ bledne: value ? 'tak' : null })
   const hiddenValues = hiddenValuesOf(params, upperType)
   const hidingValues = hiddenValues.from !== null || hiddenValues.to !== null
   const setInvoice = (value: Presence) => updateParams({ faktura: PRESENCE_PARAMS[value] })
@@ -189,6 +206,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
         gratis: gratisFilter ? gratis : 'all',
         hiddenValues,
         hiddenSuppliers,
+        markedAsError,
       },
       sort,
     )
@@ -223,12 +241,22 @@ export function DocumentsList({ storeId }: { storeId: string }) {
     (correctionFilter && (corrections !== 'all' || closed !== 'all')) ||
     (gratisFilter && gratis !== 'all') ||
     hidingValues ||
-    hiddenSuppliers.length > 0
+    hiddenSuppliers.length > 0 ||
+    markedAsError
   // Pola wyszukiwania znikną z adresu po chwili, razem z zapytaniem.
   const clearFilters = () => {
     setQuery('')
     setProduct('')
-    updateParams({ faktura: null, korekty: null, raport: null, gratis: null, ukryj_od: null, ukryj_do: null, kwota: null })
+    updateParams({
+      faktura: null,
+      korekty: null,
+      raport: null,
+      gratis: null,
+      ukryj_od: null,
+      ukryj_do: null,
+      kwota: null,
+      bledne: null,
+    })
     setHiddenSuppliers([])
   }
   const open = (document: DocumentSummary) => navigate(documentPaths.document(typeCode, document.id))
@@ -269,6 +297,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 corrections={correctionFilter ? { value: corrections, onChange: setCorrections } : null}
                 closed={correctionFilter ? { value: closed, onChange: setClosed } : null}
                 gratis={gratisFilter ? { value: gratis, onChange: setGratis } : null}
+                markedAsError={upperType === 'PZ' ? { value: markedAsError, onChange: setMarkedAsError } : null}
                 hiddenValues={hiddenValues}
                 onHiddenValuesChange={setHiddenValues}
                 hiddenSuppliers={hiddenSuppliers}
@@ -286,11 +315,27 @@ export function DocumentsList({ storeId }: { storeId: string }) {
         {totalCount > 0 && (
           <Card className="mb-4 gap-3 p-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <SearchInput value={query} onChange={setQuery} placeholder={supplierColumns ? 'Szukaj: numer, dostawca, nr dok. dostawcy' : 'Szukaj: numer dokumentu'} />
-              <SearchInput value={product} onChange={setProduct} placeholder="Szukaj produktu: nazwa, marka, EAN, ITM8" />
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder={supplierColumns ? 'Szukaj: numer, dostawca, nr dok. dostawcy' : 'Szukaj: numer dokumentu'}
+              />
+              <SearchInput
+                value={product}
+                onChange={setProduct}
+                placeholder="Szukaj produktu: nazwa, marka, EAN, ITM8"
+              />
             </div>
             {searching && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                {markedAsError && (
+                  <span>
+                    Tylko przyjęcia oznaczone jako błąd ·{' '}
+                    <Button variant="link" className="h-auto p-0 text-sm" onClick={() => setMarkedAsError(false)}>
+                      pokaż liczone
+                    </Button>
+                  </span>
+                )}
                 {hidingValues && (
                   <span>
                     Ukryte kwoty ({hiddenValues.field === 'sale' ? 'sprzedaż brutto' : 'zakup'}):{' '}
@@ -332,7 +377,12 @@ export function DocumentsList({ storeId }: { storeId: string }) {
             <Table className={cn('transition-opacity duration-150', isPlaceholderData && 'opacity-60')}>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <SortableHead column="number" sort={sort} onSort={(key) => setSort(nextSort(sort, key))} className="pl-4">
+                  <SortableHead
+                    column="number"
+                    sort={sort}
+                    onSort={(key) => setSort(nextSort(sort, key))}
+                    className="pl-4"
+                  >
                     Nr dokumentu
                   </SortableHead>
                   <SortableHead column="date" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
@@ -343,7 +393,11 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                       <SortableHead column="supplier" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
                         Dostawca
                       </SortableHead>
-                      <SortableHead column="supplierDocument" sort={sort} onSort={(key) => setSort(nextSort(sort, key))}>
+                      <SortableHead
+                        column="supplierDocument"
+                        sort={sort}
+                        onSort={(key) => setSort(nextSort(sort, key))}
+                      >
                         Nr dok. dostawcy
                       </SortableHead>
                     </>
@@ -351,7 +405,12 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                   <SortableHead column="lines" sort={sort} onSort={(key) => setSort(nextSort(sort, key))} align="right">
                     Linie
                   </SortableHead>
-                  <SortableHead column="purchase" sort={sort} onSort={(key) => setSort(nextSort(sort, key))} align="right">
+                  <SortableHead
+                    column="purchase"
+                    sort={sort}
+                    onSort={(key) => setSort(nextSort(sort, key))}
+                    align="right"
+                  >
                     Zakup zł
                   </SortableHead>
                   <SortableHead column="sale" sort={sort} onSort={(key) => setSort(nextSort(sort, key))} align="right">
@@ -398,6 +457,9 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                               className="-ml-1.5"
                             />
                           </span>
+                          {document.errorMarkedAt && (
+                            <Badge className="bg-red-200 text-red-950 dark:bg-red-950/60 dark:text-red-100">błąd</Badge>
+                          )}
                           <GratisBadge document={document} />
                           <CorrectionBadge document={document} type={upperType} />
                           <TransferTargetBadge document={document} />
@@ -449,10 +511,16 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                       )}
                       <TableCell className="text-right">{countFormat.format(document.lineCount)}</TableCell>
                       <TableCell className="text-right">
-                        <ListValue value={document.purchaseValue} corrected={document.correctionTotals?.purchaseValue} />
+                        <ListValue
+                          value={document.purchaseValue}
+                          corrected={document.correctionTotals?.purchaseValue}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
-                        <ListValue value={document.saleValueGross} corrected={document.correctionTotals?.saleValueGross} />
+                        <ListValue
+                          value={document.saleValueGross}
+                          corrected={document.correctionTotals?.saleValueGross}
+                        />
                       </TableCell>
                       <TableCell className="pr-4 text-right">
                         <ChevronRightIcon aria-hidden className="ml-auto size-4 text-muted-foreground" />
@@ -471,8 +539,12 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                         {searching && ' znalezionych'})
                       </span>
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{formatMoney(first.purchaseTotal)}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{formatMoney(first.saleTotal)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatMoney(first.purchaseTotal)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatMoney(first.saleTotal)}
+                    </TableCell>
                     <TableCell />
                   </TableRow>
                 </TableFooter>
@@ -482,7 +554,11 @@ export function DocumentsList({ storeId }: { storeId: string }) {
         )}
 
         {/* Dojechanie tu dociąga kolejne 100 dokumentów. */}
-        <div ref={loadMoreRef} aria-live="polite" className="flex min-h-12 items-center justify-center text-sm text-muted-foreground">
+        <div
+          ref={loadMoreRef}
+          aria-live="polite"
+          className="flex min-h-12 items-center justify-center text-sm text-muted-foreground"
+        >
           {isFetchingNextPage ? (
             <span className="inline-flex items-center gap-2">
               <LoaderCircleIcon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
@@ -492,7 +568,8 @@ export function DocumentsList({ storeId }: { storeId: string }) {
             documents.length > 0 &&
             !hasNextPage &&
             first &&
-            first.matchingCount > 100 && `To wszystkie ${countFormat.format(first.matchingCount)} ${documentsWord(first.matchingCount)}.`
+            first.matchingCount > 100 &&
+            `To wszystkie ${countFormat.format(first.matchingCount)} ${documentsWord(first.matchingCount)}.`
           )}
         </div>
       </section>

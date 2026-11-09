@@ -158,7 +158,7 @@ public interface StocktakeRepository extends JpaRepository<Stocktake, UUID> {
     @Query(value = """
             select l.itm8 as itm8, -sum(l.quantity) as quantity
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type = 'MM' and l.quantity < 0
               and d.document_date >= :since and d.document_date < :until
             group by l.itm8

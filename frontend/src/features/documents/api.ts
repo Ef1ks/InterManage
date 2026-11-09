@@ -65,13 +65,20 @@ export type DocumentFilters = {
   gratis: GratisFilter
   hiddenValues: HiddenValueRange
   hiddenSuppliers: string[]
+  /** Tylko przyjęcia oznaczone jako błąd (bez tego lista ich nie pokazuje). */
+  markedAsError: boolean
 }
 
 /**
  * Lista dokumentów typu stronami po 100 (wyszukiwanie, filtry i sortowanie w bazie); kolejne strony dociąga
  * {@code fetchNextPage} przy przewijaniu. {@code typeCode} jak w ścieżce strony ("pz", "pl"...).
  */
-export function useDocuments(storeId: string, typeCode: string, filters: DocumentFilters, sort: SortState<DocumentColumn>) {
+export function useDocuments(
+  storeId: string,
+  typeCode: string,
+  filters: DocumentFilters,
+  sort: SortState<DocumentColumn>,
+) {
   return useInfiniteQuery({
     queryKey: [...documentsKey(storeId), typeCode, 'list', { ...filters, ...sort }],
     queryFn: ({ pageParam }) => {
@@ -89,6 +96,7 @@ export function useDocuments(storeId: string, typeCode: string, filters: Documen
         if (to !== null) params.set('hideValueTo', String(to))
       }
       filters.hiddenSuppliers.forEach((code) => params.append('hiddenSuppliers', code))
+      if (filters.markedAsError) params.set('markedAsError', 'true')
       return api<DocumentPage>(`${documentsPath(storeId)}/${typeCode}?${params}`)
     },
     initialPageParam: 0,
@@ -196,6 +204,20 @@ export function useSupplierDocumentNumber(storeId: string, typeCode: string, id:
 }
 
 /**
+ * Oznaczenie przyjęcia PZ jako błąd i jego cofnięcie. Oznaczone znika z listy, liczników i raportów (wszystkie
+ * zapytania odświeża `MutationCache`), a dokument pod swoim adresem zostaje.
+ */
+export function useDocumentErrorMark(storeId: string, typeCode: string, id: string) {
+  const queryClient = useQueryClient()
+  const path = `${documentsPath(storeId)}/${typeCode}/${id}/error`
+  const onSuccess = (document: Document) => queryClient.setQueryData([...documentsKey(storeId), typeCode, id], document)
+  return {
+    mark: useMutation({ mutationFn: () => api<Document>(path, { method: 'PUT' }), onSuccess }),
+    unmark: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
+  }
+}
+
+/**
  * Faktury KSeF do przypięcia dokumentu: domyślnie z kwotą netto ±10% wartości dokumentu, od najbliższej;
  * {@code query} szuka po numerze faktury, dostawcy i NIP-ie.
  */
@@ -213,7 +235,9 @@ export function useKsefInvoiceCandidates(
     queryFn: () => {
       const params = new URLSearchParams({ amountRange: String(amountRange) })
       if (debounced) params.set('query', debounced)
-      return api<KsefInvoiceCandidate[]>(`${documentsPath(storeId)}/${typeCode}/${id}/ksef-invoices/candidates?${params}`)
+      return api<KsefInvoiceCandidate[]>(
+        `${documentsPath(storeId)}/${typeCode}/${id}/ksef-invoices/candidates?${params}`,
+      )
     },
     enabled,
     placeholderData: keepPreviousData,
@@ -297,7 +321,13 @@ export function useManualInvoices(storeId: string, typeCode: string, id: string)
  * Do przyjęcia: jego korekty do przypięcia; do korekty: przyjęcia, których może dotyczyć. Zawsze od tego samego
  * dostawcy, najpierw z największą liczbą wspólnych artykułów.
  */
-export function useCorrectionCandidates(storeId: string, typeCode: string, id: string, query: string, enabled: boolean) {
+export function useCorrectionCandidates(
+  storeId: string,
+  typeCode: string,
+  id: string,
+  query: string,
+  enabled: boolean,
+) {
   const debounced = useDebouncedValue(query.trim(), 250)
   return useQuery({
     queryKey: [...documentsKey(storeId), typeCode, id, 'correction-candidates', { query: debounced }],

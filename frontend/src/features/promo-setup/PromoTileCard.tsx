@@ -1,4 +1,4 @@
-import { FileOutputIcon, ListPlusIcon, ScanBarcodeIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { BadgePercentIcon, FileOutputIcon, ListPlusIcon, ScanBarcodeIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { type ClipboardEvent, type KeyboardEvent, useState } from 'react'
 
 import { CopyButton } from '@/components/CopyButton'
@@ -34,6 +34,8 @@ type Props = {
   onList: () => void
   onPrice: (row: PromoRow, price: number | null) => void
   onDiscount: (row: PromoRow, discount: number | null) => void
+  /** Ta sama przecena dla wszystkich artykułów kafelka. */
+  onTileDiscount: (discount: number) => void
   onRemoveRow: (row: PromoRow) => void
   onRemove: () => void
   onGenerate: () => void
@@ -41,8 +43,16 @@ type Props = {
 
 /** Jedna promocja: okres, artykuły z cenami i plik .PRO. Enter i strzałki w cenie przechodzą między wierszami. */
 export function PromoTileCard(props: Props) {
-  const { tile, tariff, levels, selected, canGenerate, onDates, onList, onRemove, onGenerate } = props
+  const { tile, tariff, levels, selected, canGenerate, onDates, onList, onTileDiscount, onRemove, onGenerate } = props
   const periodError = tile.dateTo && !hasPeriod(tile) ? 'Koniec przed początkiem' : undefined
+  const articleRows = tile.rows.filter((row) => row.article)
+  // Wspólna przecena widoczna w wyborze, gdy wszystkie artykuły mają ten sam stopień.
+  const common = articleRows[0]?.discount ?? null
+  const tileDiscount =
+    common !== null && levels.includes(common) && articleRows.every((row) => row.discount === common)
+      ? String(common)
+      : null
+  const levelItems = levels.map((level) => ({ value: String(level), label: levelLabel(level) }))
 
   return (
     <Card className="gap-3 px-4 py-4">
@@ -107,6 +117,30 @@ export function PromoTileCard(props: Props) {
           <ListPlusIcon />
           Lista towarów
         </Button>
+        {levels.length > 0 && (
+          <Select
+            items={levelItems}
+            value={tileDiscount}
+            disabled={articleRows.length === 0}
+            onValueChange={(value) => value && onTileDiscount(Number(value))}
+          >
+            <SelectTrigger
+              aria-label={`Przecena wszystkich artykułów promocji ${tile.number}`}
+              title="Ta sama przecena dla wszystkich artykułów tej promocji"
+              className="h-9"
+            >
+              <BadgePercentIcon />
+              <SelectValue placeholder="Przeceń wszystkie" />
+            </SelectTrigger>
+            <SelectContent>
+              {levelItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  Wszystkie {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Button
           variant="outline"
           className="ml-auto"

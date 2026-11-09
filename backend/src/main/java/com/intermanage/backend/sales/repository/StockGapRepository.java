@@ -112,7 +112,7 @@ public interface StockGapRepository extends Repository<Sale, Sale.Key> {
             , received as (
                 select coalesce(p.itm8, e.itm8) as itm8, d.type, d.document_date, l.supplier_code, l.supplier_name
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId

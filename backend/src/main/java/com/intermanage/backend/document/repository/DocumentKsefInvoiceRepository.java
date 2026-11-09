@@ -21,14 +21,14 @@ public interface DocumentKsefInvoiceRepository extends JpaRepository<DocumentKse
     /** Dokumenty sklepu przypięte do faktur (faktury są wspólne dla firmy, przypięcia - sklepu). */
     @Query("""
             select l from DocumentKsefInvoice l join fetch l.document d
-            where d.store.id = :storeId and l.invoice.id in :invoiceIds and l.unlinkedAt is null
+            where d.store.id = :storeId and l.invoice.id in :invoiceIds and l.unlinkedAt is null and d.errorMarkedAt is null
             order by d.documentDate""")
     List<DocumentKsefInvoice> findActiveByInvoiceIds(UUID storeId, Collection<UUID> invoiceIds);
 
     /** Dokumenty podanych sklepów (sklepów firmy) przypięte do faktur, razem ze sklepem. */
     @Query("""
             select l from DocumentKsefInvoice l join fetch l.document d join fetch d.store
-            where d.store.id in :storeIds and l.invoice.id in :invoiceIds and l.unlinkedAt is null
+            where d.store.id in :storeIds and l.invoice.id in :invoiceIds and l.unlinkedAt is null and d.errorMarkedAt is null
             order by d.documentDate""")
     List<DocumentKsefInvoice> findActiveByInvoiceIdsInStores(Collection<UUID> storeIds, Collection<UUID> invoiceIds);
 

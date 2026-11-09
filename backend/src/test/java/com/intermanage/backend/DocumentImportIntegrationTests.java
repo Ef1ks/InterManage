@@ -556,6 +556,94 @@ class DocumentImportIntegrationTests {
     }
 
     @Test
+    void deliveryMarkedAsErrorLeavesListsAndReportsAndCanBeRestored() throws Exception {
+        Cookie owner = login();
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(100_000, 999_999));
+        String store = createStore(number, "Sklep błędnych przyjęć");
+        String kept = docNumber() + "00";
+        String wrong = docNumber() + "00";
+        String supplierCorrection = "WZ" + docNumber();
+        upload(owner, store, report(number,
+                amounts(line("PZ", kept, "F/10/26", 1, "10", "2", "20")),
+                amounts(line("PZ", wrong, "F/11/26", 1, "10", "3", "30")),
+                amounts(correction(line("WZ", supplierCorrection, "FK/1/26", 1, "0", "1", "-5")))))
+                .andExpect(status().isCreated());
+        String keptId = id(store, "/pz", kept);
+        String wrongId = id(store, "/pz", wrong);
+        String correctionId = id(store, "/wz", supplierCorrection);
+
+        String closing = com.jayway.jsonpath.JsonPath.read(mvc.perform(post(url(store, "/pz/report-closings"))
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\":\"2026-10-21\",\"to\":\"2026-10-21\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id");
+
+        // Tylko przyjęcie można oznaczyć jako błąd.
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(url(store, "/wz/" + correctionId + "/error")).cookie(owner).with(csrf()))
+                .andExpect(status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(url(store, "/pz/" + wrongId + "/error")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errorMarkable").value(true))
+                .andExpect(jsonPath("$.errorMarkedAt").isNotEmpty())
+                .andExpect(jsonPath("$.errorMarkedBy").isNotEmpty());
+
+        // Znika z listy, licznika i podpowiedzi korekt; filtr pokazuje tylko oznaczone, a adres dokumentu działa.
+        mvc.perform(get(url(store, "/pz")).cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.type.documentCount").value(1))
+                .andExpect(jsonPath("$.purchaseTotal").value(20))
+                .andExpect(jsonPath("$.documents[0].id").value(keptId));
+        mvc.perform(get(url(store, "/pz")).param("markedAsError", "true").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(wrongId))
+                .andExpect(jsonPath("$.documents[0].errorMarkedAt").isNotEmpty());
+        mvc.perform(get(url(store, "")).cookie(owner))
+                .andExpect(jsonPath("$.types[?(@.code == 'PZ')].documentCount").value(1));
+        mvc.perform(get(url(store, "/wz/" + correctionId + "/corrections/candidates")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.number == '" + wrong + "')]").isEmpty())
+                .andExpect(jsonPath("$[?(@.number == '" + kept + "')]").isNotEmpty());
+        mvc.perform(get(url(store, "/pz/" + wrongId)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errorMarkedAt").isNotEmpty());
+
+        // Raport przyjęć: nie ma go w okresie, a zamknięty raport dostaje zmianę, która go zdejmuje.
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(get(url(store, "/pz/period-report"))
+                        .param("from", "2026-10-21").param("to", "2026-10-21").cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains(">1 przyjęcie<", ">F/10/26<").doesNotContain(">F/11/26<");
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.pendingChanges").value(1));
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/period-report/changes")).cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains("przyjęcie oznaczone jako błąd", "<v>-30</v>");
+        String next = com.jayway.jsonpath.JsonPath.read(mvc.perform(post(url(store, "/pz/report-closings"))
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\":\"2026-10-22\",\"to\":\"2026-10-22\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        org.assertj.core.api.Assertions.assertThat(sheet(mvc.perform(
+                        get(url(store, "/pz/report-closings/" + next + "/xlsx")).cookie(owner))
+                .andReturn().getResponse().getContentAsByteArray()))
+                .contains("przyjęcie oznaczone jako błąd", "<v>-30</v>");
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.pendingChanges").value(0));
+
+        // Cofnięcie: przyjęcie wraca na listę, a raporty dostają je z powrotem jako zmianę.
+        mvc.perform(delete(url(store, "/pz/" + wrongId + "/error")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.errorMarkedAt").isEmpty());
+        mvc.perform(get(url(store, "/pz")).cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(2))
+                .andExpect(jsonPath("$.type.documentCount").value(2));
+        mvc.perform(get(url(store, "/pz/report-closings")).cookie(owner))
+                .andExpect(jsonPath("$.pendingChanges").value(1));
+        org.assertj.core.api.Assertions.assertThat(closing).isNotBlank();
+    }
+
+    @Test
     void transferCorrectedByTransferWithPlusValues() throws Exception {
         Cookie owner = login();
         String number = String.valueOf(ThreadLocalRandom.current().nextInt(100_000, 999_999));

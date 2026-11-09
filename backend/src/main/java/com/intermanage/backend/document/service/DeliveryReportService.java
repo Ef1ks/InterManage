@@ -239,7 +239,7 @@ public class DeliveryReportService {
         List<DeliveryReportClosingDelivery> rows = new ArrayList<>();
         for (Current delivery : main) {
             rows.add(new DeliveryReportClosingDelivery(closing, delivery.document(), null,
-                    delivery.document().getPurchaseValue(), delivery.correctionValue(), delivery.regions(),
+                    delivery.purchaseValue(), delivery.correctionValue(), delivery.regions(),
                     delivery.correctionIds()));
         }
         for (Change change : changes) {
@@ -297,9 +297,14 @@ public class DeliveryReportService {
                         .map(headers::get).filter(Objects::nonNull).toList();
                 List<Document> removed = known.stream().filter(id -> !row.getCorrectionIds().contains(id))
                         .map(headers::get).filter(Objects::nonNull).toList();
+                // Zrzut nie mówi wprost o oznaczeniu jako błąd: to zmiana, która zeruje wszystko, co raporty wiedziały.
+                boolean markedAsError = before != null && before.purchaseValue().signum() != 0
+                        && before.purchaseValue().add(row.getPurchaseValue()).signum() == 0
+                        && before.correctionValue().add(row.getCorrectionValue()).signum() == 0
+                        && row.getCorrectionIds().isEmpty();
                 changes.add(new ReportLine(delivery, invoice,
-                        changeLabel(row.getOriginClosing(), before == null, row.getPurchaseValue(), added, removed,
-                                labels),
+                        changeLabel(row.getOriginClosing(), markedAsError, before == null, row.getPurchaseValue(),
+                                added, removed, labels),
                         row.getPurchaseValue(), row.getCorrectionValue(), regions));
             }
         }
@@ -351,6 +356,11 @@ public class DeliveryReportService {
     private record Current(Document document, List<Document> corrections, Map<String, BigDecimal> regions,
             List<InvoiceRef> invoices) {
 
+        /** Zakup netto z raportu; przyjęcie oznaczone jako błąd ma 0. */
+        BigDecimal purchaseValue() {
+            return document.isMarkedAsError() ? BigDecimal.ZERO : document.getPurchaseValue();
+        }
+
         BigDecimal correctionValue() {
             return corrections.stream().map(Document::getPurchaseValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         }
@@ -389,6 +399,10 @@ public class DeliveryReportService {
                 .collect(Collectors.toMap(Document::getId, Function.identity()));
         Map<UUID, List<InvoiceRef>> invoices = invoiceRefs(storeId, deliveries);
         return deliveries.stream().map(delivery -> {
+            if (delivery.isMarkedAsError()) {
+                // Oznaczone jako błąd po zamknięciu: dla raportów przyjęcia już nie ma.
+                return new Current(delivery, List.of(), Map.of(), invoices.getOrDefault(delivery.getId(), List.of()));
+            }
             List<Document> ofDelivery = links.getOrDefault(delivery.getId(), List.of()).stream()
                     .map(link -> correctionDocuments.get(link.getCorrection().getId()))
                     .filter(Objects::nonNull).toList();
@@ -468,7 +482,10 @@ public class DeliveryReportService {
         Map<String, BigDecimal> knownRegions = known != null ? known.regions() : Map.of();
         Set<UUID> knownCorrections = known != null ? known.correctionIds() : Set.of();
 
-        BigDecimal purchaseDelta = current.document().getPurchaseValue().subtract(knownPurchase);
+        if (known == null && current.document().isMarkedAsError()) {
+            return null;
+        }
+        BigDecimal purchaseDelta = current.purchaseValue().subtract(knownPurchase);
         BigDecimal correctionDelta = current.correctionValue().subtract(knownCorrection);
         Map<String, BigDecimal> regionDeltas = new TreeMap<>(REGION_ORDER);
         Set<String> codes = new HashSet<>(current.regions().keySet());
@@ -504,14 +521,15 @@ public class DeliveryReportService {
 
     private static ReportLine line(Current current, Map<UUID, String> labels) {
         return new ReportLine(current.document(), invoiceNumber(current.document(), current.invoices()),
-                correctionsLabel(current.corrections(), labels), current.document().getPurchaseValue(),
+                correctionsLabel(current.corrections(), labels), current.purchaseValue(),
                 current.corrections().isEmpty() ? null : current.correctionValue(), current.regions());
     }
 
     private static ReportLine line(Change change, Map<UUID, String> labels) {
         Current current = change.current();
         return new ReportLine(current.document(), invoiceNumber(current.document(), current.invoices()),
-                changeLabel(change.origin(), change.added(), change.purchaseDelta(), change.addedCorrections(),
+                changeLabel(change.origin(), current.document().isMarkedAsError(), change.added(),
+                        change.purchaseDelta(), change.addedCorrections(),
                         change.removedCorrections(), labels),
                 change.purchaseDelta(), change.correctionDelta(), change.regionDeltas());
     }
@@ -658,10 +676,15 @@ public class DeliveryReportService {
     }
 
     /** Opis zmiany: z którego zamkniętego okresu i co się zmieniło. */
-    private static String changeLabel(DeliveryReportClosing origin, boolean added, BigDecimal purchaseDelta,
-            List<Document> addedCorrections, List<Document> removedCorrections, Map<UUID, String> labels) {
+    private static String changeLabel(DeliveryReportClosing origin, boolean markedAsError, boolean added,
+            BigDecimal purchaseDelta, List<Document> addedCorrections, List<Document> removedCorrections,
+            Map<UUID, String> labels) {
         List<String> parts = new ArrayList<>();
         parts.add("Okres " + period(origin));
+        if (markedAsError) {
+            parts.add("przyjęcie oznaczone jako błąd");
+            return String.join("; ", parts);
+        }
         if (added) {
             parts.add("przyjęcie dopisane po zamknięciu");
         } else if (purchaseDelta.signum() != 0) {

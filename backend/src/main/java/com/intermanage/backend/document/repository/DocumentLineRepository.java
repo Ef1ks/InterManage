@@ -24,7 +24,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      */
     @Query("""
             select l from DocumentLine l join fetch l.document d
-            where d.store.id = :storeId and d.type = :type and l.itm8 in :itm8s
+            where d.store.id = :storeId and d.type = :type and l.itm8 in :itm8s and d.errorMarkedAt is null
               and l.purchasePrice > 0 and l.quantity > 0
             order by d.documentDate desc, d.number desc, l.lineNumber desc""")
     List<DocumentLine> findPricedLines(UUID storeId, DocumentType type, Collection<String> itm8s);
@@ -53,7 +53,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             select l.itm8 as itm8, l.ean as ean, d.id as document_id, d.number as document_number,
                    d.document_date as document_date, l.purchase_price as purchase_price
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type = 'PZ' and l.supplier_code in (:supplierCodes)
               and l.purchase_price > 0 and l.quantity > 0
               and d.document_date >= :from and d.document_date < :to
@@ -85,6 +85,9 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
         BigDecimal getCorrectedValue();
 
         boolean getCorrected();
+
+        /** Kody MEA artykułu z dostawy z bazy, której Nr_Bl = nr dok. dostawcy przyjęcia, po przecinku; bez nich pusty. */
+        String getMeaCodes();
     }
 
     /** Linie przypiętych korekt przyjęć z CTE {@code lines}, po artykule, CTE {@code fixes}. */
@@ -144,11 +147,11 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                        max(l.supplier_name) as supplier_name,
                        sum(l.quantity) as quantity, sum(l.purchase_value) as purchase_value
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
                   and d.document_date >= :since and d.document_date < :until
                   and l.itm8 in (select c.itm8 from document_lines c
-                                 join documents cd on cd.id = c.document_id
+                                 join documents cd on cd.id = c.document_id and cd.error_marked_at is null
                                  where cd.store_id = :storeId and cd.type = 'PZ'
                                    and ((cd.document_date >= :from and cd.document_date < :until)
                                         or cast(cd.id as varchar) = any(cast(:documentIds as varchar[]))))
@@ -236,7 +239,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                        max(l.sale_price_document) as sale_price, max(l.vat_rate) as vat_rate,
                        sum(l.quantity) as quantity, sum(l.purchase_value) as purchase_value
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
                   and ((d.document_date >= :from and d.document_date < :until)
                        or cast(d.id as varchar) = any(cast(:documentIds as varchar[])))
@@ -307,20 +310,29 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
     /**
      * Ostatnie dostawy artykułu (przyjęcia PZ z ilością > 0), od najnowszej. Linie tego samego ITM8 w jednym
-     * przyjęciu są sumowane, więc cena to wartość / ilość.
+     * przyjęciu są sumowane, więc cena to wartość / ilość. Kody MEA z aktywnego dokumentu dostawy z bazy o numerze
+     * (Nr_Bl) równym nr dok. dostawcy przyjęcia, z linii tego samego ITM8 (w pliku 8 cyfr, więc bez zer wiodących).
      */
     @Query(value = ARTICLE_EANS + """
             , lines as (
                 select d.id as document_id, d.number as document_number, d.document_date, l.itm8,
+                       d.supplier_document_number as bl_number,
                        max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
                        sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
                   and """ + ARTICLE_LINE + """
-                group by d.id, d.number, d.document_date, l.itm8
+                group by d.id, d.number, d.document_date, d.supplier_document_number, l.itm8
             ), """ + DELIVERY_FIXES + """
             select ln.document_id, ln.document_number, ln.document_date,
+                   (select string_agg(distinct bl.mea_code, ',' order by bl.mea_code)
+                    from base_deliveries b
+                    join base_delivery_lines bl on bl.delivery_id = b.id
+                    where b.store_id = :storeId and b.replaced_at is null and b.number = ln.bl_number
+                      and btrim(bl.mea_code) <> ''
+                      and ltrim(bl.itm8, '0') in (select ltrim(x.itm8, '0') from lines x
+                                                  where x.document_id = ln.document_id)) as mea_codes,
                    max(ln.supplier_code) as supplier_code, max(ln.supplier_name) as supplier_name,
                    sum(ln.quantity) as quantity, sum(ln.purchase_value) as purchase_value,
                    sum(ln.quantity + coalesce(f.quantity, 0)) as corrected_quantity,
@@ -328,7 +340,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    bool_or(f.delivery_id is not null) as corrected
             from lines ln
             left join fixes f on f.delivery_id = ln.document_id and f.itm8 = ln.itm8
-            group by ln.document_id, ln.document_number, ln.document_date
+            group by ln.document_id, ln.document_number, ln.document_date, ln.bl_number
             order by ln.document_date desc, length(ln.document_number) desc, ln.document_number desc
             limit :limit
             """, nativeQuery = true)
@@ -337,7 +349,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     /** Stawka VAT (%) z najnowszej linii dokumentu artykułu, która ją ma. */
     @Query(value = """
             select l.vat_rate from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and l.itm8 = :itm8 and l.vat_rate is not null
             order by d.document_date desc
             limit 1
@@ -369,7 +381,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    exists (select 1 from document_gratis g
                            where g.document_id = d.id and g.deleted_at is null) as gratis
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type not in ('PZ', 'PK', 'WZ')
               and """ + ARTICLE_LINE + """
             group by d.id, d.type, d.number, d.document_date
@@ -386,7 +398,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     @Query(value = """
             select cast(d.document_date as date) as day, coalesce(sum(l.purchase_value), 0) as purchase_value
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type = 'PL' and l.itm8 = :itm8
               and d.document_date >= cast(:from as timestamp)
               and d.document_date < cast(:to as timestamp) + interval '1 day'
@@ -403,7 +415,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     @Query(value = """
             select cast(d.document_date as date) as day, coalesce(sum(l.purchase_value), 0) as purchase_value
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             left join products p on p.store_id = :storeId and p.itm8 = l.itm8
             cross join lateral (select coalesce(p.subfamily_code,
                     nullif(replace(l.nomenclature_code, ' ', ''), '')) as code) n
@@ -436,7 +448,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             select coalesce(left(replace(l.nomenclature_code, ' ', ''), 2), '') as region_code, d.type as type,
                    coalesce(sum(l.purchase_value), 0) as purchase_value
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type in (:types)
               and d.document_date >= cast(:from as timestamp)
               and d.document_date < cast(:to as timestamp) + interval '1 day'
@@ -467,7 +479,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             select l.itm8 as itm8, n.code as nomenclature_code, max(l.name) as name, max(l.ean) as ean,
                    max(l.brand) as brand, coalesce(sum(l.purchase_value), 0) as purchase_value
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             cross join lateral (select coalesce(replace(l.nomenclature_code, ' ', ''), '') as code) n
             where d.store_id = :storeId and d.type = :type
               and d.document_date >= cast(:from as timestamp)
@@ -500,7 +512,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    case when l.supplier_code in (:brandSuppliers) then nullif(trim(l.brand), '') end as brand,
                    max(d.document_date) as last_delivery_date, count(distinct l.itm8) as product_count
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type = 'PZ' and l.itm8 in (:itm8s) and l.quantity > 0
               and l.supplier_code is not null
             group by 1, 3
@@ -552,7 +564,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                        :withPrevious and d.document_date >= cast(:previousFrom as timestamp)
                            and d.document_date < cast(:previousTo as timestamp) + interval '1 day' as in_previous
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = :type
                   and ((d.document_date >= cast(:currentFrom as timestamp)
                           and d.document_date < cast(:currentTo as timestamp) + interval '1 day')
@@ -607,7 +619,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select d.id as document_id, d.number as document_number, d.document_date, l.supplier_code,
                        l.supplier_name, l.quantity, l.purchase_value, coalesce(p.itm8, e.itm8) as itm8
                 from document_lines l
-                join documents d on d.id = l.document_id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
@@ -696,7 +708,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             select distinct on (l.itm8) l.itm8 as itm8, l.supplier_code as supplier_code,
                    l.supplier_name as supplier_name
             from document_lines l
-            join documents d on d.id = l.document_id
+            join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.itm8 in (:itm8s)
               and l.supplier_code is not null
             order by l.itm8, d.document_date desc, d.number desc

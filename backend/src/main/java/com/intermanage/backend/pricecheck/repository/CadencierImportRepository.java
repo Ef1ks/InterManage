@@ -98,7 +98,7 @@ public interface CadencierImportRepository extends JpaRepository<CadencierImport
     @Query(value = """
             with lines as (
                 select d.id as document_id, l.itm8, ltrim(btrim(l.ean), '0') as ean
-                from documents d join document_lines l on l.document_id = d.id
+                from documents d join document_lines l on l.document_id = d.id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and d.document_date >= :from and d.document_date < :to
                   and (coalesce(l.supplier_code, d.supplier_code) is null
                        or coalesce(l.supplier_code, d.supplier_code) not in (:baseSupplierCodes))

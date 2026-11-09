@@ -24,6 +24,11 @@ public record DocumentResponse(
         String supplierDocumentNumberEditedBy,
         /** Numer dokumentu dostawcy można poprawić (przyjęcia PZ, po nim faktury KSeF wiążą się z dostawą). */
         boolean supplierDocumentNumberEditable,
+        /** Przyjęcie PZ można oznaczyć jako błąd: znika z listy dokumentów i z raportów. */
+        boolean errorMarkable,
+        /** Oznaczenie jako błąd: kiedy i kto ({@code null} = dokument się liczy). */
+        Instant errorMarkedAt,
+        String errorMarkedBy,
         int lineCount,
         BigDecimal purchaseValue,
         BigDecimal saleValueGross,

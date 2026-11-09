@@ -101,7 +101,8 @@ public class DocumentController {
      * (nieoznaczone z pozycją GRATIS).
      * {@code hideValueFrom} / {@code hideValueTo}: ukrywa dokumenty z kwotą w tym przedziale (granice włącznie,
      * jedna wystarczy), {@code hideValueOf}: {@code purchase} (domyślnie) albo {@code sale} (sprzedaż brutto).
-     * {@code hiddenSuppliers}: kody dostawców ukrytych na liście. Domyślnie od najwyższego numeru.
+     * {@code hiddenSuppliers}: kody dostawców ukrytych na liście. {@code markedAsError}: tylko przyjęcia oznaczone
+     * jako błąd (bez tego ich nie ma). Domyślnie od najwyższego numeru.
      */
     @GetMapping("/{type}")
     @PreAuthorize(VIEW)
@@ -113,11 +114,12 @@ public class DocumentController {
             @RequestParam(required = false) BigDecimal hideValueFrom,
             @RequestParam(required = false) BigDecimal hideValueTo,
             @RequestParam(defaultValue = "") List<String> hiddenSuppliers,
+            @RequestParam(defaultValue = "false") boolean markedAsError,
             @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "desc") String direction) {
         return documentService.list(storeId, type, page, query, product, DocumentSearch.Presence.of(invoice),
                 DocumentSearch.Presence.of(corrections), DocumentSearch.Presence.of(closed),
                 DocumentSearch.GratisFilter.of(gratis), DocumentSearch.ValueField.of(hideValueOf), hideValueFrom,
-                hideValueTo, hiddenSuppliers, sort, direction);
+                hideValueTo, hiddenSuppliers, markedAsError, sort, direction);
     }
 
     @GetMapping("/{type}/{id}")
@@ -326,6 +328,21 @@ public class DocumentController {
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return documentService.editSupplierDocumentNumber(storeId, type, id, request.supplierDocumentNumber(),
                 principal.getId());
+    }
+
+    /** Oznacza przyjęcie PZ jako błąd: znika z listy dokumentów i z raportów. */
+    @PutMapping("/{type}/{id}/error")
+    @PreAuthorize(EDIT)
+    public DocumentResponse markAsError(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return documentService.markAsError(storeId, type, id, principal.getId());
+    }
+
+    /** Cofa oznaczenie jako błąd. */
+    @DeleteMapping("/{type}/{id}/error")
+    @PreAuthorize(EDIT)
+    public DocumentResponse unmarkError(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id) {
+        return documentService.unmarkError(storeId, type, id);
     }
 
     /** Cofa poprawkę numeru: znowu obowiązuje numer z raportu. */

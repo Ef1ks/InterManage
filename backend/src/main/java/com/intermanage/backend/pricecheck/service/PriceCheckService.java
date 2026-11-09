@@ -154,7 +154,7 @@ public class PriceCheckService {
                 : cadencierImports.findDeliveriesWithCadencierLines(storeId, BASE_SUPPLIER_CODES, start, end));
         ids.addAll(reviewsByDelivery.keySet());
         List<Document> deliveries = ids.isEmpty() ? List.of() : documents.findWithLines(storeId, ids).stream()
-                .filter(delivery -> delivery.getType() == DocumentType.PZ)
+                .filter(delivery -> delivery.getType() == DocumentType.PZ && !delivery.isMarkedAsError())
                 .filter(delivery -> reviewsByDelivery.containsKey(delivery.getId())
                         || hasCadencierLineFromOtherSupplier(delivery, cadencier, excluded))
                 .toList();

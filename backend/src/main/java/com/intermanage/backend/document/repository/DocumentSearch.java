@@ -82,11 +82,19 @@ public final class DocumentSearch {
         };
     }
 
+    /** Dokumenty typu w sklepie pasujące do słów, bez oznaczonych jako błąd (listy, podpowiedzi, przypinanie). */
     public static Specification<Document> inStoreMatching(UUID storeId, DocumentType type, List<String> words) {
+        return inStoreMatching(storeId, type, words, false);
+    }
+
+    /** Jak wyżej; {@code markedAsError}: tylko dokumenty oznaczone jako błąd (filtr listy), inaczej bez nich. */
+    public static Specification<Document> inStoreMatching(UUID storeId, DocumentType type, List<String> words,
+            boolean markedAsError) {
         return (root, query, cb) -> {
             List<Predicate> all = new ArrayList<>();
             all.add(cb.equal(root.get("store").get("id"), storeId));
             all.add(cb.equal(root.get("type"), type));
+            all.add(markedAsError ? cb.isNotNull(root.get("errorMarkedAt")) : cb.isNull(root.get("errorMarkedAt")));
             for (String word : words) {
                 String contains = "%" + word + "%";
                 all.add(cb.or(
