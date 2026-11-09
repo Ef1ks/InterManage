@@ -135,7 +135,28 @@ class NegativeStockIntegrationTests {
     }
 
     @Test
+    void suggestsSimilarArticleOnPlusWithStockCloseToMissingQuantity() throws Exception {
+        // -5 i +5 w tej samej podrodzinie, nazwy podobne; -3 i -4 nie mieszczą się w ±20% od 5.
+        mvc.perform(report().param("delivery", "ANY"))
+                .andExpect(jsonPath("$.pairTolerance").value(20))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NEVER_DELIVERED + "')].counterparts[0].itm8")
+                        .value(POSITIVE))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NEVER_DELIVERED + "')].counterparts[0].stock")
+                        .value(5.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NEVER_DELIVERED + "')].counterparts[0].sameSubfamily")
+                        .value(true))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LOCAL_DELIVERY + "')].counterparts.length()")
+                        .value(0));
+        mvc.perform(report().param("delivery", "ANY").param("pairTolerance", "30"))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LOCAL_DELIVERY + "')].counterparts[0].itm8")
+                        .value(POSITIVE))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + OLD_DELIVERY + "')].counterparts.length()")
+                        .value(0));
+    }
+
+    @Test
     void rejectsWrongParameters() throws Exception {
+        mvc.perform(report().param("pairTolerance", "0")).andExpect(status().isBadRequest());
         mvc.perform(report().param("days", "0")).andExpect(status().isBadRequest());
         mvc.perform(report().param("delivery", "DELIVERED_IN")).andExpect(status().isBadRequest());
         mvc.perform(report().param("delivery", "DELIVERED_IN").param("from", today.toString())

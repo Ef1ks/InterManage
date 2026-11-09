@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 35.0.0.0
+;@Ahk2Exe-SetVersion 36.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 35 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 36 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -363,6 +363,15 @@ PlayMacro(rawClip) {
                     : WebWait(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Trim(parts[4]) : "", parts.Length >= 5 ? Integer(Trim(parts[5])) : 15000)
                 if (problem != "") {
                     MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBDIALOG":
+                ; WEBDIALOG|okno pytania|tekst (kilka po średniku)|przycisk|limit w ms: pytanie, które pojawia się tylko czasem
+                ; (np. sprzedaż ze stratą przy przecenie). Z tym tekstem klika przycisk, bez okna albo z innym pytaniem idzie dalej.
+                problem := parts.Length < 4 ? "Linia WEBDIALOG wymaga okna, tekstu i przycisku."
+                    : OptionalDialog(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 3000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBVALUE":
@@ -1009,6 +1018,42 @@ ConfirmDialog(title, expected, button, timeoutMs) {
         }
         if (A_TickCount >= deadline)
             return "Nie pojawiło się okno potwierdzenia `"" expected "`"."
+        Sleep 100
+    }
+}
+
+; Pytanie, które pojawia się tylko czasem. Liczą się tylko strony z przyciskiem o tym id (główne okno Mercalys też ma
+; w tytule „Les Mousquetaires”). Okno z innym tekstem zostaje dla kolejnych linii makra (np. „Utworzyć zapis ?”),
+; więc nie czekamy wtedy do końca limitu.
+OptionalDialog(title, expected, button, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                element := ""
+                text := ""
+                try {
+                    if (doc.readyState = "complete") {
+                        element := doc.getElementById(button)
+                        if (WebProp(element, "tagName") != "")
+                            text := Trim(doc.body.innerText)
+                    }
+                }
+                if (text = "")
+                    continue
+                matched := false
+                for piece in StrSplit(expected, ";")
+                    if (Trim(piece) != "" && InStr(text, Trim(piece)))
+                        matched := true
+                if !matched
+                    return ""
+                try WinActivate hwnd
+                ClickWithoutWaiting(doc, element)
+                return WinWaitClose("ahk_id " hwnd, , 10) ? "" : "Okno pytania `"" expected "`" się nie zamknęło."
+            }
+        }
+        if (A_TickCount >= deadline)
+            return ""
         Sleep 100
     }
 }

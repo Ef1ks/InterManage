@@ -60,6 +60,11 @@ public interface CadencierImportRepository extends JpaRepository<CadencierImport
     @Query(value = "select c.itm8 from cadencier_items c where c.store_id = :storeId", nativeQuery = true)
     List<String> findCurrentItm8s(UUID storeId);
 
+    /** Czy artykuł jest na bieżącej liście cadencier sklepu (po ITM8). */
+    @Query(value = "select exists (select 1 from cadencier_items c where c.store_id = :storeId and c.itm8 = :itm8)",
+            nativeQuery = true)
+    boolean isInCadencier(UUID storeId, String itm8);
+
     interface CadencierEan {
         String getItm8();
 

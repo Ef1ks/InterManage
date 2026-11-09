@@ -128,4 +128,85 @@ public interface NegativeStockRepository extends Repository<Sale, Sale.Key> {
             group by itm8
             """, nativeQuery = true)
     List<ArticleReceipts> findReceipts(UUID storeId, LocalDateTime periodFrom, LocalDateTime periodTo);
+
+    /** Podobny artykuł na plusie dla artykułu z ujemnym stanem. */
+    interface Counterpart {
+        String getNegativeItm8();
+
+        String getItm8();
+
+        String getEan();
+
+        String getName();
+
+        String getBrand();
+
+        String getSubfamilyCode();
+
+        BigDecimal getStock();
+
+        BigDecimal getPurchasePrice();
+
+        double getSimilarity();
+
+        boolean getSameSubfamily();
+
+        boolean getSameBrand();
+
+        BigDecimal getSoldQuantity();
+    }
+
+    /**
+     * Do każdego artykułu ze stanem od {@code -minMissing} w dół najwyżej 5 artykułów na plusie ze stanem od
+     * {@code low} do {@code high} razy brakującej ilości, z tej samej podrodziny (nazwa podobna od 0,25) albo tej samej
+     * marki (od 0,4), czyli towar, który przyjechał pod innym kodem albo sprzedaje się pod złym. Podobieństwo nazw z
+     * pg_trgm; najpierw najpodobniejsza nazwa, ta sama marka i podrodzina, ilość najbliższa brakującej. Kandydatów
+     * daje złączenie po równości podrodziny albo marki (na 10023 ok. 0,3 s).
+     */
+    @Query(value = """
+            with neg as (
+                select p.itm8, p.name, p.subfamily_code, -p.stock as missing,
+                       nullif(nullif(upper(replace(btrim(p.brand), '*', '')), ''), '0') as brand_key
+                from products p
+                where p.store_id = :storeId and p.stock <= -:minMissing and p.name is not null
+            ), pos as (
+                select p.itm8, p.ean, p.name, p.brand, p.subfamily_code, p.stock, p.purchase_price,
+                       nullif(nullif(upper(replace(btrim(p.brand), '*', '')), ''), '0') as brand_key
+                from products p
+                where p.store_id = :storeId and p.stock > 0 and p.name is not null
+            ), candidates as (
+                select n.itm8 as negative_itm8, p.itm8
+                from neg n join pos p on p.subfamily_code = n.subfamily_code
+                where p.stock between n.missing * :low and n.missing * :high
+                union
+                select n.itm8, p.itm8
+                from neg n join pos p on p.brand_key = n.brand_key
+                where p.stock between n.missing * :low and n.missing * :high
+            ), scored as (
+                select c.negative_itm8, p.itm8, p.ean, p.name, p.brand, p.subfamily_code, p.stock, p.purchase_price,
+                       n.missing, similarity(n.name, p.name) as similarity,
+                       coalesce(p.subfamily_code = n.subfamily_code, false) as same_subfamily,
+                       coalesce(p.brand_key = n.brand_key, false) as same_brand
+                from candidates c
+                join neg n on n.itm8 = c.negative_itm8
+                join pos p on p.itm8 = c.itm8
+            ), ranked as (
+                select s.*, row_number() over (partition by s.negative_itm8 order by
+                           s.similarity + case when s.same_brand then 0.15 else 0 end
+                               + case when s.same_subfamily then 0.1 else 0 end
+                               - abs(s.stock - s.missing) / s.missing * 0.5 desc, s.itm8) as rn
+                from scored s
+                where (s.same_subfamily and s.similarity >= 0.25) or (s.same_brand and s.similarity >= 0.4)
+            )
+            select r.negative_itm8, r.itm8, r.ean, r.name, r.brand, r.subfamily_code, r.stock, r.purchase_price,
+                   r.similarity, r.same_subfamily, r.same_brand,
+                   (select sum(x.quantity) from sales_by_article x
+                    where x.store_id = :storeId and x.itm8 = r.itm8
+                      and x.sale_date between :salesFrom and :salesTo) as sold_quantity
+            from ranked r
+            where r.rn <= 5
+            order by r.negative_itm8, r.rn
+            """, nativeQuery = true)
+    List<Counterpart> findCounterparts(UUID storeId, BigDecimal minMissing, BigDecimal low, BigDecimal high,
+            LocalDate salesFrom, LocalDate salesTo);
 }

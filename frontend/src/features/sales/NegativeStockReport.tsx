@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { ChevronDownIcon } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
 
 import { BackLink } from '@/components/BackLink'
 import { DateField, MultiComboboxField, SegmentedField, SelectField, SwitchField, TextField } from '@/components/form'
@@ -17,7 +18,7 @@ import { nomenclatureName, StatTile } from '@/features/sales/report-parts'
 import { rangeError, useReportParams } from '@/features/sales/report-period'
 import { addDays, todayIso } from '@/lib/dates'
 import { nextSort, type SortAccessors, sortRows, type SortState } from '@/lib/table-sort'
-import type { NegativeStockDelivery, NegativeStockItem } from '@/lib/types'
+import type { NegativeStockCounterpart, NegativeStockDelivery, NegativeStockItem } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,9 @@ const DELIVERY: { value: NegativeStockDelivery; label: string; param: string | n
   { value: 'ANY', label: 'Wszystkie', param: 'wszystkie', hint: 'Wszystkie artykuły ze stanem na minusie.' },
 ]
 
+const DEFAULT_TOLERANCE = 20
+const TOLERANCES = [10, 20, 30, 50]
+
 const CADENCIER = [
   { value: 'all', label: 'Wszystkie', param: null },
   { value: 'with', label: 'W cadencier', param: 'tak' },
@@ -57,7 +61,18 @@ const CADENCIER = [
 ] as const
 
 type SortKey =
-  'itm8' | 'ean' | 'name' | 'supplier' | 'delivery' | 'deliveries' | 'stock' | 'value' | 'sold' | 'gross' | 'lastSale'
+  | 'itm8'
+  | 'ean'
+  | 'name'
+  | 'supplier'
+  | 'delivery'
+  | 'deliveries'
+  | 'stock'
+  | 'pair'
+  | 'value'
+  | 'sold'
+  | 'gross'
+  | 'lastSale'
 
 const SORT_PARAMS: Record<SortKey, string> = {
   itm8: 'itm8',
@@ -67,6 +82,7 @@ const SORT_PARAMS: Record<SortKey, string> = {
   delivery: 'dostawa',
   deliveries: 'dostaw',
   stock: 'stan',
+  pair: 'para',
   value: 'wartosc',
   sold: 'sprzedaz',
   gross: 'brutto',
@@ -112,6 +128,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
     to: delivery.value === 'DELIVERED_IN' ? to : null,
     withProduction: params.get('produkcja') === 'tak',
     nomenclatures: [...new Set(params.getAll('nom'))].sort(),
+    pairTolerance: TOLERANCES.find((value) => String(value) === params.get('tolerancja')) ?? DEFAULT_TOLERANCE,
   }
   const valid = !daysError && !periodError
   const report = useNegativeStock(storeId, query, valid)
@@ -119,6 +136,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
   const supplier = params.get('dostawca') ?? ALL_SUPPLIERS
   const cadencier = CADENCIER.find((option) => option.param === params.get('cadencier')) ?? CADENCIER[0]
   const onlySelling = params.get('sprzedaje') === 'tak'
+  const onlyPaired = params.get('podobne') === 'tak'
   const sortKey = (Object.keys(SORT_PARAMS) as SortKey[]).find((key) => SORT_PARAMS[key] === params.get('sortuj'))
   const direction = params.get('kierunek') === 'malejaco' ? 'desc' : 'asc'
   const sort = useMemo<SortState<SortKey>>(
@@ -140,6 +158,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
       delivery: (item) => item.lastDeliveryDate,
       deliveries: (item) => (inPeriod ? item.periodDeliveries : item.deliveryDays),
       stock: (item) => item.stock,
+      pair: (item) => item.counterparts[0]?.similarity ?? null,
       value: (item) => item.stockValue,
       sold: (item) => item.soldQuantity,
       gross: (item) => item.soldGross,
@@ -156,10 +175,11 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
           (supplier === NO_SUPPLIER ? item.supplierCode == null : item.supplierCode === supplier)) &&
         (cadencier.value === 'all' || item.cadencier === (cadencier.value === 'with')) &&
         (!onlySelling || item.soldQuantity > 0) &&
+        (!onlyPaired || item.counterparts.length > 0) &&
         matches(item, words),
     )
     return sortRows(filtered, accessors, sort)
-  }, [report.data, searchField.debounced, supplier, cadencier.value, onlySelling, accessors, sort])
+  }, [report.data, searchField.debounced, supplier, cadencier.value, onlySelling, onlyPaired, accessors, sort])
 
   const suppliers = useMemo(() => {
     const found = new Map<string, { name: string | null; count: number }>()
@@ -290,6 +310,20 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
             onCheckedChange={(checked) => update({ produkcja: checked ? 'tak' : null })}
           />
         </div>
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          <SwitchField
+            label="Tylko z podobnym na plusie"
+            description={`Minus, do którego pasuje podobny artykuł (ta sama podrodzina albo marka, podobna nazwa) ze stanem na plusie bliskim brakującej ilości: przy −100 od +${100 - query.pairTolerance} do +${100 + query.pairTolerance}. Towar przyjechał albo sprzedaje się pod drugim kodem.`}
+            checked={onlyPaired}
+            onCheckedChange={(checked) => update({ podobne: checked ? 'tak' : null })}
+          />
+          <SegmentedField
+            label="Stan podobnego na plusie"
+            options={TOLERANCES.map((value) => ({ value: String(value), label: `±${value}%` }))}
+            value={String(query.pairTolerance)}
+            onChange={(next) => update({ tolerancja: next === String(DEFAULT_TOLERANCE) ? null : next })}
+          />
+        </div>
       </Card>
 
       <SearchInput
@@ -341,6 +375,14 @@ function Results({
   salesTo: string | null
 }) {
   const [shown, setShown] = useState(PAGE)
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
+  const toggle = (itm8: string) =>
+    setOpen((current) => {
+      const next = new Set(current)
+      if (!next.delete(itm8)) next.add(itm8)
+      return next
+    })
+  const paired = items.filter((item) => item.counterparts.length > 0).length
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < items.length, shown)
   const sorting = { sort, onSort }
   const selling = items.filter((item) => item.soldQuantity > 0).length
@@ -354,7 +396,7 @@ function Results({
         <StatTile
           label="Artykułów"
           value={formatQuantity(items.length)}
-          detail={`W tym sprzedających się: ${formatQuantity(selling)}`}
+          detail={`Sprzedających się: ${formatQuantity(selling)} · z podobnym na plusie: ${formatQuantity(paired)}`}
           tone="strong"
         />
         <StatTile
@@ -400,6 +442,9 @@ function Results({
                   <SortableHead column="stock" align="right" {...sorting}>
                     Stan
                   </SortableHead>
+                  <SortableHead column="pair" {...sorting} className="min-w-56 whitespace-nowrap">
+                    Podobny na plusie
+                  </SortableHead>
                   <SortableHead column="value" align="right" {...sorting} className="whitespace-nowrap">
                     Wartość stanu
                   </SortableHead>
@@ -416,65 +461,77 @@ function Results({
               </TableHeader>
               <TableBody>
                 {items.slice(0, shown).map((item) => (
-                  <TableRow key={item.itm8}>
-                    <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
-                    <TableCell className="tabular-nums">{item.ean ?? '–'}</TableCell>
-                    <TableCell className="whitespace-normal">
-                      <div className="flex items-center gap-1.5">
-                        <span className="min-w-0">
-                          {item.name}
-                          {item.brand && <span className="ml-1.5 text-muted-foreground">{item.brand}</span>}
-                        </span>
-                        {item.cadencier && (
-                          <span className="shrink-0 rounded-md bg-blue-200 px-1.5 text-xs font-medium text-blue-950 dark:bg-blue-500/30 dark:text-blue-100">
-                            cadencier
+                  <Fragment key={item.itm8}>
+                    <TableRow className={cn(open.has(item.itm8) && 'border-b-0 bg-muted/50')}>
+                      <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
+                      <TableCell className="tabular-nums">{item.ean ?? '–'}</TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex items-center gap-1.5">
+                          <span className="min-w-0">
+                            {item.name}
+                            {item.brand && <span className="ml-1.5 text-muted-foreground">{item.brand}</span>}
+                          </span>
+                          {item.cadencier && (
+                            <span className="shrink-0 rounded-md bg-blue-200 px-1.5 text-xs font-medium text-blue-950 dark:bg-blue-500/30 dark:text-blue-100">
+                              cadencier
+                            </span>
+                          )}
+                          {!item.active && (
+                            <span className="shrink-0 rounded-md bg-zinc-200 px-1.5 text-xs font-medium text-zinc-900 dark:bg-zinc-600/40 dark:text-zinc-100">
+                              nieaktywny
+                            </span>
+                          )}
+                          <ArticleStatsButton
+                            article={{ itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand }}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        className="max-w-56 truncate text-muted-foreground"
+                        title={item.supplierName ?? undefined}
+                      >
+                        {item.supplierCode ? `${item.supplierCode} ${item.supplierName ?? ''}` : '–'}
+                      </TableCell>
+                      <TableCell
+                        className="whitespace-nowrap text-muted-foreground tabular-nums"
+                        title={item.daysSinceDelivery != null ? daysAgo(item.daysSinceDelivery) : undefined}
+                      >
+                        {item.lastDeliveryDate ? (
+                          formatDocumentDate(item.lastDeliveryDate)
+                        ) : (
+                          <span className="rounded-md bg-amber-200 px-1.5 text-xs font-medium text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">
+                            nigdy
                           </span>
                         )}
-                        {!item.active && (
-                          <span className="shrink-0 rounded-md bg-zinc-200 px-1.5 text-xs font-medium text-zinc-900 dark:bg-zinc-600/40 dark:text-zinc-100">
-                            nieaktywny
-                          </span>
-                        )}
-                        <ArticleStatsButton
-                          article={{ itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand }}
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell
-                      className="max-w-56 truncate text-muted-foreground"
-                      title={item.supplierName ?? undefined}
-                    >
-                      {item.supplierCode ? `${item.supplierCode} ${item.supplierName ?? ''}` : '–'}
-                    </TableCell>
-                    <TableCell
-                      className="whitespace-nowrap text-muted-foreground tabular-nums"
-                      title={item.daysSinceDelivery != null ? daysAgo(item.daysSinceDelivery) : undefined}
-                    >
-                      {item.lastDeliveryDate ? (
-                        formatDocumentDate(item.lastDeliveryDate)
-                      ) : (
-                        <span className="rounded-md bg-amber-200 px-1.5 text-xs font-medium text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">
-                          nigdy
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatQuantity(inPeriod ? item.periodDeliveries : item.deliveryDays)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-red-700 tabular-nums dark:text-red-400">
-                      {formatQuantity(item.stock)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{money(item.stockValue)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {item.soldQuantity > 0 ? formatQuantity(item.soldQuantity) : '–'}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {item.soldGross !== 0 ? money(item.soldGross) : '–'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground tabular-nums">
-                      {item.lastSale ? formatDocumentDate(item.lastSale) : 'nigdy'}
-                    </TableCell>
-                  </TableRow>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatQuantity(inPeriod ? item.periodDeliveries : item.deliveryDays)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-red-700 tabular-nums dark:text-red-400">
+                        {formatQuantity(item.stock)}
+                      </TableCell>
+                      <TableCell>
+                        <PairButton item={item} open={open.has(item.itm8)} onToggle={() => toggle(item.itm8)} />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{money(item.stockValue)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {item.soldQuantity > 0 ? formatQuantity(item.soldQuantity) : '–'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {item.soldGross !== 0 ? money(item.soldGross) : '–'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground tabular-nums">
+                        {item.lastSale ? formatDocumentDate(item.lastSale) : 'nigdy'}
+                      </TableCell>
+                    </TableRow>
+                    {open.has(item.itm8) && (
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableCell colSpan={12} className="px-4 pt-0 pb-3 whitespace-normal">
+                          <PairComparison item={item} />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </TableBody>
             </table>
@@ -483,5 +540,133 @@ function Results({
         </Card>
       )}
     </>
+  )
+}
+
+const similarityLabel = (similarity: number) => `${Math.round(similarity * 100)}%`
+
+/** Najlepiej pasujący artykuł na plusie; klik rozwija porównanie wszystkich podpowiedzi. */
+function PairButton({ item, open, onToggle }: { item: NegativeStockItem; open: boolean; onToggle: () => void }) {
+  const [best, ...rest] = item.counterparts
+  if (!best) return <span className="text-muted-foreground">–</span>
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      title="Porównaj z podobnymi artykułami na plusie"
+      className="flex w-full max-w-72 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left hover:bg-accent"
+    >
+      <span className="shrink-0 rounded-md bg-emerald-200 px-1.5 text-xs font-semibold text-emerald-950 tabular-nums dark:bg-emerald-500/30 dark:text-emerald-100">
+        +{formatQuantity(best.stock)}
+      </span>
+      <span className="min-w-0 truncate">{best.name}</span>
+      {rest.length > 0 && <span className="shrink-0 text-xs text-muted-foreground">+{rest.length}</span>}
+      <ChevronDownIcon
+        aria-hidden
+        className={cn('ml-auto size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
+      />
+    </button>
+  )
+}
+
+/** Artykuł z minusem nad podobnymi z plusem: suma stanów bliska zera to ten sam towar pod dwoma kodami. */
+function PairComparison({ item }: { item: NegativeStockItem }) {
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <p className="mb-2 text-xs text-muted-foreground">
+        Jeśli to ten sam towar, dostawa weszła albo kasa sprzedaje pod drugim kodem. Suma stanów bliska zera to mocna
+        wskazówka; sprzedaż tylko na minusie i brak sprzedaży na plusie też.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr className="text-left">
+              <th className="py-1 pr-3 font-medium">Artykuł</th>
+              <th className="py-1 pr-3 font-medium">ITM8</th>
+              <th className="py-1 pr-3 font-medium">EAN</th>
+              <th className="py-1 pr-3 text-right font-medium">Stan</th>
+              <th className="py-1 pr-3 text-right font-medium whitespace-nowrap">Suma stanów</th>
+              <th className="py-1 pr-3 text-right font-medium whitespace-nowrap">Sprzedaż 28 dni</th>
+              <th className="py-1 text-right font-medium whitespace-nowrap">Wartość stanu</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t">
+              <td className="py-1.5 pr-3">
+                <span className="font-medium">{item.name}</span>
+                {item.brand && <span className="ml-1.5 text-muted-foreground">{item.brand}</span>}
+              </td>
+              <td className="py-1.5 pr-3 tabular-nums">{itm8Label(item.itm8)}</td>
+              <td className="py-1.5 pr-3 tabular-nums">{item.ean ?? '–'}</td>
+              <td className="py-1.5 pr-3 text-right font-medium text-red-700 tabular-nums dark:text-red-400">
+                {formatQuantity(item.stock)}
+              </td>
+              <td className="py-1.5 pr-3 text-right text-muted-foreground">–</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums">
+                {item.soldQuantity > 0 ? formatQuantity(item.soldQuantity) : '–'}
+              </td>
+              <td className="py-1.5 text-right tabular-nums">{money(item.stockValue)}</td>
+            </tr>
+            {item.counterparts.map((counterpart) => (
+              <CounterpartRow key={counterpart.itm8} counterpart={counterpart} missing={item.stock} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function CounterpartRow({ counterpart, missing }: { counterpart: NegativeStockCounterpart; missing: number }) {
+  const sum = Math.round((missing + counterpart.stock) * 1000) / 1000
+  return (
+    <tr className="border-t">
+      <td className="py-1.5 pr-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span>
+            {counterpart.name}
+            {counterpart.brand && <span className="ml-1.5 text-muted-foreground">{counterpart.brand}</span>}
+          </span>
+          <span
+            className="rounded-md bg-zinc-200 px-1.5 text-xs font-medium text-zinc-900 tabular-nums dark:bg-zinc-600/40 dark:text-zinc-100"
+            title="Podobieństwo nazw"
+          >
+            nazwa {similarityLabel(counterpart.similarity)}
+          </span>
+          {counterpart.sameBrand && (
+            <span className="rounded-md bg-violet-200 px-1.5 text-xs font-medium text-violet-950 dark:bg-violet-500/30 dark:text-violet-100">
+              ta sama marka
+            </span>
+          )}
+          {counterpart.sameSubfamily && (
+            <span className="rounded-md bg-teal-200 px-1.5 text-xs font-medium text-teal-950 dark:bg-teal-500/30 dark:text-teal-100">
+              ta sama podrodzina
+            </span>
+          )}
+          <ArticleStatsButton
+            article={{
+              itm8: counterpart.itm8,
+              name: counterpart.name,
+              ean: counterpart.ean,
+              brand: counterpart.brand,
+            }}
+          />
+        </div>
+      </td>
+      <td className="py-1.5 pr-3 tabular-nums">{itm8Label(counterpart.itm8)}</td>
+      <td className="py-1.5 pr-3 tabular-nums">{counterpart.ean ?? '–'}</td>
+      <td className="py-1.5 pr-3 text-right font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
+        +{formatQuantity(counterpart.stock)}
+      </td>
+      <td className="py-1.5 pr-3 text-right tabular-nums">
+        {sum > 0 ? '+' : ''}
+        {formatQuantity(sum)}
+      </td>
+      <td className="py-1.5 pr-3 text-right tabular-nums">
+        {counterpart.soldQuantity !== 0 ? formatQuantity(counterpart.soldQuantity) : '–'}
+      </td>
+      <td className="py-1.5 text-right tabular-nums">{money(counterpart.stockValue)}</td>
+    </tr>
   )
 }

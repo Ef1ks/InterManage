@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794198012.2936072,
-    "seen": 1794198144.7701068,
-    "ast_hash": "a169c1e44ee0cb8a188bac6215cf9e88",
+    "mtime": 1794207765.2349398,
+    "seen": 1794207950.7293472,
+    "ast_hash": "ab6e786339e96febaba744bcab455160",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794198100.700933,
-    "seen": 1794198144.7837973,
-    "ast_hash": "4c16572fddbcf409c0deccea6aa7e8e9",
+    "mtime": 1794207906.6372619,
+    "seen": 1794207950.7442145,
+    "ast_hash": "433005580301348c6f60107a6966a3c5",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794165617.2837224,
-    "seen": 1794165738.766034,
-    "ast_hash": "adedaaf25647ce0c2ff4d2cc9585dd51",
+    "mtime": 1794207765.2359397,
+    "seen": 1794207950.717247,
+    "ast_hash": "bfe27c4b1b38c4f0c823949bbc652709",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -3276,9 +3276,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/mapper/SalesMapper.java": {
-    "mtime": 1793956282.2245986,
-    "seen": 1793956444.3450868,
-    "ast_hash": "f9ba3b99b35d46721a69d32ee2a0edd5",
+    "mtime": 1794205633.7689757,
+    "seen": 1794205770.6847258,
+    "ast_hash": "bba0e302be7904ef3b750654eef3972a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/repository/SaleRepository.java": {
@@ -3300,9 +3300,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/SalesReportService.java": {
-    "mtime": 1793956282.2261133,
-    "seen": 1793956444.3466573,
-    "ast_hash": "778f61a692aa2e3647d982b0c86d43a9",
+    "mtime": 1794205643.5682285,
+    "seen": 1794205770.6862292,
+    "ast_hash": "ede1441182194318dba2ac51f16c427d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/store/controller/StoreController.java": {
@@ -3552,9 +3552,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/SalesArticleResponse.java": {
-    "mtime": 1793956282.2245986,
-    "seen": 1793956444.3412993,
-    "ast_hash": "f9f5435cc8ea4fbcb767f17aedd05983",
+    "mtime": 1794205632.9156322,
+    "seen": 1794205770.6806061,
+    "ast_hash": "554a1b770f81043e6c8235181ff0ff4f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/SalesHistoryDay.java": {
@@ -3570,9 +3570,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesChartDialog.tsx": {
-    "mtime": 1794049341.1391225,
-    "seen": 1794049414.7323222,
-    "ast_hash": "e502d06d3ff1a62ffe1bcde0f4044d5d",
+    "mtime": 1794207771.1306398,
+    "seen": 1794207950.716216,
+    "ast_hash": "d74cd8abce7a4c2c80ad9dbfc7e98659",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/controller/DocumentTransferController.java": {
@@ -4074,9 +4074,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/repository/CadencierImportRepository.java": {
-    "mtime": 1793640342.335422,
-    "seen": 1793640475.971191,
-    "ast_hash": "70ab7b655ec047e0f99d4ad60425767d",
+    "mtime": 1794205632.0964086,
+    "seen": 1794205770.660907,
+    "ast_hash": "ea1154e76ecafd9cd368ddc3bc1ec29c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/service/CadencierService.java": {
@@ -7992,9 +7992,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794078636.7551134,
-    "seen": 1794078682.8104203,
-    "ast_hash": "6d5a67cfeecd1d623db354a0b72e533a",
+    "mtime": 1794205822.3777409,
+    "seen": 1794207950.6957028,
+    "ast_hash": "0604209eb7722b24e3cb729d44397a8d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -9480,39 +9480,39 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/NegativeStockReport.java": {
-    "mtime": 1794165552.5598538,
-    "seen": 1794165738.6805677,
-    "ast_hash": "ed5fbfca2d54bccd3e3edc457df762b3",
+    "mtime": 1794207719.8170245,
+    "seen": 1794207950.6282976,
+    "ast_hash": "4a3af47c3afe1711a4a185886f75be45",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/NegativeStockRequest.java": {
-    "mtime": 1794165551.7799172,
-    "seen": 1794165738.6805677,
-    "ast_hash": "0c1f938b688d049629b212d011e79a1f",
+    "mtime": 1794207719.8170245,
+    "seen": 1794207950.6282976,
+    "ast_hash": "5b8616ef934f8a6074a54814d0cf0092",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/repository/NegativeStockRepository.java": {
-    "mtime": 1794165596.907319,
-    "seen": 1794165738.685068,
-    "ast_hash": "a201d2d2cb68d7921561c5e817302f67",
+    "mtime": 1794207719.8170245,
+    "seen": 1794207950.6333945,
+    "ast_hash": "f2d9c35d78a18d5490a1a6db9f008364",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/NegativeStockService.java": {
-    "mtime": 1794165597.6943688,
-    "seen": 1794165738.6868262,
-    "ast_hash": "a711a908422a800adf5b8315811a74e0",
+    "mtime": 1794207719.81803,
+    "seen": 1794207950.6333945,
+    "ast_hash": "20476ff449cb9cdd35de014d31899317",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/NegativeStockIntegrationTests.java": {
-    "mtime": 1794165794.7202146,
-    "seen": 1794165893.8586633,
-    "ast_hash": "ecf8ca75e3e347565a8e221f738d5385",
+    "mtime": 1794207736.4037013,
+    "seen": 1794207950.6739054,
+    "ast_hash": "987cb4f5cb20eddc623f5c9aeef5ebad",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/NegativeStockReport.tsx": {
-    "mtime": 1794165732.6586916,
-    "seen": 1794165893.898964,
-    "ast_hash": "d9d3b4bf9dff0556ff58dc888d88f96a",
+    "mtime": 1794207855.424021,
+    "seen": 1794207950.7146642,
+    "ast_hash": "c6571e3e0b846e6052b8493cc1bcc616",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/controller/DownloadController.java": {

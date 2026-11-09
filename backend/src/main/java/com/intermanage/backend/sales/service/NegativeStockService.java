@@ -22,6 +22,7 @@ import com.intermanage.backend.product.repository.ProductImportRepository;
 import com.intermanage.backend.sales.component.RegionGroups;
 import com.intermanage.backend.sales.dto.NegativeStockDelivery;
 import com.intermanage.backend.sales.dto.NegativeStockReport;
+import com.intermanage.backend.sales.dto.NegativeStockReport.Counterpart;
 import com.intermanage.backend.sales.dto.NegativeStockReport.Item;
 import com.intermanage.backend.sales.dto.NegativeStockRequest;
 import com.intermanage.backend.sales.repository.NegativeStockRepository;
@@ -48,6 +49,9 @@ public class NegativeStockService {
     /** Mięso, garmaż i wyroby własne: stany schodzą na minus przez produkcję, nie przez złe kody. */
     private static final List<String> PRODUCTION_REGIONS = List.of("24", "36", "46");
     private static final int MONEY_SCALE = 2;
+    public static final int DEFAULT_PAIR_TOLERANCE = 20;
+    /** Mniejsze minusy (-1) pasowałyby do każdego artykułu ze stanem 1. */
+    private static final BigDecimal MIN_PAIR_QUANTITY = BigDecimal.valueOf(2);
 
     private final NegativeStockRepository negatives;
     private final StockGapRepository gaps;
@@ -85,6 +89,10 @@ public class NegativeStockService {
         }
         boolean withProduction = Boolean.TRUE.equals(request.withProduction());
         List<String> nomenclatures = request.nomenclatures() != null ? request.nomenclatures() : List.of();
+        int tolerance = request.pairTolerance() != null ? request.pairTolerance() : DEFAULT_PAIR_TOLERANCE;
+        if (tolerance < 1 || tolerance > 50) {
+            throw ApiException.badRequest("Różnica stanu podobnego artykułu musi być od 1 do 50%.");
+        }
 
         sales.tuneForReport();
         LocalDate lastSaleDate = gaps.findLastSaleDate(storeId).orElse(null);
@@ -95,6 +103,13 @@ public class NegativeStockService {
         Map<String, ArticleReceipts> receipts = negatives
                 .findReceipts(storeId, periodFrom.atStartOfDay(), periodTo.atStartOfDay()).stream()
                 .collect(Collectors.toMap(ArticleReceipts::getItm8, Function.identity()));
+        BigDecimal share = BigDecimal.valueOf(tolerance).movePointLeft(2);
+        Map<String, List<Counterpart>> counterparts = negatives
+                .findCounterparts(storeId, MIN_PAIR_QUANTITY, BigDecimal.ONE.subtract(share), BigDecimal.ONE.add(share),
+                        salesFrom, salesTo)
+                .stream()
+                .collect(Collectors.groupingBy(NegativeStockRepository.Counterpart::getNegativeItm8,
+                        Collectors.mapping(NegativeStockService::counterpart, Collectors.toList())));
 
         List<Item> items = new ArrayList<>();
         for (NegativeArticle article : negatives.findArticles(storeId, salesFrom, salesTo,
@@ -102,7 +117,8 @@ public class NegativeStockService {
             if (!isReported(article.getSubfamilyCode(), withProduction || !nomenclatures.isEmpty())) {
                 continue;
             }
-            Item item = item(article, receipts.get(article.getItm8()), today);
+            Item item = item(article, receipts.get(article.getItm8()),
+                    counterparts.getOrDefault(article.getItm8(), List.of()), today);
             if (matches(item, delivery, days)) {
                 items.add(item);
             }
@@ -111,7 +127,7 @@ public class NegativeStockService {
 
         return new NegativeStockReport(store.getNumber(), store.getName(),
                 productImports.findNewestReportGeneratedAt(storeId).orElse(null), lastSaleDate, salesFrom, today,
-                delivery, days, from, to, items);
+                delivery, days, from, to, tolerance, items);
     }
 
     /** Torby, kaucje i usługi nie są towarem; produkcja tylko na życzenie albo przy wybranej nomenklaturze. */
@@ -120,7 +136,8 @@ public class NegativeStockService {
                 || PRODUCTION_REGIONS.stream().noneMatch(subfamilyCode::startsWith));
     }
 
-    private static Item item(NegativeArticle article, ArticleReceipts receipts, LocalDate today) {
+    private static Item item(NegativeArticle article, ArticleReceipts receipts, List<Counterpart> counterparts,
+            LocalDate today) {
         BigDecimal stock = article.getStock();
         BigDecimal value = article.getPurchasePrice() == null ? BigDecimal.ZERO
                 : stock.multiply(article.getPurchasePrice()).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
@@ -134,7 +151,15 @@ public class NegativeStockService {
                 lastDelivery, lastDelivery != null ? ChronoUnit.DAYS.between(lastDelivery, today) : null,
                 receipts != null ? receipts.getDeliveryDays() : 0, receipts != null ? receipts.getPeriodDays() : 0,
                 receipts != null ? receipts.getSupplierCode() : null,
-                receipts != null ? receipts.getSupplierName() : null);
+                receipts != null ? receipts.getSupplierName() : null, counterparts);
+    }
+
+    private static Counterpart counterpart(NegativeStockRepository.Counterpart row) {
+        BigDecimal value = row.getPurchasePrice() == null ? BigDecimal.ZERO
+                : row.getStock().multiply(row.getPurchasePrice()).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        return new Counterpart(row.getItm8(), row.getEan(), row.getName(), row.getBrand(), row.getSubfamilyCode(),
+                row.getStock(), value, row.getSimilarity(), row.getSameSubfamily(), row.getSameBrand(),
+                row.getSoldQuantity() != null ? row.getSoldQuantity() : BigDecimal.ZERO);
     }
 
     private static boolean matches(Item item, NegativeStockDelivery delivery, int days) {

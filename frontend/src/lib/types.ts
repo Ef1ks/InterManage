@@ -1197,6 +1197,8 @@ export type SalesArticle = {
   reportGeneratedAt: string | null
   /** Rejon, rodzina, podrodzina (te, które są w nomenklaturze sklepu). */
   nomenclaturePath: NomenclatureOption[]
+  /** Artykuł na bieżącej liście cadencier sklepu. */
+  cadencier: boolean
 }
 
 /** Dostawa artykułu (przyjęcie PZ, z raportu bez korekt): ilość i cena zakupu netto sztuki. */
@@ -1858,6 +1860,23 @@ export type NegativeStockItem = {
   periodDeliveries: number
   supplierCode: string | null
   supplierName: string | null
+  /** Podobne artykuły na plusie ze stanem zbliżonym do brakującej ilości, najlepiej pasujący pierwszy. */
+  counterparts: NegativeStockCounterpart[]
+}
+
+export type NegativeStockCounterpart = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  stock: number
+  stockValue: number
+  /** Podobieństwo nazw 0-1. */
+  similarity: number
+  sameSubfamily: boolean
+  sameBrand: boolean
+  soldQuantity: number
 }
 
 export type NegativeStockReport = {
@@ -1871,6 +1890,7 @@ export type NegativeStockReport = {
   days: number
   from: string | null
   to: string | null
+  pairTolerance: number
   items: NegativeStockItem[]
 }
 

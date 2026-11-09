@@ -9,6 +9,8 @@ import org.springframework.format.annotation.DateTimeFormat;
  * Parametry raportu ujemnych stanów. {@code delivery} domyślnie {@link NegativeStockDelivery#NO_DELIVERY_SINCE},
  * {@code days} domyślnie 14, {@code from}/{@code to} tylko przy {@link NegativeStockDelivery#DELIVERED_IN}.
  * {@code withProduction}: także rejony produkcji (24, 36, 46), których stany schodzą na minus przez produkcję.
+ * {@code pairTolerance}: o ile procent stan podobnego artykułu na plusie może się różnić od brakującej ilości
+ * (domyślnie 20: przy -100 szukamy od +80 do +120).
  */
 public record NegativeStockRequest(
         NegativeStockDelivery delivery,
@@ -16,5 +18,6 @@ public record NegativeStockRequest(
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
         Boolean withProduction,
-        List<String> nomenclatures) {
+        List<String> nomenclatures,
+        Integer pairTolerance) {
 }

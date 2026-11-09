@@ -19,7 +19,7 @@ import {
   useSalesHistory,
 } from '@/features/sales/api'
 import { type DateRange, formatRange } from '@/features/sales/periods'
-import { addDays, parseIsoDate } from '@/lib/dates'
+import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
 import type { ArticleDelivery, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -221,9 +221,19 @@ function ChartContent({
   return (
     <>
       {inline ? (
-        <div className="grid gap-1">
-          <h2 className="text-lg leading-snug font-semibold">{title(target, article.data)}</h2>
-          <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid min-w-0 gap-1">
+            <h2 className="text-lg leading-snug font-semibold">{title(target, article.data)}</h2>
+            <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
+          </div>
+          {article.data?.cadencier && (
+            <p
+              className="shrink-0 rounded-lg bg-red-600 px-4 py-2 text-base font-bold tracking-wide text-white uppercase shadow-sm dark:bg-red-700"
+              title="Artykuł jest na bieżącej liście cadencier sklepu"
+            >
+              Obecny w cadencier
+            </p>
+          )}
         </div>
       ) : (
         <DialogHeader className="pr-8">
@@ -434,6 +444,37 @@ function useStockCover(
 
 const NO_FILTER: string[] = []
 
+/** Z ilu ostatnich miesięcy dostaw wybieramy najtańszego dostawcę. */
+const SUPPLIER_MONTHS = 3
+
+/**
+ * Dostawca do pokazania przy artykule. Z przyjęć PZ z ostatnich {@link SUPPLIER_MONTHS} miesięcy każdy dostawca ma cenę
+ * ze swojej najnowszej dostawy, a wygrywa najtańszy, także gdy nie przywiózł ostatniej dostawy. Linie bez ceny (gratisy)
+ * się nie liczą. Bez dostaw w tym czasie: dostawca ostatniego przyjęcia.
+ */
+function pickSupplier(
+  deliveries: ArticleDelivery[],
+  today: string,
+): { delivery: ArticleDelivery; cheapestOf: number; outsideWindow: boolean } | null {
+  const priced = deliveries.filter((delivery) => delivery.purchasePrice != null && delivery.purchasePrice > 0)
+  if (priced.length === 0)
+    return deliveries[0] ? { delivery: deliveries[0], cheapestOf: 1, outsideWindow: false } : null
+  const since = addMonths(today.slice(0, 7), -SUPPLIER_MONTHS) + today.slice(7)
+  const recent = priced.filter((delivery) => delivery.documentDate.slice(0, 10) >= since)
+  if (recent.length === 0) return { delivery: priced[0], cheapestOf: 1, outsideWindow: true }
+  // Lista idzie od najnowszej dostawy, więc pierwsza linia dostawcy to jego aktualna cena.
+  const latestBySupplier = new Map<string, ArticleDelivery>()
+  for (const delivery of recent) {
+    const key = delivery.supplierCode ?? delivery.supplierName ?? ''
+    if (!latestBySupplier.has(key)) latestBySupplier.set(key, delivery)
+  }
+  const candidates = [...latestBySupplier.values()]
+  const cheapest = candidates.reduce((best, delivery) =>
+    (delivery.purchasePrice ?? Infinity) < (best.purchasePrice ?? Infinity) ? delivery : best,
+  )
+  return { delivery: cheapest, cheapestOf: candidates.length, outsideWindow: false }
+}
+
 /** Bieżące dane artykułu z kartoteki: stan i rotacja z ostatniego raportu kartoteki, ceny, dostawca, nomenklatura. */
 function ArticleFacts({
   storeId,
@@ -454,6 +495,8 @@ function ArticleFacts({
 }) {
   const cover = useStockCover(storeId, target, lastSaleDate, history, rangeLabel)
   const canMarkDown = useCan('INVENTORY', 'EDIT')
+  const deliveries = useArticleDeliveries(storeId, target.itm8)
+  const supplier = deliveries.data ? pickSupplier(deliveries.data, todayIso()) : null
   if (isPending)
     return <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
   if (!article) {
@@ -496,7 +539,24 @@ function ArticleFacts({
         </Fact>
       </div>
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-        {article.supplier && <Detail label="Dostawca">{article.supplier}</Detail>}
+        {supplier && (
+          <Detail label={supplier.cheapestOf > 1 ? 'Najtańszy dostawca' : 'Ostatni dostawca'}>
+            <span className="font-medium">
+              {[supplier.delivery.supplierCode, supplier.delivery.supplierName].filter(Boolean).join(' ') || '—'}
+            </span>
+            {supplier.delivery.purchasePrice != null && (
+              <span className="tabular-nums"> · {formatPrice(supplier.delivery.purchasePrice)} zł</span>
+            )}
+            <span className="text-muted-foreground">
+              {' '}
+              · {shortDate.format(parseIsoDate(supplier.delivery.documentDate.slice(0, 10)))}
+              {supplier.cheapestOf > 1 &&
+                ` · najniższa cena z ${supplier.cheapestOf} dostawców w ostatnich ${SUPPLIER_MONTHS} miesiącach`}
+              {supplier.outsideWindow && ` · brak dostaw w ostatnich ${SUPPLIER_MONTHS} miesiącach`}
+            </span>
+          </Detail>
+        )}
+        {article.supplier && <Detail label={supplier ? 'Dostawca w kartotece' : 'Dostawca'}>{article.supplier}</Detail>}
         {path && <Detail label="Nomenklatura">{path}</Detail>}
         {article.caseSize != null && <Detail label="W kartonie">{formatQuantity(article.caseSize)}</Detail>}
         {article.vatPercent != null && <Detail label="VAT">{article.vatPercent}%</Detail>}

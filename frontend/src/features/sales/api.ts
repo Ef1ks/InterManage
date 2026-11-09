@@ -384,6 +384,8 @@ export type NegativeStockQuery = {
   to: string | null
   withProduction: boolean
   nomenclatures: string[]
+  /** O ile % stan podobnego artykułu na plusie może się różnić od brakującej ilości. */
+  pairTolerance: number
 }
 
 /** Ujemne stany: sortowanie i wyszukiwanie robi strona, bo artykułów jest 2-3 tys. */
@@ -392,6 +394,7 @@ export function useNegativeStock(storeId: string, query: NegativeStockQuery, ena
     delivery: query.delivery,
     days: String(query.days),
     withProduction: String(query.withProduction),
+    pairTolerance: String(query.pairTolerance),
   })
   if (query.delivery === 'DELIVERED_IN' && query.from && query.to) {
     search.set('from', query.from)

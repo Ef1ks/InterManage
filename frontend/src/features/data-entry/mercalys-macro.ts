@@ -112,7 +112,15 @@ const MARKDOWN_SCREEN = {
   backButton: 'btnB1_Retour_LnkBouton',
   /** „ZER.” na karcie artykułu; na taryfach tego przycisku nie ma, więc mówi też, że powrót się udał. */
   resetButton: 'btnB2_RAZ_LnkBouton',
+  /**
+   * „Sprzedaż ze stratą! Minimalna cena sprzedaży wynosi … Czy potwierdzasz sprzedaż ze stratą?”: Mercalys pyta po wpisaniu
+   * ceny poniżej minimalnej. Przecenę ze stratą pracownik wybrał świadomie (okno pokazuje marżę po przecenie), więc Tak.
+   */
+  lossText: 'Minimalna cena;ze strat',
 } as const
+
+/** Pytanie o stratę pojawia się po wyjściu z pola ceny; przy cenie powyżej minimalnej go nie ma. */
+const LOSS_DIALOG_TIMEOUT_MS = 3000
 
 /** Po potwierdzeniu strona się przeładowuje, a klik w starą stronę by przepadł. */
 const AFTER_CONFIRM_SLEEP_MS = 1500
@@ -171,11 +179,14 @@ export function buildMarkdownMacro({ ean, itm8, price, from, to }: MarkdownMacro
       `SLEEP|${AFTER_PROMO_SLEEP_MS}`,
       `WEBKEY|${WINDOW}|${screen.dateToField}|^a${mercalysDate(to)}{Tab}`,
       `WEBKEY|${WINDOW}|${screen.priceField}|^a${priceText}{Tab}`,
+      `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
       `WEBVALUE|${WINDOW}|${screen.dateFromField}|${datePattern(from)}`,
       `WEBVALUE|${WINDOW}|${screen.promoCheckbox}|^tak$`,
       `WEBVALUE|${WINDOW}|${screen.dateToField}|${datePattern(to)}`,
       `WEBVALUE|${WINDOW}|${screen.priceField}|^${priceText}$`,
       `WEBCLICK|${WINDOW}|${screen.approveButton}`,
+      // Gdyby Mercalys zapytał o stratę dopiero przy zapisie; inne pytanie (Utworzyć zapis) WEBDIALOG zostawia od razu.
+      `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
       `WEBWAIT|${DIALOG}|Oui|${screen.confirmText}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${DIALOG}|Oui`,
       `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,

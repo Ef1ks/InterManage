@@ -19,6 +19,7 @@ import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.nomenclature.mapper.NomenclatureMapper;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
+import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
@@ -64,10 +65,12 @@ public class SalesReportService {
     private final SalesMapper salesMapper;
     private final NomenclatureMapper nomenclatureMapper;
     private final DocumentLineRepository documentLines;
+    private final CadencierImportRepository cadencier;
 
     public SalesReportService(SaleRepository sales, SalesImportRepository imports, ProductRepository products,
             NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper,
-            DocumentLineRepository documentLines) {
+            DocumentLineRepository documentLines, CadencierImportRepository cadencier) {
+        this.cadencier = cadencier;
         this.sales = sales;
         this.imports = imports;
         this.products = products;
@@ -182,7 +185,8 @@ public class SalesReportService {
             Short rate = documentLines.findLatestVatRate(storeId, product.getItm8());
             vatPercent = rate == null ? null : BigDecimal.valueOf(rate);
         }
-        return salesMapper.toArticle(product, path, vatPercent);
+        return salesMapper.toArticle(product, path, vatPercent,
+                cadencier.isInCadencier(storeId, product.getItm8()));
     }
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej, najwyżej {@link #DELIVERY_LIMIT}. */

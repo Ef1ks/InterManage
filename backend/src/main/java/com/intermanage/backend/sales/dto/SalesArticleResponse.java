@@ -26,5 +26,6 @@ public record SalesArticleResponse(
         BigDecimal rotation,
         BigDecimal caseSize,
         LocalDateTime reportGeneratedAt,
-        List<NomenclatureOption> nomenclaturePath) {
+        List<NomenclatureOption> nomenclaturePath,
+        boolean cadencier) {
 }
