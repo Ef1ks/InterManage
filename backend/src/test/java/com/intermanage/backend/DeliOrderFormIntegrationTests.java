@@ -247,7 +247,8 @@ class DeliOrderFormIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".LST")))
                 .andReturn().getResponse().getContentAsString();
-        assertThat(lst).isEqualTo(kabanosEan + "\r\n" + pasztetEan);
+        assertThat(lst).isEqualTo("E0000002\r\n" + "%13s".formatted(kabanosEan).replace(' ', '0') + "\r\n"
+                + "%13s".formatted(pasztetEan).replace(' ', '0') + "\r\n");
         byte[] xlsx = mvc.perform(get(url(supplier, "/orders/" + orderId + "/export/xlsx")).cookie(owner))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
         assertThat(new String(xlsx, 0, 2)).isEqualTo("PK");
@@ -326,7 +327,8 @@ class DeliOrderFormIntegrationTests {
         send(owner, put(url(supplier, "/orders/" + secondId + "/items")),
                 "{\"items\":[{\"id\":\"" + secondPasztet + "\",\"quantity\":0}]}").andExpect(status().isOk());
         assertThat(mvc.perform(get(url(shop, "/orders/" + secondId + "/export/lst")).cookie(owner))
-                .andReturn().getResponse().getContentAsString()).isEqualTo(kabanosEan);
+                .andReturn().getResponse().getContentAsString())
+                .isEqualTo("E0000001\r\n" + "%13s".formatted(kabanosEan).replace(' ', '0') + "\r\n");
         assertThat(pasztetLine).isNotBlank();
         // Realizacja z ilościami zapisuje je w tym samym kroku.
         String secondKabanos = id(secondOrder, "$.items[0].id");

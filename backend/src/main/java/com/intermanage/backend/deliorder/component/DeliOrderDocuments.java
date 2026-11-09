@@ -122,12 +122,17 @@ public class DeliOrderDocuments {
     }
 
     /**
-     * Same kody EAN, jeden w linii, w kolejności zamówienia. CRLF między liniami, bo plik trafia do programów na
-     * Windows, ale bez końca linii po ostatnim kodzie: program sklepu takiej listy nie wczytuje.
+     * Lista EAN-ów 1:1 jak plik z Impeka ({@code backend/ImpEklst.lst}): nagłówek {@code E} + liczba kodów na 7
+     * cyfrach ({@code E0000025}), potem EAN na 13 znakach (dopełniony zerami) w kolejności zamówienia, CRLF po każdej
+     * linii, także po ostatniej.
      */
     public byte[] lst(OrderDocument order) {
-        return String.join("\r\n", order.orderedLines().stream().map(Line::ean).toList())
-                .getBytes(StandardCharsets.US_ASCII);
+        List<String> eans = order.orderedLines().stream().map(Line::ean).toList();
+        StringBuilder out = new StringBuilder("E%07d\r\n".formatted(eans.size()));
+        for (String ean : eans) {
+            out.append("0".repeat(Math.max(0, 13 - ean.length()))).append(ean).append("\r\n");
+        }
+        return out.toString().getBytes(StandardCharsets.US_ASCII);
     }
 
     /** Plik PROTO6 dla programu sklepu, w kolejności zamówienia. */

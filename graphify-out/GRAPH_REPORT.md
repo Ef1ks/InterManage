@@ -1,9 +1,9 @@
 # Graph Report - intermanage  (2026-11-09)
 
 ## Corpus Check
-- 1708 files · ~1,308,678 words
+- 1708 files · ~1,308,878 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 39 file(s) not represented in the graph (top: (none) 11, .bin 9, .css 4)
+- Unclassified: 40 file(s) not represented in the graph (top: (none) 11, .bin 9, .css 4)
 
 ## Summary
 - 16278 nodes · 64690 edges · 389 communities (283 shown, 106 thin omitted)
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6e015912`
+- Built from commit: `c81fae6e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1581,6 +1581,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `api` be split into smaller, more focused modules?**
   _Cohesion score 0.020471464019851116 - nodes in this community are weakly interconnected._
 - **Why does `Document` connect `Document` to `DocumentRepository`, `jakarta.persistence.Entity`, `org.mapstruct.Mapping`, `AppUser`, `ProductionCardService`, `.headers`, `ReportReader`, `PriceCalculationItem`, `DocumentTotalsRepositoryImpl.java`, `DeliOrderDocument`, `DocumentImport`, `DeliveryNotePdf`, `DeliveryReportClosingDelivery`, `BakeryCheck`, `DocumentPrintService`, `KsefInvoicePdf.java`, `DeliveryReportService`, `Store`, `org.springframework.transaction.annotation.Transactional`, `uuid`, `DocumentTransferTarget`, `DocumentPrint`, `DocumentLine`, `KsefInvoice`, `.notFound`, `BakeryCheckService`?**
-  _High betweenness centrality (0.241) - this node is a cross-community bridge._
+  _High betweenness centrality (0.244) - this node is a cross-community bridge._
 - **Should `StaffTimeService` be split into smaller, more focused modules?**
   _Cohesion score 0.034880671387359036 - nodes in this community are weakly interconnected._

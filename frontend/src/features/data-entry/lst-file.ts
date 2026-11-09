@@ -5,11 +5,12 @@ import type { SavedFolderSpec } from '@/lib/saved-folders'
 export const LST_FOLDER: SavedFolderSpec = { key: 'data-entry-lst', label: 'Lista EAN (plik .lst)' }
 
 /**
- * Plik .LST: EAN w każdej linii, CRLF między liniami, ale bez końca linii po ostatnim kodzie, bo program sklepu takiej
- * listy nie wczytuje (jak lista EAN-ów zamówienia garmażu).
+ * Plik .LST 1:1 jak plik z Impeka (`backend/ImpEklst.lst`): nagłówek `E` + liczba kodów na 7 cyfrach (`E0000025`),
+ * potem EAN na 13 znakach (dopełniony zerami) w każdej linii, CRLF po każdej linii, także po ostatniej.
  */
 export function lstFile(eans: string[]) {
-  return new Blob([eans.join('\r\n')], { type: 'text/plain' })
+  const lines = [`E${String(eans.length).padStart(7, '0')}`, ...eans.map((ean) => ean.padStart(13, '0'))]
+  return new Blob([lines.map((line) => `${line}\r\n`).join('')], { type: 'text/plain' })
 }
 
 /** Nazwa pliku: rodzaj listy i numer dokumentu, a bez numeru dzisiejsza data. */
@@ -17,10 +18,10 @@ export function lstFileName(prefix: string, documentNumber: string | null | unde
   return `${prefix}_${(documentNumber || todayIso()).replace(/[^\p{L}\d-]+/gu, '_')}.LST`
 }
 
-/** Kody z pliku .lst: pierwsza kolumna każdej linii, puste linie pominięte. */
+/** Kody z pliku .lst: pierwsza kolumna każdej linii, puste linie i nagłówek `E0000025` pominięte. */
 export function parseLst(text: string) {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim().split(/[\s;,]+/)[0])
-    .filter(Boolean)
+    .filter((code) => Boolean(code) && !/^E\d+$/i.test(code))
 }
