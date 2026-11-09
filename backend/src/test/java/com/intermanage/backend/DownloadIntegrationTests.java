@@ -107,6 +107,64 @@ class DownloadIntegrationTests {
         assertThat(list(employee)).hasSize(1);
     }
 
+    @Test
+    void newVersionIsAnnouncedWithChangelogUntilSeen() throws Exception {
+        Cookie employee = employee();
+        String id = JsonPath.read(mvc.perform(multipart(SETTINGS)
+                        .file(new MockMultipartFile("file", "AutoJob.exe", "application/octet-stream", new byte[] {1}))
+                        .param("title", "AutoJob").param("version", "v36").cookie(owner).with(csrf()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$[0].id");
+
+        // Kto wgrał, ten wersję zna; pracownik dostaje baner.
+        assertThat(JsonPath.<Boolean>read(list(owner).get(0), "$.newVersion")).isFalse();
+        assertThat(JsonPath.<Boolean>read(list(employee).get(0), "$.newVersion")).isTrue();
+
+        // Pobranie zdejmuje baner.
+        mvc.perform(get("/api/downloads/" + id + "/file").cookie(employee)).andExpect(status().isOk());
+        assertThat(JsonPath.<Boolean>read(list(employee).get(0), "$.newVersion")).isFalse();
+
+        // Nowa wersja z listą zmian: baner wraca, wpisy w kolejności Dodano, Zmieniono, Naprawiono.
+        mvc.perform(multipart(HttpMethod.PUT, SETTINGS + "/" + id + "/file")
+                        .file(new MockMultipartFile("file", "AutoJob.exe", "application/octet-stream", new byte[] {2}))
+                        .param("version", "v37").param("added", "- Makro korekty\n\n• Skrót Alt+R")
+                        .param("fixed", "Esc zatrzymuje makro").cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        Map<String, Object> item = list(employee).get(0);
+        assertThat(JsonPath.<Boolean>read(item, "$.newVersion")).isTrue();
+        assertThat(JsonPath.<List<String>>read(item, "$.file.changes[*].text"))
+                .containsExactly("Makro korekty", "Skrót Alt+R", "Esc zatrzymuje makro");
+        assertThat(JsonPath.<List<String>>read(item, "$.file.changes[*].kind"))
+                .containsExactly("ADDED", "ADDED", "FIXED");
+
+        // „Mam już tę wersję” też zdejmuje baner.
+        mvc.perform(post("/api/downloads/" + id + "/seen").cookie(employee).with(csrf())).andExpect(status().isOk());
+        assertThat(JsonPath.<Boolean>read(list(employee).get(0), "$.newVersion")).isFalse();
+
+        // Poprawka listy zmian nie ogłasza wersji drugi raz, stare wpisy dostają znacznik.
+        mvc.perform(put(SETTINGS + "/" + id + "/changes").cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"changed\":\"Szybsze makra\"}"))
+                .andExpect(status().isOk());
+        item = list(employee).get(0);
+        assertThat(JsonPath.<Boolean>read(item, "$.newVersion")).isFalse();
+        assertThat(JsonPath.<List<String>>read(item, "$.file.changes[*].text")).containsExactly("Szybsze makra");
+        assertThat(jdbc.queryForObject("select count(*) from download_file_changes where removed_at is not null"
+                + " and file_id in (select id from download_files where download_id = ?::uuid)", Integer.class, id))
+                .isEqualTo(3);
+
+        // Wersja wgrana po cichu nie daje banera.
+        mvc.perform(multipart(HttpMethod.PUT, SETTINGS + "/" + id + "/file")
+                        .file(new MockMultipartFile("file", "AutoJob.exe", "application/octet-stream", new byte[] {3}))
+                        .param("version", "v37.1").param("announce", "false").cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        assertThat(JsonPath.<Boolean>read(list(employee).get(0), "$.newVersion")).isFalse();
+
+        // Historia: wszystkie wersje od najnowszej, każda ze swoją listą zmian.
+        String versions = mvc.perform(get("/api/downloads/" + id + "/versions").cookie(employee))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<String>>read(versions, "$[*].version")).containsExactly("v37.1", "v37", "v36");
+        assertThat(JsonPath.<List<String>>read(versions, "$[1].changes[*].text")).containsExactly("Szybsze makra");
+    }
+
     private void upload(String id, String name, byte[] content, String version) throws Exception {
         mvc.perform(multipart(HttpMethod.PUT, SETTINGS + "/" + id + "/file")
                         .file(new MockMultipartFile("file", name, "application/octet-stream", content))

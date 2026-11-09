@@ -202,12 +202,20 @@ public class Product {
     }
 
     /**
-     * Artykułu nie ma w kolejnym raporcie: zostaje w kartotece, ale traci CENA_CAD, bo cena z cadencier obowiązuje
-     * tylko z ostatniego raportu.
+     * Artykułu nie ma w kolejnym raporcie: zostaje w kartotece, ale traci to, co obowiązuje tylko z ostatniego raportu:
+     * CENA_CAD, stan i rotację, i nie jest już aktywny. Zwykle system sklepu przeniósł EAN na nowy ITM8 razem ze stanem,
+     * więc stary stan na starej karcie liczyłby się drugi raz (ujemne stany, zerówki, magazyn). Gdy karta wróci do
+     * raportu, {@link #seenIn} wpisze jej dane z pliku.
      */
     public void missingFrom(ProductImport productImport) {
-        if (lastSeenImport != productImport && cadencierPrice != null) {
+        if (lastSeenImport == productImport) {
+            return;
+        }
+        if (cadencierPrice != null || stock != null || rotation != null || !Boolean.FALSE.equals(active)) {
             cadencierPrice = null;
+            stock = null;
+            rotation = null;
+            active = false;
             updatedAt = Instant.now();
         }
     }

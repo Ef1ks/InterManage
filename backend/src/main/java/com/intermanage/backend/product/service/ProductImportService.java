@@ -229,7 +229,7 @@ public class ProductImportService {
             }
         }
 
-        // CENA_CAD obowiązuje tylko z bieżącego raportu: artykuły spoza pliku ją tracą.
+        // CENA_CAD, stan i rotacja obowiązują tylko z bieżącego raportu: artykuły spoza pliku je tracą.
         for (Product product : catalog.productsByItm8.values()) {
             product.missingFrom(productImport);
         }

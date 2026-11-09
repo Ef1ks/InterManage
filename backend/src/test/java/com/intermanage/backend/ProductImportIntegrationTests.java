@@ -215,10 +215,21 @@ class ProductImportIntegrationTests {
                 .isEqualTo(new BigDecimal("8.79"));
         assertThat(jdbc.queryForObject("select cadencier_price from products where itm8 = ?", BigDecimal.class, b))
                 .isNull();
-        // Artykuł spoza pliku zostaje w kartotece z resztą danych, ale bez CENA_CAD.
+        // Artykuł spoza pliku zostaje w kartotece z resztą danych, ale bez CENA_CAD, stanu i rotacji, i nie jest
+        // aktywny: stary stan liczyłby się drugi raz, gdy system sklepu przeniósł EAN na nowy ITM8.
         Map<String, Object> productC = jdbc.queryForMap("select * from products where itm8 = ?", c);
         assertThat(productC.get("cadencier_price")).isNull();
         assertThat(productC.get("sale_price")).isEqualTo(new BigDecimal("1.99"));
+        assertThat(productC.get("stock")).isNull();
+        assertThat(productC.get("rotation")).isNull();
+        assertThat(productC.get("active")).isEqualTo(false);
+
+        // Gdy wróci do raportu, dostaje dane z pliku.
+        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"), product(c, "1.99", "4", "C")))
+                .andExpect(status().isCreated());
+        Map<String, Object> returned = jdbc.queryForMap("select * from products where itm8 = ?", c);
+        assertThat(returned.get("stock")).isEqualTo(new BigDecimal("4.000"));
+        assertThat(returned.get("active")).isEqualTo(true);
     }
 
     @Test

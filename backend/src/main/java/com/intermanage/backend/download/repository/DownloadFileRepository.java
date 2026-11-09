@@ -30,15 +30,30 @@ public interface DownloadFileRepository extends JpaRepository<DownloadFile, UUID
         Instant getUploadedAt();
 
         String getUploadedBy();
+
+        boolean getAnnounce();
     }
 
     @Query("""
             select f.download.id as downloadId, f.id as id, f.fileName as fileName, f.version as version,
                 f.sizeBytes as sizeBytes, f.sha256 as sha256, f.createdAt as uploadedAt,
-                u.displayName as uploadedBy
+                u.displayName as uploadedBy, f.announce as announce
             from DownloadFile f left join f.createdBy u where f.replacedAt is null""")
     List<Summary> findCurrentSummaries();
 
+    /** Wszystkie wersje pozycji (historia zmian), od najnowszej. */
+    @Query("""
+            select f.download.id as downloadId, f.id as id, f.fileName as fileName, f.version as version,
+                f.sizeBytes as sizeBytes, f.sha256 as sha256, f.createdAt as uploadedAt,
+                u.displayName as uploadedBy, f.announce as announce
+            from DownloadFile f left join f.createdBy u where f.download.id = :downloadId
+            order by f.createdAt desc""")
+    List<Summary> findSummaries(UUID downloadId);
+
     @Query("select f from DownloadFile f where f.download.id = :downloadId and f.replacedAt is null")
     Optional<DownloadFile> findCurrent(UUID downloadId);
+
+    /** Id obowiązującej wersji, bez wczytywania treści. */
+    @Query("select f.id from DownloadFile f where f.download.id = :downloadId and f.replacedAt is null")
+    Optional<UUID> findCurrentId(UUID downloadId);
 }

@@ -586,7 +586,7 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
         {list && list.length > 0 && (
           <p className="text-xs text-muted-foreground">
             {list.length === 50 ? 'ostatnie 50 przyjęć' : `przyjęcia: ${list.length}`}, od najnowszej · cena zakupu
-            netto
+            netto po korektach
           </p>
         )}
       </div>
@@ -609,7 +609,7 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
               <col className="w-20" />
               <col />
               <col className="w-20" />
-              <col className="w-36" />
+              <col className="w-52" />
               <col className="w-28" />
             </colgroup>
             <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
@@ -644,12 +644,46 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
                   <td className="truncate px-3 py-1.5" title={delivery.supplierName ?? undefined}>
                     {delivery.supplierName ?? delivery.supplierCode ?? '—'}
                   </td>
-                  <td className="px-3 py-1.5 text-right">{formatQuantity(delivery.quantity)}</td>
+                  <td className="px-3 py-1.5 text-right">
+                    {formatQuantity(delivery.quantity)}
+                    <BeforeCorrection
+                      changed={delivery.originalQuantity != null && delivery.originalQuantity !== delivery.quantity}
+                    >
+                      {delivery.originalQuantity != null && formatQuantity(delivery.originalQuantity)}
+                    </BeforeCorrection>
+                  </td>
                   <td className="px-3 py-1.5 text-right whitespace-nowrap">
                     <PriceChange delivery={delivery} previous={list[index + 1]} />
                     {delivery.purchasePrice == null ? '—' : `${formatPrice(delivery.purchasePrice)} zł`}
+                    {delivery.originalQuantity != null && (
+                      <span
+                        className="ml-1.5 rounded bg-amber-200 px-1 py-px text-xs font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-50"
+                        title="Cena po korektach przypiętych do przyjęcia"
+                      >
+                        po korekcie
+                      </span>
+                    )}
+                    <BeforeCorrection
+                      changed={
+                        delivery.originalPurchasePrice != null &&
+                        (delivery.purchasePrice == null ||
+                          Math.abs(delivery.originalPurchasePrice - delivery.purchasePrice) >= 0.00005)
+                      }
+                    >
+                      {delivery.originalPurchasePrice != null && `${formatPrice(delivery.originalPurchasePrice)} zł`}
+                    </BeforeCorrection>
                   </td>
-                  <td className="px-3 py-1.5 text-right whitespace-nowrap">{formatZloty(delivery.purchaseValue)}</td>
+                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                    {formatZloty(delivery.purchaseValue)}
+                    <BeforeCorrection
+                      changed={
+                        delivery.originalPurchaseValue != null &&
+                        Math.abs(delivery.originalPurchaseValue - delivery.purchaseValue) >= 0.005
+                      }
+                    >
+                      {delivery.originalPurchaseValue != null && formatZloty(delivery.originalPurchaseValue)}
+                    </BeforeCorrection>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -745,6 +779,16 @@ function ArticleProtocols({ storeId, itm8 }: { storeId: string; itm8: string }) 
         </div>
       )}
     </section>
+  )
+}
+
+/** Wartość z bonu sprzed korekt, przekreślona pod wartością po korektach; bez zmiany nic. */
+function BeforeCorrection({ changed, children }: { changed: boolean; children: ReactNode }) {
+  if (!changed) return null
+  return (
+    <span className="block text-xs text-muted-foreground line-through" title="Z bonu, przed korektą">
+      {children}
+    </span>
   )
 }
 

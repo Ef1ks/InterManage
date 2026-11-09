@@ -6,7 +6,8 @@ import java.util.UUID;
 
 /**
  * Dostawa artykułu w oknie wykresu: przyjęcie PZ z ilością i ceną zakupu netto sztuki ({@code purchaseValue} /
- * {@code quantity}, z raportu, bez korekt). Dostawca z linii przyjęcia.
+ * {@code quantity}) po korektach przypiętych do przyjęcia. Gdy korekty zmieniły ilość albo wartość, {@code original*}
+ * to wartości z bonu, inaczej są puste. Dostawca z linii przyjęcia.
  */
 public record ArticleDeliveryResponse(
         UUID documentId,
@@ -16,5 +17,9 @@ public record ArticleDeliveryResponse(
         String supplierName,
         BigDecimal quantity,
         BigDecimal purchasePrice,
-        BigDecimal purchaseValue) {
+        BigDecimal purchaseValue,
+        boolean corrected,
+        BigDecimal originalQuantity,
+        BigDecimal originalPurchasePrice,
+        BigDecimal originalPurchaseValue) {
 }

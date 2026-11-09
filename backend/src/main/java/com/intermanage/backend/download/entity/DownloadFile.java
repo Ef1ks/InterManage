@@ -47,6 +47,10 @@ public class DownloadFile {
     @Column(nullable = false, updatable = false)
     private byte[] content;
 
+    /** Czy nowa wersja pokazuje pracownikom baner „Nowa wersja”. */
+    @Column(nullable = false, updatable = false)
+    private boolean announce;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
     private AppUser createdBy;
@@ -65,13 +69,14 @@ public class DownloadFile {
     }
 
     public DownloadFile(Download download, String fileName, String version, byte[] content, String sha256,
-            AppUser createdBy) {
+            boolean announce, AppUser createdBy) {
         this.download = download;
         this.fileName = fileName;
         this.version = version;
         this.sizeBytes = content.length;
         this.sha256 = sha256;
         this.content = content;
+        this.announce = announce;
         this.createdBy = createdBy;
     }
 

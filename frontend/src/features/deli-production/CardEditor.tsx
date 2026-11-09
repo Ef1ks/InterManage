@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { ScanBarcodeIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { ArrowUpIcon, ScanBarcodeIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { useBlocker, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -28,13 +28,7 @@ import {
   useRestoreCard,
   useSaveCard,
 } from '@/features/deli-production/api'
-import {
-  expiryDate,
-  findByCode,
-  matchesName,
-  quantityFormat,
-  randomStartHour,
-} from '@/features/deli-production/format'
+import { expiryDate, findByCode, matchesName, quantityFormat, randomStartHour } from '@/features/deli-production/format'
 import { PdfButtons } from '@/features/deli-production/PdfButtons'
 import { ApiError, printFile } from '@/lib/api'
 import { formatShortDate, todayIso } from '@/lib/dates'
@@ -152,7 +146,9 @@ function CardView({ store, card }: { store: StoreSummary; card: ProductionCard }
                   <div className="font-medium">{line.name}</div>
                   {line.code && <div className="text-xs text-muted-foreground tabular-nums">{line.code}</div>}
                 </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{quantityFormat.format(line.quantity)}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {quantityFormat.format(line.quantity)}
+                </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {line.startHour}:00–{line.endHour}:00
                 </TableCell>
@@ -260,7 +256,34 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
     setFlashKey(row.key)
   }
 
+  const [highlight, setHighlight] = useState(0)
+  const [listClosed, setListClosed] = useState(false)
+  const listOpen = suggestions.length > 0 && !listClosed
+  const active = Math.min(highlight, suggestions.length - 1)
+  const listRef = useRef<HTMLUListElement>(null)
+
+  useEffect(() => {
+    listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [active, listOpen])
+
+  const changeQuery = (value: string) => {
+    setQuery(value)
+    setHighlight(0)
+    setListClosed(false)
+  }
+
   const onScan = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (listOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault()
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      setHighlight((active + step + suggestions.length) % suggestions.length)
+      return
+    }
+    if (listOpen && event.key === 'Escape') {
+      event.preventDefault()
+      setListClosed(true)
+      return
+    }
     if (event.key !== 'Enter') return
     event.preventDefault()
     const text = query.trim()
@@ -268,7 +291,8 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
       focusFirstEmpty()
       return
     }
-    const article = findByCode(articles, text) ?? suggestions[0]
+    // Wybrana strzałkami podpowiedź ma pierwszeństwo, bez wyboru zeskanowany kod przed pierwszą podpowiedzią.
+    const article = listOpen && active > 0 ? suggestions[active] : (findByCode(articles, text) ?? suggestions[0])
     if (!article) {
       toast.error(`Nie ma w bazie artykułu „${text}”`, {
         description: 'Dodaj go w zakładce Baza artykułów albo wyszukaj po nazwie.',
@@ -276,7 +300,13 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
       return
     }
     add(article)
-    setQuery('')
+    changeQuery('')
+  }
+
+  const scrollToTop = () => {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' })
+    scanInput.current?.focus({ preventScroll: true })
   }
 
   const focusFirstEmpty = () => {
@@ -323,7 +353,11 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
   }
 
   const submit = () => {
-    const wrong = new Set(rows.filter((row) => parseQuantity(row.quantity) == null || parseHour(row.startHour) == null).map((row) => row.key))
+    const wrong = new Set(
+      rows
+        .filter((row) => parseQuantity(row.quantity) == null || parseHour(row.startHour) == null)
+        .map((row) => row.key),
+    )
     setInvalid(wrong)
     if (rows.length === 0) {
       toast.error('Karta nie ma pozycji. Zeskanuj kody wyprodukowanych artykułów.')
@@ -395,7 +429,10 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
         <div className="flex flex-wrap items-center gap-2">
           {card && (
             <>
-              <PdfButtons path={cardPdfPath(store.id, card.id)} fileName={`karta-produkcji-${card.productionDate}.pdf`} />
+              <PdfButtons
+                path={cardPdfPath(store.id, card.id)}
+                fileName={`karta-produkcji-${card.productionDate}.pdf`}
+              />
               <Button variant="ghost" loading={remove.isPending} onClick={deleteCard}>
                 <Trash2Icon />
                 Usuń
@@ -414,8 +451,14 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
             autoComplete="off"
             autoFocus={!card}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => changeQuery(event.target.value)}
             onKeyDown={onScan}
+            onBlur={() => setListClosed(true)}
+            onFocus={() => setListClosed(false)}
+            role="combobox"
+            aria-expanded={listOpen}
+            aria-controls="production-article-suggestions"
+            aria-activedescendant={listOpen ? `production-article-${suggestions[active].id}` : undefined}
             disabled={basePending}
             hint={
               base && base.articles.length === 0
@@ -427,25 +470,40 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
             aria-hidden
             className="pointer-events-none absolute top-6 right-3.5 size-5 -translate-y-1/2 text-muted-foreground"
           />
-          {suggestions.length > 0 && (
-            <ul className="absolute inset-x-0 top-[3.25rem] z-20 max-h-72 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg">
+          {listOpen && (
+            <ul
+              ref={listRef}
+              id="production-article-suggestions"
+              role="listbox"
+              className="absolute inset-x-0 top-[3.25rem] z-20 max-h-72 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg"
+            >
               {suggestions.map((article, index) => (
-                <li key={article.id}>
+                <li
+                  key={article.id}
+                  id={`production-article-${article.id}`}
+                  role="option"
+                  aria-selected={index === active}
+                >
                   <button
                     type="button"
+                    tabIndex={-1}
+                    data-index={index}
                     className={cn(
-                      'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-sm hover:bg-muted',
-                      index === 0 && 'bg-muted/60',
+                      'flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-sm',
+                      index === active ? 'bg-muted' : 'hover:bg-muted/60',
                     )}
                     onMouseDown={(event) => event.preventDefault()}
+                    onMouseMove={() => index !== active && setHighlight(index)}
                     onClick={() => {
                       add(article)
-                      setQuery('')
+                      changeQuery('')
                       scanInput.current?.focus()
                     }}
                   >
                     <span className="truncate">{article.name}</span>
-                    {article.code && <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{article.code}</span>}
+                    {article.code && (
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{article.code}</span>
+                    )}
                   </button>
                 </li>
               ))}
@@ -567,7 +625,17 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 md:-mx-6 md:px-6">
+        <Button
+          variant="outline"
+          size="icon-lg"
+          className="mr-auto size-12 rounded-xl"
+          aria-label="Na górę"
+          title="Na górę (do skanowania)"
+          onClick={scrollToTop}
+        >
+          <ArrowUpIcon />
+        </Button>
         {dirty && <span className="text-sm text-muted-foreground">Niezapisane zmiany</span>}
         <Button ref={saveButton} size="xl" loading={save.isPending} onClick={submit}>
           {card ? 'Zapisz zmiany' : 'Zapisz kartę'}

@@ -422,7 +422,24 @@ class SalesReportIntegrationTests {
                 .andExpect(jsonPath("$[0].purchasePrice").value(4.5))
                 .andExpect(jsonPath("$[0].purchaseValue").value(27.0))
                 .andExpect(jsonPath("$[1].documentId").value(older))
-                .andExpect(jsonPath("$[1].purchasePrice").value(4.0));
+                .andExpect(jsonPath("$[1].purchasePrice").value(4.0))
+                .andExpect(jsonPath("$[1].corrected").value(false))
+                .andExpect(jsonPath("$[1].originalPurchasePrice").doesNotExist());
+
+        // Korekta od dostawcy przypięta do przyjęcia (obniżka ceny): cena po korekcie, z bonu obok.
+        String correction = insertDocument(storeId, documentImport, "WZ", "WZ01", "2026-09-22 10:00");
+        insertDeliveryLine(correction, 1, itm8, "0", "-3");
+        jdbc.update("""
+                insert into delivery_corrections (id, delivery_id, correction_id, linked_at)
+                values (gen_random_uuid(), ?::uuid, ?::uuid, now())""", newer, correction);
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + itm8 + "/deliveries").cookie(owner))
+                .andExpect(jsonPath("$[0].corrected").value(true))
+                .andExpect(jsonPath("$[0].quantity").value(6.0))
+                .andExpect(jsonPath("$[0].purchaseValue").value(24.0))
+                .andExpect(jsonPath("$[0].purchasePrice").value(4.0))
+                .andExpect(jsonPath("$[0].originalPurchasePrice").value(4.5))
+                .andExpect(jsonPath("$[0].originalPurchaseValue").value(27.0))
+                .andExpect(jsonPath("$[1].corrected").value(false));
 
         // Straty na wykresie: likwidacje w wartości zakupu netto (w raporcie z minusem), artykułu i grupy.
         String loss = insertDocument(storeId, documentImport, "PL", "PL01", "2026-09-21 10:00");

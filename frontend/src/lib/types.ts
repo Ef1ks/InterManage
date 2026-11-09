@@ -1201,7 +1201,10 @@ export type SalesArticle = {
   cadencier: boolean
 }
 
-/** Dostawa artykułu (przyjęcie PZ, z raportu bez korekt): ilość i cena zakupu netto sztuki. */
+/**
+ * Dostawa artykułu (przyjęcie PZ): ilość i cena zakupu netto sztuki po korektach przypiętych do przyjęcia.
+ * `original*` to wartości z bonu, gdy korekty je zmieniły, inaczej `null`.
+ */
 export type ArticleDelivery = {
   documentId: string
   documentNumber: string
@@ -1211,6 +1214,10 @@ export type ArticleDelivery = {
   quantity: number
   purchasePrice: number | null
   purchaseValue: number
+  corrected: boolean
+  originalQuantity: number | null
+  originalPurchasePrice: number | null
+  originalPurchaseValue: number | null
 }
 
 /** Protokół artykułu: dokument inny niż przyjęcie i korekta; {@code label} to rodzaj do pokazania. */

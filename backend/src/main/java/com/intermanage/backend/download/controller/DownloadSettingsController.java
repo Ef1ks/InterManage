@@ -17,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.download.dto.DownloadChangesRequest;
 import com.intermanage.backend.download.dto.DownloadRequest;
 import com.intermanage.backend.download.dto.DownloadResponse;
 import com.intermanage.backend.download.service.DownloadService;
@@ -34,41 +35,60 @@ public class DownloadSettingsController {
         this.downloads = downloads;
     }
 
-    /** Nowa pozycja: multipart {@code title}, {@code description}, opcjonalnie {@code file} i {@code version}. */
+    /**
+     * Nowa pozycja: multipart {@code title}, {@code description}, opcjonalnie {@code file} z {@code version}, listą
+     * zmian ({@code added}, {@code changed}, {@code fixed}: wpis w linii) i {@code announce} (baner u pracowników).
+     */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<DownloadResponse> create(@RequestParam String title,
             @RequestParam(required = false) String description,
             @RequestParam(required = false) MultipartFile file, @RequestParam(required = false) String version,
+            @RequestParam(required = false) String added, @RequestParam(required = false) String changed,
+            @RequestParam(required = false) String fixed, @RequestParam(defaultValue = "true") boolean announce,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        downloads.create(valid(title, description), file, version, principal.getId());
-        return downloads.list(true);
+        downloads.create(valid(title, description), file, version, new DownloadChangesRequest(added, changed, fixed),
+                announce, principal.getId());
+        return downloads.list(true, principal.getId());
     }
 
     @PutMapping("/{id}")
-    public List<DownloadResponse> update(@PathVariable UUID id, @Valid @RequestBody DownloadRequest request) {
+    public List<DownloadResponse> update(@PathVariable UUID id, @Valid @RequestBody DownloadRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
         downloads.update(id, request);
-        return downloads.list(true);
+        return downloads.list(true, principal.getId());
     }
 
-    /** Nowa wersja pliku (multipart {@code file}, opcjonalnie {@code version}). */
+    /** Nowa wersja pliku (multipart {@code file}, opcjonalnie wersja, lista zmian i {@code announce}). */
     @PutMapping(path = "/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<DownloadResponse> replaceFile(@PathVariable UUID id, @RequestParam("file") MultipartFile file,
-            @RequestParam(required = false) String version, @AuthenticationPrincipal AppUserPrincipal principal) {
-        downloads.replaceFile(id, file, version, principal.getId());
-        return downloads.list(true);
+            @RequestParam(required = false) String version, @RequestParam(required = false) String added,
+            @RequestParam(required = false) String changed, @RequestParam(required = false) String fixed,
+            @RequestParam(defaultValue = "true") boolean announce,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        downloads.replaceFile(id, file, version, new DownloadChangesRequest(added, changed, fixed), announce,
+                principal.getId());
+        return downloads.list(true, principal.getId());
+    }
+
+    /** Poprawka listy zmian obowiązującej wersji (bez nowego pliku i bez ponownego banera). */
+    @PutMapping("/{id}/changes")
+    public List<DownloadResponse> updateChanges(@PathVariable UUID id, @RequestBody DownloadChangesRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        downloads.updateChanges(id, request, principal.getId());
+        return downloads.list(true, principal.getId());
     }
 
     /** Usuwa pozycję (znacznik); „Przywróć” to {@code POST …/{id}/restore}. */
     @DeleteMapping("/{id}")
     public List<DownloadResponse> remove(@PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
         downloads.remove(id, principal.getId());
-        return downloads.list(true);
+        return downloads.list(true, principal.getId());
     }
 
     @PostMapping("/{id}/restore")
-    public List<DownloadResponse> restore(@PathVariable UUID id) {
+    public List<DownloadResponse> restore(@PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
         downloads.restore(id);
-        return downloads.list(true);
+        return downloads.list(true, principal.getId());
     }
 
     private static DownloadRequest valid(String title, String description) {

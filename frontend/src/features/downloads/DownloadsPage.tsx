@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DownloadIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { CheckIcon, HistoryIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -8,15 +8,17 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCurrentUser } from '@/features/auth/api'
 import {
-  downloadFileUrl,
   useDownloads,
+  useMarkDownloadSeen,
   useRemoveDownload,
   useRestoreDownload,
   type Download,
 } from '@/features/downloads/api'
+import { ChangeList, DownloadButton, VersionHistoryDialog } from '@/features/downloads/changes'
 import { DownloadFormDialog } from '@/features/downloads/DownloadFormDialog'
 import { formatSize } from '@/features/downloads/format'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 const date = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium' })
 
@@ -110,11 +112,19 @@ function DownloadCard({
   onRemove: () => void
 }) {
   const { file } = download
+  const [history, setHistory] = useState(false)
   return (
-    <Card className="gap-4 p-5">
+    <Card className={cn('gap-4 p-5', download.newVersion && 'ring-2 ring-sky-400 dark:ring-sky-500')}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold">{download.title}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">{download.title}</h2>
+            {download.newVersion && (
+              <span className="rounded-md bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-950 dark:bg-sky-900/70 dark:text-sky-100">
+                Nowa wersja
+              </span>
+            )}
+          </div>
           {file && (
             <p className="text-sm text-muted-foreground">
               {[file.version, formatSize(file.sizeBytes), `wgrano ${date.format(new Date(file.uploadedAt))}`]
@@ -146,18 +156,26 @@ function DownloadCard({
         </div>
       )}
 
+      {file && file.changes.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-3">
+          <h3 className="text-sm font-semibold">Co nowego{file.version ? ` w ${file.version}` : ''}</h3>
+          <ChangeList changes={file.changes} />
+        </div>
+      )}
+
       <div className="mt-auto flex flex-wrap items-center gap-3">
         {file ? (
           <>
-            <Button
-              size="lg"
-              nativeButton={false}
-              render={<a href={downloadFileUrl(download.id)} download={file.fileName} />}
-            >
-              <DownloadIcon />
-              Pobierz {file.fileName}
+            <DownloadButton download={download} />
+            <Button variant="ghost" onClick={() => setHistory(true)}>
+              <HistoryIcon />
+              Historia zmian
             </Button>
-            <span className="truncate font-mono text-xs text-muted-foreground" title={`SHA-256: ${file.sha256}`}>
+            {download.newVersion && <MarkSeenButton id={download.id} />}
+            <span
+              className="ml-auto truncate font-mono text-xs text-muted-foreground"
+              title={`SHA-256: ${file.sha256}`}
+            >
               SHA-256 {file.sha256.slice(0, 12)}…
             </span>
           </>
@@ -165,6 +183,17 @@ function DownloadCard({
           <p className="text-sm text-amber-700 dark:text-amber-300">Bez pliku - pracownicy jeszcze tego nie widzą.</p>
         )}
       </div>
+      {file && <VersionHistoryDialog download={download} open={history} onOpenChange={setHistory} />}
     </Card>
+  )
+}
+
+function MarkSeenButton({ id }: { id: string }) {
+  const seen = useMarkDownloadSeen()
+  return (
+    <Button variant="ghost" onClick={() => seen.mutate(id)}>
+      <CheckIcon />
+      Mam już tę wersję
+    </Button>
   )
 }

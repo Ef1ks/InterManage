@@ -79,9 +79,14 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
         BigDecimal getQuantity();
 
         BigDecimal getPurchaseValue();
+
+        BigDecimal getCorrectedQuantity();
+
+        BigDecimal getCorrectedValue();
+
+        boolean getCorrected();
     }
 
-    /** Dostawa artykułu z historii: ilość i wartość z bonu oraz po korektach przypiętych do przyjęcia. */
     /** Linie przypiętych korekt przyjęć z CTE {@code lines}, po artykule, CTE {@code fixes}. */
     String DELIVERY_FIXES = """
             fixes as (
@@ -305,15 +310,26 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * przyjęciu są sumowane, więc cena to wartość / ilość.
      */
     @Query(value = ARTICLE_EANS + """
-            select d.id as document_id, d.number as document_number, d.document_date as document_date,
-                   max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
-                   sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
-            from document_lines l
-            join documents d on d.id = l.document_id
-            where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
-              and """ + ARTICLE_LINE + """
-            group by d.id, d.number, d.document_date
-            order by d.document_date desc, length(d.number) desc, d.number desc
+            , lines as (
+                select d.id as document_id, d.number as document_number, d.document_date, l.itm8,
+                       max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
+                       sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
+                from document_lines l
+                join documents d on d.id = l.document_id
+                where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
+                  and """ + ARTICLE_LINE + """
+                group by d.id, d.number, d.document_date, l.itm8
+            ), """ + DELIVERY_FIXES + """
+            select ln.document_id, ln.document_number, ln.document_date,
+                   max(ln.supplier_code) as supplier_code, max(ln.supplier_name) as supplier_name,
+                   sum(ln.quantity) as quantity, sum(ln.purchase_value) as purchase_value,
+                   sum(ln.quantity + coalesce(f.quantity, 0)) as corrected_quantity,
+                   sum(ln.purchase_value + coalesce(f.purchase_value, 0)) as corrected_value,
+                   bool_or(f.delivery_id is not null) as corrected
+            from lines ln
+            left join fixes f on f.delivery_id = ln.document_id and f.itm8 = ln.itm8
+            group by ln.document_id, ln.document_number, ln.document_date
+            order by ln.document_date desc, length(ln.document_number) desc, ln.document_number desc
             limit :limit
             """, nativeQuery = true)
     List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, int limit);

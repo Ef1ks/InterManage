@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useCurrentUser, useLogout } from '@/features/auth/api'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
+import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
 import { THEME_LABELS, useThemeChoice, type ThemeChoice } from '@/lib/theme'
@@ -144,6 +145,7 @@ export function AppLayout() {
             <UserMenu />
           </div>
         </header>
+        <DownloadUpdatesBanner />
         {/* Szerokie strony (data-wide-page) zajmują całą szerokość, a menu jest zwinięte do ikon. */}
         {/* Strony z data-fit-page (od lg) mają wysokość okna pod nagłówkiem i przewijają się w środku, nie całe. */}
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none lg:has-[[data-fit-page]]:flex lg:has-[[data-fit-page]]:h-[calc(100svh-3.5rem)] lg:has-[[data-fit-page]]:flex-col lg:has-[[data-fit-page]]:overflow-y-auto">

@@ -34,8 +34,20 @@ public interface SalesMapper {
 
     ZeroStockReport.Item toZeroStockItem(Product product);
 
-    @Mapping(target = "purchasePrice", expression = "java(unitPrice(delivery))")
-    ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery);
+    /** Ilość, cena i wartość po korektach; z bonu tylko, gdy korekty coś w nich zmieniły. */
+    default ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery) {
+        BigDecimal quantity = delivery.getCorrectedQuantity();
+        BigDecimal value = delivery.getCorrectedValue();
+        BigDecimal originalQuantity = delivery.getQuantity();
+        BigDecimal originalValue = delivery.getPurchaseValue();
+        boolean changed = quantity.compareTo(originalQuantity) != 0 || value.compareTo(originalValue) != 0;
+        return new ArticleDeliveryResponse(delivery.getDocumentId(), delivery.getDocumentNumber(),
+                delivery.getDocumentDate(), delivery.getSupplierCode(), delivery.getSupplierName(),
+                quantity, unitPrice(value, quantity), value, delivery.getCorrected(),
+                changed ? originalQuantity : null,
+                changed ? unitPrice(originalValue, originalQuantity) : null,
+                changed ? originalValue : null);
+    }
 
     @Mapping(target = "label", expression = "java(protocolLabel(protocol))")
     ArticleProtocolResponse toProtocol(DocumentLineRepository.ArticleProtocol protocol);
@@ -46,10 +58,8 @@ public interface SalesMapper {
     }
 
     /** Cena zakupu netto sztuki (kg) z sumy linii przyjęcia, do 4 miejsc jak w raporcie. */
-    default BigDecimal unitPrice(DocumentLineRepository.ArticleDelivery delivery) {
-        BigDecimal quantity = delivery.getQuantity();
-        return quantity == null || quantity.signum() == 0 ? null
-                : delivery.getPurchaseValue().divide(quantity, 4, RoundingMode.HALF_UP);
+    default BigDecimal unitPrice(BigDecimal value, BigDecimal quantity) {
+        return quantity == null || quantity.signum() == 0 ? null : value.divide(quantity, 4, RoundingMode.HALF_UP);
     }
 
     /** Budżet rejonu; {@code budget} pusty = rejon bez ustawionego budżetu. */

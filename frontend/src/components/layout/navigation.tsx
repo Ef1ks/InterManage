@@ -29,6 +29,7 @@ import { promoSetupPath } from '@/features/promo-setup/paths'
 import { downloadsPath } from '@/features/downloads/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
+import { NewDownloadsBadge } from '@/features/downloads/DownloadUpdatesBanner'
 import { salesPaths } from '@/features/sales/paths'
 import { stocktakePath } from '@/features/stocktake/paths'
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
@@ -292,6 +293,7 @@ const GROUPS: GroupSpec[] = [
         icon: DownloadIcon,
         // Pobiera każdy zalogowany, więc Ustawienia widzi każdy (z samym tym kafelkiem bez innych uprawnień).
         visible: () => true,
+        badge: () => <NewDownloadsBadge />,
       },
     ],
   },
