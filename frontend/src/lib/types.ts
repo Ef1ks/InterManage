@@ -2309,6 +2309,15 @@ export type DataEntryCatalogProduct = {
 }
 
 /** Artykuł w ustawianiu promocji. */
+/** Ceny do okna przeceny na karcie artykułu (jak w ustawianiu promocji). */
+export type MarkdownPrices = {
+  /** Cena sprzedaży brutto bez trwającej promocji. */
+  regularPrice: number | null
+  /** Cena netto sztuki z ostatniego przyjęcia PZ; pusta bez przyjęcia. */
+  lastPurchasePrice: number | null
+  lastPurchaseDate: string | null
+}
+
 export type PromotionSetupArticle = {
   /** Kod, którego szukano (bez zer wiodących). */
   code: string

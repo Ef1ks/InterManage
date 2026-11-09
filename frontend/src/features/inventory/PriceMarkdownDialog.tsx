@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { buildMarkdownMacro } from '@/features/data-entry/mercalys-macro'
 import { parseNumber } from '@/features/data-entry/grid-values'
-import { formatMoney } from '@/features/documents/format'
-import { useCreatePriceMarkdown } from '@/features/inventory/api'
+import { formatDocumentDate, formatMoney, formatPrice } from '@/features/documents/format'
+import { useCreatePriceMarkdown, useMarkdownPrices } from '@/features/inventory/api'
 import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
 import type { SalesArticle } from '@/lib/types'
@@ -16,11 +16,11 @@ import { cn } from '@/lib/utils'
 
 const percentFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 })
 
-/** Marża od sprzedaży netto przy cenie brutto; bez ceny zakupu albo VAT-u nieznana. */
-function marginAt(price: number, article: SalesArticle) {
-  if (article.purchasePrice == null || article.vatPercent == null) return null
-  const net = price / (1 + article.vatPercent / 100)
-  return ((net - article.purchasePrice) / net) * 100
+/** Marża od sprzedaży netto przy cenie brutto (jak w ustawianiu promocji); bez ceny zakupu albo VAT-u nieznana. */
+function marginAt(price: number | null, purchase: number | null, vatPercent: number | null) {
+  if (price == null || price <= 0 || purchase == null || vatPercent == null) return null
+  const net = price / (1 + vatPercent / 100)
+  return ((net - purchase) / net) * 100
 }
 
 /** Przycisk przy cenie sprzedaży na karcie artykułu. */
@@ -47,6 +47,7 @@ export function PriceMarkdownButton({ storeId, article }: { storeId: string; art
  */
 function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: SalesArticle; onDone: () => void }) {
   const create = useCreatePriceMarkdown(storeId)
+  const prices = useMarkdownPrices(storeId, article.itm8)
   const [priceText, setPriceText] = useState('')
   const [dateFrom, setDateFrom] = useState(todayIso())
   const [dateTo, setDateTo] = useState('')
@@ -56,10 +57,14 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
   const priceError = priceText.trim() !== '' && price == null ? 'Wpisz cenę, np. 2,49' : undefined
   const periodError = dateTo && dateTo < dateFrom ? 'Koniec przeceny nie może być przed początkiem' : undefined
   const ready = price != null && dateTo !== '' && !periodError
-  const regular = article.salePrice
+  // Do czasu odpowiedzi (albo przy błędzie) ceny z karty: kartoteka i cena zakupu z kartoteki.
+  const regular = prices.data ? prices.data.regularPrice : article.salePrice
+  const delivered = prices.data?.lastPurchasePrice != null
+  const purchase = delivered ? prices.data!.lastPurchasePrice : article.purchasePrice
   const notLower = price != null && regular != null && price >= regular
   const discount = price != null && regular != null && regular > 0 ? (1 - price / regular) * 100 : null
-  const margin = price != null ? marginAt(price, article) : null
+  const marginNow = marginAt(regular, purchase, article.vatPercent)
+  const margin = marginAt(price, purchase, article.vatPercent)
 
   const submit = async () => {
     if (price == null || !ready) return
@@ -99,6 +104,27 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
         </DialogDescription>
       </DialogHeader>
 
+      <dl className="grid grid-cols-3 gap-2 text-sm">
+        <Figure
+          label="Ostatnia dostawa"
+          value={purchase != null ? `${formatPrice(purchase)} zł` : '–'}
+          note={
+            prices.isPending
+              ? 'sprawdzam…'
+              : delivered
+                ? `netto, ${formatDocumentDate(prices.data!.lastPurchaseDate!)}`
+                : 'bez przyjęcia, z kartoteki'
+          }
+        />
+        <Figure label="Cena bez promocji" value={regular != null ? `${formatMoney(regular)} zł` : '–'} note="brutto" />
+        <Figure
+          label="Marża teraz"
+          value={marginNow != null ? `${percentFormat.format(marginNow)}%` : '–'}
+          note="od netto"
+          negative={marginNow != null && marginNow < 0}
+        />
+      </dl>
+
       <TextField
         label="Nowa cena sprzedaży brutto"
         inputMode="decimal"
@@ -106,7 +132,6 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
         value={priceText}
         onChange={(event) => setPriceText(event.target.value)}
         error={priceError}
-        hint={regular != null ? `Teraz ${formatMoney(regular)} zł` : undefined}
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -114,16 +139,20 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
         <DateField label="Do" value={dateTo} min={dateFrom} onChange={setDateTo} error={periodError} />
       </div>
 
-      {(discount != null || margin != null) && (
-        <p className="flex flex-wrap gap-x-4 text-sm tabular-nums">
-          {discount != null && discount > 0 && <span>Przecena {percentFormat.format(discount)}%</span>}
-          {margin != null && (
-            <span className={cn(margin < 0 && 'font-medium text-destructive')}>
-              Marża po przecenie {percentFormat.format(margin)}%
-            </span>
-          )}
-        </p>
-      )}
+      <dl className="grid grid-cols-2 gap-2 text-sm">
+        <Figure
+          label="Przecena"
+          value={discount != null && discount > 0 ? `${percentFormat.format(discount)}%` : '–'}
+          note="od ceny bez promocji"
+        />
+        <Figure
+          label="Marża po przecenie"
+          value={margin != null ? `${percentFormat.format(margin)}%` : '–'}
+          note={purchase == null ? 'brak ceny zakupu' : 'od netto, z ostatniej dostawy'}
+          negative={margin != null && margin < 0}
+          strong
+        />
+      </dl>
 
       {notLower && <Warning>Nowa cena nie jest niższa od obecnej.</Warning>}
 
@@ -134,6 +163,37 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
         </Button>
       </FormActions>
     </Form>
+  )
+}
+
+function Figure({
+  label,
+  value,
+  note,
+  negative = false,
+  strong = false,
+}: {
+  label: string
+  value: string
+  note: string
+  negative?: boolean
+  strong?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg bg-muted px-3 py-2',
+        negative && 'bg-red-200 text-red-950 dark:bg-red-900/70 dark:text-red-100',
+      )}
+    >
+      <dt className={cn('text-xs text-muted-foreground', negative && 'text-red-950/80 dark:text-red-100/80')}>
+        {label}
+      </dt>
+      <dd className={cn('tabular-nums', strong ? 'text-lg font-semibold' : 'font-medium')}>{value}</dd>
+      <dd className={cn('text-xs text-muted-foreground', negative && 'text-red-950/80 dark:text-red-100/80')}>
+        {note}
+      </dd>
+    </div>
   )
 }
 

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
@@ -24,6 +25,8 @@ import com.intermanage.backend.product.dto.PriceMarkdownIdsRequest;
 import com.intermanage.backend.product.dto.PriceMarkdownItem;
 import com.intermanage.backend.product.dto.PriceMarkdownRequest;
 import com.intermanage.backend.product.service.PriceMarkdownService;
+import com.intermanage.backend.promotion.service.PromotionSetupService;
+import com.intermanage.backend.promotion.service.PromotionSetupService.MarkdownPrices;
 
 import jakarta.validation.Valid;
 
@@ -39,14 +42,25 @@ public class PriceMarkdownController {
 
     private final PriceMarkdownService markdowns;
 
-    public PriceMarkdownController(PriceMarkdownService markdowns) {
+    private final PromotionSetupService promotionSetup;
+
+    public PriceMarkdownController(PriceMarkdownService markdowns, PromotionSetupService promotionSetup) {
         this.markdowns = markdowns;
+        this.promotionSetup = promotionSetup;
     }
 
     @GetMapping
     @PreAuthorize(VIEW)
     public List<PriceMarkdownItem> list(@PathVariable UUID storeId) {
         return markdowns.list(storeId);
+    }
+
+    /** Cena bez promocji i ostatnia dostawa artykułu do okna przeceny (jak w ustawianiu promocji); 404 spoza kartoteki. */
+    @GetMapping("/prices")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<MarkdownPrices> prices(@PathVariable UUID storeId, @RequestParam String itm8) {
+        MarkdownPrices prices = promotionSetup.markdownPrices(storeId, itm8);
+        return prices == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(prices);
     }
 
     @PostMapping

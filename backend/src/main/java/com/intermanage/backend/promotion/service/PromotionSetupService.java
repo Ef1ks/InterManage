@@ -1,5 +1,6 @@
 package com.intermanage.backend.promotion.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -40,6 +41,19 @@ public class PromotionSetupService {
                 : repository.findPrices(storeId, itm8s, LocalDate.now(StoreTime.ZONE)).stream()
                         .collect(Collectors.toMap(ArticlePrices::getItm8, Function.identity()));
         return products.stream().map(product -> article(product, prices.get(product.itm8()))).toList();
+    }
+
+    /** Cena zwykła i ostatni zakup jednego artykułu po ITM8 (okno przeceny na karcie artykułu); {@code null} spoza kartoteki. */
+    @Transactional(readOnly = true)
+    public MarkdownPrices markdownPrices(UUID storeId, String itm8) {
+        return repository.findPrices(storeId, List.of(itm8), LocalDate.now(StoreTime.ZONE)).stream().findFirst()
+                .map(prices -> new MarkdownPrices(prices.getRegularPrice(), prices.getLastPurchasePrice(),
+                        prices.getLastPurchaseDate() != null ? prices.getLastPurchaseDate().toLocalDate() : null))
+                .orElse(null);
+    }
+
+    /** Ceny do okna przeceny; {@code lastPurchasePrice} pusta, gdy artykuł nie miał przyjęcia PZ. */
+    public record MarkdownPrices(BigDecimal regularPrice, BigDecimal lastPurchasePrice, LocalDate lastPurchaseDate) {
     }
 
     private static PromotionSetupArticle article(CatalogProduct product, ArticlePrices prices) {

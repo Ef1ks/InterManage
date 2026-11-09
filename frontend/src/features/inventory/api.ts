@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { PriceMarkdown, ProductListPage, ProductPriceHistory } from '@/lib/types'
+import type { MarkdownPrices, PriceMarkdown, ProductListPage, ProductPriceHistory } from '@/lib/types'
 
 const path = (storeId: string) => `/stores/${storeId}/products`
 const productsKey = (storeId: string) => ['stores', storeId, 'products'] as const
@@ -46,6 +46,14 @@ export function usePriceMarkdowns(storeId: string) {
   return useQuery({
     queryKey: markdownsKey(storeId),
     queryFn: () => api<PriceMarkdown[]>(markdownsPath(storeId)),
+  })
+}
+
+/** Cena bez promocji i ostatnia dostawa artykułu do okna przeceny, liczone jak w ustawianiu promocji. */
+export function useMarkdownPrices(storeId: string, itm8: string) {
+  return useQuery({
+    queryKey: [...markdownsKey(storeId), 'prices', itm8],
+    queryFn: () => api<MarkdownPrices>(`${markdownsPath(storeId)}/prices?${new URLSearchParams({ itm8 })}`),
   })
 }
 
