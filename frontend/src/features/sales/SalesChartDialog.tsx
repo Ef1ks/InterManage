@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ZoomOut } from 'lucide-react'
+import { ChartColumnIcon, ChevronLeft, ChevronRight, EyeOffIcon, ZoomOut } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useCan } from '@/features/auth/api'
 import { bonNumber, documentPaths, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
+import { ArticleCodeFields, ArticleCodesCard } from '@/features/sales/ArticleCodes'
 import {
   type ReportKind,
   type SalesChartTarget,
@@ -187,6 +188,20 @@ function ChartContent({
   const history = useSalesHistory(storeId, kind, target, range, filter)
   const article = useSalesArticle(storeId, target.kind === 'article' ? target.itm8 : null)
   const showMargin = hasMargin(kind, target)
+  // Wykres da się schować przy artykule (zostają dane z kartoteki, dostawy i protokoły); grupa ma tylko wykres.
+  const [chartHiddenSetting, setChartHidden] = useChartHidden()
+  const chartHidden = target.kind === 'article' && chartHiddenSetting
+  // Karta przypisanych kodów otwiera się przyciskiem przy polach ITM8 i EAN; wraca zamknięta przy innym artykule.
+  const [codesOpen, setCodesOpen] = useState(false)
+  const codeFields =
+    target.kind === 'article' ? (
+      <ArticleCodeFields
+        itm8={target.itm8}
+        ean={article.data?.ean ?? target.ean}
+        codesOpen={codesOpen}
+        onToggleCodes={() => setCodesOpen((open) => !open)}
+      />
+    ) : null
 
   const quantity: Series = { label: 'Ilość', value: (f) => f.quantity, format: formatQuantity, unit: 'ilość' }
   const sale: Series = {
@@ -225,7 +240,10 @@ function ChartContent({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid min-w-0 gap-1">
             <h2 className="text-lg leading-snug font-semibold">{title(target, article.data)}</h2>
-            <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
+            {subtitle(target, article.data) && (
+              <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
+            )}
+            {codeFields && <div className="mt-1">{codeFields}</div>}
           </div>
           {article.data?.cadencier && (
             <p
@@ -239,8 +257,13 @@ function ChartContent({
       ) : (
         <DialogHeader className="pr-8">
           <DialogTitle className="text-lg leading-snug">{title(target, article.data)}</DialogTitle>
-          <DialogDescription>{subtitle(target, article.data)}</DialogDescription>
+          <DialogDescription>{subtitle(target, article.data) || 'Statystyki artykułu'}</DialogDescription>
+          {codeFields && <div className="pt-1">{codeFields}</div>}
         </DialogHeader>
+      )}
+
+      {target.kind === 'article' && codesOpen && (
+        <ArticleCodesCard storeId={storeId} itm8={target.itm8} onClose={() => setCodesOpen(false)} />
       )}
 
       {target.kind === 'article' && (
@@ -255,106 +278,133 @@ function ChartContent({
         />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedField label="Co pokazać" options={metrics} value={metric} onChange={setMetric} />
-        <SegmentedField
-          label="Okres wykresu"
-          options={(Object.keys(RANGES) as ChartRange[]).map((key) => ({
-            value: key,
-            label: RANGES[key].label,
-          }))}
-          value={rangeKey}
-          onChange={(value) => {
-            setZoom(null)
-            setRangeKey(value)
-          }}
-        />
-      </div>
-
-      <div
-        className={cn('grid min-w-0 gap-4 transition-opacity duration-150', history.isPlaceholderData && 'opacity-60')}
-      >
-        <div className="grid gap-2">
-          {zoomed ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setZoom(null)}>
-                <ZoomOut />
-                {RANGES[rangeKey].label}
-              </Button>
-              <div className="flex items-center gap-0.5">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Poprzednie 7 dni"
-                  disabled={zoomIndex === 0}
-                  onClick={() => zoomTo(zoomIndex - 1)}
-                >
-                  <ChevronLeft />
-                </Button>
-                <p className="min-w-44 text-center text-sm font-medium tabular-nums">
-                  {formatRange({ from: zoomed.from, to: zoomed.to })}
-                </p>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Następne 7 dni"
-                  disabled={zoomIndex === allBars.length - 1}
-                  onClick={() => zoomTo(zoomIndex + 1)}
-                >
-                  <ChevronRight />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">z okresu {formatRange(range)}</p>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">{formatRange(range)}</p>
-          )}
-          {data && viewTotal && (
-            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:auto-cols-fr sm:grid-flow-col sm:grid-cols-none">
-              <Stat label={`${bar.label} razem`}>{bar.format(total)}</Stat>
-              <Stat label="Średnio dziennie">{bar.format(days > 0 ? total / days : 0)}</Stat>
-              {line && (
-                <Stat label={line === price ? 'Średnia cena w okresie' : 'Marża % w okresie'} accent>
-                  {lineTotal == null ? '—' : line.format(lineTotal)}
-                </Stat>
-              )}
-              {line === price && <Stat label="Sprzedaż brutto razem">{formatZloty(viewTotal.saleValueGross)}</Stat>}
-              {line === margin && viewTotal.marginValue != null && (
-                <Stat label="Marża razem">{formatZloty(viewTotal.marginValue)}</Stat>
-              )}
-              <Stat label="Straty (zakup netto)">
-                <span className={cn(viewLoss > 0 && 'text-destructive')}>{formatZloty(viewLoss)}</span>
-                {viewLoss > 0 && viewTotal.saleValueGross > 0 && (
-                  <span
-                    className="ml-1.5 text-xs font-normal text-muted-foreground"
-                    title="Straty jako % sprzedaży brutto, jak w podsumowaniu sprzedaży i strat"
-                  >
-                    {formatPercentValue((viewLoss / viewTotal.saleValueGross) * 100)} sprzedaży
-                  </span>
-                )}
-              </Stat>
-            </dl>
-          )}
+      {chartHidden ? (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setChartHidden(false)}>
+            <ChartColumnIcon />
+            Pokaż wykres sprzedaży
+          </Button>
         </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <SegmentedField label="Co pokazać" options={metrics} value={metric} onChange={setMetric} />
+              {target.kind === 'article' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setChartHidden(true)}
+                  title="Schowaj wykres, zostaną dane artykułu, dostawy i protokoły. Wybór zostaje zapamiętany."
+                >
+                  <EyeOffIcon />
+                  Ukryj wykres
+                </Button>
+              )}
+            </div>
+            <SegmentedField
+              label="Okres wykresu"
+              options={(Object.keys(RANGES) as ChartRange[]).map((key) => ({
+                value: key,
+                label: RANGES[key].label,
+              }))}
+              value={rangeKey}
+              onChange={(value) => {
+                setZoom(null)
+                setRangeKey(value)
+              }}
+            />
+          </div>
 
-        {history.isError && !data ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
-        ) : !data ? (
-          <div aria-hidden className="h-80 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
-        ) : (
-          <BarChart
-            scope={`${data.from}:${data.to}`}
-            window={zoomed ?? { start: 0, end: data.days.length }}
-            bars={bars}
-            bar={bar}
-            line={line}
-            basis={basis}
-            showMargin={showMargin}
-            step={step}
-            onZoom={zoomed ? undefined : (index) => zoomTo(index)}
-          />
-        )}
-      </div>
+          <div
+            className={cn(
+              'grid min-w-0 gap-4 transition-opacity duration-150',
+              history.isPlaceholderData && 'opacity-60',
+            )}
+          >
+            <div className="grid gap-2">
+              {zoomed ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setZoom(null)}>
+                    <ZoomOut />
+                    {RANGES[rangeKey].label}
+                  </Button>
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Poprzednie 7 dni"
+                      disabled={zoomIndex === 0}
+                      onClick={() => zoomTo(zoomIndex - 1)}
+                    >
+                      <ChevronLeft />
+                    </Button>
+                    <p className="min-w-44 text-center text-sm font-medium tabular-nums">
+                      {formatRange({ from: zoomed.from, to: zoomed.to })}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Następne 7 dni"
+                      disabled={zoomIndex === allBars.length - 1}
+                      onClick={() => zoomTo(zoomIndex + 1)}
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">z okresu {formatRange(range)}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{formatRange(range)}</p>
+              )}
+              {data && viewTotal && (
+                <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:auto-cols-fr sm:grid-flow-col sm:grid-cols-none">
+                  <Stat label={`${bar.label} razem`}>{bar.format(total)}</Stat>
+                  <Stat label="Średnio dziennie">{bar.format(days > 0 ? total / days : 0)}</Stat>
+                  {line && (
+                    <Stat label={line === price ? 'Średnia cena w okresie' : 'Marża % w okresie'} accent>
+                      {lineTotal == null ? '—' : line.format(lineTotal)}
+                    </Stat>
+                  )}
+                  {line === price && <Stat label="Sprzedaż brutto razem">{formatZloty(viewTotal.saleValueGross)}</Stat>}
+                  {line === margin && viewTotal.marginValue != null && (
+                    <Stat label="Marża razem">{formatZloty(viewTotal.marginValue)}</Stat>
+                  )}
+                  <Stat label="Straty (zakup netto)">
+                    <span className={cn(viewLoss > 0 && 'text-destructive')}>{formatZloty(viewLoss)}</span>
+                    {viewLoss > 0 && viewTotal.saleValueGross > 0 && (
+                      <span
+                        className="ml-1.5 text-xs font-normal text-muted-foreground"
+                        title="Straty jako % sprzedaży brutto, jak w podsumowaniu sprzedaży i strat"
+                      >
+                        {formatPercentValue((viewLoss / viewTotal.saleValueGross) * 100)} sprzedaży
+                      </span>
+                    )}
+                  </Stat>
+                </dl>
+              )}
+            </div>
+
+            {history.isError && !data ? (
+              <p className="py-16 text-center text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
+            ) : !data ? (
+              <div aria-hidden className="h-80 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+            ) : (
+              <BarChart
+                scope={`${data.from}:${data.to}`}
+                window={zoomed ?? { start: 0, end: data.days.length }}
+                bars={bars}
+                bar={bar}
+                line={line}
+                basis={basis}
+                showMargin={showMargin}
+                step={step}
+                onZoom={zoomed ? undefined : (index) => zoomTo(index)}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {target.kind === 'article' && (
         <>
@@ -364,6 +414,29 @@ function ChartContent({
       )}
     </>
   )
+}
+
+const CHART_HIDDEN_KEY = 'intermanage.articleChartHidden'
+
+/** Czy wykres artykułu jest schowany: preferencja przeglądarki (localStorage), wspólna dla kart i okien artykułu. */
+function useChartHidden() {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem(CHART_HIDDEN_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const update = (value: boolean) => {
+    setHidden(value)
+    try {
+      if (value) window.localStorage.setItem(CHART_HIDDEN_KEY, '1')
+      else window.localStorage.removeItem(CHART_HIDDEN_KEY)
+    } catch {
+      // Bez dostępu do localStorage wybór działa do zamknięcia karty.
+    }
+  }
+  return [hidden, update] as const
 }
 
 function Stat({ label, accent, children }: { label: string; accent?: boolean; children: ReactNode }) {
@@ -385,8 +458,8 @@ function title(target: SalesChartTarget, article: SalesArticle | null | undefine
 
 function subtitle(target: SalesChartTarget, article: SalesArticle | null | undefined) {
   if (target.kind === 'group') return target.levelLabel
-  const ean = article?.ean ?? target.ean
-  return [`ITM8 ${target.itm8}`, ean && `EAN ${ean}`, article?.brand ?? target.brand].filter(Boolean).join(' · ')
+  // ITM8 i EAN mają własne pola z kopiowaniem (ArticleCodeFields), tu zostaje marka.
+  return article?.brand ?? target.brand ?? ''
 }
 
 /** Ile dni przed datą przyjęcia artykuł mógł już leżeć na półce (przyjęcie wpisane później niż wyłożony towar). */

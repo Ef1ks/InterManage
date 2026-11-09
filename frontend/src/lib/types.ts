@@ -1204,6 +1204,40 @@ export type SalesArticle = {
 }
 
 /**
+ * Kody artykułu w sklepie: główny EAN z kartoteki (`mainEan`, pusty spoza kartoteki), EAN-y z multikodów (obowiązujące
+ * i dawne) i pary ITM8 + EAN z raportów kartoteki, a przy każdym EAN-ie inne artykuły, do których jest przypisany teraz.
+ */
+export type ArticleCodes = {
+  itm8: string
+  name: string | null
+  mainEan: string | null
+  eans: ArticleCode[]
+}
+
+export type ArticleCode = {
+  ean: string
+  /** Bieżący EAN z kartoteki. */
+  main: boolean
+  /** Pierwszy i ostatni raport kartoteki z tą parą ITM8 + EAN. */
+  catalogFirstSeen: string | null
+  catalogLastSeen: string | null
+  /** Wpis z multikodów; `current` = w najnowszym raporcie multikodów. */
+  multicode: {
+    prio: boolean
+    current: boolean
+    saleUnit: string | null
+    salePack: number | null
+    priceFactor: number | null
+    salePrice: number | null
+    removalDate: string | null
+    firstSeen: string | null
+    lastSeen: string | null
+  } | null
+  /** Inne artykuły z tym kodem: MAIN (ich główny EAN), MULTICODE, CATALOG (para z raportu kartoteki). */
+  otherArticles: { itm8: string; name: string | null; source: 'MAIN' | 'MULTICODE' | 'CATALOG' }[]
+}
+
+/**
  * Dostawa artykułu (przyjęcie PZ): ilość i cena zakupu netto sztuki po korektach przypiętych do przyjęcia.
  * `original*` to wartości z bonu, gdy korekty je zmieniły, inaczej `null`.
  */

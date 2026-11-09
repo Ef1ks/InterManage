@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type { DateRange, Periods } from '@/features/sales/periods'
 import { api, ApiError, downloadFile, printFile } from '@/lib/api'
 import type {
+  ArticleCodes,
   ArticleDelivery,
   ArticleProtocol,
   CadencierImport,
@@ -193,6 +194,15 @@ export function useArticleProtocols(storeId: string, itm8: string) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'article', itm8, 'protocols'],
     queryFn: () => api<ArticleProtocol[]>(`${reportsPath(storeId)}/articles/${itm8}/protocols`),
+  })
+}
+
+/** Kody artykułu: EAN-y z kartoteki, multikodów i par z raportów oraz inne artykuły z tymi kodami. */
+export function useArticleCodes(storeId: string, itm8: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article', itm8, 'codes'],
+    queryFn: () => api<ArticleCodes>(`${reportsPath(storeId)}/articles/${itm8}/codes`),
+    enabled,
   })
 }
 

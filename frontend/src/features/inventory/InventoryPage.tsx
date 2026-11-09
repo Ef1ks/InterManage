@@ -275,6 +275,18 @@ function ProductList({
     scroller.current?.scrollTo({ top: 0 })
   }, [debouncedQuery, debouncedFilters])
 
+  // Wyszukiwanie z jednym wynikiem (np. zeskanowany EAN) od razu otwiera artykuł. Raz na wyszukiwanie, więc powrót
+  // do listy na telefonie („Lista artykułów”) nie otwiera go ponownie; wynik poprzedniego zapytania się nie liczy.
+  const autoOpened = useRef<string | null>(null)
+  const single = !list.isPlaceholderData && total === 1 && items.length === 1 ? items[0].itm8 : null
+  useEffect(() => {
+    if (!debouncedQuery.trim() || !single) return
+    const key = `${debouncedQuery}|${debouncedFilters}`
+    if (autoOpened.current === key) return
+    autoOpened.current = key
+    if (single !== selected) onSelect(single)
+  }, [debouncedQuery, debouncedFilters, single, selected, onSelect])
+
   const move = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
     event.preventDefault()

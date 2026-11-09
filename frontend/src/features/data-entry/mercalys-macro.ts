@@ -300,3 +300,74 @@ export function transferFinishLines() {
     `WINMIN|${PROGRAM_WINDOW}`,
   ]
 }
+
+/**
+ * Kody MEA: Cadencier → Lista Cadencier (ca-e064), filtr Nazwa Cad., przetworzenie pliku (ca-e029), Wybór (ca-e062),
+ * Zatwierdź, Integracja (ca-e032), Integracja, Tak, PDF, Powrót.
+ */
+const MEA_SCREEN = {
+  cadencierTab: 'mnTp_CADENCIER',
+  listMenuItem: 'mnTv_CADENCIER_ca-e064_ListeCadenciers',
+  nameFilter: 'txtZ1_LibelleCadencier_TxtBox',
+  /** Przycisk „Przetworzenie” w wierszu: `dgDetail__ctl<n + 1>_ibtC11_Traitement`, pierwszy wiersz to ctl2. */
+  rowButton: 'ibtC11_Traitement',
+  selectionButton: 'btnB11_SelectionRecherche_LnkBouton',
+  approveSelectionButton: 'btnB2_Valider_LnkBouton',
+  integrationButton: 'btnB8_Integration_LnkBouton',
+  integrateButton: 'btnB2_Integrer_LnkBouton',
+  /** „Czy potwierdzasz integrację wybranych artykułów?” */
+  integrateText: 'integracj',
+  backButton: 'btnB1_Retour_LnkBouton',
+} as const
+
+/** Pod jednym kodem MEA bywa 1-3 plików cadencier; tyle wierszy listy makro sprawdza najwyżej. */
+export const MEA_MAX_FILES = 5
+/** Po integracji Acrobat pokazuje raport; czekamy, aż okna przestaną się zmieniać. */
+const MEA_PDF_TIMEOUT_MS = 15000
+
+/**
+ * Makro kodów MEA: dla każdego kodu filtr listy cadencier i po kolei każdy plik z tym kodem (Przetworzenie, Wybór,
+ * Zatwierdź, Integracja, Integracja, Tak, zamknięcie PDF-a, Powrót). Po każdym pliku kod jest wpisywany od nowa na oznaczonej
+ * stronie (WEBMARK), a WEBIFROW czeka na przeładowaną listę, także pustą (kod bez plików); gdy plików jest mniej, przechodzi do następnego kodu. Na końcu chowa
+ * Mercalys. Wymaga odtwarzacza od wersji 37 (WEBMARK, WEBIFROW, LABEL).
+ */
+export function buildMeaMacro(codes: string[]) {
+  const screen = MEA_SCREEN
+  const out = [
+    `# Kody MEA: ${codes.length}`,
+    `WINOPEN|${PROGRAM_WINDOW}`,
+    `WEBENSURE|${WINDOW}|${screen.listMenuItem}|${screen.cadencierTab}`,
+    `WEBCLICK|${WINDOW}|${screen.listMenuItem}`,
+    `WEBWAIT|${WINDOW}|${screen.nameFilter}||${PAGE_TIMEOUT_MS}`,
+  ]
+  for (const code of codes) {
+    const label = `mea-${code}`
+    out.push(`# Kod MEA ${code}`)
+    for (let row = 1; row <= MEA_MAX_FILES; row++) {
+      out.push(
+        `# Plik ${row}`,
+        `WEBMARK|${WINDOW}|${screen.nameFilter}`,
+        `WEBKEY|${WINDOW}|${screen.nameFilter}|^a${code}{Enter}`,
+        `WEBIFROW|${WINDOW}|${screen.nameFilter}|${GRID}|${screen.rowButton}|${row}|${code}|${label}|${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${GRID}__ctl${row + 1}_${screen.rowButton}`,
+        `WEBWAIT|${WINDOW}|${screen.selectionButton}||${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
+        `WEBWAIT|${WINDOW}|${screen.approveSelectionButton}||${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${screen.approveSelectionButton}`,
+        `WEBWAIT|${WINDOW}|${screen.integrationButton}||${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${screen.integrationButton}`,
+        `WEBWAIT|${WINDOW}|${screen.integrateButton}||${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${screen.integrateButton}`,
+        `WEBWAIT|${DIALOG}|Oui|${screen.integrateText}|${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${DIALOG}|Oui`,
+        `WEBWAIT|${WINDOW}|${screen.integrationButton}||${INTEGRATION_TIMEOUT_MS}`,
+        `WINCLOSEALL|${PDF_WINDOW}|${MEA_PDF_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${screen.backButton}`,
+        `WEBWAIT|${WINDOW}|${screen.nameFilter}||${PAGE_TIMEOUT_MS}`,
+      )
+    }
+    out.push(`LABEL|${label}`)
+  }
+  out.push(`WINMIN|${PROGRAM_WINDOW}`)
+  return out.join('\r\n') + '\r\n'
+}

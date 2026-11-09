@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
+import com.intermanage.backend.product.dto.ArticleCodesResponse;
+import com.intermanage.backend.product.service.ArticleCodesService;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.DeliCostsOverview;
@@ -37,11 +39,13 @@ public class SalesReportController {
 
     private final SalesReportService salesReportService;
     private final DeliCostReportService deliCostReportService;
+    private final ArticleCodesService articleCodesService;
 
     public SalesReportController(SalesReportService salesReportService,
-            DeliCostReportService deliCostReportService) {
+            DeliCostReportService deliCostReportService, ArticleCodesService articleCodesService) {
         this.salesReportService = salesReportService;
         this.deliCostReportService = deliCostReportService;
+        this.articleCodesService = articleCodesService;
     }
 
     /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport. */
@@ -99,6 +103,13 @@ public class SalesReportController {
     @PreAuthorize(ARTICLE_VIEW)
     public SalesArticleResponse article(@PathVariable UUID storeId, @PathVariable String itm8) {
         return salesReportService.article(storeId, itm8);
+    }
+
+    /** Kody artykułu: EAN-y z kartoteki, par z raportów i multikodów oraz inne artykuły z tymi samymi kodami. */
+    @GetMapping("/articles/{itm8}/codes")
+    @PreAuthorize(ARTICLE_VIEW)
+    public ArticleCodesResponse articleCodes(@PathVariable UUID storeId, @PathVariable String itm8) {
+        return articleCodesService.codes(storeId, itm8);
     }
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ): ilość i cena zakupu, od najnowszej. */

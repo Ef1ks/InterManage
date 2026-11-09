@@ -1,4 +1,4 @@
-import { CheckIcon, RotateCcwIcon, Undo2Icon } from 'lucide-react'
+import { CheckIcon, ClipboardCopyIcon, RotateCcwIcon, Undo2Icon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { buildMeaMacro } from '@/features/data-entry/mercalys-macro'
 import { formatDocumentDate } from '@/features/documents/format'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
@@ -68,6 +69,19 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
       })
     })
 
+  const copyMacro = async () => {
+    try {
+      await navigator.clipboard.writeText(buildMeaMacro(chosen))
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+      return
+    }
+    toast.success(`Makro w schowku: kodów ${chosen.length}`, {
+      description:
+        'Naciśnij Alt+E (odtwarzacz od wersji 37): Lista Cadencier, każdy plik z kodem, integracja. Potem potwierdź wpisanie.',
+    })
+  }
+
   return (
     <>
       <PageHeader
@@ -86,7 +100,7 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
         title="Jak wpisać kody MEA"
         steps={[
           'Lista pokazuje kody MEA z wgranych dokumentów z bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
-          'Wpisz kody w Mercalys (przycisk kopiuje wszystkie zaznaczone, po jednym w wierszu).',
+          'Wpisz kody w Mercalys: „Makro do Mercalys” kopiuje makro, a Alt+E integruje w Liście Cadencier każdy plik z zaznaczonymi kodami. Można też skopiować same kody.',
           'Kliknij „Potwierdź wpisanie”: kody znikają z listy i nie wrócą przy kolejnych dostawach. Pomyłkę cofniesz w historii.',
         ]}
       />
@@ -100,6 +114,12 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
           <div className="ml-auto flex items-center gap-2">
             {chosen.length > 0 && (
               <CopyButton value={chosen.join('\n')} label={`Kopiuj zaznaczone kody (${chosen.length})`} />
+            )}
+            {chosen.length > 0 && (
+              <Button variant="outline" onClick={() => void copyMacro()}>
+                <ClipboardCopyIcon />
+                Makro do Mercalys
+              </Button>
             )}
             <Button onClick={confirm} loading={change.isPending} disabled={chosen.length === 0}>
               <CheckIcon />

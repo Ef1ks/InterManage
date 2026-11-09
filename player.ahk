@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 36.0.0.0
+;@Ahk2Exe-SetVersion 37.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 36 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 37 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -198,8 +198,10 @@ PlayMacro(rawClip) {
     closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
 
-    for index, line in lines {
-        line := Trim(line)
+    index := 0
+    while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW przeskakuje do LABEL
+        index += 1
+        line := Trim(lines[index])
         if (line = "" || SubStr(line, 1, 1) = "#")
             continue
 
@@ -405,6 +407,37 @@ PlayMacro(rawClip) {
                 report .= "`n" summary.text "`n"
                 if !summary.finished {
                     MsgBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBMARK":
+                ; WEBMARK|okno|element strony: oznacza bieżącą stronę, żeby WEBIFROW brał pod uwagę dopiero stronę po przeładowaniu
+                if (parts.Length < 3 || !MarkPage(Trim(parts[2]), Trim(parts[3]))) {
+                    MsgBox report "Nie ma strony z elementem do oznaczenia.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "LABEL":
+                ; LABEL|nazwa: cel przeskoku z WEBIFROW, sama nic nie robi
+            case "WEBIFROW":
+                ; WEBIFROW|okno|element strony listy|siatka|przycisk w wierszu|numer wiersza od 1|tekst|etykieta|limit w ms:
+                ; czeka, aż lista pokaże tylko wiersze z tekstem (np. kodem MEA wpisanym w filtr). Gdy wiersz o tym numerze jest,
+                ; idzie dalej; gdy lista ma mniej wierszy albo żadnego, przeskakuje do LABEL|etykieta.
+                if (parts.Length < 8) {
+                    MsgBox report "Linia WEBIFROW wymaga okna, strony, siatki, przycisku, numeru, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                problem := WebIfRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Integer(Trim(parts[6])), Trim(parts[7]),
+                    parts.Length >= 9 ? Integer(Trim(parts[9])) : 30000)
+                if (problem = "SKIP") {
+                    target := LabelLine(lines, Trim(parts[8]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBSHOW":
@@ -889,6 +922,72 @@ WebWait(title, element, text, timeoutMs) {
         if (A_TickCount >= deadline)
             return text = "" ? "Nie pojawił się element `"" element "`"."
                 : "Nie pojawił się element `"" element "`" z tekstem `"" text "`"."
+        Sleep 100
+    }
+}
+
+; Numer linii LABEL|nazwa za linią start; 0, gdy jej nie ma.
+LabelLine(lines, name, start) {
+    Loop lines.Length - start {
+        parts := StrSplit(Trim(lines[start + A_Index]), "|")
+        if (parts.Length >= 2 && StrUpper(Trim(parts[1])) = "LABEL" && Trim(parts[2]) = name)
+            return start + A_Index
+    }
+    return 0
+}
+
+; Tekst wiersza tabeli, w którym stoi element.
+RowTextOf(element) {
+    try {
+        node := element
+        Loop 10 {
+            node := node.parentNode
+            if (WebProp(node, "tagName") = "TR")
+                return node.innerText
+        }
+    }
+    return ""
+}
+
+; "" = wiersz o tym numerze jest i ma tekst, "SKIP" = przefiltrowana lista ma mniej wierszy, inaczej opis problemu.
+; Strona oznaczona przez WEBMARK to jeszcze stara lista sprzed filtra, więc liczy się tylko przeładowana. Pusta lista
+; musi utrzymać się 0,5 s, a wiersz bez tekstu też znaczy starą listę (gdyby przed WEBIFROW nie było WEBMARK).
+WebIfRow(title, page, grid, button, number, text, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    pattern := "i)(?<!\d)\Q" text "\E(?!\d)"
+    firstId := grid "__ctl2_" button
+    rowId := grid "__ctl" (number + 1) "_" button
+    emptySince := 0
+    Loop {
+        empty := false
+        for doc in PagesWith(title, page) {
+            mark := ""
+            try mark := WebProp(doc.body, "macroMark")
+            if (mark != "")
+                continue
+            first := ""
+            try first := doc.getElementById(firstId)
+            if (WebProp(first, "tagName") = "") {
+                empty := true
+                continue
+            }
+            if !RegExMatch(RowTextOf(first), pattern)
+                continue
+            row := ""
+            try row := doc.getElementById(rowId)
+            if (WebProp(row, "tagName") = "")
+                return "SKIP"
+            return RegExMatch(RowTextOf(row), pattern) ? "" : "Wiersz " number " listy nie ma tekstu `"" text "`"."
+        }
+        if empty {
+            if (emptySince = 0)
+                emptySince := A_TickCount
+            else if (A_TickCount - emptySince >= 500)
+                return "SKIP"
+        } else
+            emptySince := 0
+        if (A_TickCount >= deadline)
+            return "Lista nie pokazała wierszy z tekstem `"" text "`"."
         Sleep 100
     }
 }
