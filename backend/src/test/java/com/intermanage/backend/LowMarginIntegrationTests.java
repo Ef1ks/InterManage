@@ -175,6 +175,21 @@ class LowMarginIntegrationTests {
     }
 
     @Test
+    void localItm8TakesPromotionOfCatalogArticleWithTheSameEan() throws Exception {
+        requiredMargin("57", "30");
+        // Promocja z kasy jest na artykule z kartoteki, a dostawca spoza bazy przywozi go pod własnym ITM8.
+        product(LISTED, "15.00");
+        tillPromotion(LISTED, "15.00", "11.00");
+        delivery(LOCAL_ITM8, 5, "10", "100.00", "11.00", "570101");
+        jdbc.update("update document_lines set ean = '05900000000000' where itm8 = ?", LOCAL_ITM8);
+        // Bez promocji przy artykule zostaje cena z dokumentu.
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "11.00", "570101");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD)));
+    }
+
+    @Test
     void suppliersWithoutRequiredMarginAreLeftOutUntilRemovedFromTheList() throws Exception {
         requiredMargin("57", "30");
         jdbc.update("insert into suppliers (store_id, code, name) values (?::uuid, '100', 'Dostawca 100')", store);

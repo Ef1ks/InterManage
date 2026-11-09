@@ -1,4 +1,4 @@
-import { ClipboardCopyIcon } from 'lucide-react'
+import { ClipboardCopyIcon, ScanSearchIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { buildMissingItm8Macro } from '@/features/data-entry/mercalys-macro'
 import { formatDocumentDate } from '@/features/documents/format'
 import type { BaseDelivery } from '@/lib/types'
 
@@ -31,6 +32,21 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
   const [text, setText] = useState('')
   const codes = parseItm8List(text)
   const plan = delivery && codes.length > 0 ? planMacro(delivery, codes) : null
+
+  /** Makro zbiera z Mercalys kody z błędem „ITM nie istnieje” do Schowka; okno zostaje otwarte, żeby je tu wkleić. */
+  const collect = async () => {
+    if (!delivery) return
+    try {
+      await navigator.clipboard.writeText(buildMissingItm8Macro(delivery.number))
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+      return
+    }
+    toast.success('Makro w schowku', {
+      description: 'Wciśnij Alt+E. Kody ITM8 z błędem „ITM nie istnieje” trafią do schowka, potem wklej je tutaj.',
+      duration: 10_000,
+    })
+  }
 
   const submit = async () => {
     if (!plan) return
@@ -70,6 +86,11 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
             {delivery && ` (${formatDocumentDate(delivery.deliveryDate)} → ${expiryDate(delivery.deliveryDate)})`}.
           </DialogDescription>
         </DialogHeader>
+
+        <Button variant="outline" className="justify-self-start" disabled={!delivery?.number} onClick={collect}>
+          <ScanSearchIcon />
+          Zbierz brakujące ITM8 z Mercalys
+        </Button>
 
         <TextareaField
           label="Kody ITM8 (każdy w nowej linii, po przecinku albo spacji)"

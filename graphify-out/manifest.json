@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794216163.7801688,
-    "seen": 1794216277.0830107,
-    "ast_hash": "6f1224d7b77b2b2f6918bf3b28d3688d",
+    "mtime": 1794220083.337326,
+    "seen": 1794220150.18712,
+    "ast_hash": "af226bdf18d85bea073624adfd3dcc22",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -2640,9 +2640,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/repository/DocumentLineRepository.java": {
-    "mtime": 1794212669.0321593,
-    "seen": 1794212858.572875,
-    "ast_hash": "bdf4b9e88bdb762873a9cd601aac9230",
+    "mtime": 1794219176.96478,
+    "seen": 1794219208.7283218,
+    "ast_hash": "4c6537bdc3d20f58b30454f33645d2d7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/repository/DocumentRepository.java": {
@@ -6546,9 +6546,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
-    "mtime": 1794053673.0062852,
-    "seen": 1794053766.7742167,
-    "ast_hash": "297ab5b918ef742bffda1bf693b54019",
+    "mtime": 1794219117.0993264,
+    "seen": 1794219208.9074018,
+    "ast_hash": "4440e6836ffed6a372141eee64352ebb",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/itm8-macro.ts": {
@@ -7080,9 +7080,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/LowMarginIntegrationTests.java": {
-    "mtime": 1793901537.9419162,
-    "seen": 1793901650.6955972,
-    "ast_hash": "8b5d51484725468c970419e9f47aafb9",
+    "mtime": 1794219240.6407123,
+    "seen": 1794219320.434703,
+    "ast_hash": "358583f3d6a27a6ad9481f5968c98778",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/LowMarginReport.tsx": {
@@ -7992,9 +7992,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794216019.7244446,
-    "seen": 1794216277.028468,
-    "ast_hash": "7a399ef03ad13b55bfd4f5379048e950",
+    "mtime": 1794220091.1458902,
+    "seen": 1794220150.1362393,
+    "ast_hash": "879c373456e9618604e312d4036a6981",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {

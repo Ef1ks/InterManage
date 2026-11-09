@@ -229,10 +229,12 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * cena zwykła z promocji trwającej tego dnia na liście promocji, {@code tillPrice} to samo z plików kasy (promocje
      * założone ręcznie są tylko tam), {@code leaflet} artykuł w gazetce tego dnia,
      * {@code referencePrice} cena zwykła ze sprzedaży ({@link PromotionReportRepository#REGULAR_PRICES}),
-     * {@code catalogPrice} cena z kartoteki. Linie bez wartości (gratis) się nie liczą.
+     * {@code catalogPrice} cena z kartoteki. Linie bez wartości (gratis) się nie liczą. Linia z lokalnym ITM8 dostawcy
+     * ({@code 99…}, spoza kartoteki) bierze to wszystko z artykułu z kartoteki o tym EAN-ie (główny, multikody, dawne
+     * pary), bo promocja jest na artykule sklepu, a nie na ITM8 dostawcy.
      */
     @Query(value = """
-            with lines as (
+            with raw_lines as (
                 select d.id as document_id, cast(d.document_date as date) as day, l.itm8,
                        max(l.ean) as ean, max(l.name) as name, max(l.brand) as brand,
                        max(l.nomenclature_code) as nomenclature_code, max(l.supplier_code) as supplier_code,
@@ -244,24 +246,48 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                   and ((d.document_date >= :from and d.document_date < :until)
                        or cast(d.id as varchar) = any(cast(:documentIds as varchar[])))
                 group by d.id, d.document_date, l.itm8
+            ), local_eans as (
+                select distinct ltrim(btrim(r.ean), '0') as ean
+                from raw_lines r
+                where not exists (select 1 from products p where p.store_id = :storeId and p.itm8 = r.itm8)
+                  and ltrim(btrim(r.ean), '0') <> ''
+            ), local_articles as (
+                select ean, min(itm8) as itm8 from (
+                    select ltrim(btrim(p.ean), '0') as ean, p.itm8 from products p
+                    where p.store_id = :storeId and ltrim(btrim(p.ean), '0') in (select ean from local_eans)
+                    union
+                    select ltrim(btrim(pc.ean), '0'), pc.itm8 from product_codes pc
+                    where pc.store_id = :storeId and pc.current
+                      and ltrim(btrim(pc.ean), '0') in (select ean from local_eans)
+                    union
+                    select ltrim(btrim(pe.ean), '0'), p.itm8 from product_eans pe join products p on p.id = pe.product_id
+                    where p.store_id = :storeId and ltrim(btrim(pe.ean), '0') in (select ean from local_eans)
+                ) codes
+                group by ean
+            ), lines as (
+                select r.*, coalesce(a.itm8, r.itm8) as article
+                from raw_lines r
+                left join local_articles a
+                       on a.ean = ltrim(btrim(r.ean), '0')
+                      and not exists (select 1 from products p where p.store_id = :storeId and p.itm8 = r.itm8)
             ), """ + DELIVERY_FIXES + ", leaflet as (" + PromoLeafletRepository.ARTICLE_PERIODS + "), "
             + PromotionReportRepository.REGULAR_PRICES + """
             , listed as (
                 select l.document_id, l.itm8, max(p.regular_sale_price) as price
                 from lines l
-                join promotions p on p.store_id = :storeId and p.itm8 = l.itm8
+                join promotions p on p.store_id = :storeId and p.itm8 = l.article
                                  and l.day between p.start_date and p.end_date
                 group by l.document_id, l.itm8
             ), till as (
                 select l.document_id, l.itm8, max(t.regular_price) as price
                 from lines l
-                join till_promotions t on t.store_id = :storeId and t.itm8 = l.itm8
+                join till_promotions t on t.store_id = :storeId and t.itm8 = l.article
                                       and l.day between t.promo_from and t.promo_to
                 group by l.document_id, l.itm8
             ), in_leaflet as (
                 select distinct l.document_id, l.itm8
                 from lines l
-                join leaflet g on g.itm8 = l.itm8 and l.day between g.date_from and g.date_to
+                join leaflet g on g.itm8 = l.article and l.day between g.date_from and g.date_to
             )
             select l.document_id as documentId, l.itm8 as itm8, l.ean as ean, l.name as name, l.brand as brand,
                    l.nomenclature_code as nomenclatureCode, l.supplier_code as supplierCode,
@@ -277,9 +303,9 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             left join listed p on p.document_id = l.document_id and p.itm8 = l.itm8
             left join till t on t.document_id = l.document_id and t.itm8 = l.itm8
             left join in_leaflet g on g.document_id = l.document_id and g.itm8 = l.itm8
-            left join reference r on r.itm8 = l.itm8
+            left join reference r on r.itm8 = l.article
                                  and r.month = cast(date_trunc('month', l.day) as date)
-            left join products c on c.store_id = :storeId and c.itm8 = l.itm8
+            left join products c on c.store_id = :storeId and c.itm8 = l.article
             """, nativeQuery = true)
     List<DeliveryMargin> findDeliveryMargins(UUID storeId, LocalDateTime from, LocalDateTime until,
             String[] documentIds, LocalDate dataFrom, LocalDate dataTo, LocalDate referenceFrom, int minReferenceDays);

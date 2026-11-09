@@ -94,6 +94,53 @@ export function buildDeliveryMacro(documents: MacroDocument[]) {
   )
 }
 
+/** Obsługa BL bazy (ac-e034): lista plików bonów, a po Wybór linie bonu (ac-e080) z błędami. */
+const BASE_BL_SCREEN = {
+  menuItem: 'mnTv_ACHAT_ac-e034_BlEuropa',
+  selectionButton: 'btnSelection_LnkBouton',
+  /** Przycisk ekranu linii bonu: mówi, że Wybór otworzył bon. */
+  detailScreen: 'btnB3_Integration_LnkBouton',
+  /** Lista plików: nazwa `095_<nr bonu>_00538` w kolumnie 0, data w 1. */
+  filesGrid: 'dgDetail',
+  /** Linie bonu: ITM8 (13 cyfr z zerami) w kolumnie 0, błąd w kolumnie 7. */
+  linesGrid: 'dgArticles',
+  missingItm8Text: 'ITM nie istnieje',
+  /** Kolumna z kodem ITM8 od zera albo `auto`: pierwsza komórka z samym kodem do 8 cyfr. */
+  itm8Column: '0',
+  nextPageButton: 'pgrDetail_ibtSuivant',
+  pageList: 'pgrDetail_ddlGoTo',
+  /** Wiersze z błędami są na początku listy: strona bez „ITM nie istnieje” kończy przegląd. */
+  stopOnEmptyPage: '1',
+} as const
+
+/** Otwarcie dużego bonu potrafi trwać. */
+const BASE_BL_TIMEOUT_MS = 60000
+
+/**
+ * „Zbierz brakujące ITM8”: Zakup → Obsługa BL bazy, wiersz z plikiem bonu (nazwa `…_<nr bonu>_…`, zera wiodące dowolne),
+ * Wybór, a z linii bonu ze wszystkich stron kody ITM8 z błędem „ITM nie istnieje” trafiają do Schowka. Na końcu powrót
+ * na Zakup i Mercalys na pasek zadań. Wymaga odtwarzacza od wersji 38 (WEBPICKRE, WEBCOLLECT).
+ */
+export function buildMissingItm8Macro(bonNumber: string) {
+  const screen = BASE_BL_SCREEN
+  const digits = bonNumber.replace(/\D/g, '').replace(/^0+/, '')
+  return (
+    [
+      `# Zbierz brakujące ITM8: bon ${bonNumber}`,
+      `WINOPEN|${PROGRAM_WINDOW}`,
+      `WEBENSURE|${WINDOW}|${screen.menuItem}|${MENU.purchasesTab}`,
+      `WEBCLICK|${WINDOW}|${screen.menuItem}`,
+      `WEBWAIT|${WINDOW}|${screen.selectionButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBPICKRE|${WINDOW}|${screen.filesGrid}|(?<!\\d)0*${digits}(?!\\d)|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
+      `WEBWAIT|${WINDOW}|${screen.detailScreen}||${BASE_BL_TIMEOUT_MS}`,
+      `WEBCOLLECT|${WINDOW}|${screen.linesGrid}|${screen.missingItm8Text}|${screen.itm8Column}|${screen.nextPageButton}|${screen.pageList}|${screen.stopOnEmptyPage}`,
+      `WEBCLICK|${WINDOW}|${MENU.purchasesTab}`,
+      `WINMIN|${PROGRAM_WINDOW}`,
+    ].join('\r\n') + '\r\n'
+  )
+}
+
 /** Przecena: karta artykułu (ar-e001) i taryfy sprzedaży (ar-e003). */
 const MARKDOWN_SCREEN = {
   articleTab: 'mnTp_ARTICLE',

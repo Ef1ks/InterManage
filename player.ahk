@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 37.0.0.0
+;@Ahk2Exe-SetVersion 38.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 37 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 38 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -351,6 +351,29 @@ PlayMacro(rawClip) {
                     MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
+            case "WEBPICKRE":
+                ; WEBPICKRE|okno|siatka|wyrażenie regularne|limit w ms: zaznacza pierwszy wiersz, którego tekst pasuje (np. nazwa pliku z numerem bonu)
+                problem := parts.Length < 4 ? "Linia WEBPICKRE wymaga okna, siatki i wyrażenia."
+                    : WebPickRowMatching(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBCOLLECT":
+                ; WEBCOLLECT|okno|siatka|tekst wiersza|kolumna kodu od 0 albo auto|następna strona|lista stron|1 = stop na stronie bez takiego wiersza:
+                ; ze stron listy zbiera kody z wierszy z tym tekstem (np. „ITM nie istnieje”), bez powtórzeń i zer wiodących, i kładzie je do Schowka.
+                ; Mercalys stawia wiersze z błędami na początku listy, więc strona bez błędu kończy przegląd.
+                if (parts.Length < 6) {
+                    MsgBox report "Linia WEBCOLLECT wymaga okna, siatki, tekstu, kolumny i następnej strony.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                summary := WebCollect(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Trim(parts[6]), parts.Length >= 7 ? Trim(parts[7]) : "",
+                    parts.Length >= 8 && Trim(parts[8]) = "1")
+                if (summary.problem != "") {
+                    MsgBox report summary.problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                report .= summary.text "`n"
             case "WEBSET":
                 ; WEBSET|okno|id pola albo listy|wartość|limit w ms: wpisuje wartość, a lista wybiera pozycję i wywołuje swoją zmianę
                 problem := parts.Length < 4 ? "Linia WEBSET wymaga okna, pola i wartości."
@@ -1016,6 +1039,167 @@ WebPickRow(title, grid, column, text, timeoutMs) {
     }
 }
 
+; Tekst całego wiersza z pojedynczymi spacjami.
+RowText(row) => Trim(RegExReplace(StrReplace(WebProp(row, "innerText"), Chr(160), " "), "\s+", " "))
+
+; Zaznacza pierwszy wiersz, którego tekst pasuje do wyrażenia. Lista bez takiego wiersza przez 2 s to błąd, bez czekania do limitu.
+WebPickRowMatching(title, grid, pattern, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    gridSince := 0
+    Loop {
+        gridFound := false
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                rows := GridRows(doc, grid)
+                if (rows.Length > 0)
+                    gridFound := true
+                for item in rows {
+                    if RegExMatch(RowText(item.row), pattern) {
+                        try WinActivate hwnd
+                        try {
+                            ClickWithoutWaiting(doc, item.row)
+                            return WaitForSelection(doc, item.grid, item, deadline)
+                        }
+                    }
+                }
+            }
+        }
+        if gridFound {
+            if (gridSince = 0)
+                gridSince := A_TickCount
+            else if (A_TickCount - gridSince >= 2000)
+                return "Na liście nie ma wiersza pasującego do `"" pattern "`"."
+        }
+        if (A_TickCount >= deadline)
+            return gridFound ? "Na liście nie ma wiersza pasującego do `"" pattern "`"." : "Nie ma listy `"" grid "`" w oknie `"" title "`"."
+        Sleep 100
+    }
+}
+
+; Kod z wiersza: z podanej kolumny albo (auto) z pierwszej komórki z samym kodem do 8 cyfr, także dopełnionym zerami do 13.
+; Bez zer wiodących; "" = wiersz nie ma kodu.
+RowCode(row, column) {
+    if IsInteger(column) {
+        text := CellText(row, Integer(column))
+        return RegExMatch(text, "^\d+$") ? LTrim(text, "0") : ""
+    }
+    try {
+        cells := row.cells
+        Loop cells.length {
+            text := Trim(StrReplace(cells.item(A_Index - 1).innerText, Chr(160), " "))
+            if RegExMatch(text, "^0*\d{5,8}$")
+                return LTrim(text, "0")
+        }
+    }
+    return ""
+}
+
+; Wiersze siatki z pierwszej strony okna, która ją ma; czeka, aż strona się wczyta.
+VisibleGridRows(title, grid, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                rows := GridRows(doc, grid)
+                if (rows.Length > 0)
+                    return rows
+            }
+        }
+        if (A_TickCount >= deadline)
+            return []
+        Sleep 200
+    }
+}
+
+; Numer bieżącej strony i ostatniej z listy stron (pgrDetail_ddlGoTo); puste, gdy listy stron nie ma.
+PagerState(title, field) {
+    if (field = "")
+        return {current: "", last: ""}
+    for hwnd in WinGetList(title) {
+        for item in FindElements(HtmlDocuments(hwnd), field) {
+            try {
+                options := item.element.options
+                return {current: WebProp(item.element, "value"), last: WebProp(options.item(options.length - 1), "value")}
+            }
+        }
+    }
+    return {current: "", last: ""}
+}
+
+PageSignature(title, grid, field) {
+    rows := VisibleGridRows(title, grid, 0)
+    return PagerState(title, field).current "|" (rows.Length > 0 ? RowText(rows[1].row) : "")
+}
+
+WebCollect(title, grid, text, column, nextPage, pageField, stopOnEmptyPage := false) {
+    codes := []
+    seen := Map()
+    pages := 0
+    matched := 0
+    withoutCode := 0
+    wanted := RegExReplace(text, "\s+", " ")
+    Loop {
+        rows := VisibleGridRows(title, grid, 30000)
+        if (rows.Length = 0)
+            return {problem: "Nie ma listy `"" grid "`" w oknie `"" title "`" (strona " (pages + 1) ").", text: ""}
+        pages += 1
+        pageMatched := 0
+        for item in rows {
+            if !InStr(RowText(item.row), wanted)
+                continue
+            matched += 1
+            pageMatched += 1
+            code := RowCode(item.row, column)
+            if (code = "") {
+                withoutCode += 1
+                continue
+            }
+            if !seen.Has(code) {
+                seen[code] := true
+                codes.Push(code)
+            }
+        }
+        if (stopOnEmptyPage && pageMatched = 0)
+            break
+        state := PagerState(title, pageField)
+        if (state.current != "" && state.current = state.last)
+            break
+        if (pages >= 500 || !PagerAvailable(title, nextPage))
+            break
+        before := PageSignature(title, grid, pageField)
+        problem := WebClick(title, nextPage, 5000)
+        if (problem != "")
+            return {problem: problem, text: ""}
+        deadline := A_TickCount + 20000
+        Loop {
+            Sleep 200
+            after := PageSignature(title, grid, pageField)
+            if (after != before && VisibleGridRows(title, grid, 0).Length > 0)
+                break
+            if (A_TickCount >= deadline)
+                return {problem: "Lista nie przeszła na stronę " (pages + 1) ".", text: ""}
+        }
+    }
+    list := ""
+    for code in codes
+        list .= code "`r`n"
+    A_Clipboard := list
+    shown := ""
+    for code in codes {
+        if (A_Index > 40) {
+            shown .= "… i " (codes.Length - 40) " więcej`n"
+            break
+        }
+        shown .= code "`n"
+    }
+    result := "Przejrzane strony: " pages "`nWiersze z błędem `"" text "`": " matched "`n"
+    if (withoutCode > 0)
+        result .= "BEZ KODU ITM8 (sprawdź ręcznie): " withoutCode "`n"
+    result .= codes.Length = 0 ? "`nNie ma kodów do zebrania, Schowek jest pusty.`n"
+        : "`nKody w Schowku: " codes.Length ". Wklej je w Intermanage (Uzupełnij ITM8).`n`n" shown
+    return {problem: "", text: result}
+}
+
 ; Ustawia pole albo listę i sprawdza wynik; lista bez takiej pozycji to błąd, nie cicha zmiana na inną.
 WebSetValue(title, field, value, timeoutMs) {
     deadline := A_TickCount + timeoutMs
@@ -1266,16 +1450,18 @@ WaitForSelection(doc, grid, item, deadline) {
 }
 
 ; Wiersze danych siatki z numerami z setSelectedLigne; pusto, gdy strona jeszcze się ładuje.
+; Siatka "*" = każda siatka strony (gdy jej nazwy nie znamy); wiersz niesie wtedy nazwę swojej siatki.
 GridRows(doc, grid) {
     rows := []
     try {
-        if (doc.readyState != "complete" || WebProp(doc.getElementById(grid "_hiddenFocus"), "tagName") = "")
+        if (doc.readyState != "complete" || (grid != "*" && WebProp(doc.getElementById(grid "_hiddenFocus"), "tagName") = ""))
             return rows
+        name := grid = "*" ? "[^']+" : "\Q" grid "\E"
         found := doc.getElementsByTagName("tr")
         Loop found.length {
             row := found.item(A_Index - 1)
-            if RegExMatch(WebProp(row, "outerHTML"), "setSelectedLigne\('" grid "',[^,]+,(\d+),", &match)
-                rows.Push({row: row, index: match[1]})
+            if RegExMatch(WebProp(row, "outerHTML"), "setSelectedLigne\('(" name ")',[^,]+,(\d+),", &match)
+                rows.Push({row: row, index: match[2], grid: match[1]})
         }
     }
     return rows
