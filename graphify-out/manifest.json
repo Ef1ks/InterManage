@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794286359.7021344,
-    "seen": 1794286403.778212,
-    "ast_hash": "4a716e08f1b7c6f6a702abcfa9f116da",
+    "mtime": 1794297655.3346772,
+    "seen": 1794297702.5742326,
+    "ast_hash": "5cf1aa6abb9e03deffb38bf8bff96522",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4488,15 +4488,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryGrid.tsx": {
-    "mtime": 1794092950.8426979,
-    "seen": 1794093023.0613675,
-    "ast_hash": "f38474a906382ffeac5affa67f0e143b",
+    "mtime": 1794297618.1350996,
+    "seen": 1794297702.5139797,
+    "ast_hash": "00e678bc2fbd132946167f49dc78f078",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1794244198.7652793,
-    "seen": 1794244276.2795467,
-    "ast_hash": "5e013e784eebd8329790d8041451ef07",
+    "mtime": 1794296662.3036754,
+    "seen": 1794296685.615455,
+    "ast_hash": "15b67fbcadd63852e88ea575bb6c6ec2",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4524,9 +4524,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/rows.ts": {
-    "mtime": 1793956837.9188774,
-    "seen": 1793957209.428518,
-    "ast_hash": "2b249a83c48e0e9fe40a6f9ab324985c",
+    "mtime": 1794296644.4876406,
+    "seen": 1794296685.6199915,
+    "ast_hash": "b9a38ba5cadc64477cfa72b8aa909cdc",
     "semantic_hash": ""
   },
   "frontend/src/store/dataEntryDraftSlice.ts": {
@@ -4836,9 +4836,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/SplitQuantityDialog.tsx": {
-    "mtime": 1793527865.5138268,
-    "seen": 1793527921.093099,
-    "ast_hash": "7228457667e9c9a3cdfbefe5ecc52be6",
+    "mtime": 1794296626.353952,
+    "seen": 1794296685.6169677,
+    "ast_hash": "bdbed38fbaafc6be7b7f1041d88eb3c7",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/invoice-totals.ts": {
@@ -7992,9 +7992,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794246076.5471177,
-    "seen": 1794246140.830273,
-    "ast_hash": "a43885e46cd570b1d40e922af1d6a1a0",
+    "mtime": 1794297502.7393627,
+    "seen": 1794297702.5179796,
+    "ast_hash": "6d5d8c70e26ee4e66a98a056f71afdac",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -9813,6 +9813,24 @@
     "mtime": 1794250299.7602005,
     "seen": 1794250469.1878498,
     "ast_hash": "4baaa229a33f615cc1b097f7a561ed1f",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/data-entry/PluMacroDialog.tsx": {
+    "mtime": 1794296602.0837195,
+    "seen": 1794296685.6169677,
+    "ast_hash": "94e55affef81307473adb6b93522f571",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/data-entry/plu-macro.ts": {
+    "mtime": 1794296518.632502,
+    "seen": 1794296685.6194859,
+    "ast_hash": "73642ff90a33c48a9aebde90d2d47ba5",
+    "semantic_hash": ""
+  },
+  "info.txt": {
+    "mtime": 1794296203.820899,
+    "seen": 1794296685.670216,
+    "ast_hash": "bb8465c49d9a8dbc8b6ab276269ab7eb",
     "semantic_hash": ""
   }
 }

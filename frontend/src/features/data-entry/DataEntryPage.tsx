@@ -1,6 +1,7 @@
 import {
   ArrowRightLeftIcon,
   BadgePercentIcon,
+  SplitIcon,
   CheckCheckIcon,
   ClipboardCopyIcon,
   ChevronDownIcon,
@@ -143,7 +144,7 @@ import { orderLines } from './order-file'
 import { ProFileDialog } from './ProFileDialog'
 import { ProtocolDialog, type ProtocolLine } from './ProtocolDialog'
 import { SaveSettingsDialog } from './SaveSettingsDialog'
-import { SplitQuantityDialog } from './SplitQuantityDialog'
+import { type RowSplit, SplitQuantityDialog } from './SplitQuantityDialog'
 import { SupplierChangeDialog } from './SupplierChangeDialog'
 import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
 import { buildTransferMacro, planTransferMacro } from './transfer-macro'
@@ -168,7 +169,7 @@ import {
   withAutoSalePrice,
   withAddedRow,
   withSplitQuantity,
-  type QuantitySplit,
+  canSplitQuantity,
   withCatalogProduct,
   withCurrentPromo,
   withRefreshedCatalog,
@@ -181,6 +182,8 @@ import {
 } from './rows'
 import { useUndoHistory, useUndoShortcuts } from './undo-history'
 import { CloseInvoicesDialog } from './CloseInvoicesDialog'
+import { PluMacroDialog } from './PluMacroDialog'
+import { pluItems } from './plu-macro'
 import { XmlOpenDialog, type XmlSource } from './XmlOpenDialog'
 import { XmlSaveDialog } from './XmlSaveDialog'
 import { useXmlSave } from './xml-save'
@@ -334,7 +337,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null)
   const [correctionMacroOpen, setCorrectionMacroOpen] = useState(false)
   const [closeInvoicesOpen, setCloseInvoicesOpen] = useState(false)
-  const [splitTarget, setSplitTarget] = useState<DataEntryRow | null>(null)
+  const [pluMacroOpen, setPluMacroOpen] = useState(false)
+  const [splitTargets, setSplitTargets] = useState<DataEntryRow[]>([])
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
   const [xmlSource, setXmlSource] = useState<XmlSource>('file')
@@ -651,13 +655,18 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // ---------- podział ilości (opakowanie z faktury na sztuki sprzedaży)
 
-  const splitRow = (row: DataEntryRow, split: QuantitySplit, unit: string) => {
+  const splitRows = (splits: RowSplit[], unit: string) => {
     const before = currentDraft()
-    setRows((current) => withSplitQuantity(current, row.id, split, unit))
-    setSplitTarget(null)
-    toast.success('Podzielono ilość, wartość netto bez zmian', {
-      action: { label: 'Przywróć', onClick: () => setDraft(before) },
-    })
+    setRows((current) => splits.reduce((rows, { row, split }) => withSplitQuantity(rows, row.id, split, unit), current))
+    setSplitTargets([])
+    toast.success(
+      splits.length === 1
+        ? 'Podzielono ilość, wartość netto bez zmian'
+        : `Podzielono ilość: ${splits.length} ${pieces(splits.length)}, wartość netto bez zmian`,
+      {
+        action: { label: 'Przywróć', onClick: () => setDraft(before) },
+      },
+    )
     gridRef.current?.focus()
   }
 
@@ -807,6 +816,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // Kaucje i dostawa zostają w tabeli, ale nie są artykułami: bez liczników, sprawdzania i eksportu.
   const filled = rows.filter((row) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null)
   const transferMacro = planTransferMacro(filled)
+  const pluCodes = pluItems(filled)
+  const newPluCount = pluCodes.filter((item) => item.isNew).length
   const newCount = filled.filter((row) => !row.known).length
   const changedCount = filled.filter((row) => catalogChanges(row).length > 0).length
   const toCheck = rows.filter((row) => nomenclatureState(row) === 'TO_CHECK').length
@@ -833,6 +844,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     const price = suggestedPrice(row, pricing)
     if (price !== null && price !== row.salePrice) priceChanges.set(row.id, price)
   }
+  const splittable = selectedArticles.filter(canSplitQuantity)
   const withoutSuggestion = selectedArticles.filter((row) => suggestedPrice(row, pricing) === null).length
 
   const applySuggestedPrices = () => {
@@ -1451,6 +1463,18 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 onClick={() => void copyTransferMacro()}
               />
               <ActionItem
+                icon={<ScaleIcon />}
+                label="Kody PLU dla wagi"
+                count={newPluCount}
+                disabled={pluCodes.length === 0}
+                hint={
+                  pluCodes.length === 0
+                    ? 'W tabeli nie ma kodów 24'
+                    : 'Do schowka, Alt+E: kod PLU, „KOD:” w tekście dowolnym i format etykiety dla każdego kodu 24'
+                }
+                onClick={() => setPluMacroOpen(true)}
+              />
+              <ActionItem
                 icon={<ClipboardCopyIcon />}
                 label="Zamknij faktury"
                 hint="Faktury z zapisanych plików XML, skrypt do schowka"
@@ -1699,6 +1723,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 Ustaw ceny sugerowane
                 {priceChanges.size > 0 && ` (${priceChanges.size})`}
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSplitTargets(splittable)}
+                disabled={splittable.length === 0}
+                title={
+                  splittable.length > 0
+                    ? 'Dzieli ilość zaznaczonych pozycji tą samą liczbą (np. opakowania po 10 szt. na sztuki)'
+                    : 'Zaznacz wiersze z ilością i ceną zakupu (Shift + klik, Ctrl+A)'
+                }
+              >
+                <SplitIcon />
+                Podziel ilość
+                {splittable.length > 1 && ` (${splittable.length})`}
+              </Button>
               <ToolbarDivider />
               <div className="flex items-center gap-1" role="group" aria-label="Ilość we wszystkich artykułach">
                 <span className="mr-1 text-sm text-muted-foreground">Ilość:</span>
@@ -1911,7 +1949,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             pricing={pricing}
             onShowArticle={canSeeSales ? showArticle : undefined}
             onLinkArticle={openLink}
-            onSplitQuantity={setSplitTarget}
+            onSplitQuantity={(row) => setSplitTargets([row])}
             stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
           />
         )}
@@ -2007,7 +2045,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         bonLines={correctionLines.data}
       />
 
-      <SplitQuantityDialog row={splitTarget} onClose={() => setSplitTarget(null)} onSplit={splitRow} />
+      <SplitQuantityDialog rows={splitTargets} onClose={() => setSplitTargets([])} onSplit={splitRows} />
 
       <InvoicePickerDialog
         storeId={store.id}
@@ -2017,6 +2055,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       />
 
       <CloseInvoicesDialog storeId={store.id} open={closeInvoicesOpen} onOpenChange={setCloseInvoicesOpen} />
+      <PluMacroDialog open={pluMacroOpen} onOpenChange={setPluMacroOpen} items={pluCodes} />
 
       <XmlOpenDialog
         storeId={store.id}

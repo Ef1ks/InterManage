@@ -160,6 +160,29 @@ function moveRows<T>(rows: T[], start: number, count: number, to: number) {
 /** Odległość od krawędzi okna (px), przy której przeciąganie wiersza przewija stronę. */
 const AUTO_SCROLL_EDGE = 72
 
+/** Krok przewijania przy krawędzi: im dalej za krawędzią, tym szybciej (jak w Excelu). */
+function edgeStep(position: number, start: number, end: number) {
+  if (position < start) return -Math.ceil(Math.min(start - position, 400) / 4)
+  if (position > end) return Math.ceil(Math.min(position - end, 400) / 4)
+  return 0
+}
+
+/** Indeks elementu, w którego pas (do dołu albo prawej krawędzi) wpada pozycja; poza listą najbliższy z brzegu. */
+function indexAt(elements: HTMLElement[], position: number, axis: 'y' | 'x') {
+  let low = 0
+  let high = elements.length - 1
+  while (low < high) {
+    const middle = (low + high) >> 1
+    const rect = elements[middle].getBoundingClientRect()
+    if ((axis === 'y' ? rect.bottom : rect.right) <= position) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
+/** Zaznaczanie przeciąganiem: komórki, całe wiersze (numery wierszy) albo całe kolumny (nagłówki). */
+type SelectDrag = 'cells' | 'rows' | 'columns'
+
 /**
  * Tabela jak arkusz Excela: zaznaczanie komórki i zakresu (mysz, Shift+strzałki), strzałki, Tab i Enter, edycja przez
  * wpisanie albo F2/podwójne kliknięcie, Esc, Delete (czyści komórki), Ctrl+− (usuwa wiersze), Ctrl+C/Ctrl+V zakresu jako TSV (zgodne z Excelem). Nomenklatura
@@ -201,7 +224,6 @@ export function DataEntryGrid({
   }, [])
   const [editing, setEditing] = useState<Editing | null>(null)
   const [picker, setPicker] = useState<Picker | null>(null)
-  const dragging = useRef(false)
   // Komórka z listą była już aktywna przed kliknięciem: dopiero wtedy klik otwiera listę (pierwszy tylko zaznacza).
   const clickedActive = useRef(false)
   const lastRow = Math.max(rows.length - 1, 0)
@@ -473,6 +495,27 @@ export function DataEntryGrid({
       case 'End':
         handled()
         return select({ r: ctrl ? lastRow : active.r, c: last }, event.shiftKey)
+      case 'PageUp':
+      case 'PageDown': {
+        handled()
+        // Jak w Excelu: o tyle wierszy, ile mieści się na ekranie.
+        const cellHeight = cellElement(active)?.getBoundingClientRect().height || 32
+        const page = Math.max(1, Math.floor((window.innerHeight * 0.75) / cellHeight))
+        return move(event.key === 'PageUp' ? -page : page, 0, event.shiftKey)
+      }
+      case ' ':
+        // Shift+spacja zaznacza wiersz, Ctrl+spacja kolumnę (jak w Excelu).
+        if (event.shiftKey && !ctrl) {
+          handled()
+          setAnchor({ r: active.r, c: last })
+          return setActive({ r: active.r, c: 0 })
+        }
+        if (ctrl && !event.shiftKey) {
+          handled()
+          setAnchor({ r: lastRow, c: active.c })
+          return setActive({ r: 0, c: active.c })
+        }
+        break
       case 'F2':
         handled()
         return startEdit(active, 'edit')
@@ -525,11 +568,61 @@ export function DataEntryGrid({
     return cell ? { r: Number(cell.dataset.r), c: Number(cell.dataset.c) } : null
   }
 
-  useEffect(() => {
-    const stop = () => (dragging.current = false)
-    window.addEventListener('mouseup', stop)
-    return () => window.removeEventListener('mouseup', stop)
-  }, [])
+  /**
+   * Przeciąganie zaznaczenia jak w Excelu: kursor jest śledzony w całym oknie (także nad nagłówkiem, poza tabelą i
+   * poza oknem przeglądarki), komórka wynika z jego pozycji, a przy krawędzi okna (i tabeli przewijanej w bok) widok
+   * przewija się sam, szybciej im dalej za krawędzią. Puszczenie przycisku gdziekolwiek kończy zaznaczanie.
+   */
+  const startSelectDrag = (mode: SelectDrag, pointer: { x: number; y: number }) => {
+    const grid = gridRef.current
+    if (!grid) return
+    let { x, y } = pointer
+    let frame = 0
+    let lastCell = { r: -1, c: -1 }
+    const rowHeaders = () => [...grid.querySelectorAll<HTMLElement>('[data-row-header]')]
+    const colHeaders = () => [...grid.querySelectorAll<HTMLElement>('[data-col-header]')]
+
+    const update = () => {
+      const cell = {
+        r: mode === 'columns' ? 0 : clamp(indexAt(rowHeaders(), y, 'y'), 0, lastRow),
+        c: mode === 'rows' ? 0 : clamp(indexAt(colHeaders(), x, 'x'), 0, last),
+      }
+      if (cell.r === lastCell.r && cell.c === lastCell.c) return
+      lastCell = cell
+      setActive(cell)
+    }
+    const tick = () => {
+      if (mode !== 'columns') {
+        // Górna krawędź liczona od dołu przyklejonego nagłówka kolumn.
+        const header = grid.querySelector('thead')?.getBoundingClientRect().bottom ?? 56
+        const step = edgeStep(y, Math.max(header, 56) + 8, window.innerHeight - 24)
+        if (step !== 0) window.scrollBy(0, step)
+      }
+      if (mode !== 'rows' && grid.scrollWidth > grid.clientWidth) {
+        const rect = grid.getBoundingClientRect()
+        const step = edgeStep(x, rect.left + 24, rect.right - 24)
+        if (step !== 0) grid.scrollLeft += step
+      }
+      update()
+      frame = requestAnimationFrame(tick)
+    }
+    const onMove = (event: PointerEvent) => {
+      x = event.clientX
+      y = event.clientY
+    }
+    const finish = () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      window.removeEventListener('blur', finish)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+    window.addEventListener('blur', finish)
+    frame = requestAnimationFrame(tick)
+  }
 
   const onMouseDown = (event: React.MouseEvent) => {
     if (event.button !== 0) return
@@ -545,18 +638,36 @@ export function DataEntryGrid({
       startRowDrag(Number(handle.dataset.rowHandle))
       return
     }
+    const pointer = { x: event.clientX, y: event.clientY }
+    if ((event.target as HTMLElement).closest('[data-corner]')) {
+      event.preventDefault()
+      if (editing && !commitEdit(editing)) setEditing(null)
+      selectAll()
+      focusGrid()
+      return
+    }
     const rowHeader = (event.target as HTMLElement).closest<HTMLElement>('[data-row-header]')
     if (rowHeader) {
       event.preventDefault()
+      if (editing && !commitEdit(editing)) setEditing(null)
       const r = Number(rowHeader.dataset.rowHeader)
-      if (event.shiftKey) {
-        setAnchor({ r: anchor.r, c: 0 })
-        setActive({ r, c: last })
-      } else {
-        setAnchor({ r, c: 0 })
-        setActive({ r, c: last })
-      }
+      // Aktywna komórka na początku wiersza (kolumny), żeby widok nie uciekał na koniec tabeli.
+      setAnchor({ r: event.shiftKey ? anchor.r : r, c: last })
+      setActive({ r, c: 0 })
       focusGrid()
+      startSelectDrag('rows', pointer)
+      return
+    }
+    // Nagłówek kolumny zaznacza całą kolumnę, chyba że tabela sortuje się kliknięciem w nagłówek.
+    const colHeader = onSort ? null : (event.target as HTMLElement).closest<HTMLElement>('[data-col-header]')
+    if (colHeader && !(event.target as HTMLElement).closest('button, input, [role="button"]')) {
+      event.preventDefault()
+      if (editing && !commitEdit(editing)) setEditing(null)
+      const c = Number(colHeader.dataset.colHeader)
+      setAnchor({ r: lastRow, c: event.shiftKey ? anchor.c : c })
+      setActive({ r: 0, c })
+      focusGrid()
+      startSelectDrag('columns', pointer)
       return
     }
     const cell = cellFromEvent(event)
@@ -566,14 +677,8 @@ export function DataEntryGrid({
     clickedActive.current =
       !event.shiftKey && !selectionHidden && cell.r === active.r && cell.c === active.c && range.top === range.bottom
     select(cell, event.shiftKey)
-    dragging.current = true
     focusGrid()
-  }
-
-  const onMouseOver = (event: React.MouseEvent) => {
-    if (!dragging.current) return
-    const cell = cellFromEvent(event)
-    if (cell) setActive(cell)
+    startSelectDrag('cells', pointer)
   }
 
   // Listy (nomenklatura, rodzaj): pierwsze kliknięcie tylko zaznacza komórkę (pojawia się w niej pole ze strzałką na
@@ -830,7 +935,6 @@ export function DataEntryGrid({
         onCopy={onCopy}
         onPaste={onPaste}
         onMouseDown={onMouseDown}
-        onMouseOver={onMouseOver}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         className={cn(
@@ -865,13 +969,20 @@ export function DataEntryGrid({
           <thead>
             <tr>
               <th
-                className={cn('sticky top-(--header-top) left-0 z-30 h-9 bg-muted', CELL_RULES, HEADER_RULE)}
+                data-corner
+                title="Zaznacz całą tabelę (Ctrl+A)"
+                className={cn(
+                  'sticky top-(--header-top) left-0 z-30 h-9 cursor-cell bg-muted hover:bg-foreground/10',
+                  CELL_RULES,
+                  HEADER_RULE,
+                )}
                 aria-hidden
               />
               {columns.map((column, index) => (
                 <th
                   key={column.key}
                   scope="col"
+                  data-col-header={index}
                   title={
                     column.key === 'vat' && vatMismatches > 0
                       ? `Błędny VAT w kartotece: ${vatMismatches}. Obowiązuje stawka z dokumentu.`
@@ -1495,8 +1606,8 @@ function CellContent({
         </span>
       )
       if (!canSellSmaller(row)) return value
-      // Owoce i warzywa z marżą od 45%: można sprzedawać w mniejszych ilościach; klik otwiera podział ilości.
-      const hint = `Marża od ${SMALLER_QUANTITIES_MARGIN}% na owocach i warzywach: artykuł może być sprzedawany na mniejsze ilości`
+      // Marża -20% i niższa: cena zakupu jest pewnie za opakowanie; klik otwiera podział ilości.
+      const hint = `Marża ${SMALLER_QUANTITIES_MARGIN}% i niższa: cena zakupu jest pewnie za opakowanie, podziel ilość na sztuki`
       return (
         <span className="flex items-center justify-end gap-1">
           {onSplitQuantity && canSplitQuantity(row) ? (
@@ -1505,14 +1616,14 @@ function CellContent({
               onClick={() => onSplitQuantity(row)}
               title={`${hint}. Kliknij, żeby podzielić ilość.`}
               aria-label={hint}
-              className="-my-1 grid h-5 shrink-0 place-items-center rounded bg-emerald-300 px-1 text-emerald-950 hover:bg-emerald-400 dark:bg-emerald-800 dark:text-emerald-50 dark:hover:bg-emerald-700"
+              className="-my-1 grid h-5 shrink-0 place-items-center rounded bg-amber-300 px-1 text-amber-950 hover:bg-amber-400 dark:bg-amber-800 dark:text-amber-50 dark:hover:bg-amber-700"
             >
               <SplitIcon className="size-[1em]" />
             </button>
           ) : (
             <span
               title={hint}
-              className="grid h-5 shrink-0 place-items-center rounded bg-emerald-300 px-1 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50"
+              className="grid h-5 shrink-0 place-items-center rounded bg-amber-300 px-1 text-amber-950 dark:bg-amber-800 dark:text-amber-50"
             >
               <SplitIcon aria-label={hint} className="size-[1em]" />
             </span>

@@ -789,19 +789,17 @@ export function cadencierPrice(row: DataEntryRow) {
   return row.known && row.cadencierPrice != null && row.cadencierPrice > 0 ? row.cadencierPrice : null
 }
 
-/** Rejon owoców i warzyw oraz marża, od której artykuł można sprzedawać w mniejszych ilościach. */
-export const SMALLER_QUANTITIES_REGION = '14'
-export const SMALLER_QUANTITIES_MARGIN = 45
+/** Marża, od której (w dół) podpowiadamy podział ilości. */
+export const SMALLER_QUANTITIES_MARGIN = -20
 
 /**
- * Owoce i warzywa (rejon 14) z marżą od 45%: zapas pozwala sprzedawać artykuł w mniejszych ilościach (np. worek
- * na sztuki albo na wagę), więc przy marży jest oznaczenie.
+ * Marża -20% i niższa: cena zakupu jest zwykle za opakowanie (karton 10 szt., worek 10 kg), a cena sprzedaży za
+ * sztukę, więc przy marży jest podpowiedź podziału ilości.
  */
 export function canSellSmaller(row: DataEntryRow) {
-  const code = row.subfamilyCode ?? row.nomenclaturePrefix
-  if (serviceKind(row) !== null || !code?.startsWith(SMALLER_QUANTITIES_REGION)) return false
+  if (serviceKind(row) !== null) return false
   const margin = marginPercent(row)
-  return margin !== null && margin >= SMALLER_QUANTITIES_MARGIN - 1e-9
+  return margin !== null && margin <= SMALLER_QUANTITIES_MARGIN + 1e-9
 }
 
 /** Marża artykułu poniżej wymaganej na jego nomenklaturze. */

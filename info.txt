@@ -1,0 +1,1099 @@
+otwieramy mercalys
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Article/ar-e001.aspx
+input image | id=ibtB1_ITM_Bas | name=ibtB1_ITM_Bas | value= | tekst= | opis=
+input image | id=ibtB2_ITM_Haut | name=ibtB2_ITM_Haut | value= | tekst= | opis=
+input image | id=ibtB3_EAN_Bas | name=ibtB3_EAN_Bas | value= | tekst= | opis=
+input image | id=ibtB4_EAN_Haut | name=ibtB4_EAN_Haut | value= | tekst= | opis=
+input checkbox | id=chkZ34_RotationLente_CheckBox1 | name=chkZ34_RotationLente:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ99_Bio_CheckBox1 | name=chkZ99_Bio:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ18_Recalcul_CheckBox1 | name=chkZ18_Recalcul:CheckBox1 | value=on | tekst= | opis= | zaznaczone=tak
+input checkbox | id=chkZ38_ParEAN_CheckBox1 | name=chkZ38_ParEAN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ86_Singularisation_CheckBox1 | name=chkZ86_Singularisation:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ87_ProduitRegional_CheckBox1 | name=chkZ87_ProduitRegional:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ88_ArticleTaxe_CheckBox1 | name=chkZ88_ArticleTaxe:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_PremierPrix_CheckBox1 | name=chkZ84_PremierPrix:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMN_CheckBox1 | name=chkZ84_ArticleMN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMDD_CheckBox1 | name=chkZ84_ArticleMDD:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ85_PreMarque_CheckBox1 | name=chkZ85_PreMarque:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ89_Psycho_CheckBox1 | name=chkZ89_Psycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ90_HyperPsycho_CheckBox1 | name=chkZ90_HyperPsycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ93_ArticleConsigne_CheckBox1 | name=chkZ93_ArticleConsigne:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ94_ConsigneObligatoire_CheckBox1 | name=chkZ94_ConsigneObligatoire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ95_ConsigneFacultatif_CheckBox1 | name=chkZ95_ConsigneFacultatif:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ100_TicketRestau_CheckBox1 | name=chkZ100_TicketRestau:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+a  | id= | name= | value= | tekst=Patrz | opis=
+a  | id= | name= | value= | tekst= | opis=
+a  | id=lkbL14_RechercheArticle_LinkAviso | name=LFM | value= | tekst=Szukanie artykułu | opis=
+a  | id=lkbL16_DetailComposition_LinkAviso | name=LFM | value= | tekst=Szczegóły Zestawu | opis=
+a  | id=lkbL6_AjoutListe_LinkAviso | name=LFM | value= | tekst=Dodanie artykułu do list | opis=
+a  | id=lkbL7_HistoriqueCommande_LinkAviso | name=LFM | value= | tekst=Rys Historyczny Zamówień | opis=
+a  | id=lkbL8_StatistiqueVentes_LinkAviso | name=LFM | value= | tekst=Zestawienia Sprzedaży | opis=
+a  | id=lkbL18_ExplicationTarifaire_LinkAviso | name=LFM | value= | tekst=Wytłumaczenie taryfikacji | opis=
+a  | id=lnkZ8_Fournisseur_LnkAviso | name=LFA | value= | tekst=Dostawca : | opis=
+a  | id=lnkZ11_Nomenclature_LnkAviso | name=LFA | value= | tekst=Nomenklatura: | opis=
+a  | id=lnkZ42_TexteLibre_LnkAviso | name=LFA | value= | tekst=Tekst dowolny : | opis=
+a  | id=lnkZ91_Indicateur_LnkAviso | name=LFA | value= | tekst=Wskaźniki | opis=
+a  | id=lnkZ22_CodeTVA_LnkAviso | name=LFA | value= | tekst=Kod VAT : | opis=
+a  | id=lnkZ45_Consigne_LnkAviso | name=LFA | value= | tekst=Kaucja : | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_RAZ_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Reprise_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_Reappro_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ1_CodeITM_TxtBox | name=txtZ1_CodeITM:TxtBox | value= | max=13
+input text | id=txtZ6_Libelle_TxtBox | name=txtZ6_Libelle:TxtBox | value= | max=30
+input text | id=txtZ4_CodeEAN_TxtBox | name=txtZ4_CodeEAN:TxtBox | value= | max=13
+input text | id=txtZ7_LibelleCaisse_TxtBox | name=txtZ7_LibelleCaisse:TxtBox | value= | max=25
+input text | id=lstZ8_Fournisseur_TxtBox | name=lstZ8_Fournisseur:TxtBox | value=0 | max=8
+input text | id=nclZ11_Nomenclature_LD1_TxtBox | name=nclZ11_Nomenclature:LD1:TxtBox | value=0 | max=2
+input text | id=nclZ11_Nomenclature_LD2_TxtBox | name=nclZ11_Nomenclature:LD2:TxtBox | value=0 | max=2
+input text | id=nclZ11_Nomenclature_LD3_TxtBox | name=nclZ11_Nomenclature:LD3:TxtBox | value=0 | max=2
+input text | id=lstZ62_TypeArticle_TxtBox | name=lstZ62_TypeArticle:TxtBox | value=0 | max=1
+input text | id=lstZ12_TypeVente_TxtBox | name=lstZ12_TypeVente:TxtBox | value=0 | max=1
+input text | id=txdZ14_DateSupprITMPrio_TxtBox | name=txdZ14_DateSupprITMPrio:TxtBox | value= | max=10
+input text | id=txtZ32_RefFournisseur_TxtBox | name=txtZ32_RefFournisseur:TxtBox | value= | max=13
+input text | id=lstZ28_Unite_TxtBox | name=lstZ28_Unite:TxtBox | value=0 | max=2
+input text | id=txnZ26_PoidsVolume_TxtBox | name=txnZ26_PoidsVolume:TxtBox | value=0,000 | max=7
+input text | id=txnZ30_ConditBase_TxtBox | name=txnZ30_ConditBase:TxtBox | value=0,00 | max=7
+input text | id=txnZ33_MinimumCommande_TxtBox | name=txnZ33_MinimumCommande:TxtBox | value=0,00 | max=7
+input text | id=lstZ29_Nature_TxtBox | name=lstZ29_Nature:TxtBox | value=0 | max=1
+input text | id=txtZ31_Adresse1_TxtBox | name=txtZ31_Adresse1:TxtBox | value= | max=8
+input text | id=txtZ31_Adresse2_TxtBox | name=txtZ31_Adresse2:TxtBox | value= | max=8
+input text | id=txmZ17_PABrut_TxtBox | name=txmZ17_PABrut:TxtBox | value=0,00 | max=10
+input text | id=txnZ20_Remise_TxtBox | name=txnZ20_Remise:TxtBox | value=0,00 | max=5
+input text | id=txmZ21_PANet_TxtBox | name=txmZ21_PANet:TxtBox | value=0,00 | max=10
+input text | id=txt_CodeCn_TxtBox | name=txt_CodeCn:TxtBox | value= | max=8
+input text | id=lst_Gtu_TxtBox | name=lst_Gtu:TxtBox | value= | max=8
+input text | id=lst_Split_TxtBox | name=lst_Split:TxtBox | value= | max=1
+input text | id=lstZ22_CodeTVA_TxtBox | name=lstZ22_CodeTVA:TxtBox | value=0 | max=1
+input text | id=txwZ80_CodePKWIU_TxtBox | name=txwZ80_CodePKWIU:TxtBox | value= | max=10
+input text | id=txmZ25_PrixVente_TxtBox | name=txmZ25_PrixVente:TxtBox | value=0,00 | max=10
+input text | id=txnZ23_Coefficient_TxtBox | name=txnZ23_Coefficient:TxtBox | value=0,000 | max=7
+input text | id=txnZ24_Marge_TxtBox | name=txnZ24_Marge:TxtBox | value=0,00 | max=6
+input text | id=txeZ36_NombreEtiq_TxtBox | name=txeZ36_NombreEtiq:TxtBox | value=0 | max=2
+input text | id=lstZ37_FormatEtiq_TxtBox | name=lstZ37_FormatEtiq:TxtBox | value=0 | max=2
+input text | id=lstZ39_EtiRecept_TxtBox | name=lstZ39_EtiRecept:TxtBox | value=0 | max=2
+input text | id=txtZ41_Marque_TxtBox | name=txtZ41_Marque:TxtBox | value= | max=10
+input text | id=txtZ40_LibelleCommercial1_TxtBox | name=txtZ40_LibelleCommercial1:TxtBox | value=
+input text | id=txtZ40_LibelleCommercial2_TxtBox | name=txtZ40_LibelleCommercial2:TxtBox | value= | max=15
+input text | id=lstZ43_PassageCaisse_TxtBox | name=lstZ43_PassageCaisse:TxtBox | value=0 | max=1
+input text | id=lstZ44_StockReappro_TxtBox | name=lstZ44_StockReappro:TxtBox | value=0 | max=1
+input text | id=lstZ45_Consigne_TxtBox | name=lstZ45_Consigne:TxtBox | value=0 | max=3
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:25 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+
+Wejdz w Artykul -> Karta artykulu -> wklej nowy ean
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Article/ar-e001.aspx
+input image | id=ibtB1_ITM_Bas | name=ibtB1_ITM_Bas | value= | tekst= | opis=
+input image | id=ibtB2_ITM_Haut | name=ibtB2_ITM_Haut | value= | tekst= | opis=
+input image | id=ibtB3_EAN_Bas | name=ibtB3_EAN_Bas | value= | tekst= | opis=
+input image | id=ibtB4_EAN_Haut | name=ibtB4_EAN_Haut | value= | tekst= | opis=
+input checkbox | id=chkZ34_RotationLente_CheckBox1 | name=chkZ34_RotationLente:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ99_Bio_CheckBox1 | name=chkZ99_Bio:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ18_Recalcul_CheckBox1 | name=chkZ18_Recalcul:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ38_ParEAN_CheckBox1 | name=chkZ38_ParEAN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ86_Singularisation_CheckBox1 | name=chkZ86_Singularisation:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ87_ProduitRegional_CheckBox1 | name=chkZ87_ProduitRegional:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ88_ArticleTaxe_CheckBox1 | name=chkZ88_ArticleTaxe:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_PremierPrix_CheckBox1 | name=chkZ84_PremierPrix:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMN_CheckBox1 | name=chkZ84_ArticleMN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMDD_CheckBox1 | name=chkZ84_ArticleMDD:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ85_PreMarque_CheckBox1 | name=chkZ85_PreMarque:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ89_Psycho_CheckBox1 | name=chkZ89_Psycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ90_HyperPsycho_CheckBox1 | name=chkZ90_HyperPsycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ93_ArticleConsigne_CheckBox1 | name=chkZ93_ArticleConsigne:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ94_ConsigneObligatoire_CheckBox1 | name=chkZ94_ConsigneObligatoire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ95_ConsigneFacultatif_CheckBox1 | name=chkZ95_ConsigneFacultatif:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ100_TicketRestau_CheckBox1 | name=chkZ100_TicketRestau:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+a  | id= | name= | value= | tekst=Patrz | opis=
+a  | id= | name= | value= | tekst= | opis=
+a  | id=lkbL14_RechercheArticle_LinkAviso | name=LFM | value= | tekst=Szukanie artykułu | opis=
+a  | id=lkbL16_DetailComposition_LinkAviso | name=LFM | value= | tekst=Szczegóły Zestawu | opis=
+a  | id=lkbL6_AjoutListe_LinkAviso | name=LFM | value= | tekst=Dodanie artykułu do list | opis=
+a  | id=lkbL7_HistoriqueCommande_LinkAviso | name=LFM | value= | tekst=Rys Historyczny Zamówień | opis=
+a  | id=lkbL8_StatistiqueVentes_LinkAviso | name=LFM | value= | tekst=Zestawienia Sprzedaży | opis=
+a  | id=lkbL18_ExplicationTarifaire_LinkAviso | name=LFM | value= | tekst=Wytłumaczenie taryfikacji | opis=
+a  | id=lnkZ1_CodeITM_LnkAviso | name=LFA | value= | tekst=Kod ITM8 : | opis=
+a  | id=lnkZ4_CodeEAN_LnkAviso | name=LFA | value= | tekst=Kod EAN13 : | opis=
+a  | id=lnkZ8_Fournisseur_LnkAviso | name=LFA | value= | tekst=Dostawca : | opis=
+a  | id=lnkZ11_Nomenclature_LnkAviso | name=LFA | value= | tekst=Nomenklatura: | opis=
+a  | id=lnkZ46_StockAchat_LnkAviso | name=LFA | value= | tekst=Stany Mag | opis=
+a  | id=lnkZ42_TexteLibre_LnkAviso | name=LFA | value= | tekst=Tekst dowolny : | opis=
+a  | id=lnkZ91_Indicateur_LnkAviso | name=LFA | value= | tekst=Wskaźniki | opis=
+a  | id=BanniereTarifAchat_LnkAviso | name=LFA | value= | tekst=Taryfy Zakupu | opis=
+a  | id=BanniereTarifVente_LnkAviso | name=LFA | value= | tekst=Taryfy Sprzed. | opis=
+a  | id=Lnk_CodeCN_LnkAviso | name=LFA | value= | tekst=Kod CN: | opis=
+a  | id=lnkZ22_CodeTVA_LnkAviso | name=LFA | value= | tekst=Kod VAT : | opis=
+a  | id=lnkZ45_Consigne_LnkAviso | name=LFA | value= | tekst=Kaucja : | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_RAZ_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Reprise_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_Reappro_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ1_CodeITM_TxtBox | name=txtZ1_CodeITM:TxtBox | value=0000099044318 | max=13
+input text | id=txtZ6_Libelle_TxtBox | name=txtZ6_Libelle:TxtBox | value=INDYK W GALARECIE | max=30
+input text | id=txtZ4_CodeEAN_TxtBox | name=txtZ4_CodeEAN:TxtBox | value=2405610000000 | max=13
+input text | id=txtZ7_LibelleCaisse_TxtBox | name=txtZ7_LibelleCaisse:TxtBox | value=INDYK W GALARECIE | max=25
+input text | id=lstZ8_Fournisseur_TxtBox | name=lstZ8_Fournisseur:TxtBox | value=66 | max=8
+input text | id=nclZ11_Nomenclature_LD1_TxtBox | name=nclZ11_Nomenclature:LD1:TxtBox | value=33 | max=2
+input text | id=nclZ11_Nomenclature_LD2_TxtBox | name=nclZ11_Nomenclature:LD2:TxtBox | value=76 | max=2
+input text | id=nclZ11_Nomenclature_LD3_TxtBox | name=nclZ11_Nomenclature:LD3:TxtBox | value=6 | max=2
+input text | id=lstZ62_TypeArticle_TxtBox | name=lstZ62_TypeArticle:TxtBox | value=1 | max=1
+input text | id=lstZ12_TypeVente_TxtBox | name=lstZ12_TypeVente:TxtBox | value=2 | max=1
+input text | id=txdZ14_DateSupprITMPrio_TxtBox | name=txdZ14_DateSupprITMPrio:TxtBox | value= | max=10
+input text | id=txtZ32_RefFournisseur_TxtBox | name=txtZ32_RefFournisseur:TxtBox | value=2405610000000 | max=13
+input text | id=lstZ28_Unite_TxtBox | name=lstZ28_Unite:TxtBox | value=2 | max=2
+input text | id=txnZ26_PoidsVolume_TxtBox | name=txnZ26_PoidsVolume:TxtBox | value=1,000 | max=7
+input text | id=txnZ30_ConditBase_TxtBox | name=txnZ30_ConditBase:TxtBox | value=1,00 | max=7
+input text | id=txnZ33_MinimumCommande_TxtBox | name=txnZ33_MinimumCommande:TxtBox | value=1,00 | max=7
+input text | id=lstZ29_Nature_TxtBox | name=lstZ29_Nature:TxtBox | value=1 | max=1
+input text | id=txtZ31_Adresse1_TxtBox | name=txtZ31_Adresse1:TxtBox | value= | max=8
+input text | id=txtZ31_Adresse2_TxtBox | name=txtZ31_Adresse2:TxtBox | value= | max=8
+input text | id=txmZ17_PABrut_TxtBox | name=txmZ17_PABrut:TxtBox | value=27,49 | max=10
+input text | id=txnZ20_Remise_TxtBox | name=txnZ20_Remise:TxtBox | value=0,00 | max=5
+input text | id=txmZ21_PANet_TxtBox | name=txmZ21_PANet:TxtBox | value=27,49 | max=10
+input text | id=txt_CodeCn_TxtBox | name=txt_CodeCn:TxtBox | value=99999980 | max=8
+input text | id=lst_Gtu_TxtBox | name=lst_Gtu:TxtBox | value=------ | max=8
+input text | id=lst_Split_TxtBox | name=lst_Split:TxtBox | value=N | max=1
+input text | id=lstZ22_CodeTVA_TxtBox | name=lstZ22_CodeTVA:TxtBox | value=6 | max=1
+input text | id=txwZ80_CodePKWIU_TxtBox | name=txwZ80_CodePKWIU:TxtBox | value=0 | max=10
+input text | id=txmZ25_PrixVente_TxtBox | name=txmZ25_PrixVente:TxtBox | value=49,99 | max=10
+input text | id=txnZ23_Coefficient_TxtBox | name=txnZ23_Coefficient:TxtBox | value=1,818 | max=7
+input text | id=txnZ24_Marge_TxtBox | name=txnZ24_Marge:TxtBox | value=40,25 | max=6
+input text | id=txeZ36_NombreEtiq_TxtBox | name=txeZ36_NombreEtiq:TxtBox | value=1 | max=2
+input text | id=lstZ37_FormatEtiq_TxtBox | name=lstZ37_FormatEtiq:TxtBox | value=43 | max=2
+input text | id=lstZ39_EtiRecept_TxtBox | name=lstZ39_EtiRecept:TxtBox | value=0 | max=2
+input text | id=txtZ41_Marque_TxtBox | name=txtZ41_Marque:TxtBox | value=INDIG | max=10
+input text | id=txtZ40_LibelleCommercial1_TxtBox | name=txtZ40_LibelleCommercial1:TxtBox | value=INDYK W GALAREC
+input text | id=txtZ40_LibelleCommercial2_TxtBox | name=txtZ40_LibelleCommercial2:TxtBox | value=IE | max=15
+input text | id=lstZ43_PassageCaisse_TxtBox | name=lstZ43_PassageCaisse:TxtBox | value=2 | max=1
+input text | id=lstZ44_StockReappro_TxtBox | name=lstZ44_StockReappro:TxtBox | value=2 | max=1
+input text | id=lstZ45_Consigne_TxtBox | name=lstZ45_Consigne:TxtBox | value=0 | max=3
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:25 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+klikamy w Kod EAN13
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Article/ar-e005.aspx?Chrono=83308&modeEuro=1
+input checkbox | id=chkZ04_Prioritaire_CheckBox1 | name=chkZ04_Prioritaire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=tak
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_FichePLU_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_SupprimerPLU_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ02_CodeEAN_TxtBox | name=txtZ02_CodeEAN:TxtBox | value= | max=13
+input text | id=txtZ03_Libelle_TxtBox | name=txtZ03_Libelle:TxtBox | value= | max=25
+input text | id=txdZ07_DateSuppression_TxtBox | name=txdZ07_DateSuppression:TxtBox | value= | max=10
+input text | id=lstZ05_Unite_TxtBox | name=lstZ05_Unite:TxtBox | value=0 | max=3
+input text | id=lstZ06_Consigne_TxtBox | name=lstZ06_Consigne:TxtBox | value=0 | max=3
+input text | id=txnZ08_Conditionnement_TxtBox | name=txnZ08_Conditionnement:TxtBox | value=0,000 | max=8
+input text | id=lstZ11_SectionPLUCode_TxtBox | name=lstZ11_SectionPLUCode:TxtBox | value=0 | max=2
+input text | id=txnZ09_Coefficient_TxtBox | name=txnZ09_Coefficient:TxtBox | value=0,000 | max=6
+input text | id=txtZ12_CodePLU_TxtBox | name=txtZ12_CodePLU:TxtBox | value= | max=4
+input text | id=txpZ10_PrixVente_TxtBox | name=txpZ10_PrixVente:TxtBox | value=0,00 | max=10
+input text | id=txtZ13_LibellePLU_TxtBox | name=txtZ13_LibellePLU:TxtBox | value= | max=100
+input text | id=lstZ16_TypePLU_TxtBox | name=lstZ16_TypePLU:TxtBox | value=0 | max=1
+input text | id=txeZ14_ToucheBalance_TxtBox | name=txeZ14_ToucheBalance:TxtBox | value=0 | max=4
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:26 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+klikamy 2x w wiersz w tabeli z naszym kodem ean
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Article/ar-e005.aspx?Chrono=83308&modeEuro=1
+input checkbox | id=chkZ04_Prioritaire_CheckBox1 | name=chkZ04_Prioritaire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=tak
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_FichePLU_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_SupprimerPLU_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ02_CodeEAN_TxtBox | name=txtZ02_CodeEAN:TxtBox | value=2405610000000 | max=13
+input text | id=txtZ03_Libelle_TxtBox | name=txtZ03_Libelle:TxtBox | value=INDYK W GALARECIE | max=25
+input text | id=txdZ07_DateSuppression_TxtBox | name=txdZ07_DateSuppression:TxtBox | value= | max=10
+input text | id=lstZ05_Unite_TxtBox | name=lstZ05_Unite:TxtBox | value=2 | max=3
+input text | id=lstZ06_Consigne_TxtBox | name=lstZ06_Consigne:TxtBox | value=0 | max=3
+input text | id=txnZ08_Conditionnement_TxtBox | name=txnZ08_Conditionnement:TxtBox | value=1,000 | max=8
+input text | id=lstZ11_SectionPLUCode_TxtBox | name=lstZ11_SectionPLUCode:TxtBox | value=0 | max=2
+input text | id=txnZ09_Coefficient_TxtBox | name=txnZ09_Coefficient:TxtBox | value=1,000 | max=6
+input text | id=txtZ12_CodePLU_TxtBox | name=txtZ12_CodePLU:TxtBox | value= | max=4
+input text | id=txpZ10_PrixVente_TxtBox | name=txpZ10_PrixVente:TxtBox | value=49,99 | max=10
+input text | id=txtZ13_LibellePLU_TxtBox | name=txtZ13_LibellePLU:TxtBox | value= | max=100
+input text | id=lstZ16_TypePLU_TxtBox | name=lstZ16_TypePLU:TxtBox | value=0 | max=1
+input text | id=txeZ14_ToucheBalance_TxtBox | name=txeZ14_ToucheBalance:TxtBox | value=0 | max=4
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:26 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+Sekcja Wagi wybieramy 1 lub 2 zależy co użytkownik w makrze ustawi
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Article/ar-e005.aspx?Chrono=83308&modeEuro=1
+input checkbox | id=chkZ04_Prioritaire_CheckBox1 | name=chkZ04_Prioritaire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=tak
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_FichePLU_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_SupprimerPLU_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ02_CodeEAN_TxtBox | name=txtZ02_CodeEAN:TxtBox | value=2405610000000 | max=13
+input text | id=txtZ03_Libelle_TxtBox | name=txtZ03_Libelle:TxtBox | value=INDYK W GALARECIE | max=25
+input text | id=txdZ07_DateSuppression_TxtBox | name=txdZ07_DateSuppression:TxtBox | value= | max=10
+input text | id=lstZ05_Unite_TxtBox | name=lstZ05_Unite:TxtBox | value=2 | max=3
+input text | id=lstZ06_Consigne_TxtBox | name=lstZ06_Consigne:TxtBox | value=0 | max=3
+input text | id=txnZ08_Conditionnement_TxtBox | name=txnZ08_Conditionnement:TxtBox | value=1,000 | max=8
+input text | id=lstZ11_SectionPLUCode_TxtBox | name=lstZ11_SectionPLUCode:TxtBox | value=1 | max=2
+input text | id=txnZ09_Coefficient_TxtBox | name=txnZ09_Coefficient:TxtBox | value=1,000 | max=6
+input text | id=txtZ12_CodePLU_TxtBox | name=txtZ12_CodePLU:TxtBox | value= | max=4
+input text | id=txpZ10_PrixVente_TxtBox | name=txpZ10_PrixVente:TxtBox | value=49,99 | max=10
+input text | id=txtZ13_LibellePLU_TxtBox | name=txtZ13_LibellePLU:TxtBox | value=INDYK W GALARECIE | max=100
+input text | id=lstZ16_TypePLU_TxtBox | name=lstZ16_TypePLU:TxtBox | value=2 | max=1
+input text | id=txeZ14_ToucheBalance_TxtBox | name=txeZ14_ToucheBalance:TxtBox | value=1648 | max=4
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:28 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+w przycisk wagi pojawi się wtedy numer po wyborze przepisujemy go do kod PLU
+klikamy zatwierdz pojawi się okno
+Odtwarzacz w wersji 40
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Czy+zachowa%c4%87+wpis%3f&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+klikamy tak
+
+klikamy powrot i wracamy do
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/webaviso/ecrans/article/ar-e001.aspx
+input image | id=ibtB1_ITM_Bas | name=ibtB1_ITM_Bas | value= | tekst= | opis=
+input image | id=ibtB2_ITM_Haut | name=ibtB2_ITM_Haut | value= | tekst= | opis=
+input image | id=ibtB3_EAN_Bas | name=ibtB3_EAN_Bas | value= | tekst= | opis=
+input image | id=ibtB4_EAN_Haut | name=ibtB4_EAN_Haut | value= | tekst= | opis=
+input checkbox | id=chkZ34_RotationLente_CheckBox1 | name=chkZ34_RotationLente:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ99_Bio_CheckBox1 | name=chkZ99_Bio:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ18_Recalcul_CheckBox1 | name=chkZ18_Recalcul:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ38_ParEAN_CheckBox1 | name=chkZ38_ParEAN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ86_Singularisation_CheckBox1 | name=chkZ86_Singularisation:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ87_ProduitRegional_CheckBox1 | name=chkZ87_ProduitRegional:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ88_ArticleTaxe_CheckBox1 | name=chkZ88_ArticleTaxe:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_PremierPrix_CheckBox1 | name=chkZ84_PremierPrix:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMN_CheckBox1 | name=chkZ84_ArticleMN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMDD_CheckBox1 | name=chkZ84_ArticleMDD:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ85_PreMarque_CheckBox1 | name=chkZ85_PreMarque:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ89_Psycho_CheckBox1 | name=chkZ89_Psycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ90_HyperPsycho_CheckBox1 | name=chkZ90_HyperPsycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ93_ArticleConsigne_CheckBox1 | name=chkZ93_ArticleConsigne:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ94_ConsigneObligatoire_CheckBox1 | name=chkZ94_ConsigneObligatoire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ95_ConsigneFacultatif_CheckBox1 | name=chkZ95_ConsigneFacultatif:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ100_TicketRestau_CheckBox1 | name=chkZ100_TicketRestau:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+a  | id= | name= | value= | tekst=Patrz | opis=
+a  | id= | name= | value= | tekst= | opis=
+a  | id=lkbL14_RechercheArticle_LinkAviso | name=LFM | value= | tekst=Szukanie artykułu | opis=
+a  | id=lkbL16_DetailComposition_LinkAviso | name=LFM | value= | tekst=Szczegóły Zestawu | opis=
+a  | id=lkbL6_AjoutListe_LinkAviso | name=LFM | value= | tekst=Dodanie artykułu do list | opis=
+a  | id=lkbL7_HistoriqueCommande_LinkAviso | name=LFM | value= | tekst=Rys Historyczny Zamówień | opis=
+a  | id=lkbL8_StatistiqueVentes_LinkAviso | name=LFM | value= | tekst=Zestawienia Sprzedaży | opis=
+a  | id=lkbL18_ExplicationTarifaire_LinkAviso | name=LFM | value= | tekst=Wytłumaczenie taryfikacji | opis=
+a  | id=lnkZ1_CodeITM_LnkAviso | name=LFA | value= | tekst=Kod ITM8 : | opis=
+a  | id=lnkZ4_CodeEAN_LnkAviso | name=LFA | value= | tekst=Kod EAN13 : | opis=
+a  | id=lnkZ8_Fournisseur_LnkAviso | name=LFA | value= | tekst=Dostawca : | opis=
+a  | id=lnkZ11_Nomenclature_LnkAviso | name=LFA | value= | tekst=Nomenklatura: | opis=
+a  | id=lnkZ46_StockAchat_LnkAviso | name=LFA | value= | tekst=Stany Mag | opis=
+a  | id=lnkZ42_TexteLibre_LnkAviso | name=LFA | value= | tekst=Tekst dowolny : | opis=
+a  | id=lnkZ91_Indicateur_LnkAviso | name=LFA | value= | tekst=Wskaźniki | opis=
+a  | id=BanniereTarifAchat_LnkAviso | name=LFA | value= | tekst=Taryfy Zakupu | opis=
+a  | id=BanniereTarifVente_LnkAviso | name=LFA | value= | tekst=Taryfy Sprzed. | opis=
+a  | id=Lnk_CodeCN_LnkAviso | name=LFA | value= | tekst=Kod CN: | opis=
+a  | id=lnkZ22_CodeTVA_LnkAviso | name=LFA | value= | tekst=Kod VAT : | opis=
+a  | id=lnkZ45_Consigne_LnkAviso | name=LFA | value= | tekst=Kaucja : | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_RAZ_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Reprise_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_Reappro_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ1_CodeITM_TxtBox | name=txtZ1_CodeITM:TxtBox | value=0000099044318 | max=13
+input text | id=txtZ6_Libelle_TxtBox | name=txtZ6_Libelle:TxtBox | value=INDYK W GALARECIE | max=30
+input text | id=txtZ4_CodeEAN_TxtBox | name=txtZ4_CodeEAN:TxtBox | value=2405610000000 | max=13
+input text | id=txtZ7_LibelleCaisse_TxtBox | name=txtZ7_LibelleCaisse:TxtBox | value=INDYK W GALARECIE | max=25
+input text | id=lstZ8_Fournisseur_TxtBox | name=lstZ8_Fournisseur:TxtBox | value=66 | max=8
+input text | id=nclZ11_Nomenclature_LD1_TxtBox | name=nclZ11_Nomenclature:LD1:TxtBox | value=33 | max=2
+input text | id=nclZ11_Nomenclature_LD2_TxtBox | name=nclZ11_Nomenclature:LD2:TxtBox | value=76 | max=2
+input text | id=nclZ11_Nomenclature_LD3_TxtBox | name=nclZ11_Nomenclature:LD3:TxtBox | value=6 | max=2
+input text | id=lstZ62_TypeArticle_TxtBox | name=lstZ62_TypeArticle:TxtBox | value=1 | max=1
+input text | id=lstZ12_TypeVente_TxtBox | name=lstZ12_TypeVente:TxtBox | value=2 | max=1
+input text | id=txdZ14_DateSupprITMPrio_TxtBox | name=txdZ14_DateSupprITMPrio:TxtBox | value= | max=10
+input text | id=txtZ32_RefFournisseur_TxtBox | name=txtZ32_RefFournisseur:TxtBox | value=2405610000000 | max=13
+input text | id=lstZ28_Unite_TxtBox | name=lstZ28_Unite:TxtBox | value=2 | max=2
+input text | id=txnZ26_PoidsVolume_TxtBox | name=txnZ26_PoidsVolume:TxtBox | value=1,000 | max=7
+input text | id=txnZ30_ConditBase_TxtBox | name=txnZ30_ConditBase:TxtBox | value=1,00 | max=7
+input text | id=txnZ33_MinimumCommande_TxtBox | name=txnZ33_MinimumCommande:TxtBox | value=1,00 | max=7
+input text | id=lstZ29_Nature_TxtBox | name=lstZ29_Nature:TxtBox | value=1 | max=1
+input text | id=txtZ31_Adresse1_TxtBox | name=txtZ31_Adresse1:TxtBox | value= | max=8
+input text | id=txtZ31_Adresse2_TxtBox | name=txtZ31_Adresse2:TxtBox | value= | max=8
+input text | id=txmZ17_PABrut_TxtBox | name=txmZ17_PABrut:TxtBox | value=27,49 | max=10
+input text | id=txnZ20_Remise_TxtBox | name=txnZ20_Remise:TxtBox | value=0,00 | max=5
+input text | id=txmZ21_PANet_TxtBox | name=txmZ21_PANet:TxtBox | value=27,49 | max=10
+input text | id=txt_CodeCn_TxtBox | name=txt_CodeCn:TxtBox | value=99999980 | max=8
+input text | id=lst_Gtu_TxtBox | name=lst_Gtu:TxtBox | value=------ | max=8
+input text | id=lst_Split_TxtBox | name=lst_Split:TxtBox | value=N | max=1
+input text | id=lstZ22_CodeTVA_TxtBox | name=lstZ22_CodeTVA:TxtBox | value=6 | max=1
+input text | id=txwZ80_CodePKWIU_TxtBox | name=txwZ80_CodePKWIU:TxtBox | value=0 | max=10
+input text | id=txmZ25_PrixVente_TxtBox | name=txmZ25_PrixVente:TxtBox | value=49,99 | max=10
+input text | id=txnZ23_Coefficient_TxtBox | name=txnZ23_Coefficient:TxtBox | value=1,818 | max=7
+input text | id=txnZ24_Marge_TxtBox | name=txnZ24_Marge:TxtBox | value=40,25 | max=6
+input text | id=txeZ36_NombreEtiq_TxtBox | name=txeZ36_NombreEtiq:TxtBox | value=1 | max=2
+input text | id=lstZ37_FormatEtiq_TxtBox | name=lstZ37_FormatEtiq:TxtBox | value=43 | max=2
+input text | id=lstZ39_EtiRecept_TxtBox | name=lstZ39_EtiRecept:TxtBox | value=0 | max=2
+input text | id=txtZ41_Marque_TxtBox | name=txtZ41_Marque:TxtBox | value=INDIG | max=10
+input text | id=txtZ40_LibelleCommercial1_TxtBox | name=txtZ40_LibelleCommercial1:TxtBox | value=INDYK W GALAREC
+input text | id=txtZ40_LibelleCommercial2_TxtBox | name=txtZ40_LibelleCommercial2:TxtBox | value=IE | max=15
+input text | id=lstZ43_PassageCaisse_TxtBox | name=lstZ43_PassageCaisse:TxtBox | value=2 | max=1
+input text | id=lstZ44_StockReappro_TxtBox | name=lstZ44_StockReappro:TxtBox | value=2 | max=1
+input text | id=lstZ45_Consigne_TxtBox | name=lstZ45_Consigne:TxtBox | value=0 | max=3
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:29 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+Klikamy w Teskt dowolny 
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Article/ar-e007.aspx?Chrono=83308&modeEuro=1
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ1_Commentaire1_TxtBox | name=txtZ1_Commentaire1:TxtBox | value= | max=100
+input text | id=txtZ2_Commentaire2_TxtBox | name=txtZ2_Commentaire2:TxtBox | value= | max=100
+input text | id=txtZ3_Commentaire3_TxtBox | name=txtZ3_Commentaire3:TxtBox | value= | max=100
+input text | id=txtZ4_Commentaire4_TxtBox | name=txtZ4_Commentaire4:TxtBox | value= | max=100
+input text | id=txtZ5_Commentaire5_TxtBox | name=txtZ5_Commentaire5:TxtBox | value= | max=100
+input text | id=txtZ6_Commentaire6_TxtBox | name=txtZ6_Commentaire6:TxtBox | value= | max=100
+input text | id=txtZ7_Commentaire7_TxtBox | name=txtZ7_Commentaire7:TxtBox | value= | max=100
+input text | id=txtZ8_Commentaire8_TxtBox | name=txtZ8_Commentaire8:TxtBox | value= | max=100
+input text | id=txtZ9_Commentaire9_TxtBox | name=txtZ9_Commentaire9:TxtBox | value= | max=100
+input text | id=txtZ10_Commentaire10_TxtBox | name=txtZ10_Commentaire10:TxtBox | value= | max=100
+input text | id=txtZ11_Commentaire11_TxtBox | name=txtZ11_Commentaire11:TxtBox | value= | max=100
+input text | id=txtZ12_Commentaire12_TxtBox | name=txtZ12_Commentaire12:TxtBox | value= | max=100
+input text | id=txtZ13_Commentaire13_TxtBox | name=txtZ13_Commentaire13:TxtBox | value= | max=100
+input text | id=txtZ14_Commentaire14_TxtBox | name=txtZ14_Commentaire14:TxtBox | value= | max=100
+input text | id=txtZ15_Commentaire15_TxtBox | name=txtZ15_Commentaire15:TxtBox | value= | max=100
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:29 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+
+w Komentarz 1: klikamy i wpisujemy KOD: xxxx numer który wcześniej z kod plu wzielismy
+
+potem klikamy zatwierdz i mamy okno 
+
+Odtwarzacz w wersji 40
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Czy+zachowa%c4%87+wpis%3f&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+klikamy Tak
+
+
+klikamy powrot
+
+Odtwarzacz w wersji 40
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=(Accueil)
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ARTICLE
+a  | id=mnTv_ARTICLE_ar-e001_FicheArticle | name= | value= | tekst=Karta Artykułu | opis=
+a  | id=mnTv_ARTICLE_GestionPLU | name= | value= | tekst=Zarządz. PLU | opis=
+a  | id=mnTv_ARTICLE_ar-e107_RechercheArticle | name= | value= | tekst=Szukaj artykuł | opis=
+a  | id=mnTv_ARTICLE_ar-e024_FicheSimplifiee | name= | value= | tekst=Karta Uproszczona | opis=
+a  | id=mnTv_ARTICLE_ar-e002_FicheEan | name= | value= | tekst=Karta EAN | opis=
+a  | id=mnTv_ARTICLE_EditionArticle | name= | value= | tekst=Wydruk artykułu | opis=
+a  | id=mnTv_ARTICLE_Etiquettes | name= | value= | tekst=Etykietki | opis=
+a  | id=mnTv_ARTICLE_ListesArticles | name= | value= | tekst=Lista artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e102_Composition | name= | value= | tekst=Zestaw | opis=
+a  | id=mnTv_ARTICLE_ar-e043_DiffusionFicheArticle | name= | value= | tekst=Przesłanie karty artykułu | opis=
+a  | id=mnTv_ARTICLE_ar-e094_ControleArticles | name= | value= | tekst=Kontrola Artykułów | opis=
+a  | id=mnTv_ARTICLE_ar-e064_ControleDesAnomalies | name= | value= | tekst=Kontrola błędów | opis=
+a  | id=mnTv_ARTICLE_SuppressionLogique | name= | value= | tekst=Usunięcie logiczne | opis=
+a  | id=mnTv_ARTICLE_EanExceptionnels | name= | value= | tekst=Wyjątkowe EAN | opis=
+
+Strona: http://aviso/webaviso/ecrans/article/ar-e001.aspx
+input image | id=ibtB1_ITM_Bas | name=ibtB1_ITM_Bas | value= | tekst= | opis=
+input image | id=ibtB2_ITM_Haut | name=ibtB2_ITM_Haut | value= | tekst= | opis=
+input image | id=ibtB3_EAN_Bas | name=ibtB3_EAN_Bas | value= | tekst= | opis=
+input image | id=ibtB4_EAN_Haut | name=ibtB4_EAN_Haut | value= | tekst= | opis=
+input checkbox | id=chkZ34_RotationLente_CheckBox1 | name=chkZ34_RotationLente:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ99_Bio_CheckBox1 | name=chkZ99_Bio:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ18_Recalcul_CheckBox1 | name=chkZ18_Recalcul:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ38_ParEAN_CheckBox1 | name=chkZ38_ParEAN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ86_Singularisation_CheckBox1 | name=chkZ86_Singularisation:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ87_ProduitRegional_CheckBox1 | name=chkZ87_ProduitRegional:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ88_ArticleTaxe_CheckBox1 | name=chkZ88_ArticleTaxe:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_PremierPrix_CheckBox1 | name=chkZ84_PremierPrix:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMN_CheckBox1 | name=chkZ84_ArticleMN:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ84_ArticleMDD_CheckBox1 | name=chkZ84_ArticleMDD:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ85_PreMarque_CheckBox1 | name=chkZ85_PreMarque:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ89_Psycho_CheckBox1 | name=chkZ89_Psycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ90_HyperPsycho_CheckBox1 | name=chkZ90_HyperPsycho:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ93_ArticleConsigne_CheckBox1 | name=chkZ93_ArticleConsigne:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ94_ConsigneObligatoire_CheckBox1 | name=chkZ94_ConsigneObligatoire:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ95_ConsigneFacultatif_CheckBox1 | name=chkZ95_ConsigneFacultatif:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ100_TicketRestau_CheckBox1 | name=chkZ100_TicketRestau:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+a  | id= | name= | value= | tekst=Patrz | opis=
+a  | id= | name= | value= | tekst= | opis=
+a  | id=lkbL14_RechercheArticle_LinkAviso | name=LFM | value= | tekst=Szukanie artykułu | opis=
+a  | id=lkbL16_DetailComposition_LinkAviso | name=LFM | value= | tekst=Szczegóły Zestawu | opis=
+a  | id=lkbL6_AjoutListe_LinkAviso | name=LFM | value= | tekst=Dodanie artykułu do list | opis=
+a  | id=lkbL7_HistoriqueCommande_LinkAviso | name=LFM | value= | tekst=Rys Historyczny Zamówień | opis=
+a  | id=lkbL8_StatistiqueVentes_LinkAviso | name=LFM | value= | tekst=Zestawienia Sprzedaży | opis=
+a  | id=lkbL18_ExplicationTarifaire_LinkAviso | name=LFM | value= | tekst=Wytłumaczenie taryfikacji | opis=
+a  | id=lnkZ1_CodeITM_LnkAviso | name=LFA | value= | tekst=Kod ITM8 : | opis=
+a  | id=lnkZ4_CodeEAN_LnkAviso | name=LFA | value= | tekst=Kod EAN13 : | opis=
+a  | id=lnkZ8_Fournisseur_LnkAviso | name=LFA | value= | tekst=Dostawca : | opis=
+a  | id=lnkZ11_Nomenclature_LnkAviso | name=LFA | value= | tekst=Nomenklatura: | opis=
+a  | id=lnkZ46_StockAchat_LnkAviso | name=LFA | value= | tekst=Stany Mag | opis=
+a  | id=lnkZ42_TexteLibre_LnkAviso | name=LFA | value= | tekst=Tekst dowolny : | opis=
+a  | id=lnkZ91_Indicateur_LnkAviso | name=LFA | value= | tekst=Wskaźniki | opis=
+a  | id=BanniereTarifAchat_LnkAviso | name=LFA | value= | tekst=Taryfy Zakupu | opis=
+a  | id=BanniereTarifVente_LnkAviso | name=LFA | value= | tekst=Taryfy Sprzed. | opis=
+a  | id=Lnk_CodeCN_LnkAviso | name=LFA | value= | tekst=Kod CN: | opis=
+a  | id=lnkZ22_CodeTVA_LnkAviso | name=LFA | value= | tekst=Kod VAT : | opis=
+a  | id=lnkZ45_Consigne_LnkAviso | name=LFA | value= | tekst=Kaucja : | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_RAZ_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Reprise_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB7_Reappro_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=txtZ1_CodeITM_TxtBox | name=txtZ1_CodeITM:TxtBox | value=0000099044318 | max=13
+input text | id=txtZ6_Libelle_TxtBox | name=txtZ6_Libelle:TxtBox | value=INDYK W GALARECIE | max=30
+input text | id=txtZ4_CodeEAN_TxtBox | name=txtZ4_CodeEAN:TxtBox | value=2405610000000 | max=13
+input text | id=txtZ7_LibelleCaisse_TxtBox | name=txtZ7_LibelleCaisse:TxtBox | value=INDYK W GALARECIE | max=25
+input text | id=lstZ8_Fournisseur_TxtBox | name=lstZ8_Fournisseur:TxtBox | value=66 | max=8
+input text | id=nclZ11_Nomenclature_LD1_TxtBox | name=nclZ11_Nomenclature:LD1:TxtBox | value=33 | max=2
+input text | id=nclZ11_Nomenclature_LD2_TxtBox | name=nclZ11_Nomenclature:LD2:TxtBox | value=76 | max=2
+input text | id=nclZ11_Nomenclature_LD3_TxtBox | name=nclZ11_Nomenclature:LD3:TxtBox | value=6 | max=2
+input text | id=lstZ62_TypeArticle_TxtBox | name=lstZ62_TypeArticle:TxtBox | value=1 | max=1
+input text | id=lstZ12_TypeVente_TxtBox | name=lstZ12_TypeVente:TxtBox | value=2 | max=1
+input text | id=txdZ14_DateSupprITMPrio_TxtBox | name=txdZ14_DateSupprITMPrio:TxtBox | value= | max=10
+input text | id=txtZ32_RefFournisseur_TxtBox | name=txtZ32_RefFournisseur:TxtBox | value=2405610000000 | max=13
+input text | id=lstZ28_Unite_TxtBox | name=lstZ28_Unite:TxtBox | value=2 | max=2
+input text | id=txnZ26_PoidsVolume_TxtBox | name=txnZ26_PoidsVolume:TxtBox | value=1,000 | max=7
+input text | id=txnZ30_ConditBase_TxtBox | name=txnZ30_ConditBase:TxtBox | value=1,00 | max=7
+input text | id=txnZ33_MinimumCommande_TxtBox | name=txnZ33_MinimumCommande:TxtBox | value=1,00 | max=7
+input text | id=lstZ29_Nature_TxtBox | name=lstZ29_Nature:TxtBox | value=1 | max=1
+input text | id=txtZ31_Adresse1_TxtBox | name=txtZ31_Adresse1:TxtBox | value= | max=8
+input text | id=txtZ31_Adresse2_TxtBox | name=txtZ31_Adresse2:TxtBox | value= | max=8
+input text | id=txmZ17_PABrut_TxtBox | name=txmZ17_PABrut:TxtBox | value=27,49 | max=10
+input text | id=txnZ20_Remise_TxtBox | name=txnZ20_Remise:TxtBox | value=0,00 | max=5
+input text | id=txmZ21_PANet_TxtBox | name=txmZ21_PANet:TxtBox | value=27,49 | max=10
+input text | id=txt_CodeCn_TxtBox | name=txt_CodeCn:TxtBox | value=99999980 | max=8
+input text | id=lst_Gtu_TxtBox | name=lst_Gtu:TxtBox | value=------ | max=8
+input text | id=lst_Split_TxtBox | name=lst_Split:TxtBox | value=N | max=1
+input text | id=lstZ22_CodeTVA_TxtBox | name=lstZ22_CodeTVA:TxtBox | value=6 | max=1
+input text | id=txwZ80_CodePKWIU_TxtBox | name=txwZ80_CodePKWIU:TxtBox | value=0 | max=10
+input text | id=txmZ25_PrixVente_TxtBox | name=txmZ25_PrixVente:TxtBox | value=49,99 | max=10
+input text | id=txnZ23_Coefficient_TxtBox | name=txnZ23_Coefficient:TxtBox | value=1,818 | max=7
+input text | id=txnZ24_Marge_TxtBox | name=txnZ24_Marge:TxtBox | value=40,25 | max=6
+input text | id=txeZ36_NombreEtiq_TxtBox | name=txeZ36_NombreEtiq:TxtBox | value=1 | max=2
+input text | id=lstZ37_FormatEtiq_TxtBox | name=lstZ37_FormatEtiq:TxtBox | value=43 | max=2
+input text | id=lstZ39_EtiRecept_TxtBox | name=lstZ39_EtiRecept:TxtBox | value=0 | max=2
+input text | id=txtZ41_Marque_TxtBox | name=txtZ41_Marque:TxtBox | value=INDIG | max=10
+input text | id=txtZ40_LibelleCommercial1_TxtBox | name=txtZ40_LibelleCommercial1:TxtBox | value=INDYK W GALAREC
+input text | id=txtZ40_LibelleCommercial2_TxtBox | name=txtZ40_LibelleCommercial2:TxtBox | value=IE | max=15
+input text | id=lstZ43_PassageCaisse_TxtBox | name=lstZ43_PassageCaisse:TxtBox | value=2 | max=1
+input text | id=lstZ44_StockReappro_TxtBox | name=lstZ44_StockReappro:TxtBox | value=2 | max=1
+input text | id=lstZ45_Consigne_TxtBox | name=lstZ45_Consigne:TxtBox | value=0 | max=3
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 46 | opis=
+a  | id= | name= | value= | tekst=Wtorek 10/11/2026  08:30 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+i wpisujemy w Format numer formatu zgodny z ustawien dla np 1 wcześniej wpisujemy 83 
+
+potem klikamy zatwierdz i ZER. na dole i minimalizujemy
+
+
+

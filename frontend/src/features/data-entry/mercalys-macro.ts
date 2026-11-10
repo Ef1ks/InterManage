@@ -24,8 +24,12 @@ const MENU = {
 
 const INTEGRATION_SCREEN = {
   confirmText: 'interacj',
+  /** „Powrót” na wyniku integracji (na-e015); dopiero po nim Mercalys przyjmuje klik w menu. */
   result: 'btnB1_Retour_LnkBouton',
 } as const
+
+/** Po Powrót z wyniku integracji strona się przeładowuje: klik w menu w tym czasie by przepadł. */
+const AFTER_RESULT_BACK_MS = 1500
 
 const BL_SCREEN = {
   /** Kolumna Nr Zamów, od zera: pusta = bon bez kodu. */
@@ -80,10 +84,14 @@ export function buildDeliveryMacro(documents: MacroDocument[]) {
       `WEBWAIT|${DIALOG}|Oui|${INTEGRATION_SCREEN.confirmText}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${DIALOG}|Oui`,
       `WEBWAIT|${WINDOW}|${INTEGRATION_SCREEN.result}||${INTEGRATION_TIMEOUT_MS}`,
-      `WEBOPEN|${WINDOW}|${MENU.directDeliveries}|${MENU.blScreen}`,
+      // Wynik integracji blokuje menu: najpierw Powrót. Gdyby klik w menu i tak przepadł, odtwarzacz klika ponownie,
+      // dopóki nie otworzy się Obsługa BL.
+      `WEBCLICK|${WINDOW}|${INTEGRATION_SCREEN.result}`,
+      `SLEEP|${AFTER_RESULT_BACK_MS}`,
+      `WEBOPEN|${WINDOW}|${MENU.directDeliveries}|${MENU.blScreen}|${bl.createCodeButton}`,
       `WEBWAIT|${WINDOW}|${bl.createCodeButton}||${PAGE_TIMEOUT_MS}`,
       `WEBROWS|${WINDOW}|${GRID}|${bl.orderColumn}|${bl.createCodeButton}|${bl.nextPageButton}|${documents.length}|${DIALOG}|${bl.confirmText}|${bl.confirmButton}`,
-      `WEBOPEN|${WINDOW}|${MENU.orders}|${MENU.orderEntry}`,
+      `WEBOPEN|${WINDOW}|${MENU.orders}|${MENU.orderEntry}|${order.criterion}`,
       `WEBWAIT|${WINDOW}|${order.criterion}`,
       `WEBKEY|${WINDOW}|${order.criterion}|${order.criterionKeys}`,
       `WEBWAIT|${WINDOW}|${order.headerButton}`,
@@ -566,6 +574,135 @@ export function transferFinishLines() {
 }
 
 /**
+ * Kod PLU dla wagi: karta artykułu (ar-e001), lista jego kodów EAN (ar-e005, „Kod EAN13”) i tekst dowolny (ar-e007).
+ */
+const PLU_SCREEN = {
+  articleTab: 'mnTp_ARTICLE',
+  articleMenuItem: 'mnTv_ARTICLE_ar-e001_FicheArticle',
+  eanField: 'txtZ4_CodeEAN_TxtBox',
+  itm8Field: 'txtZ1_CodeITM_TxtBox',
+  /** „Kod EAN13 :” na karcie: link pojawia się dopiero po wczytaniu artykułu. */
+  eanCodesButton: 'lnkZ4_CodeEAN_LnkAviso',
+  /** ar-e005: EAN wybranego wiersza; pusty, dopóki wiersz nie jest otwarty. */
+  eanDetailField: 'txtZ02_CodeEAN_TxtBox',
+  /** „Sekcja wagi” (1, 2): po wyborze Mercalys nadaje numer klawisza wagi. */
+  sectionField: 'lstZ11_SectionPLUCode_TxtBox',
+  scaleKeyField: 'txeZ14_ToucheBalance_TxtBox',
+  pluField: 'txtZ12_CodePLU_TxtBox',
+  eanApproveButton: 'btnB4_Valider_LnkBouton',
+  /** „Tekst dowolny :” na karcie i jego pierwszy komentarz. */
+  freeTextButton: 'lnkZ42_TexteLibre_LnkAviso',
+  commentField: 'txtZ1_Commentaire1_TxtBox',
+  freeTextApproveButton: 'btnB2_Valider_LnkBouton',
+  /** Format etykiety na karcie artykułu. */
+  labelFormatField: 'lstZ37_FormatEtiq_TxtBox',
+  cardApproveButton: 'btnB6_Valider_LnkBouton',
+  backButton: 'btnB1_Retour_LnkBouton',
+  resetButton: 'btnB2_RAZ_LnkBouton',
+  /** „Czy zachować wpis?” po Zatwierdź na liście EAN-ów i w tekście dowolnym. */
+  keepText: 'zachowa',
+  /** Zatwierdź na karcie artykułu może zapytać o zachowanie albo utworzenie wpisu; bez pytania makro idzie dalej. */
+  cardConfirmText: 'zachowa;Utworzy',
+} as const
+
+/** Odczyt numeru klawisza wagi: do makra trafia jako %PLU%. */
+const PLU_VARIABLE = 'PLU'
+/** Kod PLU ma najwyżej 4 cyfry (tyle mieści pole), 0 to „jeszcze nie nadany”. */
+const PLU_PATTERN = '^[1-9]\\d{0,3}$'
+
+export const PLU_MACRO_CONFIG = {
+  /** Po „Tak” strona się przeładowuje: klik w starą stronę by przepadł. */
+  afterConfirm: 1500,
+  /** Ile makro czeka na pytanie po Zatwierdź na karcie artykułu (pojawia się tylko czasem). */
+  cardDialogTimeout: 3000,
+  /** Ile makro czeka na numer klawisza wagi po wyborze sekcji. */
+  scaleKeyTimeout: 15000,
+} as const
+
+export type PluSection = '1' | '2'
+
+/**
+ * Makro kodów PLU dla nowych kodów 24…: dla każdego EAN-u po kolei karta artykułu, „Kod EAN13”, podwójny klik w wiersz
+ * z tym EAN-em, sekcja wagi, numer klawisza wagi przepisany do kodu PLU, Zatwierdź, Tak, Powrót, „Tekst dowolny”
+ * z komentarzem „KOD: <PLU>”, Zatwierdź, Tak, Powrót, format etykiety sekcji, Zatwierdź i ZER. Artykuł, który ma już kod PLU,
+ * nie dostaje nowego, ale jego kod trafia do komentarza i format jest ustawiany. EAN-u bez artykułu w Mercalys makro
+ * nie przeskakuje: staje z błędem (najpierw trzeba wczytać plik nowych artykułów). Na końcu chowa Mercalys.
+ * Wymaga odtwarzacza od wersji 41 (WEBDBLROW, WEBREAD).
+ */
+export function buildPluMacro({
+  eans,
+  section,
+  labelFormat,
+}: {
+  eans: string[]
+  section: PluSection
+  labelFormat: string
+}) {
+  const screen = PLU_SCREEN
+  const c = PLU_MACRO_CONFIG
+  const plu = `%${PLU_VARIABLE}%`
+  const out = [
+    `# Kody PLU: ${eans.length}, sekcja wagi ${section}, format ${labelFormat}`,
+    `WINOPEN|${PROGRAM_WINDOW}`,
+    `WEBENSURE|${WINDOW}|${screen.articleMenuItem}|${screen.articleTab}`,
+    `WEBCLICK|${WINDOW}|${screen.articleMenuItem}`,
+  ]
+  eans.forEach((ean, index) => {
+    const hasPlu = `plu-ma-${index + 1}`
+    out.push(
+      `# ${index + 1}/${eans.length}: EAN ${ean}`,
+      `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.eanField}|^a${ean}{Enter}`,
+      // Wczytany artykuł ma ITM8; po ZER. pole jest puste, więc stara karta nie uda wczytanej.
+      `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*[1-9]\\d*$|${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.eanField}|^${ean}$`,
+      `WEBCLICK|${WINDOW}|${screen.eanCodesButton}`,
+      `WEBWAIT|${WINDOW}|${screen.eanDetailField}||${PAGE_TIMEOUT_MS}`,
+      `WEBDBLROW|${WINDOW}|${GRID}|${ean}|${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.eanDetailField}|^${ean}$|${PAGE_TIMEOUT_MS}`,
+      // Kod PLU już jest: zapamiętany od razu (po zapisie Mercalys czyści szczegóły wiersza), bez nowej sekcji
+      // i zapisu, dalej tylko komentarz i format. Pusty kod nadpisze odczyt numeru klawisza wagi.
+      `WEBREAD|${WINDOW}|${screen.pluField}|${PLU_VARIABLE}|^(\\d{1,4})?$|${PAGE_TIMEOUT_MS}`,
+      `WEBIFVALUE|${WINDOW}|${screen.pluField}|^0?$|${hasPlu}|500`,
+      `WEBKEY|${WINDOW}|${screen.sectionField}|^a${section}{Tab}`,
+      `WEBREAD|${WINDOW}|${screen.scaleKeyField}|${PLU_VARIABLE}|${PLU_PATTERN}|${c.scaleKeyTimeout}`,
+      `WEBKEY|${WINDOW}|${screen.pluField}|^a${plu}{Tab}`,
+      `WEBVALUE|${WINDOW}|${screen.pluField}|^${plu}$`,
+      `WEBCLICK|${WINDOW}|${screen.eanApproveButton}`,
+      `WEBWAIT|${DIALOG}|Oui|${screen.keepText}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${DIALOG}|Oui`,
+      `SLEEP|${c.afterConfirm}`,
+      `LABEL|${hasPlu}`,
+      `WEBCLICK|${WINDOW}|${screen.backButton}`,
+      `WEBWAIT|${WINDOW}|${screen.freeTextButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.freeTextButton}`,
+      `WEBWAIT|${WINDOW}|${screen.commentField}||${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.commentField}|^aKOD: ${plu}`,
+      `WEBVALUE|${WINDOW}|${screen.commentField}|^KOD: ${plu}$`,
+      `WEBCLICK|${WINDOW}|${screen.freeTextApproveButton}`,
+      `WEBWAIT|${DIALOG}|Oui|${screen.keepText}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${DIALOG}|Oui`,
+      `SLEEP|${c.afterConfirm}`,
+      `WEBCLICK|${WINDOW}|${screen.backButton}`,
+      `WEBWAIT|${WINDOW}|${screen.labelFormatField}||${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.eanField}|^${ean}$|${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.labelFormatField}|^a${labelFormat}{Tab}`,
+      `WEBVALUE|${WINDOW}|${screen.labelFormatField}|^${labelFormat}$`,
+      `WEBCLICK|${WINDOW}|${screen.cardApproveButton}`,
+      `WEBDIALOG|${DIALOG}|${screen.cardConfirmText}|Oui|${c.cardDialogTimeout}`,
+      `SLEEP|${c.afterConfirm}`,
+      `WEBWAIT|${WINDOW}|${screen.resetButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.resetButton}`,
+      // Pusta karta: kolejny EAN nie trafi w stary artykuł, a jego ITM8 nie uda wczytanego.
+      `WEBVALUE|${WINDOW}|${screen.eanField}|^$|${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*$|${PAGE_TIMEOUT_MS}`,
+    )
+  })
+  out.push(`WINMIN|${PROGRAM_WINDOW}`)
+  return out.join('\r\n') + '\r\n'
+}
+
+/**
  * Kody MEA: Cadencier → Lista Cadencier (ca-e064), filtr Nazwa Cad., przetworzenie pliku (ca-e029), Wybór (ca-e062),
  * Zatwierdź, Integracja (ca-e032), Integracja, Tak, PDF, Powrót.
  */
@@ -573,9 +710,10 @@ const MEA_SCREEN = {
   cadencierTab: 'mnTp_CADENCIER',
   listMenuItem: 'mnTv_CADENCIER_ca-e064_ListeCadenciers',
   nameFilter: 'txtZ1_LibelleCadencier_TxtBox',
-  /** Przycisk „Przetworzenie” w wierszu: `dgDetail__ctl<n + 1>_ibtC11_Traitement`, pierwszy wiersz to ctl2. */
+  /** Przycisk „Przetworzenie” w wierszu (`dgDetail__ctl<n>_ibtC11_Traitement`; numer w id liczy też wiersze schowane filtrem). */
   rowButton: 'ibtC11_Traitement',
-  selectionButton: 'btnB11_SelectionRecherche_LnkBouton',
+  /** „Wybór” (zielona gwiazdka). Obok jest „Wybór wysz.” (`btnB11_SelectionRecherche`), tryb wyszukiwania: nie ten. */
+  selectionButton: 'btnB3_Select_LnkBouton',
   approveSelectionButton: 'btnB2_Valider_LnkBouton',
   integrationButton: 'btnB8_Integration_LnkBouton',
   integrateButton: 'btnB2_Integrer_LnkBouton',
@@ -587,13 +725,14 @@ const MEA_SCREEN = {
 /** Pod jednym kodem MEA bywa 1-3 plików cadencier; tyle wierszy listy makro sprawdza najwyżej. */
 export const MEA_MAX_FILES = 5
 /** Po integracji Acrobat pokazuje raport; czekamy, aż okna przestaną się zmieniać. */
-const MEA_PDF_TIMEOUT_MS = 15000
+const MEA_PDF_TIMEOUT_MS = 45000
 
 /**
  * Makro kodów MEA: dla każdego kodu filtr listy cadencier i po kolei każdy plik z tym kodem (Przetworzenie, Wybór,
- * Zatwierdź, Integracja, Integracja, Tak, zamknięcie PDF-a, Powrót). Po każdym pliku kod jest wpisywany od nowa na oznaczonej
- * stronie (WEBMARK), a WEBIFROW czeka na przeładowaną listę, także pustą (kod bez plików); gdy plików jest mniej, przechodzi do następnego kodu. Na końcu chowa
- * Mercalys. Wymaga odtwarzacza od wersji 37 (WEBMARK, WEBIFROW, LABEL).
+ * Zatwierdź, Integracja, Integracja, Tak, zamknięcie PDF-a, Powrót). Po każdym pliku kod jest wpisywany od nowa, a filtr
+ * listy działa na stronie, bez przeładowania: WEBIFROW czeka, aż widoczne są tylko wiersze z kodem (albo żaden), i podaje
+ * przycisk n-tego jako %ROW%; gdy plików jest mniej, przechodzi do następnego kodu. Na końcu chowa Mercalys.
+ * Wymaga odtwarzacza od wersji 41 (WEBIFROW z %ROW%, LABEL).
  */
 export function buildMeaMacro(codes: string[]) {
   const screen = MEA_SCREEN
@@ -610,10 +749,10 @@ export function buildMeaMacro(codes: string[]) {
     for (let row = 1; row <= MEA_MAX_FILES; row++) {
       out.push(
         `# Plik ${row}`,
-        `WEBMARK|${WINDOW}|${screen.nameFilter}`,
         `WEBKEY|${WINDOW}|${screen.nameFilter}|^a${code}{Enter}`,
         `WEBIFROW|${WINDOW}|${screen.nameFilter}|${GRID}|${screen.rowButton}|${row}|${code}|${label}|${PAGE_TIMEOUT_MS}`,
-        `WEBCLICK|${WINDOW}|${GRID}__ctl${row + 1}_${screen.rowButton}`,
+        // Filtr chowa wiersze na stronie, więc przycisk n-tego widocznego pliku podaje WEBIFROW (%ROW%).
+        `WEBCLICK|${WINDOW}|%ROW%`,
         `WEBWAIT|${WINDOW}|${screen.selectionButton}||${PAGE_TIMEOUT_MS}`,
         `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
         `WEBWAIT|${WINDOW}|${screen.approveSelectionButton}||${PAGE_TIMEOUT_MS}`,
@@ -624,8 +763,10 @@ export function buildMeaMacro(codes: string[]) {
         `WEBCLICK|${WINDOW}|${screen.integrateButton}`,
         `WEBWAIT|${DIALOG}|Oui|${screen.integrateText}|${PAGE_TIMEOUT_MS}`,
         `WEBCLICK|${DIALOG}|Oui`,
-        `WEBWAIT|${WINDOW}|${screen.integrationButton}||${INTEGRATION_TIMEOUT_MS}`,
+        // Raport integracji otwiera się w Acrobacie po 2-3 s; ekran po integracji nie ma już przycisku Integracja,
+        // więc najpierw PDF (WINCLOSEALL czeka, aż się pojawi i ustoi), potem Powrót, gdy już jest.
         `WINCLOSEALL|${PDF_WINDOW}|${MEA_PDF_TIMEOUT_MS}`,
+        `WEBWAIT|${WINDOW}|${screen.backButton}||${INTEGRATION_TIMEOUT_MS}`,
         `WEBCLICK|${WINDOW}|${screen.backButton}`,
         `WEBWAIT|${WINDOW}|${screen.nameFilter}||${PAGE_TIMEOUT_MS}`,
       )

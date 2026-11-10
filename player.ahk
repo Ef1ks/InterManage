@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 40.0.0.0
+;@Ahk2Exe-SetVersion 41.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 40 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 41 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -197,6 +197,7 @@ PlayMacro(rawClip) {
     report := "" ; podsumowania etapów, pokazane na końcu makra
     closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
+    vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
 
     index := 0
     while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW i WEBIFVALUE przeskakują do LABEL
@@ -204,6 +205,9 @@ PlayMacro(rawClip) {
         line := Trim(lines[index])
         if (line = "" || SubStr(line, 1, 1) = "#")
             continue
+        ; Tylko nazwy już odczytane: znak % w zwykłej linii zostaje bez zmian.
+        for name, value in vars
+            line := StrReplace(line, "%" name "%", value)
 
         sep := InStr(line, "|") ? "|" : ";"
         parts := StrSplit(line, sep)
@@ -322,8 +326,10 @@ PlayMacro(rawClip) {
                     return
                 }
             case "WEBOPEN":
-                ; WEBOPEN|okno|rozwinięcie menu|pozycja menu: rozwija tylko, gdy pozycji nie widać, bo drugie kliknięcie zwinęłoby menu
-                problem := parts.Length < 4 ? "Linia WEBOPEN wymaga okna, rozwinięcia i pozycji." : WebOpen(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]))
+                ; WEBOPEN|okno|rozwinięcie menu|pozycja menu|element otwartego ekranu: rozwija tylko, gdy pozycji nie widać, bo drugie
+                ; kliknięcie zwinęłoby menu. Z elementem klika pozycję ponownie (najwyżej 4 razy), dopóki ekran się nie otworzy.
+                problem := parts.Length < 4 ? "Linia WEBOPEN wymaga okna, rozwinięcia i pozycji."
+                    : WebOpen(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Trim(parts[5]) : "")
                 if (problem != "") {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
@@ -407,6 +413,29 @@ PlayMacro(rawClip) {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
+            case "WEBREAD":
+                ; WEBREAD|okno|pole|nazwa|wyrażenie regularne|limit w ms: czeka, aż pole ma pasującą wartość, i zapamiętuje ją;
+                ; kolejne linie dostają ją w miejscu %nazwa%. Np. numer klawisza wagi przepisywany do kodu PLU i komentarza.
+                if (parts.Length < 5) {
+                    MsgBox report "Linia WEBREAD wymaga okna, pola, nazwy i wyrażenia.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                value := ""
+                problem := WebValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[5]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 10000, &value)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                vars[Trim(parts[4])] := value
+            case "WEBDBLROW":
+                ; WEBDBLROW|okno|siatka albo *|tekst|limit w ms: klika dwa razy pierwszy wiersz tabeli z tym tekstem
+                ; (liczba stoi osobno, więc 2405610000000 nie trafi w dłuższy kod), np. EAN na liście kodów artykułu.
+                problem := parts.Length < 4 ? "Linia WEBDBLROW wymaga okna, siatki i tekstu."
+                    : WebDoubleClickRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
             case "WEBKEY":
                 ; WEBKEY|okno|pole|klawisze|limit w ms: ustawia fokus w polu i naciska prawdziwe klawisze (np. {Enter}, {Tab})
                 problem := parts.Length < 4 ? "Linia WEBKEY wymaga okna, pola i klawiszy."
@@ -442,15 +471,22 @@ PlayMacro(rawClip) {
                 ; LABEL|nazwa: cel przeskoku z WEBIFROW i WEBIFVALUE, sama nic nie robi
             case "WEBIFROW":
                 ; WEBIFROW|okno|element strony listy|siatka|przycisk w wierszu|numer wiersza od 1|tekst|etykieta|limit w ms:
-                ; czeka, aż lista pokaże tylko wiersze z tekstem (np. kodem MEA wpisanym w filtr). Gdy wiersz o tym numerze jest,
-                ; idzie dalej; gdy lista ma mniej wierszy albo żadnego, przeskakuje do LABEL|etykieta.
+                ; czeka, aż lista pokaże tylko wiersze z tekstem (np. kodem MEA wpisanym w filtr). Gdy widoczny wiersz o tym numerze
+                ; jest, idzie dalej, a id jego przycisku jest w kolejnych liniach jako %ROW%; gdy lista ma mniej wierszy albo
+                ; żadnego, przeskakuje do LABEL|etykieta.
                 if (parts.Length < 8) {
                     MsgBox report "Linia WEBIFROW wymaga okna, strony, siatki, przycisku, numeru, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
+                rowButton := ""
+                seen := ""
                 problem := WebIfRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Integer(Trim(parts[6])), Trim(parts[7]),
-                    parts.Length >= 9 ? Integer(Trim(parts[9])) : 30000)
+                    parts.Length >= 9 ? Integer(Trim(parts[9])) : 30000, &rowButton, &seen)
+                if (problem = "")
+                    vars["ROW"] := rowButton ; kolejne linie klikają przycisk tego wiersza jako %ROW%
                 if (problem = "SKIP") {
+                    ; Podsumowanie na końcu: ile plików obsłużono i co było widać na liście przy przeskoku.
+                    report .= Trim(parts[7]) ": obsłużone pliki: " (Integer(Trim(parts[6])) - 1) " (" seen ")`n"
                     target := LabelLine(lines, Trim(parts[8]), index)
                     if (target = 0) {
                         MsgBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
@@ -624,13 +660,24 @@ WebEnsure(title, element, button) {
     return problem != "" ? problem : WebWait(title, element, "", 30000)
 }
 
-WebOpen(title, expander, target) {
+WebOpen(title, expander, target, expected := "") {
     if (WebWait(title, target, "", 500) != "") {
         problem := WebClick(title, expander, 10000)
         if (problem != "")
             return problem
     }
-    return WebClick(title, target, 10000)
+    if (expected = "")
+        return WebClick(title, target, 10000)
+    ; Mercalys po cichu odrzuca klik w menu, gdy strona obok jeszcze pracuje (np. wynik integracji wielu plików),
+    ; więc bez oczekiwanego ekranu klikamy ponownie.
+    Loop 4 {
+        problem := WebClick(title, target, 10000)
+        if (problem != "")
+            return problem
+        if (WebWait(title, expected, "", 5000) = "")
+            return ""
+    }
+    return "Po kliknięciu `"" target "`" nie pojawił się element `"" expected "`"."
 }
 
 ; Wpisuje Nr BL do nagłówka każdej dostawy z listy. Wiersz z tym samym numerem jest pomijany, więc makro można powtórzyć,
@@ -984,7 +1031,7 @@ WebFreeCode(title, fresh, codeField, checkField, first, tries, loadMs, &found) {
 }
 
 ; Sprawdza wartość pola po wyrażeniu regularnym. Mercalys formatuje pola po wyjściu z nich, więc wzorzec dopuszcza oba zapisy.
-WebValue(title, field, pattern, timeoutMs) {
+WebValue(title, field, pattern, timeoutMs, &value := "") {
     deadline := A_TickCount + timeoutMs
     last := "(brak pola)"
     Loop {
@@ -995,8 +1042,10 @@ WebValue(title, field, pattern, timeoutMs) {
                 last := WebProp(item.element, "type") = "checkbox"
                     ? (WebProp(item.element, "checked") ? "tak" : "nie")
                     : Trim(WebProp(item.element, "value"))
-                if RegExMatch(last, pattern)
+                if RegExMatch(last, pattern) {
+                    value := last
                     return ""
+                }
             }
         }
         if (A_TickCount >= deadline)
@@ -1054,45 +1103,70 @@ RowTextOf(element) {
     return ""
 }
 
-; "" = wiersz o tym numerze jest i ma tekst, "SKIP" = przefiltrowana lista ma mniej wierszy, inaczej opis problemu.
-; Strona oznaczona przez WEBMARK to jeszcze stara lista sprzed filtra, więc liczy się tylko przeładowana. Pusta lista
-; musi utrzymać się 0,5 s, a wiersz bez tekstu też znaczy starą listę (gdyby przed WEBIFROW nie było WEBMARK).
-WebIfRow(title, page, grid, button, number, text, timeoutMs) {
+; "" = widoczny wiersz o tym numerze jest (id jego przycisku w buttonId), "SKIP" = przefiltrowana lista ma mniej wierszy,
+; inaczej opis problemu. Filtr listy cadencier działa na stronie, bez przeładowania (onpropertychange), chowa wiersze
+; i przepuszcza też tekst wewnątrz dłuższej liczby, więc liczą się widoczne wiersze z tekstem jako osobną liczbą, a numer
+; w id (ctl2, ctl3) nie mówi, który to widoczny wiersz. Lista jest gotowa, gdy pole strony (filtr) ma ten tekst,
+; a widoczne wiersze nie zmieniają się przez 0,5 s.
+WebIfRow(title, page, grid, button, number, text, timeoutMs, &buttonId := "", &seen := "") {
     deadline := A_TickCount + timeoutMs
     pattern := "i)(?<!\d)\Q" text "\E(?!\d)"
-    firstId := grid "__ctl2_" button
-    rowId := grid "__ctl" (number + 1) "_" button
-    emptySince := 0
+    lastState := ""
+    stableSince := 0
+    seen := "nie ma strony z polem `"" page "`"" ; opis do błędu: co makro widziało ostatnio
     Loop {
-        empty := false
+        state := ""
+        found := ""
         for doc in PagesWith(title, page) {
-            mark := ""
-            try mark := WebProp(doc.body, "macroMark")
-            if (mark != "")
-                continue
-            first := ""
-            try first := doc.getElementById(firstId)
-            if (WebProp(first, "tagName") = "") {
-                empty := true
+            filter := ""
+            try filter := doc.getElementById(page).value
+            if !InStr(filter, text) {
+                seen := "pole `"" page "`" ma wartość `"" filter "`""
                 continue
             }
-            if !RegExMatch(RowTextOf(first), pattern)
-                continue
-            row := ""
-            try row := doc.getElementById(rowId)
-            if (WebProp(row, "tagName") = "")
-                return "SKIP"
-            return RegExMatch(RowTextOf(row), pattern) ? "" : "Wiersz " number " listy nie ma tekstu `"" text "`"."
+            visible := 0
+            rows := []
+            first := ""
+            for item in GridRows(doc, grid) {
+                if !IsShown(item.row)
+                    continue
+                visible += 1
+                if (first = "")
+                    first := RowText(item.row)
+                if RegExMatch(RowText(item.row), pattern)
+                    rows.Push(item.row)
+            }
+            seen := "widoczne wiersze: " visible ", z tekstem: " rows.Length (first != "" ? ", pierwszy: `"" first "`"" : "")
+            if (rows.Length >= number) {
+                try {
+                    inputs := rows[number].getElementsByTagName("input")
+                    Loop inputs.length {
+                        id := WebProp(inputs.item(A_Index - 1), "id")
+                        if (SubStr(id, -StrLen(button) - 1) = "_" button)
+                            found := id
+                    }
+                }
+                if (found = "")
+                    return "Wiersz " number " listy nie ma przycisku `"" button "`"."
+            }
+            state := visible ":" rows.Length ":" found
+            break
         }
-        if empty {
-            if (emptySince = 0)
-                emptySince := A_TickCount
-            else if (A_TickCount - emptySince >= 500)
-                return "SKIP"
-        } else
-            emptySince := 0
+        if (state != "" && state = lastState) {
+            ; Przeskok do następnego kodu dopiero po 2 s takiej samej listy: chwilowo pusta lista w trakcie filtrowania
+            ; albo przeładowania nie może zakończyć kodu.
+            if (A_TickCount - stableSince >= (found = "" ? 2000 : 500)) {
+                if (found = "")
+                    return "SKIP"
+                buttonId := found
+                return ""
+            }
+        } else {
+            lastState := state
+            stableSince := A_TickCount
+        }
         if (A_TickCount >= deadline)
-            return "Lista nie pokazała wierszy z tekstem `"" text "`"."
+            return "Lista nie pokazała wierszy z tekstem `"" text "`" (" seen ")."
         Sleep 100
     }
 }
@@ -1121,8 +1195,68 @@ WebPickRow(title, grid, column, text, timeoutMs) {
     }
 }
 
-; Tekst całego wiersza z pojedynczymi spacjami.
-RowText(row) => Trim(RegExReplace(StrReplace(WebProp(row, "innerText"), Chr(160), " "), "\s+", " "))
+; Podwójny klik w wiersz z tekstem. Siatka "*" = każdy najgłębszy wiersz tabeli strony, bo nazwy listy kodów EAN
+; karty artykułu (ar-e005) nie znamy. Klik i dwuklik idą do pierwszej komórki i wypływają do wiersza, jak u człowieka.
+WebDoubleClickRow(title, grid, text, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    pattern := "(?<!\d)\Q" text "\E(?!\d)"
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                if !PageLoaded(doc)
+                    continue
+                candidates := []
+                if (grid != "*") {
+                    for item in GridRows(doc, grid)
+                        candidates.Push(item.row)
+                } else {
+                    try {
+                        found := doc.getElementsByTagName("tr")
+                        Loop found.length {
+                            row := found.item(A_Index - 1)
+                            if (row.getElementsByTagName("tr").length = 0)
+                                candidates.Push(row)
+                        }
+                    }
+                }
+                for row in candidates {
+                    if !(IsShown(row) && RegExMatch(RowText(row), pattern))
+                        continue
+                    try WinActivate hwnd
+                    try {
+                        ; Mercalys: klik zaznacza wiersz (setSelectedLigne), dwuklik to __doPostBack z atrybutu ondblclick wiersza.
+                        ; Kod z atrybutu uruchamiamy wprost; bez niego zdarzenie idzie do pierwszej komórki i wypływa do wiersza.
+                        dbl := ""
+                        if RegExMatch(WebProp(row, "outerHTML"), "i)ondblclick=`"([^`"]+)`"", &match)
+                            dbl := StrReplace(StrReplace(StrReplace(match[1], "&quot;", "`""), "&#39;", "'"), "&amp;", "&")
+                        window := doc.parentWindow
+                        window.__macroTarget := row
+                        window.setTimeout("var t = window.__macroTarget; t.click(); "
+                            . (dbl != "" ? dbl : "t.cells[0].fireEvent('ondblclick');"), 0, "JScript")
+                        return ""
+                    }
+                }
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie ma wiersza z `"" text "`" w oknie `"" title "`"."
+        Sleep 100
+    }
+}
+
+; Tekst całego wiersza z pojedynczymi spacjami. Komórki rozdziela spacja: innerText wiersza w IE skleja je
+; („… 52817” + „19/11/2026” = „5281719/11/2026”), a liczba musi stać osobno.
+RowText(row) {
+    text := ""
+    try {
+        cells := row.cells
+        Loop cells.length
+            text .= " " cells.item(A_Index - 1).innerText
+    }
+    if (text = "")
+        text := WebProp(row, "innerText")
+    return Trim(RegExReplace(StrReplace(text, Chr(160), " "), "\s+", " "))
+}
 
 ; Zaznacza pierwszy wiersz, którego tekst pasuje do wyrażenia. Lista bez takiego wiersza przez 2 s to błąd, bez czekania do limitu.
 WebPickRowMatching(title, grid, pattern, timeoutMs) {
@@ -1542,6 +1676,11 @@ GridRows(doc, grid) {
         found := doc.getElementsByTagName("tr")
         Loop found.length {
             row := found.item(A_Index - 1)
+            ; Wiersz z tabelą w środku (ramka listy, np. Lista Cadencier) ma w HTML kliknięcia swoich wierszy, ale sam nim nie jest.
+            nested := 0
+            try nested := row.getElementsByTagName("tr").length
+            if (nested > 0)
+                continue
             if RegExMatch(WebProp(row, "outerHTML"), "setSelectedLigne\('(" name ")',[^,]+,(\d+),", &match)
                 rows.Push({row: row, index: match[2], grid: match[1]})
         }
