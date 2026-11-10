@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -166,22 +167,24 @@ export function ControlGroupMenu({
     <DropdownMenu>
       <DropdownMenuTrigger render={trigger} />
       <DropdownMenuContent align="start" className="min-w-60" onClick={(event) => event.stopPropagation()}>
-        <DropdownMenuLabel>Dostawca do kontroli ({count})</DropdownMenuLabel>
-        {groups.map((group) => {
-          const members = new Set(group.itm8s)
-          const all = itm8s.every((itm8) => members.has(itm8))
-          return (
-            <DropdownMenuCheckboxItem
-              key={group.id}
-              checked={all}
-              closeOnClick={false}
-              onCheckedChange={(checked) => toggle(group, checked)}
-            >
-              <span className={cn('size-2.5 shrink-0 rounded-full', colorOf(group.color).dot)} aria-hidden />
-              <span className="truncate">{group.name}</span>
-            </DropdownMenuCheckboxItem>
-          )
-        })}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Dostawca do kontroli ({count})</DropdownMenuLabel>
+          {groups.map((group) => {
+            const members = new Set(group.itm8s)
+            const all = itm8s.every((itm8) => members.has(itm8))
+            return (
+              <DropdownMenuCheckboxItem
+                key={group.id}
+                checked={all}
+                closeOnClick={false}
+                onCheckedChange={(checked) => toggle(group, checked)}
+              >
+                <span className={cn('size-2.5 shrink-0 rounded-full', colorOf(group.color).dot)} aria-hidden />
+                <span className="truncate">{group.name}</span>
+              </DropdownMenuCheckboxItem>
+            )
+          })}
+        </DropdownMenuGroup>
         {groups.length > 0 && <DropdownMenuSeparator />}
         <DropdownMenuItem onClick={() => onCreate(itm8s)}>
           <PlusIcon />

@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useMemo, useState } from 'react'
+import { type ComponentProps, Fragment, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { ChartColumnIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TagIcon, TriangleAlertIcon } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -397,6 +397,13 @@ function Report({
     )
   const activeControlKey = activeControl.join(',')
 
+  // Tekst do szukania liczony raz na raport: normalizacja przy każdym znaku dla tysięcy artykułów zacinała pisanie.
+  const articleTexts = useMemo(
+    () =>
+      new Map(report.groups.flatMap((group) => group.articles.map((article) => [article.itm8, articleText(article)]))),
+    [report.groups],
+  )
+
   const groups = useMemo(() => {
     // Filtr dostawców do kontroli: tylko ich artykuły, a pozycja liczy się z nich.
     const controlIds = new Set(activeControlKey ? activeControlKey.split(',') : [])
@@ -420,6 +427,7 @@ function Report({
           })
     const words = normalize(query).split(/\s+/).filter(Boolean)
     const matches = (text: string) => words.every((word) => text.includes(word))
+    const textOf = (article: ProtocolReportArticle) => articleTexts.get(article.itm8) ?? articleText(article)
     const filtered =
       words.length === 0
         ? source.map((group) => ({ group, articles: group.articles, viaArticles: false }))
@@ -427,7 +435,7 @@ function Report({
             if (matches(normalize(`${group.code ?? ''} ${group.name ?? ''}`))) {
               return [{ group, articles: group.articles, viaArticles: false }]
             }
-            const articles = group.articles.filter((article) => matches(articleText(article)))
+            const articles = group.articles.filter((article) => matches(textOf(article)))
             return articles.length > 0 ? [{ group, articles, viaArticles: true }] : []
           })
     const byGroup: SortAccessors<(typeof filtered)[number], SortKey> = Object.fromEntries(
@@ -448,19 +456,25 @@ function Report({
         shownArticles:
           groupWords.length === 0
             ? articles
-            : articles.filter((article) => groupWords.every((word) => articleText(article).includes(word))),
+            : articles.filter((article) => groupWords.every((word) => textOf(article).includes(word))),
       }
     })
-  }, [report.groups, query, sort, groupQueries, controlGroups, activeControlKey])
+  }, [report.groups, articleTexts, query, sort, groupQueries, controlGroups, activeControlKey])
   const controlFiltered = activeControl.length > 0
   const controlTotal = sumFigures(groups.map((row) => row.group.current))
   const controlPrevious = compare ? sumFigures(groups.map((row) => row.group.previous!)) : null
 
   // Zaznaczone artykuły, które są w raporcie (po zmianie okresu część może zniknąć), w kolejności raportu.
-  const selection = report.groups.flatMap((group) => {
-    const articles = group.articles.filter((article) => selected.has(selectionKey(group, article)))
-    return articles.length > 0 ? [{ group, articles, whole: articles.length === group.articles.length }] : []
-  })
+  const selection = useMemo(
+    () =>
+      selected.size === 0
+        ? []
+        : report.groups.flatMap((group) => {
+            const articles = group.articles.filter((article) => selected.has(selectionKey(group, article)))
+            return articles.length > 0 ? [{ group, articles, whole: articles.length === group.articles.length }] : []
+          }),
+    [report.groups, selected],
+  )
   const selectedArticles = selection.flatMap((item) => item.articles)
   const selectedTotal = sumFigures(selectedArticles.map((article) => article.current))
   const selectedPrevious = compare ? sumFigures(selectedArticles.map((article) => article.previous!)) : null
@@ -598,7 +612,7 @@ function Report({
             onEdit={setEditor}
           />
           <div className="mb-3 flex flex-wrap items-center gap-3">
-            <SearchInput
+            <DelayedSearchInput
               value={query}
               onChange={(next) => {
                 onQuery(next)
@@ -813,7 +827,7 @@ function Report({
                           <TableRow className="hover:bg-transparent">
                             <TableCell colSpan={columnCount} className="py-1.5">
                               <div className="sticky left-0 flex w-fit max-w-full flex-wrap items-center gap-2 pl-6">
-                                <SearchInput
+                                <DelayedSearchInput
                                   value={groupQuery}
                                   onChange={(next) => setGroupQueries((current) => ({ ...current, [group.key]: next }))}
                                   placeholder={`Szukaj w: ${groupName(group, report.grouping) || 'pozycji'} (nazwa, ITM8, EAN, marka)`}
@@ -933,6 +947,28 @@ function Report({
 }
 
 const NO_FILTER: string[] = []
+
+/**
+ * Pole szukania z własnym stanem: pisanie przerysowuje tylko pole, a raport (tysiące wierszy) przelicza się po 200 ms
+ * przerwy. Zmiana z zewnątrz (np. wyczyszczenie, powrót z adresu) wraca do pola.
+ */
+function DelayedSearchInput({ value, onChange, ...props }: ComponentProps<typeof SearchInput>) {
+  const [text, setText] = useState(value)
+  const [committed, setCommitted] = useState(value)
+  if (value !== committed) {
+    setCommitted(value)
+    setText(value)
+  }
+  useEffect(() => {
+    if (text === committed) return
+    const timer = window.setTimeout(() => {
+      setCommitted(text)
+      onChange(text)
+    }, 200)
+    return () => window.clearTimeout(timer)
+  }, [text, committed, onChange])
+  return <SearchInput {...props} value={text} onChange={setText} />
+}
 const NO_CONTROL_GROUPS: LossControlGroup[] = []
 
 function selectionKey(group: ProtocolReportGroup, article: ProtocolReportArticle) {
