@@ -246,20 +246,18 @@ function ChartContent({
             )}
             {codeFields && <div className="mt-1">{codeFields}</div>}
           </div>
-          {article.data?.cadencier && (
-            <p
-              className="shrink-0 rounded-lg bg-red-600 px-4 py-2 text-base font-bold tracking-wide text-white uppercase shadow-sm dark:bg-red-700"
-              title="Artykuł jest na bieżącej liście cadencier sklepu"
-            >
-              Obecny w cadencier
-            </p>
-          )}
+          {article.data?.cadencier && <CadencierBadge />}
         </div>
       ) : (
         <DialogHeader className="pr-8">
-          <DialogTitle className="text-lg leading-snug">{title(target, article.data)}</DialogTitle>
-          <DialogDescription>{subtitle(target, article.data) || 'Statystyki artykułu'}</DialogDescription>
-          {codeFields && <div className="pt-1">{codeFields}</div>}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="grid min-w-0 gap-1">
+              <DialogTitle className="text-lg leading-snug">{title(target, article.data)}</DialogTitle>
+              <DialogDescription>{subtitle(target, article.data) || 'Statystyki artykułu'}</DialogDescription>
+              {codeFields && <div className="pt-1">{codeFields}</div>}
+            </div>
+            {article.data?.cadencier && <CadencierBadge />}
+          </div>
         </DialogHeader>
       )}
 
@@ -521,6 +519,18 @@ function useStockCover(
 
 const NO_FILTER: string[] = []
 
+/** Duża plakietka przy artykule z bieżącej listy cadencier: na stronie i w oknie statystyk tak samo. */
+function CadencierBadge() {
+  return (
+    <p
+      className="shrink-0 rounded-lg bg-red-600 px-4 py-2 text-base font-bold tracking-wide text-white uppercase shadow-sm dark:bg-red-700"
+      title="Artykuł jest na bieżącej liście cadencier sklepu"
+    >
+      Obecny w cadencier
+    </p>
+  )
+}
+
 /** Z ilu ostatnich miesięcy dostaw wybieramy najtańszego dostawcę. */
 const SUPPLIER_MONTHS = 3
 
@@ -609,7 +619,28 @@ function ArticleFacts({
           label="Cena sprzedaży"
           action={canMarkDown && article.ean ? <PriceMarkdownButton storeId={storeId} article={article} /> : undefined}
         >
-          {article.salePrice == null ? '—' : `${formatMoney(article.salePrice)} zł`}
+          {article.promoPrice != null ? (
+            <>
+              <span className="text-orange-600 dark:text-orange-400">{formatMoney(article.promoPrice)} zł</span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                promocja z kasy
+                {article.promoTo && ` do ${shortDate.format(parseIsoDate(article.promoTo))}`}
+                {article.salePrice != null && ` · regularna ${formatMoney(article.salePrice)} zł`}
+              </span>
+            </>
+          ) : article.salePrice == null ? (
+            '—'
+          ) : (
+            `${formatMoney(article.salePrice)} zł`
+          )}
+          {article.cadencierPrice != null && article.cadencierPrice > 0 && (
+            <span
+              className="block text-xs font-normal text-blue-700 dark:text-blue-300"
+              title="CENA_CAD: cena sprzedaży narzucona przez centralę, z ostatniego raportu kartoteki"
+            >
+              CENA_CAD {formatMoney(article.cadencierPrice)} zł
+            </span>
+          )}
         </Fact>
         <Fact label="Cena zakupu">
           {article.purchasePrice == null ? '—' : `${formatPrice(article.purchasePrice)} zł`}
@@ -637,6 +668,13 @@ function ArticleFacts({
         {path && <Detail label="Nomenklatura">{path}</Detail>}
         {article.caseSize != null && <Detail label="W kartonie">{formatQuantity(article.caseSize)}</Detail>}
         {article.vatPercent != null && <Detail label="VAT">{article.vatPercent}%</Detail>}
+        <Detail label="Cadencier">
+          {article.cadencier ? (
+            <span className="font-medium">na bieżącej liście cadencier</span>
+          ) : (
+            <span className="text-muted-foreground">poza cadencier</span>
+          )}
+        </Detail>
         {article.active === false && <Detail label="Status">nieaktywny w kartotece</Detail>}
       </dl>
       <ReportFreshness generatedAt={article.reportGeneratedAt} className="justify-self-start" />

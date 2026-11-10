@@ -27,7 +27,7 @@ import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { TransferTargetBadge } from '@/features/documents/DocumentTransferTarget'
-import { VerificationBadge } from '@/features/documents/DocumentVerification'
+import { VerificationBadge, VerificationMenu } from '@/features/documents/DocumentVerification'
 import { DocumentFilters, useHiddenSuppliers } from '@/features/documents/DocumentFilters'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
 import {
@@ -480,11 +480,21 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                           {document.errorMarkedAt && (
                             <Badge className="bg-red-200 text-red-950 dark:bg-red-950/60 dark:text-red-100">błąd</Badge>
                           )}
-                          <VerificationBadge
-                            status={document.verificationStatus}
-                            at={document.verificationAt}
-                            by={document.verificationBy}
-                          />
+                          {upperType === 'PZ' ? (
+                            // Menu w wierszu: klik nie otwiera dokumentu (zdarzenia z okna menu też tu dochodzą).
+                            <span
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <VerificationMenu storeId={storeId} document={document} size="sm" />
+                            </span>
+                          ) : (
+                            <VerificationBadge
+                              status={document.verificationStatus}
+                              at={document.verificationAt}
+                              by={document.verificationBy}
+                            />
+                          )}
                           <GratisBadge document={document} />
                           <CorrectionBadge document={document} type={upperType} />
                           <TransferTargetBadge document={document} />

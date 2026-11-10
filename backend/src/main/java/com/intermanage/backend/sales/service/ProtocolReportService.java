@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -162,8 +163,13 @@ public class ProtocolReportService {
                 request.from(), request.to(), request.previousFrom(), request.previousTo());
         boolean selection = request.groups() != null && !request.groups().isEmpty();
         Set<String> keys = selection ? new HashSet<>(request.groups()) : Set.of();
+        Map<String, List<String>> partial = request.groupArticles() == null ? Map.of() : request.groupArticles();
         List<Group> groups = selection
-                ? report.groups().stream().filter(group -> keys.contains(group.key())).toList()
+                ? report.groups().stream().filter(group -> keys.contains(group.key()))
+                        .map(group -> partial.containsKey(group.key()) ? onlyArticles(group, partial.get(group.key()))
+                                : group)
+                        .filter(group -> !group.articles().isEmpty())
+                        .toList()
                 : report.groups();
         if (selection && groups.isEmpty()) {
             throw ApiException.badRequest("Wybranych pozycji nie ma w raporcie za ten okres");
@@ -190,6 +196,20 @@ public class ProtocolReportService {
         return new ExportFile("protokol-" + protocol.name().toLowerCase() + name + "-" + store.getNumber() + "-"
                 + report.from() + "_" + report.to() + ".pdf", "application/pdf",
                 reportPdf.pdf(header, report, groups, total, previousTotal, request.articles()));
+    }
+
+    /** Grupa z samymi wskazanymi artykułami i ich sumami. */
+    private static Group onlyArticles(Group group, List<String> itm8s) {
+        Set<String> wanted = itm8s == null ? Set.of() : new HashSet<>(itm8s);
+        List<Article> articles = group.articles().stream().filter(article -> wanted.contains(article.itm8())).toList();
+        boolean compare = group.previous() != null;
+        return new Group(group.key(), group.code(), group.name(), sumFigures(articles.stream().map(Article::current)),
+                compare ? sumFigures(articles.stream().map(Article::previous)) : null, articles);
+    }
+
+    private static Figures sumFigures(Stream<Figures> figures) {
+        return figures.reduce(ZERO, (a, b) -> new Figures(a.quantity().add(b.quantity()),
+                a.purchaseValue().add(b.purchaseValue()), a.saleValueGross().add(b.saleValueGross())));
     }
 
     private static String fileNamePart(String name) {

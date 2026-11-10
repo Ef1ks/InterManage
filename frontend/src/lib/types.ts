@@ -1279,6 +1279,12 @@ export type SalesArticle = {
   nomenclaturePath: NomenclatureOption[]
   /** Artykuł na bieżącej liście cadencier sklepu. */
   cadencier: boolean
+  /** CENA_CAD z ostatniego raportu kartoteki (cena narzucona przez centralę). */
+  cadencierPrice: number | null
+  /** Trwająca dziś promocja z kasy; `salePrice` jest wtedy ceną regularną. */
+  promoPrice: number | null
+  promoFrom: string | null
+  promoTo: string | null
 }
 
 /**
@@ -2328,6 +2334,33 @@ export type LowMarginDelivery = {
   review: PriceCheckReview | null
   history: PriceCheckReview[]
   lines: LowMarginLine[]
+  /** Weryfikacja przyjęcia, ta sama co w Dokumentach ({@code null} = bez statusu). */
+  verificationStatus: DocumentVerificationStatus | null
+  verificationAt: string | null
+  verificationBy: string | null
+  /** Faktury KSeF przyjęcia i jego korekt od dostawcy. */
+  ksefInvoices: LinkedKsefInvoice[]
+}
+
+/** Ocena artykułu przyjęcia na bonie: jak w raporcie marż (odchylenie puste = w normie). */
+export type DeliveryLineHint = {
+  line: Omit<LowMarginLine, 'deviation' | 'requiredMargin' | 'targetPurchasePrice' | 'excessValue'> & {
+    deviation: LowMarginDeviation | null
+    requiredMargin: number | null
+    targetPurchasePrice: number | null
+    excessValue: number | null
+  }
+  /** Aktywny w cadencier: marża ustalona z góry. */
+  cadencier: boolean
+  /** Dostawca pomijany w raporcie marż. */
+  excludedSupplier: boolean
+}
+
+export type DeliveryLineHints = {
+  lowGap: number
+  highGap: number
+  marginsConfigured: boolean
+  lines: DeliveryLineHint[]
 }
 
 export type LowMarginReport = {

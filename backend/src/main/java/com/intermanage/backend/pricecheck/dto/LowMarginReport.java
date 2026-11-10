@@ -1,10 +1,13 @@
 package com.intermanage.backend.pricecheck.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+
+import com.intermanage.backend.document.dto.LinkedKsefInvoice;
 
 /**
  * Marże poza normą z ostatnich {@code periodDays} dni (wg daty przyjęcia): przyjęcia PZ z artykułem, którego marża
@@ -54,7 +57,13 @@ public record LowMarginReport(
             BigDecimal excessValue,
             PriceCheckReviewResponse review,
             List<PriceCheckReviewResponse> history,
-            List<Line> lines) {
+            List<Line> lines,
+            /** Weryfikacja przyjęcia (ta sama co w Dokumentach): status, kiedy i kto; {@code null} = bez statusu. */
+            String verificationStatus,
+            Instant verificationAt,
+            String verificationBy,
+            /** Faktury KSeF przyjęcia i jego korekt od dostawcy (do wydruku z raportu). */
+            List<LinkedKsefInvoice> ksefInvoices) {
     }
 
     /**

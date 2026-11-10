@@ -18,6 +18,7 @@ import type {
   NomenclatureOption,
   PeriodSummary,
   PeriodSummaryLevel,
+  DeliveryLineHints,
   LowMarginReport,
   OverpaymentReport,
   PriceCheckCategory,
@@ -284,6 +285,8 @@ export type ProtocolReportPrint = ProtocolReportQuery & {
   /** Klucze grup do wydruku; pusta lista = wszystkie. */
   groups: string[]
   articles: boolean
+  /** Grupy zaznaczone tylko częściowo: klucz grupy → ITM8 zaznaczonych artykułów. */
+  groupArticles: Record<string, string[]>
 }
 
 const protocolPdfRequest = (storeId: string, print: ProtocolReportPrint) => ({
@@ -297,6 +300,7 @@ const protocolPdfRequest = (storeId: string, print: ProtocolReportPrint) => ({
     previousTo: print.previous?.to ?? null,
     groups: print.groups,
     articles: print.articles,
+    groupArticles: print.groupArticles,
   },
 })
 
@@ -689,6 +693,15 @@ export function useLowMargins(storeId: string, days: number) {
     queryKey: [...reportsKey(storeId), 'low-margins', days],
     queryFn: () => api<LowMarginReport>(`${reportsPath(storeId)}/low-margins?days=${days}`),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Ocena artykułów przyjęcia PZ do kolorów na bonie (marża wobec wymaganej, promocje, cadencier). */
+export function useDeliveryLineHints(storeId: string, documentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'low-margins', 'delivery', documentId],
+    queryFn: () => api<DeliveryLineHints>(`${reportsPath(storeId)}/low-margins/deliveries/${documentId}`),
+    enabled,
   })
 }
 

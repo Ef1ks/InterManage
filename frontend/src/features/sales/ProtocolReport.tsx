@@ -362,7 +362,9 @@ function Report({
     compare || requestedSort.key.endsWith(':current') || !requestedSort.key.includes(':') ? requestedSort : DEFAULT_SORT
   const [shown, setShown] = useState(PAGE)
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
+  // Zaznaczone artykuły: klucz grupy + ITM8. Grupa jest zaznaczona, gdy zaznaczone są wszystkie jej artykuły.
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
+  const [groupQueries, setGroupQueries] = useState<Readonly<Record<string, string>>>({})
   const [withArticles, setWithArticles] = useState(true)
   const pdf = useProtocolReportPdf(storeId)
 
@@ -385,33 +387,70 @@ function Report({
         (row: (typeof filtered)[number]) => accessor(row.group),
       ]),
     ) as SortAccessors<(typeof filtered)[number], SortKey>
-    return sortRows(filtered, byGroup, sort).map((row) => ({
-      ...row,
-      articles: sortRows(row.articles, SORT_ACCESSORS, sort),
-    }))
-  }, [report.groups, query, sort])
+    return sortRows(filtered, byGroup, sort).map((row) => {
+      const articles = sortRows(row.articles, SORT_ACCESSORS, sort)
+      // Wyszukiwarka pod rozwiniętą grupą zawęża jej artykuły (po wyszukiwaniu ogólnym).
+      const groupWords = normalize(groupQueries[row.group.key] ?? '')
+        .split(/\s+/)
+        .filter(Boolean)
+      return {
+        ...row,
+        articles,
+        shownArticles:
+          groupWords.length === 0
+            ? articles
+            : articles.filter((article) => groupWords.every((word) => articleText(article).includes(word))),
+      }
+    })
+  }, [report.groups, query, sort, groupQueries])
 
-  // Zaznaczone grupy, które są w raporcie (po zmianie okresu część może zniknąć), w kolejności raportu.
-  const selectedGroups = report.groups.filter((group) => selected.has(group.key))
-  const selectedTotal = sumFigures(selectedGroups.map((group) => group.current))
-  const selectedPrevious = compare ? sumFigures(selectedGroups.map((group) => group.previous!)) : null
-  const toggleSelected = (key: string) =>
+  // Zaznaczone artykuły, które są w raporcie (po zmianie okresu część może zniknąć), w kolejności raportu.
+  const selection = report.groups.flatMap((group) => {
+    const articles = group.articles.filter((article) => selected.has(selectionKey(group, article)))
+    return articles.length > 0 ? [{ group, articles, whole: articles.length === group.articles.length }] : []
+  })
+  const selectedArticles = selection.flatMap((item) => item.articles)
+  const selectedTotal = sumFigures(selectedArticles.map((article) => article.current))
+  const selectedPrevious = compare ? sumFigures(selectedArticles.map((article) => article.previous!)) : null
+  const selectedLabel =
+    byArticle || selection.every((item) => item.whole)
+      ? `${selection.length}`
+      : `${selection.length} · ${articlesLabel(selectedArticles.length)}`
+  const groupState = (group: ProtocolReportGroup) => {
+    const count = group.articles.filter((article) => selected.has(selectionKey(group, article))).length
+    return count === 0 ? 'none' : count === group.articles.length ? 'all' : 'some'
+  }
+  const setArticles = (group: ProtocolReportGroup, articles: ProtocolReportArticle[], on: boolean) =>
     setSelected((current) => {
       const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      for (const article of articles) {
+        if (on) next.add(selectionKey(group, article))
+        else next.delete(selectionKey(group, article))
+      }
       return next
     })
-  const filteredUnselected = groups.filter(({ group }) => !selected.has(group.key)).length
+  const toggleGroup = (group: ProtocolReportGroup) => setArticles(group, group.articles, groupState(group) !== 'all')
+  const toggleArticle = (group: ProtocolReportGroup, article: ProtocolReportArticle) =>
+    setArticles(group, [article], !selected.has(selectionKey(group, article)))
+  const unselectedIn = (group: ProtocolReportGroup, articles: ProtocolReportArticle[]) =>
+    articles.filter((article) => !selected.has(selectionKey(group, article)))
+  // Wyszukane po artykule zaznaczają tylko znalezione artykuły, wyszukane po pozycji całą pozycję.
+  const filteredUnselected = groups.filter(({ group, articles }) => unselectedIn(group, articles).length > 0).length
   const printRequest = {
     ...reportQuery,
     previous: compare ? reportQuery.previous : null,
-    groups: selectedGroups.map((group) => group.key),
+    groups: selection.map((item) => item.group.key),
     articles: !byArticle && withArticles,
+    groupArticles: Object.fromEntries(
+      selection
+        .filter((item) => !item.whole)
+        .map((item) => [item.group.key, item.articles.map((article) => article.itm8)]),
+    ),
   }
   const onPdfError = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
-  const printLabel = selectedGroups.length > 0 ? ` zaznaczone (${selectedGroups.length})` : ' wszystko'
+  const printLabel = selection.length > 0 ? ` zaznaczone (${selectedLabel})` : ' wszystko'
+  const columnCount = 2 + METRICS.length * (compare ? 3 : 1)
 
   const sorting = { sort, onSort: (column: SortKey) => setSort(nextSort(sort, column)) }
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < groups.length, shown)
@@ -490,12 +529,22 @@ function Report({
             {query.trim() !== '' && groups.length > 0 && filteredUnselected > 0 && (
               <Button
                 variant="outline"
-                onClick={() => setSelected((current) => new Set([...current, ...groups.map(({ group }) => group.key)]))}
+                onClick={() =>
+                  setSelected(
+                    (current) =>
+                      new Set([
+                        ...current,
+                        ...groups.flatMap(({ group, articles }) =>
+                          articles.map((article) => selectionKey(group, article)),
+                        ),
+                      ]),
+                  )
+                }
               >
                 Zaznacz wyszukane ({filteredUnselected})
               </Button>
             )}
-            {selectedGroups.length > 0 && (
+            {selection.length > 0 && (
               <Button variant="ghost" onClick={() => setSelected(new Set())}>
                 Wyczyść zaznaczenie
               </Button>
@@ -504,9 +553,11 @@ function Report({
 
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <p className="text-sm text-muted-foreground">
-              {selectedGroups.length > 0
-                ? 'Wydruk obejmie tylko zaznaczone pozycje, z ich sumą na dole.'
-                : 'Zaznacz pozycje (np. kilka zapisów tej samej marki), żeby je zsumować i wydrukować, np. dla dostawcy.'}
+              {selection.length > 0
+                ? 'Wydruk obejmie tylko zaznaczone pozycje i artykuły, z ich sumą na dole.'
+                : byArticle
+                  ? 'Zaznacz artykuły, żeby je zsumować i wydrukować, np. dla dostawcy.'
+                  : 'Zaznacz pozycje (np. kilka zapisów tej samej marki) albo pojedyncze artykuły w rozwiniętej pozycji, żeby je zsumować i wydrukować, np. dla dostawcy.'}
             </p>
             <div className="ml-auto flex flex-wrap items-center gap-3">
               {!byArticle && (
@@ -588,9 +639,12 @@ function Report({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {groups.slice(0, shown).map(({ group, articles, viaArticles }) => {
+                  {groups.slice(0, shown).map(({ group, articles, shownArticles, viaArticles }) => {
                     const open = !byArticle && (expanded.has(group.key) || viaArticles)
                     const article = byArticle ? group.articles[0] : null
+                    const state = groupState(group)
+                    const groupQuery = groupQueries[group.key] ?? ''
+                    const toSelect = unselectedIn(group, shownArticles)
                     return (
                       <Fragment key={group.key}>
                         <TableRow
@@ -599,13 +653,11 @@ function Report({
                         >
                           <TableCell className={cn('sticky left-0 z-10 max-w-96 bg-card pl-4', open && 'bg-muted')}>
                             <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                aria-label={`Zaznacz do sumy i wydruku: ${group.name ?? group.key}`}
-                                className="size-4 shrink-0 accent-foreground"
-                                checked={selected.has(group.key)}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={() => toggleSelected(group.key)}
+                              <SelectBox
+                                label={`Zaznacz do sumy i wydruku: ${group.name ?? group.key}`}
+                                checked={state === 'all'}
+                                indeterminate={state === 'some'}
+                                onChange={() => toggleGroup(group)}
                               />
                               {article ? (
                                 <div className="min-w-0 flex-1">
@@ -655,11 +707,55 @@ function Report({
                             {share(group.current.purchaseValue)}
                           </TableCell>
                         </TableRow>
+                        {open && (
+                          <TableRow className="hover:bg-transparent">
+                            <TableCell colSpan={columnCount} className="py-1.5">
+                              <div className="sticky left-0 flex w-fit max-w-full flex-wrap items-center gap-2 pl-6">
+                                <SearchInput
+                                  value={groupQuery}
+                                  onChange={(next) => setGroupQueries((current) => ({ ...current, [group.key]: next }))}
+                                  placeholder={`Szukaj w: ${groupName(group, report.grouping) || 'pozycji'} (nazwa, ITM8, EAN, marka)`}
+                                  className="w-96 max-w-full"
+                                />
+                                {groupQuery.trim() !== '' && toSelect.length > 0 && (
+                                  <Button variant="outline" onClick={() => setArticles(group, toSelect, true)}>
+                                    Zaznacz wyszukane ({toSelect.length})
+                                  </Button>
+                                )}
+                                {groupQuery.trim() !== '' && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {shownArticles.length} z {articles.length}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {open && shownArticles.length === 0 && (
+                          <TableRow className="hover:bg-transparent">
+                            <TableCell colSpan={columnCount} className="py-3 pl-10 text-sm text-muted-foreground">
+                              Żaden artykuł tej pozycji nie pasuje do wyszukiwania.
+                            </TableCell>
+                          </TableRow>
+                        )}
                         {open &&
-                          articles.map((item) => (
-                            <TableRow key={item.itm8}>
+                          shownArticles.map((item) => (
+                            <TableRow
+                              key={item.itm8}
+                              className="cursor-pointer"
+                              onClick={() => toggleArticle(group, item)}
+                            >
                               <TableCell className="sticky left-0 z-10 max-w-96 bg-card pl-10">
-                                <ArticleName article={item} onChart={() => openChart(item)} />
+                                <div className="flex items-center gap-2">
+                                  <SelectBox
+                                    label={`Zaznacz artykuł do sumy i wydruku: ${item.name ?? item.itm8}`}
+                                    checked={selected.has(selectionKey(group, item))}
+                                    onChange={() => toggleArticle(group, item)}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <ArticleName article={item} onChart={() => openChart(item)} />
+                                  </div>
+                                </div>
                               </TableCell>
                               <Figures current={item.current} previous={item.previous} compare={compare} />
                               <TableCell className={cn('pr-4 text-right text-muted-foreground', compare && 'border-l')}>
@@ -672,10 +768,10 @@ function Report({
                   })}
                 </TableBody>
                 <TableFooter className="sticky bottom-0 z-20 bg-card">
-                  {selectedGroups.length > 0 && (
+                  {selection.length > 0 && (
                     <TableRow className="bg-muted/60 hover:bg-muted/60">
                       <TableCell className="sticky left-0 z-10 bg-muted pl-4 font-semibold">
-                        Zaznaczone ({selectedGroups.length})
+                        Zaznaczone ({selectedLabel})
                       </TableCell>
                       <Figures current={selectedTotal} previous={selectedPrevious} compare={compare} strong />
                       <TableCell className={cn('pr-4 text-right font-semibold', compare && 'border-l')}>
@@ -713,6 +809,36 @@ function Report({
 }
 
 const NO_FILTER: string[] = []
+
+function selectionKey(group: ProtocolReportGroup, article: ProtocolReportArticle) {
+  return `${group.key}\u0000${article.itm8}`
+}
+
+function SelectBox({
+  label,
+  checked,
+  indeterminate = false,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  indeterminate?: boolean
+  onChange: () => void
+}) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={label}
+      className="size-4 shrink-0 accent-foreground"
+      checked={checked}
+      ref={(element) => {
+        if (element) element.indeterminate = indeterminate
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onChange={onChange}
+    />
+  )
+}
 
 function ArticleName({ article, onChart }: { article: ProtocolReportArticle; onChart: () => void }) {
   return (

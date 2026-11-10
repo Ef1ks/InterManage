@@ -82,6 +82,7 @@ export function ReviewedReportPage<D extends Delivery>({
   emptyDeliveryText,
   nothingFoundText,
   renderLines,
+  renderBadges,
 }: {
   storeId: string
   report: ReviewedReport
@@ -108,6 +109,8 @@ export function ReviewedReportPage<D extends Delivery>({
   emptyDeliveryText: string
   nothingFoundText: string
   renderLines: (delivery: D) => ReactNode
+  /** Dodatkowe plakietki w wierszu przyjęcia (bez przycisków, bo wiersz sam jest przyciskiem). */
+  renderBadges?: (delivery: D) => ReactNode
 }) {
   const [params, setParams] = useSearchParams()
   const filter =
@@ -326,6 +329,7 @@ export function ReviewedReportPage<D extends Delivery>({
                                   tone="loss"
                                 />
                               )}
+                              {renderBadges?.(delivery)}
                             </>
                           }
                         >

@@ -441,6 +441,30 @@ class SalesReportIntegrationTests {
                 .andExpect(jsonPath("$[0].originalPurchaseValue").value(27.0))
                 .andExpect(jsonPath("$[1].corrected").value(false));
 
+        // Korekta błędu sklepu na 0 zł zamienia artykuł w przyjęciu: zamieniony ma tam ilość 0 po korekcie, a ten,
+        // który naprawdę przyjechał, ma dostawę, choć w samym przyjęciu go nie ma.
+        String swapped = "0000000654321";
+        String swap = insertDocument(storeId, documentImport, "PK", "PK01", "2026-09-12 10:00");
+        insertDeliveryLine(swap, 1, itm8, "-10", "0");
+        insertDeliveryLine(swap, 2, swapped, "10", "0");
+        jdbc.update("""
+                insert into delivery_corrections (id, delivery_id, correction_id, linked_at)
+                values (gen_random_uuid(), ?::uuid, ?::uuid, now())""", older, swap);
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + swapped + "/deliveries").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documentId").value(older))
+                .andExpect(jsonPath("$[0].supplierName").value("WASA"))
+                .andExpect(jsonPath("$[0].corrected").value(true))
+                .andExpect(jsonPath("$[0].quantity").value(10.0))
+                .andExpect(jsonPath("$[0].originalQuantity").value(0));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + itm8 + "/deliveries").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[1].documentId").value(older))
+                .andExpect(jsonPath("$[1].quantity").value(0))
+                .andExpect(jsonPath("$[1].originalQuantity").value(10.0));
+        jdbc.update("update delivery_corrections set unlinked_at = now() where correction_id = ?::uuid", swap);
+
         // Straty na wykresie: likwidacje w wartości zakupu netto (w raporcie z minusem), artykułu i grupy.
         String loss = insertDocument(storeId, documentImport, "PL", "PL01", "2026-09-21 10:00");
         insertDeliveryLine(loss, 1, itm8, "-2", "-8");

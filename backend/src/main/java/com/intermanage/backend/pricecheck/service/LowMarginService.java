@@ -30,9 +30,13 @@ import com.intermanage.backend.document.repository.DocumentImportRepository;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.document.repository.DocumentLineRepository.DeliveryMargin;
 import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.document.dto.LinkedKsefInvoice;
 import com.intermanage.backend.document.service.DeliveryCorrectionService;
+import com.intermanage.backend.document.service.DocumentKsefLinkService;
 import com.intermanage.backend.nomenclature.service.NomenclatureMarginService;
 import com.intermanage.backend.pricecheck.component.ExcludedSuppliers;
+import com.intermanage.backend.pricecheck.dto.DeliveryLineHint;
+import com.intermanage.backend.pricecheck.dto.DeliveryLineHints;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport.Delivery;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport.Line;
@@ -96,13 +100,14 @@ public class LowMarginService {
     private final LowMarginSettingsRepository settings;
     private final StoreRepository stores;
     private final AppUserRepository users;
+    private final DocumentKsefLinkService ksefLinks;
 
     public LowMarginService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             NomenclatureMarginService margins, PriceCheckReviewRepository reviews, PriceCheckMapper mapper,
             SaleRepository sales, ExcludedSuppliers excludedSuppliers, ReportExcludedSupplierService reportSuppliers,
             CadencierImportRepository cadencierImports, LowMarginSettingsRepository settings, StoreRepository stores,
-            AppUserRepository users) {
+            AppUserRepository users, DocumentKsefLinkService ksefLinks) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -117,6 +122,7 @@ public class LowMarginService {
         this.settings = settings;
         this.stores = stores;
         this.users = users;
+        this.ksefLinks = ksefLinks;
     }
 
     @Transactional(readOnly = true)
@@ -158,6 +164,8 @@ public class LowMarginService {
         List<Document> deliveries = ids.isEmpty() ? List.of() : documents.findAllById(ids).stream()
                 .filter(delivery -> delivery.getType() == DocumentType.PZ && !delivery.isMarkedAsError()).toList();
         Map<UUID, List<DeliveryCorrection>> links = corrections.correctionsOf(deliveries);
+        Map<UUID, List<LinkedKsefInvoice>> invoices = deliveries.isEmpty() ? Map.of()
+                : ksefLinks.invoicesWithCorrections(storeId, deliveries, links);
 
         List<Delivery> result = new ArrayList<>();
         for (Document delivery : deliveries) {
@@ -170,7 +178,11 @@ public class LowMarginService {
                     OverpaymentService.sum(lines, Line::purchaseValue),
                     OverpaymentService.sum(lines.stream().filter(line -> line.deviation() == MarginDeviation.LOW)
                             .toList(), Line::excessValue), responses.isEmpty() ? null : responses.getFirst(),
-                    responses, lines));
+                    responses, lines,
+                    delivery.getVerificationStatus() != null ? delivery.getVerificationStatus().name() : null,
+                    delivery.getVerificationAt(),
+                    delivery.getVerificationBy() != null ? delivery.getVerificationBy().getDisplayName() : null,
+                    invoices.getOrDefault(delivery.getId(), List.of())));
         }
         result.sort(Comparator.<Delivery>comparingInt(delivery -> delivery.review() == null ? 0
                         : OverpaymentService.STATUS_ORDER.get(delivery.review().status()))
@@ -181,6 +193,42 @@ public class LowMarginService {
                 documentImports.findLastPeriodTo(storeId).orElse(null),
                 documentImports.findNewestReportGeneratedAt(storeId).orElse(null),
                 withoutMargin, reportSuppliers.options(storeId), result);
+    }
+
+    /**
+     * Ocena wszystkich artykułów jednego przyjęcia PZ, do kolorów na bonie: marża z aktualnej ceny wobec wymaganej
+     * (z progami sklepu), promocja teraz i na przyjęciu, cadencier i dostawcy pomijani w raporcie. Artykuł w normie ma
+     * {@code deviation} pusty; bez marży wymaganej puste są też cel i różnica.
+     */
+    @Transactional(readOnly = true)
+    public DeliveryLineHints lineHints(UUID storeId, UUID documentId) {
+        Document delivery = documents.findById(documentId)
+                .filter(document -> document.getStore().getId().equals(storeId) && document.getType() == DocumentType.PZ)
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono przyjęcia"));
+        sales.tuneForReport();
+        LocalDate to = LocalDate.now(StoreTime.ZONE);
+        LocalDate day = delivery.getDocumentDate().toLocalDate();
+        LocalDateTime none = to.plusDays(1).atStartOfDay();
+        Optional<LowMarginSettings> saved = settings.findByStoreId(storeId);
+        BigDecimal lowGap = saved.map(LowMarginSettings::getLowGap).orElse(LOW_GAP);
+        BigDecimal highGap = saved.map(LowMarginSettings::getHighGap).orElse(HIGH_GAP);
+        Map<String, BigDecimal> required = margins.effectiveByCode(storeId);
+        Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
+        reportSuppliers.active(storeId, ReviewedReport.LOW_MARGIN).forEach(supplier -> excluded.add(supplier.code()));
+        Cadencier cadencier = Cadencier.of(cadencierImports.findCurrentItm8s(storeId),
+                cadencierImports.findCurrentEans(storeId));
+        List<DeliveryLineHint> hints = new ArrayList<>();
+        for (DeliveryMargin article : documentLines.findDeliveryMargins(storeId, none, none,
+                new String[] {documentId.toString()}, day.isBefore(to) ? day : to, to,
+                day.withDayOfMonth(1).minusMonths(PromotionReportService.REFERENCE_MONTHS),
+                PromotionReportService.MIN_REFERENCE_DAYS)) {
+            Line line = evaluate(article, requiredMargin(article.getNomenclatureCode(), required), lowGap, highGap);
+            if (line != null) {
+                hints.add(new DeliveryLineHint(line, cadencier.itm8Of(article.getItm8(), article.getEan()) != null,
+                        excluded.contains(article.getSupplierCode())));
+            }
+        }
+        return new DeliveryLineHints(lowGap, highGap, !required.isEmpty(), hints);
     }
 
     /** Zapisuje progi marży sklepu; zwraca raport po zmianie. */
@@ -238,10 +286,23 @@ public class LowMarginService {
      */
     private static Line lowMarginLine(DeliveryMargin article, BigDecimal requiredMargin, BigDecimal lowGap,
             BigDecimal highGap) {
+        if (requiredMargin == null) {
+            return null;
+        }
+        Line line = evaluate(article, requiredMargin, lowGap, highGap);
+        return line != null && line.deviation() != null ? line : null;
+    }
+
+    /**
+     * Ocena artykułu przyjęcia: marża z aktualnej ceny, a przy marży wymaganej cel, różnica i odchylenie
+     * ({@code null} w normie). {@code null}, gdy linia nie ma danych do policzenia marży.
+     */
+    private static Line evaluate(DeliveryMargin article, BigDecimal requiredMargin, BigDecimal lowGap,
+            BigDecimal highGap) {
         BigDecimal quantity = article.getCorrectedQuantity();
         BigDecimal value = article.getCorrectedValue();
         BigDecimal documentPrice = article.getSalePrice();
-        if (requiredMargin == null || quantity.signum() <= 0 || value.signum() <= 0 || documentPrice == null
+        if (quantity.signum() <= 0 || value.signum() <= 0 || documentPrice == null
                 || documentPrice.signum() <= 0 || article.getVatRate() == null) {
             return null;
         }
@@ -250,16 +311,18 @@ public class LowMarginService {
                 .divide(HUNDRED.add(BigDecimal.valueOf(article.getVatRate())), 6, RoundingMode.HALF_UP);
         BigDecimal price = value.divide(quantity, 4, RoundingMode.HALF_UP);
         BigDecimal margin = net.subtract(price).multiply(HUNDRED).divide(net, 2, RoundingMode.HALF_UP);
-        MarginDeviation deviation;
-        if (margin.compareTo(requiredMargin.subtract(lowGap)) <= 0) {
-            deviation = MarginDeviation.LOW;
-        } else if (margin.compareTo(requiredMargin.add(highGap)) >= 0) {
-            deviation = MarginDeviation.HIGH;
-        } else {
-            return null;
+        MarginDeviation deviation = null;
+        BigDecimal target = null;
+        BigDecimal excess = null;
+        if (requiredMargin != null) {
+            if (margin.compareTo(requiredMargin.subtract(lowGap)) <= 0) {
+                deviation = MarginDeviation.LOW;
+            } else if (margin.compareTo(requiredMargin.add(highGap)) >= 0) {
+                deviation = MarginDeviation.HIGH;
+            }
+            target = net.multiply(HUNDRED.subtract(requiredMargin)).divide(HUNDRED, 4, RoundingMode.HALF_UP);
+            excess = price.subtract(target).multiply(quantity).abs().setScale(2, RoundingMode.HALF_UP);
         }
-        BigDecimal target = net.multiply(HUNDRED.subtract(requiredMargin)).divide(HUNDRED, 4, RoundingMode.HALF_UP);
-        BigDecimal excess = price.subtract(target).multiply(quantity).abs().setScale(2, RoundingMode.HALF_UP);
         return new Line(article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
                 OverpaymentService.regionOf(article.getNomenclatureCode()), article.getSupplierCode(), quantity, price,
                 value, regular, documentPrice,

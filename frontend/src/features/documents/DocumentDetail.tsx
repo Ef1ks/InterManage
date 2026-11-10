@@ -16,6 +16,7 @@ import { documentPrintPath, useDocument } from '@/features/documents/api'
 import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
 import { ErrorMarkBanner, MarkAsErrorButton } from '@/features/documents/DocumentErrorMark'
 import { VerificationMenu } from '@/features/documents/DocumentVerification'
+import { CurrentPrice, HintBadges, HintLegend, HintMargin, useDeliveryHints } from '@/features/documents/delivery-hints'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
 import { DocumentPrintMenu } from '@/features/documents/DocumentPrintMenu'
@@ -106,6 +107,8 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
     [corrected, showCorrected, document.lines],
   )
   const emptyCount = useMemo(() => lines.filter((line) => line.quantity === 0).length, [lines])
+  // Przyjęcie PZ: kolory z oceny marży z aktualnej ceny i promocji (jak w raporcie marż poza normą).
+  const hints = useDeliveryHints(storeId, document.id, document.type === 'PZ')
   // W likwidacjach czy przeniesieniach każda linia ma swojego dostawcę - pokazujemy go przy linii.
   const perLineSupplier = document.supplierName == null
 
@@ -155,7 +158,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
             )}
           </h2>
           <div className="flex flex-wrap items-center gap-2">
-            <VerificationMenu storeId={storeId} document={document} />
+            {document.type === 'PZ' && <VerificationMenu storeId={storeId} document={document} />}
             <MarkAsErrorButton storeId={storeId} document={document} />
             <DocumentPrintMenu
               path={(format) => documentPrintPath(storeId, document, format)}
@@ -256,6 +259,9 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
         </div>
       </div>
 
+      {hints.data && (
+        <HintLegend lowGap={hints.data.lowGap} highGap={hints.data.highGap} configured={hints.data.marginsConfigured} />
+      )}
       <Card className="py-0">
         <Table className="min-w-4xl">
           <TableHeader>
@@ -301,6 +307,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
                     <div className="flex flex-wrap items-center gap-2 font-medium">
                       {line.name ?? 'Bez nazwy'}
                       <ArticleStatsButton article={line} />
+                      <HintBadges hint={hints.byItm8.get(line.itm8)} />
                       {line.corrected && (
                         <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[0.7rem] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                           {line.originalQuantity == null ? 'Dopisane korektą' : 'Po korekcie'}
@@ -337,9 +344,17 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
                       format={formatMoney}
                     />
                   </TableCell>
-                  <TableCell className="text-right">{formatPrice(line.salePriceDocument)}</TableCell>
+                  <TableCell className="text-right">
+                    {formatPrice(line.salePriceDocument)}
+                    <CurrentPrice hint={hints.byItm8.get(line.itm8)} documentPrice={line.salePriceDocument} />
+                  </TableCell>
                   <TableCell className="text-right">{line.vatRate != null ? `${line.vatRate}%` : ''}</TableCell>
-                  <TableCell className="pr-4 text-right">{formatPercent(line.marginPercent)}</TableCell>
+                  <TableCell className="pr-4 text-right">
+                    {formatPercent(line.marginPercent)}
+                    <span className="block">
+                      <HintMargin hint={hints.byItm8.get(line.itm8)} />
+                    </span>
+                  </TableCell>
                 </TableRow>
               ))
             )}

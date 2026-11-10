@@ -8,6 +8,7 @@ import { useCan } from '@/features/auth/api'
 import { useDeliveryKsefCorrectionLinks, useDeliveryKsefCorrections } from '@/features/documents/api'
 import { bonNumber, documentPaths, formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { useDownloadInvoice } from '@/features/ksef/api'
+import { InvoicePrintButton } from '@/features/ksef/InvoicePrintButton'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
 import type { DeliveryKsefCorrection, Document } from '@/lib/types'
@@ -113,6 +114,7 @@ function CorrectionRow({
           <DownloadIcon />
           PDF
         </Button>
+        <InvoicePrintButton storeId={storeId} invoiceId={correction.id} invoiceNumber={correction.invoiceNumber} />
       </div>
 
       <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-sm">

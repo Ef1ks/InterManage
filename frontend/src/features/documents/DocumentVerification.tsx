@@ -8,7 +8,7 @@ import { useCan } from '@/features/auth/api'
 import { useDocumentVerification } from '@/features/documents/api'
 import { bonNumber } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
-import type { Document, DocumentVerificationStatus } from '@/lib/types'
+import type { DocumentVerificationStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const changedAtFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
@@ -59,14 +59,31 @@ export function VerificationBadge({
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
+/** Przyjęcie PZ ze statusem weryfikacji: dokument, wiersz listy albo przyjęcie z raportu marż. */
+export type VerifiableDocument = {
+  id: string
+  number: string
+  verificationStatus: DocumentVerificationStatus | null
+  verificationAt: string | null
+  verificationBy: string | null
+}
+
 /**
- * Status weryfikacji w nagłówku przyjęcia PZ: „W trakcie weryfikacji” (dla kierownika) albo „Zweryfikowany”, z
- * możliwością zdjęcia statusu. Toast „Cofnij” przywraca poprzedni stan. Bez prawa edycji widać tylko plakietkę.
+ * Status weryfikacji przyjęcia PZ: „W trakcie weryfikacji” (dla kierownika) albo „Zweryfikowany”, z możliwością
+ * zdjęcia statusu. Ten sam status jest w Dokumentach i w raporcie marż. Toast „Cofnij” przywraca poprzedni stan. Bez
+ * prawa edycji widać tylko plakietkę.
  */
-export function VerificationMenu({ storeId, document }: { storeId: string; document: Document }) {
+export function VerificationMenu({
+  storeId,
+  document,
+  size,
+}: {
+  storeId: string
+  document: VerifiableDocument
+  size?: 'sm' | 'default'
+}) {
   const canEdit = useCan('DOCUMENTS', 'EDIT')
-  const { set, clear } = useDocumentVerification(storeId, document.type, document.id)
-  if (document.type !== 'PZ') return null
+  const { set, clear } = useDocumentVerification(storeId, 'pz', document.id)
   const current = document.verificationStatus
   if (!canEdit) return <VerificationBadge status={current} at={document.verificationAt} by={document.verificationBy} />
 
@@ -97,6 +114,7 @@ export function VerificationMenu({ storeId, document }: { storeId: string; docum
         render={
           <Button
             variant="outline"
+            size={size}
             loading={set.isPending || clear.isPending}
             className={cn(current && VERIFICATION_STYLES[current], current && 'border-transparent')}
             title={

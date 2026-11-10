@@ -161,6 +161,35 @@ class LowMarginIntegrationTests {
     }
 
     @Test
+    void deliveryHintsJudgeEveryArticleAndReportShowsDocumentVerification() throws Exception {
+        jdbc.update("delete from low_margin_settings where store_id = ?::uuid", store);
+        requiredMargin("57", "30");
+        // Jedno przyjęcie: za niska (20%), w normie (33%) i za wysoka (50%) marża.
+        String id = document("PZ", 5);
+        line(id, ON_THRESHOLD, "10", "100.00", "12.50", "570101", 0);
+        line(id, ABOVE_THRESHOLD, "10", "100.00", "15.00", "570101", 0);
+        line(id, LISTED, "10", "100.00", "20.00", "570101", 0);
+
+        mvc.perform(get(url() + "/deliveries/" + id).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lowGap").value(5.0))
+                .andExpect(jsonPath("$.lines", hasSize(3)))
+                .andExpect(jsonPath("$.lines[?(@.line.itm8 == '" + ON_THRESHOLD + "')].line.deviation").value("LOW"))
+                .andExpect(jsonPath("$.lines[?(@.line.itm8 == '" + ABOVE_THRESHOLD + "')].line.deviation")
+                        .value(org.hamcrest.Matchers.contains((Object) null)))
+                .andExpect(jsonPath("$.lines[?(@.line.itm8 == '" + LISTED + "')].line.deviation").value("HIGH"));
+
+        // Status weryfikacji z Dokumentów widać w raporcie przy przyjęciu.
+        mvc.perform(put("/api/stores/" + store + "/documents/pz/" + id + "/verification").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[0].id").value(id))
+                .andExpect(jsonPath("$.deliveries[0].verificationStatus").value("VERIFIED"))
+                .andExpect(jsonPath("$.deliveries[0].verificationBy").isNotEmpty());
+    }
+
+    @Test
     void ignoresPromotionalPriceAndUsesCatalogPrice() throws Exception {
         requiredMargin("57", "30");
         String promotions = jdbc.queryForObject("""

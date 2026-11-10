@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { bonNumber, formatMoney, formatPercent, formatPrice, formatQuantity } from '@/features/documents/format'
 import { useCan } from '@/features/auth/api'
 import { InsertIntoDataEntry } from '@/features/data-entry/InsertIntoDataEntry'
+import { VerificationBadge, VerificationMenu } from '@/features/documents/DocumentVerification'
+import { InvoicePrintButton } from '@/features/ksef/InvoicePrintButton'
 import { emptyRow, withScannedProduct } from '@/features/data-entry/rows'
 import { useLowMargins, useSetLowMarginGaps } from '@/features/sales/api'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
@@ -145,6 +147,13 @@ export function LowMarginReport({ storeId }: { storeId: string }) {
       emptyDeliveryText="W tym przyjęciu nie ma już artykułów z marżą poza normą."
       nothingFoundText="W wybranym okresie żaden artykuł nie miał marży wyraźnie innej niż wymagana."
       renderLines={(delivery) => <LinesTable storeId={storeId} delivery={delivery} />}
+      renderBadges={(delivery) => (
+        <VerificationBadge
+          status={delivery.verificationStatus}
+          at={delivery.verificationAt}
+          by={delivery.verificationBy}
+        />
+      )}
     />
   )
 }
@@ -247,9 +256,24 @@ function InsertLinesIntoDataEntry({ storeId, delivery }: { storeId: string; deli
 }
 
 function LinesTable({ storeId, delivery }: { storeId: string; delivery: LowMarginDelivery }) {
+  const canSeeInvoices = useCan('KSEF_INVOICES', 'VIEW')
   return (
     <div className="grid gap-2">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="mr-auto text-sm text-muted-foreground">
+          Weryfikacja przyjęcia jest ta sama co w Dokumentach:
+        </span>
+        <VerificationMenu storeId={storeId} document={delivery} size="sm" />
+        {canSeeInvoices &&
+          delivery.ksefInvoices.map((invoice) => (
+            <InvoicePrintButton
+              key={invoice.id}
+              storeId={storeId}
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoiceNumber}
+              label={`${invoice.correction ? 'Korekta' : 'Faktura'} ${invoice.invoiceNumber}`}
+            />
+          ))}
         <InsertLinesIntoDataEntry storeId={storeId} delivery={delivery} />
       </div>
       <div className="overflow-x-auto rounded-lg border bg-background shadow-xs">

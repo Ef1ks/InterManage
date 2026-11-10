@@ -370,38 +370,70 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
     /**
      * Ostatnie dostawy artykułu (przyjęcia PZ z ilością > 0), od najnowszej. Linie tego samego ITM8 w jednym
-     * przyjęciu są sumowane, więc cena to wartość / ilość. Kody MEA z aktywnego dokumentu dostawy z bazy o numerze
-     * (Nr_Bl) równym nr dok. dostawcy przyjęcia, z linii tego samego ITM8 (w pliku 8 cyfr, więc bez zer wiodących).
+     * przyjęciu są sumowane, więc cena to wartość / ilość. Linie przypiętych korekt artykułu (ta sama reguła co linie
+     * przyjęcia albo ITM8 z linii przyjęcia) zmieniają ilość i wartość, a przyjęcie, do którego artykuł doszedł tylko
+     * korektą (błąd sklepu: zamiana artykułu), też jest dostawą, gdy po korekcie ilość jest dodatnia. Kody MEA
+     * z aktywnego dokumentu dostawy z bazy o numerze (Nr_Bl) równym nr dok. dostawcy przyjęcia, z linii tego samego
+     * ITM8 (w pliku 8 cyfr, więc bez zer wiodących).
      */
     @Query(value = ARTICLE_EANS + """
             , lines as (
-                select d.id as document_id, d.number as document_number, d.document_date, l.itm8,
-                       d.supplier_document_number as bl_number,
+                select d.id as document_id, l.itm8,
                        max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
                        sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
                   and """ + ARTICLE_LINE + """
-                group by d.id, d.number, d.document_date, d.supplier_document_number, l.itm8
-            ), """ + DELIVERY_FIXES + """
-            select ln.document_id, ln.document_number, ln.document_date,
+                group by d.id, l.itm8
+            ), fix_lines as (
+                select c.delivery_id, l.itm8,
+                       max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
+                       sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
+                from delivery_corrections c
+                join documents d on d.id = c.delivery_id and d.store_id = :storeId and d.type = 'PZ'
+                                and d.error_marked_at is null
+                join document_lines l on l.document_id = c.correction_id
+                where c.unlinked_at is null
+                  and (""" + ARTICLE_LINE + """
+                       or exists (select 1 from lines x where x.document_id = c.delivery_id and x.itm8 = l.itm8))
+                group by c.delivery_id, l.itm8
+            ), received as (
+                select document_id, max(supplier_code) as supplier_code, max(supplier_name) as supplier_name,
+                       sum(quantity) as quantity, sum(purchase_value) as purchase_value
+                from lines
+                group by document_id
+            ), fixed as (
+                select delivery_id, max(supplier_code) as supplier_code, max(supplier_name) as supplier_name,
+                       sum(quantity) as quantity, sum(purchase_value) as purchase_value
+                from fix_lines
+                group by delivery_id
+            ), deliveries as (
+                select document_id as id from received
+                union
+                select delivery_id from fixed where quantity > 0
+            )
+            select d.id as document_id, d.number as document_number, d.document_date,
                    (select string_agg(distinct bl.mea_code, ',' order by bl.mea_code)
                     from base_deliveries b
                     join base_delivery_lines bl on bl.delivery_id = b.id
-                    where b.store_id = :storeId and b.replaced_at is null and b.number = ln.bl_number
+                    where b.store_id = :storeId and b.replaced_at is null and b.number = d.supplier_document_number
                       and btrim(bl.mea_code) <> ''
-                      and ltrim(bl.itm8, '0') in (select ltrim(x.itm8, '0') from lines x
-                                                  where x.document_id = ln.document_id)) as mea_codes,
-                   max(ln.supplier_code) as supplier_code, max(ln.supplier_name) as supplier_name,
-                   sum(ln.quantity) as quantity, sum(ln.purchase_value) as purchase_value,
-                   sum(ln.quantity + coalesce(f.quantity, 0)) as corrected_quantity,
-                   sum(ln.purchase_value + coalesce(f.purchase_value, 0)) as corrected_value,
-                   bool_or(f.delivery_id is not null) as corrected
-            from lines ln
-            left join fixes f on f.delivery_id = ln.document_id and f.itm8 = ln.itm8
-            group by ln.document_id, ln.document_number, ln.document_date, ln.bl_number
-            order by ln.document_date desc, length(ln.document_number) desc, ln.document_number desc
+                      and ltrim(bl.itm8, '0') in (select ltrim(x.itm8, '0') from lines x where x.document_id = d.id
+                                                  union
+                                                  select ltrim(x.itm8, '0') from fix_lines x
+                                                  where x.delivery_id = d.id)) as mea_codes,
+                   coalesce(r.supplier_code, f.supplier_code) as supplier_code,
+                   coalesce(r.supplier_name, f.supplier_name) as supplier_name,
+                   coalesce(r.quantity, 0) as quantity, coalesce(r.purchase_value, 0) as purchase_value,
+                   coalesce(r.quantity, 0) + coalesce(f.quantity, 0) as corrected_quantity,
+                   coalesce(r.purchase_value, 0) + coalesce(f.purchase_value, 0) as corrected_value,
+                   f.delivery_id is not null as corrected
+            from deliveries ids
+            join documents d on d.id = ids.id
+            left join received r on r.document_id = d.id
+            left join fixed f on f.delivery_id = d.id
+            order by d.document_date desc, length(d.number) desc, d.number desc
             limit :limit
             """, nativeQuery = true)
     List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, int limit);

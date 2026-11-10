@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.document.dto.DeliveryReportExcludedSuppliersRequest;
+import com.intermanage.backend.pricecheck.dto.DeliveryLineHints;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport;
 import com.intermanage.backend.pricecheck.dto.LowMarginSettingsRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewRequest;
@@ -47,6 +48,14 @@ public class LowMarginController {
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
     public LowMarginReport report(@PathVariable UUID storeId, @RequestParam(defaultValue = "30") int days) {
         return lowMarginService.report(storeId, days);
+    }
+
+    /** Ocena artykułów jednego przyjęcia PZ do kolorów na bonie (marża, promocje, cadencier). */
+    @GetMapping("/deliveries/{documentId}")
+    @PreAuthorize("(hasAuthority('SALES:VIEW') or hasAuthority('DOCUMENTS:VIEW'))"
+            + " and @storeAccess.canAccess(authentication, #storeId)")
+    public DeliveryLineHints lineHints(@PathVariable UUID storeId, @PathVariable UUID documentId) {
+        return lowMarginService.lineHints(storeId, documentId);
     }
 
     /** Progi marży sklepu (punkty procentowe od wymaganej); zwraca raport po zmianie. */

@@ -29,8 +29,20 @@ public interface SalesMapper {
 
     @Mapping(target = "reportGeneratedAt", source = "product.lastSeenImport.reportGeneratedAt")
     @Mapping(target = "nomenclaturePath", source = "path")
+    @Mapping(target = "promoPrice", expression = "java(activePromo(product) ? product.getPromoPrice() : null)")
+    @Mapping(target = "promoFrom", expression = "java(activePromo(product) ? product.getPromoFrom() : null)")
+    @Mapping(target = "promoTo", expression = "java(activePromo(product) ? product.getPromoTo() : null)")
     SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path, BigDecimal vatPercent,
             boolean cadencier);
+
+    /** Promocja z kasy trwa dziś (Europe/Warsaw). */
+    default boolean activePromo(Product product) {
+        if (product.getPromoPrice() == null || product.getPromoFrom() == null || product.getPromoTo() == null) {
+            return false;
+        }
+        java.time.LocalDate today = java.time.LocalDate.now(com.intermanage.backend.common.component.StoreTime.ZONE);
+        return !today.isBefore(product.getPromoFrom()) && !today.isAfter(product.getPromoTo());
+    }
 
     ZeroStockReport.Item toZeroStockItem(Product product);
 

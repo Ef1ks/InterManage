@@ -33,6 +33,7 @@ import { InvoiceAmountCheck } from '@/features/documents/InvoiceAmountCheck'
 import { InvoiceComparisonPanel } from '@/features/documents/InvoiceComparisonPanel'
 import { AddSupplierForm, SupplierPicker } from '@/features/documents/SupplierPicker'
 import { useDownloadInvoice } from '@/features/ksef/api'
+import { InvoicePrintButton } from '@/features/ksef/InvoicePrintButton'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError, downloadFile, printFile } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
@@ -134,7 +135,9 @@ export function DocumentKsefInvoices({ storeId, document }: { storeId: string; d
               storeId={storeId}
               invoice={invoice}
               onUnlink={
-                canLink && !invoice.matchedByNumber && invoice.viaCorrection == null ? () => onUnlink(invoice) : undefined
+                canLink && !invoice.matchedByNumber && invoice.viaCorrection == null
+                  ? () => onUnlink(invoice)
+                  : undefined
               }
               unlinking={unlink.isPending && unlink.variables === invoice.id}
             />
@@ -416,6 +419,9 @@ function LinkedInvoiceRow({
             PDF
           </Button>
         )}
+        {canView && (
+          <InvoicePrintButton storeId={storeId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} />
+        )}
         {onUnlink && (
           <Button
             variant="ghost"
@@ -449,14 +455,12 @@ function KsefInvoicePicker({
 }) {
   const [query, setQuery] = useState('')
   const [amountRange, setAmountRange] = useState(true)
-  const { data: candidates = [], isPending, isError, isPlaceholderData } = useKsefInvoiceCandidates(
-    storeId,
-    document.type,
-    document.id,
-    query,
-    amountRange,
-    true,
-  )
+  const {
+    data: candidates = [],
+    isPending,
+    isError,
+    isPlaceholderData,
+  } = useKsefInvoiceCandidates(storeId, document.type, document.id, query, amountRange, true)
   const value = Math.abs(document.purchaseValue)
   const linked = new Set(document.ksefInvoices.map((invoice) => invoice.id))
 
@@ -468,7 +472,8 @@ function KsefInvoicePicker({
         </DialogTitle>
         <DialogDescription className="tabular-nums">
           Wartość zakupu {formatMoney(document.purchaseValue)} zł
-          {document.supplierName && ` · ${document.supplierName}`}. Najpierw faktury tego dostawcy, od najbliższej kwoty.
+          {document.supplierName && ` · ${document.supplierName}`}. Najpierw faktury tego dostawcy, od najbliższej
+          kwoty.
         </DialogDescription>
       </DialogHeader>
 
@@ -530,7 +535,9 @@ function KsefInvoicePicker({
                     <span className="text-right text-sm">
                       <span className="block font-medium">{formatMoney(candidate.netAmount ?? 0)} zł netto</span>
                       <span className="block text-xs text-muted-foreground">
-                        {candidate.difference === 0 ? 'ta sama kwota' : `różnica ${formatMoney(candidate.difference)} zł`}
+                        {candidate.difference === 0
+                          ? 'ta sama kwota'
+                          : `różnica ${formatMoney(candidate.difference)} zł`}
                       </span>
                     </span>
                   </button>
@@ -616,7 +623,10 @@ function ManualInvoiceForm({
           if (file && created && !created.file) {
             attachFile.mutate(
               { invoiceId: created.id, file },
-              { onError: (error) => toast.error(errorMessage(error, 'Faktura zapisana, ale nie udało się dołączyć pliku')) },
+              {
+                onError: (error) =>
+                  toast.error(errorMessage(error, 'Faktura zapisana, ale nie udało się dołączyć pliku')),
+              },
             )
           }
         },
@@ -882,6 +892,14 @@ function KsefInvoiceChips({ storeId, invoices }: { storeId: string; invoices: Li
             >
               <DownloadIcon className="size-3" />
             </button>
+          )}
+          {canView && (
+            <InvoicePrintButton
+              storeId={storeId}
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoiceNumber}
+              variant="icon"
+            />
           )}
         </span>
       ))}
