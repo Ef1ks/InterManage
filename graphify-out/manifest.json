@@ -66,9 +66,9 @@
     "semantic_hash": ""
   },
   "frontend/package.json": {
-    "mtime": 1793634800.6619544,
-    "seen": 1793635133.5681581,
-    "ast_hash": "a3186186b6a7a8ef1e005d13340f4700",
+    "mtime": 1794316052.8468347,
+    "seen": 1794316298.1360185,
+    "ast_hash": "a21980e3d0586c980e23cb404d30e03d",
     "semantic_hash": ""
   },
   "frontend/src/App.tsx": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794314048.2721577,
-    "seen": 1794314094.2982388,
-    "ast_hash": "2a2485ec8b9e46a9079d788cd211572e",
+    "mtime": 1794316243.1868036,
+    "seen": 1794316298.214134,
+    "ast_hash": "9aac76f3488f6a15adcf4e13cff6547f",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -6186,9 +6186,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProtocolReportIntegrationTests.java": {
-    "mtime": 1794313995.3744166,
-    "seen": 1794314094.226087,
-    "ast_hash": "2f433276d8084616ba50a4c99ec8c35a",
+    "mtime": 1794316063.2154462,
+    "seen": 1794316298.132289,
+    "ast_hash": "03721d0d750c2dc81ba0180d88a5c576",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/ProductFiltersPanel.tsx": {
@@ -6204,9 +6204,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ProtocolReport.tsx": {
-    "mtime": 1794313953.166272,
-    "seen": 1794314094.2683694,
-    "ast_hash": "8debe22123c7a228d206d5c478cb530f",
+    "mtime": 1794316147.1458523,
+    "seen": 1794316298.1807468,
+    "ast_hash": "f0eb962b68eccc02e27d8f27fed9c156",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/controller/PromotionReportController.java": {
@@ -9948,9 +9948,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/LossControlGroupRequest.java": {
-    "mtime": 1794313730.6933072,
-    "seen": 1794314094.1723974,
-    "ast_hash": "2374b941db5eb4ea8d8c08e224b4139e",
+    "mtime": 1794316063.179649,
+    "seen": 1794316298.0754309,
+    "ast_hash": "7dd704f976e2e38d799835ba619058ad",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/LossControlGroupResponse.java": {
@@ -9990,15 +9990,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/LossControlGroupService.java": {
-    "mtime": 1794313733.0634332,
-    "seen": 1794314094.1808443,
-    "ast_hash": "9708a627eed0f4fc43a9795251a26890",
+    "mtime": 1794316063.179649,
+    "seen": 1794316298.0844703,
+    "ast_hash": "30a92915ab5b95cab8a9a160b6f2339e",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/LossControlGroups.tsx": {
-    "mtime": 1794313953.273032,
-    "seen": 1794314094.267793,
-    "ast_hash": "3472673364553be7613cc8c0270313df",
+    "mtime": 1794316147.2124183,
+    "seen": 1794316298.1797469,
+    "ast_hash": "5f30fb7d545d4de5d334d01dc8981451",
     "semantic_hash": ""
   }
 }

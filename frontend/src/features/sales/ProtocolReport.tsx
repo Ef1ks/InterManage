@@ -1,5 +1,13 @@
 import { type ComponentProps, Fragment, type ReactNode, useEffect, useMemo, useState } from 'react'
-import { ChartColumnIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TagIcon, TriangleAlertIcon } from 'lucide-react'
+import {
+  ChartColumnIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  PrinterIcon,
+  TagIcon,
+  TriangleAlertIcon,
+  XIcon,
+} from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -33,6 +41,7 @@ import {
   ControlGroupEditor,
   ControlGroupMenu,
   type EditorState,
+  tintStyle,
   useControlGroupsByItm8,
 } from '@/features/sales/LossControlGroups'
 import { useCan } from '@/features/auth/api'
@@ -533,6 +542,8 @@ function Report({
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
   const printLabel =
     selection.length > 0 ? ` zaznaczone (${selectedLabel})` : controlFiltered ? ' dostawców z filtra' : ' wszystko'
+  // Artykuł w kilku grupach bierze kolor pierwszej (kropki przy nazwie pokazują resztę).
+  const rowTint = (itm8: string) => tintStyle(controlByItm8.get(itm8)?.[0]?.color)
   const assignProps = {
     storeId,
     groups: controlGroups,
@@ -643,62 +654,6 @@ function Report({
                 Zaznacz wyszukane ({filteredUnselected})
               </Button>
             )}
-            {canEdit && selectedArticles.length > 0 && (
-              <ControlGroupMenu
-                {...assignProps}
-                itm8s={[...new Set(selectedArticles.map((article) => article.itm8))]}
-                trigger={
-                  <Button variant="outline">
-                    <TagIcon />
-                    Przypisz zaznaczone ({selectedArticles.length})
-                  </Button>
-                }
-              />
-            )}
-            {selection.length > 0 && (
-              <Button variant="ghost" onClick={() => setSelected(new Set())}>
-                Wyczyść zaznaczenie
-              </Button>
-            )}
-          </div>
-
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-muted-foreground">
-              {selection.length > 0
-                ? 'Wydruk obejmie tylko zaznaczone pozycje i artykuły, z ich sumą na dole.'
-                : byArticle
-                  ? 'Zaznacz artykuły, żeby je zsumować i wydrukować, np. dla dostawcy.'
-                  : 'Zaznacz pozycje (np. kilka zapisów tej samej marki) albo pojedyncze artykuły w rozwiniętej pozycji, żeby je zsumować i wydrukować, np. dla dostawcy.'}
-            </p>
-            <div className="ml-auto flex flex-wrap items-center gap-3">
-              {!byArticle && (
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-foreground"
-                    checked={withArticles}
-                    onChange={(event) => setWithArticles(event.target.checked)}
-                  />
-                  Z artykułami
-                </label>
-              )}
-              <Button
-                variant="outline"
-                loading={pdf.download.isPending}
-                onClick={() => pdf.download.mutate(printRequest, { onError: onPdfError })}
-              >
-                <DownloadIcon />
-                Pobierz PDF{printLabel}
-              </Button>
-              <Button
-                variant="outline"
-                loading={pdf.print.isPending}
-                onClick={() => pdf.print.mutate(printRequest, { onError: onPdfError })}
-              >
-                <PrinterIcon />
-                Drukuj{printLabel}
-              </Button>
-            </div>
           </div>
 
           <Card className="overflow-clip py-0">
@@ -760,9 +715,13 @@ function Report({
                       <Fragment key={group.key}>
                         <TableRow
                           className={cn(!byArticle && 'cursor-pointer', open && 'bg-muted/60')}
+                          style={article ? rowTint(article.itm8) : undefined}
                           onClick={byArticle ? undefined : () => toggle(group.key)}
                         >
-                          <TableCell className={cn('sticky left-0 z-10 max-w-96 bg-card pl-4', open && 'bg-muted')}>
+                          <TableCell
+                            className={cn('sticky left-0 z-10 max-w-96 bg-card pl-4', open && 'bg-muted')}
+                            style={article ? rowTint(article.itm8) : undefined}
+                          >
                             <div className="flex items-center gap-2">
                               <SelectBox
                                 label={`Zaznacz do sumy i wydruku: ${group.name ?? group.key}`}
@@ -859,9 +818,13 @@ function Report({
                             <TableRow
                               key={item.itm8}
                               className="cursor-pointer"
+                              style={rowTint(item.itm8)}
                               onClick={() => toggleArticle(group, item)}
                             >
-                              <TableCell className="sticky left-0 z-10 max-w-96 bg-card pl-10">
+                              <TableCell
+                                className="sticky left-0 z-10 max-w-96 bg-card pl-10"
+                                style={rowTint(item.itm8)}
+                              >
                                 <div className="flex items-center gap-2">
                                   <SelectBox
                                     label={`Zaznacz artykuł do sumy i wydruku: ${item.name ?? item.itm8}`}
@@ -889,6 +852,68 @@ function Report({
                   })}
                 </TableBody>
                 <TableFooter className="sticky bottom-0 z-20 bg-card">
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={columnCount} className="py-2">
+                      <div className="sticky left-0 flex w-fit max-w-full flex-wrap items-center gap-2 px-2">
+                        {selection.length > 0 ? (
+                          <>
+                            <span className="text-sm font-medium">Zaznaczone: {selectedLabel}</span>
+                            <Button variant="outline" size="sm" onClick={() => setSelected(new Set())}>
+                              <XIcon />
+                              Odznacz wszystko
+                            </Button>
+                            {canEdit && (
+                              <ControlGroupMenu
+                                {...assignProps}
+                                itm8s={[...new Set(selectedArticles.map((article) => article.itm8))]}
+                                trigger={
+                                  <Button variant="outline" size="sm">
+                                    <TagIcon />
+                                    Przypisz do dostawcy
+                                  </Button>
+                                }
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {byArticle
+                              ? 'Zaznacz artykuły, żeby je zsumować i wydrukować.'
+                              : 'Zaznacz pozycje albo artykuły, żeby je zsumować i wydrukować.'}
+                          </span>
+                        )}
+                        <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+                        {!byArticle && (
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-foreground"
+                              checked={withArticles}
+                              onChange={(event) => setWithArticles(event.target.checked)}
+                            />
+                            Z artykułami
+                          </label>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          loading={pdf.download.isPending}
+                          onClick={() => pdf.download.mutate(printRequest, { onError: onPdfError })}
+                        >
+                          <DownloadIcon />
+                          Pobierz PDF{printLabel}
+                        </Button>
+                        <Button
+                          size="sm"
+                          loading={pdf.print.isPending}
+                          onClick={() => pdf.print.mutate(printRequest, { onError: onPdfError })}
+                        >
+                          <PrinterIcon />
+                          Drukuj{printLabel}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                   {controlFiltered && (
                     <TableRow className="hover:bg-transparent">
                       <TableCell className="sticky left-0 z-10 bg-card pl-4 font-semibold">

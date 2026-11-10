@@ -141,7 +141,7 @@ class ProtocolReportIntegrationTests {
         String controls = base + "/control-groups";
         String created = mvc.perform(post(controls).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"  Wasa  Polska \",\"color\":\"sky\"}"))
+                        .content("{\"name\":\"  Wasa  Polska \",\"color\":\"#0EA5E9\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Wasa Polska"))
                 .andReturn().getResponse().getContentAsString();
@@ -163,7 +163,7 @@ class ProtocolReportIntegrationTests {
                         .content("{\"itm8s\":[\"" + BREAD + "\"]}"))
                 .andExpect(jsonPath("$[0].itm8s.length()").value(1))
                 .andExpect(jsonPath("$[0].itm8s[0]").value(WASA));
-        mvc.perform(get(controls).cookie(owner)).andExpect(jsonPath("$[0].color").value("sky"));
+        mvc.perform(get(controls).cookie(owner)).andExpect(jsonPath("$[0].color").value("#0ea5e9"));
 
         // Wydruk części artykułów pozycji z dostawcą do kontroli w nagłówku.
         mvc.perform(post(base + "/LIQUIDATION/pdf").cookie(owner).with(csrf())

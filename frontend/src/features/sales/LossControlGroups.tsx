@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactElement, useMemo, useState } from 'react'
 import { CheckIcon, PencilIcon, PlusIcon, TagIcon, Trash2Icon, UsersIcon } from 'lucide-react'
+import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { toast } from 'sonner'
 
 import { Form, FormActions, TextField } from '@/components/form'
@@ -20,83 +21,48 @@ import { ApiError } from '@/lib/api'
 import type { LossControlGroup } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-/** Paleta kolorów dostawców do kontroli strat; nazwa koloru trafia do bazy (`LossControlGroupService.COLORS`). */
-export const CONTROL_COLORS = [
-  {
-    key: 'red',
-    label: 'Czerwony',
-    dot: 'bg-red-500',
-    chip: 'bg-red-200 text-red-950 dark:bg-red-900/70 dark:text-red-100',
-  },
-  {
-    key: 'orange',
-    label: 'Pomarańczowy',
-    dot: 'bg-orange-500',
-    chip: 'bg-orange-200 text-orange-950 dark:bg-orange-900/70 dark:text-orange-100',
-  },
-  {
-    key: 'amber',
-    label: 'Bursztynowy',
-    dot: 'bg-amber-400',
-    chip: 'bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-100',
-  },
-  {
-    key: 'lime',
-    label: 'Limonkowy',
-    dot: 'bg-lime-500',
-    chip: 'bg-lime-200 text-lime-950 dark:bg-lime-900/70 dark:text-lime-100',
-  },
-  {
-    key: 'green',
-    label: 'Zielony',
-    dot: 'bg-green-600',
-    chip: 'bg-green-200 text-green-950 dark:bg-green-900/70 dark:text-green-100',
-  },
-  {
-    key: 'teal',
-    label: 'Morski',
-    dot: 'bg-teal-500',
-    chip: 'bg-teal-200 text-teal-950 dark:bg-teal-900/70 dark:text-teal-100',
-  },
-  {
-    key: 'sky',
-    label: 'Błękitny',
-    dot: 'bg-sky-500',
-    chip: 'bg-sky-200 text-sky-950 dark:bg-sky-900/70 dark:text-sky-100',
-  },
-  {
-    key: 'blue',
-    label: 'Niebieski',
-    dot: 'bg-blue-600',
-    chip: 'bg-blue-200 text-blue-950 dark:bg-blue-900/70 dark:text-blue-100',
-  },
-  {
-    key: 'violet',
-    label: 'Fioletowy',
-    dot: 'bg-violet-600',
-    chip: 'bg-violet-200 text-violet-950 dark:bg-violet-900/70 dark:text-violet-100',
-  },
-  {
-    key: 'fuchsia',
-    label: 'Fuksja',
-    dot: 'bg-fuchsia-500',
-    chip: 'bg-fuchsia-200 text-fuchsia-950 dark:bg-fuchsia-900/70 dark:text-fuchsia-100',
-  },
-  {
-    key: 'pink',
-    label: 'Różowy',
-    dot: 'bg-pink-500',
-    chip: 'bg-pink-200 text-pink-950 dark:bg-pink-900/70 dark:text-pink-100',
-  },
-  {
-    key: 'slate',
-    label: 'Grafitowy',
-    dot: 'bg-slate-600',
-    chip: 'bg-slate-300 text-slate-950 dark:bg-slate-700 dark:text-slate-100',
-  },
-] as const
+/** Gotowe próbki pod próbnikiem; kolor zapisuje się jako `#rrggbb`. */
+export const COLOR_PRESETS = [
+  '#ef4444',
+  '#f97316',
+  '#f59e0b',
+  '#eab308',
+  '#84cc16',
+  '#22c55e',
+  '#14b8a6',
+  '#06b6d4',
+  '#0ea5e9',
+  '#3b82f6',
+  '#6366f1',
+  '#8b5cf6',
+  '#d946ef',
+  '#ec4899',
+  '#a16207',
+  '#64748b',
+]
 
-const colorOf = (key: string) => CONTROL_COLORS.find((color) => color.key === key) ?? CONTROL_COLORS.at(-1)!
+/** Kolory z pierwszej wersji palety (nazwy w bazie) jako HEX. */
+const LEGACY_COLORS: Record<string, string> = {
+  red: '#ef4444',
+  orange: '#f97316',
+  amber: '#fbbf24',
+  lime: '#84cc16',
+  green: '#16a34a',
+  teal: '#14b8a6',
+  sky: '#0ea5e9',
+  blue: '#2563eb',
+  violet: '#7c3aed',
+  fuchsia: '#d946ef',
+  pink: '#ec4899',
+  slate: '#475569',
+}
+
+export const hexOf = (color: string) => LEGACY_COLORS[color] ?? color
+
+/** Mocne tło wiersza w kolorze dostawcy, czytelne w jasnym i ciemnym motywie (mieszane z tłem karty). */
+export function tintStyle(color: string | undefined, strength = 45) {
+  return color ? { backgroundColor: `color-mix(in srgb, ${hexOf(color)} ${strength}%, var(--card))` } : undefined
+}
 
 /** ITM8 → dostawcy do kontroli, do których artykuł jest podpięty. */
 export function useControlGroupsByItm8(groups: LossControlGroup[]) {
@@ -111,11 +77,17 @@ export function useControlGroupsByItm8(groups: LossControlGroup[]) {
 
 /** Kropki z kolorami dostawców do kontroli przy artykule. */
 export function ControlDots({ groups }: { groups: LossControlGroup[] | undefined }) {
-  if (!groups || groups.length === 0) return null
+  // Jeden dostawca to już kolor całego wiersza; kropki pokazują, że artykuł jest u kilku.
+  if (!groups || groups.length < 2) return null
   return (
     <span className="inline-flex shrink-0 items-center gap-1" title={groups.map((group) => group.name).join(', ')}>
       {groups.map((group) => (
-        <span key={group.id} className={cn('size-2.5 rounded-full', colorOf(group.color).dot)} aria-hidden />
+        <span
+          key={group.id}
+          className="size-2.5 rounded-full"
+          style={{ backgroundColor: hexOf(group.color) }}
+          aria-hidden
+        />
       ))}
       <span className="sr-only">Dostawcy do kontroli: {groups.map((group) => group.name).join(', ')}</span>
     </span>
@@ -179,7 +151,11 @@ export function ControlGroupMenu({
                 closeOnClick={false}
                 onCheckedChange={(checked) => toggle(group, checked)}
               >
-                <span className={cn('size-2.5 shrink-0 rounded-full', colorOf(group.color).dot)} aria-hidden />
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: hexOf(group.color) }}
+                  aria-hidden
+                />
                 <span className="truncate">{group.name}</span>
               </DropdownMenuCheckboxItem>
             )
@@ -258,10 +234,10 @@ function EditorForm({
   onClose: () => void
 }) {
   const change = useChangeLossControlGroups(storeId)
-  const used = new Set(groups.map((group) => group.color))
+  const used = new Set(groups.map((group) => hexOf(group.color)))
   const [name, setName] = useState(state.group?.name ?? '')
   const [color, setColor] = useState<string>(
-    state.group?.color ?? CONTROL_COLORS.find((item) => !used.has(item.key))?.key ?? CONTROL_COLORS[0].key,
+    hexOf(state.group?.color ?? COLOR_PRESETS.find((preset) => !used.has(preset)) ?? COLOR_PRESETS[0]),
   )
   const [error, setError] = useState<string | null>(null)
   const submit = async (event: FormEvent) => {
@@ -308,26 +284,44 @@ function EditorForm({
           autoFocus
           maxLength={80}
         />
-        <fieldset className="grid gap-2">
+        <fieldset className="grid gap-3">
           <legend className="mb-2 text-sm font-medium">Kolor</legend>
-          <div className="flex flex-wrap gap-2">
-            {CONTROL_COLORS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-label={item.label}
-                aria-pressed={color === item.key}
-                title={item.label}
-                onClick={() => setColor(item.key)}
-                className={cn(
-                  'flex size-8 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-background transition-transform duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95',
-                  item.dot,
-                  color === item.key && 'ring-2 ring-foreground',
-                )}
-              >
-                {color === item.key && <CheckIcon className="size-4" />}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-start gap-4">
+            <HexColorPicker color={color} onChange={setColor} className="control-color-picker" />
+            <div className="grid min-w-40 flex-1 gap-3">
+              <div className="grid grid-cols-4 gap-1.5">
+                {COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    aria-label={`Kolor ${preset}`}
+                    aria-pressed={color === preset}
+                    title={preset}
+                    onClick={() => setColor(preset)}
+                    style={{ backgroundColor: preset }}
+                    className={cn(
+                      'flex size-8 items-center justify-center rounded-lg text-white ring-offset-2 ring-offset-background transition-transform duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95',
+                      color === preset && 'ring-2 ring-foreground',
+                    )}
+                  >
+                    {color === preset && <CheckIcon className="size-4" />}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">HEX</span>
+                <HexColorInput
+                  color={color}
+                  onChange={setColor}
+                  prefixed
+                  aria-label="Kolor w zapisie HEX"
+                  className="h-9 w-28 rounded-lg border border-input bg-background px-2 font-mono text-sm uppercase outline-none focus:border-ring focus:ring-3 focus:ring-ring/30 dark:bg-input/30"
+                />
+              </label>
+              <div className="rounded-lg border px-3 py-2 text-sm" style={tintStyle(color)}>
+                Tak wygląda wiersz artykułu
+              </div>
+            </div>
           </div>
         </fieldset>
         <FormActions>
@@ -397,13 +391,14 @@ export function ControlFilterBar({
             key={group.id}
             type="button"
             aria-pressed={on}
+            style={on ? tintStyle(group.color, 60) : undefined}
             onClick={() => onActive(on ? active.filter((id) => id !== group.id) : [...active, group.id])}
             className={cn(
               'flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-[background-color,border-color,transform] duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.97]',
-              on ? cn(colorOf(group.color).chip, 'border-transparent font-medium') : 'bg-card hover:bg-muted',
+              on ? 'border-transparent font-medium' : 'bg-card hover:bg-muted',
             )}
           >
-            <span className={cn('size-2.5 rounded-full', colorOf(group.color).dot)} aria-hidden />
+            <span className="size-2.5 rounded-full" style={{ backgroundColor: hexOf(group.color) }} aria-hidden />
             {group.name}
             <span className="tabular-nums opacity-70">{group.itm8s.length}</span>
           </button>
@@ -438,7 +433,11 @@ export function ControlFilterBar({
             <ul className="divide-y">
               {groups.map((group) => (
                 <li key={group.id} className="flex items-center gap-3 py-2 text-sm">
-                  <span className={cn('size-3 shrink-0 rounded-full', colorOf(group.color).dot)} aria-hidden />
+                  <span
+                    className="size-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: hexOf(group.color) }}
+                    aria-hidden
+                  />
                   <span className="min-w-0 flex-1 truncate font-medium">{group.name}</span>
                   <span className="text-muted-foreground tabular-nums">{group.itm8s.length} art.</span>
                   <Button

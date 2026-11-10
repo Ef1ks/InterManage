@@ -29,7 +29,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
 @Service
 public class LossControlGroupService {
 
-    /** Kolory z palety frontu; nazwa koloru trafia do bazy. */
+    /** Nazwy z dawnej palety frontu; nowe kolory to {@code #rrggbb} z próbnika. */
     public static final Set<String> COLORS = Set.of("red", "orange", "amber", "lime", "green", "teal", "sky", "blue",
             "violet", "fuchsia", "pink", "slate");
 
@@ -128,10 +128,11 @@ public class LossControlGroupService {
     }
 
     private static String color(LossControlGroupRequest request) {
-        if (!COLORS.contains(request.color())) {
+        String color = request.color().toLowerCase(java.util.Locale.ROOT);
+        if (!color.matches("#[0-9a-f]{6}") && !COLORS.contains(color)) {
             throw ApiException.badRequest("Nieznany kolor");
         }
-        return request.color();
+        return color;
     }
 
     private static Set<String> itm8s(List<String> itm8s) {
