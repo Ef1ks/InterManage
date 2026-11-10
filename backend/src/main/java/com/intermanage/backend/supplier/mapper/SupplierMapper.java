@@ -5,10 +5,12 @@ import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.supplier.dto.MercalysSupplierCreationResponse;
 import com.intermanage.backend.supplier.dto.SupplierContactResponse;
 import com.intermanage.backend.supplier.dto.SupplierDetails;
 import com.intermanage.backend.supplier.dto.SupplierImportResponse;
 import com.intermanage.backend.supplier.dto.SupplierResponse;
+import com.intermanage.backend.supplier.entity.MercalysSupplierCreation;
 import com.intermanage.backend.supplier.entity.Supplier;
 import com.intermanage.backend.supplier.entity.SupplierContact;
 import com.intermanage.backend.supplier.entity.SupplierImport;
@@ -41,6 +43,9 @@ public interface SupplierMapper {
 
     @Mapping(target = "updatedBy", source = "updatedBy.displayName")
     SupplierContactResponse toResponse(SupplierContact contact);
+
+    @Mapping(target = "createdBy", source = "createdBy.displayName")
+    MercalysSupplierCreationResponse toResponse(MercalysSupplierCreation creation);
 
     /** {@code importedBy} jest pusty, gdy konto osoby importującej zostało usunięte. */
     @Mapping(target = "importedBy", source = "importedBy.displayName")

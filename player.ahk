@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 38.0.0.0
+;@Ahk2Exe-SetVersion 40.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 38 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 40 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -199,7 +199,7 @@ PlayMacro(rawClip) {
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
 
     index := 0
-    while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW przeskakuje do LABEL
+    while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW i WEBIFVALUE przeskakują do LABEL
         index += 1
         line := Trim(lines[index])
         if (line = "" || SubStr(line, 1, 1) = "#")
@@ -439,7 +439,7 @@ PlayMacro(rawClip) {
                     return
                 }
             case "LABEL":
-                ; LABEL|nazwa: cel przeskoku z WEBIFROW, sama nic nie robi
+                ; LABEL|nazwa: cel przeskoku z WEBIFROW i WEBIFVALUE, sama nic nie robi
             case "WEBIFROW":
                 ; WEBIFROW|okno|element strony listy|siatka|przycisk w wierszu|numer wiersza od 1|tekst|etykieta|limit w ms:
                 ; czeka, aż lista pokaże tylko wiersze z tekstem (np. kodem MEA wpisanym w filtr). Gdy wiersz o tym numerze jest,
@@ -463,6 +463,40 @@ PlayMacro(rawClip) {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
+            case "WEBIFVALUE":
+                ; WEBIFVALUE|okno|pole|wyrażenie regularne|etykieta|limit w ms: czeka do limitu, aż pole ma pasującą wartość.
+                ; Pasuje: idzie dalej; nie pasuje (albo pola nie ma): przeskakuje do LABEL|etykieta. Np. wypełniony panel
+                ; istniejącej operacji promocji, którą trzeba najpierw usunąć.
+                if (parts.Length < 5) {
+                    MsgBox report "Linia WEBIFVALUE wymaga okna, pola, wyrażenia i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                if (WebValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 3000) != "") {
+                    target := LabelLine(lines, Trim(parts[5]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+            case "WEBFREECODE":
+                ; WEBFREECODE|okno|przycisk świeżej karty|pole kodu|pole sprawdzane|pierwszy kod|ile prób|czas na wczytanie karty w ms:
+                ; dla kolejnych kodów od pierwszego otwiera świeżą kartę (pole kodu = 0), wpisuje kod z Tab i czeka, czy program
+                ; wczyta istniejącą kartę (pole sprawdzane niepuste). Pierwszy kod bez karty zostaje w polu i makro idzie dalej;
+                ; wszystkie zajęte zatrzymują makro. Np. nowy dostawca w Mercalys, gdy lista w aplikacji jest nieaktualna.
+                if (parts.Length < 7) {
+                    MsgBox report "Linia WEBFREECODE wymaga okna, przycisku, pola kodu, pola sprawdzanego, kodu i liczby prób.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                found := ""
+                problem := WebFreeCode(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Integer(Trim(parts[6])),
+                    Integer(Trim(parts[7])), parts.Length >= 8 ? Integer(Trim(parts[8])) : 3000, &found)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                ; Bez wpisu do podsumowania: na końcu zwykłe „Zakończono”, jak przy innych makrach.
             case "WEBSHOW":
                 ; WEBSHOW|fragment tytułu okna|elementy po przecinku: tylko pokazuje ich HTML (do Schowka), niczego nie klika
                 if (parts.Length >= 3)
@@ -876,18 +910,29 @@ GridCell(step, order, column) {
 ; Pola własne Mercalys reagują na klawisze, a nie na zmianę wartości: potrzebny jest fokus i prawdziwe naciśnięcie.
 WebKey(title, field, keys, timeoutMs) {
     deadline := A_TickCount + timeoutMs
+    found := false
     Loop {
         for hwnd in WinGetList(title) {
             for doc in HtmlDocuments(hwnd) {
                 for element in FormElements(doc) {
                     if ((WebProp(element, "id") = field || WebProp(element, "name") = field) && IsShown(element)) {
-                        try {
-                            WinActivate hwnd
-                            ; Klawisze idą do aktywnego okna: bez tego trafiłyby np. w otwarty PDF.
-                            if !WinWaitActive("ahk_id " hwnd, , 2)
-                                return "Okno `"" title "`" nie stało się aktywne, klawisze trafiłyby w inne okno."
-                            element.focus()
+                        found := true
+                        try WinActivate hwnd
+                        ; Klawisze idą do aktywnego okna: bez tego trafiłyby np. w otwarty PDF.
+                        if !WinWaitActive("ahk_id " hwnd, , 2)
+                            return "Okno `"" title "`" nie stało się aktywne, klawisze trafiłyby w inne okno."
+                        ; Pola z własnym skryptem przy wejściu (np. NIP w Mercalys) potrafią rzucić błąd z focus(), choć
+                        ; kursor w nich staje. Liczy się, czy pole jest aktywne; bez tego próbujemy kliknięcia.
+                        focused := true
+                        try element.focus()
+                        catch
+                            focused := false
+                        Sleep 100
+                        if (!focused && !HasFocus(doc, element)) {
+                            try element.click()
                             Sleep 100
+                        }
+                        if (focused || HasFocus(doc, element)) {
                             Send keys
                             return ""
                         }
@@ -896,9 +941,46 @@ WebKey(title, field, keys, timeoutMs) {
             }
         }
         if (A_TickCount >= deadline)
-            return "Nie ma pola `"" field "`" w oknie `"" title "`"."
+            return found ? "Nie udało się ustawić kursora w polu `"" field "`" w oknie `"" title "`"."
+                : "Nie ma pola `"" field "`" w oknie `"" title "`"."
         Sleep 100
     }
+}
+
+; Czy kursor stoi w polu (aktywny element strony to ono).
+HasFocus(doc, element) {
+    try {
+        active := doc.activeElement
+        id := WebProp(element, "id")
+        return id != "" ? WebProp(active, "id") = id : WebProp(active, "uniqueID") = WebProp(element, "uniqueID")
+    }
+    return false
+}
+
+; Pierwszy wolny kod od `first`, najwyżej `tries` prób. Każda próba na świeżej karcie (przycisk `fresh`, pole kodu 0 albo
+; puste), bo po zajętym kodzie w polu sprawdzanym zostałaby nazwa poprzedniej karty i wolny kod wyglądałby na zajęty.
+WebFreeCode(title, fresh, codeField, checkField, first, tries, loadMs, &found) {
+    Loop tries {
+        code := first + A_Index - 1
+        problem := WebClick(title, fresh, 10000)
+        if (problem = "")
+            problem := WebWait(title, codeField, "", 30000)
+        if (problem = "")
+            problem := WebValue(title, codeField, "^0?$", 30000)
+        ; Znacznik na stronie: po kodzie Mercalys przeładowuje kartę, więc nie czekamy pełnego limitu, tylko na przeładowanie.
+        MarkPage(title, codeField)
+        if (problem = "")
+            problem := WebKey(title, codeField, "^a" code "{Tab}", 10000)
+        if (problem != "")
+            return problem
+        ; Po przeładowaniu karta (albo jej brak) już jest: krótkie sprawdzenie. Bez przeładowania cały limit.
+        reloaded := WaitForReload(title, codeField, loadMs)
+        if (WebValue(title, checkField, "\S", reloaded ? 400 : 0) != "") {
+            found := code
+            return ""
+        }
+    }
+    return "Kody od " first " do " (first + tries - 1) " są zajęte. Wgraj aktualną listę i wygeneruj makro ponownie."
 }
 
 ; Sprawdza wartość pola po wyrażeniu regularnym. Mercalys formatuje pola po wyjściu z nich, więc wzorzec dopuszcza oba zapisy.

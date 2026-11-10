@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
 import { bonNumber, documentPaths, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
 import { ArticleCodeFields, ArticleCodesCard } from '@/features/sales/ArticleCodes'
 import {
@@ -410,6 +411,8 @@ function ChartContent({
         <>
           <ArticleDeliveries storeId={storeId} itm8={target.itm8} />
           <ArticleProtocols storeId={storeId} itm8={target.itm8} />
+          {/* Na stronie (Magazyn, Ustaw promocje) historię cen pokazuje sama strona pod kartą. */}
+          {!inline && <ArticlePriceHistory storeId={storeId} itm8={target.itm8} />}
         </>
       )}
     </>

@@ -1,17 +1,28 @@
-import { BadgePercentIcon, FileOutputIcon, ListPlusIcon, ScanBarcodeIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { Popover } from '@base-ui/react/popover'
+import {
+  BadgePercentIcon,
+  CalendarDaysIcon,
+  FileOutputIcon,
+  ListPlusIcon,
+  ScanBarcodeIcon,
+  Trash2Icon,
+  WandSparklesIcon,
+  XIcon,
+} from 'lucide-react'
 import { type ClipboardEvent, type KeyboardEvent, useState } from 'react'
 
 import { CopyButton } from '@/components/CopyButton'
 import { DateField } from '@/components/form'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { parseNumber } from '@/features/data-entry/grid-values'
 import { formatDocumentDate, formatMoney, formatPercent, formatPrice } from '@/features/documents/format'
 import { cn } from '@/lib/utils'
-import type { PromoRow, PromoTile } from '@/store/promoSetupDraftSlice'
+import type { PromoMode, PromoRow, PromoTile } from '@/store/promoSetupDraftSlice'
 
-import { hasPeriod, pastedCodes, promoMargin } from './promo-rows'
+import { hasPeriod, pastedCodes, promoMargin, rowEndError } from './promo-rows'
 
 const NO_DISCOUNT = 'brak'
 
@@ -21,11 +32,11 @@ const fieldClass =
 const levelLabel = (level: number) => `-${String(level).replace('.', ',')}%`
 
 type Props = {
+  /** {@code macro}: własny koniec przy każdym artykule i „Stwórz automatycznie”; {@code pro}: okres i plik .PRO. */
+  variant: PromoMode
   tile: PromoTile
-  tariff: string
   levels: number[]
   selected: string | null
-  canGenerate: boolean
   onSelect: (row: PromoRow) => void
   onDates: (changes: { dateFrom?: string; dateTo?: string }) => void
   onCodes: (codes: string[]) => void
@@ -37,13 +48,26 @@ type Props = {
   /** Ta sama przecena dla wszystkich artykułów kafelka. */
   onTileDiscount: (discount: number) => void
   onRemoveRow: (row: PromoRow) => void
-  onRemove: () => void
-  onGenerate: () => void
+  /** Tryb .PRO: kod taryfy, usunięcie kafelka i jego plik. */
+  tariff?: string
+  canGenerate?: boolean
+  onRemove?: () => void
+  onGenerate?: () => void
+  /** Tryb makra: koniec promocji artykułu i ten sam koniec dla wszystkich. */
+  onRowEnd?: (row: PromoRow, dateTo: string) => void
+  onAllEnds?: () => void
+  /** Tryb makra: powód, dla którego nie da się jeszcze ustawić promocji ({@code null} = można). */
+  createBlocked?: string | null
+  onCreate?: () => void
 }
 
-/** Jedna promocja: okres, artykuły z cenami i plik .PRO. Enter i strzałki w cenie przechodzą między wierszami. */
+/**
+ * Promocja: artykuły z cenami. W trybie .PRO kafelek ma jeden okres i daje plik, w trybie makra każdy artykuł ma
+ * własny koniec, a koniec kafelka podpowiada go nowym artykułom. Enter i strzałki w cenie przechodzą między wierszami.
+ */
 export function PromoTileCard(props: Props) {
-  const { tile, tariff, levels, selected, canGenerate, onDates, onList, onTileDiscount, onRemove, onGenerate } = props
+  const { variant, tile, tariff, levels, selected, canGenerate, onDates, onList, onTileDiscount, onRemove } = props
+  const macro = variant === 'macro'
   const periodError = tile.dateTo && !hasPeriod(tile) ? 'Koniec przed początkiem' : undefined
   const articleRows = tile.rows.filter((row) => row.article)
   // Wspólna przecena widoczna w wyborze, gdy wszystkie artykuły mają ten sam stopień.
@@ -56,37 +80,60 @@ export function PromoTileCard(props: Props) {
 
   return (
     <Card className="gap-3 px-4 py-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 className="font-semibold">Promocja {tile.number}</h2>
-        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground tabular-nums">
-          kod taryfy {tariff}
-          <CopyButton value={tariff} label={`Kopiuj kod taryfy ${tariff}`} />
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="ml-auto"
-          aria-label={`Usuń promocję ${tile.number}`}
-          title="Usuń promocję"
-          onClick={onRemove}
-        >
-          <Trash2Icon />
-        </Button>
-      </div>
+      {macro ? (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="font-semibold">Promocje do ustawienia</h2>
+          <span className="text-sm text-muted-foreground tabular-nums">artykuły: {articleRows.length}</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="font-semibold">Promocja {tile.number}</h2>
+          {tariff && (
+            <span className="inline-flex items-center gap-1 text-sm text-muted-foreground tabular-nums">
+              kod taryfy {tariff}
+              <CopyButton value={tariff} label={`Kopiuj kod taryfy ${tariff}`} />
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="ml-auto"
+            aria-label={`Usuń promocję ${tile.number}`}
+            title="Usuń promocję"
+            onClick={onRemove}
+          >
+            <Trash2Icon />
+          </Button>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <DateField label="Początek promocji" value={tile.dateFrom} onChange={(dateFrom) => onDates({ dateFrom })} />
+        {/* W trybie makra początek to dzień ustawienia: Mercalys podpowiada dzisiejszy i makro go nie zmienia. */}
+        {!macro && (
+          <DateField label="Początek promocji" value={tile.dateFrom} onChange={(dateFrom) => onDates({ dateFrom })} />
+        )}
         <DateField
-          label="Koniec promocji"
+          label={macro ? 'Koniec dla nowych artykułów' : 'Koniec promocji'}
           value={tile.dateTo}
           min={tile.dateFrom}
           error={periodError}
+          hint={
+            macro && tile.dateTo && articleRows.length > 0 ? (
+              <button
+                type="button"
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+                onClick={props.onAllEnds}
+              >
+                Ustaw ten koniec wszystkim artykułom
+              </button>
+            ) : undefined
+          }
           onChange={(dateTo) => onDates({ dateTo })}
         />
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[38rem] text-sm">
+        <table className={cn('w-full text-sm', macro ? 'min-w-[44rem]' : 'min-w-[38rem]')}>
           <thead className="bg-muted text-left text-xs text-muted-foreground">
             <tr>
               <th className="w-32 px-2 py-1.5 font-medium">EAN / ITM8</th>
@@ -100,6 +147,7 @@ export function PromoTileCard(props: Props) {
               <th className="w-20 px-2 py-1.5 text-right font-medium">Cena promo</th>
               <th className="w-17 px-2 py-1.5 text-right font-medium">Marża</th>
               <th className="w-23 px-2 py-1.5 font-medium">Przecena</th>
+              {macro && <th className="w-26 px-2 py-1.5 font-medium">Koniec</th>}
               <th className="w-9" aria-label="Usuń" />
             </tr>
           </thead>
@@ -141,17 +189,33 @@ export function PromoTileCard(props: Props) {
             </SelectContent>
           </Select>
         )}
-        <Button
-          variant="outline"
-          className="ml-auto"
-          disabled={!canGenerate}
-          title={canGenerate ? undefined : 'Dodaj artykuły i ustaw okres promocji'}
-          onClick={onGenerate}
-        >
-          <FileOutputIcon />
-          Wygeneruj plik promocji
-        </Button>
+        {macro ? (
+          <Button
+            size="lg"
+            className="ml-auto"
+            disabled={!props.onCreate || Boolean(props.createBlocked)}
+            title={props.createBlocked ?? undefined}
+            onClick={props.onCreate}
+          >
+            <WandSparklesIcon />
+            Stwórz automatycznie
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            className="ml-auto"
+            disabled={!canGenerate}
+            title={canGenerate ? undefined : 'Dodaj artykuły i ustaw okres promocji'}
+            onClick={props.onGenerate}
+          >
+            <FileOutputIcon />
+            Wygeneruj plik promocji
+          </Button>
+        )}
       </div>
+      {macro && props.createBlocked && articleRows.length > 0 && (
+        <p className="text-right text-xs text-muted-foreground">{props.createBlocked}</p>
+      )}
       {levels.length === 0 && (
         <p className="text-xs text-muted-foreground">
           Dodaj automatyczne przeceny pod kafelkami, żeby wybierać obniżkę.
@@ -164,10 +228,13 @@ export function PromoTileCard(props: Props) {
 function Row({
   row,
   active,
+  variant,
+  tile,
   levels,
   onSelect,
   onPrice,
   onDiscount,
+  onRowEnd,
   onRemoveRow,
 }: Props & { row: PromoRow; active: boolean }) {
   const { article } = row
@@ -268,6 +335,19 @@ function Row({
           </Select>
         )}
       </td>
+      {variant === 'macro' && (
+        <td className="px-1 py-1" onClick={(event) => event.stopPropagation()}>
+          {article && (
+            <RowEndInput
+              value={row.dateTo ?? ''}
+              min={tile.dateFrom}
+              error={rowEndError(tile, row)}
+              name={article.name ?? row.code}
+              onChange={(dateTo) => onRowEnd?.(row, dateTo)}
+            />
+          )}
+        </td>
+      )}
       <td className="pr-1" onClick={(event) => event.stopPropagation()}>
         <Button
           variant="ghost"
@@ -346,8 +426,62 @@ function PriceInput({
   )
 }
 
+const shortDate = (value: string) => {
+  const [year, month, day] = value.split('-')
+  return `${day}.${month}.${year.slice(2)}`
+}
+
+/** Koniec promocji artykułu w wierszu: zwarte pole z kalendarzem marki. */
+function RowEndInput({
+  value,
+  min,
+  error,
+  name,
+  onChange,
+}: {
+  value: string
+  min: string
+  error: string | null
+  name: string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
+        aria-label={`Koniec promocji: ${name}`}
+        aria-invalid={error ? true : undefined}
+        title={error ?? undefined}
+        className={cn(
+          fieldClass,
+          'flex items-center justify-between gap-1 text-left tabular-nums data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/30',
+          !value && 'text-muted-foreground',
+          error && 'border-red-500 bg-red-200 text-red-950 dark:bg-red-900/60 dark:text-red-100',
+        )}
+      >
+        {value ? shortDate(value) : 'wybierz'}
+        <CalendarDaysIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner sideOffset={6} align="end" className="isolate z-50">
+          <Popover.Popup className="origin-(--transform-origin) rounded-2xl bg-popover p-4 text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.25)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
+            <Calendar
+              value={value}
+              min={min}
+              onChange={(next) => {
+                onChange(next)
+                setOpen(false)
+              }}
+            />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  )
+}
+
 /** Pole na kolejny kod pod artykułami: skan albo wpisany kod z Enterem, wklejona kolumna z Excela. */
-function CodeRow({ onCodes, onSearch }: Props) {
+function CodeRow({ variant, onCodes, onSearch }: Props) {
   const [text, setText] = useState('')
 
   const submit = () => {
@@ -367,7 +501,7 @@ function CodeRow({ onCodes, onSearch }: Props) {
 
   return (
     <tr>
-      <td colSpan={8} className="px-1 py-1">
+      <td colSpan={variant === 'macro' ? 9 : 8} className="px-1 py-1">
         <div className="relative">
           <ScanBarcodeIcon
             aria-hidden

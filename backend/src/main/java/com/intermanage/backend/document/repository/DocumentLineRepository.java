@@ -221,6 +221,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
         BigDecimal getReferencePrice();
 
         BigDecimal getCatalogPrice();
+
+        BigDecimal getCadencierPrice();
     }
 
     /**
@@ -229,7 +231,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * cena zwykła z promocji trwającej tego dnia na liście promocji, {@code tillPrice} to samo z plików kasy (promocje
      * założone ręcznie są tylko tam), {@code leaflet} artykuł w gazetce tego dnia,
      * {@code referencePrice} cena zwykła ze sprzedaży ({@link PromotionReportRepository#REGULAR_PRICES}),
-     * {@code catalogPrice} cena z kartoteki. Linie bez wartości (gratis) się nie liczą. Linia z lokalnym ITM8 dostawcy
+     * {@code catalogPrice} cena z kartoteki, {@code cadencierPrice} CENA_CAD z kartoteki. Linie bez wartości (gratis) się nie liczą. Linia z lokalnym ITM8 dostawcy
      * ({@code 99…}, spoza kartoteki) bierze to wszystko z artykułu z kartoteki o tym EAN-ie (główny, multikody, dawne
      * pary), bo promocja jest na artykule sklepu, a nie na ITM8 dostawcy.
      */
@@ -297,7 +299,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    f.delivery_id is not null as corrected,
                    p.price as listedPrice, t.price as tillPrice, g.itm8 is not null as leaflet,
                    round(cast(r.price as numeric), 2) as referencePrice,
-                   c.sale_price as catalogPrice
+                   c.sale_price as catalogPrice, c.cadencier_price as cadencierPrice
             from lines l
             left join fixes f on f.delivery_id = l.document_id and f.itm8 = l.itm8
             left join listed p on p.document_id = l.document_id and p.itm8 = l.itm8
@@ -740,4 +742,107 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             order by l.itm8, d.document_date desc, d.number desc
             """, nativeQuery = true)
     List<LastSupplier> findLastSuppliers(UUID storeId, Collection<String> itm8s);
+
+    /** Dostawca z przyjęć PZ sklepu: kod z linii, nazwa z najnowszej linii, ostatnia dostawa. */
+    interface DeliverySupplier {
+        String getSupplierCode();
+
+        String getSupplierName();
+
+        LocalDateTime getLastDelivery();
+    }
+
+    @Query(value = """
+            select distinct on (l.supplier_code) l.supplier_code as supplierCode, l.supplier_name as supplierName,
+                   d.document_date as lastDelivery
+            from document_lines l
+            join documents d on d.id = l.document_id and d.error_marked_at is null
+            where d.store_id = :storeId and d.type = 'PZ' and coalesce(btrim(l.supplier_code), '') <> ''
+            order by l.supplier_code, d.document_date desc
+            """, nativeQuery = true)
+    List<DeliverySupplier> findDeliverySuppliers(UUID storeId);
+
+    /** Zakup od dostawcy w miesiącu i pozycji nomenklatury (kod bez spacji, pusty bez nomenklatury). */
+    interface SupplierTurnoverAmount {
+        LocalDate getMonth();
+
+        String getNomenclatureCode();
+
+        BigDecimal getDelivered();
+
+        BigDecimal getCorrections();
+    }
+
+    /**
+     * Przyjęcia PZ: wspólna część zapytań obrotu z dostawcą. Przyjęcie z linią dostawcy, wg daty przyjęcia (oba końce
+     * włącznie), z miesiącem, do którego należy.
+     */
+    String SUPPLIER_DELIVERIES = """
+            with deliveries as (
+                select distinct d.id, cast(date_trunc('month', d.document_date) as date) as month
+                from documents d
+                join document_lines l on l.document_id = d.id
+                where d.store_id = :storeId and d.type = 'PZ' and d.error_marked_at is null
+                  and d.document_date >= cast(:from as timestamp)
+                  and d.document_date < cast(:to as timestamp) + interval '1 day'
+                  and l.supplier_code = :supplierCode
+            )
+            """;
+
+    /**
+     * Zakup netto od dostawcy po miesiącach i nomenklaturze linii: linie dostawcy w jego przyjęciach PZ i linie korekt
+     * przypiętych do tych przyjęć (w miesiącu przyjęcia, jak przyjęcie po korektach). Linia korekty z innym dostawcą
+     * się nie liczy, bez dostawcy tak.
+     */
+    @Query(value = SUPPLIER_DELIVERIES + """
+            , amounts as (
+                select dl.month, l.nomenclature_code, l.purchase_value as delivered, 0 as corrections
+                from deliveries dl
+                join document_lines l on l.document_id = dl.id
+                where l.supplier_code = :supplierCode
+                union all
+                select dl.month, cl.nomenclature_code, 0, cl.purchase_value
+                from deliveries dl
+                join delivery_corrections c on c.delivery_id = dl.id and c.unlinked_at is null
+                join document_lines cl on cl.document_id = c.correction_id
+                where coalesce(nullif(btrim(cl.supplier_code), ''), :supplierCode) = :supplierCode
+            )
+            select month, coalesce(replace(nomenclature_code, ' ', ''), '') as nomenclatureCode,
+                   sum(delivered) as delivered, sum(corrections) as corrections
+            from amounts
+            group by 1, 2
+            """, nativeQuery = true)
+    List<SupplierTurnoverAmount> sumSupplierTurnover(UUID storeId, String supplierCode, LocalDate from, LocalDate to);
+
+    interface SupplierDeliveryCount {
+        LocalDate getMonth();
+
+        long getDeliveries();
+    }
+
+    @Query(value = SUPPLIER_DELIVERIES + """
+            select month, count(*) as deliveries from deliveries group by month
+            """, nativeQuery = true)
+    List<SupplierDeliveryCount> countSupplierDeliveries(UUID storeId, String supplierCode, LocalDate from,
+            LocalDate to);
+
+    /** Korekty dostawcy z okresu, które nie są przypięte do żadnego przyjęcia. */
+    interface UnattachedCorrections {
+        long getCount();
+
+        BigDecimal getPurchaseValue();
+    }
+
+    @Query(value = """
+            select count(distinct d.id) as count, coalesce(sum(l.purchase_value), 0) as purchaseValue
+            from documents d
+            join document_lines l on l.document_id = d.id and l.supplier_code = :supplierCode
+            where d.store_id = :storeId and d.type in ('PK', 'WZ')
+              and d.document_date >= cast(:from as timestamp)
+              and d.document_date < cast(:to as timestamp) + interval '1 day'
+              and not exists (select 1 from delivery_corrections c
+                              where c.correction_id = d.id and c.unlinked_at is null)
+            """, nativeQuery = true)
+    UnattachedCorrections sumUnattachedSupplierCorrections(UUID storeId, String supplierCode, LocalDate from,
+            LocalDate to);
 }

@@ -68,7 +68,12 @@ export function comparePeriods(
   }
 }
 
-function comparedPeriod(mode: PeriodMode, compare: CompareMode, current: DateRange, compareCustom: DateRange): DateRange {
+function comparedPeriod(
+  mode: PeriodMode,
+  compare: CompareMode,
+  current: DateRange,
+  compareCustom: DateRange,
+): DateRange {
   if (compare === 'custom') return compareCustom
   if (compare === 'year') return shiftRange(current, -YEAR_AGO_DAYS)
   if (compare === 'week') return shiftRange(current, -7)
@@ -100,7 +105,12 @@ function shiftRange({ from, to }: DateRange, days: number): DateRange {
 export const YEAR_AGO_DAYS = 364
 
 /** Wybrany okres: dzień, pełny tydzień pon.-niedz., miesiąc (w toku do ostatniego dnia ze sprzedażą) albo własny. */
-export function currentPeriod(mode: PeriodMode, anchor: string, custom: DateRange, lastSaleDate: string | null): DateRange {
+export function currentPeriod(
+  mode: PeriodMode,
+  anchor: string,
+  custom: DateRange,
+  lastSaleDate: string | null,
+): DateRange {
   if (mode === 'day') return { from: anchor, to: anchor }
   if (mode === 'week') {
     // Zawsze pełny tydzień od poniedziałku do niedzieli; który, pilnuje resolveAnchor.
@@ -143,6 +153,19 @@ export function shiftAnchor(mode: Exclude<PeriodMode, 'custom'>, anchor: string,
   if (mode === 'day') return addDays(anchor, step)
   if (mode === 'week') return addDays(weekStart(anchor), 7 * step)
   return shiftMonth(monthStart(anchor), step)
+}
+
+/**
+ * Ten sam okres rok temu: miesiąc to ten sam miesiąc kalendarzowy, dzień, tydzień i własny okres cofają się o 52 tygodnie
+ * (te same dni tygodnia, jak porównanie rok do roku).
+ */
+export function yearAgoAnchor(mode: Exclude<PeriodMode, 'custom'>, anchor: string): string {
+  if (mode === 'month') return shiftMonth(monthStart(anchor), -12)
+  return addDays(anchor, -YEAR_AGO_DAYS)
+}
+
+export function yearAgoRange(range: DateRange): DateRange {
+  return shiftRange(range, -YEAR_AGO_DAYS)
 }
 
 export function dayCount(range: DateRange): number {

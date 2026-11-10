@@ -13,15 +13,20 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.supplier.dto.CreateSupplierRequest;
+import com.intermanage.backend.supplier.dto.MercalysSupplierCreationRequest;
+import com.intermanage.backend.supplier.dto.MercalysSupplierCreationResponse;
+import com.intermanage.backend.supplier.dto.MercalysSupplierDraft;
 import com.intermanage.backend.supplier.dto.SupplierContactRequest;
 import com.intermanage.backend.supplier.dto.SupplierDetails;
 import com.intermanage.backend.supplier.dto.SupplierDetailsRequest;
 import com.intermanage.backend.supplier.dto.SupplierResponse;
+import com.intermanage.backend.supplier.service.MercalysSupplierService;
 import com.intermanage.backend.supplier.service.SupplierDirectoryService;
 
 import jakarta.validation.Valid;
@@ -37,11 +42,16 @@ public class SupplierController {
     private static final String STORE = " and @storeAccess.canAccess(authentication, #storeId)";
     private static final String VIEW = "hasAuthority('SUPPLIERS:VIEW')" + STORE;
     private static final String EDIT = "hasAuthority('SUPPLIERS:EDIT')" + STORE;
+    /** Zakładanie dostawcy w Mercalys idzie z wprowadzania danych, gdy sprzedawcy z faktury nie ma na liście. */
+    private static final String MERCALYS = "hasAnyAuthority('SUPPLIERS:EDIT', 'DATA_ENTRY:VIEW')" + STORE;
 
     private final SupplierDirectoryService directory;
 
-    public SupplierController(SupplierDirectoryService directory) {
+    private final MercalysSupplierService mercalys;
+
+    public SupplierController(SupplierDirectoryService directory, MercalysSupplierService mercalys) {
         this.directory = directory;
+        this.mercalys = mercalys;
     }
 
     @GetMapping
@@ -49,6 +59,33 @@ public class SupplierController {
             + STORE)
     public List<SupplierResponse> list(@PathVariable UUID storeId) {
         return directory.list(storeId);
+    }
+
+    /** Dane do makra zakładania dostawcy w Mercalys (sprzedawca z faktury spoza listy); niczego nie zapisuje. */
+    @GetMapping("/mercalys-draft")
+    @PreAuthorize(MERCALYS)
+    public MercalysSupplierDraft mercalysDraft(@PathVariable UUID storeId, @RequestParam String nip,
+            @RequestParam(required = false) String name) {
+        return mercalys.draft(storeId, nip, name);
+    }
+
+    /** Makro skopiowane: rezerwuje kod do wgrania nowej listy dostawców. */
+    @PostMapping("/mercalys-creations")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(MERCALYS)
+    public MercalysSupplierCreationResponse mercalysCreation(@PathVariable UUID storeId,
+            @Valid @RequestBody MercalysSupplierCreationRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return mercalys.create(storeId, request, principal.getId());
+    }
+
+    /** „Cofnij” po skopiowaniu makra: kod wraca do puli. */
+    @DeleteMapping("/mercalys-creations/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(MERCALYS)
+    public void deleteMercalysCreation(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        mercalys.delete(storeId, id, principal.getId());
     }
 
     /** Dostawca, którego nie ma w systemie sklepu - jest tylko w aplikacji. */

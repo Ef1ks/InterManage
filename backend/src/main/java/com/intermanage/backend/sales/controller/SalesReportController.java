@@ -6,12 +6,14 @@ import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.dto.ArticleCodesResponse;
 import com.intermanage.backend.product.service.ArticleCodesService;
@@ -59,6 +61,8 @@ public class SalesReportController {
      * Porównanie sprzedaży dwóch okresów na jednym poziomie nomenklatury: bez {@code parent} rejony, z kodem rejonu
      * rodziny, rodziny podrodziny, podrodziny artykuły; {@code unassigned=true} artykuły bez nomenklatury.
      * {@code nomenclatures} (powtarzane, kody dowolnego poziomu) zawęża porównanie do wybranych pozycji.
+     * {@code compareStore} dokłada do każdego wiersza aktualną sprzedaż drugiego sklepu (swojego albo
+     * zaprzyjaźnionego, lista jak w raporcie lady).
      */
     @GetMapping("/sales-comparison")
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
@@ -69,9 +73,11 @@ public class SalesReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate currentTo,
             @RequestParam(required = false) String parent,
             @RequestParam(defaultValue = "false") boolean unassigned,
-            @RequestParam(required = false) List<String> nomenclatures) {
+            @RequestParam(required = false) List<String> nomenclatures,
+            @RequestParam(required = false) UUID compareStore,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
         return salesReportService.compare(storeId, previousFrom, previousTo, currentFrom, currentTo, parent,
-                unassigned, nomenclatures);
+                unassigned, nomenclatures, compareStore, principal.getId());
     }
 
     /** Nomenklatura sklepu do filtra raportów. */

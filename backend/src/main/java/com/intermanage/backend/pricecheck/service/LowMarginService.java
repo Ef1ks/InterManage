@@ -214,7 +214,9 @@ public class LowMarginService {
         return new Line(article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
                 OverpaymentService.regionOf(article.getNomenclatureCode()), article.getSupplierCode(), quantity, price,
                 value, regular, documentPrice, regular.compareTo(documentPrice) > 0 ? promotionOf(article) : null,
-                margin, requiredMargin, target, excess, article.getCorrected());
+                margin, requiredMargin, target, excess, article.getCorrected(),
+                article.getCadencierPrice() != null && article.getCadencierPrice().signum() > 0
+                        && article.getCadencierPrice().compareTo(regular) == 0);
     }
 
     /** Cena katalogowa w dniu przyjęcia: cena z dokumentu, a w promocji cena zwykła, nigdy niższa niż z dokumentu. */

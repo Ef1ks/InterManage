@@ -4,14 +4,21 @@ import { addDays, todayIso } from '@/lib/dates'
 import type { PromotionSetupArticle } from '@/lib/types'
 import { isUuid } from '@/lib/uuid'
 
-/** Wiersz promocji: wpisany kod, artykuł ({@code null} = kodu nie ma w kartotece), cena i wybrana przecena w %. */
+/**
+ * Wiersz promocji: wpisany kod, artykuł ({@code null} = kodu nie ma w kartotece), cena i wybrana przecena w %.
+ * {@code dateTo}: własny koniec promocji artykułu, tylko w trybie makra (w plikach .PRO okres ma kafelek).
+ */
 export type PromoRow = {
   id: string
   code: string
   article: PromotionSetupArticle | null
   price: number | null
   discount: number | null
+  dateTo?: string
 }
+
+/** {@code macro}: jeden kafelek, każdy artykuł z własnym końcem, promocje ustawia makro; {@code pro}: pliki .PRO. */
+export type PromoMode = 'macro' | 'pro'
 
 /** Kafelek: osobne artykuły i okres. {@code number} to dwie ostatnie cyfry kodu taryfy, nadawany raz i nie wraca. */
 export type PromoTile = { id: string; number: number; dateFrom: string; dateTo: string; rows: PromoRow[] }
@@ -20,7 +27,10 @@ export type PromoTile = { id: string; number: number; dateFrom: string; dateTo: 
 export type PromoSetupDraft = { operation: string; nextNumber: number; tiles: PromoTile[] }
 
 type DraftState = {
+  /** Tryb plików .PRO. */
   drafts: Record<string, PromoSetupDraft>
+  /** Tryb makra: osobna praca, zawsze z jednym kafelkiem; jego {@code dateTo} to koniec dla nowych artykułów. */
+  macroDrafts: Record<string, PromoSetupDraft>
   /** Stopnie automatycznych przecen w % sklepu; bez wpisu domyślne. */
   levels: Record<string, number[]>
 }
@@ -46,21 +56,23 @@ export const newPromoDraft = (): PromoSetupDraft => ({
   tiles: [newTile(1)],
 })
 
+const validDrafts = (drafts: Record<string, PromoSetupDraft>) =>
+  Object.fromEntries(Object.entries(drafts).filter(([store, draft]) => isUuid(store) && Array.isArray(draft?.tiles)))
+
 function readStored(): DraftState {
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as Partial<DraftState> | null
     if (value && typeof value.drafts === 'object' && value.drafts) {
       return {
-        drafts: Object.fromEntries(
-          Object.entries(value.drafts).filter(([store, draft]) => isUuid(store) && Array.isArray(draft?.tiles)),
-        ),
+        drafts: validDrafts(value.drafts),
+        macroDrafts: validDrafts(value.macroDrafts ?? {}),
         levels: value.levels ?? {},
       }
     }
   } catch {
     // Brak localStorage albo zepsuty JSON.
   }
-  return { drafts: {}, levels: {} }
+  return { drafts: {}, macroDrafts: {}, levels: {} }
 }
 
 /** Kopia w przeglądarce. */
@@ -72,7 +84,13 @@ export function persistPromoSetup(state: DraftState) {
   }
 }
 
-type TileAction = { storeId: string; tileId: string }
+type ModeAction = { storeId: string; mode: PromoMode }
+type TileAction = ModeAction & { tileId: string }
+
+const draftsOf = (state: DraftState, mode: PromoMode) => (mode === 'macro' ? state.macroDrafts : state.drafts)
+
+const tileOf = (state: DraftState, { storeId, mode, tileId }: TileAction) =>
+  draftsOf(state, mode)[storeId]?.tiles.find((tile) => tile.id === tileId)
 
 /**
  * Promocje w przygotowaniu per sklep: zostają po przejściu do innej zakładki i odświeżeniu strony (kopia
@@ -83,8 +101,8 @@ const promoSetupDraftSlice = createSlice({
   name: 'promoSetupDraft',
   initialState: readStored(),
   reducers: {
-    setPromoDraft(state, action: PayloadAction<{ storeId: string; draft: PromoSetupDraft }>) {
-      state.drafts[action.payload.storeId] = action.payload.draft
+    setPromoDraft(state, action: PayloadAction<ModeAction & { draft: PromoSetupDraft }>) {
+      draftsOf(state, action.payload.mode)[action.payload.storeId] = action.payload.draft
     },
     addPromoTile(state, action: PayloadAction<{ storeId: string }>) {
       const draft = (state.drafts[action.payload.storeId] ??= newPromoDraft())
@@ -95,22 +113,20 @@ const promoSetupDraftSlice = createSlice({
       state,
       action: PayloadAction<TileAction & { changes: Partial<Pick<PromoTile, 'dateFrom' | 'dateTo'>> }>,
     ) {
-      const { storeId, tileId, changes } = action.payload
-      const tile = state.drafts[storeId]?.tiles.find((candidate) => candidate.id === tileId)
-      if (tile) Object.assign(tile, changes)
+      const tile = tileOf(state, action.payload)
+      if (tile) Object.assign(tile, action.payload.changes)
     },
     addPromoRows(state, action: PayloadAction<TileAction & { rows: PromoRow[] }>) {
-      const { storeId, tileId, rows } = action.payload
-      state.drafts[storeId]?.tiles.find((tile) => tile.id === tileId)?.rows.push(...rows)
+      tileOf(state, action.payload)?.rows.push(...action.payload.rows)
     },
     updatePromoRow(
       state,
-      action: PayloadAction<TileAction & { rowId: string; changes: Pick<PromoRow, 'price' | 'discount'> }>,
+      action: PayloadAction<
+        TileAction & { rowId: string; changes: Partial<Pick<PromoRow, 'price' | 'discount' | 'dateTo'>> }
+      >,
     ) {
-      const { storeId, tileId, rowId, changes } = action.payload
-      const tile = state.drafts[storeId]?.tiles.find((candidate) => candidate.id === tileId)
-      const row = tile?.rows.find((candidate) => candidate.id === rowId)
-      if (row) Object.assign(row, changes)
+      const row = tileOf(state, action.payload)?.rows.find((candidate) => candidate.id === action.payload.rowId)
+      if (row) Object.assign(row, action.payload.changes)
     },
     setPromoLevels(state, action: PayloadAction<{ storeId: string; levels: number[] }>) {
       state.levels[action.payload.storeId] = action.payload.levels

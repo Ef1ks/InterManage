@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.dataentry.component.LabelFile;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService.ProtocolFile;
+import com.intermanage.backend.product.dto.PriceMarkdownBatchRequest;
 import com.intermanage.backend.product.dto.PriceMarkdownIdsRequest;
 import com.intermanage.backend.product.dto.PriceMarkdownItem;
 import com.intermanage.backend.product.dto.PriceMarkdownRequest;
@@ -39,6 +40,14 @@ public class PriceMarkdownController {
             "hasAuthority('INVENTORY:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT =
             "hasAuthority('INVENTORY:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
+    /**
+     * Lista cenówek i jej plik: też ustawianie promocji ({@code DATA_ENTRY:VIEW}), bo każdy artykuł z jego makra trafia
+     * na listę, a cenówki drukuje osoba, która ustawiła promocje.
+     */
+    private static final String LABELS =
+            "(hasAuthority('INVENTORY:EDIT') or hasAuthority('DATA_ENTRY:VIEW')) and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String LIST =
+            "(hasAuthority('INVENTORY:VIEW') or hasAuthority('DATA_ENTRY:VIEW')) and @storeAccess.canAccess(authentication, #storeId)";
 
     private final PriceMarkdownService markdowns;
 
@@ -50,7 +59,7 @@ public class PriceMarkdownController {
     }
 
     @GetMapping
-    @PreAuthorize(VIEW)
+    @PreAuthorize(LIST)
     public List<PriceMarkdownItem> list(@PathVariable UUID storeId) {
         return markdowns.list(storeId);
     }
@@ -70,9 +79,18 @@ public class PriceMarkdownController {
         return markdowns.create(storeId, request, principal.getId());
     }
 
+    /** Artykuły z makra ustawiania promocji; wszystkie albo żaden. */
+    @PostMapping("/batch")
+    @PreAuthorize(LABELS)
+    public List<PriceMarkdownItem> createAll(@PathVariable UUID storeId,
+            @Valid @RequestBody PriceMarkdownBatchRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return markdowns.createAll(storeId, request.items(), principal.getId());
+    }
+
     /** Plik ETIQUETTE; zapisuje go przeglądarka w folderze plików PROTO i dopiero wtedy woła {@code labels-generated}. */
     @PostMapping("/labels-file")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(LABELS)
     public ResponseEntity<byte[]> labelsFile(@PathVariable UUID storeId,
             @Valid @RequestBody PriceMarkdownIdsRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -85,7 +103,7 @@ public class PriceMarkdownController {
     }
 
     @PostMapping("/labels-generated")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(LABELS)
     public List<PriceMarkdownItem> labelsGenerated(@PathVariable UUID storeId,
             @Valid @RequestBody PriceMarkdownIdsRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -93,7 +111,7 @@ public class PriceMarkdownController {
     }
 
     @PostMapping("/delete")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(LABELS)
     public List<PriceMarkdownItem> delete(@PathVariable UUID storeId,
             @Valid @RequestBody PriceMarkdownIdsRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -101,7 +119,7 @@ public class PriceMarkdownController {
     }
 
     @PostMapping("/restore")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(LABELS)
     public List<PriceMarkdownItem> restore(@PathVariable UUID storeId,
             @Valid @RequestBody PriceMarkdownIdsRequest request) {
         return markdowns.restore(storeId, request.ids());

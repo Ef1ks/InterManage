@@ -8,6 +8,9 @@ import type {
   ArticleProtocol,
   CadencierImport,
   CadencierOverview,
+  CounterMetric,
+  CounterReport,
+  CounterStoreOption,
   DeliCostsOverview,
   GratisReport,
   IncidentImport,
@@ -25,6 +28,8 @@ import type {
   PromotionReport,
   ProtocolKind,
   ProtocolReport,
+  SupplierTurnoverReport,
+  TurnoverSupplier,
   ProtocolReportGrouping,
   ProtocolReportsOverview,
   RegionBudget,
@@ -90,7 +95,7 @@ export function useSalesNomenclatures(storeId: string) {
 /**
  * Jeden poziom porównania sprzedaży: bez {@code parent} rejony, z kodem rejonu jego rodziny, z kodem rodziny
  * podrodziny, a z kodem podrodziny artykuły. {@code unassigned} to artykuły bez nomenklatury. {@code filter} to
- * wybrane pozycje nomenklatury (pusty = cały sklep).
+ * wybrane pozycje nomenklatury (pusty = cały sklep). {@code compareStore} dokłada aktualną sprzedaż drugiego sklepu.
  */
 export const salesComparisonKey = (
   storeId: string,
@@ -99,7 +104,8 @@ export const salesComparisonKey = (
   filter: string[],
   parent: string,
   unassigned = false,
-) => [...reportsKey(storeId), `${kind}-comparison`, periods, filter, parent, unassigned] as const
+  compareStore: string | null = null,
+) => [...reportsKey(storeId), `${kind}-comparison`, periods, filter, parent, unassigned, compareStore] as const
 
 export function useSalesComparison(
   storeId: string,
@@ -108,9 +114,10 @@ export function useSalesComparison(
   filter: string[],
   parent: string,
   unassigned = false,
+  compareStore: string | null = null,
 ) {
   return useQuery({
-    queryKey: salesComparisonKey(storeId, kind, periods, filter, parent, unassigned),
+    queryKey: salesComparisonKey(storeId, kind, periods, filter, parent, unassigned, compareStore),
     staleTime: REPORT_STALE_TIME,
     queryFn: () => {
       const params = new URLSearchParams({
@@ -121,6 +128,7 @@ export function useSalesComparison(
         parent,
       })
       if (unassigned) params.set('unassigned', 'true')
+      if (compareStore) params.set('compareStore', compareStore)
       filter.forEach((code) => params.append('nomenclatures', code))
       return api<SalesComparison>(`${reportsPath(storeId)}/${kind}-comparison?${params}`)
     },
@@ -571,6 +579,61 @@ export function useTopSalesPartners(storeId: string) {
   })
 }
 
+/** Raport lady: wybrane rejony 24, 36, 46 w bieżącym sklepie i porównywanych. */
+export type CounterQuery = {
+  range: DateRange
+  regions: string[]
+  stores: string[]
+}
+
+const counterParams = (query: CounterQuery) => {
+  const params = new URLSearchParams({ from: query.range.from, to: query.range.to })
+  query.regions.forEach((code) => params.append('regions', code))
+  query.stores.forEach((store) => params.append('stores', store))
+  return params
+}
+
+export function useCounterReport(storeId: string, query: CounterQuery, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'counter', query],
+    staleTime: REPORT_STALE_TIME,
+    placeholderData: keepPreviousData,
+    queryFn: () => api<CounterReport>(`${reportsPath(storeId)}/counter?${counterParams(query)}`),
+    enabled,
+  })
+}
+
+/** Sklepy do porównania w raporcie lady: dostępne użytkownikowi i zaprzyjaźnione. */
+export function useCounterStores(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'counter', 'stores'],
+    queryFn: () => api<CounterStoreOption[]>(`${reportsPath(storeId)}/counter/stores`),
+  })
+}
+
+export type CounterPrint = CounterQuery & { metrics: CounterMetric[]; basis: 'GROSS' | 'NET'; articles: boolean }
+
+const counterPdfPath = (storeId: string, print: CounterPrint) => {
+  const params = counterParams(print)
+  print.metrics.forEach((metric) => params.append('metrics', metric))
+  params.set('basis', print.basis)
+  params.set('articles', String(print.articles))
+  return `${reportsPath(storeId)}/counter/pdf?${params}`
+}
+
+export function useCounterPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (print: CounterPrint) => printFile(counterPdfPath(storeId, print)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (print: CounterPrint) => downloadFile(counterPdfPath(storeId, print), 'raport-lady.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
+}
+
 /** Przepłacone artykuły: przyjęcia z ostatnich 30 dni droższe niż poprzednie dostawy. */
 export function useOverpayments(storeId: string, maxReferenceDays: number) {
   return useQuery({
@@ -728,4 +791,27 @@ export function usePriceReviewActions(storeId: string, report: ReviewedReport) {
         api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/reviews/${reviewId}/restore`, { method: 'POST' }),
     }),
   }
+}
+
+/** Dostawcy z przyjęć PZ sklepu do wyboru w obrotach z dostawcami. */
+export function useTurnoverSuppliers(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'supplier-turnover', 'suppliers'],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<TurnoverSupplier[]>(`${reportsPath(storeId)}/supplier-turnover/suppliers`),
+  })
+}
+
+/** Zakup netto od dostawcy po miesiącach i nomenklaturze. */
+export function useSupplierTurnover(storeId: string, supplier: string | null, range: DateRange, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'supplier-turnover', supplier, range],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () =>
+      api<SupplierTurnoverReport>(
+        `${reportsPath(storeId)}/supplier-turnover?${new URLSearchParams({ supplier: supplier!, from: range.from, to: range.to })}`,
+      ),
+    enabled: enabled && supplier != null,
+    placeholderData: keepPreviousData,
+  })
 }

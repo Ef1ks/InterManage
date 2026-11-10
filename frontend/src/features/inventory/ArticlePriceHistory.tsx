@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 
 import { SelectField } from '@/components/form'
 import { formatDocumentDate, formatMoney, formatPercent } from '@/features/documents/format'
@@ -23,7 +23,6 @@ export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: 
   return (
     <>
       <HistorySection
-        id="price-changes"
         title="Zmiany cen"
         note="cena sprzedaży brutto, od najnowszej"
         isError={prices.isError}
@@ -52,7 +51,6 @@ export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: 
         {data && <PriceChangesTable changes={changes} />}
       </HistorySection>
       <HistorySection
-        id="price-promotions"
         title="Przeceny"
         note="promocje z listy promocji, od najpóźniej kończącej się"
         isError={prices.isError}
@@ -66,7 +64,6 @@ export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: 
 }
 
 function HistorySection({
-  id,
   title,
   note,
   isError,
@@ -75,7 +72,6 @@ function HistorySection({
   toolbar,
   children,
 }: {
-  id: string
   title: string
   note: string
   isError: boolean
@@ -84,6 +80,8 @@ function HistorySection({
   toolbar?: ReactNode
   children: ReactNode
 }) {
+  // Historia bywa naraz na stronie i w oknie statystyk nad nią, więc id nagłówka musi być unikalne.
+  const id = useId()
   return (
     <section className="grid min-w-0 gap-2" aria-labelledby={id}>
       <div className="flex items-baseline justify-between gap-3">

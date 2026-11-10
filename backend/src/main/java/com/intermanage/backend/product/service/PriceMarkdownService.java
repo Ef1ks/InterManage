@@ -52,17 +52,28 @@ public class PriceMarkdownService {
 
     @Transactional
     public List<PriceMarkdownItem> create(UUID storeId, PriceMarkdownRequest request, UUID userId) {
+        markdowns.saveAndFlush(markdown(storeId, request, user(userId)));
+        return list(storeId);
+    }
+
+    /** Wszystkie albo żadna: błąd jednego artykułu wycofuje całość. */
+    @Transactional
+    public List<PriceMarkdownItem> createAll(UUID storeId, List<PriceMarkdownRequest> requests, UUID userId) {
+        AppUser user = user(userId);
+        markdowns.saveAllAndFlush(requests.stream().map(request -> markdown(storeId, request, user)).toList());
+        return list(storeId);
+    }
+
+    private PriceMarkdown markdown(UUID storeId, PriceMarkdownRequest request, AppUser user) {
         if (request.validTo().isBefore(request.validFrom())) {
             throw ApiException.badRequest("Koniec przeceny nie może być przed początkiem");
         }
         Product product = products.findByStoreIdAndItm8(storeId, request.itm8())
-                .orElseThrow(() -> ApiException.notFound("Artykułu nie ma w kartotece sklepu"));
+                .orElseThrow(() -> ApiException.notFound("Artykułu nie ma w kartotece sklepu: " + request.itm8()));
         if (product.getEan() == null || product.getEan().isBlank()) {
             throw ApiException.badRequest("Artykuł nie ma EAN-u, więc nie można go przecenić");
         }
-        markdowns.saveAndFlush(new PriceMarkdown(storeId, product, request.newPrice(), request.validFrom(),
-                request.validTo(), user(userId)));
-        return list(storeId);
+        return new PriceMarkdown(storeId, product, request.newPrice(), request.validFrom(), request.validTo(), user);
     }
 
     /** Plik ETIQUETTE z wybranych przecen: po jednej cenówce na artykuł, bez znacznika (stawia go zapis na dysku). */

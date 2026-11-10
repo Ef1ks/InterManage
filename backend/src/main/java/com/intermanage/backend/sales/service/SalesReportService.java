@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -66,11 +67,14 @@ public class SalesReportService {
     private final NomenclatureMapper nomenclatureMapper;
     private final DocumentLineRepository documentLines;
     private final CadencierImportRepository cadencier;
+    private final CounterReportService counterReports;
 
     public SalesReportService(SaleRepository sales, SalesImportRepository imports, ProductRepository products,
             NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper,
-            DocumentLineRepository documentLines, CadencierImportRepository cadencier) {
+            DocumentLineRepository documentLines, CadencierImportRepository cadencier,
+            CounterReportService counterReports) {
         this.cadencier = cadencier;
+        this.counterReports = counterReports;
         this.sales = sales;
         this.imports = imports;
         this.products = products;
@@ -93,38 +97,99 @@ public class SalesReportService {
      */
     public SalesComparisonResponse compare(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
             LocalDate currentFrom, LocalDate currentTo, String parent, boolean unassigned, List<String> filter) {
+        return compare(storeId, previousFrom, previousTo, currentFrom, currentTo, parent, unassigned, filter, null,
+                null);
+    }
+
+    /**
+     * Jak wyżej, a z {@code otherStoreId} każdy wiersz dostaje sprzedaż drugiego sklepu w aktualnym okresie (ten sam
+     * kod nomenklatury albo ITM8). Pozycje, które sprzedał tylko drugi sklep, dochodzą z zerami u nas. Drugi sklep
+     * musi być dostępny użytkownikowi albo zaprzyjaźniony (jak w raporcie lady), inaczej 403.
+     */
+    public SalesComparisonResponse compare(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, String parent, boolean unassigned, List<String> filter,
+            UUID otherStoreId, UUID userId) {
         ReportPeriod.check(previousFrom, previousTo, ReportPeriod.MAX_DAYS, "Poprzedni okres");
         ReportPeriod.check(currentFrom, currentTo, ReportPeriod.MAX_DAYS, "Aktualny okres");
         String code = parentCode(parent, unassigned);
         String[] codes = filterCodes(filter);
-
-        sales.tuneForReport();
-        Level level;
-        List<SaleRepository.ComparisonRow> found;
-        // Rozwinięta grupa czyta sprzedaż tylko swoich artykułów; cały sklep i artykuły bez nomenklatury sumują
-        // całą sprzedaż okresów.
-        if (unassigned) {
-            level = Level.PRODUCT;
-            found = sales.compareUnassignedArticles(storeId, previousFrom, previousTo, currentFrom, currentTo, codes);
-        } else if (code.length() == 6) {
-            level = Level.PRODUCT;
-            found = sales.compareArticles(storeId, previousFrom, previousTo, currentFrom, currentTo, code, codes);
-        } else if (code.isEmpty()) {
-            level = Level.REGION;
-            found = sales.compareByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo, 2, codes);
-        } else {
-            level = code.length() == 2 ? Level.FAMILY : Level.SUBFAMILY;
-            found = sales.compareGroupByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo,
-                    code.length() + 2, code, codes);
+        boolean withOther = otherStoreId != null && !otherStoreId.equals(storeId);
+        if (withOther && counterReports.options(storeId, userId).stream()
+                .noneMatch(option -> option.id().equals(otherStoreId))) {
+            throw ApiException.forbidden("Porównać można tylko swoje sklepy i sklepy zaprzyjaźnione");
         }
 
-        List<SalesComparisonRow> rows = found.stream().map(SalesReportService::toRow).toList();
+        sales.tuneForReport();
+        Level level = level(code, unassigned);
+        List<SalesComparisonRow> rows = query(storeId, previousFrom, previousTo, currentFrom, currentTo, code,
+                unassigned, codes).stream().map(SalesReportService::toRow).toList();
+        SalesFigures otherTotal = null;
+        if (withOther) {
+            // Drugi sklep tylko w aktualnym okresie: poprzedni to jeden dzień bez sprzedaży, więc nic nie czyta.
+            List<SalesComparisonRow> theirs = query(otherStoreId, NO_SALES_DAY, NO_SALES_DAY, currentFrom, currentTo,
+                    code, unassigned, codes).stream().map(SalesReportService::toRow).toList();
+            rows = withOther(rows, theirs, level);
+            otherTotal = rows.stream().map(SalesComparisonRow::other).reduce(SalesFigures.ZERO, SalesFigures::plus);
+        }
         SalesFigures previousTotal = rows.stream().map(SalesComparisonRow::previous)
                 .reduce(SalesFigures.ZERO, SalesFigures::plus);
         SalesFigures currentTotal = rows.stream().map(SalesComparisonRow::current)
                 .reduce(SalesFigures.ZERO, SalesFigures::plus);
         return new SalesComparisonResponse(previousFrom, previousTo, currentFrom, currentTo,
-                unassigned ? null : code, level, rows, previousTotal, currentTotal);
+                unassigned ? null : code, level, rows, previousTotal, currentTotal, otherTotal);
+    }
+
+    /** Dzień sprzed wszystkich raportów: okres porównania drugiego sklepu, który niczego nie czyta. */
+    private static final LocalDate NO_SALES_DAY = LocalDate.of(1900, 1, 1);
+
+    private static Level level(String code, boolean unassigned) {
+        if (unassigned || code.length() == 6) {
+            return Level.PRODUCT;
+        }
+        return code.isEmpty() ? Level.REGION : code.length() == 2 ? Level.FAMILY : Level.SUBFAMILY;
+    }
+
+    /**
+     * Rozwinięta grupa czyta sprzedaż tylko swoich artykułów; cały sklep i artykuły bez nomenklatury sumują całą
+     * sprzedaż okresów.
+     */
+    private List<SaleRepository.ComparisonRow> query(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, String code, boolean unassigned, String[] codes) {
+        if (unassigned) {
+            return sales.compareUnassignedArticles(storeId, previousFrom, previousTo, currentFrom, currentTo, codes);
+        }
+        if (code.length() == 6) {
+            return sales.compareArticles(storeId, previousFrom, previousTo, currentFrom, currentTo, code, codes);
+        }
+        if (code.isEmpty()) {
+            return sales.compareByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo, 2, codes);
+        }
+        return sales.compareGroupByNomenclature(storeId, previousFrom, previousTo, currentFrom, currentTo,
+                code.length() + 2, code, codes);
+    }
+
+    /**
+     * Nasze wiersze z aktualną sprzedażą drugiego sklepu (po kodzie nomenklatury albo ITM8). To, co sprzedał tylko
+     * drugi sklep, dochodzi z zerami u nas: pozycje nomenklatury na swoje miejsce wg kodu, artykuły na koniec.
+     */
+    static List<SalesComparisonRow> withOther(List<SalesComparisonRow> ours, List<SalesComparisonRow> theirs,
+            Level level) {
+        Map<String, SalesComparisonRow> byCode = new LinkedHashMap<>();
+        theirs.forEach(row -> byCode.put(row.code(), row));
+        List<SalesComparisonRow> result = new ArrayList<>();
+        for (SalesComparisonRow row : ours) {
+            SalesComparisonRow other = byCode.remove(row.code());
+            result.add(new SalesComparisonRow(row.code(), row.name(), row.ean(), row.brand(), row.previous(),
+                    row.current(), other == null ? SalesFigures.ZERO : other.current()));
+        }
+        byCode.values().forEach(row -> result.add(new SalesComparisonRow(row.code(), row.name(), row.ean(),
+                row.brand(), SalesFigures.ZERO, SalesFigures.ZERO, row.current())));
+        if (level != Level.PRODUCT) {
+            // Pusty kod (sprzedaż bez nomenklatury) zawsze na końcu.
+            result.sort(Comparator.comparing((SalesComparisonRow row) -> row.code().isEmpty())
+                    .thenComparing(SalesComparisonRow::code));
+        }
+        return result;
     }
 
     /** Cała nomenklatura sklepu w kolejności kodów (do filtra raportów). */

@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChevronRightIcon, ChevronsDownUpIcon } from 'lucide-react'
 
 import { BackLink } from '@/components/BackLink'
-import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
+import { DateField, MultiComboboxField, SegmentedField, SelectField } from '@/components/form'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -23,6 +23,7 @@ import {
   type ReportKind,
   type SalesChartTarget,
   salesComparisonKey,
+  useCounterStores,
   useDeliCostsOverview,
   useSalesComparison,
   useSalesNomenclatures,
@@ -54,7 +55,13 @@ import {
   type Periods,
   resolveCompareMode,
 } from '@/features/sales/periods'
-import type { SalesComparison, SalesComparisonLevel, SalesComparisonRow, SalesFigures } from '@/lib/types'
+import type {
+  CounterStoreOption,
+  SalesComparison,
+  SalesComparisonLevel,
+  SalesComparisonRow,
+  SalesFigures,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** Okres w adresie strony po polsku, żeby link do raportu otwierał ten sam widok. */
@@ -109,6 +116,12 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
   const compareError = compare === 'custom' ? rangeError(compareCustom) : null
   const periods = comparePeriods(mode, anchor, custom, lastSaleDate, compare, compareCustom)
   const valid = !customError && !compareError
+
+  // Porównanie z drugim sklepem (swoim albo zaprzyjaźnionym, lista jak w raporcie lady); kwoty na życzenie.
+  const storeOptions = useCounterStores(storeId)
+  const otherStore = deli ? null : (storeOptions.data?.find((option) => option.id === params.get('sklep')) ?? null)
+  const amounts = params.get('kwoty') === 'tak'
+  const view = useMemo<View>(() => ({ other: otherStore, amounts }), [otherStore, amounts])
 
   return (
     <>
@@ -172,6 +185,35 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           />
         </div>
 
+        {!deli && (storeOptions.data?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap items-end gap-3">
+            <SelectField
+              label="Porównaj ze sklepem"
+              options={[
+                { value: NO_STORE, label: 'Bez porównania ze sklepem' },
+                ...(storeOptions.data ?? []).map((option) => ({
+                  value: option.id,
+                  label: `${option.number} ${option.name}${option.partner ? ' (zaprzyjaźniony)' : ''}`,
+                })),
+              ]}
+              value={otherStore?.id ?? NO_STORE}
+              onChange={(id) => update({ sklep: id === NO_STORE ? null : id })}
+              className="w-full sm:w-80"
+            />
+            {otherStore && (
+              <SegmentedField
+                label="Kwoty sprzedaży"
+                options={[
+                  { value: 'hidden', label: 'Ukryte' },
+                  { value: 'shown', label: 'Pokaż' },
+                ]}
+                value={view.amounts ? 'shown' : 'hidden'}
+                onChange={(next) => update({ kwoty: next === 'shown' ? 'tak' : null })}
+              />
+            )}
+          </div>
+        )}
+
         <PeriodPicker period={period} update={update}>
           {compare === 'custom' && (
             <>
@@ -234,12 +276,19 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           filter={filter}
           compare={compare}
           basis={basis}
+          view={view}
           lastSaleDate={lastSaleDate}
         />
       )}
     </>
   )
 }
+
+/** Wartość listy sklepów bez porównania (pusty tekst SelectField traktuje jak brak wyboru). */
+const NO_STORE = 'brak'
+
+/** Porównanie z drugim sklepem: który sklep i czy pokazywać kwoty sprzedaży (domyślnie same ilości i marża %). */
+type View = { other: CounterStoreOption | null; amounts: boolean }
 
 function PeriodsSummary({
   periods,
@@ -336,6 +385,8 @@ type Tree = {
   periods: Periods
   filter: string[]
   basis: SaleBasis
+  view: View
+  groups: Group[]
   expanded: ReadonlySet<string>
   toggle: (key: string) => void
   /** Po wczytaniu poziomu przeliczamy przypięte wiersze i ściągę (zmieniła się tabela). */
@@ -365,6 +416,7 @@ function Comparison({
   filter,
   compare,
   basis,
+  view,
   lastSaleDate,
 }: {
   storeId: string
@@ -373,15 +425,20 @@ function Comparison({
   filter: string[]
   compare: CompareMode
   basis: SaleBasis
+  view: View
   lastSaleDate: string
 }) {
   const deli = kind === 'deli'
+  const compareStore = view.other?.id ?? null
+  const groups = useMemo(() => tableGroups(view, basis, deli, compare), [view, basis, deli, compare])
   const { data, isPending, isError, refetch, isPlaceholderData } = useSalesComparison(
     storeId,
     kind,
     periods,
     filter,
     '',
+    false,
+    compareStore,
   )
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const queryClient = useQueryClient()
@@ -511,12 +568,14 @@ function Comparison({
       periods,
       filter,
       basis,
+      view,
+      groups,
       expanded,
       toggle,
       onLevelLoaded,
       openChart: setChart,
     }),
-    [storeId, kind, periods, filter, basis, expanded, toggle, onLevelLoaded],
+    [storeId, kind, periods, filter, basis, view, groups, expanded, toggle, onLevelLoaded],
   )
 
   if (isError && !data) {
@@ -532,7 +591,9 @@ function Comparison({
 
   /** Wiersze poziomu z pamięci zapytań: każdy rozwinięty wiersz wczytał już swój poziom. */
   const cachedLevel = (parent: string) =>
-    queryClient.getQueryData<SalesComparison>(salesComparisonKey(storeId, kind, periods, filter, parent))
+    queryClient.getQueryData<SalesComparison>(
+      salesComparisonKey(storeId, kind, periods, filter, parent, false, compareStore),
+    )
 
   const pinnedRows = pinned.flatMap((key) => {
     const level = cachedLevel(parentOf(key))
@@ -557,38 +618,42 @@ function Comparison({
 
   return (
     <div className={cn('transition-opacity duration-150', isPlaceholderData && 'opacity-60')}>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <TotalTile
-          label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
-          previous={data && saleValue(data.previousTotal, basis)}
-          current={data && saleValue(data.currentTotal, basis)}
-          format={formatZloty}
-          compare={compare}
-        />
-        <TotalTile
-          label="Marża"
-          previous={data?.previousTotal.marginValue ?? undefined}
-          current={data?.currentTotal.marginValue ?? undefined}
-          format={formatZloty}
-          compare={compare}
-          note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
-        />
-        <TotalTile
-          label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
-          previous={data?.previousTotal.costValue ?? undefined}
-          current={data?.currentTotal.costValue ?? undefined}
-          format={formatZloty}
-          compare={compare}
-          neutral
-        />
-        <TotalTile
-          label="Ilość"
-          previous={data?.previousTotal.quantity}
-          current={data?.currentTotal.quantity}
-          format={formatQuantity}
-          compare={compare}
-        />
-      </div>
+      {view.other ? (
+        <StoreTiles data={data} view={view} basis={basis} compare={compare} />
+      ) : (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <TotalTile
+            label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
+            previous={data && saleValue(data.previousTotal, basis)}
+            current={data && saleValue(data.currentTotal, basis)}
+            format={formatZloty}
+            compare={compare}
+          />
+          <TotalTile
+            label="Marża"
+            previous={data?.previousTotal.marginValue ?? undefined}
+            current={data?.currentTotal.marginValue ?? undefined}
+            format={formatZloty}
+            compare={compare}
+            note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
+          />
+          <TotalTile
+            label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
+            previous={data?.previousTotal.costValue ?? undefined}
+            current={data?.currentTotal.costValue ?? undefined}
+            format={formatZloty}
+            compare={compare}
+            neutral
+          />
+          <TotalTile
+            label="Ilość"
+            previous={data?.previousTotal.quantity}
+            current={data?.currentTotal.quantity}
+            format={formatQuantity}
+            compare={compare}
+          />
+        </div>
+      )}
 
       {empty ? (
         <Card className="items-center px-6 py-10 text-center">
@@ -617,6 +682,7 @@ function Comparison({
                 ))}
               </span>
             </div>
+            {view.other && <StoreLegend other={view.other} />}
             {expanded.size > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setExpanded(new Set())}>
                 <ChevronsDownUpIcon />
@@ -671,6 +737,8 @@ function Comparison({
                             <FigureCells
                               previous={entry.row.previous}
                               current={entry.row.current}
+                              other={view.other ? entry.row.other : undefined}
+                              amounts={view.amounts}
                               basis={basis}
                               strong
                             />
@@ -691,30 +759,24 @@ function Comparison({
                       >
                         Nomenklatura
                       </TableHead>
-                      {GROUPS.map((group) => (
+                      {groups.map((group) => (
                         <TableHead key={group.key} colSpan={group.columns.length} className="h-9 border-l text-center">
-                          {group.key === 'sale'
-                            ? basis === 'gross'
-                              ? 'Sprzedaż brutto zł'
-                              : 'Sprzedaż netto zł'
-                            : group.key === 'cost' && deli
-                              ? 'Reprezentacja zł'
-                              : group.label}
+                          {group.label}
                         </TableHead>
                       ))}
                     </TableRow>
                     <TableRow className="hover:bg-transparent">
-                      {GROUPS.map((group) =>
+                      {groups.map((group) =>
                         group.columns.map((column, index) => (
                           <TableHead
-                            key={`${group.key}-${column}`}
+                            key={`${group.key}-${index}`}
                             data-leaf
                             className={cn(
                               'h-8 text-right text-xs font-normal text-muted-foreground',
                               index === 0 && 'border-l',
                             )}
                           >
-                            {columnLabel(column, compare)}
+                            {column}
                           </TableHead>
                         )),
                       )}
@@ -722,7 +784,7 @@ function Comparison({
                   </TableHeader>
                   <TableBody>
                     {isPending ? (
-                      <LoadingRow depth={0} rows={6} />
+                      <LoadingRow depth={0} rows={6} groups={groups} />
                     ) : (
                       <TreeContext.Provider value={tree}>
                         <LevelRows parent="" ancestors={[]} />
@@ -733,7 +795,14 @@ function Comparison({
                     <TableFooter className="sticky bottom-0 z-30 bg-muted shadow-[0_-1px_0_var(--border)]">
                       <TableRow className="hover:bg-transparent">
                         <TableCell className="sticky left-0 z-10 bg-muted py-3 pl-4 font-semibold">Razem</TableCell>
-                        <FigureCells previous={data.previousTotal} current={data.currentTotal} basis={basis} strong />
+                        <FigureCells
+                          previous={data.previousTotal}
+                          current={data.currentTotal}
+                          other={view.other ? data.otherTotal : undefined}
+                          amounts={view.amounts}
+                          basis={basis}
+                          strong
+                        />
                       </TableRow>
                     </TableFooter>
                   )}
@@ -775,34 +844,43 @@ function firstRowBelow(rows: HTMLTableRowElement[], probe: number) {
   return rows[low]
 }
 
+/** Grupa kolumn tabeli: nagłówek nad nią i podpisy kolumn liczb. */
+type Group = { key: string; label: string; columns: string[] }
+
 /**
  * Grupy kolumn tabeli. Zmiana % stoi pod wartością aktualną, żeby cała tabela mieściła się na ekranie; tylko marża
- * ma osobną kolumnę zmiany (zmiana kwoty i różnica % marży w punktach procentowych).
+ * ma osobną kolumnę zmiany (zmiana kwoty i różnica % marży w punktach procentowych). Przy porównaniu ze sklepem:
+ * ilość (nasza w obu okresach, ich aktualna i o ile więcej mają), marża % i kwoty sprzedaży na życzenie.
  */
-const GROUPS = [
-  { key: 'quantity', label: 'Ilość', columns: ['previous', 'current'] },
-  { key: 'cost', label: 'Zakup FIFO zł', columns: ['previous', 'current'] },
-  { key: 'sale', label: 'Sprzedaż zł', columns: ['previous', 'current'] },
-  {
-    key: 'margin',
-    label: 'Marża zł',
-    columns: ['previous', 'current', 'change'],
-  },
-] as const
+function tableGroups(view: View, basis: SaleBasis, deli: boolean, compare: CompareMode): Group[] {
+  const previous = COMPARE_LABELS[compare].column
+  const sale = basis === 'gross' ? 'Sprzedaż brutto zł' : 'Sprzedaż netto zł'
+  if (view.other) {
+    const theirs = `Sklep ${view.other.number}`
+    return [
+      { key: 'quantity', label: 'Ilość', columns: [previous, 'Aktualny', theirs, 'U nich więcej'] },
+      { key: 'margin', label: 'Marża % (aktualny)', columns: ['Nasza', theirs, 'U nich więcej'] },
+      ...(view.amounts ? [{ key: 'sale', label: sale, columns: [previous, 'Aktualny', theirs] }] : []),
+    ]
+  }
+  return [
+    { key: 'quantity', label: 'Ilość', columns: [previous, 'Aktualny'] },
+    { key: 'cost', label: deli ? 'Reprezentacja zł' : 'Zakup FIFO zł', columns: [previous, 'Aktualny'] },
+    { key: 'sale', label: sale, columns: [previous, 'Aktualny'] },
+    { key: 'margin', label: 'Marża zł', columns: [previous, 'Aktualny', 'Zmiana'] },
+  ]
+}
 
-/** Nagłówek kolumny; porównywany okres nazywa się wg trybu porównania (Rok temu, Poprzedni...). */
-const columnLabel = (column: (typeof GROUPS)[number]['columns'][number], compare: CompareMode) =>
-  column === 'previous' ? COMPARE_LABELS[compare].column : column === 'current' ? 'Aktualny' : 'Zmiana'
+const numberColumns = (groups: Group[]) => groups.reduce((sum, group) => sum + group.columns.length, 0)
 
 /** Numery kolumn liczb, od których zaczyna się grupa (z kreską po lewej). */
-const GROUP_STARTS = new Set(
-  GROUPS.reduce<number[]>((starts, _, index) => {
-    starts.push(index === 0 ? 0 : starts[index - 1] + GROUPS[index - 1].columns.length)
-    return starts
-  }, []),
-)
-const NUMBER_COLUMNS = GROUPS.reduce((sum, group) => sum + group.columns.length, 0)
-const COLUMN_COUNT = 1 + NUMBER_COLUMNS
+const groupStarts = (groups: Group[]) =>
+  new Set(
+    groups.reduce<number[]>((starts, _, index) => {
+      starts.push(index === 0 ? 0 : starts[index - 1] + groups[index - 1].columns.length)
+      return starts
+    }, []),
+  )
 
 type LevelProps = {
   /** Rozwinięta pozycja; pusty tekst = rejony sklepu. */
@@ -815,20 +893,29 @@ type LevelProps = {
 
 /** Wiersze jednego poziomu drzewa; rozwinięty wiersz wstawia pod sobą wiersze następnego poziomu. */
 function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
-  const { storeId, kind, periods, filter, basis, expanded, toggle, onLevelLoaded, openChart } = useTree()
-  const { data, isPending, isError, refetch } = useSalesComparison(storeId, kind, periods, filter, parent, unassigned)
+  const { storeId, kind, periods, filter, basis, view, groups, expanded, toggle, onLevelLoaded, openChart } = useTree()
+  const { data, isPending, isError, refetch } = useSalesComparison(
+    storeId,
+    kind,
+    periods,
+    filter,
+    parent,
+    unassigned,
+    view.other?.id ?? null,
+  )
   const depth = ancestors.length
+  const columnCount = 1 + numberColumns(groups)
 
   useEffect(() => {
     if (data) onLevelLoaded()
   }, [data, onLevelLoaded])
 
-  if (isPending) return <LoadingRow depth={depth} />
+  if (isPending) return <LoadingRow depth={depth} groups={groups} />
   if (isError && !data) {
     return (
       <TableRow className="hover:bg-transparent">
         <TableCell
-          colSpan={COLUMN_COUNT}
+          colSpan={columnCount}
           className="py-3 text-sm text-muted-foreground"
           style={{ paddingLeft: indent(depth) }}
         >
@@ -848,7 +935,7 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
     return (
       <TableRow className="hover:bg-transparent">
         <TableCell
-          colSpan={COLUMN_COUNT}
+          colSpan={columnCount}
           className="py-3 text-sm text-muted-foreground"
           style={{ paddingLeft: indent(depth) }}
         >
@@ -919,7 +1006,14 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
               <ChartButton onClick={() => openChart(chartTarget(row, level, key))} />
             </div>
           </TableCell>
-          <FigureCells previous={row.previous} current={row.current} basis={basis} strong={depth === 0 || open} />
+          <FigureCells
+            previous={row.previous}
+            current={row.current}
+            other={view.other ? row.other : undefined}
+            amounts={view.amounts}
+            basis={basis}
+            strong={depth === 0 || open}
+          />
         </TableRow>
         {open && (
           <LevelRows
@@ -1003,14 +1097,31 @@ function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesCompari
 function FigureCells({
   previous,
   current,
+  other,
+  amounts = false,
   basis,
   strong,
 }: {
   previous: SalesFigures
   current: SalesFigures
+  /** Porównanie ze sklepem: jego sprzedaż (brak w odpowiedzi = zera); bez porównania {@code undefined}. */
+  other?: SalesFigures | null
+  amounts?: boolean
   basis: SaleBasis
   strong?: boolean
 }) {
+  if (other !== undefined) {
+    return (
+      <StoreFigureCells
+        previous={previous}
+        current={current}
+        other={other ?? ZERO_FIGURES}
+        amounts={amounts}
+        basis={basis}
+        strong={strong}
+      />
+    )
+  }
   const valueClass = cn('text-right', strong && 'font-medium')
   const previousClass = 'border-l text-right text-muted-foreground'
   return (
@@ -1133,15 +1244,20 @@ function ChangeLine({
   current,
   neutral,
   large,
+  plain,
 }: {
   previous: number
   current: number
   neutral?: boolean
   large?: boolean
+  /** W wyróżnionej komórce kolor bierze z niej. */
+  plain?: boolean
 }) {
   const { label, direction } = change(previous, current)
   return (
-    <span className={cn('block font-medium', large ? 'text-sm' : 'text-xs', directionClass(direction, neutral))}>
+    <span
+      className={cn('block font-medium', large ? 'text-sm' : 'text-xs', !plain && directionClass(direction, neutral))}
+    >
       {label}
     </span>
   )
@@ -1196,17 +1312,235 @@ function TotalTile({
 
 const formatZloty = (value: number) => `${formatMoney(value)} zł`
 
-function LoadingRow({ depth, rows = 2 }: { depth: number; rows?: number }) {
+function LoadingRow({ depth, rows = 2, groups }: { depth: number; rows?: number; groups: Group[] }) {
+  const starts = groupStarts(groups)
   return Array.from({ length: rows }, (_, row) => (
     <TableRow key={row} className="hover:bg-transparent" aria-hidden>
       <TableCell className="py-3.5" style={{ paddingLeft: indent(depth) }}>
         <div className="h-3.5 w-40 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
       </TableCell>
-      {Array.from({ length: NUMBER_COLUMNS }, (_, column) => (
-        <TableCell key={column} className={cn(GROUP_STARTS.has(column) && 'border-l')}>
+      {Array.from({ length: numberColumns(groups) }, (_, column) => (
+        <TableCell key={column} className={cn(starts.has(column) && 'border-l')}>
           <div className="ml-auto h-3.5 w-14 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
         </TableCell>
       ))}
     </TableRow>
   ))
+}
+
+const ZERO_FIGURES: SalesFigures = {
+  quantity: 0,
+  costValue: 0,
+  saleValueGross: 0,
+  saleValueNet: 0,
+  marginValue: 0,
+}
+
+/** Wzrost naszej ilości względem poprzedniego okresu poniżej tylu % (także spadek) jest oznaczany na czerwono. */
+const SMALL_GROWTH_PERCENT = 20
+
+/** Oznaczenia w porównaniu ze sklepem: mocne tło, żeby było je widać na kolorach poziomów nomenklatury. */
+const MARKS = {
+  smallGrowth: 'bg-red-200 text-red-950 dark:bg-red-950/70 dark:text-red-100',
+  moreQuantity: 'bg-amber-200 text-amber-950 dark:bg-amber-900/60 dark:text-amber-100',
+  higherSale: 'bg-fuchsia-200 text-fuchsia-950 dark:bg-fuchsia-950/70 dark:text-fuchsia-100',
+  lowerMargin: 'bg-orange-200 text-orange-950 dark:bg-orange-950/70 dark:text-orange-100',
+} as const
+
+/** Mały wzrost: poniżej {@link SMALL_GROWTH_PERCENT}; bez sprzedaży w poprzednim okresie nie ma od czego liczyć. */
+const smallGrowth = (previous: number, current: number) =>
+  previous > 0 && ((current - previous) / previous) * 100 < SMALL_GROWTH_PERCENT
+
+/** O ile % drugi sklep ma więcej (minus = mniej) od naszego; bez naszej sprzedaży procentu nie ma. */
+function aheadLabel(ours: number, theirs: number) {
+  if (ours === 0) return theirs === 0 ? '–' : theirs > 0 ? 'tylko u nich' : '–'
+  const percent = Math.round(((theirs - ours) / Math.abs(ours)) * 1000) / 10
+  if (percent === 0) return '0,0%'
+  return `${percent > 0 ? '+' : '−'}${percentFormat.format(Math.abs(percent))}%`
+}
+
+const percentLabel = (value: number | null) => (value == null ? '–' : `${percentFormat.format(value)}%`)
+
+/** Różnica % marży w punktach procentowych (ich − nasza). */
+function pointsLabel(ours: number | null, theirs: number | null) {
+  if (ours == null || theirs == null) return '–'
+  const points = Math.round((theirs - ours) * 10) / 10
+  return `${points > 0 ? '+' : points < 0 ? '−' : ''}${percentFormat.format(Math.abs(points))} p.p.`
+}
+
+/** Nasza marża % niższa niż u nich (po zaokrągleniu do 0,1 p.p., jak w tabeli). */
+const lowerMargin = (ours: number | null, theirs: number | null) =>
+  ours != null && theirs != null && Math.round(ours * 10) < Math.round(theirs * 10)
+
+/**
+ * Kolumny porównania ze sklepem: nasza ilość w obu okresach (mały wzrost na czerwono), ich ilość i o ile % więcej
+ * (więcej u nich na bursztynowo), marża % nasza i ich (nasza niższa na pomarańczowo) i na życzenie kwoty sprzedaży
+ * (wyższa u nich na fuksjowo).
+ */
+function StoreFigureCells({
+  previous,
+  current,
+  other,
+  amounts,
+  basis,
+  strong,
+}: {
+  previous: SalesFigures
+  current: SalesFigures
+  other: SalesFigures
+  amounts: boolean
+  basis: SaleBasis
+  strong?: boolean
+}) {
+  const valueClass = cn('text-right', strong && 'font-medium')
+  const previousClass = 'border-l text-right text-muted-foreground'
+  const small = smallGrowth(previous.quantity, current.quantity)
+  const moreQuantity = other.quantity > current.quantity
+  const ours = marginPercent(current)
+  const theirs = marginPercent(other)
+  const lower = lowerMargin(ours, theirs)
+  const ourSale = saleValue(current, basis)
+  const theirSale = saleValue(other, basis)
+  const higherSale = theirSale > ourSale
+  const store = 'w drugim sklepie'
+  return (
+    <>
+      <TableCell className={previousClass}>{formatQuantity(previous.quantity)}</TableCell>
+      <TableCell
+        className={cn(valueClass, small && MARKS.smallGrowth)}
+        title={small ? `Wzrost ilości poniżej ${SMALL_GROWTH_PERCENT}%` : undefined}
+      >
+        {formatQuantity(current.quantity)}
+        <ChangeLine previous={previous.quantity} current={current.quantity} plain={small} />
+      </TableCell>
+      <TableCell className={cn(valueClass, moreQuantity && MARKS.moreQuantity)}>
+        {formatQuantity(other.quantity)}
+      </TableCell>
+      <TableCell
+        className={cn('text-right text-xs font-medium', moreQuantity && MARKS.moreQuantity)}
+        title={moreQuantity ? `Większa ilość ${store}` : undefined}
+      >
+        {aheadLabel(current.quantity, other.quantity)}
+      </TableCell>
+
+      <TableCell
+        className={cn('border-l text-right', strong && 'font-medium', lower && MARKS.lowerMargin)}
+        title={lower ? `Niższa marża niż ${store}` : undefined}
+      >
+        {percentLabel(ours)}
+      </TableCell>
+      <TableCell className={valueClass}>{percentLabel(theirs)}</TableCell>
+      <TableCell className={cn('text-right text-xs font-medium', lower && MARKS.lowerMargin)}>
+        {pointsLabel(ours, theirs)}
+      </TableCell>
+
+      {amounts && (
+        <>
+          <TableCell className={previousClass}>{formatMoney(saleValue(previous, basis))}</TableCell>
+          <TableCell className={valueClass}>
+            {formatMoney(ourSale)}
+            <ChangeLine previous={saleValue(previous, basis)} current={ourSale} />
+          </TableCell>
+          <TableCell
+            className={cn(valueClass, higherSale && MARKS.higherSale)}
+            title={higherSale ? `Wyższa sprzedaż ${store}` : undefined}
+          >
+            {formatMoney(theirSale)}
+            <span className="block text-xs font-medium">{aheadLabel(ourSale, theirSale)}</span>
+          </TableCell>
+        </>
+      )}
+    </>
+  )
+}
+
+function StoreLegend({ other }: { other: CounterStoreOption }) {
+  const items = [
+    { mark: MARKS.smallGrowth, label: `Nasz wzrost ilości poniżej ${SMALL_GROWTH_PERCENT}%` },
+    { mark: MARKS.moreQuantity, label: `Więcej sztuk w sklepie ${other.number}` },
+    { mark: MARKS.lowerMargin, label: 'Nasza marża % niższa' },
+    { mark: MARKS.higherSale, label: 'Wyższa sprzedaż u nich' },
+  ]
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground" aria-label="Oznaczenia">
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5">
+          <span aria-hidden className={cn('size-3 rounded-sm', item.mark)} />
+          {item.label}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** Kafelki porównania ze sklepem: nasza ilość, ich ilość, marża % obu sklepów i na życzenie sprzedaż. */
+function StoreTiles({
+  data,
+  view,
+  basis,
+  compare,
+}: {
+  data: SalesComparison | undefined
+  view: View
+  basis: SaleBasis
+  compare: CompareMode
+}) {
+  const other = data?.otherTotal ?? (data ? ZERO_FIGURES : undefined)
+  const number = view.other?.number ?? ''
+  const ours = data ? marginPercent(data.currentTotal) : null
+  const theirs = other ? marginPercent(other) : null
+  return (
+    <div className={cn('mb-4 grid gap-3 sm:grid-cols-2', view.amounts ? 'xl:grid-cols-4' : 'xl:grid-cols-3')}>
+      <TotalTile
+        label="Ilość"
+        previous={data?.previousTotal.quantity}
+        current={data?.currentTotal.quantity}
+        format={formatQuantity}
+        compare={compare}
+      />
+      <PlainTile
+        label={`Ilość · sklep ${number}`}
+        value={other && formatQuantity(other.quantity)}
+        note={data && other && `u nich więcej: ${aheadLabel(data.currentTotal.quantity, other.quantity)}`}
+      />
+      <PlainTile
+        label="Marża % (aktualny)"
+        value={data && percentLabel(ours)}
+        note={data && `sklep ${number}: ${percentLabel(theirs)} · u nich więcej: ${pointsLabel(ours, theirs)}`}
+      />
+      {view.amounts && (
+        <PlainTile
+          label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
+          value={data && formatZloty(saleValue(data.currentTotal, basis))}
+          note={
+            data &&
+            other &&
+            `sklep ${number}: ${formatZloty(saleValue(other, basis))} · ${aheadLabel(
+              saleValue(data.currentTotal, basis),
+              saleValue(other, basis),
+            )}`
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+function PlainTile({ label, value, note }: { label: string; value: ReactNode; note: ReactNode }) {
+  return (
+    <Card className="gap-1 p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      {value != null ? (
+        <>
+          <p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+          <p className="text-sm text-muted-foreground tabular-nums">{note}</p>
+        </>
+      ) : (
+        <div aria-hidden className="mt-1 space-y-2">
+          <div className="h-7 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+          <div className="h-4 w-24 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+        </div>
+      )}
+    </Card>
+  )
 }

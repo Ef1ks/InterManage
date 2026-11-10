@@ -20,6 +20,26 @@ export function promoMargin({ article, price }: PromoRow) {
 /** Kafelek z artykułami i pełnym okresem daje plik. */
 export const hasPeriod = (tile: PromoTile) => tile.dateTo !== '' && tile.dateTo >= tile.dateFrom
 
+/** Tryb makra: błąd końca promocji artykułu, {@code null} gdy koniec jest i nie wypada przed początkiem. */
+export function rowEndError(tile: PromoTile, row: PromoRow) {
+  if (!row.dateTo) return 'Wybierz koniec promocji'
+  return row.dateTo < tile.dateFrom ? 'Koniec przed początkiem promocji' : null
+}
+
+/** Tryb makra: powód, dla którego promocji nie da się jeszcze ustawić, albo {@code null}. */
+export function macroBlocked(tile: PromoTile) {
+  const articles = tile.rows.filter((row) => row.article)
+  if (articles.length === 0) return 'Dodaj artykuły do promocji'
+  if (!tile.dateFrom) return 'Wybierz początek promocji'
+  const unknown = tile.rows.length - articles.length
+  if (unknown > 0) return `Usuń kody spoza kartoteki: ${unknown}`
+  const withoutPrice = articles.filter((row) => row.price === null || row.price <= 0).length
+  if (withoutPrice > 0) return `Bez ceny promocji: ${withoutPrice}`
+  const badEnd = articles.filter((row) => rowEndError(tile, row)).length
+  if (badEnd > 0) return `Bez poprawnego końca promocji: ${badEnd}`
+  return null
+}
+
 const tariff = (operation: string, tile: PromoTile) => `${operation}${String(tile.number).padStart(2, '0')}`
 
 export const tileTariff = (draft: PromoSetupDraft, tile: PromoTile) => tariff(draft.operation, tile)

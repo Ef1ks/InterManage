@@ -1,6 +1,7 @@
 import {
   ArrowLeftRightIcon,
   BadgeAlertIcon,
+  BeefIcon,
   ChevronRightIcon,
   CircleMinusIcon,
   CircleOffIcon,
@@ -14,6 +15,7 @@ import {
   TagIcon,
   TrendingDownIcon,
   TrophyIcon,
+  TruckIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -63,6 +65,12 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
           'Najlepsze artykuły okresu: ilość, marża zł albo marża %, wg nomenklatury i w porównaniu ze sklepami.',
         icon: TrophyIcon,
       },
+      {
+        path: salesPaths.counter,
+        title: 'Raport lady',
+        description: 'Mięso, garmaż i drób w kilku sklepach naraz: ilość, zakup, sprzedaż i marża wg nomenklatury.',
+        icon: BeefIcon,
+      },
     ],
   },
   {
@@ -100,6 +108,14 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         icon: TOOL_ROUTES.MEAT_PURCHASES.icon,
         fromDocuments: 'Z papierowych dokumentów WZ',
         permission: 'MEAT_PURCHASES',
+      },
+      {
+        path: salesPaths.supplierTurnover,
+        title: 'Obroty z dostawcami',
+        description:
+          'Za ile netto kupiliśmy od dostawcy w każdym miesiącu, po nomenklaturze, z korektami. Suma zaznaczonych pozycji.',
+        icon: TruckIcon,
+        fromDocuments: 'Z przyjęć PZ i ich korekt',
       },
     ],
   },

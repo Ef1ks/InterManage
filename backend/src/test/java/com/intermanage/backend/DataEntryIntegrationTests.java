@@ -1436,6 +1436,31 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.length()").value(2));
     }
 
+    @Test
+    void priceMarkdownBatchAddsAllArticlesOrNone() throws Exception {
+        String batch = "/api/stores/" + storeId + "/price-markdowns/batch";
+        String milk = "{\"itm8\":\"0000000000101\",\"newPrice\":2.49,\"validFrom\":\"2026-11-10\","
+                + "\"validTo\":\"2026-11-20\"}";
+        String unknown = "{\"itm8\":\"9999999999999\",\"newPrice\":1.99,\"validFrom\":\"2026-11-10\","
+                + "\"validTo\":\"2026-11-15\"}";
+        // Nieznany artykuł wycofuje całość.
+        mvc.perform(post(batch).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[" + milk + "," + unknown + "]}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/stores/" + storeId + "/price-markdowns").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(batch).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[]}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post(batch).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[" + milk + "," + milk.replace("2026-11-20", "2026-11-25") + "]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].ean").value("5900000000012"))
+                .andExpect(jsonPath("$[0].newPrice").value(2.49));
+    }
+
     private String createStore() throws Exception {
         String number = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000, 9_999_999_999L));
         String json = mvc.perform(post("/api/settings/stores").cookie(owner).with(csrf())

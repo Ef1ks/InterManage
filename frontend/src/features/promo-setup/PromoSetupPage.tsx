@@ -4,18 +4,24 @@ import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
+import { SegmentedField } from '@/components/form'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan } from '@/features/auth/api'
 import { CatalogListDialog } from '@/features/data-entry/CatalogListDialog'
+import { formatDocumentDate } from '@/features/documents/format'
 import { paddedScaleCode } from '@/features/data-entry/rows'
+import { useAddPriceMarkdowns } from '@/features/inventory/api'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
-import type { ProFile } from '@/features/leaflet/leaflet-rows'
+import { PriceLabelsButton } from '@/features/inventory/PriceLabelsDialog'
+import { buildPromoEntryMacro } from '@/features/data-entry/mercalys-macro'
+import { type ProFile, proFileName } from '@/features/leaflet/leaflet-rows'
 import { ProFilesDialog } from '@/features/leaflet/ProFilesDialog'
 import { useSalesReportsOverview } from '@/features/sales/api'
 import { ArticleSalesPanel } from '@/features/sales/SalesChartDialog'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
+import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
 import { useProtoFolder } from '@/lib/proto-files'
 import type { StoreSummary } from '@/lib/types'
@@ -25,6 +31,7 @@ import {
   addPromoTile,
   DEFAULT_LEVELS,
   newPromoDraft,
+  type PromoMode,
   type PromoRow,
   type PromoSetupDraft,
   type PromoTile,
@@ -36,7 +43,7 @@ import {
 
 import { fetchPromoArticles, savePromoLabels } from './api'
 import { DiscountLevelsDialog } from './DiscountLevelsDialog'
-import { codeKey, discountedPrice, hasPeriod, promoFiles, tileTariff } from './promo-rows'
+import { codeKey, discountedPrice, hasPeriod, macroBlocked, promoFiles, tileTariff } from './promo-rows'
 import { PromoTileCard } from './PromoTileCard'
 
 const PRO_COPY = {
@@ -46,13 +53,30 @@ const PRO_COPY = {
   withoutPrice: 'bez ceny promocji',
 }
 
+const MODE_OPTIONS: { value: PromoMode; label: string }[] = [
+  { value: 'macro', label: 'Makro' },
+  { value: 'pro', label: 'Pliki .PRO' },
+]
+
+/** Tryb w adresie: bez parametru makro (główny), {@code ?tryb=pro} pliki .PRO. */
+const modeOf = (params: URLSearchParams): PromoMode => (params.get('tryb') === 'pro' ? 'pro' : 'macro')
+
+const draftsOf = (mode: PromoMode) => {
+  const state = reduxStore.getState().promoSetupDraft
+  return mode === 'macro' ? state.macroDrafts : state.drafts
+}
+
 /**
- * Ustawianie promocji: po lewej kafelki, każdy z własnymi artykułami i okresem, po prawej karta klikniętego artykułu
- * jak w Magazynie i produktach. Cenę promocji wpisuje się ręcznie albo wybiera przecenę od ceny z kartoteki; każdy
- * kafelek daje plik .PRO z kodem taryfy: cztery losowe cyfry pracy i numer kafelka (543101, 543102).
+ * Ustawianie promocji w dwóch trybach. Makro (główny): jeden kafelek, każdy artykuł z własnym końcem promocji, a
+ * „Stwórz automatycznie” ustawia je w programie sklepu. Pliki .PRO: kafelki, każdy z własnymi artykułami i okresem,
+ * każdy daje plik .PRO z kodem taryfy: cztery losowe cyfry pracy i numer kafelka (543101, 543102). Po prawej karta
+ * klikniętego artykułu jak w Magazynie i produktach. Cenę promocji wpisuje się ręcznie albo wybiera przecenę od ceny
+ * z kartoteki.
  */
 export function PromoSetupPage() {
   const store = useCurrentStore()
+  const [params] = useSearchParams()
+  const mode = modeOf(params)
   if (!store) {
     return (
       <>
@@ -61,12 +85,15 @@ export function PromoSetupPage() {
       </>
     )
   }
-  return <StorePromoSetup key={store.id} store={store} />
+  return <StorePromoSetup key={`${store.id}:${mode}`} store={store} mode={mode} />
 }
 
-function StorePromoSetup({ store }: { store: StoreSummary }) {
+function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode }) {
   const dispatch = useAppDispatch()
-  const stored = useAppSelector((state) => state.promoSetupDraft.drafts[store.id])
+  const macro = mode === 'macro'
+  const stored = useAppSelector((state) =>
+    macro ? state.promoSetupDraft.macroDrafts[store.id] : state.promoSetupDraft.drafts[store.id],
+  )
   const levels = useAppSelector((state) => state.promoSetupDraft.levels[store.id]) ?? DEFAULT_LEVELS
   const [fallback] = useState(newPromoDraft)
   const draft = stored ?? fallback
@@ -76,6 +103,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
   const [levelsOpen, setLevelsOpen] = useState(false)
   const [generated, setGenerated] = useState<ProFile[] | null>(null)
   const labelsFolder = useProtoFolder(store.id)
+  const addMarkdowns = useAddPriceMarkdowns(store.id)
 
   const canSeeSales = useCan('SALES')
   const canSeeInventory = useCan('INVENTORY')
@@ -87,17 +115,17 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
   const lastSaleDate = savedUntil && savedUntil < yesterday ? savedUntil : yesterday
 
   useEffect(() => {
-    if (!stored) dispatch(setPromoDraft({ storeId: store.id, draft: fallback }))
-  }, [dispatch, fallback, store.id, stored])
+    if (!stored) dispatch(setPromoDraft({ storeId: store.id, mode, draft: fallback }))
+  }, [dispatch, fallback, mode, store.id, stored])
 
   // Szkic bywa sprzed kilku dni: ceny i ostatni zakup od nowa, a cena z przeceny idzie za ceną z kartoteki.
   useEffect(() => {
-    const current = reduxStore.getState().promoSetupDraft.drafts[store.id]
+    const current = draftsOf(mode)[store.id]
     const codes = [...new Set(current?.tiles.flatMap((tile) => tile.rows.map((row) => codeKey(row.code))) ?? [])]
     if (codes.length === 0) return
     fetchPromoArticles(store.id, codes)
       .then((articles) => {
-        const latest = reduxStore.getState().promoSetupDraft.drafts[store.id]
+        const latest = draftsOf(mode)[store.id]
         if (!latest) return
         const refreshed = (row: PromoRow): PromoRow => {
           const article = articles.get(codeKey(row.code)) ?? null
@@ -106,10 +134,10 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
           return { ...row, article, price }
         }
         const tiles = latest.tiles.map((tile) => ({ ...tile, rows: tile.rows.map(refreshed) }))
-        dispatch(setPromoDraft({ storeId: store.id, draft: { ...latest, tiles } }))
+        dispatch(setPromoDraft({ storeId: store.id, mode, draft: { ...latest, tiles } }))
       })
       .catch(() => toast.error('Nie udało się odświeżyć cen artykułów.'))
-  }, [dispatch, store.id])
+  }, [dispatch, mode, store.id])
 
   const files = useMemo(() => promoFiles(draft), [draft])
   const incomplete = draft.tiles.filter((tile) => tile.rows.length > 0 && !hasPeriod(tile))
@@ -120,7 +148,20 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
     [listTile],
   )
 
-  const restore = (previous: PromoSetupDraft) => dispatch(setPromoDraft({ storeId: store.id, draft: previous }))
+  const setDraft = (next: PromoSetupDraft) => dispatch(setPromoDraft({ storeId: store.id, mode, draft: next }))
+  const restore = setDraft
+
+  const switchMode = (next: PromoMode) =>
+    setParams(
+      (current) => {
+        const params = new URLSearchParams(current)
+        if (next === 'pro') params.set('tryb', 'pro')
+        else params.delete('tryb')
+        params.delete('artykul')
+        return params
+      },
+      { replace: true },
+    )
 
   const select = (row: PromoRow) => {
     if (!row.article?.itm8) return
@@ -157,7 +198,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
       toast.error('Nie udało się wyszukać artykułów.')
       return
     }
-    const tile = reduxStore.getState().promoSetupDraft.drafts[store.id]?.tiles.find((item) => item.id === tileId)
+    const tile = draftsOf(mode)[store.id]?.tiles.find((item) => item.id === tileId)
     const present = new Set(tile?.rows.map((row) => row.article?.ean ?? row.code))
     const rows: PromoRow[] = []
     let repeated = 0
@@ -168,21 +209,80 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
       if (present.has(key)) repeated += 1
       else {
         present.add(key)
-        rows.push({ id: crypto.randomUUID(), code, article, price: null, discount: null })
+        rows.push({
+          id: crypto.randomUUID(),
+          code,
+          article,
+          price: null,
+          discount: null,
+          ...(macro && { dateTo: tile?.dateTo ?? '' }),
+        })
       }
     }
-    dispatch(addPromoRows({ storeId: store.id, tileId, rows }))
+    dispatch(addPromoRows({ storeId: store.id, mode, tileId, rows }))
     if (repeated > 0) toast.info(`Już w tej promocji: ${repeated}`)
     const last = rows.at(-1)
     if (last) select(last)
   }
 
   const setPrice = (tile: PromoTile, row: PromoRow, price: number | null) =>
-    dispatch(updatePromoRow({ storeId: store.id, tileId: tile.id, rowId: row.id, changes: { price, discount: null } }))
+    dispatch(
+      updatePromoRow({ storeId: store.id, mode, tileId: tile.id, rowId: row.id, changes: { price, discount: null } }),
+    )
 
   const setDiscount = (tile: PromoTile, row: PromoRow, discount: number | null) => {
     const price = discount === null ? row.price : discountedPrice(row.article?.regularPrice ?? null, discount)
-    dispatch(updatePromoRow({ storeId: store.id, tileId: tile.id, rowId: row.id, changes: { price, discount } }))
+    dispatch(updatePromoRow({ storeId: store.id, mode, tileId: tile.id, rowId: row.id, changes: { price, discount } }))
+  }
+
+  /**
+   * Tryb makra: makro wprowadzania promocji do schowka (odtwarzacz, Alt+E). Kod operacji jak kod taryfy w .PRO,
+   * nazwa jak nazwa pliku .PRO: dzień początku (dziś) i najpóźniejszego końca.
+   */
+  const copyMacro = async (tile: PromoTile) => {
+    const items = tile.rows.flatMap((row) =>
+      row.article?.ean && row.price !== null && row.dateTo
+        ? [{ ean: row.article.ean.replace(/^0+(?=\d{13})/, ''), price: row.price, dateTo: row.dateTo }]
+        : [],
+    )
+    const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
+    const code = tileTariff(draft, tile)
+    const name = proFileName(todayIso(), end).replace(/\.PRO$/, '')
+    try {
+      await navigator.clipboard.writeText(buildPromoEntryMacro({ code, name, items }))
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+      return
+    }
+    toast.success(`Skopiowano makro: ${items.length} art., operacja ${code}`, {
+      description: 'Przejdź do Mercalys i naciśnij Alt+E.',
+    })
+    // Każdy artykuł z makra na listę cenówek; szkic artykułu (bez ITM8) czeka na raport kartoteki.
+    const markdowns = tile.rows.flatMap((row) =>
+      row.article?.itm8 && row.article.ean && row.price !== null && row.dateTo
+        ? [{ itm8: row.article.itm8, newPrice: row.price, validFrom: todayIso(), validTo: row.dateTo }]
+        : [],
+    )
+    if (markdowns.length === 0) return
+    addMarkdowns.mutate(markdowns, {
+      onSuccess: () => toast.success(`Dodano do cenówek: ${markdowns.length} art.`),
+      onError: (error) =>
+        toast.error('Nie udało się dodać artykułów do cenówek', {
+          description: error instanceof ApiError ? error.message : undefined,
+        }),
+    })
+  }
+
+  const setRowEnd = (tile: PromoTile, row: PromoRow, dateTo: string) =>
+    dispatch(updatePromoRow({ storeId: store.id, mode, tileId: tile.id, rowId: row.id, changes: { dateTo } }))
+
+  /** Tryb makra: koniec z kafelka dla wszystkich artykułów. */
+  const setAllEnds = (tile: PromoTile) => {
+    const rows = tile.rows.map((row) => ({ ...row, dateTo: tile.dateTo }))
+    setDraft({ ...draft, tiles: draft.tiles.map((item) => (item.id === tile.id ? { ...item, rows } : item)) })
+    toast.success(`Koniec promocji ${formatDocumentDate(tile.dateTo)} dla ${rows.length} art.`, {
+      action: { label: 'Przywróć', onClick: () => restore(draft) },
+    })
   }
 
   /** Ten sam stopień przeceny dla wszystkich artykułów kafelka; ręcznie wpisane ceny też są zastępowane. */
@@ -191,18 +291,21 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
       row.article ? { ...row, discount, price: discountedPrice(row.article.regularPrice, discount) } : row,
     )
     const tiles = draft.tiles.map((item) => (item.id === tile.id ? { ...item, rows } : item))
-    dispatch(setPromoDraft({ storeId: store.id, draft: { ...draft, tiles } }))
+    setDraft({ ...draft, tiles })
     const count = rows.filter((row) => row.article).length
-    toast.success(`Promocja ${tile.number}: przecena -${String(discount).replace('.', ',')}% dla ${count} art.`, {
-      action: { label: 'Przywróć', onClick: () => restore(draft) },
-    })
+    toast.success(
+      `${macro ? 'Promocje' : `Promocja ${tile.number}`}: przecena -${String(discount).replace('.', ',')}% dla ${count} art.`,
+      {
+        action: { label: 'Przywróć', onClick: () => restore(draft) },
+      },
+    )
   }
 
   const removeRow = (tile: PromoTile, row: PromoRow) => {
     const tiles = draft.tiles.map((item) =>
       item.id === tile.id ? { ...item, rows: item.rows.filter((candidate) => candidate.id !== row.id) } : item,
     )
-    dispatch(setPromoDraft({ storeId: store.id, draft: { ...draft, tiles } }))
+    setDraft({ ...draft, tiles })
     closeArticle([row])
     toast.success(`Usunięto: ${row.article?.name ?? row.code}`, {
       action: { label: 'Przywróć', onClick: () => restore(draft) },
@@ -211,7 +314,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
 
   const removeTile = (tile: PromoTile) => {
     const tiles = draft.tiles.filter((item) => item.id !== tile.id)
-    dispatch(setPromoDraft({ storeId: store.id, draft: { ...draft, tiles } }))
+    setDraft({ ...draft, tiles })
     closeArticle(tile.rows)
     toast.success(`Usunięto promocję ${tile.number}`, {
       action: { label: 'Przywróć', onClick: () => restore(draft) },
@@ -219,7 +322,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
   }
 
   const clear = () => {
-    dispatch(setPromoDraft({ storeId: store.id, draft: newPromoDraft() }))
+    setDraft(newPromoDraft())
     closeArticle(draft.tiles.flatMap((tile) => tile.rows))
     toast.success('Wyczyszczono promocje', { action: { label: 'Przywróć', onClick: () => restore(draft) } })
   }
@@ -229,48 +332,82 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
       <span data-wide-page hidden />
       <PageHeader
         title="Ustaw promocje"
-        description={`${storeLabel(store)}: kilka promocji naraz, każda z własnymi artykułami i okresem.`}
+        description={
+          macro
+            ? `${storeLabel(store)}: artykuły z cenami i własnym końcem promocji, ustawiane automatycznie makrem.`
+            : `${storeLabel(store)}: kilka promocji naraz, każda z własnymi artykułami i okresem, w plikach .PRO.`
+        }
+        actions={
+          <>
+            <PriceLabelsButton storeId={store.id} />
+            <SegmentedField
+              label="Tryb ustawiania promocji"
+              options={MODE_OPTIONS}
+              value={mode}
+              onChange={switchMode}
+            />
+          </>
+        }
       />
 
       <div className="sticky top-14 z-15 mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted p-1.5 shadow-xs">
         <span className="px-2 text-sm text-muted-foreground tabular-nums">
-          Promocje: {draft.tiles.length} · artykuły: {articleCount}
+          {macro ? `Artykuły: ${articleCount}` : `Promocje: ${draft.tiles.length} · artykuły: ${articleCount}`}
         </span>
         <Button variant="ghost" className="ml-auto" disabled={articleCount === 0} onClick={clear}>
           <EraserIcon />
           Wyczyść
         </Button>
-        <Button
-          disabled={files.size === 0}
-          title={files.size === 0 ? 'Dodaj artykuły i ustaw okres promocji' : undefined}
-          onClick={() => setGenerated([...files.values()])}
-        >
-          <FileOutputIcon />
-          Wygeneruj wszystkie pliki promo
-        </Button>
+        {!macro && (
+          <Button
+            disabled={files.size === 0}
+            title={files.size === 0 ? 'Dodaj artykuły i ustaw okres promocji' : undefined}
+            onClick={() => setGenerated([...files.values()])}
+          >
+            <FileOutputIcon />
+            Wygeneruj wszystkie pliki promo
+          </Button>
+        )}
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <div className="grid min-w-0 gap-4">
-          {draft.tiles.map((tile) => {
+          {/* Tryb makra ma zawsze jeden kafelek. */}
+          {(macro ? draft.tiles.slice(0, 1) : draft.tiles).map((tile) => {
             const file = files.get(tile.id)
-            return (
+            const shared = {
+              tile,
+              levels,
+              selected,
+              onSelect: select,
+              onDates: (changes: { dateFrom?: string; dateTo?: string }) =>
+                dispatch(updatePromoTile({ storeId: store.id, mode, tileId: tile.id, changes })),
+              onCodes: (codes: string[]) => void addCodes(tile.id, codes),
+              onSearch: (query: string) => setListFor({ tileId: tile.id, query }),
+              onList: () => setListFor({ tileId: tile.id, query: '' }),
+              onPrice: (row: PromoRow, price: number | null) => setPrice(tile, row, price),
+              onDiscount: (row: PromoRow, discount: number | null) => setDiscount(tile, row, discount),
+              onTileDiscount: (discount: number) => setTileDiscount(tile, discount),
+              onRemoveRow: (row: PromoRow) => removeRow(tile, row),
+            }
+            return macro ? (
               <PromoTileCard
                 key={tile.id}
-                tile={tile}
+                variant="macro"
+                {...shared}
+                onRowEnd={(row, dateTo) => setRowEnd(tile, row, dateTo)}
+                onAllEnds={() => setAllEnds(tile)}
+                tile={{ ...tile, dateFrom: todayIso() }}
+                createBlocked={macroBlocked({ ...tile, dateFrom: todayIso() })}
+                onCreate={() => void copyMacro(tile)}
+              />
+            ) : (
+              <PromoTileCard
+                key={tile.id}
+                variant="pro"
+                {...shared}
                 tariff={tileTariff(draft, tile)}
-                levels={levels}
-                selected={selected}
                 canGenerate={file !== undefined}
-                onSelect={select}
-                onDates={(changes) => dispatch(updatePromoTile({ storeId: store.id, tileId: tile.id, changes }))}
-                onCodes={(codes) => void addCodes(tile.id, codes)}
-                onSearch={(query) => setListFor({ tileId: tile.id, query })}
-                onList={() => setListFor({ tileId: tile.id, query: '' })}
-                onPrice={(row, price) => setPrice(tile, row, price)}
-                onDiscount={(row, discount) => setDiscount(tile, row, discount)}
-                onTileDiscount={(discount) => setTileDiscount(tile, discount)}
-                onRemoveRow={(row) => removeRow(tile, row)}
                 onRemove={() => removeTile(tile)}
                 onGenerate={() => file && setGenerated([file])}
               />
@@ -278,10 +415,12 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
           })}
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="lg" onClick={() => dispatch(addPromoTile({ storeId: store.id }))}>
-              <PlusIcon />
-              Dodaj promocję
-            </Button>
+            {!macro && (
+              <Button variant="outline" size="lg" onClick={() => dispatch(addPromoTile({ storeId: store.id }))}>
+                <PlusIcon />
+                Dodaj promocję
+              </Button>
+            )}
             <Button variant="outline" size="lg" onClick={() => setLevelsOpen(true)}>
               <BadgePercentIcon />
               Stwórz nowe automatyczne przeceny
@@ -325,7 +464,7 @@ function StorePromoSetup({ store }: { store: StoreSummary }) {
             )
           }
           initialQuery={listFor.query}
-          title={`Lista towarów · promocja ${listTile?.number ?? ''}`}
+          title={macro ? 'Lista towarów · promocje' : `Lista towarów · promocja ${listTile?.number ?? ''}`}
           lastSaleDate={canSeeSales ? lastSaleDate : null}
         />
       )}

@@ -36,6 +36,7 @@ import {
   Trash2Icon,
   TrendingDownIcon,
   Undo2Icon,
+  WandSparklesIcon,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -133,6 +134,7 @@ import { ArticleFileDialog } from './ArticleFileDialog'
 import { ACTION_TILE, ACTION_TONES, ActionItem, ActionMenu, TILE_WIDTH, TileContent } from './ActionMenu'
 import { LabelDialog, type LabelLine } from './LabelDialog'
 import { LinkArticleDialog, type LinkTarget } from './LinkArticleDialog'
+import { MercalysSupplierDialog } from './MercalysSupplierDialog'
 import { LST_FOLDER, lstFile, lstFileName, parseLst } from './lst-file'
 import { priceFilesNeedAttention, usePriceFileOverview, usePriceFileWatch } from './price-files'
 import { savePriceControlFile } from './price-control'
@@ -357,8 +359,14 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     [dispatch, store.id],
   )
   const [supplierOpen, setSupplierOpen] = useState(false)
+  const [mercalysSupplierOpen, setMercalysSupplierOpen] = useState(false)
   const { data: suppliers } = useSuppliers(store.id)
   const supplier = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
+  // NIP sprzedawcy z faktury, którego nie ma na liście dostawców (i nie wybrano innego): można go założyć w Mercalys.
+  const sellerToCreate =
+    suppliers && !supplier && !invoice?.supplier && invoice?.sellerNip?.replace(/\D/g, '').length === 10
+      ? invoice.sellerNip.replace(/\D/g, '')
+      : null
   const correctionLines = useCorrectionDeliveryLines(
     store.id,
     canLoadInvoices ? (invoice?.id ?? null) : null,
@@ -1342,6 +1350,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                   : 'Wybierz dostawcę'
             }
             onChange={() => setSupplierOpen(true)}
+            onCreate={sellerToCreate ? () => setMercalysSupplierOpen(true) : undefined}
           />
         )}
         <div className="flex shrink-0 gap-1.5" role="group" aria-label="Pliki">
@@ -2100,6 +2109,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onOpenChange={setSupplierOpen}
         onChange={changeSupplier}
       />
+
+      {sellerToCreate && (
+        <MercalysSupplierDialog
+          storeId={store.id}
+          nip={sellerToCreate}
+          invoiceName={invoice?.sellerName ?? null}
+          open={mercalysSupplierOpen}
+          onOpenChange={setMercalysSupplierOpen}
+        />
+      )}
     </>
   )
 }
@@ -2261,12 +2280,15 @@ function SupplierNumber({
   problem,
   changeLabel,
   onChange,
+  onCreate,
 }: {
   code: string | null
   name: string | null
   problem: string | null
   changeLabel: string | null
   onChange: () => void
+  /** Sprzedawcy z faktury nie ma na liście dostawców: założenie go w Mercalys makrem. */
+  onCreate?: () => void
 }) {
   return (
     <div
@@ -2286,6 +2308,17 @@ function SupplierNumber({
         <span className="text-sm leading-tight font-semibold">{problem ?? 'Sprawdzanie…'}</span>
       )}
       {name && <span className="w-full truncate text-xs leading-tight">{name}</span>}
+      {onCreate && (
+        <button
+          type="button"
+          onClick={onCreate}
+          title="Założy dostawcę w Mercalys makrem (dane z GUS, pierwszy wolny kod)"
+          className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-amber-950 px-1.5 py-0.5 text-xs leading-tight font-semibold text-amber-50 transition-colors duration-150 outline-none hover:bg-amber-900 focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-amber-100 dark:text-amber-950 dark:hover:bg-amber-200"
+        >
+          <WandSparklesIcon aria-hidden className="size-3" />
+          Załóż w Mercalys
+        </button>
+      )}
       {changeLabel && (
         <Button
           variant="ghost"

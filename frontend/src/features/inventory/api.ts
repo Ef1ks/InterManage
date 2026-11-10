@@ -67,6 +67,19 @@ export function useCreatePriceMarkdown(storeId: string) {
   })
 }
 
+export type NewPriceMarkdown = { itm8: string; newPrice: number; validFrom: string; validTo: string }
+
+/** Kilka przecen naraz (makro ustawiania promocji): wszystkie albo żadna. */
+export function useAddPriceMarkdowns(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (items: NewPriceMarkdown[]) =>
+      api<PriceMarkdown[]>(`${markdownsPath(storeId)}/batch`, { method: 'POST', json: { items } }),
+    onSuccess: (list) => queryClient.setQueryData(markdownsKey(storeId), list),
+    meta: { invalidates: false },
+  })
+}
+
 /** Znacznik „w pliku” po zapisie na dysku, usunięcie (znacznik) i „Przywróć”; każda zmiana zwraca listę. */
 export function usePriceMarkdownChange(storeId: string) {
   const queryClient = useQueryClient()

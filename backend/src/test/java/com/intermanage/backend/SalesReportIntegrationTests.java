@@ -563,6 +563,73 @@ class SalesReportIntegrationTests {
                 new BigDecimal(value));
     }
 
+    @Test
+    void comparesCurrentPeriodWithOtherStore() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String otherId = createStore(owner);
+        String ours = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        String theirs = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 2, 2, 0, 0, 0) returning id""", String.class, otherId);
+        String bread = insertProduct(storeId, ours, "PIECZYWO WASA", "01 01 01");
+        // Ten sam ITM8 w drugim sklepie i artykuł, którego nasz sklep nie sprzedaje.
+        jdbc.update("""
+                insert into products (store_id, itm8, ean, name, nomenclature, unit, net_content, purchase_price,
+                    sale_price, active, first_seen_import_id, last_seen_import_id)
+                values (?::uuid, ?, '5900000000001', 'PIECZYWO WASA', '01 01 01', 'szt.', 1, 1, 9.99, true,
+                    ?::uuid, ?::uuid)""", otherId, bread, theirs, theirs);
+        String onlyTheirs = insertProduct(otherId, theirs, "PIECZYWO LEKKIE", "01 01 01");
+
+        String ourSales = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', timestamp '2026-10-03 07:15:00', date '2026-09-29',
+                    date '2026-10-02', 2, 2, 0, 0) returning id""", String.class, storeId);
+        String theirSales = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', timestamp '2026-10-03 07:15:00', date '2026-09-29',
+                    date '2026-10-02', 3, 3, 0, 0) returning id""", String.class, otherId);
+        insertSale(storeId, ourSales, "2026-09-30", bread, "590001", "1", "2", "5.4", "0.4", "3");
+        insertSale(storeId, ourSales, "2026-10-01", bread, "590001", "2", "4", "10.8", "0.8", "6");
+        // Poprzedni okres drugiego sklepu się nie liczy.
+        insertSale(otherId, theirSales, "2026-09-30", bread, "590001", "7", "14", "37.8", "2.8", "21");
+        insertSale(otherId, theirSales, "2026-10-01", bread, "590001", "3", "6", "16.2", "1.2", "9");
+        insertSale(otherId, theirSales, "2026-10-02", onlyTheirs, "590003", "4", "4", "8.64", "0.64", "4");
+
+        mvc.perform(get(comparisonUrl(storeId) + "&parent=&compareStore=" + otherId).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows.length()").value(1))
+                .andExpect(jsonPath("$.rows[0].code").value("01"))
+                .andExpect(jsonPath("$.rows[0].previous.quantity").value(1.0))
+                .andExpect(jsonPath("$.rows[0].current.quantity").value(2.0))
+                .andExpect(jsonPath("$.rows[0].other.quantity").value(7.0))
+                .andExpect(jsonPath("$.rows[0].other.marginValue").value(13.0))
+                .andExpect(jsonPath("$.otherTotal.quantity").value(7.0));
+
+        mvc.perform(get(comparisonUrl(storeId) + "&parent=010101&compareStore=" + otherId).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.level").value("PRODUCT"))
+                .andExpect(jsonPath("$.rows.length()").value(2))
+                .andExpect(jsonPath("$.rows[0].code").value(bread))
+                .andExpect(jsonPath("$.rows[0].other.quantity").value(3.0))
+                // Artykuł tylko z drugiego sklepu: u nas zera, na końcu.
+                .andExpect(jsonPath("$.rows[1].code").value(onlyTheirs))
+                .andExpect(jsonPath("$.rows[1].name").value("PIECZYWO LEKKIE"))
+                .andExpect(jsonPath("$.rows[1].current.quantity").value(0))
+                .andExpect(jsonPath("$.rows[1].other.quantity").value(4.0));
+
+        // Bez porównania drugiego sklepu nie ma.
+        compare(owner, storeId, "")
+                .andExpect(jsonPath("$.rows[0].other").value(nullValue()))
+                .andExpect(jsonPath("$.otherTotal").value(nullValue()));
+    }
+
     private ResultActions compare(Cookie owner, String storeId, String parent) throws Exception {
         return mvc.perform(get(comparisonUrl(storeId) + "&parent=" + parent).cookie(owner));
     }

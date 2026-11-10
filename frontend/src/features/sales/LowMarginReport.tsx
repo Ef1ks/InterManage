@@ -30,7 +30,7 @@ export function LowMarginReport({ storeId }: { storeId: string }) {
       report="LOW_MARGIN"
       query={query}
       title="Za niskie marże"
-      intro="Przyjęcia z ostatnich 30 dni, w których artykuł ma marżę o co najmniej 10 punktów procentowych niższą niż marża wymagana na jego nomenklaturze (20% przy wymaganych 30%). Marża jest liczona od sprzedaży netto, z ceny zakupu po korektach. Gdy w dniu przyjęcia trwała promocja (z listy promocji, założona ręcznie na kasie albo z gazetki), cena promocyjna się nie liczy: marża jest z ceny katalogowej poza promocją. Raport pomija prasę od Kolportera i artykuły aktywne w cadencier, bo mają z góry ustaloną marżę."
+      intro="Przyjęcia z ostatnich 30 dni, w których artykuł ma marżę o co najmniej 10 punktów procentowych niższą niż marża wymagana na jego nomenklaturze (20% przy wymaganych 30%). Marża jest liczona od sprzedaży netto, z ceny zakupu po korektach. Gdy w dniu przyjęcia trwała promocja (z listy promocji, założona ręcznie na kasie albo z gazetki), cena promocyjna się nie liczy: marża jest z ceny katalogowej poza promocją. Raport pomija prasę od Kolportera i artykuły aktywne w cadencier, bo mają z góry ustaloną marżę. Niebieska cena sprzedaży to CENA_CAD z kartoteki, czyli cena narzucona przez centralę."
       actions={
         query.data && (
           <ExcludedSuppliersSettings
@@ -111,7 +111,16 @@ function LinesTable({ delivery }: { delivery: LowMarginDelivery }) {
               <TableCell className="text-right">{formatQuantity(line.quantity)}</TableCell>
               <TableCell className="text-right font-medium">{formatPrice(line.purchasePrice)}</TableCell>
               <TableCell className="text-right whitespace-normal">
-                {formatPrice(line.salePrice)}
+                {line.cadencierPrice ? (
+                  <span
+                    className="font-bold text-blue-700 dark:text-blue-300"
+                    title="Cena cadencier (CENA_CAD) narzucona przez centralę"
+                  >
+                    {formatPrice(line.salePrice)}
+                  </span>
+                ) : (
+                  formatPrice(line.salePrice)
+                )}
                 {line.promotion && (
                   <span
                     className="block text-xs text-orange-700 dark:text-orange-300"

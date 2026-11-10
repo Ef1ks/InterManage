@@ -27,7 +27,7 @@ const ROW_GRID =
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
-/** Przycisk w nagłówku Magazynu z liczbą przecen bez cenówki. */
+/** Przycisk w nagłówku Magazynu i Ustaw promocje z liczbą przecen bez cenówki. */
 export function PriceLabelsButton({ storeId }: { storeId: string }) {
   const markdowns = usePriceMarkdowns(storeId)
   const [open, setOpen] = useState(false)
@@ -64,7 +64,10 @@ function PriceLabelsDialog({
   const markdowns = usePriceMarkdowns(storeId)
   const change = usePriceMarkdownChange(storeId)
   const folder = useProtoFolder(storeId)
-  const canEdit = useCan('INVENTORY', 'EDIT')
+  // Ustawianie promocji (DATA_ENTRY:VIEW) dopisuje swoje artykuły i drukuje ich cenówki.
+  const canEditInventory = useCan('INVENTORY', 'EDIT')
+  const canSetPromotions = useCan('DATA_ENTRY')
+  const canEdit = canEditInventory || canSetPromotions
   const [saving, setSaving] = useState(false)
   // Zaznaczone jest wszystko, więc pamiętamy tylko odznaczone.
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(new Set())

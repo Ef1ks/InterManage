@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { ChevronLeftIcon, ChevronRightIcon, HistoryIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 
 import { DateField } from '@/components/form'
@@ -14,6 +14,8 @@ import {
   type PeriodMode,
   resolveAnchor,
   shiftAnchor,
+  yearAgoAnchor,
+  yearAgoRange,
 } from '@/features/sales/periods'
 import { addDays, todayIso } from '@/lib/dates'
 
@@ -135,6 +137,25 @@ export function PeriodPicker({
 }) {
   const { mode, anchor, custom, customError, lastDate } = period
   const latest = max ?? lastDate
+  // Ten sam okres rok temu: miesiąc kalendarzowy, a dzień, tydzień i własny okres 52 tygodnie wcześniej.
+  const yearAgoButton = (
+    <Button
+      variant="outline"
+      size="lg"
+      className="shrink-0"
+      title="Ten sam okres rok temu (dzień i tydzień: te same dni tygodnia)"
+      disabled={mode === 'custom' && customError != null}
+      onClick={() => {
+        if (mode === 'custom') {
+          const range = yearAgoRange(custom)
+          update({ od: range.from, do: range.to })
+        } else update({ data: yearAgoAnchor(mode, anchor) })
+      }}
+    >
+      <HistoryIcon />
+      Rok temu
+    </Button>
+  )
   return (
     <div className="flex flex-wrap items-start gap-3">
       {mode === 'custom' ? (
@@ -190,8 +211,10 @@ export function PeriodPicker({
           >
             <ChevronRightIcon />
           </Button>
+          {yearAgoButton}
         </div>
       )}
+      {mode === 'custom' && <div className="flex items-center self-stretch">{yearAgoButton}</div>}
       {children}
     </div>
   )

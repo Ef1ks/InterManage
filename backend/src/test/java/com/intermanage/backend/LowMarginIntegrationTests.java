@@ -190,6 +190,25 @@ class LowMarginIntegrationTests {
     }
 
     @Test
+    void marksSalePriceSetByCadencier() throws Exception {
+        requiredMargin("57", "30");
+        // Cena 12,50 zł to CENA_CAD narzucona przez centralę, więc za niską marżę daje cena z cadencier.
+        product(ON_THRESHOLD, "12.50");
+        jdbc.update("update products set cadencier_price = 12.50 where itm8 = ?", ON_THRESHOLD);
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
+        // CENA_CAD inna niż cena, od której liczy się marża: bez oznaczenia.
+        product(LISTED_LOW, "12.50");
+        jdbc.update("update products set cadencier_price = 13.99 where itm8 = ?", LISTED_LOW);
+        delivery(LISTED_LOW, 5, "10", "100.00", "12.50", "570101");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + ON_THRESHOLD
+                        + "')].lines[0].cadencierPrice").value(true))
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED_LOW
+                        + "')].lines[0].cadencierPrice").value(false));
+    }
+
+    @Test
     void suppliersWithoutRequiredMarginAreLeftOutUntilRemovedFromTheList() throws Exception {
         requiredMargin("57", "30");
         jdbc.update("insert into suppliers (store_id, code, name) values (?::uuid, '100', 'Dostawca 100')", store);

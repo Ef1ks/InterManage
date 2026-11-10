@@ -36,8 +36,9 @@ public class ProductCatalogController {
         return service.list(storeId, request);
     }
 
+    /** Też dla {@code SALES:VIEW}: historia cen jest w oknie statystyk artykułu z raportów sprzedaży. */
     @GetMapping("/{itm8}/prices")
-    @PreAuthorize(VIEW)
+    @PreAuthorize("(hasAuthority('INVENTORY:VIEW') or hasAuthority('SALES:VIEW')) and @storeAccess.canAccess(authentication, #storeId)")
     public ProductPriceHistoryResponse prices(@PathVariable UUID storeId, @PathVariable String itm8) {
         return service.priceHistory(storeId, itm8);
     }

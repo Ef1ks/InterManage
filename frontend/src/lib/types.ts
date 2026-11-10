@@ -865,6 +865,31 @@ export type GratisSupplierSuggestion = {
 }
 
 /** Dostawca sklepu: z listy z systemu sklepu albo dodany ręcznie ({@code manual}, bez kodu). */
+/** Skopiowane makro zakładania dostawcy w Mercalys: kod zarezerwowany do wgrania nowej listy dostawców. */
+export type MercalysSupplierCreation = {
+  id: string
+  nip: string
+  code: string
+  name: string
+  createdAt: string
+  createdBy: string | null
+}
+
+/** Dane do makra nowego dostawcy, przycięte do pól Mercalys (wielkie litery bez polskich znaków). */
+export type MercalysSupplierDraft = {
+  nip: string
+  code: string
+  keyword: string
+  name1: string
+  name2: string
+  street: string
+  postalCode: string
+  city: string
+  fromGus: boolean
+  gusProblem: string | null
+  previous: MercalysSupplierCreation | null
+}
+
 export type Supplier = {
   id: string
   code: string | null
@@ -1075,6 +1100,48 @@ export type DeliCostsOverview = {
 
 export type SalesComparisonLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'PRODUCT'
 
+/** Raport lady: sumy pozycji w jednym sklepie; marża % od netto, udział w sprzedaży brutto wybranych rejonów. */
+export type CounterFigures = {
+  quantity: number
+  costValue: number
+  saleValueGross: number
+  saleValueNet: number
+  marginValue: number
+  marginPercent: number | null
+  sharePercent: number | null
+}
+
+/** Wartości pozycji w kolejności {@code CounterReport.stores}; {@code null} = brak sprzedaży w sklepie. */
+export type CounterValues = (CounterFigures | null)[]
+
+export type CounterReport = {
+  from: string
+  to: string
+  regionCodes: string[]
+  stores: { id: string; number: string; name: string; lastSaleDate: string | null }[]
+  total: CounterValues
+  regions: {
+    code: string
+    name: string | null
+    values: CounterValues
+    families: {
+      code: string
+      name: string | null
+      values: CounterValues
+      subfamilies: {
+        code: string
+        name: string | null
+        values: CounterValues
+        articles: { itm8: string; name: string | null; brand: string | null; values: CounterValues }[]
+      }[]
+    }[]
+  }[]
+}
+
+export type CounterStoreOption = { id: string; number: string; name: string; partner: boolean }
+
+export type CounterMetric = 'QUANTITY' | 'COST' | 'SALE' | 'MARGIN' | 'MARGIN_PERCENT' | 'SHARE'
+
 export type SalesComparisonRow = {
   /** Kod nomenklatury bez spacji ("01", "0101", "010101") albo ITM8; pusty = sprzedaż bez nomenklatury. */
   code: string
@@ -1084,6 +1151,8 @@ export type SalesComparisonRow = {
   brand: string | null
   previous: SalesFigures
   current: SalesFigures
+  /** Sprzedaż drugiego sklepu w aktualnym okresie (porównanie ze sklepem); bez porównania null. */
+  other: SalesFigures | null
 }
 
 export type SalesComparison = {
@@ -1097,6 +1166,8 @@ export type SalesComparison = {
   rows: SalesComparisonRow[]
   previousTotal: SalesFigures
   currentTotal: SalesFigures
+  /** Suma drugiego sklepu w aktualnym okresie; bez porównania ze sklepem null. */
+  otherTotal: SalesFigures | null
 }
 
 /** Pozycja nomenklatury sklepu (filtr raportów, ścieżka artykułu). */
@@ -2227,6 +2298,8 @@ export type LowMarginLine = {
   targetPurchasePrice: number
   excessValue: number
   corrected: boolean
+  /** Cena katalogowa to CENA_CAD z kartoteki, narzucona przez centralę. */
+  cadencierPrice: boolean
 }
 
 export type LowMarginDelivery = {
@@ -3720,4 +3793,35 @@ export type TimeSettings = {
     cardUid: string | null
     rcpNumber: number | null
   }[]
+}
+
+/** Dostawca z przyjęć PZ sklepu do wyboru w obrotach z dostawcami. */
+export type TurnoverSupplier = { code: string; name: string; nip: string | null; lastDelivery: string }
+
+/** Zakup z bonów, korekty przypięte do przyjęć i zakup po korektach (netto). */
+export type SupplierTurnoverAmount = { delivered: number; corrections: number; net: number }
+
+export type SupplierTurnoverRow = {
+  /** Pusty: „Bez nomenklatury”. */
+  code: string
+  level: 'REGION' | 'FAMILY' | 'SUBFAMILY' | null
+  name: string
+  /** Po miesiącach, w kolejności `months` raportu. */
+  values: SupplierTurnoverAmount[]
+  total: SupplierTurnoverAmount
+}
+
+export type SupplierTurnoverReport = {
+  supplierCode: string
+  supplierName: string
+  from: string
+  to: string
+  documentsCoveredUntil: string | null
+  /** Pierwsze dni miesięcy okresu. */
+  months: string[]
+  deliveries: number[]
+  totals: SupplierTurnoverAmount[]
+  total: SupplierTurnoverAmount
+  rows: SupplierTurnoverRow[]
+  unattachedCorrections: { count: number; purchaseValue: number }
 }

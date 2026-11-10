@@ -15,6 +15,7 @@ const PAGE_TIMEOUT_MS = 30000
 const MENU = {
   purchasesTab: 'mnTp_ACHAT',
   directDeliveries: 'mnTv_ACHAT_BlFournisseursDirects',
+  deliveries: 'mnTv_ACHAT_Livraison',
   integration: 'mnTv_ACHAT_na-e014_IntegrationFichiersBl',
   blScreen: 'mnTv_ACHAT_ac-e082_GestionDesBl',
   orders: 'mnTv_ACHAT_Commande',
@@ -128,8 +129,8 @@ export function buildMissingItm8Macro(bonNumber: string) {
     [
       `# Zbierz brakujące ITM8: bon ${bonNumber}`,
       `WINOPEN|${PROGRAM_WINDOW}`,
-      `WEBENSURE|${WINDOW}|${screen.menuItem}|${MENU.purchasesTab}`,
-      `WEBCLICK|${WINDOW}|${screen.menuItem}`,
+      `WEBENSURE|${WINDOW}|${MENU.deliveries}|${MENU.purchasesTab}`,
+      `WEBOPEN|${WINDOW}|${MENU.deliveries}|${screen.menuItem}`,
       `WEBWAIT|${WINDOW}|${screen.selectionButton}||${PAGE_TIMEOUT_MS}`,
       `WEBPICKRE|${WINDOW}|${screen.filesGrid}|(?<!\\d)0*${digits}(?!\\d)|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
@@ -241,6 +242,222 @@ export function buildMarkdownMacro({ ean, itm8, price, from, to }: MarkdownMacro
       `WEBWAIT|${WINDOW}|${screen.resetButton}||${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.resetButton}`,
       `WEBVALUE|${WINDOW}|${screen.eanField}|^$|${PAGE_TIMEOUT_MS}`,
+      `WINMIN|${PROGRAM_WINDOW}`,
+    ].join('\r\n') + '\r\n'
+  )
+}
+
+/** Wprowadzanie promocji: nagłówek operacji (ar-e072) i artykuły operacji (ar-e074). */
+const PROMO_SCREEN = {
+  tariffTab: 'mnTp_TARIF',
+  menuItem: 'mnTv_TARIF_ar-e072_SaisieDesPromos',
+  codeField: 'lstZ1_CodeOp_TxtBox',
+  nameField: 'txtZ2_LibelleOp_TxtBox',
+  typeField: 'lstZ3_TypeOp_TxtBox',
+  type: '1',
+  endField: 'txdZ7_FinOp_TxtBox',
+  approveButton: 'btnB6_Valider_LnkBouton',
+  enterButton: 'btnB2_Saisir_LnkBouton',
+  articleField: 'txtZ8_CodeArticle_TxtBox',
+  saleEndField: 'txdZ12_FinVentePDV_TxtBox',
+  priceField: 'txpZ25_PrixPromoPDV_TxtBox',
+  createText: 'Utworzy',
+  /** Kod istniejącej operacji wypełnia panel: wtedy Usuń, Tak i kod od nowa. */
+  deleteButton: 'btnB3_Supprimer_LnkBouton',
+  /** „Operacja … posiada N zakończonych promocji. Chcesz nadal ją usunąć ?” */
+  deleteText: 'usun',
+  /** Etykieta przeskoku, gdy kod jest wolny. */
+  freeCodeLabel: 'KOD_WOLNY',
+  /** „Sprzedaż ze stratą. Cena sprzedaży minimum jest … Potwierdzasz Sprzedaż ze stratą ?”: tylko czasem, Tak. */
+  lossText: 'ze strat',
+  backButton: 'btnB1_Retour_LnkBouton',
+} as const
+
+/** Czasy makra promocji w ms, poprawiamy je tylko tutaj. */
+export const PROMO_MACRO_CONFIG = {
+  /** Po EAN-ie program wczytuje artykuł. */
+  afterEan: 800,
+  /** Po „Utworzyć zapis ?” strona się przeładowuje przed kolejnym artykułem. */
+  afterSave: AFTER_CONFIRM_SLEEP_MS,
+  /** Tyle makro czeka po kodzie, czy Mercalys wypełni panel istniejącej operacji (nazwa w polu). */
+  existingCheck: 3000,
+  /** Po przeładowaniu strony artykułów, przed Powrót. */
+  beforeBack: 500,
+} as const
+
+export type PromoMacroItem = { ean: string; price: number; dateTo: string }
+
+/**
+ * Wprowadzanie promocji: Taryfa → Wprowadzanie promocji, kod i nazwa operacji, typ 1, koniec operacji = najpóźniejszy
+ * koniec artykułów, Zatwierdź, Tak, Wpisz; potem dla każdego artykułu EAN, koniec sprzedaży, cena promocji z Enterem,
+ * Tak przy sprzedaży ze stratą (gdy Mercalys zapyta) i Tak przy „Utworzyć zapis ?”. Na końcu Powrót i Mercalys na
+ * pasek zadań. Początku operacji makro nie zmienia: Mercalys podpowiada dzisiejszy. Kod istniejącej operacji wypełnia
+ * panel: makro ją usuwa (Usuń, Tak) i wpisuje kod od nowa. Wymaga odtwarzacza od wersji 39 (WEBIFVALUE).
+ */
+export function buildPromoEntryMacro({ code, name, items }: { code: string; name: string; items: PromoMacroItem[] }) {
+  const screen = PROMO_SCREEN
+  const c = PROMO_MACRO_CONFIG
+  const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
+  const out = [
+    `# Wprowadzanie promocji ${code}: ${items.length} art.`,
+    `WINOPEN|${PROGRAM_WINDOW}`,
+    `WEBENSURE|${WINDOW}|${screen.menuItem}|${screen.tariffTab}`,
+    `WEBCLICK|${WINDOW}|${screen.menuItem}`,
+    `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
+    `WEBKEY|${WINDOW}|${screen.codeField}|^a${code}{Tab}`,
+    // Operacja z tym kodem już jest (panel wypełniony, np. PROMO GNIEZNO): Usuń, Tak, kod od nowa.
+    `WEBIFVALUE|${WINDOW}|${screen.nameField}|\\S|${screen.freeCodeLabel}|${c.existingCheck}`,
+    `WEBCLICK|${WINDOW}|${screen.deleteButton}`,
+    `WEBWAIT|${DIALOG}|Oui|${screen.deleteText}|${PAGE_TIMEOUT_MS}`,
+    `WEBCLICK|${DIALOG}|Oui`,
+    `SLEEP|${c.afterSave}`,
+    `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
+    `WEBKEY|${WINDOW}|${screen.codeField}|^a${code}{Tab}`,
+    `WEBVALUE|${WINDOW}|${screen.nameField}|^$|${c.existingCheck}`,
+    `LABEL|${screen.freeCodeLabel}`,
+    `WEBKEY|${WINDOW}|${screen.nameField}|^a${name}{Tab}`,
+    `WEBKEY|${WINDOW}|${screen.typeField}|^a${screen.type}{Tab}`,
+    `WEBKEY|${WINDOW}|${screen.endField}|^a${mercalysDate(end)}{Tab}`,
+    `WEBVALUE|${WINDOW}|${screen.codeField}|^${code}$`,
+    `WEBVALUE|${WINDOW}|${screen.typeField}|^${screen.type}$`,
+    `WEBVALUE|${WINDOW}|${screen.endField}|${datePattern(end)}`,
+    `WEBCLICK|${WINDOW}|${screen.approveButton}`,
+    `WEBWAIT|${DIALOG}|Oui|${screen.createText}|${PAGE_TIMEOUT_MS}`,
+    `WEBCLICK|${DIALOG}|Oui`,
+    `SLEEP|${c.afterSave}`,
+    `WEBWAIT|${WINDOW}|${screen.enterButton}||${PAGE_TIMEOUT_MS}`,
+    `WEBCLICK|${WINDOW}|${screen.enterButton}`,
+  ]
+  for (const item of items) {
+    const price = item.price.toFixed(2).replace('.', ',')
+    out.push(
+      `# EAN ${item.ean}: ${price} do ${item.dateTo}`,
+      `WEBWAIT|${WINDOW}|${screen.articleField}||${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.articleField}|^a${item.ean}{Enter}`,
+      `SLEEP|${c.afterEan}`,
+      `WEBKEY|${WINDOW}|${screen.saleEndField}|^a${mercalysDate(item.dateTo)}{Tab}`,
+      `WEBVALUE|${WINDOW}|${screen.saleEndField}|${datePattern(item.dateTo)}`,
+      `WEBKEY|${WINDOW}|${screen.priceField}|^a${price}{Enter}`,
+      `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
+      `WEBWAIT|${DIALOG}|Oui|${screen.createText}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${DIALOG}|Oui`,
+      `SLEEP|${c.afterSave}`,
+    )
+  }
+  out.push(
+    // Po ostatnim zapisie strona artykułów się przeładowuje: klik w starą stronę by przepadł, a schowany program
+    // wracał na wierzch po przeładowaniu. Powrót dopiero na nowej stronie, chowanie po wejściu na nagłówek operacji.
+    `WEBWAIT|${WINDOW}|${screen.articleField}||${PAGE_TIMEOUT_MS}`,
+    `SLEEP|${c.beforeBack}`,
+    `WEBCLICK|${WINDOW}|${screen.backButton}`,
+    `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
+    `WINMIN|${PROGRAM_WINDOW}`,
+  )
+  return out.join('\r\n') + '\r\n'
+}
+
+/** Obsługa → Dostawcy (ac-e001): karta dostawcy, a po Excel wybór zakresu kodów do listy. */
+const SUPPLIER_SCREEN = {
+  maintenanceTab: 'mnTp_MAINTENANCE',
+  menuItem: 'mnTv_MAINTENANCE_ac-e001_Fournisseurs',
+  codeField: 'lstZ01_Code_TxtBox',
+  originField: 'lstZ02_Origine_TxtBox',
+  origin: '2',
+  keywordField: 'txtZ05_MotDirecteur_TxtBox',
+  /**
+   * Wymagany: bez niego Zatwierdź daje „Uwaga! Musisz wpisać kod NIP”. Na karcie nowego dostawcy (po kodzie) to zwykłe
+   * pole tekstowe; `lstZ43_CodeNIP_TbxNip_TxtBox` jest tylko na pustej karcie z kodem 0.
+   */
+  nipField: 'txtZ43_CodeNIP_TxtBox',
+  name1Field: 'txtZ03_RaisonSociale1_TxtBox',
+  name2Field: 'txtZ04_RaisonSociale2_TxtBox',
+  streetField: 'txtZ06_Adresse1_TxtBox',
+  postalCodeField: 'txtZ08_CodePostal_TxtBox',
+  officeField: 'txtZ13_BureauDistr_TxtBox',
+  phonePrefixField: 'txtZ10_TelephonePrefixe_TxtBox',
+  phoneNumberField: 'txtZ10_TelephoneNumero_TxtBox',
+  /** Telefon jest wymagany, a w aplikacji go nie mamy: 11 w obu polach (decyzja sklepu). */
+  phone: '11',
+  /** „Aktu. stanów zamknięcie dostawy”. */
+  stockOnCloseCheckbox: 'chkZ48_MajStockClotureLiv_CheckBox1',
+  /** „Pełna realiz. zamów.” (ExceptionLivraison); „Zam. uzupeł.” obok to Reliquats. Ustalone z kolejności pól na ekranie. */
+  fullOrderCheckbox: 'chkZ17_ExceptionLivraison_CheckBox1',
+  approveButton: 'btnB9_Valider_LnkBouton',
+  createText: 'Utworzy',
+  excelButton: 'btnB10_Excel_LnkBouton',
+  /** Ekran Excel: zakres kodów, domyślnie cała lista. */
+  excelFromField: 'lstZ1_FrsMin_TxtBox',
+  excelApproveButton: 'btnB2_Valider_LnkBouton',
+} as const
+
+/** Tyle makro czeka po kodzie, czy Mercalys wczyta kartę istniejącego dostawcy (nazwa w polu). */
+const SUPPLIER_EXISTING_CHECK_MS = 3000
+
+export type SupplierMacro = {
+  code: string
+  keyword: string
+  nip: string
+  name1: string
+  name2: string
+  street: string
+  postalCode: string
+  city: string
+}
+
+/**
+ * Tekst do WEBKEY: odtwarzacz naciska prawdziwe klawisze, więc znaki specjalne AutoHotkey idą w klamrach, a `|` (separator
+ * linii makra) i znaki nowej linii wypadają.
+ */
+const keysText = (value: string) => value.replace(/[|\r\n]/g, ' ').replace(/[+^!#{}]/g, '{$&}')
+
+/** Tyle kolejnych kodów makro próbuje, gdy proponowany jest w Mercalys zajęty. */
+export const SUPPLIER_CODE_TRIES = 10
+
+/**
+ * Nowy dostawca: Obsługa → Dostawcy, kod (zajęty, czyli z wczytaną kartą: kolejny, najwyżej {@link SUPPLIER_CODE_TRIES}
+ * prób, potem makro staje), Pochodz. 2, hasło, NIP, nazwa, adres, kod pocztowy, biuro dystr., telefon 11 i 11, pola Aktu.
+ * stanów zamknięcie dostawy i Pełna realiz. zamów., Zatwierdź, Tak, potem Excel z całą listą dostawców i Mercalys na
+ * pasek zadań. Wymaga odtwarzacza od wersji 40 (WEBFREECODE).
+ */
+export function buildSupplierMacro(supplier: SupplierMacro) {
+  const s = SUPPLIER_SCREEN
+  const key = (field: string, value: string, end = '{Tab}') => `WEBKEY|${WINDOW}|${field}|^a${keysText(value)}${end}`
+  return (
+    [
+      `# Nowy dostawca ${supplier.code} (albo kolejny wolny): ${keysText(supplier.name1)}`,
+      `WINOPEN|${PROGRAM_WINDOW}`,
+      `WEBENSURE|${WINDOW}|${s.menuItem}|${s.maintenanceTab}`,
+      // Kod zajęty (lista dostawców w aplikacji jest nieaktualna): Mercalys wczytuje kartę istniejącego dostawcy, więc
+      // odtwarzacz bierze kolejny kod, każdy na świeżej karcie. Wszystkie zajęte zatrzymują makro, nic nie jest nadpisane.
+      `WEBFREECODE|${WINDOW}|${s.menuItem}|${s.codeField}|${s.name1Field}|${supplier.code}|${SUPPLIER_CODE_TRIES}|${SUPPLIER_EXISTING_CHECK_MS}`,
+      key(s.originField, s.origin),
+      key(s.keywordField, supplier.keyword),
+      key(s.nipField, supplier.nip),
+      key(s.name1Field, supplier.name1),
+      ...(supplier.name2 ? [key(s.name2Field, supplier.name2)] : []),
+      key(s.streetField, supplier.street),
+      key(s.postalCodeField, supplier.postalCode),
+      key(s.officeField, supplier.city),
+      key(s.phonePrefixField, s.phone, '{Enter}'),
+      key(s.phoneNumberField, s.phone, '{Enter}'),
+      `WEBCHECK|${WINDOW}|${s.stockOnCloseCheckbox}`,
+      `WEBCHECK|${WINDOW}|${s.fullOrderCheckbox}`,
+      // Bez `|` w wyrażeniu: odtwarzacz dzieli po nim linię. Kod sprawdził już WEBFREECODE.
+      `WEBVALUE|${WINDOW}|${s.codeField}|^0*[1-9][0-9]*$`,
+      `WEBVALUE|${WINDOW}|${s.originField}|^${s.origin}$`,
+      // Mercalys może dopisać myślniki albo spacje między cyframi.
+      `WEBVALUE|${WINDOW}|${s.nipField}|^${supplier.nip.split('').join('[- ]?')}$`,
+      `WEBVALUE|${WINDOW}|${s.stockOnCloseCheckbox}|^tak$`,
+      `WEBVALUE|${WINDOW}|${s.fullOrderCheckbox}|^tak$`,
+      `WEBCLICK|${WINDOW}|${s.approveButton}`,
+      `WEBWAIT|${DIALOG}|Oui|${s.createText}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${DIALOG}|Oui`,
+      `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
+      `WEBWAIT|${WINDOW}|${s.excelButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${s.excelButton}`,
+      `WEBWAIT|${WINDOW}|${s.excelFromField}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${s.excelApproveButton}`,
+      `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
       `WINMIN|${PROGRAM_WINDOW}`,
     ].join('\r\n') + '\r\n'
   )

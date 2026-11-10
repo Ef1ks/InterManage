@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
+import { CounterReport } from '@/features/sales/CounterReport'
 import { GratisReport } from '@/features/sales/GratisReport'
 import { LowMarginReport } from '@/features/sales/LowMarginReport'
 import { OverpaymentReport } from '@/features/sales/OverpaymentReport'
@@ -14,6 +15,7 @@ import { SalesComparisonReport } from '@/features/sales/SalesComparisonReport'
 import { TopSalesReport } from '@/features/sales/TopSalesReport'
 import { SlowMovingReport } from '@/features/sales/SlowMovingReport'
 import { StockGapReport } from '@/features/sales/StockGapReport'
+import { SupplierTurnoverReport } from '@/features/sales/SupplierTurnoverReport'
 import { NegativeStockReport } from '@/features/sales/NegativeStockReport'
 import { ZeroStockReport } from '@/features/sales/ZeroStockReport'
 import { salesPaths } from '@/features/sales/paths'
@@ -43,12 +45,14 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="porownanie" element={<SalesComparisonReport storeId={store.id} />} />
         <Route path="podsumowanie" element={<PeriodSummaryReport storeId={store.id} />} />
         <Route path="topy" element={<TopSalesReport storeId={store.id} />} />
+        <Route path="raport-lady" element={<CounterReport storeId={store.id} />} />
         <Route path="koszty-garmazu" element={<SalesComparisonReport key="deli" storeId={store.id} kind="deli" />} />
         <Route path="zakup-bazowy-poza-baza" element={<PriceCheckReport storeId={store.id} />} />
         <Route path="przeplacone-artykuly" element={<OverpaymentReport storeId={store.id} />} />
         <Route path="za-niskie-marze" element={<LowMarginReport storeId={store.id} />} />
         <Route path="gratisy" element={<GratisReport storeId={store.id} />} />
         <Route path="protokoly" element={<ProtocolReport storeId={store.id} />} />
+        <Route path="obroty-dostawcow" element={<SupplierTurnoverReport storeId={store.id} />} />
         <Route path="promocje" element={<PromotionReport storeId={store.id} />} />
         <Route path="zerowki" element={<ZeroStockReport storeId={store.id} />} />
         <Route path="niesprzedajace-sie" element={<SlowMovingReport storeId={store.id} />} />
