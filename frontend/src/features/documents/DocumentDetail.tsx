@@ -15,6 +15,7 @@ import { DocumentProductionCards } from '@/features/deli-production/TransferProd
 import { documentPrintPath, useDocument } from '@/features/documents/api'
 import { DeliveryCorrections } from '@/features/documents/DeliveryCorrections'
 import { ErrorMarkBanner, MarkAsErrorButton } from '@/features/documents/DocumentErrorMark'
+import { VerificationMenu } from '@/features/documents/DocumentVerification'
 import { DocumentGratisSection } from '@/features/documents/DocumentGratis'
 import { DocumentKsefInvoices } from '@/features/documents/DocumentKsefInvoices'
 import { DocumentPrintMenu } from '@/features/documents/DocumentPrintMenu'
@@ -154,6 +155,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
             )}
           </h2>
           <div className="flex flex-wrap items-center gap-2">
+            <VerificationMenu storeId={storeId} document={document} />
             <MarkAsErrorButton storeId={storeId} document={document} />
             <DocumentPrintMenu
               path={(format) => documentPrintPath(storeId, document, format)}

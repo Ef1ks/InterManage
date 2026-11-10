@@ -58,8 +58,8 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as PriceCheckStatus[]).map((v
   label: STATUS_LABELS[value],
 }))
 
-export type PeriodFilter = '7' | '14' | '30'
-export const PERIOD_FILTERS: { value: PeriodFilter; label: string }[] = [
+export type PeriodOption = { value: string; label: string }
+export const PERIOD_FILTERS: PeriodOption[] = [
   { value: '7', label: '7 dni' },
   { value: '14', label: '14 dni' },
   { value: '30', label: '30 dni' },

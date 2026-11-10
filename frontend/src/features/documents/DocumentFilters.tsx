@@ -10,6 +10,7 @@ import {
   type HiddenValueRange,
   type Presence,
   type ValueField,
+  type VerificationFilter,
   useSuppliers,
 } from '@/features/documents/api'
 import { parseAmount } from '@/features/documents/format'
@@ -44,6 +45,13 @@ const CORRECTION_OPTIONS: { value: Presence; label: string }[] = [
   { value: 'all', label: 'Wszystkie' },
   { value: 'with', label: 'Z korektami' },
   { value: 'without', label: 'Bez korekt' },
+]
+
+const VERIFICATION_OPTIONS: { value: VerificationFilter; label: string }[] = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'none', label: 'Bez statusu' },
+  { value: 'in_progress', label: 'W trakcie' },
+  { value: 'verified', label: 'Zweryfikowane' },
 ]
 
 const CLOSED_OPTIONS: { value: Presence; label: string }[] = [
@@ -82,6 +90,8 @@ type Props = {
   gratis: { value: GratisFilter; onChange: (value: GratisFilter) => void } | null
   /** Przyjęcia oznaczone jako błąd zamiast liczonych; {@code null} = niedostępny dla tego typu. */
   markedAsError: { value: boolean; onChange: (value: boolean) => void } | null
+  /** Status weryfikacji przyjęć; {@code null} = niedostępny dla tego typu. */
+  verification: { value: VerificationFilter; onChange: (value: VerificationFilter) => void } | null
   hiddenValues: HiddenValueRange
   onHiddenValuesChange: (range: HiddenValueRange) => void
   hiddenSuppliers: string[]
@@ -100,6 +110,7 @@ export function DocumentFilters({
   closed,
   gratis,
   markedAsError,
+  verification,
   hiddenValues,
   onHiddenValuesChange,
   hiddenSuppliers,
@@ -112,7 +123,8 @@ export function DocumentFilters({
     [invoice, corrections, closed, gratis].filter((filter) => filter && filter.value !== 'all').length +
     (hiddenValues.from !== null || hiddenValues.to !== null ? 1 : 0) +
     (hiddenSuppliers.length > 0 ? 1 : 0) +
-    (markedAsError?.value ? 1 : 0)
+    (markedAsError?.value ? 1 : 0) +
+    (verification && verification.value !== 'all' ? 1 : 0)
 
   const options = useMemo<ComboboxOption[]>(() => {
     const listed = (suppliers ?? [])
@@ -146,7 +158,7 @@ export function DocumentFilters({
             </DialogDescription>
           </DialogHeader>
 
-          {(invoice || corrections || closed || gratis || markedAsError) && (
+          {(invoice || corrections || closed || gratis || markedAsError || verification) && (
             <div className="grid gap-4">
               {closed && (
                 <FilterRow label="Raport okresowy" hint="Zakończone poszły w zamkniętym raporcie za okres.">
@@ -175,6 +187,16 @@ export function DocumentFilters({
                     options={CORRECTION_OPTIONS}
                     value={corrections.value}
                     onChange={corrections.onChange}
+                  />
+                </FilterRow>
+              )}
+              {verification && (
+                <FilterRow label="Weryfikacja" hint="W trakcie: przyjęcie czeka na sprawdzenie przez kierownika.">
+                  <SegmentedField
+                    label="Weryfikacja"
+                    options={VERIFICATION_OPTIONS}
+                    value={verification.value}
+                    onChange={verification.onChange}
                   />
                 </FilterRow>
               )}

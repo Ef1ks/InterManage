@@ -19,6 +19,7 @@ import {
   type HiddenValueRange,
   type Presence,
   type ValueField,
+  type VerificationFilter,
   useDocuments,
 } from '@/features/documents/api'
 import { AutoInvoiceMatching } from '@/features/documents/AutoInvoiceMatching'
@@ -26,6 +27,7 @@ import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
 import { TransferTargetBadge } from '@/features/documents/DocumentTransferTarget'
+import { VerificationBadge } from '@/features/documents/DocumentVerification'
 import { DocumentFilters, useHiddenSuppliers } from '@/features/documents/DocumentFilters'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
 import {
@@ -86,6 +88,16 @@ export function BackToTypes() {
 
 /** Filtry „ma / nie ma” w adresie strony: `?faktura=z|bez` itd.; `all` = brak parametru. */
 const PRESENCE_PARAMS: Record<Presence, string | null> = { all: null, with: 'z', without: 'bez' }
+
+/** Filtr weryfikacji przyjęć w adresie (`?weryfikacja=`). */
+const VERIFICATION_PARAMS: Record<Exclude<VerificationFilter, 'all'>, string> = {
+  none: 'bez',
+  in_progress: 'w-trakcie',
+  verified: 'zweryfikowane',
+}
+const VERIFICATION_FILTERS: Record<string, VerificationFilter> = Object.fromEntries(
+  Object.entries(VERIFICATION_PARAMS).map(([filter, param]) => [param, filter as VerificationFilter]),
+)
 const presenceOf = (value: string | null): Presence => (value === 'z' ? 'with' : value === 'bez' ? 'without' : 'all')
 
 const SORT_COLUMNS: DocumentColumn[] = ['number', 'date', 'supplier', 'supplierDocument', 'lines', 'purchase', 'sale']
@@ -149,6 +161,10 @@ export function DocumentsList({ storeId }: { storeId: string }) {
   const gratis: GratisFilter = params.get('gratis') === 'moze' ? 'candidate' : presenceOf(params.get('gratis'))
   const markedAsError = upperType === 'PZ' && params.get('bledne') === 'tak'
   const setMarkedAsError = (value: boolean) => updateParams({ bledne: value ? 'tak' : null })
+  const verification: VerificationFilter =
+    upperType === 'PZ' ? (VERIFICATION_FILTERS[params.get('weryfikacja') ?? ''] ?? 'all') : 'all'
+  const setVerification = (value: VerificationFilter) =>
+    updateParams({ weryfikacja: value === 'all' ? null : VERIFICATION_PARAMS[value] })
   const hiddenValues = hiddenValuesOf(params, upperType)
   const hidingValues = hiddenValues.from !== null || hiddenValues.to !== null
   const setInvoice = (value: Presence) => updateParams({ faktura: PRESENCE_PARAMS[value] })
@@ -207,6 +223,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
         hiddenValues,
         hiddenSuppliers,
         markedAsError,
+        verification,
       },
       sort,
     )
@@ -242,7 +259,8 @@ export function DocumentsList({ storeId }: { storeId: string }) {
     (gratisFilter && gratis !== 'all') ||
     hidingValues ||
     hiddenSuppliers.length > 0 ||
-    markedAsError
+    markedAsError ||
+    verification !== 'all'
   // Pola wyszukiwania znikną z adresu po chwili, razem z zapytaniem.
   const clearFilters = () => {
     setQuery('')
@@ -256,6 +274,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
       ukryj_do: null,
       kwota: null,
       bledne: null,
+      weryfikacja: null,
     })
     setHiddenSuppliers([])
   }
@@ -298,6 +317,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 closed={correctionFilter ? { value: closed, onChange: setClosed } : null}
                 gratis={gratisFilter ? { value: gratis, onChange: setGratis } : null}
                 markedAsError={upperType === 'PZ' ? { value: markedAsError, onChange: setMarkedAsError } : null}
+                verification={upperType === 'PZ' ? { value: verification, onChange: setVerification } : null}
                 hiddenValues={hiddenValues}
                 onHiddenValuesChange={setHiddenValues}
                 hiddenSuppliers={hiddenSuppliers}
@@ -460,6 +480,11 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                           {document.errorMarkedAt && (
                             <Badge className="bg-red-200 text-red-950 dark:bg-red-950/60 dark:text-red-100">błąd</Badge>
                           )}
+                          <VerificationBadge
+                            status={document.verificationStatus}
+                            at={document.verificationAt}
+                            by={document.verificationBy}
+                          />
                           <GratisBadge document={document} />
                           <CorrectionBadge document={document} type={upperType} />
                           <TransferTargetBadge document={document} />

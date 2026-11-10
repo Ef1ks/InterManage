@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Za niskie marże z ostatnich {@code periodDays} dni (wg daty przyjęcia): przyjęcia PZ z artykułem, którego marża
- * z ceny katalogowej (bez promocji) jest o co najmniej {@code marginGap} punktów procentowych niższa niż marża wymagana
- * na jego nomenklaturze, oraz przyjęcia, które już mają status wyjaśniania. {@code marginsConfigured}: sklep ma
+ * Marże poza normą z ostatnich {@code periodDays} dni (wg daty przyjęcia): przyjęcia PZ z artykułem, którego marża
+ * z aktualnej ceny na kasie jest o co najmniej {@code lowGap} punktów procentowych niższa albo o co najmniej
+ * {@code highGap} wyższa niż marża wymagana na jego nomenklaturze, oraz przyjęcia, które już mają status wyjaśniania. {@code marginsConfigured}: sklep ma
  * ustawioną marżę wymaganą. {@code excludedSuppliers}: dostawcy, których nie dotyczy marża, {@code suppliers}: lista do
  * ich wyboru.
  */
@@ -17,13 +17,19 @@ public record LowMarginReport(
         LocalDate from,
         LocalDate to,
         int periodDays,
-        int marginGap,
+        BigDecimal lowGap,
+        BigDecimal highGap,
         boolean marginsConfigured,
         LocalDate documentsCoveredUntil,
         LocalDateTime documentsReportGeneratedAt,
         List<ReportSupplier> excludedSuppliers,
         List<ReportSupplier> suppliers,
         List<Delivery> deliveries) {
+
+    /** Marża artykułu: za niska ({@code LOW}) albo za wysoka ({@code HIGH}) wobec wymaganej. */
+    public enum MarginDeviation {
+        LOW, HIGH
+    }
 
     /** Skąd wiadomo, że w dniu przyjęcia trwała promocja. */
     public enum PromotionSource {
@@ -55,7 +61,9 @@ public record LowMarginReport(
      * Artykuł z za niską marżą. Ilość i cena zakupu po korektach. {@code salePrice}: aktualna cena zwykła brutto na kasie
      * (bez artykułu w kartotece cena katalogowa z dnia przyjęcia), od niej liczy się marża (% od sprzedaży netto);
      * {@code documentSalePrice}: cena z dokumentu PZ, {@code promotion}: była promocyjna. {@code targetPurchasePrice}: cena zakupu dająca marżę wymaganą, {@code excessValue}: różnica
-     * × ilość. {@code regionCode}: rejon nomenklatury z linii (do własnych kategorii raportu).
+     * × ilość (przy za niskiej marży brakująca marża, przy za wysokiej nadwyżka, obie na plus). {@code deviation}: za
+     * niska albo za wysoka. {@code currentPromoPrice} / {@code currentPromoTo}: artykuł jest dziś w promocji (cena
+     * promocyjna i koniec); marża liczy się dalej z ceny zwykłej. {@code regionCode}: rejon nomenklatury z linii (do własnych kategorii raportu).
      */
     public record Line(
             String itm8,
@@ -74,6 +82,9 @@ public record LowMarginReport(
             BigDecimal requiredMargin,
             BigDecimal targetPurchasePrice,
             BigDecimal excessValue,
-            boolean corrected) {
+            boolean corrected,
+            MarginDeviation deviation,
+            BigDecimal currentPromoPrice,
+            LocalDate currentPromoTo) {
     }
 }

@@ -90,6 +90,18 @@ public class Document {
     @JoinColumn(name = "error_marked_by")
     private AppUser errorMarkedBy;
 
+    /** Weryfikacja przyjęcia PZ: w trakcie (czeka na kierownika) albo zweryfikowane; pusty = bez statusu. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_status")
+    private DocumentVerificationStatus verificationStatus;
+
+    @Column(name = "verification_at")
+    private Instant verificationAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "verification_by")
+    private AppUser verificationBy;
+
     @Column(name = "line_count", nullable = false)
     private int lineCount;
 
@@ -186,6 +198,32 @@ public class Document {
 
     public boolean isMarkedAsError() {
         return errorMarkedAt != null;
+    }
+
+    /**
+     * Ustawia albo zdejmuje ({@code null}) status weryfikacji; zwraca, czy coś się zmieniło. Nie zmienia
+     * {@code updatedAt}, bo weryfikacja nie zmienia kwot w raportach.
+     */
+    public boolean setVerification(DocumentVerificationStatus status, AppUser user) {
+        if (verificationStatus == status) {
+            return false;
+        }
+        verificationStatus = status;
+        verificationAt = status == null ? null : Instant.now();
+        verificationBy = status == null ? null : user;
+        return true;
+    }
+
+    public DocumentVerificationStatus getVerificationStatus() {
+        return verificationStatus;
+    }
+
+    public Instant getVerificationAt() {
+        return verificationAt;
+    }
+
+    public AppUser getVerificationBy() {
+        return verificationBy;
     }
 
     /** Linia z pliku: nowa albo zaktualizowana. {@code true}, gdy coś się zmieniło. */

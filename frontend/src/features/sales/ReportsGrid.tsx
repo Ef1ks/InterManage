@@ -94,9 +94,9 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
       },
       {
         path: salesPaths.lowMargins,
-        title: 'Za niskie marże',
+        title: 'Marże poza normą',
         description:
-          'Artykuły z marżą o 10 punktów niższą niż wymagana na nomenklaturze, liczoną z ceny poza promocją. Do wyjaśnienia.',
+          'Artykuły z marżą o 5 punktów niższą albo o 10 wyższą niż wymagana na nomenklaturze, z aktualnej ceny na kasie. Do wyjaśnienia.',
         icon: TrendingDownIcon,
         fromDocuments: 'Z przyjęć PZ i ich korekt',
       },

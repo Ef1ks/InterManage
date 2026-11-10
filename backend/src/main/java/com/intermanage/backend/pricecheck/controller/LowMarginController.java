@@ -11,11 +11,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.document.dto.DeliveryReportExcludedSuppliersRequest;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport;
+import com.intermanage.backend.pricecheck.dto.LowMarginSettingsRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewRequest;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
 import com.intermanage.backend.pricecheck.entity.ReviewedReport;
@@ -40,11 +42,19 @@ public class LowMarginController {
         this.priceCheckService = priceCheckService;
     }
 
-    /** Przyjęcia z ostatnich {@value LowMarginService#PERIOD_DAYS} dni. */
+    /** Przyjęcia z ostatnich {@code days} dni (domyślnie {@value LowMarginService#PERIOD_DAYS}). */
     @GetMapping
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
-    public LowMarginReport report(@PathVariable UUID storeId) {
-        return lowMarginService.report(storeId);
+    public LowMarginReport report(@PathVariable UUID storeId, @RequestParam(defaultValue = "30") int days) {
+        return lowMarginService.report(storeId, days);
+    }
+
+    /** Progi marży sklepu (punkty procentowe od wymaganej); zwraca raport po zmianie. */
+    @PutMapping("/settings")
+    @PreAuthorize("hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public LowMarginReport settings(@PathVariable UUID storeId, @Valid @RequestBody LowMarginSettingsRequest request,
+            @RequestParam(defaultValue = "30") int days, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return lowMarginService.setGaps(storeId, request.lowGap(), request.highGap(), days, principal.getId());
     }
 
     /** Zastępuje listę dostawców, których nie dotyczy marża; zwraca raport po zmianie. */
@@ -52,8 +62,8 @@ public class LowMarginController {
     @PreAuthorize("hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
     public LowMarginReport excludedSuppliers(@PathVariable UUID storeId,
             @Valid @RequestBody DeliveryReportExcludedSuppliersRequest request,
-            @AuthenticationPrincipal AppUserPrincipal principal) {
-        return lowMarginService.setExcludedSuppliers(storeId, request.supplierCodes(), principal.getId());
+            @RequestParam(defaultValue = "30") int days, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return lowMarginService.setExcludedSuppliers(storeId, request.supplierCodes(), days, principal.getId());
     }
 
     /** Nowy status wyjaśniania przyjęcia; zwraca historię zmian od najnowszej. */

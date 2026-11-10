@@ -78,6 +78,8 @@ class LowMarginIntegrationTests {
                 values (?::uuid, 'Zeszyt2.xlsx', ?::timestamp, ?::date, ?::date, 1, 1, 1, 0, 0) returning id""",
                 String.class, store, today + " 08:00", today.minusDays(200), today);
         createNomenclature();
+        // Większość przypadków jest liczona z progiem 10 punktów w dół; domyślne progi sprawdza osobny test.
+        gaps("10", "10");
     }
 
     @Test
@@ -97,7 +99,8 @@ class LowMarginIntegrationTests {
         mvc.perform(get(url()).cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.marginsConfigured").value(true))
-                .andExpect(jsonPath("$.marginGap").value(10))
+                .andExpect(jsonPath("$.lowGap").value(10.0))
+                .andExpect(jsonPath("$.highGap").value(10.0))
                 .andExpect(jsonPath("$.deliveries", hasSize(1)))
                 .andExpect(jsonPath("$.deliveries[0].id").value(flagged))
                 .andExpect(jsonPath("$.deliveries[0].linesPurchaseValue").value(100.0))
@@ -107,7 +110,54 @@ class LowMarginIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[0].lines[0].marginPercent").value(20.0))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].requiredMargin").value(30.0))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].targetPurchasePrice").value(8.75))
-                .andExpect(jsonPath("$.deliveries[0].lines[0].promotion").isEmpty());
+                .andExpect(jsonPath("$.deliveries[0].lines[0].promotion").isEmpty())
+                .andExpect(jsonPath("$.deliveries[0].lines[0].deviation").value("LOW"));
+    }
+
+    @Test
+    void defaultGapsFlagMarginsFivePointsBelowAndTenAboveRequired() throws Exception {
+        jdbc.update("delete from low_margin_settings where store_id = ?::uuid", store);
+        requiredMargin("57", "30");
+        // Zakup 10 zł: 13,33 zł daje 25% (5 punktów niżej), 13,34 zł już 25,04%.
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "13.33", "570101");
+        delivery(ABOVE_THRESHOLD, 5, "10", "100.00", "13.34", "570101");
+        // 16,67 zł daje 40,01% (10 punktów wyżej), 16,66 zł 39,98%.
+        delivery(LISTED, 5, "10", "100.00", "16.67", "570101");
+        delivery(LISTED_LOW, 5, "10", "100.00", "16.66", "570101");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.lowGap").value(5.0))
+                .andExpect(jsonPath("$.highGap").value(10.0))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD, LISTED)))
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED
+                        + "')].lines[0].deviation").value("HIGH"))
+                // Nadwyżka: cena dająca 30% to 11,67 zł, więc 10 szt. kupiono taniej o 16,69 zł.
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED
+                        + "')].lines[0].excessValue").value(16.69))
+                // Kwota przyjęcia to tylko brakująca marża z za niskich.
+                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED
+                        + "')].excessValue").value(0));
+    }
+
+    @Test
+    void storeSetsOwnGapsAndLongerPeriod() throws Exception {
+        requiredMargin("57", "30");
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "13.33", "570101");
+        delivery(OLD, 60, "10", "100.00", "12.50", "570101");
+
+        mvc.perform(put(url() + "/settings?days=90").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lowGap\":5,\"highGap\":15}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lowGap").value(5.0))
+                .andExpect(jsonPath("$.highGap").value(15.0))
+                .andExpect(jsonPath("$.periodDays").value(90))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD, OLD)));
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD)));
+        mvc.perform(get(url() + "?days=366").cookie(owner)).andExpect(status().isBadRequest());
+        mvc.perform(put(url() + "/settings").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lowGap\":-1,\"highGap\":15}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -330,6 +380,11 @@ class LowMarginIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.marginsConfigured").value(false))
                 .andExpect(jsonPath("$.deliveries", hasSize(0)));
+    }
+
+    private void gaps(String low, String high) {
+        jdbc.update("insert into low_margin_settings (store_id, low_gap, high_gap) values (?::uuid, ?::numeric, ?::numeric)",
+                store, low, high);
     }
 
     private String url() {

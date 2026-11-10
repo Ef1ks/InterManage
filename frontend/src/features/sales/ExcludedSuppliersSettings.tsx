@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -20,6 +20,8 @@ type Props = {
   placeholder: string
   /** Początek zdania z listą dostawców dla osoby bez prawa zmian. */
   readOnlyLabel: string
+  /** Dodatkowe ustawienia raportu nad listą dostawców. */
+  children?: ReactNode
 }
 
 const supplierLabel = (supplier: ReportSupplier) => `${supplier.code} ${supplier.name}`
@@ -33,10 +35,11 @@ export function ExcludedSuppliersSettings({
   label,
   placeholder,
   readOnlyLabel,
+  children,
 }: Props) {
   const canEdit = useCan('SALES', 'EDIT')
   const [open, setOpen] = useState(false)
-  if (!canEdit && report.excludedSuppliers.length === 0) return null
+  if (!canEdit && report.excludedSuppliers.length === 0 && !children) return null
 
   return (
     <>
@@ -55,12 +58,15 @@ export function ExcludedSuppliersSettings({
             <DialogTitle className="text-lg">Ustawienia raportu</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
+          {children}
           {canEdit ? (
             <SupplierField storeId={storeId} path={path} report={report} label={label} placeholder={placeholder} />
           ) : (
-            <FormNote>
-              {readOnlyLabel}: {report.excludedSuppliers.map(supplierLabel).join(', ')}.
-            </FormNote>
+            report.excludedSuppliers.length > 0 && (
+              <FormNote>
+                {readOnlyLabel}: {report.excludedSuppliers.map(supplierLabel).join(', ')}.
+              </FormNote>
+            )
           )}
         </DialogContent>
       </Dialog>

@@ -23,6 +23,7 @@ import {
   MoneyPill,
   OTHER_CATEGORY,
   PERIOD_FILTERS,
+  type PeriodOption,
   periodStart,
   ReviewedDeliveryRow,
   type ReviewedDelivery,
@@ -75,6 +76,7 @@ export function ReviewedReportPage<D extends Delivery>({
   notice,
   filters,
   filterParams = [],
+  periods = PERIOD_FILTERS,
   linesLabel,
   excessLabel,
   emptyDeliveryText,
@@ -94,6 +96,11 @@ export function ReviewedReportPage<D extends Delivery>({
   filters?: ReactNode
   /** Parametry adresu filtrów z `filters`: czyści je „Wyczyść filtry”. */
   filterParams?: string[]
+  /**
+   * Okresy do wyboru (`?okres=`, domyślnie 30 dni). Krótsze niż okres raportu zawęża przeglądarka; dłuższy raport
+   * pobiera sam, z tym samym parametrem adresu.
+   */
+  periods?: PeriodOption[]
   /** Podpis liczby artykułów w wierszu przyjęcia. */
   linesLabel: string
   /** Podpis kwoty `excessValue`. */
@@ -108,7 +115,7 @@ export function ReviewedReportPage<D extends Delivery>({
   const { expanded, toggle } = useExpanded(`${reportKind}-expanded:${storeId}`)
   const { text: search, setText: setSearch } = useSearchParamText('szukaj')
   const supplier = params.get('dostawca') ?? ALL_SUPPLIERS
-  const period = PERIOD_FILTERS.find((option) => option.value === params.get('okres'))?.value ?? '30'
+  const period = periods.find((option) => option.value === params.get('okres'))?.value ?? '30'
   const setParam = (key: string, value: string | null) =>
     setParams(
       (current) => {
@@ -222,7 +229,7 @@ export function ReviewedReportPage<D extends Delivery>({
                 Przyjęte w ostatnich
                 <SegmentedField
                   label="Okres"
-                  options={PERIOD_FILTERS}
+                  options={periods}
                   value={period}
                   onChange={(next) => setParam('okres', next === '30' ? null : next)}
                 />

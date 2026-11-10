@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -19,7 +20,9 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.StoreTime;
+import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentType;
@@ -33,22 +36,28 @@ import com.intermanage.backend.pricecheck.component.ExcludedSuppliers;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport.Delivery;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport.Line;
+import com.intermanage.backend.pricecheck.dto.LowMarginReport.MarginDeviation;
 import com.intermanage.backend.pricecheck.dto.LowMarginReport.PromotionSource;
 import com.intermanage.backend.pricecheck.dto.PriceCheckReviewResponse;
 import com.intermanage.backend.pricecheck.dto.ReportSupplier;
+import com.intermanage.backend.pricecheck.entity.LowMarginSettings;
 import com.intermanage.backend.pricecheck.entity.PriceCheckReview;
 import com.intermanage.backend.pricecheck.entity.ReviewedReport;
 import com.intermanage.backend.pricecheck.mapper.PriceCheckMapper;
 import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
+import com.intermanage.backend.pricecheck.repository.LowMarginSettingsRepository;
 import com.intermanage.backend.pricecheck.repository.PriceCheckReviewRepository;
 import com.intermanage.backend.pricecheck.service.PriceCheckService.Cadencier;
 import com.intermanage.backend.promotion.service.PromotionReportService;
 import com.intermanage.backend.sales.repository.SaleRepository;
+import com.intermanage.backend.store.repository.StoreRepository;
+
 
 /**
- * Za niskie marże. Każde przyjęcie PZ z ostatnich {@value #PERIOD_DAYS} dni: artykuł trafia do raportu, gdy jego marża
- * (% od sprzedaży netto, zakup po korektach) jest o co najmniej {@value #MARGIN_GAP} punktów procentowych niższa niż
- * marża wymagana na jego nomenklaturze ({@link NomenclatureMarginService}).
+ * Marże poza normą. Każde przyjęcie PZ z wybranego okresu (domyślnie {@value #PERIOD_DAYS} dni, najwyżej
+ * {@value #MAX_PERIOD_DAYS}): artykuł trafia do raportu, gdy jego marża (% od sprzedaży netto, zakup po korektach) jest
+ * o co najmniej próg niższa albo wyższa niż marża wymagana na jego nomenklaturze ({@link NomenclatureMarginService}).
+ * Progi w punktach procentowych sklep ustawia sam ({@link LowMarginSettings}), domyślnie 5 w dół i 10 w górę.
  * <p>
  * Marżę liczymy z aktualnej ceny zwykłej na kasie (kartoteka po plikach TRACEART, bez trwającej promocji), a nie z ceny
  * z dokumentu: po zmianie ceny raport od razu liczy z nowej. Artykuł spoza kartoteki bierze cenę z dnia przyjęcia: z
@@ -62,7 +71,12 @@ import com.intermanage.backend.sales.repository.SaleRepository;
 public class LowMarginService {
 
     public static final int PERIOD_DAYS = 30;
-    static final int MARGIN_GAP = 10;
+    /** Najdłuższy okres raportu w dniach. */
+    public static final int MAX_PERIOD_DAYS = 365;
+    /** Domyślnie marża niższa od wymaganej o tyle punktów procentowych (i więcej) jest za niska. */
+    static final BigDecimal LOW_GAP = BigDecimal.valueOf(5);
+    /** Domyślnie marża wyższa od wymaganej o tyle punktów procentowych (i więcej) jest za wysoka. */
+    static final BigDecimal HIGH_GAP = BigDecimal.valueOf(10);
     /** Kody nomenklatury od podrodziny do rejonu: obowiązuje najbardziej szczegółowy. */
     private static final int[] CODE_LENGTHS = {6, 4, 2};
 
@@ -79,12 +93,16 @@ public class LowMarginService {
     private final ExcludedSuppliers excludedSuppliers;
     private final ReportExcludedSupplierService reportSuppliers;
     private final CadencierImportRepository cadencierImports;
+    private final LowMarginSettingsRepository settings;
+    private final StoreRepository stores;
+    private final AppUserRepository users;
 
     public LowMarginService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             NomenclatureMarginService margins, PriceCheckReviewRepository reviews, PriceCheckMapper mapper,
             SaleRepository sales, ExcludedSuppliers excludedSuppliers, ReportExcludedSupplierService reportSuppliers,
-            CadencierImportRepository cadencierImports) {
+            CadencierImportRepository cadencierImports, LowMarginSettingsRepository settings, StoreRepository stores,
+            AppUserRepository users) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -96,13 +114,19 @@ public class LowMarginService {
         this.excludedSuppliers = excludedSuppliers;
         this.reportSuppliers = reportSuppliers;
         this.cadencierImports = cadencierImports;
+        this.settings = settings;
+        this.stores = stores;
+        this.users = users;
     }
 
     @Transactional(readOnly = true)
-    public LowMarginReport report(UUID storeId) {
+    public LowMarginReport report(UUID storeId, int days) {
+        if (days < 1 || days > MAX_PERIOD_DAYS) {
+            throw ApiException.badRequest("Okres raportu musi mieć od 1 do " + MAX_PERIOD_DAYS + " dni.");
+        }
         sales.tuneForReport();
         LocalDate to = LocalDate.now(StoreTime.ZONE);
-        LocalDate from = to.minusDays(PERIOD_DAYS - 1L);
+        LocalDate from = to.minusDays(days - 1L);
         LocalDateTime start = from.atStartOfDay();
         LocalDateTime until = to.plusDays(1).atStartOfDay();
 
@@ -114,6 +138,9 @@ public class LowMarginService {
                 .map(review -> review.getDocument().getDocumentDate().toLocalDate()).min(Comparator.naturalOrder())
                 .filter(date -> date.isBefore(from)).orElse(from);
 
+        Optional<LowMarginSettings> saved = settings.findByStoreId(storeId);
+        BigDecimal lowGap = saved.map(LowMarginSettings::getLowGap).orElse(LOW_GAP);
+        BigDecimal highGap = saved.map(LowMarginSettings::getHighGap).orElse(HIGH_GAP);
         Map<String, BigDecimal> required = margins.effectiveByCode(storeId);
         List<ReportSupplier> withoutMargin = reportSuppliers.active(storeId, ReviewedReport.LOW_MARGIN);
         Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
@@ -122,7 +149,7 @@ public class LowMarginService {
                 : lowMargins(documentLines.findDeliveryMargins(storeId, start, until,
                         reviewed.stream().map(UUID::toString).toArray(String[]::new), oldest, to,
                         oldest.withDayOfMonth(1).minusMonths(PromotionReportService.REFERENCE_MONTHS),
-                        PromotionReportService.MIN_REFERENCE_DAYS), required, excluded,
+                        PromotionReportService.MIN_REFERENCE_DAYS), required, excluded, lowGap, highGap,
                         Cadencier.of(cadencierImports.findCurrentItm8s(storeId),
                                 cadencierImports.findCurrentEans(storeId)));
 
@@ -141,7 +168,8 @@ public class LowMarginService {
                     delivery.getSupplierCode(), delivery.getSupplierName(), delivery.getSupplierDocumentNumber(),
                     links.getOrDefault(delivery.getId(), List.of()).size(),
                     OverpaymentService.sum(lines, Line::purchaseValue),
-                    OverpaymentService.sum(lines, Line::excessValue), responses.isEmpty() ? null : responses.getFirst(),
+                    OverpaymentService.sum(lines.stream().filter(line -> line.deviation() == MarginDeviation.LOW)
+                            .toList(), Line::excessValue), responses.isEmpty() ? null : responses.getFirst(),
                     responses, lines));
         }
         result.sort(Comparator.<Delivery>comparingInt(delivery -> delivery.review() == null ? 0
@@ -149,33 +177,44 @@ public class LowMarginService {
                 .thenComparing(Delivery::documentDate, Comparator.reverseOrder())
                 .thenComparing(Delivery::number, Comparator.reverseOrder()));
 
-        return new LowMarginReport(from, to, PERIOD_DAYS, MARGIN_GAP, !required.isEmpty(),
+        return new LowMarginReport(from, to, days, lowGap, highGap, !required.isEmpty(),
                 documentImports.findLastPeriodTo(storeId).orElse(null),
                 documentImports.findNewestReportGeneratedAt(storeId).orElse(null),
                 withoutMargin, reportSuppliers.options(storeId), result);
     }
 
-    /** Zastępuje listę dostawców, których nie dotyczy marża; zwraca raport po zmianie. */
+    /** Zapisuje progi marży sklepu; zwraca raport po zmianie. */
     @Transactional
-    public LowMarginReport setExcludedSuppliers(UUID storeId, List<String> supplierCodes, UUID userId) {
-        reportSuppliers.replace(storeId, ReviewedReport.LOW_MARGIN, supplierCodes, userId);
-        return report(storeId);
+    public LowMarginReport setGaps(UUID storeId, BigDecimal lowGap, BigDecimal highGap, int days, UUID userId) {
+        LowMarginSettings saved = settings.findByStoreId(storeId)
+                .orElseGet(() -> new LowMarginSettings(stores.getReferenceById(storeId)));
+        saved.update(lowGap, highGap, users.getReferenceById(userId));
+        settings.saveAndFlush(saved);
+        return report(storeId, days);
     }
 
-    /** Artykuły z za niską marżą po przyjęciach, od największej straty. */
+    /** Zastępuje listę dostawców, których nie dotyczy marża; zwraca raport po zmianie. */
+    @Transactional
+    public LowMarginReport setExcludedSuppliers(UUID storeId, List<String> supplierCodes, int days, UUID userId) {
+        reportSuppliers.replace(storeId, ReviewedReport.LOW_MARGIN, supplierCodes, userId);
+        return report(storeId, days);
+    }
+
+    /** Artykuły z marżą poza normą po przyjęciach: najpierw za niskie od największej straty, potem za wysokie. */
     private static Map<UUID, List<Line>> lowMargins(List<DeliveryMargin> articles, Map<String, BigDecimal> required,
-            Set<String> excluded, Cadencier cadencier) {
+            Set<String> excluded, BigDecimal lowGap, BigDecimal highGap, Cadencier cadencier) {
         Map<UUID, List<Line>> lines = new HashMap<>();
         for (DeliveryMargin article : articles) {
             boolean skipped = excluded.contains(article.getSupplierCode())
                     || cadencier.itm8Of(article.getItm8(), article.getEan()) != null;
             Line line = skipped ? null
-                    : lowMarginLine(article, requiredMargin(article.getNomenclatureCode(), required));
+                    : lowMarginLine(article, requiredMargin(article.getNomenclatureCode(), required), lowGap, highGap);
             if (line != null) {
                 lines.computeIfAbsent(article.getDocumentId(), id -> new ArrayList<>()).add(line);
             }
         }
-        lines.values().forEach(list -> list.sort(Comparator.comparing(Line::excessValue, Comparator.reverseOrder())));
+        lines.values().forEach(list -> list.sort(Comparator.comparing(Line::deviation)
+                .thenComparing(Line::excessValue, Comparator.reverseOrder())));
         return lines;
     }
 
@@ -193,8 +232,12 @@ public class LowMarginService {
         return null;
     }
 
-    /** Linia raportu, gdy marża z ceny katalogowej jest co najmniej o próg niższa od wymaganej, inaczej {@code null}. */
-    private static Line lowMarginLine(DeliveryMargin article, BigDecimal requiredMargin) {
+    /**
+     * Linia raportu, gdy marża z aktualnej ceny jest co najmniej o {@code lowGap} p.p. niższa albo o {@code highGap}
+     * p.p. wyższa od wymaganej, inaczej {@code null}.
+     */
+    private static Line lowMarginLine(DeliveryMargin article, BigDecimal requiredMargin, BigDecimal lowGap,
+            BigDecimal highGap) {
         BigDecimal quantity = article.getCorrectedQuantity();
         BigDecimal value = article.getCorrectedValue();
         BigDecimal documentPrice = article.getSalePrice();
@@ -207,16 +250,22 @@ public class LowMarginService {
                 .divide(HUNDRED.add(BigDecimal.valueOf(article.getVatRate())), 6, RoundingMode.HALF_UP);
         BigDecimal price = value.divide(quantity, 4, RoundingMode.HALF_UP);
         BigDecimal margin = net.subtract(price).multiply(HUNDRED).divide(net, 2, RoundingMode.HALF_UP);
-        if (margin.compareTo(requiredMargin.subtract(BigDecimal.valueOf(MARGIN_GAP))) > 0) {
+        MarginDeviation deviation;
+        if (margin.compareTo(requiredMargin.subtract(lowGap)) <= 0) {
+            deviation = MarginDeviation.LOW;
+        } else if (margin.compareTo(requiredMargin.add(highGap)) >= 0) {
+            deviation = MarginDeviation.HIGH;
+        } else {
             return null;
         }
         BigDecimal target = net.multiply(HUNDRED.subtract(requiredMargin)).divide(HUNDRED, 4, RoundingMode.HALF_UP);
-        BigDecimal excess = price.subtract(target).multiply(quantity).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal excess = price.subtract(target).multiply(quantity).abs().setScale(2, RoundingMode.HALF_UP);
         return new Line(article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
                 OverpaymentService.regionOf(article.getNomenclatureCode()), article.getSupplierCode(), quantity, price,
                 value, regular, documentPrice,
                 priceOnDeliveryDay(article).compareTo(documentPrice) > 0 ? promotionOf(article) : null,
-                margin, requiredMargin, target, excess, article.getCorrected());
+                margin, requiredMargin, target, excess, article.getCorrected(), deviation, article.getCurrentPromoPrice(),
+                article.getCurrentPromoTo());
     }
 
     /**

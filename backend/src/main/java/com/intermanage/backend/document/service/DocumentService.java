@@ -161,14 +161,14 @@ public class DocumentService {
      * szuka artykułu w liniach, {@code invoice} działa w przyjęciach i korektach od dostawcy, {@code corrections}
      * i {@code closed} (w zamkniętym raporcie okresowym) w przyjęciach. {@code hiddenSuppliers}: kody dostawców,
      * których dokumentów lista nie pokazuje. {@code markedAsError}: tylko przyjęcia oznaczone jako błąd (bez tego
-     * lista ich nie pokazuje).
+     * lista ich nie pokazuje). {@code verification}: status weryfikacji przyjęcia.
      */
     @Transactional(readOnly = true)
     public DocumentPage list(UUID storeId, String typeCode, int page, String query, String product,
             DocumentSearch.Presence invoice, DocumentSearch.Presence withCorrections, DocumentSearch.Presence closed,
             DocumentSearch.GratisFilter withGratis, DocumentSearch.ValueField hiddenValueField, BigDecimal hiddenValueFrom,
-            BigDecimal hiddenValueTo, Collection<String> hiddenSuppliers, boolean markedAsError, String sort,
-            String direction) {
+            BigDecimal hiddenValueTo, Collection<String> hiddenSuppliers, boolean markedAsError,
+            DocumentSearch.VerificationFilter verification, String sort, String direction) {
         DocumentType type = type(typeCode);
         Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, type, DocumentSearch.words(query),
                         markedAsError && type == DocumentType.PZ)
@@ -184,7 +184,8 @@ public class DocumentService {
         }
         if (type == DocumentType.PZ) {
             matching = matching.and(DocumentSearch.withCorrections(withCorrections))
-                    .and(DocumentSearch.inReportClosing(closed));
+                    .and(DocumentSearch.inReportClosing(closed))
+                    .and(DocumentSearch.withVerification(verification));
         }
         Page<Document> found = documents.findAll(matching,
                 PageRequest.of(Math.max(page, 0), PAGE_SIZE, DocumentSearch.sort(sort, direction)));

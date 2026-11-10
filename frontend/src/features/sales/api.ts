@@ -683,11 +683,23 @@ export function useOverpayments(storeId: string, maxReferenceDays: number) {
   })
 }
 
-/** Za niskie marże z przyjęć z ostatnich 30 dni. */
-export function useLowMargins(storeId: string) {
+/** Marże poza normą z przyjęć z ostatnich `days` dni (najwyżej 365). */
+export function useLowMargins(storeId: string, days: number) {
   return useQuery({
-    queryKey: [...reportsKey(storeId), 'low-margins'],
-    queryFn: () => api<LowMarginReport>(`${reportsPath(storeId)}/low-margins`),
+    queryKey: [...reportsKey(storeId), 'low-margins', days],
+    queryFn: () => api<LowMarginReport>(`${reportsPath(storeId)}/low-margins?days=${days}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Progi marży raportu marż poza normą dla sklepu; raport pobiera się od nowa. */
+export function useSetLowMarginGaps(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (gaps: { lowGap: number; highGap: number }) =>
+      api<LowMarginReport>(`${reportsPath(storeId)}/low-margins/settings`, { method: 'PUT', json: gaps }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...reportsKey(storeId), 'low-margins'] }),
+    meta: { invalidates: false },
   })
 }
 

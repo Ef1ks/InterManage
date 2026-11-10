@@ -569,7 +569,14 @@ export type DocumentSummary = {
   transferTarget: TransferTarget | null
   /** Przyjęcie oznaczone jako błąd (na liście tylko z filtrem „Oznaczone jako błąd”). */
   errorMarkedAt: string | null
+  /** Weryfikacja przyjęcia PZ ({@code null} = bez statusu): status, kiedy i kto. */
+  verificationStatus: DocumentVerificationStatus | null
+  verificationAt: string | null
+  verificationBy: string | null
 }
+
+/** Weryfikacja przyjęcia PZ: w trakcie (czeka na kierownika) albo zweryfikowane. */
+export type DocumentVerificationStatus = 'IN_PROGRESS' | 'VERIFIED'
 
 /** Zamknięty raport przyjęć, w którym przyjęcie poszło razem ze swoim okresem (daty RRRR-MM-DD). */
 export type DocumentReportClosing = {
@@ -2288,7 +2295,7 @@ export type LowMarginLine = {
   quantity: number
   purchasePrice: number
   purchaseValue: number
-  /** Cena katalogowa brutto, od niej liczy się marża. */
+  /** Aktualna cena zwykła brutto na kasie, od niej liczy się marża. */
   salePrice: number
   documentSalePrice: number
   promotion: LowMarginPromotion | null
@@ -2296,9 +2303,17 @@ export type LowMarginLine = {
   requiredMargin: number
   /** Cena zakupu dająca marżę wymaganą. */
   targetPurchasePrice: number
+  /** Brakująca marża (za niska) albo nadwyżka marży (za wysoka), zawsze na plus. */
   excessValue: number
   corrected: boolean
+  deviation: LowMarginDeviation
+  /** Artykuł jest dziś w promocji: cena promocyjna i koniec (RRRR-MM-DD); marża i tak z ceny zwykłej. */
+  currentPromoPrice: number | null
+  currentPromoTo: string | null
 }
+
+/** Marża za niska albo za wysoka wobec wymaganej. */
+export type LowMarginDeviation = 'LOW' | 'HIGH'
 
 export type LowMarginDelivery = {
   id: string
@@ -2319,7 +2334,10 @@ export type LowMarginReport = {
   from: string
   to: string
   periodDays: number
-  marginGap: number
+  /** Marża niższa o tyle punktów procentowych od wymaganej jest za niska. */
+  lowGap: number
+  /** Marża wyższa o tyle punktów procentowych od wymaganej jest za wysoka. */
+  highGap: number
   marginsConfigured: boolean
   documentsCoveredUntil: string | null
   documentsReportGeneratedAt: string | null

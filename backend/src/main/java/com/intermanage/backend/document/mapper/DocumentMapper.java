@@ -64,6 +64,7 @@ public interface DocumentMapper {
     @Mapping(target = "manualInvoices", source = "manualInvoices")
     @Mapping(target = "reportClosing", source = "reportClosing")
     @Mapping(target = "transferTarget", source = "transferTarget")
+    @Mapping(target = "verificationBy", source = "document.verificationBy.displayName")
     DocumentSummary toSummary(Document document, DocumentGratis gratis, List<LinkedKsefInvoice> ksefInvoices,
             CorrectionTotals correctionTotals, LinkedDelivery correctionOf, InvoiceAmountCheck invoiceAmountCheck,
             List<ManualInvoice> manualInvoices, DocumentReportClosing reportClosing,
@@ -82,6 +83,7 @@ public interface DocumentMapper {
     @Mapping(target = "gratisAllowed", expression = "java(document.getType().canBeGratis())")
     @Mapping(target = "supplierDocumentNumberEditedBy", source = "document.supplierDocumentNumberEditedBy.displayName")
     @Mapping(target = "errorMarkedBy", source = "document.errorMarkedBy.displayName")
+    @Mapping(target = "verificationBy", source = "document.verificationBy.displayName")
     @Mapping(target = "errorMarkable",
             expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.PZ)")
     @Mapping(target = "ksefLinkable", expression = "java(document.getType().canLinkKsefInvoice())")

@@ -37,5 +37,9 @@ public record DocumentSummary(
         /** Ruch międzymagazynowy: sklep zaprzyjaźniony, dla którego go wystawiono. */
         TransferTargetResponse transferTarget,
         /** Przyjęcie oznaczone jako błąd (widać je tylko z filtrem „Oznaczone jako błąd”). */
-        Instant errorMarkedAt) {
+        Instant errorMarkedAt,
+        /** Weryfikacja przyjęcia PZ ({@code null} = bez statusu): status, kiedy i kto. */
+        String verificationStatus,
+        Instant verificationAt,
+        String verificationBy) {
 }

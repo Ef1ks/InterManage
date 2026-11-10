@@ -22,6 +22,7 @@ import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.entity.DocumentVerificationStatus;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -168,6 +169,33 @@ public final class DocumentSearch {
                 has = cb.or(has, cb.and(cb.equal(root.get("type"), DocumentType.PZ), cb.exists(byNumber)));
             }
             return presence == Presence.WITH ? has : cb.not(has);
+        };
+    }
+
+    /** Filtr statusu weryfikacji przyjęcia: wszystkie, bez statusu albo z danym statusem. */
+    public enum VerificationFilter {
+        ALL, NONE, IN_PROGRESS, VERIFIED;
+
+        public static VerificationFilter of(String value) {
+            if (value == null) {
+                return ALL;
+            }
+            return switch (value.toLowerCase()) {
+                case "none" -> NONE;
+                case "in_progress" -> IN_PROGRESS;
+                case "verified" -> VERIFIED;
+                default -> ALL;
+            };
+        }
+    }
+
+    /** Przyjęcia ze statusem weryfikacji z filtra. */
+    public static Specification<Document> withVerification(VerificationFilter filter) {
+        return (root, query, cb) -> switch (filter) {
+            case ALL -> cb.conjunction();
+            case NONE -> cb.isNull(root.get("verificationStatus"));
+            case IN_PROGRESS -> cb.equal(root.get("verificationStatus"), DocumentVerificationStatus.IN_PROGRESS);
+            case VERIFIED -> cb.equal(root.get("verificationStatus"), DocumentVerificationStatus.VERIFIED);
         };
     }
 

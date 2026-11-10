@@ -1,5 +1,6 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,6 +26,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -52,6 +54,9 @@ class DocumentImportIntegrationTests {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     @Test
     void printsDocumentsToPdfAndExcelWithNomenclatureSummary() throws Exception {
@@ -553,6 +558,64 @@ class DocumentImportIntegrationTests {
             }
         }
         return null;
+    }
+
+    @Test
+    void deliveryVerificationStatusIsSetFilteredAndCleared() throws Exception {
+        Cookie owner = login();
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(100_000, 999_999));
+        String store = createStore(number, "Sklep weryfikacji przyjęć");
+        String checked = docNumber() + "00";
+        String waiting = docNumber() + "00";
+        String plain = docNumber() + "00";
+        String supplierCorrection = "WZ" + docNumber();
+        upload(owner, store, report(number,
+                amounts(line("PZ", checked, "F/20/26", 1, "10", "2", "20")),
+                amounts(line("PZ", waiting, "F/21/26", 1, "10", "3", "30")),
+                amounts(line("PZ", plain, "F/22/26", 1, "10", "4", "40")),
+                amounts(correction(line("WZ", supplierCorrection, "FK/2/26", 1, "0", "1", "-5")))))
+                .andExpect(status().isCreated());
+        String checkedId = id(store, "/pz", checked);
+        String waitingId = id(store, "/pz", waiting);
+        String correctionId = id(store, "/wz", supplierCorrection);
+
+        // Tylko przyjęcie ma weryfikację.
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(url(store, "/wz/" + correctionId + "/verification")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(url(store, "/pz/" + checkedId + "/verification")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verificationStatus").value("VERIFIED"))
+                .andExpect(jsonPath("$.verificationAt").isNotEmpty())
+                .andExpect(jsonPath("$.verificationBy").isNotEmpty());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put(url(store, "/pz/" + waitingId + "/verification")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"IN_PROGRESS\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verificationStatus").value("IN_PROGRESS"));
+
+        mvc.perform(get(url(store, "/pz")).param("verification", "verified").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(checkedId))
+                .andExpect(jsonPath("$.documents[0].verificationStatus").value("VERIFIED"));
+        mvc.perform(get(url(store, "/pz")).param("verification", "in_progress").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].id").value(waitingId));
+        mvc.perform(get(url(store, "/pz")).param("verification", "none").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1));
+
+        // Zdjęcie statusu: przyjęcie wraca do „bez statusu”, a historia ma wszystkie trzy zmiany.
+        mvc.perform(delete(url(store, "/pz/" + checkedId + "/verification")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verificationStatus").isEmpty());
+        mvc.perform(get(url(store, "/pz")).param("verification", "none").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(2));
+        assertThat(jdbc.queryForObject("""
+                select count(*) from document_verification_changes c join documents d on d.id = c.document_id
+                where d.store_id = ?::uuid""", Integer.class, store)).isEqualTo(3);
     }
 
     @Test
