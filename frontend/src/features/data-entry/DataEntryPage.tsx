@@ -48,6 +48,7 @@ import { toast } from 'sonner'
 import { CopyButton } from '@/components/CopyButton'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo, HowToButton } from '@/components/HowTo'
+import { PriceLabelsButton } from '@/features/inventory/PriceLabelsDialog'
 import { PageHeader } from '@/components/PageHeader'
 import {
   AlertDialog,
@@ -817,7 +818,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const filled = rows.filter((row) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null)
   const transferMacro = planTransferMacro(filled)
   const pluCodes = pluItems(filled)
-  const newPluCount = pluCodes.filter((item) => item.isNew).length
   const newCount = filled.filter((row) => !row.known).length
   const changedCount = filled.filter((row) => catalogChanges(row).length > 0).length
   const toCheck = rows.filter((row) => nomenclatureState(row) === 'TO_CHECK').length
@@ -1305,6 +1305,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         actions={
           <>
             <HowToButton id="data-entry" />
+            {/* Zmiany cen z plików CTRLPRIX czekają tu na jeden plik cenówek dnia. */}
+            <PriceLabelsButton storeId={store.id} />
             <SettingsButton storeId={store.id} onClick={() => setSaveSettings({ open: true, missing: [] })} />
           </>
         }
@@ -1465,12 +1467,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <ActionItem
                 icon={<ScaleIcon />}
                 label="Kody PLU dla wagi"
-                count={newPluCount}
+                count={pluCodes.length}
                 disabled={pluCodes.length === 0}
                 hint={
                   pluCodes.length === 0
-                    ? 'W tabeli nie ma kodów 24'
-                    : 'Do schowka, Alt+E: kod PLU, „KOD:” w tekście dowolnym i format etykiety dla każdego kodu 24'
+                    ? 'W tabeli nie ma nowych artykułów z kodem 24'
+                    : 'Do schowka, Alt+E: kod PLU, „KOD:” w tekście dowolnym i format etykiety dla każdego nowego kodu 24'
                 }
                 onClick={() => setPluMacroOpen(true)}
               />

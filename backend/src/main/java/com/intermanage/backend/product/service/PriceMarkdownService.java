@@ -1,19 +1,26 @@
 package com.intermanage.backend.product.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.LabelFile;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService.ProtocolFile;
 import com.intermanage.backend.product.dto.PriceMarkdownItem;
 import com.intermanage.backend.product.dto.PriceMarkdownRequest;
+import com.intermanage.backend.product.entity.PriceLabelKind;
 import com.intermanage.backend.product.entity.PriceMarkdown;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.mapper.PriceMarkdownMapper;
@@ -27,9 +34,6 @@ import com.intermanage.backend.product.repository.ProductRepository;
  */
 @Service
 public class PriceMarkdownService {
-
-    /** Ten sam format cenówki co przy ustawianiu promocji. */
-    static final String LABEL_FORMAT = "PRO_PRO_FOR_67";
 
     private final PriceMarkdownRepository markdowns;
     private final ProductRepository products;
@@ -76,17 +80,45 @@ public class PriceMarkdownService {
         return new PriceMarkdown(storeId, product, request.newPrice(), request.validFrom(), request.validTo(), user);
     }
 
-    /** Plik ETIQUETTE z wybranych przecen: po jednej cenówce na artykuł, bez znacznika (stawia go zapis na dysku). */
+    /**
+     * Zmiany cen z pliku CTRLPRIX (artykuł z kartoteki → nowa cena) na liście cenówek, od dziś. Zmiana tego samego
+     * artykułu, która jeszcze czeka na cenówkę, ustępuje nowszej (znacznik), żeby w pliku nie było starej ceny.
+     */
+    @Transactional
+    public void addPriceChanges(UUID storeId, Map<Product, BigDecimal> prices, UUID priceControlFileId, UUID userId) {
+        if (prices.isEmpty()) {
+            return;
+        }
+        AppUser user = user(userId);
+        Set<String> itm8s = prices.keySet().stream().map(Product::getItm8).collect(Collectors.toSet());
+        markdowns.findPendingPriceChanges(storeId, itm8s).forEach(previous -> previous.delete(user));
+        LocalDate today = LocalDate.now(StoreTime.ZONE);
+        markdowns.saveAllAndFlush(prices.entrySet().stream()
+                .filter(entry -> entry.getKey().getEan() != null && !entry.getKey().getEan().isBlank())
+                .map(entry -> PriceMarkdown.priceChange(storeId, entry.getKey(), entry.getValue(), today,
+                        priceControlFileId, user))
+                .toList());
+    }
+
+    /**
+     * Plik ETIQUETTE z wybranych wpisów: po jednej cenówce na artykuł, w formacie ich rodzaju (przecena i zmiana ceny
+     * mają różne cenówki, więc jeden plik to jeden rodzaj), bez znacznika (stawia go zapis na dysku).
+     */
     @Transactional(readOnly = true)
     public ProtocolFile labels(UUID storeId, List<UUID> ids, String username) {
-        List<LabelFile.Line> lines = markdowns.findByStoreIdAndIdIn(storeId, ids).stream()
-                .filter(markdown -> markdown.getDeletedAt() == null).map(PriceMarkdown::getEan).distinct()
+        List<PriceMarkdown> chosen = markdowns.findByStoreIdAndIdIn(storeId, ids).stream()
+                .filter(markdown -> markdown.getDeletedAt() == null).toList();
+        Set<PriceLabelKind> kinds = chosen.stream().map(PriceMarkdown::getKind).collect(Collectors.toSet());
+        if (kinds.size() > 1) {
+            throw ApiException.badRequest("Przeceny i zmiany cen mają różne cenówki: utwórz osobny plik dla każdych");
+        }
+        List<LabelFile.Line> lines = chosen.stream().map(PriceMarkdown::getEan).distinct()
                 .map(ean -> new LabelFile.Line(ean, 1)).toList();
         byte[] content = LabelFile.content(lines);
         if (content.length == 0) {
             throw ApiException.badRequest("Brak artykułów z EAN-em do cenówek");
         }
-        return new ProtocolFile(LabelFile.fileName(username, LABEL_FORMAT), content);
+        return new ProtocolFile(LabelFile.fileName(username, kinds.iterator().next().labelFormat()), content);
     }
 
     @Transactional

@@ -1437,6 +1437,55 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void priceControlFileQueuesPriceChangeLabels() throws Exception {
+        jdbc.update("""
+                insert into suppliers (store_id, code, keyword, name, nip)
+                values (?::uuid, '98', 'GOBARTO', 'GOBARTO S.A.', '6991781489')""", storeId);
+        String markdowns = "/api/stores/" + storeId + "/price-markdowns";
+        // Artykuł z kartoteki trafia na listę cenówek jako zmiana ceny; kod spoza kartoteki nie.
+        mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sellerNip":"6991781489","rows":[
+                                 {"ean":"5900000000012","salePrice":3.99},{"ean":"5904634010327","salePrice":4.99}]}"""))
+                .andExpect(status().isOk());
+        // Druga zmiana tego samego artykułu, zanim powstała cenówka: zostaje tylko nowsza cena.
+        mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sellerNip\":\"6991781489\",\"rows\":[{\"ean\":\"5900000000012\",\"salePrice\":4.19}]}"))
+                .andExpect(status().isOk());
+        String list = mvc.perform(get(markdowns).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].kind").value("PRICE_CHANGE"))
+                .andExpect(jsonPath("$[0].ean").value("5900000000012"))
+                .andExpect(jsonPath("$[0].regularPrice").value(3.49))
+                .andExpect(jsonPath("$[0].newPrice").value(4.19))
+                .andExpect(jsonPath("$[0].validTo").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        String changeId = JsonPath.read(list, "$[0].id");
+
+        // Zmiany cen mają białą cenówkę.
+        mvc.perform(post(markdowns + "/labels-file").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + changeId + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("_BIALFOR67_")))
+                .andExpect(content().bytes("59000000000120001\r\n".getBytes(StandardCharsets.US_ASCII)));
+
+        // Przecena i zmiana ceny razem: różne cenówki, więc osobne pliki.
+        String both = mvc.perform(post(markdowns).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itm8\":\"0000000000101\",\"newPrice\":2.49,\"validFrom\":\"2026-11-10\","
+                                + "\"validTo\":\"2026-11-12\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(both, "$[*].id");
+        mvc.perform(post(markdowns + "/labels-file").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[\"" + String.join("\",\"", ids) + "\"]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void priceMarkdownBatchAddsAllArticlesOrNone() throws Exception {
         String batch = "/api/stores/" + storeId + "/price-markdowns/batch";
         String milk = "{\"itm8\":\"0000000000101\",\"newPrice\":2.49,\"validFrom\":\"2026-11-10\","

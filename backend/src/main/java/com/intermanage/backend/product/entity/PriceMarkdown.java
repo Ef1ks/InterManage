@@ -11,6 +11,8 @@ import com.intermanage.backend.auth.entity.AppUser;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -18,7 +20,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
-/** Przecena artykułu czekająca na cenówkę (opis w V90). */
+/** Przecena albo zmiana ceny artykułu czekająca na cenówkę (opis w V90 i V117). */
 @Entity
 @Table(name = "price_markdowns")
 public class PriceMarkdown {
@@ -48,8 +50,16 @@ public class PriceMarkdown {
     @Column(name = "valid_from", nullable = false, updatable = false)
     private LocalDate validFrom;
 
-    @Column(name = "valid_to", nullable = false, updatable = false)
+    /** Pusty przy zmianie ceny: obowiązuje do następnej zmiany. */
+    @Column(name = "valid_to", updatable = false)
     private LocalDate validTo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, updatable = false)
+    private PriceLabelKind kind = PriceLabelKind.MARKDOWN;
+
+    @Column(name = "price_control_file_id", updatable = false)
+    private UUID priceControlFileId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
@@ -86,6 +96,18 @@ public class PriceMarkdown {
         this.validFrom = validFrom;
         this.validTo = validTo;
         this.createdBy = createdBy;
+    }
+
+    /**
+     * Zmiana ceny sprzedaży z pliku CTRLPRIX: od dziś, bez końca, cena sprzed zmiany z kartoteki. Plik CTRLPRIX powstaje
+     * przed wczytaniem go w programie sklepu, więc kartoteka ma jeszcze starą cenę.
+     */
+    public static PriceMarkdown priceChange(UUID storeId, Product product, BigDecimal newPrice, LocalDate from,
+            UUID priceControlFileId, AppUser createdBy) {
+        PriceMarkdown change = new PriceMarkdown(storeId, product, newPrice, from, null, createdBy);
+        change.kind = PriceLabelKind.PRICE_CHANGE;
+        change.priceControlFileId = priceControlFileId;
+        return change;
     }
 
     @PrePersist
@@ -141,6 +163,10 @@ public class PriceMarkdown {
 
     public LocalDate getValidTo() {
         return validTo;
+    }
+
+    public PriceLabelKind getKind() {
+        return kind;
     }
 
     public Instant getCreatedAt() {

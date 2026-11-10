@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 41.0.0.0
+;@Ahk2Exe-SetVersion 42.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 41 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 42 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -394,6 +394,15 @@ PlayMacro(rawClip) {
                     : WebWait(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Trim(parts[4]) : "", parts.Length >= 5 ? Integer(Trim(parts[5])) : 15000)
                 if (problem != "") {
                     MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    return
+                }
+            case "WEBPAGE":
+                ; WEBPAGE|okno|fragment adresu strony|element|limit w ms: czeka na tę stronę (np. na-e015, wynik integracji) z widocznym
+                ; elementem. Sam WEBWAIT na Powrót przechodził od razu, bo Powrót ma też strona sprzed integracji.
+                problem := parts.Length < 4 ? "Linia WEBPAGE wymaga okna, adresu i elementu."
+                    : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBDIALOG":
@@ -804,7 +813,8 @@ TickAfterReload(title, box, timeoutMs, marked) {
     pause := reloaded ? 200 : 1000
     stable := 0
     Loop {
-        problem := WebClick(title, box, 5000, true)
+        ; Panel z polem bywa wolny (ostatnia dostawa z listy pojawiła się po ponad 5 s), więc na pole czekamy do limitu kroku.
+        problem := WebClick(title, box, Max(deadline - A_TickCount, 1000), true)
         if (problem != "")
             return problem
         Sleep pause
@@ -1076,6 +1086,22 @@ WebWait(title, element, text, timeoutMs) {
         if (A_TickCount >= deadline)
             return text = "" ? "Nie pojawił się element `"" element "`"."
                 : "Nie pojawił się element `"" element "`" z tekstem `"" text "`"."
+        Sleep 100
+    }
+}
+
+; Czeka na wczytaną stronę, której adres zawiera fragment, z widocznym elementem.
+WebPage(title, address, element, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for item in FindElements(HtmlDocuments(hwnd), element) {
+                if (PageLoaded(item.doc) && InStr(WebProp(item.doc, "URL"), address) && IsShown(item.element))
+                    return ""
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie pojawiła się strona `"" address "`" z elementem `"" element "`"."
         Sleep 100
     }
 }

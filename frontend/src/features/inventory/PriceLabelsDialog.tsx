@@ -19,11 +19,14 @@ import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
-import type { PriceMarkdown } from '@/lib/types'
+import type { PriceLabelKind, PriceMarkdown } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const ROW_GRID =
   'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]'
+
+const KINDS: PriceLabelKind[] = ['PRICE_CHANGE', 'MARKDOWN']
+const KIND_LABELS: Record<PriceLabelKind, string> = { PRICE_CHANGE: 'zmiany cen', MARKDOWN: 'przeceny' }
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
@@ -86,19 +89,26 @@ function PriceLabelsDialog({
       return next
     })
 
+  // Przecena i zmiana ceny mają różne cenówki, więc każdy rodzaj idzie do osobnego pliku.
   const saveFile = async (chosen: PriceMarkdown[]) => {
-    const ids = chosen.map((item) => item.id)
     setSaving(true)
     try {
       // Zgoda na zapis w folderze tylko zaraz po kliknięciu.
       const folderReady = await ensureFolderAccess(folder.key)
-      const { fileName, blob } = await fetchPostedFile(priceLabelsFilePath(storeId), { ids }, 'ETIQUETTE.traite0')
-      if (folderReady) await saveToFolder(folder.key, fileName, blob)
-      else saveBlob(blob, fileName)
-      await change.mutateAsync({ action: 'labels-generated', ids })
-      toast.success(`Zapisano plik ${fileName}`, {
-        description: `Cenówek: ${new Set(chosen.map((item) => item.ean)).size}${
-          folderReady ? '' : ' · pobrany: folder protokołów nie jest wybrany w tej przeglądarce'
+      const saved: string[] = []
+      for (const kind of KINDS) {
+        const ofKind = chosen.filter((item) => item.kind === kind)
+        if (ofKind.length === 0) continue
+        const ids = ofKind.map((item) => item.id)
+        const { fileName, blob } = await fetchPostedFile(priceLabelsFilePath(storeId), { ids }, 'ETIQUETTE.traite0')
+        if (folderReady) await saveToFolder(folder.key, fileName, blob)
+        else saveBlob(blob, fileName)
+        await change.mutateAsync({ action: 'labels-generated', ids })
+        saved.push(`${fileName} (${KIND_LABELS[kind]}: ${new Set(ofKind.map((item) => item.ean)).size})`)
+      }
+      toast.success(saved.length === 1 ? 'Zapisano plik cenówek' : `Zapisano pliki cenówek: ${saved.length}`, {
+        description: `${saved.join(' · ')}${
+          folderReady ? '' : ' · pobrane: folder protokołów nie jest wybrany w tej przeglądarce'
         }`,
         duration: 10_000,
       })
@@ -156,10 +166,17 @@ function PriceLabelsDialog({
           <span className="block text-xs text-muted-foreground tabular-nums">{item.ean}</span>
         </span>
         <span className="text-xs text-muted-foreground tabular-nums max-sm:hidden">
-          {formatDocumentDate(item.validFrom)} - {formatDocumentDate(item.validTo)}
+          {item.kind === 'PRICE_CHANGE' ? (
+            <span className="rounded bg-sky-200 px-1.5 py-0.5 font-medium text-sky-950 dark:bg-sky-900 dark:text-sky-50">
+              zmiana ceny {formatDocumentDate(item.validFrom)}
+            </span>
+          ) : (
+            `${formatDocumentDate(item.validFrom)} - ${item.validTo ? formatDocumentDate(item.validTo) : ''}`
+          )}
         </span>
         <span className="text-right whitespace-nowrap tabular-nums">
-          {item.regularPrice != null && (
+          {/* Zmiana ceny to po prostu nowa cena; przekreślona stara tylko przy przecenie. */}
+          {item.kind === 'MARKDOWN' && item.regularPrice != null && (
             <span className="mr-2 text-xs text-muted-foreground line-through">{formatMoney(item.regularPrice)}</span>
           )}
           <span className="font-medium">{formatMoney(item.newPrice)} zł</span>
@@ -172,10 +189,10 @@ function PriceLabelsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-4 p-6 sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Cenówki po przecenach</DialogTitle>
+          <DialogTitle>Cenówki</DialogTitle>
           <DialogDescription>
-            Każda przecena z karty artykułu czeka tu na cenówkę. Plik ETIQUETTE wczyta program sklepu, po jednej cenówce
-            na artykuł.
+            Czekają tu przeceny i zmiany cen z plików CTRLPRIX (wprowadzanie danych). Plik ETIQUETTE wczyta program
+            sklepu, po jednej cenówce na artykuł; przeceny i zmiany cen idą do osobnych plików, bo mają inne cenówki.
           </DialogDescription>
         </DialogHeader>
 
@@ -185,7 +202,9 @@ function PriceLabelsDialog({
             <ul aria-label="Cenówki do wydruku">{pending.map(row)}</ul>
             {pending.length === 0 && (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                {markdowns.isLoading ? 'Wczytywanie…' : 'Nowe cenówki pojawią się po przecenie artykułu.'}
+                {markdowns.isLoading
+                  ? 'Wczytywanie…'
+                  : 'Nowe cenówki pojawią się po przecenie artykułu albo zmianie ceny we wprowadzaniu danych.'}
               </p>
             )}
           </div>

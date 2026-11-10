@@ -24,7 +24,9 @@ const MENU = {
 
 const INTEGRATION_SCREEN = {
   confirmText: 'interacj',
-  /** „Powrót” na wyniku integracji (na-e015); dopiero po nim Mercalys przyjmuje klik w menu. */
+  /** Strona z tabelą podsumowania integracji. */
+  resultPage: 'na-e015',
+  /** „Powrót” na wyniku integracji; dopiero po nim idziemy do Obsługi BL. */
   result: 'btnB1_Retour_LnkBouton',
 } as const
 
@@ -83,9 +85,9 @@ export function buildDeliveryMacro(documents: MacroDocument[]) {
       `WEBOPEN|${WINDOW}|${MENU.directDeliveries}|${MENU.integration}`,
       `WEBWAIT|${DIALOG}|Oui|${INTEGRATION_SCREEN.confirmText}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${DIALOG}|Oui`,
-      `WEBWAIT|${WINDOW}|${INTEGRATION_SCREEN.result}||${INTEGRATION_TIMEOUT_MS}`,
-      // Wynik integracji blokuje menu: najpierw Powrót. Gdyby klik w menu i tak przepadł, odtwarzacz klika ponownie,
-      // dopóki nie otworzy się Obsługa BL.
+      // Tabela z podsumowaniem (na-e015). Powrót ma też ekran sprzed integracji, więc czekamy na tę stronę, a nie na sam
+      // przycisk: inaczej Powrót padał w trakcie integracji. Potem Powrót i Obsługa BL (klik w menu ponawiany, gdyby przepadł).
+      `WEBPAGE|${WINDOW}|${INTEGRATION_SCREEN.resultPage}|${INTEGRATION_SCREEN.result}|${INTEGRATION_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${INTEGRATION_SCREEN.result}`,
       `SLEEP|${AFTER_RESULT_BACK_MS}`,
       `WEBOPEN|${WINDOW}|${MENU.directDeliveries}|${MENU.blScreen}|${bl.createCodeButton}`,

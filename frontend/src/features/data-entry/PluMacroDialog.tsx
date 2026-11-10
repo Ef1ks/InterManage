@@ -49,17 +49,18 @@ type Props = {
 
 /**
  * Makro kodów PLU: każdy nowy kod 24 musi mieć w Mercalys kod PLU z sekcji wagi, komentarz „KOD: <PLU>” i format etykiety.
- * Na start zaznaczone są nowe artykuły; makro przechodzi je po kolei w jednej pętli.
+ * Lista to tylko nowe artykuły (z kartoteki mają już kod PLU), na start wszystkie zaznaczone; makro przechodzi je po
+ * kolei w jednej pętli.
  */
 export function PluMacroDialog({ open, onOpenChange, items }: Props) {
   const [settings, setSettings] = useState(readSettings)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [wasOpen, setWasOpen] = useState(false)
 
-  // Każde otwarcie: zaznaczone nowe artykuły.
+  // Każde otwarcie: wszystkie zaznaczone.
   if (open !== wasOpen) {
     setWasOpen(open)
-    if (open) setExcluded(new Set(items.filter((item) => !item.isNew).map((item) => item.ean)))
+    if (open) setExcluded(new Set())
   }
 
   const chosen = items.filter((item) => !excluded.has(item.ean))
@@ -146,7 +147,7 @@ export function PluMacroDialog({ open, onOpenChange, items }: Props) {
         </div>
 
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">W tabeli nie ma kodów 24 z pełnym EAN-em.</p>
+          <p className="text-sm text-muted-foreground">W tabeli nie ma nowych artykułów z kodem 24.</p>
         ) : (
           <div className="grid max-h-[50vh] gap-0.5 overflow-y-auto rounded-lg border p-2">
             {items.map((item) => (
@@ -165,11 +166,6 @@ export function PluMacroDialog({ open, onOpenChange, items }: Props) {
                 />
                 <span className="tabular-nums">{item.ean}</span>
                 <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                {item.isNew && (
-                  <span className="rounded bg-violet-200 px-1.5 text-xs font-medium text-violet-950 dark:bg-violet-900 dark:text-violet-50">
-                    nowy
-                  </span>
-                )}
               </label>
             ))}
           </div>

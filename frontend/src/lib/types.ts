@@ -3013,15 +3013,20 @@ export type ProductionCard = {
 }
 
 /** Przecena na liście cenówek; {@code labelsGeneratedAt}: artykuł był już w pliku ETIQUETTE. */
+/** Rodzaj wpisu na liście cenówek: przecena z okresem albo zmiana ceny z pliku CTRLPRIX (bez końca, biała cenówka). */
+export type PriceLabelKind = 'MARKDOWN' | 'PRICE_CHANGE'
+
 export type PriceMarkdown = {
   id: string
+  kind: PriceLabelKind
   itm8: string
   ean: string
   name: string | null
   regularPrice: number | null
   newPrice: number
   validFrom: string
-  validTo: string
+  /** Pusty przy zmianie ceny. */
+  validTo: string | null
   createdAt: string
   labelsGeneratedAt: string | null
 }

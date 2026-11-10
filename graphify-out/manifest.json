@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794286158.5769641,
-    "seen": 1794286403.7631497,
-    "ast_hash": "3d6f0bbc61a62e16c1e470c1bcde5444",
+    "mtime": 1794302552.392826,
+    "seen": 1794302716.718719,
+    "ast_hash": "bbb358250beaae3009c21f29f9cd1db4",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794297655.3346772,
-    "seen": 1794297702.5742326,
-    "ast_hash": "5cf1aa6abb9e03deffb38bf8bff96522",
+    "mtime": 1794302664.6783984,
+    "seen": 1794302716.7338855,
+    "ast_hash": "0e738a7c4b0927c3e994e5c13d3aebc3",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4470,9 +4470,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1794240444.891251,
-    "seen": 1794240588.3041632,
-    "ast_hash": "1f6d111f02e103ebd3e298a1f137cc48",
+    "mtime": 1794302490.9735107,
+    "seen": 1794302716.652503,
+    "ast_hash": "498b73cc0ab5972d121d16fdfaa848b6",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1794296662.3036754,
-    "seen": 1794296685.615455,
-    "ast_hash": "15b67fbcadd63852e88ea575bb6c6ec2",
+    "mtime": 1794302624.1826532,
+    "seen": 1794302716.676576,
+    "ast_hash": "cb967cbca6d2590103e5bd3b2d3c0ca0",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -5730,9 +5730,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryPriceControlService.java": {
-    "mtime": 1793623553.5336325,
-    "seen": 1793623652.9526122,
-    "ast_hash": "36596adcdad93e04da4fbd123d81d121",
+    "mtime": 1794302441.3190503,
+    "seen": 1794302716.5196009,
+    "ast_hash": "a4cc687b86bc0b4706911eb144e81e26",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/PdfBarcodes.java": {
@@ -5952,9 +5952,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/price-control.ts": {
-    "mtime": 1793620607.6015818,
-    "seen": 1793620703.6197357,
-    "ast_hash": "9a26e4e6c2b9036ddcfca28854fa258c",
+    "mtime": 1794302554.7767458,
+    "seen": 1794302716.6795828,
+    "ast_hash": "9266160f3495e04fcd89923fd8983324",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-production/BaseEditor.tsx": {
@@ -7992,9 +7992,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794297502.7393627,
-    "seen": 1794297702.5179796,
-    "ast_hash": "6d5d8c70e26ee4e66a98a056f71afdac",
+    "mtime": 1794302141.0834646,
+    "seen": 1794302716.6795828,
+    "ast_hash": "64742ca07b8fc387656ed843dbe51335",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -8058,9 +8058,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/dto/PriceMarkdownItem.java": {
-    "mtime": 1794049111.8089936,
-    "seen": 1794049414.650051,
-    "ast_hash": "69fa43dcfdf0ccea8f0734fdd7313763",
+    "mtime": 1794302388.2290719,
+    "seen": 1794302716.5929763,
+    "ast_hash": "035b21349793cee11336dc008729f440",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/dto/PriceMarkdownRequest.java": {
@@ -8070,9 +8070,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/entity/PriceMarkdown.java": {
-    "mtime": 1794049109.420652,
-    "seen": 1794049414.6521595,
-    "ast_hash": "584b2f71ea033465c18c8f9e2c536da9",
+    "mtime": 1794302386.0057015,
+    "seen": 1794302716.5950491,
+    "ast_hash": "7a0884eaaa860cb3b133d915c7379bde",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/mapper/PriceMarkdownMapper.java": {
@@ -8082,21 +8082,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/repository/PriceMarkdownRepository.java": {
-    "mtime": 1794049110.2170491,
-    "seen": 1794049414.6541584,
-    "ast_hash": "8b06939e3ecd60dc10e6ec37dc9401a3",
+    "mtime": 1794302415.103499,
+    "seen": 1794302716.5971212,
+    "ast_hash": "a9bc97586d9d5564a3d6006d93d9afe1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/service/PriceMarkdownService.java": {
-    "mtime": 1794240417.67008,
-    "seen": 1794240588.256167,
-    "ast_hash": "74eb5ac6d9a2f322668b703d7126e756",
+    "mtime": 1794302413.39726,
+    "seen": 1794302716.5986748,
+    "ast_hash": "f48f30943e5c89ef61ef331fc6506a39",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceLabelsDialog.tsx": {
-    "mtime": 1794240457.6299117,
-    "seen": 1794240588.3420193,
-    "ast_hash": "2cb7cbd411fcb0ea1c7458fe97a8e203",
+    "mtime": 1794302579.73321,
+    "seen": 1794302716.6943078,
+    "ast_hash": "375585f90c67c90fba25241df092bdcc",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceMarkdownDialog.tsx": {
@@ -9816,21 +9816,27 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PluMacroDialog.tsx": {
-    "mtime": 1794296602.0837195,
-    "seen": 1794296685.6169677,
-    "ast_hash": "94e55affef81307473adb6b93522f571",
+    "mtime": 1794302615.6224866,
+    "seen": 1794302716.6775818,
+    "ast_hash": "d24d68f8e9ff2e74b7669f4adc5a4b5c",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/plu-macro.ts": {
-    "mtime": 1794296518.632502,
-    "seen": 1794296685.6194859,
-    "ast_hash": "73642ff90a33c48a9aebde90d2d47ba5",
+    "mtime": 1794302602.5450838,
+    "seen": 1794302716.6795828,
+    "ast_hash": "36c5c5c41ba0beeeeb19235420994c0d",
     "semantic_hash": ""
   },
   "info.txt": {
     "mtime": 1794296203.820899,
     "seen": 1794296685.670216,
     "ast_hash": "bb8465c49d9a8dbc8b6ab276269ab7eb",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/product/entity/PriceLabelKind.java": {
+    "mtime": 1794302344.4348383,
+    "seen": 1794302716.5950491,
+    "ast_hash": "b9ff58c024d6c3a70a11209e1222ca8e",
     "semantic_hash": ""
   }
 }
