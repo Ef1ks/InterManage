@@ -68,9 +68,12 @@ public class ProtocolReportPdf {
             new Metric("Zakup netto", Figures::purchaseValue, true),
             new Metric("Sprzedaż brutto", Figures::saleValueGross, true));
 
-    /** Opis wydruku z serwisu: nazwa protokołu, sklep, grupowanie, kto drukuje. */
+    /**
+     * Opis wydruku z serwisu: nazwa protokołu, sklep, grupowanie, kto drukuje i dostawcy do kontroli strat (własne
+     * grupy artykułów sklepu), których dotyczy wydruk.
+     */
     public record Header(String protocol, String storeNumber, String storeName, String grouping, String compareLabel,
-            boolean selection, String printedBy) {
+            boolean selection, String printedBy, List<String> controlGroups) {
     }
 
     private final BaseFont regular;
@@ -119,6 +122,10 @@ public class ProtocolReportPdf {
             period += " · porównanie z " + range(report.previousFrom(), report.previousTo());
         }
         title.add(new Phrase(period + "\n", font(regular, 8.5f, INK)));
+        if (header.controlGroups() != null && !header.controlGroups().isEmpty()) {
+            title.add(new Phrase((header.controlGroups().size() == 1 ? "Dostawca: " : "Dostawcy: ")
+                    + String.join(", ", header.controlGroups()) + "\n", font(bold, 11, INK)));
+        }
         if (header.selection()) {
             title.add(new Phrase(header.grouping() + ": " + selected(groups) + "\n", font(bold, 9, INK)));
         } else {

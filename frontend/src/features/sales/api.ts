@@ -43,6 +43,7 @@ import type {
   TopSalesPartner,
   TopSalesReport,
   SlowMovingExcludedItem,
+  LossControlGroup,
   SlowMovingReport,
   StockGapReport,
   NegativeStockDelivery,
@@ -287,6 +288,8 @@ export type ProtocolReportPrint = ProtocolReportQuery & {
   articles: boolean
   /** Grupy zaznaczone tylko częściowo: klucz grupy → ITM8 zaznaczonych artykułów. */
   groupArticles: Record<string, string[]>
+  /** Dostawcy do kontroli strat, których dotyczy wydruk (nazwy w nagłówku). */
+  controlGroups: string[]
 }
 
 const protocolPdfRequest = (storeId: string, print: ProtocolReportPrint) => ({
@@ -301,6 +304,7 @@ const protocolPdfRequest = (storeId: string, print: ProtocolReportPrint) => ({
     groups: print.groups,
     articles: print.articles,
     groupArticles: print.groupArticles,
+    controlGroups: print.controlGroups,
   },
 })
 
@@ -531,6 +535,58 @@ export function useSlowMovingPdf(storeId: string) {
 const slowMovingExcludedPath = (storeId: string) => `${reportsPath(storeId)}/slow-moving/excluded`
 
 /** Artykuły pominięte w raporcie niesprzedających się, wspólne dla całego sklepu. */
+const controlGroupsPath = (storeId: string) => `${reportsPath(storeId)}/protocols/control-groups`
+const controlGroupsKey = (storeId: string) => [...reportsKey(storeId), 'loss-control-groups']
+
+/** Dostawcy do kontroli strat (własne grupy artykułów z kolorem) w raporcie protokołów, wspólni dla sklepu. */
+export function useLossControlGroups(storeId: string) {
+  return useQuery({
+    queryKey: controlGroupsKey(storeId),
+    queryFn: () => api<LossControlGroup[]>(controlGroupsPath(storeId)),
+  })
+}
+
+export type LossControlChange =
+  | { action: 'create'; name: string; color: string }
+  | { action: 'update'; id: string; name: string; color: string }
+  | { action: 'delete' | 'restore'; id: string }
+  | { action: 'add' | 'remove'; id: string; itm8s: string[] }
+
+/** Każda zmiana zwraca całą listę, więc podmieniamy ją bez przeładowania raportu. */
+export function useChangeLossControlGroups(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (change: LossControlChange) => {
+      const path = controlGroupsPath(storeId)
+      switch (change.action) {
+        case 'create':
+          return api<LossControlGroup[]>(path, { method: 'POST', json: { name: change.name, color: change.color } })
+        case 'update':
+          return api<LossControlGroup[]>(`${path}/${change.id}`, {
+            method: 'PUT',
+            json: { name: change.name, color: change.color },
+          })
+        case 'delete':
+          return api<LossControlGroup[]>(`${path}/${change.id}`, { method: 'DELETE' })
+        case 'restore':
+          return api<LossControlGroup[]>(`${path}/${change.id}/restore`, { method: 'POST' })
+        case 'add':
+          return api<LossControlGroup[]>(`${path}/${change.id}/articles`, {
+            method: 'POST',
+            json: { itm8s: change.itm8s },
+          })
+        case 'remove':
+          return api<LossControlGroup[]>(`${path}/${change.id}/articles/remove`, {
+            method: 'POST',
+            json: { itm8s: change.itm8s },
+          })
+      }
+    },
+    onSuccess: (groups) => queryClient.setQueryData(controlGroupsKey(storeId), groups),
+    meta: { invalidates: false },
+  })
+}
+
 export function useSlowMovingExcluded(storeId: string) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'slow-moving-excluded'],

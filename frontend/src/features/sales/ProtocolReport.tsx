@@ -1,6 +1,6 @@
-import { Fragment, useMemo, useState } from 'react'
-import { ChartColumnIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
-import { Link } from 'react-router'
+import { Fragment, type ReactNode, useMemo, useState } from 'react'
+import { ChartColumnIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TagIcon, TriangleAlertIcon } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
@@ -18,6 +18,7 @@ import {
   useProtocolReport,
   useProtocolReportPdf,
   useProtocolReportsOverview,
+  useLossControlGroups,
   useSalesReportsOverview,
 } from '@/features/sales/api'
 import { displayCode } from '@/features/sales/nomenclature-levels'
@@ -25,6 +26,16 @@ import { salesPaths } from '@/features/sales/paths'
 import { StatTile } from '@/features/sales/report-parts'
 import { MODE_PARAMS, PeriodPicker, rangeError, useReportParams, useReportPeriod } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import {
+  ControlDots,
+  ControlFilterBar,
+  ControlGroupButton,
+  ControlGroupEditor,
+  ControlGroupMenu,
+  type EditorState,
+  useControlGroupsByItm8,
+} from '@/features/sales/LossControlGroups'
+import { useCan } from '@/features/auth/api'
 import {
   COMPARE_LABELS,
   type CompareMode,
@@ -47,6 +58,7 @@ import type {
   ProtocolReportArticle,
   ProtocolReportGroup,
   ProtocolReportGrouping,
+  LossControlGroup,
 } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
@@ -367,14 +379,51 @@ function Report({
   const [groupQueries, setGroupQueries] = useState<Readonly<Record<string, string>>>({})
   const [withArticles, setWithArticles] = useState(true)
   const pdf = useProtocolReportPdf(storeId)
+  const canEdit = useCan('SALES', 'EDIT')
+  const controlGroups = useLossControlGroups(storeId).data ?? NO_CONTROL_GROUPS
+  const controlByItm8 = useControlGroupsByItm8(controlGroups)
+  const [editor, setEditor] = useState<EditorState>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeControl = searchParams.getAll('kontrola').filter((id) => controlGroups.some((group) => group.id === id))
+  const setActiveControl = (ids: string[]) =>
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        next.delete('kontrola')
+        for (const id of ids) next.append('kontrola', id)
+        return next
+      },
+      { replace: true },
+    )
+  const activeControlKey = activeControl.join(',')
 
   const groups = useMemo(() => {
+    // Filtr dostawców do kontroli: tylko ich artykuły, a pozycja liczy się z nich.
+    const controlIds = new Set(activeControlKey ? activeControlKey.split(',') : [])
+    const controlled = new Set(
+      controlGroups.filter((group) => controlIds.has(group.id)).flatMap((group) => group.itm8s),
+    )
+    const source: ProtocolReportGroup[] =
+      controlIds.size === 0
+        ? report.groups
+        : report.groups.flatMap((group) => {
+            const articles = group.articles.filter((article) => controlled.has(article.itm8))
+            if (articles.length === 0) return []
+            return [
+              {
+                ...group,
+                articles,
+                current: sumFigures(articles.map((article) => article.current)),
+                previous: group.previous ? sumFigures(articles.map((article) => article.previous!)) : null,
+              },
+            ]
+          })
     const words = normalize(query).split(/\s+/).filter(Boolean)
     const matches = (text: string) => words.every((word) => text.includes(word))
     const filtered =
       words.length === 0
-        ? report.groups.map((group) => ({ group, articles: group.articles, viaArticles: false }))
-        : report.groups.flatMap((group) => {
+        ? source.map((group) => ({ group, articles: group.articles, viaArticles: false }))
+        : source.flatMap((group) => {
             if (matches(normalize(`${group.code ?? ''} ${group.name ?? ''}`))) {
               return [{ group, articles: group.articles, viaArticles: false }]
             }
@@ -402,7 +451,10 @@ function Report({
             : articles.filter((article) => groupWords.every((word) => articleText(article).includes(word))),
       }
     })
-  }, [report.groups, query, sort, groupQueries])
+  }, [report.groups, query, sort, groupQueries, controlGroups, activeControlKey])
+  const controlFiltered = activeControl.length > 0
+  const controlTotal = sumFigures(groups.map((row) => row.group.current))
+  const controlPrevious = compare ? sumFigures(groups.map((row) => row.group.previous!)) : null
 
   // Zaznaczone artykuły, które są w raporcie (po zmianie okresu część może zniknąć), w kolejności raportu.
   const selection = report.groups.flatMap((group) => {
@@ -436,20 +488,42 @@ function Report({
     articles.filter((article) => !selected.has(selectionKey(group, article)))
   // Wyszukane po artykule zaznaczają tylko znalezione artykuły, wyszukane po pozycji całą pozycję.
   const filteredUnselected = groups.filter(({ group, articles }) => unselectedIn(group, articles).length > 0).length
+  // Bez zaznaczenia, ale z filtrem dostawców, wydruk obejmuje artykuły z filtra.
+  const printSelection =
+    selection.length > 0 || !controlFiltered
+      ? selection
+      : groups.map((row) => ({
+          group: row.group,
+          articles: row.group.articles,
+          whole:
+            row.group.articles.length ===
+            (report.groups.find((group) => group.key === row.group.key)?.articles.length ?? 0),
+        }))
+  const printedItm8s = new Set(printSelection.flatMap((item) => item.articles.map((article) => article.itm8)))
   const printRequest = {
     ...reportQuery,
     previous: compare ? reportQuery.previous : null,
-    groups: selection.map((item) => item.group.key),
+    groups: printSelection.map((item) => item.group.key),
     articles: !byArticle && withArticles,
     groupArticles: Object.fromEntries(
-      selection
+      printSelection
         .filter((item) => !item.whole)
         .map((item) => [item.group.key, item.articles.map((article) => article.itm8)]),
     ),
+    // Dostawcy do kontroli w nagłówku wydruku: z filtra, a bez niego ci, do których należą drukowane artykuły.
+    controlGroups: controlFiltered
+      ? activeControl
+      : controlGroups.filter((group) => group.itm8s.some((itm8) => printedItm8s.has(itm8))).map((group) => group.id),
   }
   const onPdfError = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
-  const printLabel = selection.length > 0 ? ` zaznaczone (${selectedLabel})` : ' wszystko'
+  const printLabel =
+    selection.length > 0 ? ` zaznaczone (${selectedLabel})` : controlFiltered ? ' dostawców z filtra' : ' wszystko'
+  const assignProps = {
+    storeId,
+    groups: controlGroups,
+    onCreate: (itm8s: string[]) => setEditor({ group: null, itm8s }),
+  }
   const columnCount = 2 + METRICS.length * (compare ? 3 : 1)
 
   const sorting = { sort, onSort: (column: SortKey) => setSort(nextSort(sort, column)) }
@@ -512,6 +586,17 @@ function Report({
         </Card>
       ) : (
         <>
+          <ControlFilterBar
+            storeId={storeId}
+            groups={controlGroups}
+            active={activeControl}
+            onActive={(ids) => {
+              setActiveControl(ids)
+              setShown(PAGE)
+            }}
+            canEdit={canEdit}
+            onEdit={setEditor}
+          />
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <SearchInput
               value={query}
@@ -543,6 +628,18 @@ function Report({
               >
                 Zaznacz wyszukane ({filteredUnselected})
               </Button>
+            )}
+            {canEdit && selectedArticles.length > 0 && (
+              <ControlGroupMenu
+                {...assignProps}
+                itm8s={[...new Set(selectedArticles.map((article) => article.itm8))]}
+                trigger={
+                  <Button variant="outline">
+                    <TagIcon />
+                    Przypisz zaznaczone ({selectedArticles.length})
+                  </Button>
+                }
+              />
             )}
             {selection.length > 0 && (
               <Button variant="ghost" onClick={() => setSelected(new Set())}>
@@ -640,7 +737,7 @@ function Report({
                 </TableHeader>
                 <TableBody>
                   {groups.slice(0, shown).map(({ group, articles, shownArticles, viaArticles }) => {
-                    const open = !byArticle && (expanded.has(group.key) || viaArticles)
+                    const open = !byArticle && (expanded.has(group.key) || viaArticles || controlFiltered)
                     const article = byArticle ? group.articles[0] : null
                     const state = groupState(group)
                     const groupQuery = groupQueries[group.key] ?? ''
@@ -661,7 +758,12 @@ function Report({
                               />
                               {article ? (
                                 <div className="min-w-0 flex-1">
-                                  <ArticleName article={article} onChart={() => openChart(article)} />
+                                  <ArticleName
+                                    article={article}
+                                    onChart={() => openChart(article)}
+                                    controls={controlByItm8.get(article.itm8)}
+                                    assign={canEdit && <ControlGroupButton {...assignProps} itm8s={[article.itm8]} />}
+                                  />
                                 </div>
                               ) : (
                                 <button
@@ -753,7 +855,12 @@ function Report({
                                     onChange={() => toggleArticle(group, item)}
                                   />
                                   <div className="min-w-0 flex-1">
-                                    <ArticleName article={item} onChart={() => openChart(item)} />
+                                    <ArticleName
+                                      article={item}
+                                      onChart={() => openChart(item)}
+                                      controls={controlByItm8.get(item.itm8)}
+                                      assign={canEdit && <ControlGroupButton {...assignProps} itm8s={[item.itm8]} />}
+                                    />
                                   </div>
                                 </div>
                               </TableCell>
@@ -768,6 +875,22 @@ function Report({
                   })}
                 </TableBody>
                 <TableFooter className="sticky bottom-0 z-20 bg-card">
+                  {controlFiltered && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell className="sticky left-0 z-10 bg-card pl-4 font-semibold">
+                        Dostawcy z filtra (
+                        {controlGroups
+                          .filter((group) => activeControl.includes(group.id))
+                          .map((group) => group.name)
+                          .join(', ')}
+                        )
+                      </TableCell>
+                      <Figures current={controlTotal} previous={controlPrevious} compare={compare} strong />
+                      <TableCell className={cn('pr-4 text-right font-semibold', compare && 'border-l')}>
+                        {share(controlTotal.purchaseValue)}
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {selection.length > 0 && (
                     <TableRow className="bg-muted/60 hover:bg-muted/60">
                       <TableCell className="sticky left-0 z-10 bg-muted pl-4 font-semibold">
@@ -795,6 +918,7 @@ function Report({
         </>
       )}
 
+      <ControlGroupEditor storeId={storeId} groups={controlGroups} state={editor} onClose={() => setEditor(null)} />
       <SalesChartDialog
         storeId={storeId}
         kind="sales"
@@ -809,6 +933,7 @@ function Report({
 }
 
 const NO_FILTER: string[] = []
+const NO_CONTROL_GROUPS: LossControlGroup[] = []
 
 function selectionKey(group: ProtocolReportGroup, article: ProtocolReportArticle) {
   return `${group.key}\u0000${article.itm8}`
@@ -840,15 +965,29 @@ function SelectBox({
   )
 }
 
-function ArticleName({ article, onChart }: { article: ProtocolReportArticle; onChart: () => void }) {
+function ArticleName({
+  article,
+  onChart,
+  controls,
+  assign,
+}: {
+  article: ProtocolReportArticle
+  onChart: () => void
+  controls?: LossControlGroup[]
+  assign?: ReactNode
+}) {
   return (
     <div className="flex items-center gap-2">
       <div className="min-w-0 flex-1">
-        <span className="block truncate">{article.name ?? article.itm8}</span>
+        <span className="flex items-center gap-1.5">
+          <ControlDots groups={controls} />
+          <span className="truncate">{article.name ?? article.itm8}</span>
+        </span>
         <span className="block truncate text-xs text-muted-foreground">
           {[article.itm8.replace(/^0+/, ''), article.ean, article.brand].filter(Boolean).join(' · ')}
         </span>
       </div>
+      {assign}
       <Button
         variant="ghost"
         size="icon-sm"

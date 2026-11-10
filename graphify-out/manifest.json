@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794313109.5947456,
-    "seen": 1794313247.6042342,
-    "ast_hash": "5c86c79723e667d844498c1514c4d44a",
+    "mtime": 1794313803.8415003,
+    "seen": 1794314094.2836375,
+    "ast_hash": "4e35cf91ccab87a5db363b9b5ee90fba",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794313203.0760152,
-    "seen": 1794313247.6196334,
-    "ast_hash": "eea0a45b42ad1e69d589ee2786b6a041",
+    "mtime": 1794314048.2721577,
+    "seen": 1794314094.2982388,
+    "ast_hash": "2a2485ec8b9e46a9079d788cd211572e",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794312781.3821764,
-    "seen": 1794312997.5871356,
-    "ast_hash": "09b3e5afaa89228a5f869498233bd0b2",
+    "mtime": 1794313815.0420384,
+    "seen": 1794314094.2703848,
+    "ast_hash": "196319462dc019c578ec5ca40f313659",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -6180,15 +6180,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/ProtocolReportService.java": {
-    "mtime": 1794305128.6279397,
-    "seen": 1794305410.643597,
-    "ast_hash": "3cda69876f7009737a2eca5117e2b779",
+    "mtime": 1794313775.5706272,
+    "seen": 1794314094.1808443,
+    "ast_hash": "97b479efdc7a1ea081e8e602cc103027",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProtocolReportIntegrationTests.java": {
-    "mtime": 1794305313.0991406,
-    "seen": 1794305410.6884928,
-    "ast_hash": "7ef340a18b4fccf44a6fbef8a71fbe92",
+    "mtime": 1794313995.3744166,
+    "seen": 1794314094.226087,
+    "ast_hash": "2f433276d8084616ba50a4c99ec8c35a",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/ProductFiltersPanel.tsx": {
@@ -6204,9 +6204,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ProtocolReport.tsx": {
-    "mtime": 1794305241.302417,
-    "seen": 1794305410.7310853,
-    "ast_hash": "2f6b31e6c396bd5c604128da45b45c20",
+    "mtime": 1794313953.166272,
+    "seen": 1794314094.2683694,
+    "ast_hash": "8debe22123c7a228d206d5c478cb530f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/controller/PromotionReportController.java": {
@@ -9840,15 +9840,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/component/ProtocolReportPdf.java": {
-    "mtime": 1794305360.7237537,
-    "seen": 1794305410.63255,
-    "ast_hash": "8908246ac9ae86e2a9b381374e11b861",
+    "mtime": 1794313757.1942377,
+    "seen": 1794314094.1686442,
+    "ast_hash": "695202ba014c4cd0a4b26b0b5a5aa495",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/ProtocolReportPrintRequest.java": {
-    "mtime": 1794305028.7850275,
-    "seen": 1794305410.6370685,
-    "ast_hash": "85c333263331c1a72086c33d634e0f6e",
+    "mtime": 1794313775.570078,
+    "seen": 1794314094.1733966,
+    "ast_hash": "c507d291faaca54b281b9265dbd4110d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/dto/LowMarginSettingsRequest.java": {
@@ -9933,6 +9933,72 @@
     "mtime": 1794313110.668342,
     "seen": 1794313247.5821934,
     "ast_hash": "dc9decbbb76a8024901aa279362e7591",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/controller/LossControlGroupController.java": {
+    "mtime": 1794313733.8445978,
+    "seen": 1794314094.1696446,
+    "ast_hash": "aeeafdb615426a3abcb0ab8460f8962c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/dto/LossControlArticlesRequest.java": {
+    "mtime": 1794313731.483423,
+    "seen": 1794314094.1723974,
+    "ast_hash": "c43a770040c4842285ac7b85769993c2",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/dto/LossControlGroupRequest.java": {
+    "mtime": 1794313730.6933072,
+    "seen": 1794314094.1723974,
+    "ast_hash": "2374b941db5eb4ea8d8c08e224b4139e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/dto/LossControlGroupResponse.java": {
+    "mtime": 1794313729.90911,
+    "seen": 1794314094.1723974,
+    "ast_hash": "a131395c9685c63dd5e44ee4634dd298",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/entity/LossControlGroup.java": {
+    "mtime": 1794313726.743523,
+    "seen": 1794314094.1782892,
+    "ast_hash": "245396b91887c5b6519f0b4c8f4b404d",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/entity/LossControlGroupArticle.java": {
+    "mtime": 1794313727.531026,
+    "seen": 1794314094.1782892,
+    "ast_hash": "f3dbc7138610bcc4dc202767347753e7",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/mapper/LossControlGroupMapper.java": {
+    "mtime": 1794313732.2724435,
+    "seen": 1794314094.1782892,
+    "ast_hash": "0605631d77b15066199d16c543c940b4",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/repository/LossControlGroupArticleRepository.java": {
+    "mtime": 1794313729.1168392,
+    "seen": 1794314094.179296,
+    "ast_hash": "5af718a05795ad694b880bc0050fdcb8",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/repository/LossControlGroupRepository.java": {
+    "mtime": 1794313728.3297002,
+    "seen": 1794314094.179296,
+    "ast_hash": "030203ff9cb510b4f1a5cd154543df8c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/service/LossControlGroupService.java": {
+    "mtime": 1794313733.0634332,
+    "seen": 1794314094.1808443,
+    "ast_hash": "9708a627eed0f4fc43a9795251a26890",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/sales/LossControlGroups.tsx": {
+    "mtime": 1794313953.273032,
+    "seen": 1794314094.267793,
+    "ast_hash": "3472673364553be7613cc8c0270313df",
     "semantic_hash": ""
   }
 }

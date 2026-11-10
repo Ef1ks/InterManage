@@ -3879,3 +3879,11 @@ export type SupplierTurnoverReport = {
   rows: SupplierTurnoverRow[]
   unattachedCorrections: { count: number; purchaseValue: number }
 }
+
+/** Dostawca do kontroli strat w raporcie protokołów: własna grupa artykułów z kolorem z palety. */
+export type LossControlGroup = {
+  id: string
+  name: string
+  color: string
+  itm8s: string[]
+}

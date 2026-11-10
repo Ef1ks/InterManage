@@ -38,6 +38,8 @@ import com.intermanage.backend.sales.dto.ProtocolReportResponse.Article;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Figures;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Group;
 import com.intermanage.backend.sales.dto.ProtocolReportsOverview;
+import com.intermanage.backend.sales.entity.LossControlGroup;
+import com.intermanage.backend.sales.repository.LossControlGroupRepository;
 import com.intermanage.backend.sales.repository.SaleRepository;
 import com.intermanage.backend.sales.service.PeriodSummaryService.ExportFile;
 import com.intermanage.backend.store.entity.Store;
@@ -76,10 +78,13 @@ public class ProtocolReportService {
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final ProtocolReportPdf reportPdf;
+    private final LossControlGroupRepository controlGroups;
 
     public ProtocolReportService(DocumentLineRepository lines, DocumentImportRepository documentImports,
             NomenclatureRepository nomenclatures, StoreProtoSettingsService protoSettings, SaleRepository sales,
-            StoreRepository stores, AppUserRepository users, ProtocolReportPdf reportPdf) {
+            StoreRepository stores, AppUserRepository users, ProtocolReportPdf reportPdf,
+            LossControlGroupRepository controlGroups) {
+        this.controlGroups = controlGroups;
         this.lines = lines;
         this.documentImports = documentImports;
         this.nomenclatures = nomenclatures;
@@ -191,11 +196,21 @@ public class ProtocolReportService {
             };
         };
         ProtocolReportPdf.Header header = new ProtocolReportPdf.Header(protocol.label(), store.getNumber(),
-                store.getName(), grouping, "Porównanie", selection, printedBy);
+                store.getName(), grouping, "Porównanie", selection, printedBy, controlGroupNames(storeId, request));
         String name = selection && groups.size() == 1 ? "-" + fileNamePart(groups.getFirst().name()) : "";
         return new ExportFile("protokol-" + protocol.name().toLowerCase() + name + "-" + store.getNumber() + "-"
                 + report.from() + "_" + report.to() + ".pdf", "application/pdf",
                 reportPdf.pdf(header, report, groups, total, previousTotal, request.articles()));
+    }
+
+    /** Nazwy wskazanych dostawców do kontroli strat sklepu, w kolejności listy (po nazwie). */
+    private List<String> controlGroupNames(UUID storeId, ProtocolReportPrintRequest request) {
+        if (request.controlGroups() == null || request.controlGroups().isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> ids = new HashSet<>(request.controlGroups());
+        return controlGroups.findActive(storeId).stream().filter(group -> ids.contains(group.getId()))
+                .map(LossControlGroup::getName).toList();
     }
 
     /** Grupa z samymi wskazanymi artykułami i ich sumami. */

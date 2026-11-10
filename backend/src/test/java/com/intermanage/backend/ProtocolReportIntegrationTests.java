@@ -2,6 +2,7 @@ package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -135,6 +136,48 @@ class ProtocolReportIntegrationTests {
                                 {"grouping":"BRAND","from":"2026-10-01","to":"2026-10-31",
                                  "groups":["NIEZNANA"],"articles":false}"""))
                 .andExpect(status().isBadRequest());
+
+        // Dostawcy do kontroli strat: grupa z kolorem, artykuły po ITM8, usunięcie to znacznik.
+        String controls = base + "/control-groups";
+        String created = mvc.perform(post(controls).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  Wasa  Polska \",\"color\":\"sky\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Wasa Polska"))
+                .andReturn().getResponse().getContentAsString();
+        String controlId = JsonPath.read(created, "$[0].id");
+        mvc.perform(post(controls).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"wasa polska\",\"color\":\"red\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post(controls).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Inny\",\"color\":\"czarny\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(controls + "/" + controlId + "/articles").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itm8s\":[\"" + WASA + "\",\"" + WASA + "\",\"" + BREAD + "\"]}"))
+                .andExpect(jsonPath("$[0].itm8s.length()").value(2));
+        mvc.perform(post(controls + "/" + controlId + "/articles/remove").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itm8s\":[\"" + BREAD + "\"]}"))
+                .andExpect(jsonPath("$[0].itm8s.length()").value(1))
+                .andExpect(jsonPath("$[0].itm8s[0]").value(WASA));
+        mvc.perform(get(controls).cookie(owner)).andExpect(jsonPath("$[0].color").value("sky"));
+
+        // Wydruk części artykułów pozycji z dostawcą do kontroli w nagłówku.
+        mvc.perform(post(base + "/LIQUIDATION/pdf").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"grouping":"BRAND","from":"2026-10-01","to":"2026-10-31",
+                                 "groups":["WASA"],"articles":true,"groupArticles":{"WASA":["%s"]},
+                                 "controlGroups":["%s"]}""".formatted(WASA, controlId)))
+                .andExpect(status().isOk());
+
+        mvc.perform(delete(controls + "/" + controlId).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(controls + "/" + controlId + "/restore").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$[0].itm8s[0]").value(WASA));
 
         mvc.perform(get(base + "/REPRESENTATION?grouping=NOMENCLATURE&level=SUBFAMILY&" + PERIODS).cookie(owner))
                 .andExpect(jsonPath("$.groups[0].code").value("010101"))
