@@ -651,17 +651,19 @@ export function buildPluMacro({
   ]
   eans.forEach((ean, index) => {
     const hasPlu = `plu-ma-${index + 1}`
+    // Kod 12-cyfrowy Mercalys może pokazać jako EAN-13 z zerem z przodu.
+    const eanValue = `^0*${ean.replace(/^0+/, '')}$`
     out.push(
       `# ${index + 1}/${eans.length}: EAN ${ean}`,
       `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.eanField}|^a${ean}{Enter}`,
       // Wczytany artykuł ma ITM8; po ZER. pole jest puste, więc stara karta nie uda wczytanej.
       `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*[1-9]\\d*$|${PAGE_TIMEOUT_MS}`,
-      `WEBVALUE|${WINDOW}|${screen.eanField}|^${ean}$`,
+      `WEBVALUE|${WINDOW}|${screen.eanField}|${eanValue}`,
       `WEBCLICK|${WINDOW}|${screen.eanCodesButton}`,
       `WEBWAIT|${WINDOW}|${screen.eanDetailField}||${PAGE_TIMEOUT_MS}`,
       `WEBDBLROW|${WINDOW}|${GRID}|${ean}|${PAGE_TIMEOUT_MS}`,
-      `WEBVALUE|${WINDOW}|${screen.eanDetailField}|^${ean}$|${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.eanDetailField}|${eanValue}|${PAGE_TIMEOUT_MS}`,
       // Kod PLU już jest: zapamiętany od razu (po zapisie Mercalys czyści szczegóły wiersza), bez nowej sekcji
       // i zapisu, dalej tylko komentarz i format. Pusty kod nadpisze odczyt numeru klawisza wagi.
       `WEBREAD|${WINDOW}|${screen.pluField}|${PLU_VARIABLE}|^(\\d{1,4})?$|${PAGE_TIMEOUT_MS}`,
@@ -724,10 +726,12 @@ const MEA_SCREEN = {
   backButton: 'btnB1_Retour_LnkBouton',
 } as const
 
-/** Pod jednym kodem MEA bywa 1-3 plików cadencier; tyle wierszy listy makro sprawdza najwyżej. */
+/** Pod jednym kodem MEA bywa 1-3 plików cadencier; tyle razy makro bierze najwyżej pierwszy plik z listy. */
 export const MEA_MAX_FILES = 5
 /** Po integracji Acrobat pokazuje raport; czekamy, aż okna przestaną się zmieniać. */
 const MEA_PDF_TIMEOUT_MS = 45000
+/** Tyle WEBIFVALUE czeka, zanim uzna, że w filtrze jest już ten kod (pole jest od razu, więc krótko). */
+const FILTER_CHECK_MS = 300
 
 /**
  * Makro kodów MEA: dla każdego kodu filtr listy cadencier i po kolei każdy plik z tym kodem (Przetworzenie, Wybór,
@@ -749,10 +753,17 @@ export function buildMeaMacro(codes: string[]) {
     const label = `mea-${code}`
     out.push(`# Kod MEA ${code}`)
     for (let row = 1; row <= MEA_MAX_FILES; row++) {
+      const typed = `${label}-${row}`
       out.push(
         `# Plik ${row}`,
+        // Po Powrót w filtrze zostaje ten sam kod, a WEBIFROW i tak liczy tylko wiersze z kodem: kod wpisujemy tylko,
+        // gdy w polu jest inny (pasuje = idzie do WEBKEY, nie pasuje = przeskok za nie).
+        `WEBIFVALUE|${WINDOW}|${screen.nameFilter}|^(?!${code}$)|${typed}|${FILTER_CHECK_MS}`,
         `WEBKEY|${WINDOW}|${screen.nameFilter}|^a${code}{Enter}`,
-        `WEBIFROW|${WINDOW}|${screen.nameFilter}|${GRID}|${screen.rowButton}|${row}|${code}|${label}|${PAGE_TIMEOUT_MS}`,
+        `LABEL|${typed}`,
+        // Zintegrowany plik znika z listy (pokazuje tylko „Do przetw.”), więc zawsze pierwszy widoczny plik z kodem;
+        // pusta lista = kod skończony, przeskok do następnego.
+        `WEBIFROW|${WINDOW}|${screen.nameFilter}|${GRID}|${screen.rowButton}|1|${code}|${label}|${PAGE_TIMEOUT_MS}`,
         // Filtr chowa wiersze na stronie, więc przycisk n-tego widocznego pliku podaje WEBIFROW (%ROW%).
         `WEBCLICK|${WINDOW}|%ROW%`,
         `WEBWAIT|${WINDOW}|${screen.selectionButton}||${PAGE_TIMEOUT_MS}`,

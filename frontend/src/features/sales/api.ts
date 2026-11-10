@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import type { DateRange, Periods } from '@/features/sales/periods'
-import { api, ApiError, downloadFile, printFile } from '@/lib/api'
+import { api, ApiError, downloadFile, downloadPostedFile, printFile, printPostedFile } from '@/lib/api'
 import type {
   ArticleCodes,
   ArticleDelivery,
@@ -278,6 +278,46 @@ export function useProtocolReport(storeId: string, query: ProtocolReportQuery, e
     enabled,
     placeholderData: keepPreviousData,
   })
+}
+
+export type ProtocolReportPrint = ProtocolReportQuery & {
+  /** Klucze grup do wydruku; pusta lista = wszystkie. */
+  groups: string[]
+  articles: boolean
+}
+
+const protocolPdfRequest = (storeId: string, print: ProtocolReportPrint) => ({
+  path: `${reportsPath(storeId)}/protocols/${print.protocol}/pdf`,
+  body: {
+    grouping: print.grouping,
+    level: print.grouping === 'NOMENCLATURE' ? print.level : null,
+    from: print.range.from,
+    to: print.range.to,
+    previousFrom: print.previous?.from ?? null,
+    previousTo: print.previous?.to ?? null,
+    groups: print.groups,
+    articles: print.articles,
+  },
+})
+
+/** Wydruk raportu protokołu z wybranymi grupami (np. marką do pokazania dostawcy). */
+export function useProtocolReportPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (print: ProtocolReportPrint) => {
+        const { path, body } = protocolPdfRequest(storeId, print)
+        return printPostedFile(path, body)
+      },
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (print: ProtocolReportPrint) => {
+        const { path, body } = protocolPdfRequest(storeId, print)
+        return downloadPostedFile(path, body, 'protokol.pdf')
+      },
+      meta: { invalidates: false },
+    }),
+  }
 }
 
 /** Rozwinięty wiersz podsumowania: `parent` = kod rejonu, rodziny albo podrodziny; `unassigned` = bez nomenklatury. */

@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
-import { ChartColumnIcon, ChevronRightIcon, TriangleAlertIcon } from 'lucide-react'
+import { ChartColumnIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
 import { Link } from 'react-router'
+import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
 import { DateField, SegmentedField } from '@/components/form'
@@ -15,6 +16,7 @@ import {
   type ProtocolReportQuery,
   type SalesChartTarget,
   useProtocolReport,
+  useProtocolReportPdf,
   useProtocolReportsOverview,
   useSalesReportsOverview,
 } from '@/features/sales/api'
@@ -35,6 +37,7 @@ import {
   PERIOD_MODES,
   resolveCompareMode,
 } from '@/features/sales/periods'
+import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
 import { nextSort, type SortAccessors, type SortState, sortRows } from '@/lib/table-sort'
 import type {
@@ -110,7 +113,10 @@ const SORT_ACCESSORS = {
     METRICS.flatMap(({ key }) => [
       [`${key}:previous`, (row: SortableRow) => row.previous?.[key]],
       [`${key}:current`, (row: SortableRow) => row.current[key]],
-      [`${key}:change`, (row: SortableRow) => (row.previous ? relativeChange(row.current[key], row.previous[key]) : null)],
+      [
+        `${key}:change`,
+        (row: SortableRow) => (row.previous ? relativeChange(row.current[key], row.previous[key]) : null),
+      ],
     ]),
   ),
 } as SortAccessors<SortableRow, SortKey>
@@ -165,17 +171,14 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
   const valid = !customError && !compareError
   const { text: query, setText: setQuery } = useSearchParamText('szukaj')
 
-  const report = useProtocolReport(
-    storeId,
-    {
-      protocol: protocol?.kind ?? 'LIQUIDATION',
-      grouping: grouping.value,
-      level: level.value,
-      range: periods.current,
-      previous: compare === 'none' ? null : periods.previous,
-    },
-    valid && protocol != null && protocol.documentType != null,
-  )
+  const reportQuery: ProtocolReportQuery = {
+    protocol: protocol?.kind ?? 'LIQUIDATION',
+    grouping: grouping.value,
+    level: level.value,
+    range: periods.current,
+    previous: compare === 'none' ? null : periods.previous,
+  }
+  const report = useProtocolReport(storeId, reportQuery, valid && protocol != null && protocol.documentType != null)
 
   return (
     <>
@@ -315,8 +318,11 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
           ) : (
             <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
               <Report
+                // Zaznaczenie dotyczy grup jednego protokołu i grupowania.
+                key={`${reportQuery.protocol}:${reportQuery.grouping}:${reportQuery.level}`}
                 storeId={storeId}
                 report={report.data}
+                reportQuery={reportQuery}
                 compareLabel={compare === 'none' ? null : COMPARE_LABELS[compare].column}
                 query={query}
                 onQuery={setQuery}
@@ -333,6 +339,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
 function Report({
   storeId,
   report,
+  reportQuery,
   compareLabel,
   query,
   onQuery,
@@ -340,6 +347,7 @@ function Report({
 }: {
   storeId: string
   report: ProtocolReportData
+  reportQuery: ProtocolReportQuery
   compareLabel: string | null
   query: string
   onQuery: (query: string) => void
@@ -350,9 +358,13 @@ function Report({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const [requestedSort, setSort] = useState(DEFAULT_SORT)
   // Po wyłączeniu porównania nie ma już kolumn okresu porównywanego.
-  const sort = compare || requestedSort.key.endsWith(':current') || !requestedSort.key.includes(':') ? requestedSort : DEFAULT_SORT
+  const sort =
+    compare || requestedSort.key.endsWith(':current') || !requestedSort.key.includes(':') ? requestedSort : DEFAULT_SORT
   const [shown, setShown] = useState(PAGE)
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
+  const [withArticles, setWithArticles] = useState(true)
+  const pdf = useProtocolReportPdf(storeId)
 
   const groups = useMemo(() => {
     const words = normalize(query).split(/\s+/).filter(Boolean)
@@ -368,13 +380,38 @@ function Report({
             return articles.length > 0 ? [{ group, articles, viaArticles: true }] : []
           })
     const byGroup: SortAccessors<(typeof filtered)[number], SortKey> = Object.fromEntries(
-      Object.entries(SORT_ACCESSORS).map(([key, accessor]) => [key, (row: (typeof filtered)[number]) => accessor(row.group)]),
+      Object.entries(SORT_ACCESSORS).map(([key, accessor]) => [
+        key,
+        (row: (typeof filtered)[number]) => accessor(row.group),
+      ]),
     ) as SortAccessors<(typeof filtered)[number], SortKey>
     return sortRows(filtered, byGroup, sort).map((row) => ({
       ...row,
       articles: sortRows(row.articles, SORT_ACCESSORS, sort),
     }))
   }, [report.groups, query, sort])
+
+  // Zaznaczone grupy, które są w raporcie (po zmianie okresu część może zniknąć), w kolejności raportu.
+  const selectedGroups = report.groups.filter((group) => selected.has(group.key))
+  const selectedTotal = sumFigures(selectedGroups.map((group) => group.current))
+  const selectedPrevious = compare ? sumFigures(selectedGroups.map((group) => group.previous!)) : null
+  const toggleSelected = (key: string) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  const filteredUnselected = groups.filter(({ group }) => !selected.has(group.key)).length
+  const printRequest = {
+    ...reportQuery,
+    previous: compare ? reportQuery.previous : null,
+    groups: selectedGroups.map((group) => group.key),
+    articles: !byArticle && withArticles,
+  }
+  const onPdfError = (error: unknown) =>
+    toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
+  const printLabel = selectedGroups.length > 0 ? ` zaznaczone (${selectedGroups.length})` : ' wszystko'
 
   const sorting = { sort, onSort: (column: SortKey) => setSort(nextSort(sort, column)) }
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < groups.length, shown)
@@ -450,6 +487,56 @@ function Report({
               }
               className="min-w-64 flex-1"
             />
+            {query.trim() !== '' && groups.length > 0 && filteredUnselected > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setSelected((current) => new Set([...current, ...groups.map(({ group }) => group.key)]))}
+              >
+                Zaznacz wyszukane ({filteredUnselected})
+              </Button>
+            )}
+            {selectedGroups.length > 0 && (
+              <Button variant="ghost" onClick={() => setSelected(new Set())}>
+                Wyczyść zaznaczenie
+              </Button>
+            )}
+          </div>
+
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              {selectedGroups.length > 0
+                ? 'Wydruk obejmie tylko zaznaczone pozycje, z ich sumą na dole.'
+                : 'Zaznacz pozycje (np. kilka zapisów tej samej marki), żeby je zsumować i wydrukować, np. dla dostawcy.'}
+            </p>
+            <div className="ml-auto flex flex-wrap items-center gap-3">
+              {!byArticle && (
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-foreground"
+                    checked={withArticles}
+                    onChange={(event) => setWithArticles(event.target.checked)}
+                  />
+                  Z artykułami
+                </label>
+              )}
+              <Button
+                variant="outline"
+                loading={pdf.download.isPending}
+                onClick={() => pdf.download.mutate(printRequest, { onError: onPdfError })}
+              >
+                <DownloadIcon />
+                Pobierz PDF{printLabel}
+              </Button>
+              <Button
+                variant="outline"
+                loading={pdf.print.isPending}
+                onClick={() => pdf.print.mutate(printRequest, { onError: onPdfError })}
+              >
+                <PrinterIcon />
+                Drukuj{printLabel}
+              </Button>
+            </div>
           </div>
 
           <Card className="overflow-clip py-0">
@@ -511,40 +598,52 @@ function Report({
                           onClick={byArticle ? undefined : () => toggle(group.key)}
                         >
                           <TableCell className={cn('sticky left-0 z-10 max-w-96 bg-card pl-4', open && 'bg-muted')}>
-                            {article ? (
-                              <ArticleName article={article} onChart={() => openChart(article)} />
-                            ) : (
-                              <button
-                                type="button"
-                                aria-expanded={open}
-                                className="flex w-full items-center gap-2 text-left outline-none focus-visible:underline"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  toggle(group.key)
-                                }}
-                              >
-                                <ChevronRightIcon
-                                  aria-hidden
-                                  className={cn(
-                                    'size-4 shrink-0 text-muted-foreground transition-transform duration-150',
-                                    open && 'rotate-90',
-                                  )}
-                                />
-                                <span className="min-w-0">
-                                  <span className="block truncate font-medium">
-                                    {group.code && (
-                                      <span className="mr-1.5 text-muted-foreground">
-                                        {report.grouping === 'NOMENCLATURE' ? displayCode(group.code) : group.code}
-                                      </span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                aria-label={`Zaznacz do sumy i wydruku: ${group.name ?? group.key}`}
+                                className="size-4 shrink-0 accent-foreground"
+                                checked={selected.has(group.key)}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={() => toggleSelected(group.key)}
+                              />
+                              {article ? (
+                                <div className="min-w-0 flex-1">
+                                  <ArticleName article={article} onChart={() => openChart(article)} />
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  aria-expanded={open}
+                                  className="flex w-full items-center gap-2 text-left outline-none focus-visible:underline"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    toggle(group.key)
+                                  }}
+                                >
+                                  <ChevronRightIcon
+                                    aria-hidden
+                                    className={cn(
+                                      'size-4 shrink-0 text-muted-foreground transition-transform duration-150',
+                                      open && 'rotate-90',
                                     )}
-                                    {groupName(group, report.grouping)}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block truncate font-medium">
+                                      {group.code && (
+                                        <span className="mr-1.5 text-muted-foreground">
+                                          {report.grouping === 'NOMENCLATURE' ? displayCode(group.code) : group.code}
+                                        </span>
+                                      )}
+                                      {groupName(group, report.grouping)}
+                                    </span>
+                                    <span className="block text-xs text-muted-foreground">
+                                      {articlesLabel(group.articles.length)}
+                                    </span>
                                   </span>
-                                  <span className="block text-xs text-muted-foreground">
-                                    {articlesLabel(group.articles.length)}
-                                  </span>
-                                </span>
-                              </button>
-                            )}
+                                </button>
+                              )}
+                            </div>
                           </TableCell>
                           <Figures
                             current={group.current}
@@ -573,6 +672,17 @@ function Report({
                   })}
                 </TableBody>
                 <TableFooter className="sticky bottom-0 z-20 bg-card">
+                  {selectedGroups.length > 0 && (
+                    <TableRow className="bg-muted/60 hover:bg-muted/60">
+                      <TableCell className="sticky left-0 z-10 bg-muted pl-4 font-semibold">
+                        Zaznaczone ({selectedGroups.length})
+                      </TableCell>
+                      <Figures current={selectedTotal} previous={selectedPrevious} compare={compare} strong />
+                      <TableCell className={cn('pr-4 text-right font-semibold', compare && 'border-l')}>
+                        {share(selectedTotal.purchaseValue)}
+                      </TableCell>
+                    </TableRow>
+                  )}
                   <TableRow className="hover:bg-transparent">
                     <TableCell className="sticky left-0 z-10 bg-card pl-4 font-semibold">Razem</TableCell>
                     <Figures current={report.total} previous={report.previousTotal} compare={compare} strong />
@@ -664,6 +774,17 @@ function Figures({
   )
 }
 
+function sumFigures(figures: ProtocolFigures[]): ProtocolFigures {
+  return figures.reduce(
+    (sum, item) => ({
+      quantity: sum.quantity + item.quantity,
+      purchaseValue: sum.purchaseValue + item.purchaseValue,
+      saleValueGross: sum.saleValueGross + item.saleValueGross,
+    }),
+    { quantity: 0, purchaseValue: 0, saleValueGross: 0 },
+  )
+}
+
 /** Zmiana % względem okresu porównywanego; bez niego „nowe”, bez obu „–”. */
 function change(current: number, previous: number) {
   if (previous === 0) return current === 0 ? '–' : 'nowe'
@@ -711,7 +832,13 @@ function NumberHead({
   className?: string
 }) {
   return (
-    <SortableHead column={column} sort={sort} onSort={onSort} align="right" className={cn('whitespace-nowrap', className)}>
+    <SortableHead
+      column={column}
+      sort={sort}
+      onSort={onSort}
+      align="right"
+      className={cn('whitespace-nowrap', className)}
+    >
       <span title={hint}>{children}</span>
     </SortableHead>
   )

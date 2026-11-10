@@ -127,11 +127,7 @@ export async function downloadPostedFile(path: string, json: unknown, fallbackNa
 }
 
 /** Plik z odpowiedzi na POST z JSON-em, bez zapisu (np. do zapisania w wybranym folderze). */
-export async function fetchPostedFile(
-  path: string,
-  json: unknown,
-  fallbackName = 'plik',
-): Promise<NamedFile> {
+export async function fetchPostedFile(path: string, json: unknown, fallbackName = 'plik'): Promise<NamedFile> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = await csrfToken()
   if (token) headers['X-XSRF-TOKEN'] = token
@@ -158,7 +154,18 @@ async function namedFile(response: Response, fallbackName: string): Promise<Name
  * a przeglądarka drukuje go swoją przeglądarką PDF. Kończy się, gdy okno drukowania jest już otwarte.
  */
 export async function printFile(path: string): Promise<void> {
-  const response = await fetchFile(path)
+  return printResponse(await fetchFile(path))
+}
+
+/** Jak `printFile`, ale PDF z odpowiedzi na POST z JSON-em (parametry, które nie mieszczą się w adresie). */
+export async function printPostedFile(path: string, json: unknown): Promise<void> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = await csrfToken()
+  if (token) headers['X-XSRF-TOKEN'] = token
+  return printResponse(await fetchFile(path, { method: 'POST', headers, body: JSON.stringify(json) }))
+}
+
+async function printResponse(response: Response): Promise<void> {
   const blob = new Blob([await response.blob()], { type: 'application/pdf' })
   const url = URL.createObjectURL(blob)
   const frame = document.createElement('iframe')

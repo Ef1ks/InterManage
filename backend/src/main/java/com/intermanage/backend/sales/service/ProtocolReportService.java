@@ -1,12 +1,15 @@
 package com.intermanage.backend.sales.service;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -15,6 +18,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.entity.DocumentType;
@@ -24,13 +29,18 @@ import com.intermanage.backend.document.repository.DocumentLineRepository.Protoc
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.entity.NomenclatureLevel;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
+import com.intermanage.backend.sales.component.ProtocolReportPdf;
 import com.intermanage.backend.sales.dto.ProtocolReportGrouping;
+import com.intermanage.backend.sales.dto.ProtocolReportPrintRequest;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Article;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Figures;
 import com.intermanage.backend.sales.dto.ProtocolReportResponse.Group;
 import com.intermanage.backend.sales.dto.ProtocolReportsOverview;
 import com.intermanage.backend.sales.repository.SaleRepository;
+import com.intermanage.backend.sales.service.PeriodSummaryService.ExportFile;
+import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.store.repository.StoreRepository;
 import com.intermanage.backend.store.entity.ProtocolKind;
 import com.intermanage.backend.store.entity.StoreProtoSettings;
 import com.intermanage.backend.store.service.StoreProtoSettingsService;
@@ -62,14 +72,21 @@ public class ProtocolReportService {
     private final NomenclatureRepository nomenclatures;
     private final StoreProtoSettingsService protoSettings;
     private final SaleRepository sales;
+    private final StoreRepository stores;
+    private final AppUserRepository users;
+    private final ProtocolReportPdf reportPdf;
 
     public ProtocolReportService(DocumentLineRepository lines, DocumentImportRepository documentImports,
-            NomenclatureRepository nomenclatures, StoreProtoSettingsService protoSettings, SaleRepository sales) {
+            NomenclatureRepository nomenclatures, StoreProtoSettingsService protoSettings, SaleRepository sales,
+            StoreRepository stores, AppUserRepository users, ProtocolReportPdf reportPdf) {
         this.lines = lines;
         this.documentImports = documentImports;
         this.nomenclatures = nomenclatures;
         this.protoSettings = protoSettings;
         this.sales = sales;
+        this.stores = stores;
+        this.users = users;
+        this.reportPdf = reportPdf;
     }
 
     @Transactional(readOnly = true)
@@ -133,6 +150,58 @@ public class ProtocolReportService {
                 documentImports.findLastPeriodTo(storeId).orElse(null),
                 sum(articles, ProtocolReportService::current),
                 compare ? sum(articles, ProtocolReportService::previous) : null, groups);
+    }
+
+    /**
+     * Wydruk raportu: tylko grupy o kluczach z {@code groups} (puste = wszystkie), w kolejności raportu, z sumami
+     * wybranych. Np. likwidacje jednej marki albo dostawcy do pokazania dostawcy.
+     */
+    @Transactional(readOnly = true)
+    public ExportFile pdf(UUID storeId, ProtocolKind protocol, ProtocolReportPrintRequest request, UUID userId) {
+        ProtocolReportResponse report = report(storeId, protocol, request.grouping(), request.level(),
+                request.from(), request.to(), request.previousFrom(), request.previousTo());
+        boolean selection = request.groups() != null && !request.groups().isEmpty();
+        Set<String> keys = selection ? new HashSet<>(request.groups()) : Set.of();
+        List<Group> groups = selection
+                ? report.groups().stream().filter(group -> keys.contains(group.key())).toList()
+                : report.groups();
+        if (selection && groups.isEmpty()) {
+            throw ApiException.badRequest("Wybranych pozycji nie ma w raporcie za ten okres");
+        }
+        boolean compare = report.previousTotal() != null;
+        Figures total = selection ? sumGroups(groups, Group::current) : report.total();
+        Figures previousTotal = !compare ? null : selection ? sumGroups(groups, Group::previous) : report.previousTotal();
+
+        Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
+        String printedBy = userId != null ? users.findById(userId).map(AppUser::getDisplayName).orElse(null) : null;
+        String grouping = switch (report.grouping()) {
+            case ARTICLE -> "Artykuły";
+            case BRAND -> "Marka";
+            case SUPPLIER -> "Ostatni dostawca";
+            case NOMENCLATURE -> switch (report.level()) {
+                case FAMILY -> "Rodzina";
+                case SUBFAMILY -> "Podrodzina";
+                default -> "Rejon";
+            };
+        };
+        ProtocolReportPdf.Header header = new ProtocolReportPdf.Header(protocol.label(), store.getNumber(),
+                store.getName(), grouping, "Porównanie", selection, printedBy);
+        String name = selection && groups.size() == 1 ? "-" + fileNamePart(groups.getFirst().name()) : "";
+        return new ExportFile("protokol-" + protocol.name().toLowerCase() + name + "-" + store.getNumber() + "-"
+                + report.from() + "_" + report.to() + ".pdf", "application/pdf",
+                reportPdf.pdf(header, report, groups, total, previousTotal, request.articles()));
+    }
+
+    private static String fileNamePart(String name) {
+        String part = Normalizer.normalize(name == null ? "" : name, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").replace('ł', 'l').replace('Ł', 'L')
+                .replaceAll("[^A-Za-z0-9]+", "-").replaceAll("(^-|-$)", "").toLowerCase();
+        return part.length() > 40 ? part.substring(0, 40) : part;
+    }
+
+    private static Figures sumGroups(List<Group> groups, Function<Group, Figures> figures) {
+        return groups.stream().map(figures).reduce(ZERO, (a, b) -> new Figures(a.quantity().add(b.quantity()),
+                a.purchaseValue().add(b.purchaseValue()), a.saleValueGross().add(b.saleValueGross())));
     }
 
     /** Ostatni dostawca z przyjęć PZ; artykuł, którego nikt nie przywiózł, bierze dostawcę z linii protokołu. */

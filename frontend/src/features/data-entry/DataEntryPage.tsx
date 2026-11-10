@@ -817,7 +817,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // Kaucje i dostawa zostają w tabeli, ale nie są artykułami: bez liczników, sprawdzania i eksportu.
   const filled = rows.filter((row) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null)
   const transferMacro = planTransferMacro(filled)
-  const pluCodes = pluItems(filled)
   const newCount = filled.filter((row) => !row.known).length
   const changedCount = filled.filter((row) => catalogChanges(row).length > 0).length
   const toCheck = rows.filter((row) => nomenclatureState(row) === 'TO_CHECK').length
@@ -866,6 +865,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const isArticle = (row: DataEntryRow) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null
   // Sam kursor też zaznacza wiersz, także pusty pod artykułami, a taki nie wybiera artykułów do pliku.
   const chosenArticles = selectedArticles.filter(isArticle)
+  // Nowe kody 24 z tabeli i każdy zaznaczony kod 24, także z kartoteki.
+  const pluCodes = pluItems(filled, chosenArticles)
 
   const toggleRowFilter = (kind: RowFilter['kind']) => {
     if (rowFilter?.kind === kind) {
@@ -1471,7 +1472,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 disabled={pluCodes.length === 0}
                 hint={
                   pluCodes.length === 0
-                    ? 'W tabeli nie ma nowych artykułów z kodem 24'
+                    ? 'W tabeli nie ma nowych artykułów z kodem 24 (artykuł z kartoteki: zaznacz go w tabeli)'
                     : 'Do schowka, Alt+E: kod PLU, „KOD:” w tekście dowolnym i format etykiety dla każdego nowego kodu 24'
                 }
                 onClick={() => setPluMacroOpen(true)}

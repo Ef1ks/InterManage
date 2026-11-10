@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/api.ts": {
-    "mtime": 1793551467.7838726,
-    "seen": 1793551778.9931178,
-    "ast_hash": "1796196db28229be90f3967001dfedc1",
+    "mtime": 1794305241.470271,
+    "seen": 1794305410.7443473,
+    "ast_hash": "d69e75d45df38a720fc90d3010f500b0",
     "semantic_hash": ""
   },
   "frontend/src/lib/form-errors.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794302664.6783984,
-    "seen": 1794302716.7338855,
-    "ast_hash": "0e738a7c4b0927c3e994e5c13d3aebc3",
+    "mtime": 1794305361.6212502,
+    "seen": 1794305410.7600703,
+    "ast_hash": "e073642ce093687db9916ca2ac21c73d",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794286158.5779638,
-    "seen": 1794286403.750711,
-    "ast_hash": "b74548ab7215b7b0bda5e371f8f61ba9",
+    "mtime": 1794305149.4330049,
+    "seen": 1794305410.732596,
+    "ast_hash": "dde02ad303e3074b59322747b1f8648a",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -6156,9 +6156,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/controller/ProtocolReportController.java": {
-    "mtime": 1793639410.6991107,
-    "seen": 1793639796.3495471,
-    "ast_hash": "79a86dd27a336b8225b991c84177cacf",
+    "mtime": 1794305131.824294,
+    "seen": 1794305410.6335487,
+    "ast_hash": "4de45dffca9ac63c93745395088e8477",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/ProtocolReportGrouping.java": {
@@ -6180,15 +6180,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/ProtocolReportService.java": {
-    "mtime": 1793810924.1628582,
-    "seen": 1793819217.0015366,
-    "ast_hash": "c663b2868aac7b2b2a9b5eeff87e2e47",
+    "mtime": 1794305128.6279397,
+    "seen": 1794305410.643597,
+    "ast_hash": "3cda69876f7009737a2eca5117e2b779",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProtocolReportIntegrationTests.java": {
-    "mtime": 1793639494.9514806,
-    "seen": 1793639796.3661127,
-    "ast_hash": "e0900765575cfc3eb3ae531bb5131298",
+    "mtime": 1794305313.0991406,
+    "seen": 1794305410.6884928,
+    "ast_hash": "7ef340a18b4fccf44a6fbef8a71fbe92",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/ProductFiltersPanel.tsx": {
@@ -6204,9 +6204,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ProtocolReport.tsx": {
-    "mtime": 1793811531.756167,
-    "seen": 1793819217.040325,
-    "ast_hash": "548beb5eb3d00a5172fa51d2b8c13d58",
+    "mtime": 1794305241.302417,
+    "seen": 1794305410.7310853,
+    "ast_hash": "2f6b31e6c396bd5c604128da45b45c20",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/controller/PromotionReportController.java": {
@@ -7992,9 +7992,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794302141.0834646,
-    "seen": 1794302716.6795828,
-    "ast_hash": "64742ca07b8fc387656ed843dbe51335",
+    "mtime": 1794305333.659789,
+    "seen": 1794305410.7095754,
+    "ast_hash": "08be9bc7f142833adfd6761df2e1e20c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -8094,9 +8094,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceLabelsDialog.tsx": {
-    "mtime": 1794302579.73321,
-    "seen": 1794302716.6943078,
-    "ast_hash": "375585f90c67c90fba25241df092bdcc",
+    "mtime": 1794302930.482098,
+    "seen": 1794305410.7234068,
+    "ast_hash": "74a8197c6a19d3bd131a893598f61028",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceMarkdownDialog.tsx": {
@@ -9822,9 +9822,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/plu-macro.ts": {
-    "mtime": 1794302602.5450838,
-    "seen": 1794302716.6795828,
-    "ast_hash": "36c5c5c41ba0beeeeb19235420994c0d",
+    "mtime": 1794305322.853936,
+    "seen": 1794305410.7095754,
+    "ast_hash": "19b00726cac60a5a270482a6f6c0ebb7",
     "semantic_hash": ""
   },
   "info.txt": {
@@ -9837,6 +9837,18 @@
     "mtime": 1794302344.4348383,
     "seen": 1794302716.5950491,
     "ast_hash": "b9ff58c024d6c3a70a11209e1222ca8e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/component/ProtocolReportPdf.java": {
+    "mtime": 1794305360.7237537,
+    "seen": 1794305410.63255,
+    "ast_hash": "8908246ac9ae86e2a9b381374e11b861",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/dto/ProtocolReportPrintRequest.java": {
+    "mtime": 1794305028.7850275,
+    "seen": 1794305410.6370685,
+    "ast_hash": "85c333263331c1a72086c33d634e0f6e",
     "semantic_hash": ""
   }
 }

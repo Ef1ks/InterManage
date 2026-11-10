@@ -198,6 +198,7 @@ PlayMacro(rawClip) {
     closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
+    handledRows := Map() ; WEBIFROW: ile wierszy obsłużono pod daną etykietą (np. pliki jednego kodu MEA)
 
     index := 0
     while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW i WEBIFVALUE przeskakują do LABEL
@@ -491,11 +492,15 @@ PlayMacro(rawClip) {
                 seen := ""
                 problem := WebIfRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Integer(Trim(parts[6])), Trim(parts[7]),
                     parts.Length >= 9 ? Integer(Trim(parts[9])) : 30000, &rowButton, &seen)
-                if (problem = "")
+                listKey := Trim(parts[8])
+                if (problem = "") {
                     vars["ROW"] := rowButton ; kolejne linie klikają przycisk tego wiersza jako %ROW%
+                    handledRows[listKey] := handledRows.Get(listKey, 0) + 1
+                }
                 if (problem = "SKIP") {
-                    ; Podsumowanie na końcu: ile plików obsłużono i co było widać na liście przy przeskoku.
-                    report .= Trim(parts[7]) ": obsłużone pliki: " (Integer(Trim(parts[6])) - 1) " (" seen ")`n"
+                    ; Podsumowanie na końcu: ile plików obsłużono (obsłużony plik znika z listy, więc liczymy przejścia,
+                    ; nie numer wiersza) i co było widać na liście przy przeskoku.
+                    report .= Trim(parts[7]) ": obsłużone pliki: " handledRows.Get(listKey, 0) " (" seen ")`n"
                     target := LabelLine(lines, Trim(parts[8]), index)
                     if (target = 0) {
                         MsgBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop

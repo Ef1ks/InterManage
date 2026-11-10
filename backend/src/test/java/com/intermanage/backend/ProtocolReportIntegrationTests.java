@@ -1,13 +1,16 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.Test;
@@ -15,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -113,6 +117,24 @@ class ProtocolReportIntegrationTests {
                 .andExpect(jsonPath("$.groups[0].name").value("01_DELIKATESY"))
                 .andExpect(jsonPath("$.groups[0].articles[0].itm8").value(WASA))
                 .andExpect(jsonPath("$.groups[1].name").value("Bez nomenklatury"));
+
+        // Wydruk wybranych marek (pusty klucz = „Bez marki”) z porównaniem, z artykułami.
+        byte[] pdf = mvc.perform(post(base + "/LIQUIDATION/pdf").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"grouping":"BRAND","from":"2026-10-01","to":"2026-10-31",
+                                 "previousFrom":"2026-09-01","previousTo":"2026-09-30",
+                                 "groups":["WASA",""],"articles":true}"""))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(pdf, 0, 5, StandardCharsets.ISO_8859_1)).isEqualTo("%PDF-");
+        mvc.perform(post(base + "/LIQUIDATION/pdf").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"grouping":"BRAND","from":"2026-10-01","to":"2026-10-31",
+                                 "groups":["NIEZNANA"],"articles":false}"""))
+                .andExpect(status().isBadRequest());
 
         mvc.perform(get(base + "/REPRESENTATION?grouping=NOMENCLATURE&level=SUBFAMILY&" + PERIODS).cookie(owner))
                 .andExpect(jsonPath("$.groups[0].code").value("010101"))

@@ -147,7 +147,9 @@ export function PluMacroDialog({ open, onOpenChange, items }: Props) {
         </div>
 
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">W tabeli nie ma nowych artykułów z kodem 24.</p>
+          <p className="text-sm text-muted-foreground">
+            W tabeli nie ma nowych artykułów z kodem 24. Artykuł z kartoteki zaznacz w tabeli.
+          </p>
         ) : (
           <div className="grid max-h-[50vh] gap-0.5 overflow-y-auto rounded-lg border p-2">
             {items.map((item) => (
@@ -166,6 +168,11 @@ export function PluMacroDialog({ open, onOpenChange, items }: Props) {
                 />
                 <span className="tabular-nums">{item.ean}</span>
                 <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                {item.inCatalog && (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    z kartoteki
+                  </span>
+                )}
               </label>
             ))}
           </div>
