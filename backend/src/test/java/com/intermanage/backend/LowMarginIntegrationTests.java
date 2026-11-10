@@ -190,22 +190,27 @@ class LowMarginIntegrationTests {
     }
 
     @Test
-    void marksSalePriceSetByCadencier() throws Exception {
+    void usesCurrentTillPriceInsteadOfPriceFromDelivery() throws Exception {
         requiredMargin("57", "30");
-        // Cena 12,50 zł to CENA_CAD narzucona przez centralę, więc za niską marżę daje cena z cadencier.
-        product(ON_THRESHOLD, "12.50");
-        jdbc.update("update products set cadencier_price = 12.50 where itm8 = ?", ON_THRESHOLD);
-        delivery(ON_THRESHOLD, 5, "10", "100.00", "12.50", "570101");
-        // CENA_CAD inna niż cena, od której liczy się marża: bez oznaczenia.
-        product(LISTED_LOW, "12.50");
-        jdbc.update("update products set cadencier_price = 13.99 where itm8 = ?", LISTED_LOW);
-        delivery(LISTED_LOW, 5, "10", "100.00", "12.50", "570101");
+        // Cenę podniesiono po przyjęciu z 11 zł na 15 zł: marża liczy się z nowej, więc bez zastrzeżeń.
+        product(LISTED, "15.00");
+        delivery(LISTED, 5, "10", "100.00", "11.00", "570101");
+        // Cenę obniżono z 15 zł na 11 zł: na PZ marża była dobra, teraz jest za niska.
+        product(LISTED_LOW, "11.00");
+        delivery(LISTED_LOW, 5, "10", "100.00", "15.00", "570101");
+        // Promocja rozpoczęta przed raportem kartoteki zostawia w kartotece cenę promocyjną: liczy się cena zwykła.
+        String promotions = jdbc.queryForObject("""
+                insert into promotion_imports (store_id, file_name, total_rows) values (?::uuid, 'Taryfy.pdf', 1)
+                returning id""", String.class, store);
+        product(RECOGNIZED, "11.00");
+        promotion(promotions, RECOGNIZED, "15.00", "11.00");
+        delivery(RECOGNIZED, 5, "10", "100.00", "15.00", "570101");
 
         mvc.perform(get(url()).cookie(owner))
-                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + ON_THRESHOLD
-                        + "')].lines[0].cadencierPrice").value(true))
-                .andExpect(jsonPath("$.deliveries[?(@.lines[0].itm8 == '" + LISTED_LOW
-                        + "')].lines[0].cadencierPrice").value(false));
+                .andExpect(jsonPath("$.deliveries[*].lines[*].itm8", containsInAnyOrder(LISTED_LOW)))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].salePrice").value(11.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].documentSalePrice").value(15.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].promotion").isEmpty());
     }
 
     @Test

@@ -52,11 +52,10 @@ public record LowMarginReport(
     }
 
     /**
-     * Artykuł z za niską marżą. Ilość i cena zakupu po korektach. {@code salePrice}: cena katalogowa brutto, od niej
-     * liczy się marża (% od sprzedaży netto); {@code documentSalePrice}: cena z dokumentu, inna w promocji
-     * ({@code promotion}). {@code targetPurchasePrice}: cena zakupu dająca marżę wymaganą, {@code excessValue}: różnica
-     * × ilość. {@code regionCode}: rejon nomenklatury z linii (do własnych kategorii raportu). {@code cadencierPrice}:
-     * cena katalogowa to CENA_CAD z kartoteki, czyli cena narzucona przez centralę.
+     * Artykuł z za niską marżą. Ilość i cena zakupu po korektach. {@code salePrice}: aktualna cena zwykła brutto na kasie
+     * (bez artykułu w kartotece cena katalogowa z dnia przyjęcia), od niej liczy się marża (% od sprzedaży netto);
+     * {@code documentSalePrice}: cena z dokumentu PZ, {@code promotion}: była promocyjna. {@code targetPurchasePrice}: cena zakupu dająca marżę wymaganą, {@code excessValue}: różnica
+     * × ilość. {@code regionCode}: rejon nomenklatury z linii (do własnych kategorii raportu).
      */
     public record Line(
             String itm8,
@@ -75,7 +74,6 @@ public record LowMarginReport(
             BigDecimal requiredMargin,
             BigDecimal targetPurchasePrice,
             BigDecimal excessValue,
-            boolean corrected,
-            boolean cadencierPrice) {
+            boolean corrected) {
     }
 }

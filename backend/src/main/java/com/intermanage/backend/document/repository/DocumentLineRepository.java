@@ -222,7 +222,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
         BigDecimal getCatalogPrice();
 
-        BigDecimal getCadencierPrice();
+        BigDecimal getCurrentPrice();
     }
 
     /**
@@ -231,7 +231,9 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * cena zwykła z promocji trwającej tego dnia na liście promocji, {@code tillPrice} to samo z plików kasy (promocje
      * założone ręcznie są tylko tam), {@code leaflet} artykuł w gazetce tego dnia,
      * {@code referencePrice} cena zwykła ze sprzedaży ({@link PromotionReportRepository#REGULAR_PRICES}),
-     * {@code catalogPrice} cena z kartoteki, {@code cadencierPrice} CENA_CAD z kartoteki. Linie bez wartości (gratis) się nie liczą. Linia z lokalnym ITM8 dostawcy
+     * {@code catalogPrice} cena z kartoteki, {@code currentPrice} aktualna cena zwykła na kasie (dziś = {@code dataTo}):
+     * {@code products.sale_price}, a gdy jest w niej trwająca promocja rozpoczęta przed raportem kartoteki, cena zwykła
+     * z listy promocji albo z plików kasy (jak w ustawianiu promocji). Linie bez wartości (gratis) się nie liczą. Linia z lokalnym ITM8 dostawcy
      * ({@code 99…}, spoza kartoteki) bierze to wszystko z artykułu z kartoteki o tym EAN-ie (główny, multikody, dawne
      * pary), bo promocja jest na artykule sklepu, a nie na ITM8 dostawcy.
      */
@@ -299,7 +301,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    f.delivery_id is not null as corrected,
                    p.price as listedPrice, t.price as tillPrice, g.itm8 is not null as leaflet,
                    round(cast(r.price as numeric), 2) as referencePrice,
-                   c.sale_price as catalogPrice, c.cadencier_price as cadencierPrice
+                   c.sale_price as catalogPrice,
+                   coalesce(cp.regular_sale_price, ct.regular_price, c.sale_price) as currentPrice
             from lines l
             left join fixes f on f.delivery_id = l.document_id and f.itm8 = l.itm8
             left join listed p on p.document_id = l.document_id and p.itm8 = l.itm8
@@ -308,6 +311,16 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             left join reference r on r.itm8 = l.article
                                  and r.month = cast(date_trunc('month', l.day) as date)
             left join products c on c.store_id = :storeId and c.itm8 = l.article
+            left join lateral (
+                select pr.regular_sale_price from promotions pr
+                where pr.store_id = c.store_id and pr.itm8 = c.itm8 and pr.promo_price = c.sale_price
+                    and pr.start_date <= cast(:dataTo as date) and pr.end_date >= cast(:dataTo as date)
+                order by pr.end_date desc limit 1) cp on true
+            left join lateral (
+                select t.regular_price from till_promotions t
+                where t.store_id = c.store_id and t.itm8 = c.itm8 and t.promo_price = c.sale_price
+                    and t.promo_from <= cast(:dataTo as date) and t.promo_to >= cast(:dataTo as date)
+                order by t.file_time desc limit 1) ct on true
             """, nativeQuery = true)
     List<DeliveryMargin> findDeliveryMargins(UUID storeId, LocalDateTime from, LocalDateTime until,
             String[] documentIds, LocalDate dataFrom, LocalDate dataTo, LocalDate referenceFrom, int minReferenceDays);

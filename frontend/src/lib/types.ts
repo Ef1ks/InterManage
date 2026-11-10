@@ -2298,8 +2298,6 @@ export type LowMarginLine = {
   targetPurchasePrice: number
   excessValue: number
   corrected: boolean
-  /** Cena katalogowa to CENA_CAD z kartoteki, narzucona przez centralę. */
-  cadencierPrice: boolean
 }
 
 export type LowMarginDelivery = {

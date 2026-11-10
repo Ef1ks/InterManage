@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794302552.392826,
-    "seen": 1794302716.718719,
-    "ast_hash": "bbb358250beaae3009c21f29f9cd1db4",
+    "mtime": 1794308779.1559083,
+    "seen": 1794308937.183431,
+    "ast_hash": "a7553bc424142214c3bde898fae6e9fc",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794305361.6212502,
-    "seen": 1794305410.7600703,
-    "ast_hash": "e073642ce093687db9916ca2ac21c73d",
+    "mtime": 1794309551.0213294,
+    "seen": 1794309596.3467503,
+    "ast_hash": "6af2d78c093b2e5741a323c9ff7c07e2",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -2640,9 +2640,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/repository/DocumentLineRepository.java": {
-    "mtime": 1794250105.980163,
-    "seen": 1794250469.0440762,
-    "ast_hash": "06d064b6b4879e9eb7223ff1106c297d",
+    "mtime": 1794309422.8555925,
+    "seen": 1794309596.1732807,
+    "ast_hash": "9a23567fed3d4ce2af20a34d1bfad4f6",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/repository/DocumentRepository.java": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1794302624.1826532,
-    "seen": 1794302716.676576,
-    "ast_hash": "cb967cbca6d2590103e5bd3b2d3c0ca0",
+    "mtime": 1794305617.2987783,
+    "seen": 1794308937.1443744,
+    "ast_hash": "0db9c1695e60de106e82a1c0e55389ef",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -7068,27 +7068,27 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/dto/LowMarginReport.java": {
-    "mtime": 1794234554.1086805,
-    "seen": 1794234685.2626646,
-    "ast_hash": "2e240463f6fd4f59489f2a6de0615d17",
+    "mtime": 1794309436.1206312,
+    "seen": 1794309596.2023258,
+    "ast_hash": "3e9874ca43edbd251c8f4a5d93feba09",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/service/LowMarginService.java": {
-    "mtime": 1794234554.1086805,
-    "seen": 1794234685.2663972,
-    "ast_hash": "b62d674cf6cd1708cd616b39cac9a712",
+    "mtime": 1794309496.0366147,
+    "seen": 1794309596.2071738,
+    "ast_hash": "2051018ca51f3c542acb489ea6fc3240",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/LowMarginIntegrationTests.java": {
-    "mtime": 1794234577.4320002,
-    "seen": 1794234685.3259752,
-    "ast_hash": "68549e655692538d5d7d6edb608a9d70",
+    "mtime": 1794309487.9336338,
+    "seen": 1794309596.272603,
+    "ast_hash": "42f0cb35cd8380fd8d8fbb53466b5abb",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/LowMarginReport.tsx": {
-    "mtime": 1794234569.7002416,
-    "seen": 1794234685.3692622,
-    "ast_hash": "55d8041557c52289c56541bb3304f3a1",
+    "mtime": 1794309451.3563693,
+    "seen": 1794309596.3154752,
+    "ast_hash": "f4a5e9bd7d2565d0da8e89862d14779f",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ReviewedReportPage.tsx": {
@@ -9816,15 +9816,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PluMacroDialog.tsx": {
-    "mtime": 1794302615.6224866,
-    "seen": 1794302716.6775818,
-    "ast_hash": "d24d68f8e9ff2e74b7669f4adc5a4b5c",
+    "mtime": 1794305618.8738236,
+    "seen": 1794308937.1448896,
+    "ast_hash": "aee91024df80a46e48802843dd4fae17",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/plu-macro.ts": {
-    "mtime": 1794305322.853936,
-    "seen": 1794305410.7095754,
-    "ast_hash": "19b00726cac60a5a270482a6f6c0ebb7",
+    "mtime": 1794305603.6417725,
+    "seen": 1794308937.1484625,
+    "ast_hash": "7dedf6cd438cb537c72951d9ccb677af",
     "semantic_hash": ""
   },
   "info.txt": {

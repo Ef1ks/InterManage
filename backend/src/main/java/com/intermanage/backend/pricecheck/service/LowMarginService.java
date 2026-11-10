@@ -50,10 +50,11 @@ import com.intermanage.backend.sales.repository.SaleRepository;
  * (% od sprzedaży netto, zakup po korektach) jest o co najmniej {@value #MARGIN_GAP} punktów procentowych niższa niż
  * marża wymagana na jego nomenklaturze ({@link NomenclatureMarginService}).
  * <p>
- * Marżę liczymy z ceny katalogowej, a nie promocyjnej: w promocji cena sprzedaży z dokumentu jest ceną promocyjną, więc
- * zastępuje ją cena zwykła w dniu przyjęcia: z listy promocji i z plików kasy (promocje założone ręcznie są tylko tam),
- * a dla gazetki i promocji rozpoznanej ze sprzedaży ({@link PromotionReportService#PRICE_FACTOR}) cena zwykła ze
- * sprzedaży. Lista promocji ma tylko bieżące i przyszłe, a pliki kasy mówią o każdej promocji w sklepie. Dostawców z {@link ExcludedSuppliers} i tych, których nie
+ * Marżę liczymy z aktualnej ceny zwykłej na kasie (kartoteka po plikach TRACEART, bez trwającej promocji), a nie z ceny
+ * z dokumentu: po zmianie ceny raport od razu liczy z nowej. Artykuł spoza kartoteki bierze cenę z dnia przyjęcia: z
+ * dokumentu, a w promocji cenę zwykłą z listy promocji, z plików kasy, a dla gazetki i promocji rozpoznanej ze sprzedaży
+ * ({@link PromotionReportService#PRICE_FACTOR}) ze sprzedaży. {@code promotion} linii mówi, że cena na dokumencie była
+ * promocyjna. Dostawców z {@link ExcludedSuppliers} i tych, których nie
  * dotyczy marża ({@link ReportExcludedSupplierService}), raport nie sprawdza. Pomija też artykuły aktywne w cadencier (po
  * ITM8 albo EAN-ie), bo mają z góry ustaloną, rynkową marżę.
  */
@@ -213,14 +214,22 @@ public class LowMarginService {
         BigDecimal excess = price.subtract(target).multiply(quantity).setScale(2, RoundingMode.HALF_UP);
         return new Line(article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
                 OverpaymentService.regionOf(article.getNomenclatureCode()), article.getSupplierCode(), quantity, price,
-                value, regular, documentPrice, regular.compareTo(documentPrice) > 0 ? promotionOf(article) : null,
-                margin, requiredMargin, target, excess, article.getCorrected(),
-                article.getCadencierPrice() != null && article.getCadencierPrice().signum() > 0
-                        && article.getCadencierPrice().compareTo(regular) == 0);
+                value, regular, documentPrice,
+                priceOnDeliveryDay(article).compareTo(documentPrice) > 0 ? promotionOf(article) : null,
+                margin, requiredMargin, target, excess, article.getCorrected());
+    }
+
+    /**
+     * Cena, od której liczy się marża: aktualna cena zwykła na kasie, a bez artykułu w kartotece cena katalogowa w dniu
+     * przyjęcia.
+     */
+    private static BigDecimal regularPrice(DeliveryMargin article) {
+        BigDecimal current = article.getCurrentPrice();
+        return current != null && current.signum() > 0 ? current : priceOnDeliveryDay(article);
     }
 
     /** Cena katalogowa w dniu przyjęcia: cena z dokumentu, a w promocji cena zwykła, nigdy niższa niż z dokumentu. */
-    private static BigDecimal regularPrice(DeliveryMargin article) {
+    private static BigDecimal priceOnDeliveryDay(DeliveryMargin article) {
         BigDecimal regular = switch (promotionOf(article)) {
             case LIST -> article.getTillPrice() != null ? article.getListedPrice().max(article.getTillPrice())
                     : article.getListedPrice();

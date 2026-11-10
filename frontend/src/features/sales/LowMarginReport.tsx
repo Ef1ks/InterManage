@@ -19,7 +19,7 @@ const PROMOTION_LABELS: Record<LowMarginPromotion, string> = {
 
 /**
  * Za niskie marże: przyjęcia z ostatnich 30 dni z artykułem, którego marża jest o co najmniej 10 punktów procentowych
- * niższa niż wymagana na jego nomenklaturze. W promocji marża liczy się z ceny zwykłej, nie promocyjnej. Sprawę wyjaśnia
+ * niższa niż wymagana na jego nomenklaturze. Marża liczy się z aktualnej ceny zwykłej na kasie, nie z ceny z PZ. Sprawę wyjaśnia
  * się z dostawcą jak w zakupie bazowym poza bazą, ale statusy są osobne.
  */
 export function LowMarginReport({ storeId }: { storeId: string }) {
@@ -79,7 +79,8 @@ function LinesTable({ delivery }: { delivery: LowMarginDelivery }) {
               Cena zakupu<span className="block text-xs font-normal text-muted-foreground">netto, po korektach</span>
             </TableHead>
             <TableHead className="text-right">
-              Cena sprzedaży<span className="block text-xs font-normal text-muted-foreground">katalogowa, brutto</span>
+              Cena sprzedaży
+              <span className="block text-xs font-normal text-muted-foreground">aktualna na kasie, brutto</span>
             </TableHead>
             <TableHead className="text-right">Marża</TableHead>
             <TableHead className="text-right">
@@ -111,23 +112,20 @@ function LinesTable({ delivery }: { delivery: LowMarginDelivery }) {
               <TableCell className="text-right">{formatQuantity(line.quantity)}</TableCell>
               <TableCell className="text-right font-medium">{formatPrice(line.purchasePrice)}</TableCell>
               <TableCell className="text-right whitespace-normal">
-                {line.cadencierPrice ? (
-                  <span
-                    className="font-bold text-blue-700 dark:text-blue-300"
-                    title="Cena cadencier (CENA_CAD) narzucona przez centralę"
-                  >
-                    {formatPrice(line.salePrice)}
-                  </span>
-                ) : (
-                  formatPrice(line.salePrice)
-                )}
-                {line.promotion && (
+                {formatPrice(line.salePrice)}
+                {line.promotion ? (
                   <span
                     className="block text-xs text-orange-700 dark:text-orange-300"
-                    title={`Promocja ${PROMOTION_LABELS[line.promotion]}`}
+                    title={`Na przyjęciu cena promocyjna (promocja ${PROMOTION_LABELS[line.promotion]})`}
                   >
-                    w promocji {formatPrice(line.documentSalePrice)}
+                    na PZ w promocji {formatPrice(line.documentSalePrice)}
                   </span>
+                ) : (
+                  line.documentSalePrice !== line.salePrice && (
+                    <span className="block text-xs text-muted-foreground" title="Cena sprzedaży z przyjęcia PZ">
+                      na PZ {formatPrice(line.documentSalePrice)}
+                    </span>
+                  )
                 )}
               </TableCell>
               <TableCell className="text-right font-medium text-destructive">
