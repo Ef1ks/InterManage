@@ -121,7 +121,8 @@ public class DataEntryController {
         this.corrections = corrections;
     }
 
-    private static final String INVOICES = VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')";
+    /** Faktury KSeF są częścią pracy narzędzia, więc wystarczy {@code DATA_ENTRY:VIEW} (bez osobnego dostępu do KSeF). */
+    private static final String INVOICES = VIEW;
 
     /**
      * Okno wczytywania: faktury ({@code kind=INVOICES}) albo korekty ({@code CORRECTIONS}) sklepu, strony po 100;
@@ -220,12 +221,9 @@ public class DataEntryController {
         return invoiceService.restoreSkipped(storeId, id);
     }
 
-    /**
-     * Pozycje faktury z KSeF z artykułami z kartoteki; {@code source}: skąd wziąć EAN (domyślnie AUTO). Faktury widzi
-     * tylko osoba z dostępem do faktur KSeF.
-     */
+    /** Pozycje faktury z KSeF z artykułami z kartoteki; {@code source}: skąd wziąć EAN (domyślnie AUTO). */
     @GetMapping("/invoices/{invoiceId}")
-    @PreAuthorize(VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    @PreAuthorize(INVOICES)
     public DataEntryInvoice invoice(@PathVariable UUID storeId, @PathVariable UUID invoiceId,
             @RequestParam(required = false) String source) {
         return service.invoice(storeId, invoiceId, source);
@@ -462,9 +460,8 @@ public class DataEntryController {
     /** Plik z historii albo zapis tymczasowy jako dokument do tabeli (zapis tymczasowy z tabelą w {@code draft}). */
     @GetMapping("/xml-history/{id}")
     @PreAuthorize(VIEW)
-    public XmlDocument xmlHistoryDocument(@PathVariable UUID storeId, @PathVariable UUID id,
-            @AuthenticationPrincipal AppUserPrincipal principal) {
-        return xmlService.fromHistory(storeId, id, seesKsef(principal));
+    public XmlDocument xmlHistoryDocument(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return xmlService.fromHistory(storeId, id);
     }
 
     /** Plik z historii do ponownego pobrania, taki jak przy zapisie. */
@@ -482,19 +479,12 @@ public class DataEntryController {
     /** Plik XML faktury z dysku (własny albo od dostawcy) jako dokument do tabeli. */
     @PostMapping("/xml-documents")
     @PreAuthorize(VIEW)
-    public XmlDocument readXml(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
-            @AuthenticationPrincipal AppUserPrincipal principal) {
+    public XmlDocument readXml(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file) {
         try {
-            return xmlService.fromFile(storeId, file.getOriginalFilename(), file.getBytes(), seesKsef(principal));
+            return xmlService.fromFile(storeId, file.getOriginalFilename(), file.getBytes());
         } catch (IOException e) {
             throw ApiException.badRequest("Nie udało się odczytać pliku");
         }
-    }
-
-    /** Faktura z KSeF przy pliku XML tylko z dostępem do faktur KSeF. */
-    private static boolean seesKsef(AppUserPrincipal principal) {
-        return principal.getAuthorities().stream()
-                .anyMatch(authority -> "KSEF_INVOICES:VIEW".equals(authority.getAuthority()));
     }
 
     /** Plik PROTO1-PROTO6 protokołu z artykułów tabeli; zapisuje go przeglądarka w folderze plików PROTO. */

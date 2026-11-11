@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.supplier.dto.CreateSupplierRequest;
 import com.intermanage.backend.supplier.dto.MercalysSupplierCreationRequest;
@@ -40,7 +41,6 @@ import jakarta.validation.Valid;
 public class SupplierController {
 
     private static final String STORE = " and @storeAccess.canAccess(authentication, #storeId)";
-    private static final String VIEW = "hasAuthority('SUPPLIERS:VIEW')" + STORE;
     private static final String EDIT = "hasAuthority('SUPPLIERS:EDIT')" + STORE;
     /** Zakładanie dostawcy w Mercalys idzie z wprowadzania danych, gdy sprzedawcy z faktury nie ma na liście. */
     private static final String MERCALYS = "hasAnyAuthority('SUPPLIERS:EDIT', 'DATA_ENTRY:VIEW')" + STORE;
@@ -54,9 +54,9 @@ public class SupplierController {
         this.mercalys = mercalys;
     }
 
+    /** Lista dostawców to słownik: wybór dostawcy jest w wielu narzędziach, więc wystarczy dostęp do sklepu. */
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('SUPPLIERS:VIEW', 'DOCUMENTS:VIEW', 'DATA_ENTRY:VIEW', 'MEAT_PURCHASES:VIEW')"
-            + STORE)
+    @PreAuthorize(Access.STORE)
     public List<SupplierResponse> list(@PathVariable UUID storeId) {
         return directory.list(storeId);
     }
@@ -97,8 +97,9 @@ public class SupplierController {
         return directory.create(storeId, request, principal.getId());
     }
 
+    /** Karta dostawcy z kontaktami: słownik jak lista, zmienia ją tylko {@code SUPPLIERS:EDIT}. */
     @GetMapping("/{supplierId}")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(Access.STORE)
     public SupplierDetails details(@PathVariable UUID storeId, @PathVariable UUID supplierId) {
         return directory.details(storeId, supplierId);
     }

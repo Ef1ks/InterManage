@@ -58,6 +58,14 @@ public class KsefController {
             "hasAuthority('KSEF_INVOICES:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT =
             "hasAuthority('KSEF_INVOICES:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
+    /**
+     * Odczyt faktur (lista, PDF, XML, bon przyjęcia) w narzędziach, w których faktury są częścią pracy: wprowadzanie
+     * danych, dokumenty i weryfikacja zakupów w raportach (druk faktur przyjęcia). Pobieranie z KSeF, połączenie
+     * i ustawienia zostają przy {@code KSEF_INVOICES}.
+     */
+    private static final String READ =
+            "hasAnyAuthority('KSEF_INVOICES:VIEW', 'DATA_ENTRY:VIEW', 'DOCUMENTS:VIEW', 'SALES:VIEW')"
+            + " and @storeAccess.canAccess(authentication, #storeId)";
 
     private final KsefInvoiceService invoiceService;
     private final KsefConnectionService connectionService;
@@ -86,7 +94,7 @@ public class KsefController {
      * issueDate, number, seller, net, gross.
      */
     @GetMapping("/invoices")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(READ)
     public KsefInvoicePage invoices(@PathVariable UUID storeId, @RequestParam(defaultValue = "0") int page,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -120,7 +128,7 @@ public class KsefController {
      * najpierw ten sam dostawca i najbliższa kwota; {@code query} szuka po numerze, dostawcy, nr dok. dostawcy.
      */
     @GetMapping("/invoices/{id}/documents/candidates")
-    @PreAuthorize(EDIT + " and hasAuthority('DOCUMENTS:VIEW')")
+    @PreAuthorize(VIEW)
     public List<DocumentCandidate> documentCandidates(@PathVariable UUID storeId, @PathVariable UUID id,
             @RequestParam(required = false) String query, @RequestParam(defaultValue = "true") boolean amountRange) {
         return documentLinks.documentCandidates(storeId, id, query, amountRange);
@@ -128,7 +136,7 @@ public class KsefController {
 
     /** Przypina dokument sklepu do faktury - faktura staje się wprowadzona. */
     @PostMapping("/invoices/{id}/documents")
-    @PreAuthorize(EDIT + " and hasAuthority('DOCUMENTS:VIEW')")
+    @PreAuthorize(EDIT)
     public KsefInvoiceSummary linkDocument(@PathVariable UUID storeId, @PathVariable UUID id,
             @Valid @RequestBody LinkDocumentRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
         documentLinks.link(storeId, request.documentId(), id, principal.getId());
@@ -145,7 +153,7 @@ public class KsefController {
     }
 
     @GetMapping("/invoices/{id}/xml")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(READ)
     public ResponseEntity<byte[]> xml(@PathVariable UUID storeId, @PathVariable UUID id) {
         return download(invoiceService.xml(storeId, id));
     }
@@ -155,7 +163,7 @@ public class KsefController {
      * gdy faktura została wprowadzona w drugim sklepie.
      */
     @GetMapping("/invoices/{id}/documents/{documentId}/delivery-note")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(READ)
     public ResponseEntity<byte[]> deliveryNote(@PathVariable UUID storeId, @PathVariable UUID id,
             @PathVariable UUID documentId, @AuthenticationPrincipal AppUserPrincipal principal) {
         UUID deliveryStore = invoiceService.companyDeliveryStore(storeId, id, documentId);
@@ -166,7 +174,7 @@ public class KsefController {
 
     /** Faktura jako PDF do czytania i wydruku, zrobiona z XML z KSeF. */
     @GetMapping("/invoices/{id}/pdf")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(READ)
     public ResponseEntity<byte[]> pdf(@PathVariable UUID storeId, @PathVariable UUID id) {
         return download(invoiceService.pdf(storeId, id));
     }

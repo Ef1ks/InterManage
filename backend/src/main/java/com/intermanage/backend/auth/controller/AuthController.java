@@ -18,6 +18,8 @@ import com.intermanage.backend.auth.dto.ActivateRequest;
 import com.intermanage.backend.auth.dto.ChangePasswordRequest;
 import com.intermanage.backend.auth.dto.LoginRequest;
 import com.intermanage.backend.auth.dto.MeResponse;
+import com.intermanage.backend.auth.dto.MobileLoginRequest;
+import com.intermanage.backend.auth.dto.MobileLoginResponse;
 import com.intermanage.backend.auth.dto.SetUpPasswordRequest;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.security.JwtService;
@@ -55,10 +57,26 @@ public class AuthController {
 
     @PostMapping("/login")
     public MeResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+        AppUserPrincipal principal = authenticate(request.username(), request.password());
+        jwtService.writeTokenCookie(response, principal, Boolean.TRUE.equals(request.rememberMe()));
+        return authService.me(principal.getId());
+    }
+
+    /**
+     * Logowanie z aplikacji mobilnej: token wraca w treści (z „nie wylogowuj mnie”), a aplikacja wysyła go w
+     * {@code Authorization: Bearer}. Bez ciasteczka i bez CSRF.
+     */
+    @PostMapping("/mobile/login")
+    public MobileLoginResponse mobileLogin(@Valid @RequestBody MobileLoginRequest request) {
+        AppUserPrincipal principal = authenticate(request.username(), request.password());
+        return new MobileLoginResponse(jwtService.issueToken(principal, true), authService.me(principal.getId()));
+    }
+
+    private AppUserPrincipal authenticate(String username, String password) {
         AppUserPrincipal principal;
         try {
             principal = (AppUserPrincipal) authenticationManager.authenticate(
-                    UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()))
+                    UsernamePasswordAuthenticationToken.unauthenticated(username, password))
                     .getPrincipal();
         } catch (AuthenticationException e) {
             // Jeden komunikat dla złego loginu, hasła i zablokowanego konta - nie zdradzamy, które konta istnieją.
@@ -68,8 +86,7 @@ public class AuthController {
         if (!principal.hasStoreAccess()) {
             throw new ApiException(HttpStatus.FORBIDDEN, AuthService.NO_STORE_MESSAGE);
         }
-        jwtService.writeTokenCookie(response, principal, Boolean.TRUE.equals(request.rememberMe()));
-        return authService.me(principal.getId());
+        return principal;
     }
 
     /** Link z maila: zużywa token i loguje pracownika, który musi od razu ustawić hasło. */

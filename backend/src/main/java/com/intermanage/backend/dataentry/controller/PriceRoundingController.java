@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.dataentry.dto.PriceRoundingRequest;
 import com.intermanage.backend.dataentry.dto.PriceRoundingRuleResponse;
@@ -27,8 +28,6 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/stores/{storeId}/price-rounding")
 public class PriceRoundingController {
 
-    private static final String VIEW = "hasAnyAuthority('SALES:VIEW', 'DATA_ENTRY:VIEW')"
-            + " and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT =
             "hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
 
@@ -38,8 +37,9 @@ public class PriceRoundingController {
         this.service = service;
     }
 
+    /** Słownik: ceny sugerowane liczą różne narzędzia, więc wystarczy dostęp do sklepu. */
     @GetMapping
-    @PreAuthorize(VIEW)
+    @PreAuthorize(Access.STORE)
     public List<PriceRoundingRuleResponse> list(@PathVariable UUID storeId) {
         return service.list(storeId);
     }

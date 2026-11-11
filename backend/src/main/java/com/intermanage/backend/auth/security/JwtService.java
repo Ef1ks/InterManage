@@ -48,6 +48,9 @@ public class JwtService {
     public static final String COOKIE_NAME = "AUTH_TOKEN";
     public static final String SESSION_VERSION_CLAIM = "sv";
     public static final String REMEMBER_ME_CLAIM = "rm";
+    /** Aplikacja mobilna wysyła token w {@code Authorization: Bearer}, a odnowiony dostaje w tym nagłówku. */
+    public static final String REFRESHED_TOKEN_HEADER = "X-Auth-Token";
+    public static final String BEARER_PREFIX = "Bearer ";
 
     private static final Logger log = LoggerFactory.getLogger(JwtService.class);
     private static final int MIN_SECRET_BYTES = 32;
@@ -78,6 +81,14 @@ public class JwtService {
     }
 
     public void writeTokenCookie(HttpServletResponse response, AppUserPrincipal principal, boolean rememberMe) {
+        Duration ttl = rememberMe ? rememberMeTtl : tokenTtl;
+        // Bez „nie wylogowuj mnie” ciasteczko sesyjne (bez Max-Age) znika po zamknięciu przeglądarki.
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                cookie(issueToken(principal, rememberMe), rememberMe ? ttl : Duration.ofSeconds(-1)).toString());
+    }
+
+    /** Token bez ciasteczka (aplikacja mobilna trzyma go sama i wysyła w {@code Authorization: Bearer}). */
+    public String issueToken(AppUserPrincipal principal, boolean rememberMe) {
         Instant now = Instant.now();
         Duration ttl = rememberMe ? rememberMeTtl : tokenTtl;
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -87,18 +98,29 @@ public class JwtService {
                 .claim(SESSION_VERSION_CLAIM, principal.getSessionVersion())
                 .claim(REMEMBER_ME_CLAIM, rememberMe)
                 .build();
-        String token = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
+        return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
                 .getTokenValue();
-        // Bez „nie wylogowuj mnie” ciasteczko sesyjne (bez Max-Age) znika po zamknięciu przeglądarki.
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie(token, rememberMe ? ttl : Duration.ofSeconds(-1)).toString());
     }
 
     /** Wymienia ważny token na nowy z tym samym „nie wylogowuj mnie”, gdy minęło {@code app.auth.token-refresh-after}. */
-    public void refreshIfDue(HttpServletResponse response, Jwt jwt, AppUserPrincipal principal) {
+    public void refreshIfDue(HttpServletResponse response, Jwt jwt, AppUserPrincipal principal, boolean bearer) {
         Instant issuedAt = jwt.getIssuedAt();
         if (issuedAt == null || issuedAt.plus(refreshAfter).isBefore(Instant.now())) {
-            writeTokenCookie(response, principal, rememberMe(jwt));
+            if (bearer) {
+                response.setHeader(REFRESHED_TOKEN_HEADER, issueToken(principal, rememberMe(jwt)));
+            } else {
+                writeTokenCookie(response, principal, rememberMe(jwt));
+            }
         }
+    }
+
+    /** Token z nagłówka {@code Authorization: Bearer}, pusty bez nagłówka. */
+    public static String bearerToken(HttpServletRequest request) {
+        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header == null || !header.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
+            return null;
+        }
+        return header.substring(BEARER_PREFIX.length()).trim();
     }
 
     /** Czy ciasteczko żądania ma „nie wylogowuj mnie”; nowy token po zmianie hasła je zachowuje. */

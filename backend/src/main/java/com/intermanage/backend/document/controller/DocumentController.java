@@ -140,7 +140,7 @@ public class DocumentController {
      * najpierw ten sam dostawca i najbliższa kwota; {@code query} szuka po numerze faktury, dostawcy, NIP-ie.
      */
     @GetMapping("/{type}/{id}/ksef-invoices/candidates")
-    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    @PreAuthorize(VIEW)
     public List<KsefInvoiceCandidate> ksefInvoiceCandidates(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id, @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "true") boolean amountRange) {
@@ -152,7 +152,7 @@ public class DocumentController {
      * korygujące) bez faktury: ten sam dostawca, kwota netto różna najwyżej o 10 zł. Niczego nie zapisuje.
      */
     @GetMapping("/{type}/auto-ksef-invoices")
-    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    @PreAuthorize(VIEW)
     public List<AutoInvoiceMatch> autoKsefInvoices(@PathVariable UUID storeId, @PathVariable String type) {
         return ksefLinks.autoMatches(storeId, type);
     }
@@ -162,7 +162,7 @@ public class DocumentController {
      * przyjęć (do cofnięcia).
      */
     @PostMapping("/{type}/auto-ksef-invoices")
-    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    @PreAuthorize(EDIT)
     public List<AutoInvoiceMatchesRequest.Pair> linkAutoKsefInvoices(@PathVariable UUID storeId, @Valid @RequestBody AutoInvoiceMatchesRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return ksefLinks.linkAll(storeId, request.matches(), principal.getId());
@@ -179,7 +179,7 @@ public class DocumentController {
 
     /** Przypina fakturę KSeF do dokumentu - faktura staje się wprowadzona. */
     @PostMapping("/{type}/{id}/ksef-invoices")
-    @PreAuthorize(EDIT + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    @PreAuthorize(EDIT)
     public DocumentResponse linkKsefInvoice(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id, @Valid @RequestBody LinkKsefInvoiceRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -238,7 +238,7 @@ public class DocumentController {
      * (do 120 dni przed nią). Zawsze od tego samego dostawcy, najpierw z największą liczbą wspólnych artykułów.
      */
     @GetMapping("/{type}/{id}/corrections/candidates")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(VIEW)
     public List<CorrectionCandidate> correctionCandidates(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id, @RequestParam(required = false) String query) {
         return corrections.candidates(storeId, type, id, query);
@@ -281,7 +281,7 @@ public class DocumentController {
      * pobiera się z KSeF tylko raz na fakturę.
      */
     @GetMapping("/{type}/{id}/invoice-comparison")
-    @PreAuthorize(VIEW + " and hasAuthority('KSEF_INVOICES:VIEW')")
+    @PreAuthorize(VIEW)
     public InvoiceComparison invoiceComparison(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id) {
         return invoiceComparison.compare(storeId, type, id);
@@ -388,7 +388,7 @@ public class DocumentController {
 
     /** Ostatni dostawcy artykułów z dokumentu (z przyjęć PZ), do wyboru dostawcy gratisu. */
     @GetMapping("/{type}/{id}/gratis/supplier-suggestions")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(VIEW)
     public List<GratisSupplierSuggestion> gratisSupplierSuggestions(@PathVariable UUID storeId,
             @PathVariable String type, @PathVariable UUID id) {
         return gratisService.supplierSuggestions(storeId, type, id);

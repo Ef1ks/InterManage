@@ -152,30 +152,29 @@ public class DataEntryXmlService {
 
     /**
      * Plik z historii albo zapis tymczasowy jako dokument do tabeli; faktura z KSeF to ta, która była w tabeli przy
-     * zapisie (tylko z dostępem do faktur KSeF i gdy dalej jest widoczna w sklepie). Zapis tymczasowy niesie też tabelę
-     * z przeglądarki ({@code draft}).
+     * zapisie (gdy dalej jest widoczna w sklepie). Zapis tymczasowy niesie też tabelę z przeglądarki ({@code draft}).
      */
     @Transactional(readOnly = true)
-    public XmlDocument fromHistory(UUID storeId, UUID id, boolean withKsef) {
+    public XmlDocument fromHistory(UUID storeId, UUID id) {
         DataEntryXmlExport export = file(storeId, id);
         InvoiceXml.Document document = read(export.getContent());
         KsefInvoiceSummary invoice = null;
-        if (withKsef && export.getInvoiceId() != null) {
+        if (export.getInvoiceId() != null) {
             try {
                 invoice = ksefInvoices.summary(storeId, export.getInvoiceId());
             } catch (ApiException e) {
                 // Faktura niewidoczna już w sklepie (np. zmiana IDWew): plik wczytuje się bez niej.
             }
         }
-        if (invoice == null && withKsef) {
+        if (invoice == null) {
             invoice = matching(storeId, document);
         }
         return result(storeId, export.getFileName(), document, invoice, export.getDraft());
     }
 
-    /** Plik z dysku; faktura z KSeF po NIP-ie dostawcy i numerze z pliku (z dostępem do faktur KSeF). */
+    /** Plik z dysku; faktura z KSeF po NIP-ie dostawcy i numerze z pliku. */
     @Transactional(readOnly = true)
-    public XmlDocument fromFile(UUID storeId, String fileName, byte[] content, boolean withKsef) {
+    public XmlDocument fromFile(UUID storeId, String fileName, byte[] content) {
         if (content.length == 0) {
             throw ApiException.badRequest("Plik jest pusty");
         }
@@ -183,7 +182,7 @@ public class DataEntryXmlService {
             throw ApiException.badRequest("Plik jest za duży (najwyżej 5 MB)");
         }
         InvoiceXml.Document document = read(content);
-        return result(storeId, fileName, document, withKsef ? matching(storeId, document) : null, null);
+        return result(storeId, fileName, document, matching(storeId, document), null);
     }
 
     private DataEntryXmlExport temporaryEntry(UUID storeId, UUID id) {

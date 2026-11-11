@@ -27,8 +27,9 @@ public class GusController {
         this.gus = gus;
     }
 
+    /** Dane publiczne z rejestru, niczego nie zapisuje: słownik dla każdego zalogowanego. */
     @GetMapping("/companies")
-    @PreAuthorize("hasAnyAuthority('ROLE_OWNER', 'SUPPLIERS:EDIT', 'DOCUMENTS:EDIT', 'STAFF:EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public GusCompany company(@RequestParam String nip) {
         String digits = Nip.parse(nip, "nip");
         try {

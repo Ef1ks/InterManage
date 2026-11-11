@@ -52,7 +52,14 @@ import {
   usePrintInvoice,
   useSyncFollow,
 } from '@/features/ksef/api'
-import { formatDate, formatDateTime, formatNip, invoicesWord, invoiceTypeLabel, ksefPaths } from '@/features/ksef/format'
+import {
+  formatDate,
+  formatDateTime,
+  formatNip,
+  invoicesWord,
+  invoiceTypeLabel,
+  ksefPaths,
+} from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
 import { nextSort, type SortState } from '@/lib/table-sort'
@@ -188,7 +195,12 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
             value={filters.entered}
             onChange={(value) => set('entered', value)}
           />
-          <SegmentedField label="Rodzaj" options={KIND_OPTIONS} value={filters.kind} onChange={(value) => set('kind', value)} />
+          <SegmentedField
+            label="Rodzaj"
+            options={KIND_OPTIONS}
+            value={filters.kind}
+            onChange={(value) => set('kind', value)}
+          />
           {overview.internalIds.length > 0 && (
             <SelectField
               label="IDWew"
@@ -199,7 +211,11 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
             />
           )}
           <label htmlFor={switchId} className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <Switch id={switchId} checked={filters.showSkipped} onCheckedChange={(value) => set('showSkipped', value)} />
+            <Switch
+              id={switchId}
+              checked={filters.showSkipped}
+              onCheckedChange={(value) => set('showSkipped', value)}
+            />
             Pokaż pominiętych dostawców
           </label>
           {filtered && (
@@ -309,7 +325,11 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
         </Card>
       )}
 
-      <div ref={loadMoreRef} aria-live="polite" className="flex min-h-12 items-center justify-center text-sm text-muted-foreground">
+      <div
+        ref={loadMoreRef}
+        aria-live="polite"
+        className="flex min-h-12 items-center justify-center text-sm text-muted-foreground"
+      >
         {isFetchingNextPage && (
           <span className="inline-flex items-center gap-2">
             <LoaderCircleIcon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
@@ -388,7 +408,6 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
   const foreign = invoice.currency !== 'PLN'
   // Ręczne oznaczenie cofa sklep, który je zrobił; z innego sklepu firmy widać je tylko jako status.
   const manual = invoice.enteredAt !== null && invoice.enteredStoreId === storeId
-  const canViewDocuments = useCan('DOCUMENTS', 'VIEW')
   const documentLinks = useInvoiceDocumentLinks(storeId)
   const [picking, setPicking] = useState(false)
   const unlinkDocument = (delivery: KsefInvoiceDocument) =>
@@ -502,9 +521,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
         <InvoiceDocuments storeId={storeId} invoice={invoice} />
       </TableCell>
       <TableCell className="pr-4 text-right">
-        {canEdit && canViewDocuments && (
-          <DocumentPicker storeId={storeId} invoice={invoice} open={picking} onOpenChange={setPicking} />
-        )}
+        {canEdit && <DocumentPicker storeId={storeId} invoice={invoice} open={picking} onOpenChange={setPicking} />}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -537,7 +554,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
                 Cofnij ręczne oznaczenie
               </DropdownMenuItem>
             )}
-            {canEdit && canViewDocuments && (
+            {canEdit && (
               <DropdownMenuItem onClick={() => setPicking(true)}>
                 <LinkIcon />
                 Przypnij przyjęcie albo korektę

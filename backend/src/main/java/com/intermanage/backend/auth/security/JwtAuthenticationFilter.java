@@ -23,7 +23,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * Uwierzytelnia żądanie na podstawie JWT z ciasteczka {@value JwtService#COOKIE_NAME}. Przy każdym żądaniu wczytuje
+ * Uwierzytelnia żądanie na podstawie JWT z ciasteczka {@value JwtService#COOKIE_NAME} albo, w aplikacji mobilnej,
+ * z nagłówka {@code Authorization: Bearer} (odnowiony token wraca wtedy w {@value JwtService#REFRESHED_TOKEN_HEADER}). Przy każdym żądaniu wczytuje
  * użytkownika z bazy, żeby zmiany wprowadzone przez właściciela (uprawnienia roli, zmiana roli, blokada konta,
  * reset hasła) działały od razu, bez ponownego logowania. Nieważny lub wygasły token, zablokowane konto albo inna
  * wersja sesji niż w tokenie zostawiają żądanie nieuwierzytelnione (chronione endpointy zwrócą 401).
@@ -48,16 +49,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        // Aplikacja mobilna wysyła token w nagłówku; z nagłówkiem ciasteczko się nie liczy.
+        String bearer = JwtService.bearerToken(request);
         Cookie cookie = WebUtils.getCookie(request, JwtService.COOKIE_NAME);
-        if (cookie != null && !cookie.getValue().isBlank()) {
-            decode(cookie.getValue()).ifPresent(jwt -> authenticate(jwt).ifPresent(principal -> {
+        String token = bearer != null ? bearer : cookie != null ? cookie.getValue() : null;
+        if (token != null && !token.isBlank()) {
+            decode(token).ifPresent(jwt -> authenticate(jwt).ifPresent(principal -> {
                 SecurityContext context = contextHolder.createEmptyContext();
                 context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
                         principal, null, principal.getAuthorities()));
                 contextHolder.setContext(context);
                 // Przy wylogowaniu nie odnawiamy, bo nowe ciasteczko przykryłoby to czyszczące.
                 if (!LOGOUT_PATH.equals(request.getRequestURI())) {
-                    jwtService.refreshIfDue(response, jwt, principal);
+                    jwtService.refreshIfDue(response, jwt, principal, bearer != null);
                 }
             }));
         }

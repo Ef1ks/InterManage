@@ -3,16 +3,26 @@ import { Link } from 'react-router'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { hasPermission, useCurrentUser } from '@/features/auth/api'
+import { StoreResultsPanel } from '@/features/dashboard/StoreResultsPanel'
+import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 
 export function DashboardPage() {
   const me = useCurrentUser()
   const { data: categories = [] } = usePermissionCategories()
   const tools = categories.filter((category) => hasPermission(me, category.code))
+  const store = useCurrentStore()
 
   return (
     <>
       <PageHeader title={`Witaj, ${me.displayName}`} description={`Rola: ${me.roleName}`} />
+
+      {/* Najważniejsze informacje sklepu, dokładane stopniowo. Wyniki na razie tylko dla właściciela. */}
+      {me.owner && store ? (
+        <div className="mb-6">
+          <StoreResultsPanel storeId={store.id} storeNumber={store.number} />
+        </div>
+      ) : null}
 
       {tools.length === 0 ? (
         <Card>
@@ -28,7 +38,11 @@ export function DashboardPage() {
           {tools.map((category) => {
             const { path, icon: Icon } = TOOL_ROUTES[category.code]
             return (
-              <Link key={category.code} to={path} className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50">
+              <Link
+                key={category.code}
+                to={path}
+                className="rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
                 <Card className="h-full transition-colors hover:bg-muted/50">
                   <CardHeader>
                     <Icon className="mb-2 size-5 text-muted-foreground" />

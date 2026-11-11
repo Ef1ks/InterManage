@@ -52,10 +52,9 @@ export function InvoiceComparisonPanel({
   documentId: string
   check: InvoiceAmountCheck | null
 }) {
-  const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
   const [requested, setRequested] = useState(false)
   const automatic = check != null && !check.matches && check.confirmedAt == null
-  const enabled = canViewKsef && check != null && (automatic || requested)
+  const enabled = check != null && (automatic || requested)
   const { data, isPending, isError, error } = useInvoiceComparison(storeId, documentId, enabled)
   const [showMatching, setShowMatching] = useState(false)
   const canEdit = useCan('DOCUMENTS', 'EDIT')
@@ -75,7 +74,7 @@ export function InvoiceComparisonPanel({
     })
   }, [deposits, check, queryClient, storeId])
 
-  if (!canViewKsef || !check) return null
+  if (!check) return null
   if (!enabled) {
     return (
       <Button variant="ghost" size="sm" className="mt-2 text-muted-foreground" onClick={() => setRequested(true)}>

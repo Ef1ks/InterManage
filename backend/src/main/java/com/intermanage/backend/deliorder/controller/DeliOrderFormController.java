@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.deliorder.dto.AddOrderProductRequest;
 import com.intermanage.backend.deliorder.dto.MoveOrderCategoryRequest;
 import com.intermanage.backend.deliorder.dto.MoveOrderProductRequest;
@@ -135,7 +136,7 @@ public class DeliOrderFormController {
 
     /** Wyszukiwarka produktów kartoteki sklepu do dodawania w trybie edycji; od 3 znaków. */
     @GetMapping("/products")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(Access.STORE)
     public List<ProductSearchResponse> searchProducts(@PathVariable UUID storeId, @RequestParam String query) {
         return formService.searchProducts(storeId, query);
     }

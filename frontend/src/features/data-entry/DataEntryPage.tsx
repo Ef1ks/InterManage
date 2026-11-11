@@ -292,7 +292,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     [setRows, visibleOf],
   )
 
-  const canLoadInvoices = useCan('KSEF_INVOICES', 'VIEW')
   const canUseAi = useCan('DATA_ENTRY', 'EDIT')
   const { data: nomenclature = [] } = useDataEntryNomenclature(store.id)
   const names = useMemo(() => nomenclatureNames(nomenclature), [nomenclature])
@@ -374,7 +373,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       : null
   const correctionLines = useCorrectionDeliveryLines(
     store.id,
-    canLoadInvoices ? (invoice?.id ?? null) : null,
+    invoice?.id ?? null,
     invoice?.correction?.delivery?.id ?? null,
   )
   const { data: supplierPrices } = useSupplierSalePrices(store.id)
@@ -1293,12 +1292,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         title="Wprowadzanie danych"
         description={
           invoice ? (
-            <DocumentHeading
-              storeId={store.id}
-              invoice={invoice}
-              canSeeKsef={canLoadInvoices}
-              onEditNumber={() => setSupplierOpen(true)}
-            />
+            <DocumentHeading storeId={store.id} invoice={invoice} onEditNumber={() => setSupplierOpen(true)} />
           ) : (
             storeLabel(store)
           )
@@ -1328,7 +1322,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         ]}
       />
 
-      {invoice?.correction && invoice.id && canLoadInvoices && (
+      {invoice?.correction && invoice.id && (
         <CorrectionBanner
           key={invoice.id}
           storeId={store.id}
@@ -1377,13 +1371,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             loading={loadingLst}
             title="Wczytaj do tabeli fakturę z KSeF, plik XML albo listę .lst"
           >
-            <ActionItem
-              icon={<ReceiptTextIcon />}
-              label="Fakturę z KSeF"
-              disabled={!canLoadInvoices}
-              hint={canLoadInvoices ? undefined : 'Wczytanie faktury wymaga dostępu do faktur KSeF'}
-              onClick={() => setPickerOpen(true)}
-            />
+            <ActionItem icon={<ReceiptTextIcon />} label="Fakturę z KSeF" onClick={() => setPickerOpen(true)} />
             <ActionItem icon={<FileCodeIcon />} label="Plik XML" onClick={() => openXml('file')} />
             <ActionItem
               icon={<FileUpIcon />}
@@ -1436,7 +1424,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 {badEanTitle}
               </p>
             )}
-            {invoice?.correction && invoice.id && canLoadInvoices && (
+            {invoice?.correction && invoice.id && (
               <>
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>Korekta</DropdownMenuLabel>
@@ -2201,18 +2189,16 @@ type PendingDocument = { data: DataEntryDocument; fromXml?: string }
 function DocumentHeading({
   storeId,
   invoice,
-  canSeeKsef,
   onEditNumber,
 }: {
   storeId: string
   invoice: NonNullable<DataEntryDraft['invoice']>
-  canSeeKsef: boolean
   onEditNumber: () => void
 }) {
   const navigate = useNavigate()
   const canSeeDocuments = useCan('DOCUMENTS', 'VIEW')
   const ownDocument = Boolean(invoice.supplier)
-  const ksef = useLoadedKsefInvoice(storeId, canSeeKsef && !ownDocument ? invoice.id : null, invoice.number)
+  const ksef = useLoadedKsefInvoice(storeId, !ownDocument ? invoice.id : null, invoice.number)
   const documents = ksef.data?.deliveries ?? []
   const correction = ksef.data?.correction ?? false
   const seller = invoice.supplier ? `dla ${invoice.supplier.name}` : (invoice.sellerName ?? invoice.sellerNip)

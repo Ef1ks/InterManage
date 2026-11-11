@@ -21,5 +21,9 @@ public record MeResponse(
         /** Sklepy do wyboru w przełączniku: właściciel wszystkie aktywne, pracownik przypisane aktywne. */
         List<StoreSummary> stores,
         /** Kolejność kategorii menu bocznego sklepów, które ją zapisały (klucze grup z frontu). */
-        Map<UUID, List<String>> sidebarOrders) {
+        Map<UUID, List<String>> sidebarOrders,
+        /** Własne zdjęcie w tle aplikacji tego konta, {@code null} = bez zdjęcia. */
+        BackgroundResponse background,
+        /** Zdjęcie profilowe tego konta, {@code null} = inicjały. */
+        AvatarResponse avatar) {
 }

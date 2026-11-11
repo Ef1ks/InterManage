@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.product.dto.PendingPriceFilesRequest;
 import com.intermanage.backend.product.dto.PendingPriceFilesResponse;
@@ -42,7 +43,7 @@ public class PriceFileController {
     }
 
     @GetMapping
-    @PreAuthorize(ACCESS)
+    @PreAuthorize("hasAnyAuthority('DATA_ENTRY:VIEW', 'IMPORTS:VIEW') and " + Access.STORE)
     public PriceFileOverview overview(@PathVariable UUID storeId) {
         return priceFileService.overview(storeId);
     }

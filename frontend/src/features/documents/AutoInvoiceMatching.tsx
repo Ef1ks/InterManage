@@ -65,9 +65,8 @@ const TEXTS = {
  */
 export function AutoInvoiceMatching({ storeId, typeCode }: { storeId: string; typeCode: 'pz' | 'wz' }) {
   const canEdit = useCan('DOCUMENTS', 'EDIT')
-  const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
   const [open, setOpen] = useState(false)
-  if (!canEdit || !canViewKsef) return null
+  if (!canEdit) return null
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>

@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.auth.dto.AvatarResponse;
+import com.intermanage.backend.auth.dto.BackgroundResponse;
 import com.intermanage.backend.auth.dto.MeResponse;
 import com.intermanage.backend.auth.dto.UserResponse;
 import com.intermanage.backend.auth.entity.AppUser;
@@ -22,7 +24,11 @@ public interface UserMapper {
     @Mapping(target = "permissions", expression = "java(user.getRole().effectivePermissions())")
     @Mapping(target = "stores", source = "stores")
     @Mapping(target = "sidebarOrders", source = "sidebarOrders")
-    MeResponse toMeResponse(AppUser user, List<StoreSummary> stores, Map<UUID, List<String>> sidebarOrders);
+    @Mapping(target = "id", source = "user.id")
+    @Mapping(target = "background", source = "background")
+    @Mapping(target = "avatar", source = "avatar")
+    MeResponse toMeResponse(AppUser user, List<StoreSummary> stores, Map<UUID, List<String>> sidebarOrders,
+            BackgroundResponse background, AvatarResponse avatar);
 
     @Mapping(target = "id", source = "user.id")
     @Mapping(target = "roleId", source = "user.role.id")

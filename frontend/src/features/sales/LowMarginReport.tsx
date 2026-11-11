@@ -256,7 +256,7 @@ function InsertLinesIntoDataEntry({ storeId, delivery }: { storeId: string; deli
 }
 
 function LinesTable({ storeId, delivery }: { storeId: string; delivery: LowMarginDelivery }) {
-  const canSeeInvoices = useCan('KSEF_INVOICES', 'VIEW')
+  const canSeeInvoices = useCan('SALES', 'VIEW')
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center justify-end gap-2">

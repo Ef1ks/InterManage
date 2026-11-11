@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.dto.ArticleCodesResponse;
@@ -33,11 +34,10 @@ import com.intermanage.backend.sales.service.SalesReportService;
 public class SalesReportController {
 
     /**
-     * Zakres sprzedaży, nomenklaturę do filtra i dane artykułu widzi też Magazyn i produkty; wykres sprzedaży z tym
-     * uprawnieniem tylko dla artykułu, nie dla nomenklatury i całego sklepu.
+     * Zakres sprzedaży i dane artykułu to karta artykułu ({@link Access#ARTICLE_STATS}): widzą ją też Magazyn i
+     * Wprowadzanie danych; wykres sprzedaży z tymi uprawnieniami tylko dla artykułu, nie dla nomenklatury i sklepu.
      */
-    private static final String ARTICLE_VIEW = "(hasAuthority('SALES:VIEW') or hasAuthority('INVENTORY:VIEW')) "
-            + "and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String ARTICLE_VIEW = Access.ARTICLE_STATS;
 
     private final SalesReportService salesReportService;
     private final DeliCostReportService deliCostReportService;
@@ -80,9 +80,9 @@ public class SalesReportController {
                 unassigned, nomenclatures, compareStore, principal.getId());
     }
 
-    /** Nomenklatura sklepu do filtra raportów. */
+    /** Nomenklatura sklepu do filtrów i wyborów: słownik, widzi ją każdy z dostępem do sklepu. */
     @GetMapping("/nomenclatures")
-    @PreAuthorize(ARTICLE_VIEW)
+    @PreAuthorize(Access.STORE)
     public List<NomenclatureOption> nomenclatures(@PathVariable UUID storeId) {
         return salesReportService.nomenclatures(storeId);
     }
@@ -92,8 +92,8 @@ public class SalesReportController {
      * cały sklep, {@code unassigned=true} = bez nomenklatury), z tym samym filtrem {@code nomenclatures} co porównanie.
      */
     @GetMapping("/sales-history")
-    @PreAuthorize("(hasAuthority('SALES:VIEW') or (hasAuthority('INVENTORY:VIEW') and #itm8 != null)) "
-            + "and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize("(hasAuthority('SALES:VIEW') or (" + Access.ARTICLE_STATS_AUTHORITIES + " and #itm8 != null)) "
+            + "and " + Access.STORE)
     public SalesHistoryResponse salesHistory(@PathVariable UUID storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,

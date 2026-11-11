@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api'
-import type { Me, PermissionCategory, PermissionLevel } from '@/lib/types'
+import type { AvatarChange, BackgroundChange, Me, PermissionCategory, PermissionLevel } from '@/lib/types'
 
 export const meQueryKey = ['me'] as const
 
@@ -87,4 +87,68 @@ export function useChangePassword() {
     mutationFn: (request: { currentPassword: string; newPassword: string }) =>
       api('/auth/password', { method: 'PUT', json: request }),
   })
+}
+
+/** Zmiany zdjęcia w tle podmieniają je od razu w danych zalogowanego, bez odświeżania wszystkich zapytań. */
+function useBackgroundMutation<T>(mutationFn: (value: T) => Promise<BackgroundChange>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    meta: { invalidates: false },
+    onSuccess: (change) => {
+      queryClient.setQueryData<Me | null>(meQueryKey, (me) => (me ? { ...me, background: change.background } : me))
+    },
+  })
+}
+
+export function useUploadBackground() {
+  return useBackgroundMutation((file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api<BackgroundChange>('/auth/background', { method: 'PUT', formData })
+  })
+}
+
+export function useBackgroundVeil() {
+  return useBackgroundMutation((veilPercent: number) =>
+    api<BackgroundChange>('/auth/background/veil', { method: 'PUT', json: { veilPercent } }),
+  )
+}
+
+export function useRemoveBackground() {
+  return useBackgroundMutation(() => api<BackgroundChange>('/auth/background', { method: 'DELETE' }))
+}
+
+export function useRestoreBackground() {
+  return useBackgroundMutation((id: string) =>
+    api<BackgroundChange>(`/auth/background/${id}/restore`, { method: 'POST' }),
+  )
+}
+
+/** Zmiany zdjęcia profilowego podmieniają je od razu w danych zalogowanego, bez odświeżania wszystkich zapytań. */
+function useAvatarMutation<T>(mutationFn: (value: T) => Promise<AvatarChange>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    meta: { invalidates: false },
+    onSuccess: (change) => {
+      queryClient.setQueryData<Me | null>(meQueryKey, (me) => (me ? { ...me, avatar: change.avatar } : me))
+    },
+  })
+}
+
+export function useUploadAvatar() {
+  return useAvatarMutation((file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api<AvatarChange>('/auth/avatar', { method: 'PUT', formData })
+  })
+}
+
+export function useRemoveAvatar() {
+  return useAvatarMutation(() => api<AvatarChange>('/auth/avatar', { method: 'DELETE' }))
+}
+
+export function useRestoreAvatar() {
+  return useAvatarMutation((id: string) => api<AvatarChange>(`/auth/avatar/${id}/restore`, { method: 'POST' }))
 }

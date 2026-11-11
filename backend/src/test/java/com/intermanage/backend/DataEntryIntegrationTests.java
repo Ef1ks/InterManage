@@ -875,15 +875,18 @@ class DataEntryIntegrationTests {
 
     @Test
     void permissions() throws Exception {
-        // Podgląd i eksport bez faktur KSeF i bez propozycji AI.
+        // Samo narzędzie wystarczy do pracy z fakturami KSeF (bez osobnego dostępu do KSeF), ale nie do propozycji AI.
         Cookie viewer = employee("{\"DATA_ENTRY\":\"VIEW\"}", storeId);
         mvc.perform(get(url("/nomenclatures")).cookie(viewer)).andExpect(status().isOk());
-        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(viewer)).andExpect(status().isForbidden());
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(viewer)).andExpect(status().isOk());
+        mvc.perform(get("/api/stores/" + storeId + "/ksef/invoices/" + invoiceId + "/xml").cookie(viewer))
+                .andExpect(status().isOk());
         suggest(viewer, items()).andExpect(status().isForbidden());
         verify(model, never()).suggest(anyString(), anyString());
 
-        Cookie reader = employee("{\"DATA_ENTRY\":\"VIEW\",\"KSEF_INVOICES\":\"VIEW\"}", storeId);
-        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(reader)).andExpect(status().isOk());
+        // Inne narzędzie bez wprowadzania danych nie wczytuje faktury do tabeli.
+        Cookie seller = employee("{\"SALES\":\"EDIT\"}", storeId);
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(seller)).andExpect(status().isForbidden());
 
         // Pracownik innego sklepu.
         Cookie stranger = employee("{\"DATA_ENTRY\":\"EDIT\",\"KSEF_INVOICES\":\"VIEW\"}", createStore());

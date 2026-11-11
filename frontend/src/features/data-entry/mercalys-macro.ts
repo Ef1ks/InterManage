@@ -152,6 +152,126 @@ export function buildMissingItm8Macro(bonNumber: string) {
   )
 }
 
+/** Nowy ITM8 artykułu: karta artykułu (ar-e001) i „Kod ITM8 :” (ar-e006, ITM8 dostawcy przy artykule). */
+const ITM8_SCREEN = {
+  articleTab: 'mnTp_ARTICLE',
+  articleMenuItem: 'mnTv_ARTICLE_ar-e001_FicheArticle',
+  eanField: 'txtZ4_CodeEAN_TxtBox',
+  itm8Field: 'txtZ1_CodeITM_TxtBox',
+  /** „Kod ITM8 :” na karcie: link pojawia się dopiero po wczytaniu artykułu. */
+  itm8Button: 'lnkZ1_CodeITM_LnkAviso',
+  newItm8Field: 'txtZ02_Itm_TxtBox',
+  supplierField: 'lstZ04_Fournisseur_TxtBox',
+  supplierRefField: 'txtZ06_RefFrs_TxtBox',
+  minOrderField: 'txnZ08_MinCde_TxtBox',
+  packField: 'txnZ07_Conditionnement_TxtBox',
+  deleteDateField: 'txdZ09_DateSuppr_TxtBox',
+  activeCheckbox: 'chkZ10_Actif_CheckBox1',
+  /** „C.Z. po rab.” */
+  netPriceField: 'txtZ14_PANet_TxtBox',
+  approveButton: 'btnB4_Valider_LnkBouton',
+  createText: 'Utworzy',
+  backButton: 'btnB1_Retour_LnkBouton',
+  /** „ZER.” jest tylko na karcie artykułu, więc mówi też, że powrót z ar-e006 się udał. */
+  resetButton: 'btnB2_RAZ_LnkBouton',
+} as const
+
+export const ITM8_MACRO_CONFIG = {
+  /** Po „Tak” strona się przeładowuje: klik w starą stronę by przepadł. */
+  afterConfirm: 1500,
+  /** Po kliknięciu pola wyboru „Aktywny” strona może się przeładować. */
+  afterUncheck: 500,
+} as const
+
+export type Itm8MacroItem = {
+  itm8: string
+  ean: string
+  /** Kod dostawcy z dokumentu bez zer wiodących (538 baza, 88110 alkohol). */
+  supplierCode: string
+  /** Sztuk w kartonie (PAK). */
+  pack: number
+  /** Data usunięcia, RRRR-MM-DD. */
+  deleteDate: string
+  /** Cena zakupu netto sztuki po rabacie (C_Cesja). */
+  purchasePrice: number
+}
+
+/** Liczba z przecinkiem, jak pokazuje ją Mercalys (12 → „12”, 1.5 → „1,50”). */
+const commaNumber = (value: number, digits: number) => value.toFixed(digits).replace('.', ',')
+
+/**
+ * „Uzupełnij ITM8”: dla każdego artykułu karta artykułu po EAN-ie, „Kod ITM8 :”, nowy ITM8 z dostawcą, ref. dostawcy
+ * = ITM8, opakowanie i zamówienie min. = PAK, data usunięcia, odznaczony „Aktywny”, C.Z. po rab., sprawdzenie wszystkich
+ * pól, Zatwierdź, Tak, Powrót i ZER.; na końcu Mercalys na pasek zadań. Wszystko po identyfikatorach pól, bez myszy:
+ * pole, które nie przyjęło wartości, albo inne pytanie niż „Utworzyć zapis ?” zatrzymują makro przed zapisem.
+ * Wymaga odtwarzacza od wersji 39 (WEBIFVALUE).
+ */
+export function buildItm8Macro(items: Itm8MacroItem[]) {
+  const screen = ITM8_SCREEN
+  const c = ITM8_MACRO_CONFIG
+  const out = [
+    `# Uzupełnij ITM8: ${items.length} poz.`,
+    `WINOPEN|${PROGRAM_WINDOW}`,
+    `WEBENSURE|${WINDOW}|${screen.articleMenuItem}|${screen.articleTab}`,
+    `WEBCLICK|${WINDOW}|${screen.articleMenuItem}`,
+  ]
+  items.forEach((item, index) => {
+    const itm8 = item.itm8.replace(/\D/g, '')
+    const itm8Value = `^0*${withoutLeadingZeros(itm8)}$`
+    const supplierValue = `^0*${withoutLeadingZeros(item.supplierCode)}$`
+    const pack = commaNumber(item.pack, 0)
+    const packValue = `^${pack}(,0+)?$`
+    const price = commaNumber(item.purchasePrice, 2)
+    const priceValue = `^${price}0*$`
+    const date = mercalysDate(item.deleteDate)
+    const inactive = `nieaktywny-${index + 1}`
+    out.push(
+      `# ${index + 1}/${items.length}: ITM8 ${itm8} · EAN ${item.ean}`,
+      `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.eanField}|^a${item.ean}{Enter}`,
+      // Wczytany artykuł ma ITM8; po ZER. pole jest puste, więc stara karta nie uda wczytanej.
+      `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*[1-9]\\d*$|${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.eanField}|^0*${withoutLeadingZeros(item.ean)}$`,
+      `WEBCLICK|${WINDOW}|${screen.itm8Button}`,
+      `WEBWAIT|${WINDOW}|${screen.newItm8Field}||${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.newItm8Field}|^a${itm8}{Tab}`,
+      `WEBVALUE|${WINDOW}|${screen.newItm8Field}|${itm8Value}|${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.supplierField}|^a${item.supplierCode}{Tab}`,
+      `WEBVALUE|${WINDOW}|${screen.supplierField}|${supplierValue}|${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${screen.supplierRefField}|^a${itm8}{Tab}`,
+      `WEBKEY|${WINDOW}|${screen.minOrderField}|^a${pack}{Tab}`,
+      `WEBKEY|${WINDOW}|${screen.packField}|^a${pack}{Tab}`,
+      `WEBKEY|${WINDOW}|${screen.deleteDateField}|^a${date}{Tab}`,
+      // Odznaczenie „Aktywny”: klik tylko, gdy jest zaznaczony (WEBCHECK umie tylko zaznaczyć).
+      `WEBIFVALUE|${WINDOW}|${screen.activeCheckbox}|^tak$|${inactive}|1000`,
+      `WEBCLICK|${WINDOW}|${screen.activeCheckbox}`,
+      `SLEEP|${c.afterUncheck}`,
+      `LABEL|${inactive}`,
+      `WEBKEY|${WINDOW}|${screen.netPriceField}|^a${price}{Tab}`,
+      // Przed zapisem wszystko jeszcze raz: przeładowanie po polu dostawcy albo pola wyboru mogło coś wyczyścić.
+      `WEBVALUE|${WINDOW}|${screen.newItm8Field}|${itm8Value}`,
+      `WEBVALUE|${WINDOW}|${screen.supplierField}|${supplierValue}`,
+      `WEBVALUE|${WINDOW}|${screen.supplierRefField}|${itm8Value}`,
+      `WEBVALUE|${WINDOW}|${screen.minOrderField}|${packValue}`,
+      `WEBVALUE|${WINDOW}|${screen.packField}|${packValue}`,
+      `WEBVALUE|${WINDOW}|${screen.deleteDateField}|${datePattern(item.deleteDate)}`,
+      `WEBVALUE|${WINDOW}|${screen.activeCheckbox}|^nie$`,
+      `WEBVALUE|${WINDOW}|${screen.netPriceField}|${priceValue}`,
+      `WEBCLICK|${WINDOW}|${screen.approveButton}`,
+      `WEBWAIT|${DIALOG}|Oui|${screen.createText}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${DIALOG}|Oui`,
+      `SLEEP|${c.afterConfirm}`,
+      `WEBCLICK|${WINDOW}|${screen.backButton}`,
+      `WEBWAIT|${WINDOW}|${screen.resetButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.resetButton}`,
+      `WEBVALUE|${WINDOW}|${screen.eanField}|^$|${PAGE_TIMEOUT_MS}`,
+      `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*$|${PAGE_TIMEOUT_MS}`,
+    )
+  })
+  out.push(`WINMIN|${PROGRAM_WINDOW}`)
+  return out.join('\r\n') + '\r\n'
+}
+
 /** Przecena: karta artykułu (ar-e001) i taryfy sprzedaży (ar-e003). */
 const MARKDOWN_SCREEN = {
   articleTab: 'mnTp_ARTICLE',

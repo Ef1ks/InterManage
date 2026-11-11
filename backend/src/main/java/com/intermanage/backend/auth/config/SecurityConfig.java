@@ -46,9 +46,13 @@ public class SecurityConfig {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
-                .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**"))
+                // Aplikacja mobilna wysyła token w nagłówku Authorization, którego przeglądarka sama nie dołącza
+                // (a bez CORS strona z innego originu nie może go ustawić), więc CSRF jej nie dotyczy.
+                .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**", "/api/auth/mobile/login")
+                        .ignoringRequestMatchers(request -> JwtService.bearerToken(request) != null))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/activate").permitAll()
+                        .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/mobile/login",
+                                "/api/auth/activate").permitAll()
                         .requestMatchers("/api/time-clock/**").permitAll()
                         // Jedyne endpointy dostępne, zanim użytkownik ustawi własne hasło.
                         .requestMatchers("/api/auth/me", "/api/auth/password/setup").authenticated()

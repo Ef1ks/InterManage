@@ -50,7 +50,7 @@ public class DocumentProductionCardController {
     }
 
     @GetMapping("/documents/{type}/{id}/production-cards/candidates")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(VIEW)
     public List<ProductionCardSummary> candidates(@PathVariable UUID storeId, @PathVariable String type,
             @PathVariable UUID id) {
         return cards.candidates(storeId, type, id);

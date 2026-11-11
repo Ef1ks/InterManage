@@ -104,7 +104,7 @@ public class StaffScheduleController {
     }
 
     @GetMapping("/settings/{departmentId}")
-    @PreAuthorize(CONFIGURE)
+    @PreAuthorize(VIEW)
     public ScheduleSettings settings(@PathVariable UUID storeId, @PathVariable UUID departmentId) {
         return schedules.settings(storeId, departmentId);
     }

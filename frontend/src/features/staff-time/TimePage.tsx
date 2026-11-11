@@ -64,6 +64,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
   const department =
     list.find((item) => item.id === params.get('dzial')) ?? list.find((item) => item.canEdit) ?? list[0]
   const { from, to } = range(view, date)
+  const showsToday = from <= todayIso() && todayIso() <= to
   const cards = useTimeCards(department ? { storeId: store.id, departmentId: department.id, from, to } : null)
   const [dialog, setDialog] = useState<'simulator' | 'settings' | 'symfonia' | null>(null)
   const [picked, setPicked] = useState<{ row: TimeCardRow; segment: TimeSegment } | null>(null)
@@ -235,11 +236,18 @@ function StoreTime({ store }: { store: StoreSummary }) {
               >
                 <ChevronRightIcon aria-hidden />
               </Button>
-              {!(from <= todayIso() && todayIso() <= to) && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => update({ data: null })}>
-                  Dziś
-                </Button>
-              )}
+              {/* Zawsze w układzie (tylko schowany), żeby strzałki nie skakały po wejściu na dziś. */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={showsToday ? 'invisible' : undefined}
+                aria-hidden={showsToday || undefined}
+                tabIndex={showsToday ? -1 : undefined}
+                onClick={() => update({ data: null })}
+              >
+                Dziś
+              </Button>
             </div>
           </div>
           {cards.isError ? (

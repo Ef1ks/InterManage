@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.store.dto.InviteStorePartnerRequest;
 import com.intermanage.backend.store.dto.StorePartnersResponse;
@@ -36,8 +37,9 @@ public class StorePartnerController {
         this.partnerService = partnerService;
     }
 
+    /** Lista znajomych to słownik (wybór sklepu w raportach, ruchy MM); zmienia ją tylko {@code DOCUMENTS:EDIT}. */
     @GetMapping
-    @PreAuthorize(EDIT)
+    @PreAuthorize(Access.STORE)
     public StorePartnersResponse partners(@PathVariable UUID storeId) {
         return partnerService.partners(storeId);
     }

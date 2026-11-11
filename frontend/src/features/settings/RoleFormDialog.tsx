@@ -144,7 +144,16 @@ function RoleFormBody({ role, categories, onDone }: BodyProps) {
             </div>
           ))}
         </div>
-        <p className="px-1 text-xs text-muted-foreground">Edycja obejmuje też podgląd.</p>
+        <div className="space-y-1 px-1 text-xs text-muted-foreground">
+          <p>
+            <span className="font-medium text-foreground">Podgląd</span> wystarczy do codziennej pracy narzędziem:
+            wyszukiwanie, przeglądanie, wydruki i pliki dla programu sklepu.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Edycja</span> to dodatkowo zmiana wspólnych danych i ustawień
+            narzędzia. Kartotekę, dostawców i nomenklaturę widzi każdy pracownik sklepu.
+          </p>
+        </div>
       </fieldset>
 
       <FormActions>

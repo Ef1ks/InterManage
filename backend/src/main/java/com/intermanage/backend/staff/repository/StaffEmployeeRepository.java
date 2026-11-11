@@ -38,6 +38,10 @@ public interface StaffEmployeeRepository extends JpaRepository<StaffEmployee, UU
     @Query("select count(e) from StaffEmployee e where e.store.id = :storeId and e.endedAt is null")
     long countActiveInStore(UUID storeId);
 
+    /** Wszystkie wpisy pracownika konta, także zakończone (grafik sprzed przeniesienia albo końca pracy). */
+    @Query("select e.id from StaffEmployee e where e.user.id = :userId")
+    List<UUID> findIdsOfUser(UUID userId);
+
     @Query("select count(e) > 0 from StaffEmployee e where e.user.id = :userId and e.endedAt is null")
     boolean existsActiveForUser(UUID userId);
 

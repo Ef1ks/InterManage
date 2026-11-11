@@ -264,3 +264,13 @@
   0% { opacity: 0; transform: translateY(-160%); }
   100% { opacity: 1; transform: none; }
 }
+
+/*
+ * Zdjęcie w tle (Moje konto → Tło aplikacji): pod treścią strony leży półprzezroczysta warstwa w kolorze tła motywu,
+ * więc każdy tekst stojący poza kartami (nagłówki, opisy, link wstecz, podsumowania) jest czytelny, a zdjęcie widać
+ * obok treści i przez nią. Sam kolor, bez backdrop-filter: filtr robiłby z <main> blok zawierający dla `fixed`
+ * i psuł przyklejone paski.
+ */
+.app-layout:has(> .app-photo) main {
+  background: color-mix(in oklch, var(--background) 86%, transparent);
+}

@@ -13,11 +13,15 @@ const ITM8_LENGTH = 13
 /** Lokalny ITM8 nadaje każdy sklep sam, więc ten sam numer w innym sklepie to inny towar. */
 const LOCAL_ITM8 = /^0*99/
 
-/** Statystyki artykułu pokazuje każdy z dostępem do raportów albo do Magazynu (ten sam warunek co w API). */
+/**
+ * Kartę artykułu widzi każdy z dostępem do raportów, Magazynu albo Wprowadzania danych (ten sam warunek co w API:
+ * `Access.ARTICLE_STATS`).
+ */
 export function useCanSeeArticleStats() {
   const sales = useCan('SALES', 'VIEW')
   const inventory = useCan('INVENTORY', 'VIEW')
-  return sales || inventory
+  const dataEntry = useCan('DATA_ENTRY', 'VIEW')
+  return sales || inventory || dataEntry
 }
 
 export type ArticleStatsTarget = {

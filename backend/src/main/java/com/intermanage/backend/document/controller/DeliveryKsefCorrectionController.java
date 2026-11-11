@@ -28,10 +28,11 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/stores/{storeId}/documents/pz/{id}/ksef-corrections")
 public class DeliveryKsefCorrectionController {
 
-    private static final String VIEW = "hasAuthority('DOCUMENTS:VIEW') and hasAuthority('KSEF_INVOICES:VIEW')"
-            + " and @storeAccess.canAccess(authentication, #storeId)";
-    private static final String EDIT = "hasAuthority('DOCUMENTS:EDIT') and hasAuthority('KSEF_INVOICES:VIEW')"
-            + " and @storeAccess.canAccess(authentication, #storeId)";
+    /** Faktury KSeF przy dokumencie są częścią pracy z dokumentami: bez osobnego dostępu do KSeF. */
+    private static final String VIEW =
+            "hasAuthority('DOCUMENTS:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String EDIT =
+            "hasAuthority('DOCUMENTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
 
     private final DeliveryKsefCorrectionService service;
 

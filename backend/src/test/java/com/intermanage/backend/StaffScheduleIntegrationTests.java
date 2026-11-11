@@ -222,7 +222,10 @@ class StaffScheduleIntegrationTests {
         send(manager, get(schedule("/departments")), null)
                 .andExpect(jsonPath("$[?(@.name=='Kasy')].canEdit").value(true))
                 .andExpect(jsonPath("$[?(@.name=='Garmaż')].canEdit").value(false));
-        send(manager, get(schedule("/settings/" + department)), null).andExpect(status().isForbidden());
+        // Ustawienia działu kierownik tylko czyta (odczyt nie wymaga EDIT), zmienia je STAFF:EDIT.
+        send(manager, get(schedule("/settings/" + department)), null).andExpect(status().isOk());
+        send(manager, put(schedule("/settings/" + department)), "{\"managerIds\":[],\"minimums\":[]}")
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -526,6 +529,55 @@ class StaffScheduleIntegrationTests {
         send(owner, put(schedule("/layout")), "{\"departmentId\":\"" + department + "\",\"month\":\"" + MONTH
                 + "\",\"ungrouped\":[\"" + UUID.randomUUID() + "\"],\"groups\":[]}")
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void employeeSeesOnlyOwnPublishedSchedule() throws Exception {
+        String userId = user(role);
+        String own = assign(userId);
+        change(owner, cell(own, "2026-12-01", "06:00", "14:00", null)).andExpect(status().isOk());
+        change(owner, off(own, "2026-12-02", "W5", null)).andExpect(status().isOk());
+        change(owner, cell(employee, "2026-12-01", "08:00", "16:00", null)).andExpect(status().isOk());
+        publish(owner).andExpect(status().isOk());
+        // Poprawka po publikacji czeka na kolejną publikację, więc pracownik widzi jeszcze stare godziny.
+        change(owner, cell(own, "2026-12-01", "07:00", "15:00", null)).andExpect(status().isOk());
+
+        Cookie worker = loginUser(userId);
+        send(worker, get("/api/me/schedule?from=2026-12-01&to=2026-12-07"), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.employee").value(true))
+                .andExpect(jsonPath("$.days", hasSize(7)))
+                .andExpect(jsonPath("$.days[0].shifts", hasSize(1)))
+                .andExpect(jsonPath("$.days[0].shifts[0].start").value("06:00:00"))
+                .andExpect(jsonPath("$.days[0].shifts[0].department").value("Kasy"))
+                .andExpect(jsonPath("$.days[1].dayOff.kind").value("W5"))
+                .andExpect(jsonPath("$.days[2].shifts", hasSize(0)));
+
+        send(worker, get("/api/me/schedule?from=2026-12-01&to=2027-03-01"), null)
+                .andExpect(status().isBadRequest());
+        send(worker(role), get("/api/me/schedule?from=2026-12-01&to=2026-12-07"), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.employee").value(false))
+                .andExpect(jsonPath("$.days", hasSize(0)));
+    }
+
+    @Test
+    void dashboardSettingsAreKeptPerAccount() throws Exception {
+        send(owner, get("/api/auth/dashboard-settings"), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.salesChartMetric").value("SALES"));
+        send(owner, put("/api/auth/dashboard-settings"), "{\"salesChartMetric\":\"MARGIN\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.salesChartMetric").value("MARGIN"));
+        send(owner, get("/api/auth/dashboard-settings"), null)
+                .andExpect(jsonPath("$.salesChartMetric").value("MARGIN"));
+        send(owner, put("/api/auth/dashboard-settings"), "{\"salesChartMetric\":null}")
+                .andExpect(status().isBadRequest());
+        send(worker(role), get("/api/auth/dashboard-settings"), null)
+                .andExpect(jsonPath("$.salesChartMetric").value("SALES"));
+        // Przywrócenie, bo konto właściciela jest wspólne dla testów.
+        send(owner, put("/api/auth/dashboard-settings"), "{\"salesChartMetric\":\"SALES\"}")
+                .andExpect(status().isOk());
     }
 
     @Test

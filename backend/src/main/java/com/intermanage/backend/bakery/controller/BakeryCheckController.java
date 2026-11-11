@@ -45,15 +45,16 @@ import com.intermanage.backend.document.service.DocumentService;
 import jakarta.validation.Valid;
 
 /**
- * Weryfikacja piekarni. Uprawnienie jak wprowadzanie danych (te same faktury i przypięcia kodów), a że pokazuje bony
- * i faktury, wymaga też ich odczytu. Usunięcie weryfikacji i WZ oraz odpięcie to znaczniki.
+ * Weryfikacja piekarni. Uprawnienie jak wprowadzanie danych (te same faktury i przypięcia kodów); bony i faktury są
+ * częścią tej pracy, więc nie wymagają osobnego dostępu do Dokumentów i KSeF. Usunięcie weryfikacji i WZ oraz odpięcie
+ * to znaczniki.
  */
 @RestController
 @RequestMapping("/api/stores/{storeId}/bakery-checks")
 public class BakeryCheckController {
 
-    private static final String ACCESS = "hasAuthority('DATA_ENTRY:VIEW') and hasAuthority('DOCUMENTS:VIEW')"
-            + " and hasAuthority('KSEF_INVOICES:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String ACCESS =
+            "hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
 
     private final BakeryCheckService service;
     private final BakeryComparisonService comparison;

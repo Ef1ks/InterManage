@@ -21,8 +21,7 @@ const errorMessage = (error: unknown, fallback: string) => (error instanceof Api
  * Korekty już ujęte widać wyżej wśród faktur („z korekty …”). XML korekt pobiera się w tle, stąd licznik oczekujących.
  */
 export function DeliveryKsefCorrections({ storeId, document }: { storeId: string; document: Document }) {
-  const canView = useCan('KSEF_INVOICES', 'VIEW')
-  const enabled = canView && document.type === 'PZ' && document.ksefInvoices.some((invoice) => !invoice.correction)
+  const enabled = document.type === 'PZ' && document.ksefInvoices.some((invoice) => !invoice.correction)
   const { data } = useDeliveryKsefCorrections(storeId, document.id, enabled)
   if (!enabled || !data) return null
   const open = data.corrections.filter((correction) => !correction.documents.some((linked) => linked.attached))

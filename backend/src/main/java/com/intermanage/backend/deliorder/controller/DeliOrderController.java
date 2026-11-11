@@ -227,7 +227,7 @@ public class DeliOrderController {
 
     /** Ruchy międzymagazynowe dostawcy do przypięcia: z okolic daty dostawy albo pasujące do {@code query}. */
     @GetMapping("/orders/{orderId}/documents/candidates")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(VIEW)
     public List<DeliDocumentCandidate> documentCandidates(@PathVariable UUID storeId, @PathVariable UUID orderId,
             @RequestParam(required = false) String query) {
         return orderService.documentCandidates(storeId, orderId, query);
@@ -250,13 +250,13 @@ public class DeliOrderController {
     }
 
     @GetMapping("/invitations")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(VIEW)
     public List<DeliInvitationResponse> invitations(@PathVariable UUID storeId) {
         return invitationService.sent(storeId);
     }
 
     @GetMapping("/invitations/stores")
-    @PreAuthorize(EDIT)
+    @PreAuthorize(VIEW)
     public List<StoreSummary> invitableStores(@PathVariable UUID storeId) {
         return invitationService.invitableStores(storeId);
     }

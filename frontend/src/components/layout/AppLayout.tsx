@@ -9,14 +9,15 @@ import {
   MonitorIcon,
   MoonIcon,
   SunIcon,
-  UserIcon,
 } from 'lucide-react'
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { BrandMark } from '@/components/BrandMark'
+import { AppBackground } from '@/components/layout/AppBackground'
 import { groupTarget, locate, useNavGroups } from '@/components/layout/navigation'
 import { Button } from '@/components/ui/button'
+import { UserAvatar } from '@/components/UserAvatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,7 +103,8 @@ export function AppLayout() {
 
   return (
     // Szerokie strony (data-wide-page) zwijają menu do paska z ikonami (wariant rail); rozwinięte wysuwa się nad treść.
-    <div className="group/layout app-layout min-h-svh bg-muted/30 md:grid md:grid-cols-[15rem_1fr] md:has-[[data-wide-page]]:grid-cols-[3.5rem_1fr]">
+    <div className="group/layout app-layout isolate min-h-svh bg-muted/30 md:grid md:grid-cols-[15rem_1fr] md:has-[[data-wide-page]]:grid-cols-[3.5rem_1fr]">
+      <AppBackground />
       <aside
         data-rail={expanded || collapsing ? undefined : ''}
         onPointerEnter={onPointerEnter}
@@ -319,7 +321,7 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="ghost" />}>
-        <UserIcon />
+        <UserAvatar name={me.displayName} url={me.avatar?.url} className="size-6 text-[0.625rem]" />
         <span className="max-w-40 truncate">{me.displayName}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

@@ -30,15 +30,20 @@ public class AuthService {
     private final UserMapper userMapper;
     private final StoreService storeService;
     private final StoreSidebarService sidebarService;
+    private final UserBackgroundService backgroundService;
+    private final UserAvatarService avatarService;
 
     public AuthService(AppUserRepository users, PasswordEncoder passwordEncoder, ActivationService activationService,
-            UserMapper userMapper, StoreService storeService, StoreSidebarService sidebarService) {
+            UserMapper userMapper, StoreService storeService, StoreSidebarService sidebarService,
+            UserBackgroundService backgroundService, UserAvatarService avatarService) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.activationService = activationService;
         this.userMapper = userMapper;
         this.storeService = storeService;
         this.sidebarService = sidebarService;
+        this.backgroundService = backgroundService;
+        this.avatarService = avatarService;
     }
 
     /** Zużywa link aktywacyjny i zwraca principal do zalogowania (z obowiązkiem ustawienia hasła). */
@@ -73,7 +78,8 @@ public class AuthService {
         AppUser user = load(userId);
         List<StoreSummary> stores = storeService.accessibleStores(user);
         return userMapper.toMeResponse(user, stores,
-                sidebarService.orders(stores.stream().map(StoreSummary::id).toList()));
+                sidebarService.orders(stores.stream().map(StoreSummary::id).toList()), backgroundService.current(userId),
+                avatarService.current(userId));
     }
 
     /** Zmienia własne hasło i zwraca nowy principal, dla którego trzeba wystawić nowy token. */

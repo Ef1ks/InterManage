@@ -2,7 +2,6 @@ import { Route, Routes } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
-import { hasPermission, useCurrentUser } from '@/features/auth/api'
 import { CheckEditor } from '@/features/bakery-check/CheckEditor'
 import { CheckStart } from '@/features/bakery-check/CheckStart'
 import { useCurrentStore } from '@/features/stores/current-store'
@@ -13,24 +12,11 @@ import { useCurrentStore } from '@/features/stores/current-store'
  */
 export function BakeryCheckPage() {
   const store = useCurrentStore()
-  const me = useCurrentUser()
   if (!store) {
     return (
       <>
         <PageHeader title="Weryfikacja piekarni" />
         <FullPageMessage title="Brak sklepu" description="Weryfikację prowadzi się w konkretnym sklepie." inline />
-      </>
-    )
-  }
-  if (!hasPermission(me, 'DOCUMENTS') || !hasPermission(me, 'KSEF_INVOICES')) {
-    return (
-      <>
-        <PageHeader title="Weryfikacja piekarni" />
-        <FullPageMessage
-          title="Brak dostępu"
-          description="Weryfikacja porównuje bony i faktury, więc wymaga też dostępu do Dokumentów i Faktur KSeF."
-          inline
-        />
       </>
     )
   }

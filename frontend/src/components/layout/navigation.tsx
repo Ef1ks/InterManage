@@ -118,8 +118,8 @@ const GROUPS: GroupSpec[] = [
         label: 'Weryfikacja piekarni',
         description: 'Ilości z dokumentów WZ kontra faktura z korektami i bon po korektach.',
         icon: CroissantIcon,
-        visible: (me) =>
-          hasPermission(me, 'DATA_ENTRY') && hasPermission(me, 'DOCUMENTS') && hasPermission(me, 'KSEF_INVOICES'),
+        // Bony i faktury są częścią tej pracy: wystarczy wprowadzanie danych, bez Dokumentów i KSeF.
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
       { category: 'MEAT_PURCHASES', section: PURCHASE_CHECKS },
       { category: 'SUPPLIERS', section: SUPPLIER_LIST },

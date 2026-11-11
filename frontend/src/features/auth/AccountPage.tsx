@@ -7,6 +7,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useChangePassword, useCurrentUser } from '@/features/auth/api'
+import { AvatarSettings } from '@/features/auth/AvatarSettings'
+import { BackgroundSettings } from '@/features/auth/BackgroundSettings'
 import { applyServerErrors } from '@/lib/form-errors'
 
 type PasswordForm = {
@@ -36,7 +38,9 @@ export function AccountPage() {
       {
         onSuccess: () => {
           reset()
-          toast.success('Hasło zostało zmienione', { description: 'Na innych urządzeniach trzeba zalogować się ponownie.' })
+          toast.success('Hasło zostało zmienione', {
+            description: 'Na innych urządzeniach trzeba zalogować się ponownie.',
+          })
         },
         onError: (error) => setFormError(applyServerErrors(error, setError, ['currentPassword', 'newPassword'])),
       },
@@ -51,7 +55,8 @@ export function AccountPage() {
           <h2 id="account-details" className="text-sm font-medium">
             Dane konta
           </h2>
-          <dl className="grid gap-3 text-sm">
+          <AvatarSettings />
+          <dl className="mt-2 grid gap-3 text-sm">
             <Detail label="Imię i nazwisko" value={me.displayName} />
             <Detail label="Login" value={me.username} />
             <Detail label="E-mail" value={me.email ?? '—'} />
@@ -62,7 +67,9 @@ export function AccountPage() {
         <Card>
           <CardContent>
             <h2 className="text-base font-semibold">Zmiana hasła</h2>
-            <p className="mt-1 mb-5 text-sm text-muted-foreground">Po zmianie zostaniesz wylogowany na innych urządzeniach.</p>
+            <p className="mt-1 mb-5 text-sm text-muted-foreground">
+              Po zmianie zostaniesz wylogowany na innych urządzeniach.
+            </p>
             <Form onSubmit={onSubmit} error={formError}>
               <TextField
                 label="Obecne hasło"
@@ -100,6 +107,8 @@ export function AccountPage() {
             </Form>
           </CardContent>
         </Card>
+
+        <BackgroundSettings />
       </div>
     </>
   )

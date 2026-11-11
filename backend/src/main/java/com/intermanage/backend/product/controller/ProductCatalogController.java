@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.product.dto.ProductListPage;
 import com.intermanage.backend.product.dto.ProductListRequest;
 import com.intermanage.backend.product.dto.ProductPriceHistoryResponse;
@@ -22,23 +23,22 @@ import com.intermanage.backend.product.service.ProductCatalogService;
 @RequestMapping("/api/stores/{storeId}/products")
 public class ProductCatalogController {
 
-    private static final String VIEW = "hasAuthority('INVENTORY:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
-
     private final ProductCatalogService service;
 
     public ProductCatalogController(ProductCatalogService service) {
         this.service = service;
     }
 
+    /** Wyszukiwarka kartoteki to słownik: korzysta z niej każde narzędzie, więc wystarczy dostęp do sklepu. */
     @GetMapping
-    @PreAuthorize(VIEW)
+    @PreAuthorize(Access.STORE)
     public ProductListPage list(@PathVariable UUID storeId, @ModelAttribute ProductListRequest request) {
         return service.list(storeId, request);
     }
 
-    /** Też dla {@code SALES:VIEW}: historia cen jest w oknie statystyk artykułu z raportów sprzedaży. */
+    /** Historia cen jest częścią karty artykułu (też okno statystyk z raportów i wprowadzania danych). */
     @GetMapping("/{itm8}/prices")
-    @PreAuthorize("(hasAuthority('INVENTORY:VIEW') or hasAuthority('SALES:VIEW')) and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize(Access.ARTICLE_STATS)
     public ProductPriceHistoryResponse prices(@PathVariable UUID storeId, @PathVariable String itm8) {
         return service.priceHistory(storeId, itm8);
     }

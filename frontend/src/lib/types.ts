@@ -36,6 +36,36 @@ export type Me = {
   stores: StoreSummary[]
   /** Kolejność kategorii menu bocznego sklepów, które ją zapisały (id sklepu → klucze grup). */
   sidebarOrders: Record<string, string[]>
+  /** Własne zdjęcie w tle aplikacji tego konta (Moje konto), `null` = bez zdjęcia. */
+  background: UserBackground | null
+  /** Zdjęcie profilowe tego konta (Moje konto), `null` = inicjały. */
+  avatar: UserAvatar | null
+}
+
+export type UserBackground = {
+  id: string
+  /** Adres pliku: publiczny z CDN (R2) albo backendu dla starszych zdjęć z bazy. */
+  url: string
+  /** Ile procent zdjęcia przesłania kolor tła pod treścią (0-95), żeby tekst był czytelny. */
+  veilPercent: number
+}
+
+export type UserAvatar = {
+  id: string
+  /** Adres pliku: publiczny z CDN (R2) albo backendu dla zdjęć z bazy. */
+  url: string
+}
+
+export type AvatarChange = {
+  avatar: UserAvatar | null
+  /** Zdjęcie, które przestało obowiązywać, do „Przywróć”. */
+  previousId: string | null
+}
+
+export type BackgroundChange = {
+  background: UserBackground | null
+  /** Zdjęcie, które przestało obowiązywać, do „Przywróć”. */
+  previousId: string | null
 }
 
 export type StoreSummary = {
@@ -1247,6 +1277,11 @@ export type TopSalesReport = {
 }
 
 /** Sprzedaż dzień po dniu do wykresu; każdy dzień okresu, bez sprzedaży z zerami. */
+/** Co pokazuje wykres wyników sklepu na pulpicie: ilość, sprzedaż brutto albo marża zł (ustawienie konta). */
+export type DashboardChartMetric = 'QUANTITY' | 'SALES' | 'MARGIN'
+
+export type DashboardSettings = { salesChartMetric: DashboardChartMetric }
+
 export type SalesHistory = {
   from: string
   to: string

@@ -70,16 +70,15 @@ type PickerTarget = {
  */
 export function DocumentKsefInvoices({ storeId, document }: { storeId: string; document: Document }) {
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
-  const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
-  const canLink = canEditDocuments && canViewKsef
+  const canLink = canEditDocuments
   const { link, unlink } = useDocumentKsefLinks(storeId, document.type, document.id)
   const manual = useManualInvoices(storeId, document.type.toLowerCase(), document.id)
   const [picking, setPicking] = useState(false)
   if (!document.ksefLinkable && !document.manualInvoiceAllowed) return null
   const own = document.ksefInvoices.filter((invoice) => invoice.viaCorrection == null)
   const count = document.ksefInvoices.length + document.manualInvoices.length
-  // Bez KSeF (korekta błędu sklepu albo brak dostępu do faktur KSeF) okno od razu wpisuje fakturę spoza KSeF.
-  const ksefPicker = document.ksefLinkable && canViewKsef
+  // Bez KSeF (korekta błędu sklepu) okno od razu wpisuje fakturę spoza KSeF.
+  const ksefPicker = document.ksefLinkable
 
   const restoreManual = (invoice: ManualInvoice) =>
     manual.restore.mutate(invoice.id, {
@@ -375,7 +374,7 @@ function LinkedInvoiceRow({
   onUnlink?: () => void
   unlinking: boolean
 }) {
-  const canView = useCan('KSEF_INVOICES', 'VIEW')
+  const canView = useCan('DOCUMENTS', 'VIEW')
   const download = useDownloadInvoice(storeId)
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 tabular-nums">
@@ -792,7 +791,6 @@ function Tag({ children, tone }: { children: string; tone?: 'positive' }) {
  */
 export function DocumentRowKsef({ storeId, target }: { storeId: string; target: PickerTarget }) {
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
-  const canViewKsef = useCan('KSEF_INVOICES', 'VIEW')
   const [picking, setPicking] = useState(false)
   const empty = target.ksefInvoices.length === 0 && target.manualInvoices.length === 0
   return (
@@ -836,7 +834,7 @@ export function DocumentRowKsef({ storeId, target }: { storeId: string; target: 
             size={empty ? 'xs' : 'icon-xs'}
             className="text-muted-foreground"
             aria-label={`Przypnij fakturę: ${target.typeSingular.toLowerCase()} ${target.number}`}
-            title={canViewKsef ? 'Przypnij fakturę z KSeF albo wpisz spoza KSeF' : 'Wpisz fakturę spoza KSeF'}
+            title="Przypnij fakturę z KSeF albo wpisz spoza KSeF"
             onClick={() => setPicking(true)}
           >
             <LinkIcon />
@@ -845,7 +843,7 @@ export function DocumentRowKsef({ storeId, target }: { storeId: string; target: 
           <KsefInvoicePickerDialog
             storeId={storeId}
             target={target}
-            ksef={canViewKsef}
+            ksef
             allowManual
             open={picking}
             onOpenChange={setPicking}
@@ -858,7 +856,7 @@ export function DocumentRowKsef({ storeId, target }: { storeId: string; target: 
 
 /** Faktury KSeF w wierszu listy dokumentów: numer i pobranie PDF bez otwierania dokumentu. */
 function KsefInvoiceChips({ storeId, invoices }: { storeId: string; invoices: LinkedKsefInvoice[] }) {
-  const canView = useCan('KSEF_INVOICES', 'VIEW')
+  const canView = useCan('DOCUMENTS', 'VIEW')
   const download = useDownloadInvoice(storeId)
   if (invoices.length === 0) return null
   return (

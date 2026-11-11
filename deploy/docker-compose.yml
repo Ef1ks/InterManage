@@ -29,6 +29,11 @@ services:
       # Dane firmy po NIP-ie z GUS (BIR); pusty klucz = „Pobierz z GUS” niedostępne.
       GUS_API_URL: ${GUS_API_URL:-https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc}
       GUS_API_KEY: ${GUS_API_KEY:-}
+      # Zdjęcia profilowe i tła kont w Cloudflare R2; puste = zdjęcia w bazie.
+      R2_S3_API: ${R2_S3_API:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       # Kopia zapasowa bazy na Dysk Google; puste = połączenie z Google niedostępne.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
