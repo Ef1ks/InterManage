@@ -201,7 +201,7 @@ const commaNumber = (value: number, digits: number) => value.toFixed(digits).rep
 
 /**
  * „Uzupełnij ITM8”: dla każdego artykułu karta artykułu po EAN-ie, „Kod ITM8 :”, nowy ITM8 z dostawcą, ref. dostawcy
- * = ITM8, opakowanie i zamówienie min. = PAK, data usunięcia, odznaczony „Aktywny”, C.Z. po rab., sprawdzenie wszystkich
+ * = ITM8, najpierw opakowanie, potem zamówienie min. (oba = PAK), data usunięcia, odznaczony „Aktywny”, C.Z. po rab., sprawdzenie wszystkich
  * pól, Zatwierdź, Tak, Powrót i ZER.; na końcu Mercalys na pasek zadań. Wszystko po identyfikatorach pól, bez myszy:
  * pole, które nie przyjęło wartości, albo inne pytanie niż „Utworzyć zapis ?” zatrzymują makro przed zapisem.
  * Wymaga odtwarzacza od wersji 39 (WEBIFVALUE).
@@ -239,8 +239,9 @@ export function buildItm8Macro(items: Itm8MacroItem[]) {
       `WEBKEY|${WINDOW}|${screen.supplierField}|^a${item.supplierCode}{Tab}`,
       `WEBVALUE|${WINDOW}|${screen.supplierField}|${supplierValue}|${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.supplierRefField}|^a${itm8}{Tab}`,
-      `WEBKEY|${WINDOW}|${screen.minOrderField}|^a${pack}{Tab}`,
+      // Najpierw opakowanie, potem zamówienie min.: Mercalys sprawdza zamówienie min. względem opakowania.
       `WEBKEY|${WINDOW}|${screen.packField}|^a${pack}{Tab}`,
+      `WEBKEY|${WINDOW}|${screen.minOrderField}|^a${pack}{Tab}`,
       `WEBKEY|${WINDOW}|${screen.deleteDateField}|^a${date}{Tab}`,
       // Odznaczenie „Aktywny”: klik tylko, gdy jest zaznaczony (WEBCHECK umie tylko zaznaczyć).
       `WEBIFVALUE|${WINDOW}|${screen.activeCheckbox}|^tak$|${inactive}|1000`,
@@ -252,8 +253,8 @@ export function buildItm8Macro(items: Itm8MacroItem[]) {
       `WEBVALUE|${WINDOW}|${screen.newItm8Field}|${itm8Value}`,
       `WEBVALUE|${WINDOW}|${screen.supplierField}|${supplierValue}`,
       `WEBVALUE|${WINDOW}|${screen.supplierRefField}|${itm8Value}`,
-      `WEBVALUE|${WINDOW}|${screen.minOrderField}|${packValue}`,
       `WEBVALUE|${WINDOW}|${screen.packField}|${packValue}`,
+      `WEBVALUE|${WINDOW}|${screen.minOrderField}|${packValue}`,
       `WEBVALUE|${WINDOW}|${screen.deleteDateField}|${datePattern(item.deleteDate)}`,
       `WEBVALUE|${WINDOW}|${screen.activeCheckbox}|^nie$`,
       `WEBVALUE|${WINDOW}|${screen.netPriceField}|${priceValue}`,

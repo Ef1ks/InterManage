@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 42.0.0.0
+;@Ahk2Exe-SetVersion 43.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 42 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 43 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -492,15 +492,15 @@ PlayMacro(rawClip) {
                 seen := ""
                 problem := WebIfRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Integer(Trim(parts[6])), Trim(parts[7]),
                     parts.Length >= 9 ? Integer(Trim(parts[9])) : 30000, &rowButton, &seen)
-                listKey := Trim(parts[8])
+                rowLabel := Trim(parts[8])
                 if (problem = "") {
                     vars["ROW"] := rowButton ; kolejne linie klikają przycisk tego wiersza jako %ROW%
-                    handledRows[listKey] := handledRows.Get(listKey, 0) + 1
+                    handledRows[rowLabel] := handledRows.Get(rowLabel, 0) + 1
                 }
                 if (problem = "SKIP") {
                     ; Podsumowanie na końcu: ile plików obsłużono (obsłużony plik znika z listy, więc liczymy przejścia,
                     ; nie numer wiersza) i co było widać na liście przy przeskoku.
-                    report .= Trim(parts[7]) ": obsłużone pliki: " handledRows.Get(listKey, 0) " (" seen ")`n"
+                    report .= Trim(parts[7]) ": obsłużone pliki: " handledRows.Get(rowLabel, 0) " (" seen ")`n"
                     target := LabelLine(lines, Trim(parts[8]), index)
                     if (target = 0) {
                         MsgBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
