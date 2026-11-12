@@ -1,8 +1,13 @@
 package com.intermanage.backend.staff.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +30,7 @@ import com.intermanage.backend.staff.dto.ScheduleSettings;
 import com.intermanage.backend.staff.dto.ScheduleSettingsRequest;
 import com.intermanage.backend.staff.dto.ScheduleRateRequest;
 import com.intermanage.backend.staff.dto.ScheduleTimeOffRequest;
+import com.intermanage.backend.staff.service.SchedulePrintService;
 import com.intermanage.backend.staff.service.StaffScheduleService;
 
 import jakarta.validation.Valid;
@@ -42,9 +48,11 @@ public class StaffScheduleController {
             + " and @storeAccess.canAccess(authentication, #storeId)";
 
     private final StaffScheduleService schedules;
+    private final SchedulePrintService prints;
 
-    public StaffScheduleController(StaffScheduleService schedules) {
+    public StaffScheduleController(StaffScheduleService schedules, SchedulePrintService prints) {
         this.schedules = schedules;
+        this.prints = prints;
     }
 
     @GetMapping("/departments")
@@ -59,6 +67,20 @@ public class StaffScheduleController {
     public ScheduleResponse get(@PathVariable UUID storeId, @RequestParam UUID departmentId, @RequestParam String month,
             @RequestParam(required = false) Integer version, @AuthenticationPrincipal AppUserPrincipal principal) {
         return schedules.get(storeId, departmentId, month, version, principal);
+    }
+
+    /** Wydruk dla pracowników: to, co widać na ekranie (ta sama wersja), bez obsady, wymiaru i ostrzeżeń. */
+    @GetMapping("/pdf")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> pdf(@PathVariable UUID storeId, @RequestParam UUID departmentId,
+            @RequestParam String month, @RequestParam(required = false) Integer version,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        SchedulePrintService.File file = prints.pdf(storeId, departmentId, month, version, principal);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(file.content());
     }
 
     @PutMapping("/entries")

@@ -235,6 +235,14 @@ class StaffScheduleIntegrationTests {
                 .andExpect(jsonPath("$.rows[0].monthMinutes").doesNotExist())
                 .andExpect(jsonPath("$.rows[0].warnings", hasSize(0)));
         change(viewer, cell(employee, "2026-12-03", "06:00", "14:00", null)).andExpect(status().isForbidden());
+
+        // Wydruk dla pracowników: kto tylko ogląda, też go drukuje (ostatnia publikacja).
+        byte[] pdf = send(viewer, get(schedule("/pdf?departmentId=" + department + "&month=" + MONTH)), null)
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentType(MediaType.APPLICATION_PDF))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(pdf, 0, 5)).isEqualTo("%PDF-");
     }
 
     @Test

@@ -5,11 +5,13 @@ import {
   ChevronRightIcon,
   ClipboardPasteIcon,
   CopyPlusIcon,
+  DownloadIcon,
   EraserIcon,
   FilterIcon,
   HistoryIcon,
   ListTreeIcon,
   PaintbrushIcon,
+  PrinterIcon,
   SettingsIcon,
 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
@@ -20,6 +22,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  downloadSchedulePdf,
+  printSchedule,
   useChangeSchedule,
   useOpenHoliday,
   useSchedule,
@@ -245,6 +249,16 @@ function Loaded({
   const [brushPosition, setBrushPosition] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'publish' | 'versions' | 'settings' | 'layout' | null>(null)
   const [copied, setCopied] = useState<ScheduleRow | null>(null)
+  const [printing, setPrinting] = useState<'print' | 'download' | null>(null)
+  const print = (kind: 'print' | 'download') => {
+    setPrinting(kind)
+    const run = kind === 'print' ? printSchedule : downloadSchedulePdf
+    run(scope, viewedVersion)
+      .catch((cause: unknown) =>
+        toast.error(cause instanceof ApiError ? cause.message : 'Nie udało się przygotować wydruku grafiku'),
+      )
+      .finally(() => setPrinting(null))
+  }
   const { canEdit, viewedVersion, status, rows, days, versions } = schedule
   const brushes = brushHours(schedule.positions, rows)
   const warnings = rows.flatMap((row) => row.warnings.map((warning) => ({ ...warning, name: row.name })))
@@ -651,6 +665,34 @@ function Loaded({
               Do wyrównania ({balancing.length})
             </Button>
           )}
+          <div className="flex">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-r-none"
+              loading={printing === 'print'}
+              disabled={printing !== null}
+              title="Grafik dla pracowników: godziny, dni wolne i urlopy, bez obsady i ostrzeżeń"
+              onClick={() => print('print')}
+            >
+              <PrinterIcon aria-hidden />
+              Drukuj
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="-ml-px rounded-l-none"
+              aria-label="Pobierz PDF grafiku"
+              title="Pobierz PDF grafiku"
+              loading={printing === 'download'}
+              disabled={printing !== null}
+              onClick={() => print('download')}
+            >
+              <DownloadIcon aria-hidden />
+            </Button>
+          </div>
           {versions.length > 0 && (
             <Button type="button" variant="outline" size="sm" onClick={() => setDialog('versions')}>
               <HistoryIcon aria-hidden />

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api } from '@/lib/api'
+import { api, downloadFile, printFile } from '@/lib/api'
 import type {
   Schedule,
   ScheduleBreak,
@@ -13,6 +13,22 @@ import type {
 const path = (storeId: string, suffix: string) => `/stores/${storeId}/staff/schedule${suffix}`
 
 export type ScheduleScope = { storeId: string; departmentId: string; month: string }
+
+/** Wydruk dla pracowników: to, co widać na ekranie (z oglądaną wersją), bez obsady, wymiaru i ostrzeżeń. */
+const pdfPath = (scope: ScheduleScope, version: number | null) =>
+  path(
+    scope.storeId,
+    `/pdf?${new URLSearchParams({
+      departmentId: scope.departmentId,
+      month: scope.month,
+      ...(version !== null ? { version: String(version) } : {}),
+    })}`,
+  )
+
+export const printSchedule = (scope: ScheduleScope, version: number | null) => printFile(pdfPath(scope, version))
+
+export const downloadSchedulePdf = (scope: ScheduleScope, version: number | null) =>
+  downloadFile(pdfPath(scope, version), `grafik-${scope.month}.pdf`)
 
 /** Puste godziny i {@code dayOff} czyszczą dzień. {@code storeId}: inny sklep firmy, gdy pracownik jest tam tylko tego dnia. */
 export type ScheduleChange = {
