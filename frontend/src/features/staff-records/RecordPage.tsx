@@ -422,7 +422,9 @@ function Leave({
   onEdit,
 }: CardProps & { year: number; onYear: (year: number) => void }) {
   const leave = record.leaveYear
+  const b2b = record.b2bLeave
   const noEmployment = !record.contracts.some((contract) => contract.kind === 'EMPLOYMENT')
+  const entries = <LeaveEntries record={record} storeId={storeId} canEdit={canEdit} onEdit={onEdit} />
   return (
     <Section
       title="Urlop"
@@ -438,8 +440,32 @@ function Leave({
         </>
       }
     >
-      {noEmployment ? (
-        <Empty>Urlop z Kodeksu pracy przysługuje przy umowie o pracę. Przy zleceniu i B2B zasady ustala umowa.</Empty>
+      {noEmployment && !b2b ? (
+        <Empty>
+          Urlop z Kodeksu pracy przysługuje przy umowie o pracę. Przy zleceniu zasady ustala umowa, a przy B2B wpisz
+          płatne dni wolne w umowie.
+        </Empty>
+      ) : noEmployment && b2b ? (
+        <>
+          <div className="flex items-baseline gap-2">
+            <span className={cn('text-3xl font-semibold tabular-nums', b2b.remainingDays < 0 && 'text-destructive')}>
+              {b2b.remainingDays}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {daysWord(b2b.remainingDays)} płatnej przerwy do wykorzystania
+            </span>
+          </div>
+          <dl className="grid gap-1.5">
+            <Fact label={`Z umowy B2B na ${year}`}>{b2b.days}</Fact>
+            <Fact label="Wykorzystano">{b2b.usedDays}</Fact>
+          </dl>
+          {canEdit && (
+            <div>
+              <AddButton label="Przerwa" onClick={() => onEdit({ type: 'leave' })} />
+            </div>
+          )}
+          {entries}
+        </>
       ) : (
         <>
           <div className="flex items-baseline gap-2">
@@ -474,33 +500,44 @@ function Leave({
               <AddButton label="Urlop" onClick={() => onEdit({ type: 'leave' })} />
             </div>
           )}
-          {record.leaves.length > 0 && (
-            <ul className="grid gap-2.5 border-t pt-2.5">
-              {record.leaves.map((entry) => {
-                const label = labelOf(LEAVE_KINDS, entry.kind)
-                return (
-                  <EntryRow
-                    key={entry.id}
-                    storeId={storeId}
-                    employeeId={record.person.employeeId}
-                    kind="leaves"
-                    entryId={entry.id}
-                    label={label}
-                    canEdit={canEdit}
-                    onEdit={() => onEdit({ type: 'leave', entry })}
-                  >
-                    <div className="font-medium">{label}</div>
-                    <div className="text-xs text-muted-foreground tabular-nums">
-                      {dateRange(entry.startDate, entry.endDate)} · {entry.days} {daysWord(entry.days)}
-                    </div>
-                  </EntryRow>
-                )
-              })}
-            </ul>
-          )}
+          {entries}
         </>
       )}
     </Section>
+  )
+}
+
+/** Wpisy urlopów i przerw z wybranego roku. */
+function LeaveEntries({
+  record,
+  storeId,
+  canEdit,
+  onEdit,
+}: Pick<CardProps, 'record' | 'storeId' | 'canEdit' | 'onEdit'>) {
+  if (record.leaves.length === 0) return null
+  return (
+    <ul className="grid gap-2.5 border-t pt-2.5">
+      {record.leaves.map((entry) => {
+        const label = labelOf(LEAVE_KINDS, entry.kind)
+        return (
+          <EntryRow
+            key={entry.id}
+            storeId={storeId}
+            employeeId={record.person.employeeId}
+            kind="leaves"
+            entryId={entry.id}
+            label={label}
+            canEdit={canEdit}
+            onEdit={() => onEdit({ type: 'leave', entry })}
+          >
+            <div className="font-medium">{label}</div>
+            <div className="text-xs text-muted-foreground tabular-nums">
+              {dateRange(entry.startDate, entry.endDate)} · {entry.days} {daysWord(entry.days)}
+            </div>
+          </EntryRow>
+        )
+      })}
+    </ul>
   )
 }
 

@@ -211,7 +211,16 @@ export type WorkPeriodKind = 'EMPLOYMENT' | 'MANDATE' | 'BUSINESS' | 'ABROAD'
 export type EducationLevel =
   'NONE' | 'VOCATIONAL' | 'SECONDARY_VOCATIONAL' | 'GENERAL_SECONDARY' | 'POST_SECONDARY' | 'HIGHER'
 export type LeaveKind =
-  'ANNUAL' | 'ON_DEMAND' | 'CHILD_CARE' | 'FORCE_MAJEURE' | 'CARE' | 'REHABILITATION' | 'OCCASIONAL' | 'UNPAID'
+  | 'ANNUAL'
+  | 'ON_DEMAND'
+  | 'CHILD_CARE'
+  | 'FORCE_MAJEURE'
+  | 'CARE'
+  | 'REHABILITATION'
+  | 'OCCASIONAL'
+  | 'UNPAID'
+  /** Płatna przerwa przy umowie B2B; dni w roku z umowy. */
+  | 'B2B_PAID'
 
 export type StaffWarning = { severity: 'ERROR' | 'WARNING' | 'INFO'; message: string; basis: string | null }
 
@@ -257,6 +266,8 @@ export type StaffContract = {
   fteDenominator: number
   /** Wyjątek z art. 25¹ § 4 KP: nie liczy się do limitu 33 miesięcy. */
   fixedTermExempt: boolean
+  /** Płatne dni wolne w roku z umowy B2B; puste = umowa ich nie przewiduje. */
+  paidLeaveDays: number | null
   /** Aneksy: etat od wskazanego dnia, od najwcześniejszego. {@code fteNumerator} to etat z chwili zawarcia. */
   changes: StaffContractChange[]
 }
@@ -325,6 +336,8 @@ export type StaffRecord = {
     remainingDays: number
     usage: Partial<Record<LeaveKind, number>>
   }
+  /** Płatna przerwa B2B w roku; puste bez umowy B2B z płatnymi dniami. */
+  b2bLeave: { year: number; days: number; usedDays: number; remainingDays: number } | null
   warnings: StaffWarning[]
   /** Uprawnienia z ustawy o rehabilitacji wynikające z orzeczenia. */
   rights: string[]
@@ -3854,6 +3867,8 @@ export type ScheduleSettings = {
   toleranceMinutes: number
   /** Grafik liczy wynagrodzenia (widzą je tylko układający grafik działu). */
   payEnabled: boolean
+  /** Ruchomy czas pracy w całym sklepie (art. 140¹ KP): bez ostrzeżenia o wcześniejszym starcie w tej samej dobie. */
+  flexibleTime: boolean
 }
 
 export type ScheduleBreak = { start: string; end: string; paid: boolean }

@@ -18,7 +18,15 @@ import com.intermanage.backend.staff.entity.WorkPeriodKind;
 /** Profil pracownika w Kadrach. {@code rights}: uprawnienia z ustawy o rehabilitacji wynikające z orzeczenia. */
 public record StaffRecordResponse(Person person, Profile profile, List<Contract> contracts,
         List<WorkPeriod> workPeriods, List<Disability> disabilities, List<Leave> leaves, Opening opening,
-        SeniorityInfo seniority, LeaveYear leaveYear, List<Warning> warnings, List<String> rights) {
+        SeniorityInfo seniority, LeaveYear leaveYear, B2bLeave b2bLeave, List<Warning> warnings,
+        List<String> rights) {
+
+    /**
+     * Płatna przerwa B2B w roku: dni z umowy B2B (trwającej dziś, a bez niej ostatniej w tym roku), wykorzystane wpisy
+     * {@code B2B_PAID} i ile zostało. Puste, gdy w roku nie ma umowy B2B z płatnymi dniami.
+     */
+    public record B2bLeave(int year, int days, int usedDays, int remainingDays) {
+    }
 
     /** {@code rcpNumber}: numer karty RCP nadany w aplikacji, do wpisania w Symfonii. */
     public record Person(UUID employeeId, String displayName, String username, String email, String storeNumber,
@@ -32,7 +40,7 @@ public record StaffRecordResponse(Person person, Profile profile, List<Contract>
 
     /** {@code fteNumerator}: etat z chwili zawarcia; późniejsze są w {@code changes}, od najwcześniejszego. */
     public record Contract(UUID id, ContractKind kind, EmploymentType employmentType, LocalDate startDate,
-            LocalDate endDate, int fteNumerator, int fteDenominator, boolean fixedTermExempt,
+            LocalDate endDate, int fteNumerator, int fteDenominator, boolean fixedTermExempt, Integer paidLeaveDays,
             List<ContractChange> changes) {
     }
 

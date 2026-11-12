@@ -36,7 +36,7 @@ public class StaffEmployee {
 
     /** Konto w aplikacji; puste = pracownik bez konta (tylko imię i nazwisko w {@link #fullName}). */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", updatable = false)
+    @JoinColumn(name = "user_id")
     private AppUser user;
 
     @Column(name = "full_name", length = 100)
@@ -116,6 +116,18 @@ public class StaffEmployee {
     /** Imię i nazwisko: z konta, a bez konta z wpisu pracownika. */
     public String getDisplayName() {
         return user != null ? user.getDisplayName() : fullName;
+    }
+
+    /**
+     * Podpina konto pracownikowi dotąd bez konta. Od tej chwili imię i nazwisko jest w koncie, a grafik, kadry i czas pracy
+     * zostają przy tym samym wpisie pracownika.
+     */
+    public void linkAccount(AppUser account) {
+        if (user != null) {
+            throw new IllegalStateException("Pracownik ma już konto");
+        }
+        this.user = account;
+        this.fullName = null;
     }
 
     public void setFullName(String fullName) {

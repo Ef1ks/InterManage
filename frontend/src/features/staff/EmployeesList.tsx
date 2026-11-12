@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRightLeftIcon, ChevronRightIcon, MailIcon, PencilIcon, PlusIcon, UndoIcon } from 'lucide-react'
+import { ArrowRightLeftIcon, ChevronRightIcon, LinkIcon, MailIcon, PencilIcon, PlusIcon, UndoIcon } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -10,6 +10,7 @@ import { useCan } from '@/features/auth/api'
 import { recordPaths } from '@/features/staff-records/api'
 import { staffPaths, useEmployeeActions, useStaffEmployees, useStaffStructure } from '@/features/staff/api'
 import { EmployeeDialog } from '@/features/staff/EmployeeDialog'
+import { LinkAccountDialog } from '@/features/staff/LinkAccountDialog'
 import { Chip, Initials } from '@/features/staff/list-parts'
 import { people } from '@/features/staff/people'
 import { StoreSwitch } from '@/features/staff/StoreSwitch'
@@ -43,6 +44,7 @@ export function EmployeesList({ storeId, stores }: { storeId: string; stores: St
   const navigate = useNavigate()
   const [editor, setEditor] = useState<{ open: boolean; employee?: StaffEmployee }>({ open: false })
   const [moving, setMoving] = useState<StaffEmployee>()
+  const [linking, setLinking] = useState<StaffEmployee>()
   const manyStores = stores.length > 1
 
   const onError = (error: unknown) =>
@@ -269,6 +271,7 @@ export function EmployeesList({ storeId, stores }: { storeId: string; stores: St
                         onEdit={() => setEditor({ open: true, employee })}
                         onResend={() => resend(employee)}
                         onMove={manyStores ? () => setMoving(employee) : undefined}
+                        onLinkAccount={() => setLinking(employee)}
                       />
                     ))}
                   </ul>
@@ -330,6 +333,7 @@ export function EmployeesList({ storeId, stores }: { storeId: string; stores: St
         onOpenChange={(open) => setEditor((current) => ({ ...current, open }))}
       />
       <TransferDialog storeId={storeId} stores={stores} employee={moving} onClose={() => setMoving(undefined)} />
+      <LinkAccountDialog storeId={storeId} employee={linking} onClose={() => setLinking(undefined)} />
     </>
   )
 }
@@ -341,6 +345,7 @@ function EmployeeRow({
   canSeeRecord,
   onEdit,
   onResend,
+  onLinkAccount,
   onMove,
 }: {
   employee: StaffEmployee
@@ -349,6 +354,7 @@ function EmployeeRow({
   canSeeRecord: boolean
   onEdit: () => void
   onResend: () => void
+  onLinkAccount: () => void
   /** Brak = firma nie ma innego sklepu, do którego można przenieść. */
   onMove?: () => void
 }) {
@@ -412,6 +418,15 @@ function EmployeeRow({
               onClick={onResend}
             >
               <MailIcon />
+            </RowAction>
+          )}
+          {!employee.hasAccount && (
+            <RowAction
+              label={`Podepnij konto do ${employee.displayName}`}
+              title="Podepnij konto"
+              onClick={onLinkAccount}
+            >
+              <LinkIcon />
             </RowAction>
           )}
           {onMove && (

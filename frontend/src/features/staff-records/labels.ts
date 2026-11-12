@@ -56,6 +56,7 @@ export const LEAVE_KINDS: { value: LeaveKind; label: string; limit?: number }[] 
   { value: 'REHABILITATION', label: 'Turnus rehabilitacyjny', limit: 21 },
   { value: 'OCCASIONAL', label: 'Urlop okolicznościowy' },
   { value: 'UNPAID', label: 'Urlop bezpłatny' },
+  { value: 'B2B_PAID', label: 'Płatna przerwa (B2B, dni z umowy)' },
 ]
 
 export const labelOf = <T extends string>(options: { value: T; label: string }[], value: T | null | undefined) =>

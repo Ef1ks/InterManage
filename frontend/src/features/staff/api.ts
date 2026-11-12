@@ -97,6 +97,17 @@ export function useEmployeeActions(storeId: string) {
     mutationFn: (request: EmployeeWithoutAccount) =>
       api<StaffEmployee>(path(storeId, '/employees/without-account'), { method: 'POST', json: request }),
   })
+  const linkAccount = useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string }) =>
+      api<StaffEmployee>(path(storeId, `/employees/${id}/account`), { method: 'POST', json: { userId } }),
+  })
+  const inviteAccount = useMutation({
+    mutationFn: ({ id, email, username }: { id: string; email: string; username: string }) =>
+      api<StaffEmployee>(path(storeId, `/employees/${id}/account/invite`), {
+        method: 'POST',
+        json: { email, username },
+      }),
+  })
   const assign = useMutation({
     mutationFn: (request: EmployeeAssignment) =>
       api<StaffEmployee>(path(storeId, '/employees/existing'), { method: 'POST', json: request }),
@@ -118,7 +129,18 @@ export function useEmployeeActions(storeId: string) {
     mutationFn: ({ id, request }: { id: string; request: EmployeeTransfer }) =>
       api<StaffEmployee>(path(storeId, `/employees/${id}/transfer`), { method: 'POST', json: request }),
   })
-  return { invite, createWithoutAccount, assign, update, end, restore, resendInvitation, transfer }
+  return {
+    invite,
+    createWithoutAccount,
+    linkAccount,
+    inviteAccount,
+    assign,
+    update,
+    end,
+    restore,
+    resendInvitation,
+    transfer,
+  }
 }
 
 export function useStructureActions(storeId: string) {

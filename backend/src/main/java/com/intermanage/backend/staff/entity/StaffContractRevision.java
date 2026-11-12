@@ -55,6 +55,9 @@ public class StaffContractRevision {
     @Column(name = "fixed_term_exempt", nullable = false, updatable = false)
     private boolean fixedTermExempt;
 
+    @Column(name = "paid_leave_days", updatable = false)
+    private Integer paidLeaveDays;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "changed_by", updatable = false)
     private AppUser changedBy;
@@ -74,6 +77,7 @@ public class StaffContractRevision {
         this.fteNumerator = contract.getFteNumerator();
         this.fteDenominator = contract.getFteDenominator();
         this.fixedTermExempt = contract.isFixedTermExempt();
+        this.paidLeaveDays = contract.getPaidLeaveDays();
         this.changedBy = changedBy;
     }
 

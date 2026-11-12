@@ -2,7 +2,9 @@ package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -419,6 +421,30 @@ class StaffScheduleIntegrationTests {
                 .andExpect(jsonPath("$.days[24].closed").value(true))
                 .andExpect(jsonPath("$.rows[0].warnings[0].message").value("Boże Narodzenie: sklep oznaczony jako zamknięty"));
         openHoliday("2026-12-23", true).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void flexibleTimeOfStoreRemovesEarlierStartWarning() throws Exception {
+        change(owner, cell(employee, "2026-12-06", "08:00", "16:00", null)).andExpect(status().isOk());
+        change(owner, cell(employee, "2026-12-07", "06:00", "14:00", null))
+                .andExpect(jsonPath("$.rows[0].warnings[*].message",
+                        hasItem("Wcześniejszy start: w tej samej dobie 10 h pracy")));
+
+        send(owner, put(schedule("/settings/" + department)),
+                "{\"managerIds\":[],\"minimums\":[],\"flexibleTime\":true}")
+                .andExpect(jsonPath("$.flexibleTime").value(true));
+        change(owner, cell(employee, "2026-12-07", "06:00", "14:00", null))
+                .andExpect(jsonPath("$.rows[0].warnings[*].message",
+                        not(hasItem("Wcześniejszy start: w tej samej dobie 10 h pracy"))));
+
+        // Bez pola ustawienie zostaje, a false je wyłącza (znacznik).
+        send(owner, put(schedule("/settings/" + department)), "{\"managerIds\":[],\"minimums\":[]}")
+                .andExpect(jsonPath("$.flexibleTime").value(true));
+        send(owner, put(schedule("/settings/" + department)),
+                "{\"managerIds\":[],\"minimums\":[],\"flexibleTime\":false}")
+                .andExpect(jsonPath("$.flexibleTime").value(false));
+        assertThat(jdbc.queryForObject("select count(*) from staff_flexible_time_settings where deleted_at is not null",
+                Integer.class)).isPositive();
     }
 
     @Test

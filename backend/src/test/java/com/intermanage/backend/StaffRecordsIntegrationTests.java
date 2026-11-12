@@ -188,6 +188,29 @@ class StaffRecordsIntegrationTests {
     }
 
     @Test
+    void b2bPaidLeaveNeedsDaysInB2bContract() throws Exception {
+        String leave = "{\"kind\":\"B2B_PAID\",\"startDate\":\"2026-03-02\",\"endDate\":\"2026-03-06\"}";
+        String json = send(owner, post(records("/contracts")), contract("B2B", null, "2026-01-01", null, 1, 1))
+                .andExpect(jsonPath("$.contracts[0].paidLeaveDays").isEmpty())
+                .andExpect(jsonPath("$.b2bLeave").isEmpty())
+                .andReturn().getResponse().getContentAsString();
+        send(owner, post(records("/leaves")), leave).andExpect(status().isConflict());
+
+        String contract = JsonPath.read(json, "$.contracts[0].id");
+        send(owner, put(records("/contracts/" + contract)), "{\"kind\":\"B2B\",\"startDate\":\"2026-01-01\","
+                + "\"fteNumerator\":1,\"fteDenominator\":1,\"fixedTermExempt\":false,\"paidLeaveDays\":20}")
+                .andExpect(jsonPath("$.contracts[0].paidLeaveDays").value(20));
+        send(owner, post(records("/leaves")), leave)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.leaves[0].kind").value("B2B_PAID"))
+                .andExpect(jsonPath("$.b2bLeave.days").value(20))
+                .andExpect(jsonPath("$.b2bLeave.usedDays").value(0))
+                .andExpect(jsonPath("$.b2bLeave.remainingDays").value(20));
+        // Przy samym B2B urlopy z Kodeksu pracy dalej nie przysługują.
+        send(owner, post(records("/leaves")), leave.replace("B2B_PAID", "ANNUAL")).andExpect(status().isConflict());
+    }
+
+    @Test
     void leaveWithoutPlannedWorkHasNoDays() throws Exception {
         send(owner, post(records("/contracts")), contract("EMPLOYMENT", "INDEFINITE", "2025-01-01", null, 1, 1));
         // Dni urlopu to dni ze zmianą w grafiku; bez grafiku urlop nic nie zużywa, a liczba z żądania się nie liczy.

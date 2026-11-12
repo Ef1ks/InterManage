@@ -26,6 +26,8 @@ import com.intermanage.backend.staff.dto.CreatePlainEmployeeRequest;
 import com.intermanage.backend.staff.dto.DepartmentRequest;
 import com.intermanage.backend.staff.dto.DepartmentResponse;
 import com.intermanage.backend.staff.dto.EmployeeResponse;
+import com.intermanage.backend.staff.dto.InviteAccountRequest;
+import com.intermanage.backend.staff.dto.LinkAccountRequest;
 import com.intermanage.backend.staff.dto.LoginSuggestion;
 import com.intermanage.backend.staff.dto.PositionRequest;
 import com.intermanage.backend.staff.dto.RoleOption;
@@ -155,6 +157,20 @@ public class StaffController {
             @Valid @RequestBody CreatePlainEmployeeRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return employees.createWithoutAccount(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/employees/{id}/account")
+    @PreAuthorize(EDIT)
+    public EmployeeResponse linkAccount(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody LinkAccountRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return employees.linkAccount(storeId, id, request, principal.getId());
+    }
+
+    @PostMapping("/employees/{id}/account/invite")
+    @PreAuthorize(EDIT)
+    public EmployeeResponse inviteAccount(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody InviteAccountRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return employees.inviteAccount(storeId, id, request, principal.getId());
     }
 
     @PostMapping("/employees/existing")

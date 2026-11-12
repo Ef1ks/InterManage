@@ -10,7 +10,7 @@ import com.intermanage.backend.staff.entity.EmploymentType;
 
 /**
  * Pracownik na liście Kadr. Pola umowy puste, gdy nie ma obowiązującej; etat dzisiejszy, z aneksami;
- * {@code remainingLeave} tylko przy umowie o pracę. Sklep i dział do filtrów listy (lista startuje od bieżącego sklepu).
+ * {@code remainingLeave} przy umowie o pracę, a przy B2B pozostałe dni płatnej przerwy. Sklep i dział do filtrów listy (lista startuje od bieżącego sklepu).
  */
 public record StaffRecordRow(UUID employeeId, String displayName, UUID storeId, String storeNumber, String storeName,
         UUID departmentId, String departmentName, String positionName,

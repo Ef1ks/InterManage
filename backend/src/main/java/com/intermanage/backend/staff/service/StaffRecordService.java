@@ -39,6 +39,7 @@ import com.intermanage.backend.staff.entity.StaffContractChange;
 import com.intermanage.backend.staff.entity.StaffContractRevision;
 import com.intermanage.backend.staff.entity.StaffDisability;
 import com.intermanage.backend.staff.entity.StaffEmployee;
+import com.intermanage.backend.staff.entity.LeaveKind;
 import com.intermanage.backend.staff.entity.StaffLeave;
 import com.intermanage.backend.staff.entity.StaffLeaveOpening;
 import com.intermanage.backend.staff.entity.StaffProfile;
@@ -158,7 +159,7 @@ public class StaffRecordService {
         }
         contract.update(request.kind(), employment ? request.employmentType() : null, request.startDate(),
                 request.endDate(), employment ? request.fteNumerator() : 1, employment ? request.fteDenominator() : 1,
-                employment && request.fixedTermExempt());
+                employment && request.fixedTermExempt(), request.paidLeaveDays());
         contracts.saveAndFlush(contract);
         return response(employee, null);
     }
@@ -236,13 +237,26 @@ public class StaffRecordService {
         if (request.startDate().getYear() != request.endDate().getYear()) {
             throw ApiException.badRequest("Urlop na przełomie lat wpisz osobno dla każdego roku");
         }
-        boolean employed = contracts.findActive(List.of(id)).stream()
-                .anyMatch(contract -> contract.isEmployment() && contract.activeOn(request.startDate()));
-        if (!employed) {
+        List<StaffContract> active = contracts.findActive(List.of(id));
+        StaffContract b2b = null;
+        if (request.kind() == LeaveKind.B2B_PAID) {
+            b2b = active.stream().filter(contract -> contract.getKind() == ContractKind.B2B
+                            && contract.getPaidLeaveDays() != null && contract.activeOn(request.startDate()))
+                    .findFirst().orElseThrow(() -> ApiException.conflict(
+                            "Płatna przerwa wymaga umowy B2B z płatnymi dniami wolnymi, a w tym dniu jej nie ma"));
+        } else if (active.stream()
+                .noneMatch(contract -> contract.isEmployment() && contract.activeOn(request.startDate()))) {
             throw ApiException.conflict("Urlopy z Kodeksu pracy przysługują przy umowie o pracę, a w tym dniu jej nie ma");
         }
         // Urlop zużywa dni pracy z grafiku (art. 154² KP); bez ułożonych godzin ma 0 dni.
         int days = leaveDays.count(id, request.startDate(), request.endDate());
+        if (b2b != null) {
+            int used = b2bUsed(id, request.startDate().getYear(), leaveId);
+            if (used + days > b2b.getPaidLeaveDays()) {
+                throw ApiException.conflict("Płatna przerwa: umowa B2B daje " + b2b.getPaidLeaveDays()
+                        + " dni w roku. Wykorzystano już " + used + ", a ta przerwa miałaby " + days + ".");
+            }
+        }
         // Limit z ustawy (np. 4 dni na żądanie, art. 167² KP): ponad niego to już nie ten rodzaj nieobecności.
         leaveDays.requireLimit(id, request.kind(), request.startDate().getYear(), leaveId, days);
         StaffLeave leave = leaveId == null ? new StaffLeave(employee, actor(actorId)) : entry(leaves, id, leaveId, "urlopu");
@@ -342,6 +356,34 @@ public class StaffRecordService {
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono " + what));
     }
 
+    /** Dni płatnej przerwy B2B wykorzystane w roku, bez wpisu {@code skipId}. */
+    private int b2bUsed(UUID employeeId, int year, UUID skipId) {
+        return leaves.findActive(List.of(employeeId)).stream()
+                .filter(leave -> leave.getKind() == LeaveKind.B2B_PAID && leave.getStartDate().getYear() == year
+                        && !leave.getId().equals(skipId))
+                .mapToInt(StaffLeave::getDays).sum();
+    }
+
+    /** Płatna przerwa B2B w roku: umowa trwająca w dniu odniesienia, a bez niej ostatnia w tym roku. */
+    static StaffRecordResponse.B2bLeave b2bLeave(StaffFile file, int year, LocalDate today) {
+        LocalDate day = today.getYear() == year ? today : LocalDate.of(year, 12, 31);
+        List<StaffContract> inYear = file.contracts().stream()
+                .filter(contract -> contract.getKind() == ContractKind.B2B && contract.getPaidLeaveDays() != null)
+                .filter(contract -> contract.getStartDate().getYear() <= year
+                        && (contract.getEndDate() == null || contract.getEndDate().getYear() >= year))
+                .toList();
+        StaffContract contract = inYear.stream().filter(candidate -> candidate.activeOn(day)).findFirst()
+                .orElse(inYear.stream().max(Comparator.comparing(StaffContract::getStartDate)).orElse(null));
+        if (contract == null) {
+            return null;
+        }
+        int used = file.leaves().stream()
+                .filter(leave -> leave.getKind() == LeaveKind.B2B_PAID && leave.getStartDate().getYear() == year)
+                .mapToInt(StaffLeave::getDays).sum();
+        return new StaffRecordResponse.B2bLeave(year, contract.getPaidLeaveDays(), used,
+                contract.getPaidLeaveDays() - used);
+    }
+
     private StaffRecordResponse response(StaffEmployee employee, Integer requestedYear) {
         LocalDate today = today();
         int year = requestedYear == null ? today.getYear() : requestedYear;
@@ -365,7 +407,8 @@ public class StaffRecordService {
                 new StaffRecordResponse.SeniorityInfo(Seniority.work(file, seniorityDay),
                         Seniority.inCompany(file, seniorityDay), Seniority.forLeave(file, seniorityDay),
                         Seniority.higherLeaveFrom(file, seniorityDay)),
-                LeaveCalculator.forYear(file, year, today), warnings, StaffCompliance.rights(file, today));
+                LeaveCalculator.forYear(file, year, today), b2bLeave(file, year, today), warnings,
+                StaffCompliance.rights(file, today));
     }
 
     private StaffRecordRow row(StaffEmployee employee, StaffFile file, LocalDate today) {
@@ -374,8 +417,13 @@ public class StaffRecordService {
         List<Warning> warnings = working ? StaffCompliance.check(file, today) : List.of();
         Severity worst = warnings.isEmpty() ? null : warnings.getFirst().severity();
         Fte fte = current == null ? null : file.fteOn(current, today);
-        Integer remaining = current != null && current.isEmployment()
-                ? LeaveCalculator.forYear(file, today.getYear(), today).remainingDays() : null;
+        Integer remaining = null;
+        if (current != null && current.isEmployment()) {
+            remaining = LeaveCalculator.forYear(file, today.getYear(), today).remainingDays();
+        } else if (current != null && current.getKind() == ContractKind.B2B) {
+            StaffRecordResponse.B2bLeave b2b = b2bLeave(file, today.getYear(), today);
+            remaining = b2b == null ? null : b2b.remainingDays();
+        }
         return new StaffRecordRow(employee.getId(), employee.getDisplayName(), employee.getStore().getId(),
                 employee.getStore().getNumber(), employee.getStore().getName(),
                 employee.getPosition().getDepartment().getId(), employee.getPosition().getDepartment().getName(),

@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794471297.6087706,
-    "seen": 1794471490.5638528,
-    "ast_hash": "fce77dc112fbed3b876cc617318cda47",
+    "mtime": 1794474238.0589397,
+    "seen": 1794474362.1071823,
+    "ast_hash": "f85e7b63f7c936fce609cc43809ba084",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794471639.7474642,
-    "seen": 1794471687.4290934,
-    "ast_hash": "ce44bd3d61fe1135a667f0838ce20bfa",
+    "mtime": 1794474314.7653217,
+    "seen": 1794474362.1356947,
+    "ast_hash": "97d86fff6ece19bf0b3334f60a1ae1c9",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -8226,9 +8226,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/controller/StaffController.java": {
-    "mtime": 1794468316.3801146,
-    "seen": 1794468369.0830617,
-    "ast_hash": "1b30c1fac281179fa175a5263a90808d",
+    "mtime": 1794473291.0958304,
+    "seen": 1794473632.3222935,
+    "ast_hash": "4f7cf3bdedab1b18f8c622662835b259",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/AccountOption.java": {
@@ -8316,9 +8316,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffEmployee.java": {
-    "mtime": 1794468316.3811126,
-    "seen": 1794468369.0919938,
-    "ast_hash": "03b848f47bb35be409b09e56d383e78e",
+    "mtime": 1794473291.0947871,
+    "seen": 1794473632.3342986,
+    "ast_hash": "5381a8c6f7a023be1d6f6c79bc1fba5b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffPosition.java": {
@@ -8364,9 +8364,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffEmployeeService.java": {
-    "mtime": 1794468316.3831131,
-    "seen": 1794468369.1016972,
-    "ast_hash": "49c67815c4430c53ea66788d509b2aae",
+    "mtime": 1794473291.0953095,
+    "seen": 1794473632.3448055,
+    "ast_hash": "47dfa94bbf94bf90eac06896b6732bf7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffShiftService.java": {
@@ -8382,9 +8382,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffIntegrationTests.java": {
-    "mtime": 1794468316.3861127,
-    "seen": 1794468369.122033,
-    "ast_hash": "d305705311a5a9c5445894ba8c03ba35",
+    "mtime": 1794473334.591341,
+    "seen": 1794473632.3670046,
+    "ast_hash": "749f50dee8b07afa58a361b3c17ebb2d",
     "semantic_hash": ""
   },
   "frontend/src/features/staff/EmployeeDialog.tsx": {
@@ -8394,9 +8394,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff/EmployeesList.tsx": {
-    "mtime": 1794468316.3886185,
-    "seen": 1794468369.1704462,
-    "ast_hash": "81a15a666c44f373453b00e75f8b97c0",
+    "mtime": 1794473506.9766254,
+    "seen": 1794473632.4210649,
+    "ast_hash": "56226f86509aa5f50d0e230d3ba5f64a",
     "semantic_hash": ""
   },
   "frontend/src/features/staff/ShiftPicker.tsx": {
@@ -8418,9 +8418,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff/api.ts": {
-    "mtime": 1794468316.3886185,
-    "seen": 1794468369.1704462,
-    "ast_hash": "c14b89e43b95838dd86a993b7d93d8de",
+    "mtime": 1794473507.6336224,
+    "seen": 1794473632.4220688,
+    "ast_hash": "3b491fc60c968b25d41e7fb5f68d5576",
     "semantic_hash": ""
   },
   "frontend/src/features/staff/shifts.ts": {
@@ -8472,9 +8472,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/StaffCompliance.java": {
-    "mtime": 1794130885.839391,
-    "seen": 1794131138.9454572,
-    "ast_hash": "a1b2ecde185210cd0ea1a6e88d2fdc4d",
+    "mtime": 1794473233.9498682,
+    "seen": 1794473632.3222935,
+    "ast_hash": "178006fd248efcf9a26c689f8f5c452d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/StaffFile.java": {
@@ -8496,9 +8496,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ContractRequest.java": {
-    "mtime": 1794068911.6634617,
-    "seen": 1794069976.4840472,
-    "ast_hash": "9ec3a66b00ac8d04187e0a44a2cb4fbf",
+    "mtime": 1794473233.9448683,
+    "seen": 1794473632.3242939,
+    "ast_hash": "0e3e82757f8bd610932f04e2ef1f92ab",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/DisabilityRequest.java": {
@@ -8526,15 +8526,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/StaffRecordResponse.java": {
-    "mtime": 1794155407.6819432,
-    "seen": 1794155653.6268227,
-    "ast_hash": "3aa3f6838549fdbcb6b8c7809df75880",
+    "mtime": 1794473233.945868,
+    "seen": 1794473632.3312995,
+    "ast_hash": "322a1991feb314c3d171aa7da9f62921",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/StaffRecordRow.java": {
-    "mtime": 1794152607.0900178,
-    "seen": 1794152977.1311867,
-    "ast_hash": "0c49935e1c468b03e558445a71c85ca8",
+    "mtime": 1794473233.9508698,
+    "seen": 1794473632.3312995,
+    "ast_hash": "88bc9457576edf060fea190e3dd99406",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/WorkPeriodRequest.java": {
@@ -8568,15 +8568,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/LeaveKind.java": {
-    "mtime": 1794068723.898387,
-    "seen": 1794069976.485551,
-    "ast_hash": "37d1cf14c05724b161d4f0ee2f6d387a",
+    "mtime": 1794473233.9438689,
+    "seen": 1794473632.3322992,
+    "ast_hash": "8de11ace96c821b52f7fb483e53e66f9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffContract.java": {
-    "mtime": 1794068723.898387,
-    "seen": 1794069976.485551,
-    "ast_hash": "b989addfab35b3ecd6e58c581d3e66b0",
+    "mtime": 1794473233.9448683,
+    "seen": 1794473632.3322992,
+    "ast_hash": "464870aaf240e274f6359a360cb45163",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffContractChange.java": {
@@ -8586,9 +8586,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffContractRevision.java": {
-    "mtime": 1794069372.61041,
-    "seen": 1794069976.485551,
-    "ast_hash": "f35c25a5561e252228fe323f617bf73a",
+    "mtime": 1794473233.9448683,
+    "seen": 1794473632.3332992,
+    "ast_hash": "1b5e8a80097cd10655158e8739b7f6a4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffDisability.java": {
@@ -8688,33 +8688,33 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffRecordService.java": {
-    "mtime": 1794468316.3831131,
-    "seen": 1794468369.1022017,
-    "ast_hash": "aece11aa415a58b77d0036bf668863a9",
+    "mtime": 1794473239.806281,
+    "seen": 1794473632.3458133,
+    "ast_hash": "34c85dbaba6cfbb11b1fa477defd1c84",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffLawTests.java": {
-    "mtime": 1794093135.9141996,
-    "seen": 1794093339.730964,
-    "ast_hash": "5f90da03d45b6b84d68b24f55ac98892",
+    "mtime": 1794473245.4037788,
+    "seen": 1794473632.3670046,
+    "ast_hash": "e005c3893b2ab85a23f51ee5703b42f5",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffRecordsIntegrationTests.java": {
-    "mtime": 1794155361.6164403,
-    "seen": 1794155653.6636817,
-    "ast_hash": "78d3ddee9ce47039e65e9f3a1ab184de",
+    "mtime": 1794473333.7061112,
+    "seen": 1794473632.3670046,
+    "ast_hash": "01849a9439c359c627125259b09de5a6",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordDialogs.tsx": {
-    "mtime": 1794155441.4745927,
-    "seen": 1794155653.717198,
-    "ast_hash": "0ddbf1a22a058b99fc613643f98f3955",
+    "mtime": 1794473507.7490604,
+    "seen": 1794473632.4180639,
+    "ast_hash": "cafd2e1d2f64865d09d24399e76ba50c",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordPage.tsx": {
-    "mtime": 1794155491.4010165,
-    "seen": 1794155653.717198,
-    "ast_hash": "dba885ccf42d3ea07b576cbbfa5934fa",
+    "mtime": 1794473507.689283,
+    "seen": 1794473632.4180639,
+    "ast_hash": "7361681be733d04ee4681b58e49e375e",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordsList.tsx": {
@@ -8736,9 +8736,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/labels.ts": {
-    "mtime": 1794131941.0195434,
-    "seen": 1794132091.2471611,
-    "ast_hash": "99d3d1caf10a7c3f6bdb7105899e41b0",
+    "mtime": 1794473466.2957542,
+    "seen": 1794473632.4190638,
+    "ast_hash": "f4253e6cb3bba7b9b28055de5604dbd4",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/ScheduleCalendar.java": {
@@ -8748,9 +8748,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/ScheduleRules.java": {
-    "mtime": 1794150354.013166,
-    "seen": 1794151066.611984,
-    "ast_hash": "47c3883526b0c4ce02e7e19cc93bb107",
+    "mtime": 1794474209.9326272,
+    "seen": 1794474362.0112484,
+    "ast_hash": "2c2753a9298eb9e3d52f5542e171424a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/controller/StaffScheduleController.java": {
@@ -8784,15 +8784,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleSettings.java": {
-    "mtime": 1794150700.3580267,
-    "seen": 1794151066.6169775,
-    "ast_hash": "e6940e01d64cde0ffa1939dea0f10946",
+    "mtime": 1794474209.937395,
+    "seen": 1794474362.016249,
+    "ast_hash": "3bfff357bafc8dbcfda537d1fb06a228",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleSettingsRequest.java": {
-    "mtime": 1794150700.3580267,
-    "seen": 1794151066.6169775,
-    "ast_hash": "e9a93d8123bce5eb72fb5354d185ab2b",
+    "mtime": 1794474209.9379237,
+    "seen": 1794474362.016249,
+    "ast_hash": "83e226788d97cee9f6628d1548957668",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffDepartmentManager.java": {
@@ -8868,21 +8868,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffScheduleService.java": {
-    "mtime": 1794471297.606771,
-    "seen": 1794471490.4873216,
-    "ast_hash": "7d607a190c61b73722f6479b90265a96",
+    "mtime": 1794474209.936867,
+    "seen": 1794474362.0323508,
+    "ast_hash": "4d8e2ed8120113758c240cafafcd5033",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ScheduleLawTests.java": {
-    "mtime": 1794152103.3120327,
-    "seen": 1794152212.4842792,
-    "ast_hash": "4341396ac02df28ad02ce35bcb7eda91",
+    "mtime": 1794474219.2407308,
+    "seen": 1794474362.0506456,
+    "ast_hash": "f1eb25cd9ea91136898c867551e1345f",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffScheduleIntegrationTests.java": {
-    "mtime": 1794471367.8091123,
-    "seen": 1794471490.508949,
-    "ast_hash": "b49af7e5b565171a9f3c39023071afd7",
+    "mtime": 1794474298.7627864,
+    "seen": 1794474362.0521483,
+    "ast_hash": "625258753df9b9a90badda7c02f57a00",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/CellEditor.tsx": {
@@ -8892,9 +8892,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleDialogs.tsx": {
-    "mtime": 1794150932.7713585,
-    "seen": 1794151066.698488,
-    "ast_hash": "2f48c2cbf31739ee0a2decca48275647",
+    "mtime": 1794474238.6353016,
+    "seen": 1794474362.0981784,
+    "ast_hash": "6902d9983ffa7d465bfc902e75c30ad2",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleGrid.tsx": {
@@ -8910,15 +8910,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/api.ts": {
-    "mtime": 1794150892.392078,
-    "seen": 1794151066.698488,
-    "ast_hash": "ab124f9e4bf8624376e20c95b8616f57",
+    "mtime": 1794474238.0589397,
+    "seen": 1794474362.0991786,
+    "ast_hash": "76c94d750a5ffc3c4ffdaa2f343cc6d9",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/schedule-utils.ts": {
-    "mtime": 1794471297.6098652,
-    "seen": 1794471490.5555005,
-    "ast_hash": "13d60b1c4cbd712cde477135c0761320",
+    "mtime": 1794473507.7816434,
+    "seen": 1794473632.420064,
+    "ast_hash": "28c976051b993cf4b6090938bef83b51",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleOpenHolidayRequest.java": {
@@ -9240,9 +9240,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeService.java": {
-    "mtime": 1794468316.385112,
-    "seen": 1794468369.1022017,
-    "ast_hash": "78ec4b307b6d19088471197cf9e4dc03",
+    "mtime": 1794473233.948869,
+    "seen": 1794473632.3458133,
+    "ast_hash": "ebe552d3f97b6539e28cc07236291060",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffTimeIntegrationTests.java": {
@@ -9438,15 +9438,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/TimeSheetPdf.java": {
-    "mtime": 1794471297.606771,
-    "seen": 1794471490.467829,
-    "ast_hash": "0afc5c04e338c89416b5fd7f4ec1bd6d",
+    "mtime": 1794473233.9508698,
+    "seen": 1794473632.3222935,
+    "ast_hash": "07e2aad1bc91fc3faeba561176ddfcf7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeSheetService.java": {
-    "mtime": 1794471297.6077707,
-    "seen": 1794471490.4883215,
-    "ast_hash": "91597a6382bfc884304b5608499d6224",
+    "mtime": 1794473233.9498682,
+    "seen": 1794473632.3458133,
+    "ast_hash": "30d1517462e76444c545ac48b39beb38",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/TimeSheetPdfTests.java": {
@@ -10176,9 +10176,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/types.ts": {
-    "mtime": 1794471297.614376,
-    "seen": 1794471490.5733864,
-    "ast_hash": "a0e5f18c47b75647de80f5c30a7f0905",
+    "mtime": 1794473466.2997544,
+    "seen": 1794473632.4438045,
+    "ast_hash": "a51ef682db0cfadecb48d3de39354eca",
     "semantic_hash": ""
   },
   "mobile/tsconfig.json": {
@@ -10470,9 +10470,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/week.ts": {
-    "mtime": 1794342942.853335,
-    "seen": 1794343146.4114814,
-    "ast_hash": "873cba5e02f720c6ec69636013c45e15",
+    "mtime": 1794473466.2997544,
+    "seen": 1794473632.4438045,
+    "ast_hash": "47dc1bd87fa266c1e92cb8d8b726b514",
     "semantic_hash": ""
   },
   "skills-lock.json": {
@@ -11259,6 +11259,36 @@
     "mtime": 1794468316.3801146,
     "seen": 1794468369.085241,
     "ast_hash": "254b676f25be5f9d03beed76581e5012",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/dto/InviteAccountRequest.java": {
+    "mtime": 1794473289.1090662,
+    "seen": 1794473632.3262932,
+    "ast_hash": "b6f61032a7211e18e16e33d277a8420e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/dto/LinkAccountRequest.java": {
+    "mtime": 1794473288.3121505,
+    "seen": 1794473632.3262932,
+    "ast_hash": "cabd6d4636a415cd8dcb2ca45e6bbe9c",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/staff/LinkAccountDialog.tsx": {
+    "mtime": 1794473536.1916382,
+    "seen": 1794473632.4210649,
+    "ast_hash": "cfcf714608bb36934c965d0f75ccdc14",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/StaffFlexibleTimeSetting.java": {
+    "mtime": 1794474185.0974152,
+    "seen": 1794474362.020752,
+    "ast_hash": "a16203bd6199133f71f4c784d367bee9",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/repository/StaffFlexibleTimeSettingRepository.java": {
+    "mtime": 1794474185.8850384,
+    "seen": 1794474362.0283456,
+    "ast_hash": "d3b97ffada2865e8aca51bd6235b8903",
     "semantic_hash": ""
   }
 }

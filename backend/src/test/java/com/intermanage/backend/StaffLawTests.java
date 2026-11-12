@@ -222,7 +222,7 @@ class StaffLawTests {
         contracts.clear();
         StaffContract exempt = new StaffContract(null, null);
         exempt.update(ContractKind.EMPLOYMENT, EmploymentType.FIXED, LocalDate.parse("2023-01-01"),
-                LocalDate.parse("2026-12-31"), 1, 1, true);
+                LocalDate.parse("2026-12-31"), 1, 1, true, null);
         contracts.add(exempt);
         assertThat(messages()).noneMatch(message -> message.contains("ponad limit 33"));
     }
@@ -310,13 +310,13 @@ class StaffLawTests {
     private void employment(String from, String to, int numerator, int denominator) {
         StaffContract contract = new StaffContract(null, null);
         contract.update(ContractKind.EMPLOYMENT, EmploymentType.INDEFINITE, LocalDate.parse(from),
-                to == null ? null : LocalDate.parse(to), numerator, denominator, false);
+                to == null ? null : LocalDate.parse(to), numerator, denominator, false, null);
         contracts.add(contract);
     }
 
     private void contract(ContractKind kind, EmploymentType type, String from, String to) {
         StaffContract contract = new StaffContract(null, null);
-        contract.update(kind, type, LocalDate.parse(from), to == null ? null : LocalDate.parse(to), 1, 1, false);
+        contract.update(kind, type, LocalDate.parse(from), to == null ? null : LocalDate.parse(to), 1, 1, false, null);
         contracts.add(contract);
     }
 

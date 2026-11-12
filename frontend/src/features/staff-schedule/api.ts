@@ -160,6 +160,7 @@ export function useSaveScheduleSettings(storeId: string, departmentId: string) {
       breaks: ScheduleBreak[]
       toleranceMinutes: number
       payEnabled: boolean
+      flexibleTime: boolean
     }) => api<ScheduleSettings>(path(storeId, `/settings/${departmentId}`), { method: 'PUT', json: settings }),
   })
 }

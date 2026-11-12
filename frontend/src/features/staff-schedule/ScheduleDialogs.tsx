@@ -213,6 +213,7 @@ function SettingsForm({
   const [breaks, setBreaks] = useState<ScheduleBreak[]>(settings.breaks)
   const [tolerance, setTolerance] = useState(String(settings.toleranceMinutes))
   const [payEnabled, setPayEnabled] = useState(settings.payEnabled)
+  const [flexibleTime, setFlexibleTime] = useState(settings.flexibleTime)
   const setBreak = (index: number, change: Partial<ScheduleBreak>) =>
     setBreaks(breaks.map((item, at) => (at === index ? { ...item, ...change } : item)))
   const [error, setError] = useState<string | null>(null)
@@ -243,6 +244,7 @@ function SettingsForm({
         breaks,
         toleranceMinutes: Math.min(60, Number(tolerance || 0)),
         payEnabled,
+        flexibleTime,
       },
       {
         onSuccess: () => {
@@ -350,6 +352,17 @@ function SettingsForm({
           <span className="text-sm text-muted-foreground">
             Przy pracowniku wpisuje się stawkę za godzinę, a grafik pokazuje szacowaną wypłatę miesiąca. Widzą ją tylko
             osoby, które układają grafik tego działu.
+          </span>
+        </span>
+      </label>
+      <label className="flex cursor-pointer items-start gap-3 border-t pt-4">
+        <Switch checked={flexibleTime} onCheckedChange={setFlexibleTime} className="mt-0.5" />
+        <span className="grid gap-0.5">
+          <span className="text-sm font-medium">Ruchomy czas pracy (cały sklep)</span>
+          <span className="text-sm text-muted-foreground">
+            Włącz, gdy regulamin pracy albo obwieszczenie go wprowadza (art. 140¹ KP). Wtedy wcześniejszy start w tej
+            samej dobie, np. 6-14 po 8-16, nie jest nadgodzinami i grafik o nim nie ostrzega. Odpoczynek 11 h i 35 h
+            obowiązuje dalej. Dotyczy wszystkich działów tego sklepu.
           </span>
         </span>
       </label>

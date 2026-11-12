@@ -79,6 +79,7 @@ export const LEAVE_LABELS: Record<LeaveKind, string> = {
   REHABILITATION: 'Turnus rehabilitacyjny',
   OCCASIONAL: 'Urlop okolicznościowy',
   UNPAID: 'Urlop bezpłatny',
+  B2B_PAID: 'Płatna przerwa',
 }
 
 /** Godzina z API (GG:MM albo GG:MM:SS) jako G:MM. */

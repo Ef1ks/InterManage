@@ -53,7 +53,7 @@ public class StaffTimeSheetService {
     private static final Charset WINDOWS_1250 = Charset.forName("windows-1250");
     private static final Map<String, String> ABSENCE_SYMBOLS = Map.of("ANNUAL", "U", "ON_DEMAND", "UŻ", "CHILD_CARE",
             "OD", "FORCE_MAJEURE", "SW", "CARE", "UO", "REHABILITATION", "TR", "OCCASIONAL", "OK", "UNPAID", "UB",
-            "OTHER", "N");
+            "B2B_PAID", "UP", "OTHER", "N");
 
     private final StaffTimeService time;
     private final StaffScheduleDayOffRepository daysOff;

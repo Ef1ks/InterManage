@@ -182,6 +182,40 @@ class StaffIntegrationTests {
     }
 
     @Test
+    void employeeWithoutAccountGetsExistingOrInvitedAccount() throws Exception {
+        String surname = surname();
+        String plain = "{\"displayName\":\"Ola " + surname + "\",\"positionId\":\"" + cashier + "\",\"shifts\":[]}";
+        String first = id(send(owner, post(path("/employees/without-account")), plain)
+                .andExpect(status().isCreated()));
+        worker(managerRole);
+        String userId = jdbc.queryForObject("select id::text from users order by created_at desc limit 1",
+                String.class);
+
+        send(owner, post(path("/employees/" + first + "/account")), "{\"userId\":\"" + userId + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasAccount").value(true))
+                .andExpect(jsonPath("$.userId").value(userId))
+                .andExpect(jsonPath("$.id").value(first));
+        assertThat(role(userId)).isEqualTo(cashierRole);
+        send(owner, post(path("/employees/" + first + "/account")), "{\"userId\":\"" + userId + "\"}")
+                .andExpect(status().isConflict());
+
+        // Konto z innym stanowiskiem nie trafi do drugiej osoby.
+        String second = id(send(owner, post(path("/employees/without-account")),
+                plain.replace("Ola", "Ala")).andExpect(status().isCreated()));
+        send(owner, post(path("/employees/" + second + "/account")), "{\"userId\":\"" + userId + "\"}")
+                .andExpect(status().isConflict());
+
+        send(owner, post(path("/employees/" + second + "/account/invite")),
+                "{\"email\":\"" + email(surname) + "\",\"username\":\"\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("a" + surname))
+                .andExpect(jsonPath("$.displayName").value("Ala " + surname))
+                .andExpect(jsonPath("$.pendingActivation").value(true));
+        assertThat(mailer.lastTokenFor(email(surname))).isNotBlank();
+    }
+
+    @Test
     void employeeWithoutAccountHasOnlyNameAndPosition() throws Exception {
         String surname = surname();
         String employee = id(send(owner, post(path("/employees/without-account")),

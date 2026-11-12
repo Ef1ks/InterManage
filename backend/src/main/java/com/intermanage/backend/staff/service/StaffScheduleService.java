@@ -78,6 +78,7 @@ import com.intermanage.backend.staff.entity.StaffScheduleVersionEntry;
 import com.intermanage.backend.staff.entity.StaffShift;
 import com.intermanage.backend.staff.entity.StaffOvertimeTimeOff;
 import com.intermanage.backend.staff.entity.StaffDepartmentPaySetting;
+import com.intermanage.backend.staff.entity.StaffFlexibleTimeSetting;
 import com.intermanage.backend.staff.entity.StaffHourlyRate;
 import com.intermanage.backend.staff.entity.TimeOffInitiative;
 import com.intermanage.backend.staff.repository.StaffContractChangeRepository;
@@ -91,6 +92,7 @@ import com.intermanage.backend.staff.repository.StaffEmployeeRepository;
 import com.intermanage.backend.staff.repository.StaffLeaveRepository;
 import com.intermanage.backend.staff.repository.StaffOpenHolidayRepository;
 import com.intermanage.backend.staff.repository.StaffDepartmentPaySettingRepository;
+import com.intermanage.backend.staff.repository.StaffFlexibleTimeSettingRepository;
 import com.intermanage.backend.staff.repository.StaffHourlyRateRepository;
 import com.intermanage.backend.staff.repository.StaffOvertimeTimeOffRepository;
 import com.intermanage.backend.staff.repository.StaffPositionMinimumRepository;
@@ -149,6 +151,7 @@ public class StaffScheduleService {
     private final StaffTimeService timeService;
     private final StaffOvertimeTimeOffRepository timeOffs;
     private final StaffDepartmentPaySettingRepository paySettings;
+    private final StaffFlexibleTimeSettingRepository flexibleTime;
     private final StaffHourlyRateRepository hourlyRates;
 
     public StaffScheduleService(StaffScheduleRepository schedules, StaffScheduleEntryRepository entries,
@@ -163,7 +166,7 @@ public class StaffScheduleService {
             StaffLeaveRepository leaves, StaffEmployeeService employeeService, StoreRepository stores,
             AppUserRepository users, StaffLeaveDays leaveDays, StaffTimeService timeService,
             StaffOvertimeTimeOffRepository timeOffs, StaffDepartmentPaySettingRepository paySettings,
-            StaffHourlyRateRepository hourlyRates) {
+            StaffHourlyRateRepository hourlyRates, StaffFlexibleTimeSettingRepository flexibleTime) {
         this.schedules = schedules;
         this.entries = entries;
         this.versions = versions;
@@ -193,6 +196,7 @@ public class StaffScheduleService {
         this.timeOffs = timeOffs;
         this.paySettings = paySettings;
         this.hourlyRates = hourlyRates;
+        this.flexibleTime = flexibleTime;
     }
 
     /** Zmiana w grafiku albo w jego opublikowanej wersji, sprowadzona do tego, co potrzebne w tabeli. */
@@ -538,7 +542,8 @@ public class StaffScheduleService {
         int tolerance = timeSettings.findActive(storeId, departmentId)
                 .map(StaffDepartmentTimeSetting::getToleranceMinutes).orElse(0);
         return new ScheduleSettings(managerIds, people, result, breakList, tolerance,
-                paySettings.findActive(storeId, departmentId).isPresent());
+                paySettings.findActive(storeId, departmentId).isPresent(),
+                flexibleTime.findActive(storeId).isPresent());
     }
 
     @Transactional
@@ -616,6 +621,16 @@ public class StaffScheduleService {
             if (!request.payEnabled() && pay != null) {
                 pay.markDeleted(actor);
                 paySettings.flush();
+            }
+        }
+        if (request.flexibleTime() != null) {
+            StaffFlexibleTimeSetting flexible = flexibleTime.findActive(storeId).orElse(null);
+            if (request.flexibleTime() && flexible == null) {
+                flexibleTime.saveAndFlush(new StaffFlexibleTimeSetting(store, actor));
+            }
+            if (!request.flexibleTime() && flexible != null) {
+                flexible.markDeleted(actor);
+                flexibleTime.flush();
             }
         }
         return settings(storeId, departmentId);
@@ -867,7 +882,7 @@ public class StaffScheduleService {
                         new ScheduleRules.Days(
                                 day -> history.stream().anyMatch(planned -> planned.day().equals(day)
                                         && open.contains(new OpenDay(planned.store().getId(), day))),
-                                compensating)).stream()
+                                compensating, flexibleTime.findActive(store.getId()).isPresent())).stream()
                         .filter(warning -> warning.day() == null || YearMonth.from(warning.day()).equals(month))
                         .map(warning -> new ScheduleResponse.Warning(warning.day(), warning.message(), warning.basis()))
                         .toList();
@@ -1003,7 +1018,8 @@ public class StaffScheduleService {
     /** Urlop wypoczynkowy i na żądanie to nie dane szczególne; pozostałe rodzaje tylko dla osób z dostępem do Kadr. */
     private static String absence(StaffLeave leave, boolean records) {
         LeaveKind kind = leave.getKind();
-        return records || kind == LeaveKind.ANNUAL || kind == LeaveKind.ON_DEMAND ? kind.name() : "OTHER";
+        return records || kind == LeaveKind.ANNUAL || kind == LeaveKind.ON_DEMAND || kind == LeaveKind.B2B_PAID
+                ? kind.name() : "OTHER";
     }
 
     private static boolean seesRecords(AppUserPrincipal principal) {

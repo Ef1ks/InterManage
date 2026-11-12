@@ -974,7 +974,8 @@ public class StaffTimeService {
     /** Jak w grafiku: urlop wypoczynkowy i na żądanie widzi każdy, resztę tylko osoba z dostępem do Kadr. */
     private static String absence(StaffLeave leave, boolean records) {
         LeaveKind kind = leave.getKind();
-        return records || kind == LeaveKind.ANNUAL || kind == LeaveKind.ON_DEMAND ? kind.name() : "OTHER";
+        return records || kind == LeaveKind.ANNUAL || kind == LeaveKind.ON_DEMAND || kind == LeaveKind.B2B_PAID
+                ? kind.name() : "OTHER";
     }
 
     private static boolean overlaps(StaffContract contract, LocalDate from, LocalDate to) {

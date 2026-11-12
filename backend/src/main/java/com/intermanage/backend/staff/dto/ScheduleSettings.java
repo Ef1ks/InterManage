@@ -5,10 +5,11 @@ import java.util.UUID;
 
 /**
  * Ustawienia działu w sklepie z adresu: kto układa grafik, najmniejsza i docelowa obsada stanowisk i przerwy (GG:MM,
- * grafik ich nie pokazuje) i tolerancja kart czasu pracy w minutach.
+ * grafik ich nie pokazuje) i tolerancja kart czasu pracy w minutach. {@code flexibleTime}: ruchomy czas pracy całego
+ * sklepu (art. 140¹ KP).
  */
 public record ScheduleSettings(List<UUID> managerIds, List<Person> people, List<Minimum> minimums,
-        List<Break> breaks, int toleranceMinutes, boolean payEnabled) {
+        List<Break> breaks, int toleranceMinutes, boolean payEnabled, boolean flexibleTime) {
 
     /** Konto pracownika firmy, które można wskazać jako układającego. */
     public record Person(UUID userId, String name, String positionName) {

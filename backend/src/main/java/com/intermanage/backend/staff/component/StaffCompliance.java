@@ -230,6 +230,7 @@ public final class StaffCompliance {
             case FORCE_MAJEURE -> "Siła wyższa";
             case CARE -> "Urlop opiekuńczy";
             case REHABILITATION -> "Turnus rehabilitacyjny";
+            case B2B_PAID -> "Płatna przerwa (B2B)";
             default -> "Urlop";
         };
     }

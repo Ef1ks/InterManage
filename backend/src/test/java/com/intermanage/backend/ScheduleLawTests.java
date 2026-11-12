@@ -96,6 +96,19 @@ class ScheduleLawTests {
     }
 
     @Test
+    void flexibleTimeAllowsEarlierStartButKeepsDailyRest() {
+        // Ruchomy czas pracy (art. 140¹ § 3 KP): ponowna praca w tej samej dobie nie jest nadgodzinami.
+        Days flexible = new Days(day -> false, List.of(), true);
+        List<Shift> earlier = List.of(shift(LocalDate.of(2026, 11, 3), 8, 16), shift(LocalDate.of(2026, 11, 4), 6, 14));
+        assertThat(ScheduleRules.check(NOV_JAN, earlier, day -> EIGHT_HOURS, null, 0, flexible)).isEmpty();
+        // Odpoczynek dobowy 11 h obowiązuje dalej.
+        List<Shift> shortRest = List.of(shift(LocalDate.of(2026, 11, 3), 14, 22),
+                shift(LocalDate.of(2026, 11, 4), 6, 14));
+        assertThat(ScheduleRules.check(NOV_JAN, shortRest, day -> EIGHT_HOURS, null, 0, flexible))
+                .extracting(Warning::message).contains("Odpoczynek 8 h, a powinno być co najmniej 11 h");
+    }
+
+    @Test
     void nightShiftCrossesMidnight() {
         Shift night = shift(LocalDate.of(2026, 11, 3), 22, 6);
         assertThat(night.minutes()).isEqualTo(EIGHT_HOURS);

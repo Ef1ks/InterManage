@@ -58,10 +58,13 @@ public final class ScheduleRules {
     public record DayOff(LocalDate day, LocalDate forDate) {
     }
 
-    /** To, czego reguły nie wyczytają ze zmian: święta czynne w sklepie pracownika i oznaczone WN. */
-    public record Days(Predicate<LocalDate> openHoliday, List<DayOff> compensating) {
+    /**
+     * To, czego reguły nie wyczytają ze zmian: święta czynne w sklepie pracownika, oznaczone WN i ruchomy czas pracy
+     * sklepu ({@code flexibleTime}, art. 140¹ KP: ponowna praca w tej samej dobie nie jest nadgodzinami).
+     */
+    public record Days(Predicate<LocalDate> openHoliday, List<DayOff> compensating, boolean flexibleTime) {
 
-        public static final Days NONE = new Days(day -> false, List.of());
+        public static final Days NONE = new Days(day -> false, List.of(), false);
     }
 
     /** {@code day} pusty: dotyczy całego okresu. */
@@ -90,7 +93,7 @@ public final class ScheduleRules {
                         "art. 129 § 1 KP"));
             }
             if (index > 0) {
-                betweenShifts(sorted.get(index - 1), shift, dailyLimit, result);
+                betweenShifts(sorted.get(index - 1), shift, dailyLimit, days.flexibleTime(), result);
             }
         }
         weeklyRest(period, sorted, result);
@@ -163,16 +166,17 @@ public final class ScheduleRules {
     }
 
     private static void betweenShifts(Shift previous, Shift shift, Function<LocalDate, Integer> dailyLimit,
-            List<Warning> result) {
+            boolean flexibleTime, List<Warning> result) {
         long rest = Duration.between(previous.endsAt(), shift.startsAt()).toMinutes();
         if (rest < DAILY_REST_MINUTES) {
             result.add(new Warning(shift.day(), "Odpoczynek " + hours(rest) + " h, a powinno być co najmniej 11 h",
                     "art. 132 § 1 KP"));
         }
         // Doba pracownicza liczy się od godziny rozpoczęcia pracy (art. 128 § 3 pkt 1): wcześniejszy start następnego dnia
-        // wpada w tę samą dobę, nawet gdy obie zmiany mają po 8 godzin.
+        // wpada w tę samą dobę, nawet gdy obie zmiany mają po 8 godzin. Przy ruchomym czasie pracy to nie są nadgodziny
+        // (art. 140¹ § 3 KP), więc ostrzeżenia nie ma; odpoczynek 11 h sprawdzamy dalej.
         LocalDateTime dobaEnd = previous.startsAt().plusDays(1);
-        if (shift.startsAt().isBefore(dobaEnd)) {
+        if (!flexibleTime && shift.startsAt().isBefore(dobaEnd)) {
             LocalDateTime until = shift.endsAt().isBefore(dobaEnd) ? shift.endsAt() : dobaEnd;
             long inDoba = previous.minutes() + Duration.between(shift.startsAt(), until).toMinutes();
             int limit = dailyLimit.apply(previous.day());

@@ -13,7 +13,10 @@ public enum LeaveKind {
     CARE(5, false),
     REHABILITATION(21, false),
     OCCASIONAL(null, false),
-    UNPAID(null, false);
+    UNPAID(null, false),
+
+    /** Płatna przerwa przy umowie B2B: limit dni bierze się z umowy ({@code StaffContract.paidLeaveDays}), nie z ustawy. */
+    B2B_PAID(null, false);
 
     private final Integer limitDays;
     private final boolean countsAsAnnual;

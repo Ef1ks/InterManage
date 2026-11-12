@@ -232,6 +232,7 @@ type ContractValues = {
   fteNumerator: string
   fteDenominator: string
   fixedTermExempt: boolean
+  paidLeaveDays: string
 }
 
 function ContractForm({ entry, ...props }: FormProps & { entry?: StaffContract }) {
@@ -251,6 +252,7 @@ function ContractForm({ entry, ...props }: FormProps & { entry?: StaffContract }
       fteNumerator: String(entry?.fteNumerator ?? 1),
       fteDenominator: String(entry?.fteDenominator ?? 1),
       fixedTermExempt: entry?.fixedTermExempt ?? false,
+      paidLeaveDays: entry?.paidLeaveDays == null ? '' : String(entry.paidLeaveDays),
     },
   })
   const kind = useWatch({ control, name: 'kind' })
@@ -285,6 +287,7 @@ function ContractForm({ entry, ...props }: FormProps & { entry?: StaffContract }
           fteNumerator: employment ? Number(values.fteNumerator) : 1,
           fteDenominator: employment ? Number(values.fteDenominator) : 1,
           fixedTermExempt: employment && type === 'FIXED' && values.fixedTermExempt,
+          paidLeaveDays: kind === 'B2B' && values.paidLeaveDays !== '' ? Number(values.paidLeaveDays) : null,
         }),
       )}
     >
@@ -335,10 +338,22 @@ function ContractForm({ entry, ...props }: FormProps & { entry?: StaffContract }
           description="Zastępstwo, praca sezonowa lub dorywcza, kadencja albo obiektywne przyczyny (art. 25¹ § 4 KP)."
         />
       )}
+      {kind === 'B2B' && (
+        <TextField
+          label="Płatne dni wolne w roku"
+          inputMode="numeric"
+          hint="Z umowy B2B. Puste = umowa nie przewiduje płatnej przerwy."
+          error={errors.paidLeaveDays?.message}
+          {...register('paidLeaveDays', {
+            pattern: { value: /^\d*$/, message: 'Sama liczba' },
+            validate: (value) => value === '' || Number(value) <= 366 || 'Najwyżej 366 dni',
+          })}
+        />
+      )}
       {!employment && (
         <FormNote>
-          Kodeks pracy nie obejmuje tej umowy: program nie nalicza urlopu. Stałe godziny i kierownictwo mogą świadczyć o
-          stosunku pracy.
+          Kodeks pracy nie obejmuje tej umowy: program nie nalicza urlopu (przy B2B tylko płatną przerwę z umowy). Stałe
+          godziny i kierownictwo mogą świadczyć o stosunku pracy.
         </FormNote>
       )}
     </Shell>

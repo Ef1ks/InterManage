@@ -39,6 +39,10 @@ public class StaffContract extends StaffRecordEntry {
     @Column(name = "fixed_term_exempt", nullable = false)
     private boolean fixedTermExempt;
 
+    /** Płatne dni wolne w roku z umowy B2B; puste = umowa ich nie przewiduje. */
+    @Column(name = "paid_leave_days")
+    private Integer paidLeaveDays;
+
     protected StaffContract() {
     }
 
@@ -47,7 +51,7 @@ public class StaffContract extends StaffRecordEntry {
     }
 
     public void update(ContractKind kind, EmploymentType employmentType, LocalDate startDate, LocalDate endDate,
-            int fteNumerator, int fteDenominator, boolean fixedTermExempt) {
+            int fteNumerator, int fteDenominator, boolean fixedTermExempt, Integer paidLeaveDays) {
         this.kind = kind;
         this.employmentType = employmentType;
         this.startDate = startDate;
@@ -55,6 +59,11 @@ public class StaffContract extends StaffRecordEntry {
         this.fteNumerator = fteNumerator;
         this.fteDenominator = fteDenominator;
         this.fixedTermExempt = fixedTermExempt;
+        this.paidLeaveDays = kind == ContractKind.B2B ? paidLeaveDays : null;
+    }
+
+    public Integer getPaidLeaveDays() {
+        return paidLeaveDays;
     }
 
     public boolean isEmployment() {

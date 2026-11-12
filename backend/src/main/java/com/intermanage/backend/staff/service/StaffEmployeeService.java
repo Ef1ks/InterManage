@@ -22,6 +22,8 @@ import com.intermanage.backend.staff.dto.AssignEmployeeRequest;
 import com.intermanage.backend.staff.dto.CreateEmployeeRequest;
 import com.intermanage.backend.staff.dto.CreatePlainEmployeeRequest;
 import com.intermanage.backend.staff.dto.EmployeeResponse;
+import com.intermanage.backend.staff.dto.InviteAccountRequest;
+import com.intermanage.backend.staff.dto.LinkAccountRequest;
 import com.intermanage.backend.staff.dto.ShiftRequest;
 import com.intermanage.backend.staff.dto.TransferEmployeeRequest;
 import com.intermanage.backend.staff.dto.UpdateEmployeeRequest;
@@ -131,6 +133,57 @@ public class StaffEmployeeService {
         shiftService.replace(List.of(), request.shifts(), hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
         shifts.flush();
         return response(employee);
+    }
+
+    /** Pracownik bez konta dostaje istniejące konto (bez stanowiska). Rola konta idzie za stanowiskiem, jak przy dodaniu. */
+    @Transactional
+    public EmployeeResponse linkAccount(UUID storeId, UUID id, LinkAccountRequest request, UUID actorId) {
+        StaffEmployee employee = withoutAccount(storeId, id, actorId);
+        AppUser user = users.findWithRoleById(request.userId())
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono konta"));
+        if (!user.isEnabled()) {
+            throw ApiException.conflict("To konto jest zablokowane");
+        }
+        grants.requireGrantable(actorId, user.getRole());
+        grants.requireGrantable(actorId, employee.getPosition().getRole());
+        requireNotEmployed(user);
+        attach(employee, user);
+        return response(employee);
+    }
+
+    /** Pracownik bez konta dostaje nowe konto z jego imieniem i nazwiskiem; link aktywacyjny idzie na e-mail. */
+    @Transactional
+    public EmployeeResponse inviteAccount(UUID storeId, UUID id, InviteAccountRequest request, UUID actorId) {
+        StaffEmployee employee = withoutAccount(storeId, id, actorId);
+        StaffPosition position = employee.getPosition();
+        grants.requireGrantable(actorId, position.getRole());
+        String name = employee.getDisplayName();
+        String username = request.username() == null || request.username().isBlank()
+                ? userService.suggestUsername(name) : request.username();
+        if (username.isEmpty()) {
+            throw ApiException.badRequest("Nie da się złożyć loginu z imienia i nazwiska. Wpisz go ręcznie.");
+        }
+        AppUser user = userService.invite(username, name, request.email(), position.getRole(),
+                Set.of(employee.getStore()));
+        attach(employee, user);
+        return response(employee);
+    }
+
+    private void attach(StaffEmployee employee, AppUser user) {
+        employee.linkAccount(user);
+        if (!user.getRole().isOwner()) {
+            user.setRole(employee.getPosition().getRole());
+            user.getStores().add(employee.getStore());
+        }
+        employees.flush();
+    }
+
+    private StaffEmployee withoutAccount(UUID storeId, UUID id, UUID actorId) {
+        StaffEmployee employee = activeEmployee(storeId, id, actorId);
+        if (employee.hasAccount()) {
+            throw ApiException.conflict(employee.getDisplayName() + " ma już konto w aplikacji");
+        }
+        return employee;
     }
 
     @Transactional

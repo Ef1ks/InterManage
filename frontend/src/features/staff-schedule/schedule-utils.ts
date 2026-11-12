@@ -58,6 +58,7 @@ export const ABSENCE: Record<NonNullable<ScheduleCell['absence']>, { symbol: str
   REHABILITATION: { symbol: 'TR', label: 'Turnus rehabilitacyjny' },
   OCCASIONAL: { symbol: 'OK', label: 'Urlop okolicznościowy' },
   UNPAID: { symbol: 'UB', label: 'Urlop bezpłatny' },
+  B2B_PAID: { symbol: 'UP', label: 'Płatna przerwa (B2B)' },
   OTHER: { symbol: 'N', label: 'Nieobecność (rodzaj widać w Kadrach)' },
 }
 
@@ -87,7 +88,8 @@ export function cellKind(cell: ScheduleCell | undefined) {
   if (!cell) return 'empty'
   // Dzień wolny pod urlopem nie jest dniem urlopu (art. 154² KP), więc komórka pokazuje dzień wolny.
   if (cell.dayOff) return cell.dayOff === 'WN' ? 'wn' : cell.dayOff === 'W5' ? 'w5' : 'w'
-  if (cell.absent) return cell.absence === 'ANNUAL' || cell.absence === 'ON_DEMAND' ? 'leave' : 'absent'
+  if (cell.absent)
+    return cell.absence === 'ANNUAL' || cell.absence === 'ON_DEMAND' || cell.absence === 'B2B_PAID' ? 'leave' : 'absent'
   // Sam czas wolny za nadgodziny, bez zmiany: dzień (albo jego część) wolny w zamian za nadgodziny.
   if (!cell.start) return 'timeoff'
   if (cell.store) return 'store'
