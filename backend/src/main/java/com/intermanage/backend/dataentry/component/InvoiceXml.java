@@ -201,9 +201,30 @@ public final class InvoiceXml {
         xml.append(NL);
     }
 
+    /**
+     * Litery cyrylicy i greki wyglądające jak łacińskie (dostawcy wpisują je w numery faktur w KSeF, np.
+     * „FAN/ZА664” z cyrylickim А) zamienione na łacińskie, bo windows-1250 ich nie ma i zostałby „?”.
+     */
+    private static final String LOOKALIKES_FROM =
+            "АВЕЅІЈКМНОРСТХУаеѕіјорсхуԁһӏΑΒΕΖΗΙΚΜΝΟΡΤΥΧον";
+    private static final String LOOKALIKES_TO =
+            "ABESIJKMHOPCTXYaesijopcxydhlABEZHIKMNOPTYXov";
+
+    public static String latin(String value) {
+        if (value == null) {
+            return null;
+        }
+        StringBuilder out = new StringBuilder(value.length());
+        for (char c : value.toCharArray()) {
+            int index = LOOKALIKES_FROM.indexOf(c);
+            out.append(index >= 0 ? LOOKALIKES_TO.charAt(index) : c);
+        }
+        return out.toString();
+    }
+
     private static String escape(String value) {
         StringBuilder out = new StringBuilder(value.length());
-        for (char c : value.strip().toCharArray()) {
+        for (char c : latin(value.strip()).toCharArray()) {
             switch (c) {
                 case '&' -> out.append("&amp;");
                 case '<' -> out.append("&lt;");

@@ -550,7 +550,7 @@ public class DataEntryService {
         String supplierLabel = ProductFile.supplierPart(supplierName);
         String fileName = number != null
                 ? String.join("_", store.getNumber(), supplierPart != null ? supplierPart : "", supplierLabel,
-                        number.strip())
+                        InvoiceXml.latin(number.strip()))
                 : store.getNumber() + (supplierLabel.isEmpty() ? "" : "_" + supplierLabel) + "_wprowadzanie_"
                         + now.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         fileName = fileName.replaceAll("[\\\\/:*?\"<>|()\\p{Cntrl}\\s]+", "_").replaceAll("_+", "_") + ".xml";
