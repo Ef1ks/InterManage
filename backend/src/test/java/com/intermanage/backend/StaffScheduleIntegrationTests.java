@@ -446,6 +446,13 @@ class StaffScheduleIntegrationTests {
         change(owner, off(employee, "2026-12-11", "WN", "2026-12-07")).andExpect(status().isBadRequest());
         change(owner, off(employee, "2026-12-13", "W5", null)).andExpect(status().isBadRequest());
 
+        // Zwykłe W można postawić także w niedzielę: pracownik widzi, że ma wolne. Nie ma daty i nie rozlicza niedzieli.
+        change(owner, off(employee, "2026-12-13", "W", "2026-12-06")).andExpect(status().isBadRequest());
+        change(owner, off(employee, "2026-12-13", "W", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows[0].cells[3].dayOff").value("W"))
+                .andExpect(jsonPath("$.rows[0].warnings", hasSize(0)));
+
         // Zmiana wpisana na dzień wolny go zastępuje.
         change(owner, cell(employee, "2026-12-10", "06:00", "14:00", null))
                 .andExpect(status().isOk())

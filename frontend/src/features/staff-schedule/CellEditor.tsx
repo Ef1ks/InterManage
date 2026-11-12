@@ -134,8 +134,10 @@ function EditorBody({
   const warnings = row.warnings.filter((warning) => warning.date === day.date)
   const current = cell?.start && cell.end ? { start: cell.start, end: cell.end } : null
 
-  // Niedziela i święto są wolne same z siebie. Pod urlopem W5 mówi, że to dzień wolny, którego urlop nie zużywa.
-  const canMarkOff = !row.civil && !isSunday(day.date) && !day.holiday
+  // Niedziela i święto są wolne same z siebie, więc W5 i WN tylko w inne dni; zwykłe W każdego dnia (np. wolna niedziela).
+  // Pod urlopem W5 mówi, że to dzień wolny, którego urlop nie zużywa.
+  const canMarkOff = !row.civil
+  const canMarkLegalOff = canMarkOff && !isSunday(day.date) && !day.holiday
   const owed = [...row.owedDays].sort((a, b) => daysBetween(a, day.date) - daysBetween(b, day.date)).slice(0, 4)
 
   const markOff = (dayOff: ScheduleDayOffKind, forDate: string | null) =>
@@ -287,33 +289,46 @@ function EditorBody({
         <div className="grid gap-1">
           <p className="text-xs text-muted-foreground">Dzień wolny</p>
           <div className="flex flex-wrap gap-1">
-            {cell?.dayOff === 'WN' && cell.forDate && (
+            <Button
+              type="button"
+              size="sm"
+              variant={cell?.dayOff === 'W' ? 'default' : 'outline'}
+              aria-pressed={cell?.dayOff === 'W'}
+              title="Dzień wolny: pracownik widzi, że tego dnia nie pracuje"
+              onClick={() => markOff('W', null)}
+            >
+              W
+            </Button>
+            {canMarkLegalOff && cell?.dayOff === 'WN' && cell.forDate && (
               <Button type="button" size="sm" aria-pressed>
                 WN za {dayMonth(cell.forDate)}
               </Button>
             )}
-            {owed.map((date) => (
+            {canMarkLegalOff &&
+              owed.map((date) => (
+                <Button
+                  key={date}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  title={`Wolne za pracę ${isSunday(date) ? 'w niedzielę' : 'w święto'} ${dayMonth(date)}`}
+                  onClick={() => markOff('WN', date)}
+                >
+                  WN za {dayMonth(date)}
+                </Button>
+              ))}
+            {canMarkLegalOff && (
               <Button
-                key={date}
                 type="button"
                 size="sm"
-                variant="outline"
-                title={`Wolne za pracę ${isSunday(date) ? 'w niedzielę' : 'w święto'} ${dayMonth(date)}`}
-                onClick={() => markOff('WN', date)}
+                variant={cell?.dayOff === 'W5' ? 'default' : 'outline'}
+                aria-pressed={cell?.dayOff === 'W5'}
+                title="Wolne z tytułu pięciodniowego tygodnia pracy"
+                onClick={() => markOff('W5', null)}
               >
-                WN za {dayMonth(date)}
+                W5
               </Button>
-            ))}
-            <Button
-              type="button"
-              size="sm"
-              variant={cell?.dayOff === 'W5' ? 'default' : 'outline'}
-              aria-pressed={cell?.dayOff === 'W5'}
-              title="Wolne z tytułu pięciodniowego tygodnia pracy"
-              onClick={() => markOff('W5', null)}
-            >
-              W5
-            </Button>
+            )}
           </div>
           {cell?.dayOff && <p className="text-xs text-muted-foreground">{dayOffReason(cell)}</p>}
         </div>

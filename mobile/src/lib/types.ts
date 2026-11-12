@@ -169,7 +169,7 @@ export type MySchedule = {
   days: {
     date: string
     shifts: { start: string; end: string; storeNumber: string; storeName: string; department: string }[]
-    dayOff: { kind: 'W5' | 'WN'; forDate: string | null } | null
+    dayOff: { kind: 'W5' | 'WN' | 'W'; forDate: string | null } | null
     leave: LeaveKind | null
   }[]
 }

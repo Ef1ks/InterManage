@@ -127,7 +127,7 @@ public class StaffTimeSheetService {
             Map<String, Integer> marks = totals.markDays();
             int annual = marks.getOrDefault("U", 0) + marks.getOrDefault("UŻ", 0);
             String others = marks.entrySet().stream()
-                    .filter(entry -> !List.of("U", "UŻ", "W5", "WN").contains(entry.getKey()))
+                    .filter(entry -> !List.of("U", "UŻ", "W", "W5", "WN").contains(entry.getKey()))
                     .map(entry -> entry.getKey() + ": " + entry.getValue())
                     .collect(Collectors.joining(", "));
             List<String> notes = new ArrayList<>();
@@ -316,7 +316,7 @@ public class StaffTimeSheetService {
     }
 
     /**
-     * Urlop i nieobecność tylko w dniu z grafikiem (dzień pracy, art. 154²), inaczej dzień wolny z grafiku (W5, WN).
+     * Urlop i nieobecność tylko w dniu z grafikiem (dzień pracy, art. 154²), inaczej dzień wolny z grafiku (W, W5, WN).
      */
     private static String mark(TimeCardResponse.DayCard card, StaffScheduleDayOff off) {
         if (card.absence() != null && card.plannedStart() != null) {

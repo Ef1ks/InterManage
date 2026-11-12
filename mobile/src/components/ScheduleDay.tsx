@@ -41,7 +41,7 @@ export function ScheduleDayContent({ day, currentStore }: { day: ScheduleDayData
         <Text style={{ color: t.mutedText }}>
           {day.dayOff.kind === 'WN'
             ? `(WN, za ${day.dayOff.forDate ? formatDate(day.dayOff.forDate) : 'niedzielę'})`
-            : '(W5)'}
+            : `(${day.dayOff.kind})`}
         </Text>
       </Text>
     )

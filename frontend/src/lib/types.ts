@@ -3720,7 +3720,7 @@ export type Stocktake = {
   imports: StocktakeImport[]
 }
 
-export type ScheduleDayOffKind = 'WN' | 'W5'
+export type ScheduleDayOffKind = 'WN' | 'W5' | 'W'
 
 export type ScheduleDepartment = { id: string; name: string; canEdit: boolean }
 

@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   CalendarCheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ClipboardPasteIcon,
   CopyPlusIcon,
   EraserIcon,
   FilterIcon,
   HistoryIcon,
   ListTreeIcon,
+  PaintbrushIcon,
   SettingsIcon,
 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
@@ -69,7 +71,7 @@ const STATUS: Record<Schedule['status'], { label: string; className: string }> =
 const SUNDAY_DAY_OFF_DAYS = 6
 
 /** Szybkie wpisywanie: wybrane godziny albo czyszczenie trafiają w kolejne klikane komórki. */
-type Brush = ShiftHours | 'clear' | 'W5' | null
+type Brush = ShiftHours | 'clear' | 'W5' | 'W' | 'WN' | null
 
 const onError = (cause: unknown) =>
   toast.error(cause instanceof ApiError ? cause.message : 'Nie udało się zapisać grafiku')
@@ -247,13 +249,15 @@ function Loaded({
 
   useEffect(() => {
     if (brush === null && copied === null) return
+    // Faza przechwytywania: Esc kończy tryb klikania, nawet gdy fokus stoi w przycisku albo komórce tabeli.
     const stop = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      event.preventDefault()
       setBrush(null)
       setCopied(null)
     }
-    window.addEventListener('keydown', stop)
-    return () => window.removeEventListener('keydown', stop)
+    window.addEventListener('keydown', stop, { capture: true })
+    return () => window.removeEventListener('keydown', stop, { capture: true })
   }, [brush, copied])
 
   const save = (changes: ScheduleChange[], onSuccess?: () => void) => change.mutate(changes, { onSuccess, onError })
@@ -335,10 +339,26 @@ function Loaded({
       return
     }
     if (brush === 'clear') clear(row, day)
-    else if (brush === 'W5' && row.civil) {
-      toast('W5 oznacza się w wierszu umowy o pracę')
-    } else if (brush === 'W5') {
-      const dayOff = { start: null, end: null, storeId: null, dayOff: 'W5', forDate: null } as const
+    else if ((brush === 'W5' || brush === 'W' || brush === 'WN') && row.civil) {
+      toast(`${brush} oznacza się w wierszu umowy o pracę`)
+    } else if ((brush === 'W5' || brush === 'WN') && (isSunday(day.date) || day.holiday)) {
+      toast(`Niedzieli ani święta nie oznacza się jako ${brush}`, { description: 'Żeby pokazać wolne, użyj W.' })
+    } else if (brush === 'WN') {
+      // WN zawsze za konkretną niedzielę albo święto: bierzemy najbliższe nierozliczone (niedziela do 6 dni).
+      const forDate = row.owedDays
+        .filter((owed) => !isSunday(owed) || daysBetween(day.date, owed) <= SUNDAY_DAY_OFF_DAYS)
+        .sort((a, b) => daysBetween(a, day.date) - daysBetween(b, day.date))[0]
+      if (!forDate) {
+        toast(`${row.name}: brak niedzieli ani święta do odebrania`, {
+          description: 'WN przysługuje za przepracowaną niedzielę (w ciągu 6 dni) albo święto.',
+        })
+        return
+      }
+      save([
+        { employeeId: row.employeeId, date: day.date, start: null, end: null, storeId: null, dayOff: 'WN', forDate },
+      ])
+    } else if (brush === 'W5' || brush === 'W') {
+      const dayOff = { start: null, end: null, storeId: null, dayOff: brush, forDate: null } as const
       save([{ employeeId: row.employeeId, date: day.date, ...dayOff }])
     } else if (brush) {
       save([
@@ -526,12 +546,32 @@ function Loaded({
             <Button
               type="button"
               size="sm"
+              variant={brush === 'W' ? 'default' : 'ghost'}
+              aria-pressed={brush === 'W'}
+              title="Dzień wolny, np. wolna niedziela"
+              onClick={() => setBrush(brush === 'W' ? null : 'W')}
+            >
+              W
+            </Button>
+            <Button
+              type="button"
+              size="sm"
               variant={brush === 'W5' ? 'default' : 'ghost'}
               aria-pressed={brush === 'W5'}
               title="Wolne z tytułu pięciodniowego tygodnia pracy"
               onClick={() => setBrush(brush === 'W5' ? null : 'W5')}
             >
               W5
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={brush === 'WN' ? 'default' : 'ghost'}
+              aria-pressed={brush === 'WN'}
+              title="Wolne za pracę w niedzielę lub święto: klik bierze najbliższą nierozliczoną niedzielę albo święto"
+              onClick={() => setBrush(brush === 'WN' ? null : 'WN')}
+            >
+              WN
             </Button>
             <Button
               type="button"
@@ -606,10 +646,18 @@ function Loaded({
       )}
 
       {brush !== null && (
+        <BrushCursor
+          icon={brush === 'clear' ? <EraserIcon /> : <PaintbrushIcon />}
+          label={brush === 'clear' ? 'Czyść' : typeof brush === 'string' ? brush : shiftLabel(brush)}
+        />
+      )}
+      {copied !== null && <BrushCursor icon={<ClipboardPasteIcon />} label={`Wklej: ${copied.name}`} />}
+
+      {brush !== null && (
         <p className="text-xs text-muted-foreground">
           {brush === 'clear'
             ? 'Klikaj dni do wyczyszczenia.'
-            : `Klikaj dni, żeby wpisać ${brush === 'W5' ? 'W5' : shiftLabel(brush)}.`}{' '}
+            : `Klikaj dni, żeby wpisać ${typeof brush === 'string' ? brush : shiftLabel(brush)}.`}{' '}
           Esc kończy.
         </p>
       )}
@@ -711,5 +759,45 @@ function Loaded({
         onClose={() => setDialog(null)}
       />
     </>
+  )
+}
+
+/**
+ * Znaczek przy kursorze w trybie klikania: od razu widać, co wpisze klik (godziny, W, W5, czyszczenie, wklejenie).
+ * Pozycję zmienia sam transform przez ref, bez renderu przy każdym ruchu myszy. Tylko mysz: na dotyku nie ma kursora.
+ */
+function BrushCursor({ icon, label }: { icon: ReactNode; label: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const element = ref.current
+      if (!element) return
+      if (event.pointerType !== 'mouse') {
+        element.style.opacity = '0'
+        return
+      }
+      element.style.opacity = '1'
+      element.style.transform = `translate3d(${event.clientX + 14}px, ${event.clientY + 16}px, 0)`
+    }
+    const hide = () => {
+      if (ref.current) ref.current.style.opacity = '0'
+    }
+    window.addEventListener('pointermove', move)
+    document.documentElement.addEventListener('pointerleave', hide)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      document.documentElement.removeEventListener('pointerleave', hide)
+    }
+  }, [])
+  return (
+    <div
+      ref={ref}
+      aria-hidden
+      style={{ opacity: 0 }}
+      className="pointer-events-none fixed top-0 left-0 z-50 flex items-center gap-1 rounded-full bg-foreground px-2 py-0.5 text-xs font-medium whitespace-nowrap text-background tabular-nums shadow-md [&_svg]:size-3.5"
+    >
+      {icon}
+      {label}
+    </div>
   )
 }

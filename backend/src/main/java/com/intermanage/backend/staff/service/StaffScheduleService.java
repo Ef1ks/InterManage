@@ -422,7 +422,7 @@ public class StaffScheduleService {
                 return view(store, department, month(request.month()), null, principal);
             }
             if (currentOff(employee.getId(), day) != null) {
-                throw ApiException.conflict("Ten dzień jest już dniem wolnym (W5 albo WN)");
+                throw ApiException.conflict("Ten dzień jest już dniem wolnym (W, W5 albo WN)");
             }
             if (leaves.findActive(List.of(employee.getId())).stream()
                     .anyMatch(leave -> !day.isBefore(leave.getStartDate()) && !day.isAfter(leave.getEndDate()))) {
@@ -1159,15 +1159,18 @@ public class StaffScheduleService {
         return new StaffScheduleEntry(schedule, employee, change.date(), start, end, change.isCivil(), actor);
     }
 
-    /** W5 jest bez daty, a WN wskazuje niedzielę albo święto; sama niedziela i święto są już wolne, nie można ich oznaczyć. */
+    /**
+     * W5 jest bez daty, a WN wskazuje niedzielę albo święto; samej niedzieli i święta nie oznacza się jako W5 ani WN. Zwykłe
+     * W (bez daty) można postawić każdego dnia, także w niedzielę, żeby pracownik widział, że ma wolne.
+     */
     private StaffScheduleDayOff dayOff(ScheduleChangeRequest.Change change, Store store, StaffDepartment department,
             AppUser actor) {
         LocalDate day = change.date();
         boolean compensating = change.dayOff() == ScheduleDayOffKind.WN;
         if (compensating != (change.forDate() != null)) {
-            throw ApiException.badRequest("WN wymaga niedzieli albo święta, a W5 nie ma daty");
+            throw ApiException.badRequest("WN wymaga niedzieli albo święta, a W5 i W nie mają daty");
         }
-        if (ScheduleRules.needsDayOff(day)) {
+        if (change.dayOff() != ScheduleDayOffKind.W && ScheduleRules.needsDayOff(day)) {
             throw ApiException.badRequest("Niedzieli ani święta nie oznacza się jako W5 czy WN");
         }
         if (compensating && !ScheduleRules.needsDayOff(change.forDate())) {

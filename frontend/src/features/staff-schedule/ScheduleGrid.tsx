@@ -25,6 +25,7 @@ const KIND_STYLES: Record<string, string> = {
   absent: 'bg-zinc-300 text-zinc-800 dark:bg-zinc-600 dark:text-zinc-50',
   wn: 'bg-amber-300 text-amber-950 dark:bg-amber-700 dark:text-amber-50',
   w5: 'bg-emerald-300 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50',
+  w: 'bg-lime-200 text-lime-950 dark:bg-lime-800 dark:text-lime-50',
   timeoff: 'bg-blue-300 text-blue-950 dark:bg-blue-700 dark:text-blue-50',
 }
 
@@ -39,6 +40,7 @@ const LEGEND = [
   { kind: 'absent', label: 'Inna nieobecność z Kadr' },
   { kind: 'wn', label: 'WN: wolne za niedzielę lub święto, pod spodem jego data' },
   { kind: 'w5', label: 'W5: wolne za pięciodniowy tydzień pracy' },
+  { kind: 'w', label: 'W: dzień wolny (np. wolna niedziela)' },
   { kind: 'timeoff', label: 'CW: czas wolny za nadgodziny (w rogu: przy krótszej zmianie)' },
 ]
 
@@ -480,7 +482,7 @@ function DayCell({
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
 }) {
   const kind = cellKind(cell)
-  const isOff = kind === 'wn' || kind === 'w5'
+  const isOff = kind === 'wn' || kind === 'w5' || kind === 'w'
   const timeOff = cell?.timeOffMinutes ?? null
   const content =
     kind === 'timeoff' ? (

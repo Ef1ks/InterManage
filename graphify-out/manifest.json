@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794468316.3906248,
-    "seen": 1794468369.1769073,
-    "ast_hash": "5c0d56cef6236e0f549c4045a6adc4d3",
+    "mtime": 1794471297.6087706,
+    "seen": 1794471490.5638528,
+    "ast_hash": "fce77dc112fbed3b876cc617318cda47",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794459584.0463543,
-    "seen": 1794468369.2046778,
-    "ast_hash": "4643ce29a60381f2e55dd22947f85708",
+    "mtime": 1794471639.7474642,
+    "seen": 1794471687.4290934,
+    "ast_hash": "ce44bd3d61fe1135a667f0838ce20bfa",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -8868,9 +8868,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffScheduleService.java": {
-    "mtime": 1794468316.3841126,
-    "seen": 1794468369.1022017,
-    "ast_hash": "ac418373deeb0e4da907ccaa7aedbd8a",
+    "mtime": 1794471297.606771,
+    "seen": 1794471490.4873216,
+    "ast_hash": "7d607a190c61b73722f6479b90265a96",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ScheduleLawTests.java": {
@@ -8880,15 +8880,15 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffScheduleIntegrationTests.java": {
-    "mtime": 1794394912.9579115,
-    "seen": 1794395365.68159,
-    "ast_hash": "cf84e4cbd4fe05f3c872b078bd497e64",
+    "mtime": 1794471367.8091123,
+    "seen": 1794471490.508949,
+    "ast_hash": "b49af7e5b565171a9f3c39023071afd7",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/CellEditor.tsx": {
-    "mtime": 1794150608.8912463,
-    "seen": 1794151066.698488,
-    "ast_hash": "7174f3a04cd6bbdbcb8ac19de5ee8d63",
+    "mtime": 1794471334.868359,
+    "seen": 1794471490.554976,
+    "ast_hash": "4c574b91a2970f0d815ac45107a752e1",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleDialogs.tsx": {
@@ -8898,15 +8898,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleGrid.tsx": {
-    "mtime": 1794150933.8694701,
-    "seen": 1794151066.698488,
-    "ast_hash": "16d0dd8fa00065098574ca3571cfc217",
+    "mtime": 1794471297.6108718,
+    "seen": 1794471490.554976,
+    "ast_hash": "8cd758cea8769db5c365b8db91b85bb7",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/SchedulePage.tsx": {
-    "mtime": 1794150933.9367056,
-    "seen": 1794151066.698488,
-    "ast_hash": "2adf2da3ff2cc4ae0840f808ada4e7a4",
+    "mtime": 1794471616.5648413,
+    "seen": 1794471687.3915503,
+    "ast_hash": "43831d89d6b646e015a85e6ede7dba7c",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/api.ts": {
@@ -8916,9 +8916,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/schedule-utils.ts": {
-    "mtime": 1794150932.7698445,
-    "seen": 1794151066.698488,
-    "ast_hash": "fccb4e28cc848cbfb05ae71e3fad092c",
+    "mtime": 1794471297.6098652,
+    "seen": 1794471490.5555005,
+    "ast_hash": "13d60b1c4cbd712cde477135c0761320",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleOpenHolidayRequest.java": {
@@ -8946,9 +8946,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/ScheduleDayOffKind.java": {
-    "mtime": 1794074603.326334,
-    "seen": 1794075316.6144063,
-    "ast_hash": "2c96e665958d0a4a760d9fce0eaebf04",
+    "mtime": 1794471297.6047714,
+    "seen": 1794471490.4749708,
+    "ast_hash": "483bd4a19d2edda2142a5447e663211a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffScheduleDayOff.java": {
@@ -9438,15 +9438,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/TimeSheetPdf.java": {
-    "mtime": 1794156727.1347194,
-    "seen": 1794156872.1507857,
-    "ast_hash": "9d1f6a2e40bd91e1eb29094e8d09255c",
+    "mtime": 1794471297.606771,
+    "seen": 1794471490.467829,
+    "ast_hash": "0afc5c04e338c89416b5fd7f4ec1bd6d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeSheetService.java": {
-    "mtime": 1794163272.617481,
-    "seen": 1794163533.6371973,
-    "ast_hash": "f4d20aa9192616865541bfd6084080e8",
+    "mtime": 1794471297.6077707,
+    "seen": 1794471490.4883215,
+    "ast_hash": "91597a6382bfc884304b5608499d6224",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/TimeSheetPdfTests.java": {
@@ -10176,9 +10176,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/types.ts": {
-    "mtime": 1794399245.229389,
-    "seen": 1794399322.866668,
-    "ast_hash": "92370d56d7363ec09db9c80cd1f45565",
+    "mtime": 1794471297.614376,
+    "seen": 1794471490.5733864,
+    "ast_hash": "a0e5f18c47b75647de80f5c30a7f0905",
     "semantic_hash": ""
   },
   "mobile/tsconfig.json": {
@@ -10446,9 +10446,9 @@
     "semantic_hash": ""
   },
   "mobile/src/components/ScheduleDay.tsx": {
-    "mtime": 1794341648.0637715,
-    "seen": 1794341849.497616,
-    "ast_hash": "3e40ebd3739714454bf713df5f2821fc",
+    "mtime": 1794471297.614376,
+    "seen": 1794471490.5723863,
+    "ast_hash": "b723cc61f9f8d2f407018b57078220e4",
     "semantic_hash": ""
   },
   "mobile/src/components/StoreResultsCard.tsx": {

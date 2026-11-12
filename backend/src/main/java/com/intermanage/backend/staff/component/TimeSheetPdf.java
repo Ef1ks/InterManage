@@ -54,6 +54,7 @@ public class TimeSheetPdf {
             Map.entry("SW", "siła wyższa (art. 148¹)"), Map.entry("UO", "urlop opiekuńczy (art. 173¹)"),
             Map.entry("TR", "turnus rehabilitacyjny"), Map.entry("OK", "urlop okolicznościowy"),
             Map.entry("UB", "urlop bezpłatny"), Map.entry("N", "nieobecność"),
+            Map.entry("W", "dzień wolny"),
             Map.entry("W5", "wolne z tytułu pięciodniowego tygodnia pracy"),
             Map.entry("WN", "wolne za pracę w niedzielę lub święto"));
 

@@ -39,6 +39,7 @@ export const isSunday = (date: string) => parseIsoDate(date).getDay() === 0
 /** Za co przysługuje dzień wolny, pełnym zdaniem. */
 export function dayOffReason(cell: Pick<ScheduleCell, 'dayOff' | 'forDate'>) {
   if (cell.dayOff === 'W5') return 'W5: wolne z tytułu pięciodniowego tygodnia pracy'
+  if (cell.dayOff === 'W') return 'W: dzień wolny'
   if (cell.dayOff !== 'WN' || !cell.forDate) return null
   return `WN: wolne za pracę ${isSunday(cell.forDate) ? 'w niedzielę' : 'w święto'} ${dayMonth(cell.forDate)}`
 }
@@ -85,7 +86,7 @@ export function shiftMinutes(start: string, end: string) {
 export function cellKind(cell: ScheduleCell | undefined) {
   if (!cell) return 'empty'
   // Dzień wolny pod urlopem nie jest dniem urlopu (art. 154² KP), więc komórka pokazuje dzień wolny.
-  if (cell.dayOff) return cell.dayOff === 'WN' ? 'wn' : 'w5'
+  if (cell.dayOff) return cell.dayOff === 'WN' ? 'wn' : cell.dayOff === 'W5' ? 'w5' : 'w'
   if (cell.absent) return cell.absence === 'ANNUAL' || cell.absence === 'ON_DEMAND' ? 'leave' : 'absent'
   // Sam czas wolny za nadgodziny, bez zmiany: dzień (albo jego część) wolny w zamian za nadgodziny.
   if (!cell.start) return 'timeoff'

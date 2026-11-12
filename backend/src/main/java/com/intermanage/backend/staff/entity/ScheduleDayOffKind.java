@@ -7,5 +7,11 @@ public enum ScheduleDayOffKind {
     WN,
 
     /** Z tytułu przeciętnie pięciodniowego tygodnia pracy (art. 129 § 1 KP). */
-    W5
+    W5,
+
+    /**
+     * Zwykłe „wolne”, żeby pracownik widział, że tego dnia nie pracuje (np. w niedzielę). Bez skutków w przepisach:
+     * nie rozlicza niedzieli ani święta i nie jest liczone jak W5.
+     */
+    W
 }
