@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useChangePassword, useCurrentUser } from '@/features/auth/api'
 import { AvatarSettings } from '@/features/auth/AvatarSettings'
 import { BackgroundSettings } from '@/features/auth/BackgroundSettings'
+import { PinSettings } from '@/features/auth/PinSettings'
 import { applyServerErrors } from '@/lib/form-errors'
 
 type PasswordForm = {
@@ -109,6 +110,7 @@ export function AccountPage() {
         </Card>
 
         <BackgroundSettings />
+        <PinSettings />
       </div>
     </>
   )

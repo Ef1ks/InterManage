@@ -81,6 +81,19 @@ export function inCategory(delivery: ReviewedDelivery, key: CategoryKey, categor
   return category ? regions(category.regionCodes) : true
 }
 
+/**
+ * Artykuł (rejon nomenklatury) należy do kategorii: do własnej, gdy jego rejon jest w niej, do „pozostałych”, gdy nie
+ * ma go w żadnej. Dzięki temu bon z jednym artykułem świeżym i dwudziestoma suchymi pokazuje w zakładce świeżych
+ * tylko ten jeden.
+ */
+export function regionInCategory(regionCode: string | null, key: CategoryKey, categories: PriceCheckCategory[]) {
+  if (key === ALL_CATEGORIES) return true
+  const inRegions = (codes: string[]) => regionCode != null && codes.includes(regionCode)
+  if (key === OTHER_CATEGORY) return !categories.some((category) => inRegions(category.regionCodes))
+  const category = categories.find((item) => item.id === key)
+  return category ? inRegions(category.regionCodes) : true
+}
+
 /** Kolor statusu wyjaśniania: bursztyn czeka na sklep, niebieski na dostawcę, zieleń zamknięte. */
 export const STATUS_STYLES: Record<ReviewState, { label: string; dot: string; badge: string; tile: string }> = {
   open: {

@@ -94,6 +94,8 @@ public record LowMarginReport(
             boolean corrected,
             MarginDeviation deviation,
             BigDecimal currentPromoPrice,
-            LocalDate currentPromoTo) {
+            LocalDate currentPromoTo,
+            /** Marża (% od sprzedaży netto) na cenie promocyjnej {@code currentPromoPrice}; {@code null} bez promocji. */
+            BigDecimal currentPromoMargin) {
     }
 }

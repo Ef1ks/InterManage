@@ -1,9 +1,6 @@
 package com.intermanage.backend.auth.controller;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,8 +20,9 @@ import com.intermanage.backend.auth.dto.MobileLoginResponse;
 import com.intermanage.backend.auth.dto.SetUpPasswordRequest;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.auth.security.PasswordLogin;
+import com.intermanage.backend.auth.service.AccountSwitchService;
 import com.intermanage.backend.auth.service.AuthService;
-import com.intermanage.backend.common.exception.ApiException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -39,13 +37,16 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final AuthService authService;
-    private final AuthenticationManager authenticationManager;
+    private final PasswordLogin passwordLogin;
     private final JwtService jwtService;
+    private final AccountSwitchService accountSwitch;
 
-    public AuthController(AuthService authService, AuthenticationManager authenticationManager, JwtService jwtService) {
+    public AuthController(AuthService authService, PasswordLogin passwordLogin, JwtService jwtService,
+            AccountSwitchService accountSwitch) {
         this.authService = authService;
-        this.authenticationManager = authenticationManager;
+        this.passwordLogin = passwordLogin;
         this.jwtService = jwtService;
+        this.accountSwitch = accountSwitch;
     }
 
     /** Ustawia ciasteczko XSRF-TOKEN; frontend woła to przed pierwszym żądaniem modyfikującym. */
@@ -56,9 +57,12 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public MeResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
-        AppUserPrincipal principal = authenticate(request.username(), request.password());
+    public MeResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest,
+            HttpServletResponse response) {
+        AppUserPrincipal principal = passwordLogin.authenticate(request.username(), request.password());
         jwtService.writeTokenCookie(response, principal, Boolean.TRUE.equals(request.rememberMe()));
+        // Konto zalogowane w tle przestaje nim być, gdy loguje się na nie hasłem.
+        accountSwitch.dropFromBackground(httpRequest, response, principal.getId());
         return authService.me(principal.getId());
     }
 
@@ -68,25 +72,8 @@ public class AuthController {
      */
     @PostMapping("/mobile/login")
     public MobileLoginResponse mobileLogin(@Valid @RequestBody MobileLoginRequest request) {
-        AppUserPrincipal principal = authenticate(request.username(), request.password());
+        AppUserPrincipal principal = passwordLogin.authenticate(request.username(), request.password());
         return new MobileLoginResponse(jwtService.issueToken(principal, true), authService.me(principal.getId()));
-    }
-
-    private AppUserPrincipal authenticate(String username, String password) {
-        AppUserPrincipal principal;
-        try {
-            principal = (AppUserPrincipal) authenticationManager.authenticate(
-                    UsernamePasswordAuthenticationToken.unauthenticated(username, password))
-                    .getPrincipal();
-        } catch (AuthenticationException e) {
-            // Jeden komunikat dla złego loginu, hasła i zablokowanego konta - nie zdradzamy, które konta istnieją.
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Nieprawidłowy login lub hasło");
-        }
-        // Sprawdzane dopiero po poprawnym haśle, żeby komunikat nie zdradzał, które konta istnieją.
-        if (!principal.hasStoreAccess()) {
-            throw new ApiException(HttpStatus.FORBIDDEN, AuthService.NO_STORE_MESSAGE);
-        }
-        return principal;
     }
 
     /** Link z maila: zużywa token i loguje pracownika, który musi od razu ustawić hasło. */

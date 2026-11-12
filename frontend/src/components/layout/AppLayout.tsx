@@ -9,6 +9,7 @@ import {
   MonitorIcon,
   MoonIcon,
   SunIcon,
+  UsersRoundIcon,
 } from 'lucide-react'
 import { Link, NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -29,6 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { SwitchAccountDialog } from '@/features/auth/AccountSwitcher'
 import { useCurrentUser, useLogout } from '@/features/auth/api'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
@@ -311,6 +313,7 @@ function UserMenu() {
   const me = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
+  const [switchOpen, setSwitchOpen] = useState(false)
 
   const onLogout = () =>
     logout.mutate(undefined, {
@@ -319,32 +322,44 @@ function UserMenu() {
     })
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" />}>
-        <UserAvatar name={me.displayName} url={me.avatar?.url} className="size-6 text-[0.625rem]" />
-        <span className="max-w-40 truncate">{me.displayName}</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            <div className="truncate font-medium text-foreground">{me.displayName}</div>
-            <div className="truncate text-xs font-normal">{me.roleName}</div>
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate('/konto')}>
-          <KeyRoundIcon />
-          Moje konto
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <ThemeOptions />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onLogout} disabled={logout.isPending}>
-          <LogOutIcon />
-          Wyloguj
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <SwitchAccountDialog
+        open={switchOpen}
+        onOpenChange={setSwitchOpen}
+        // Inne konto może nie mieć dostępu do bieżącej strony, więc zaczyna od pulpitu.
+        onSwitched={(next) => navigate(next.passwordChangeRequired ? '/ustaw-haslo' : '/', { replace: true })}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" />}>
+          <UserAvatar name={me.displayName} url={me.avatar?.url} className="size-6 text-[0.625rem]" />
+          <span className="max-w-40 truncate">{me.displayName}</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>
+              <div className="truncate font-medium text-foreground">{me.displayName}</div>
+              <div className="truncate text-xs font-normal">{me.roleName}</div>
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate('/konto')}>
+            <KeyRoundIcon />
+            Moje konto
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setSwitchOpen(true)}>
+            <UsersRoundIcon />
+            Zmień konto
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <ThemeOptions />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onLogout} disabled={logout.isPending}>
+            <LogOutIcon />
+            Wyloguj
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   )
 }
 

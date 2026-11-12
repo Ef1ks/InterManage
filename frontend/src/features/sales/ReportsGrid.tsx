@@ -1,6 +1,7 @@
 import {
   ArrowLeftRightIcon,
   BadgeAlertIcon,
+  BadgePercentIcon,
   BeefIcon,
   ChevronRightIcon,
   CircleMinusIcon,
@@ -11,6 +12,7 @@ import {
   type LucideIcon,
   PackageSearchIcon,
   PackageXIcon,
+  PercentIcon,
   ScaleIcon,
   TagIcon,
   TrendingDownIcon,
@@ -94,11 +96,19 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
       },
       {
         path: salesPaths.lowMargins,
-        title: 'Marże poza normą',
+        title: 'Weryfikacja przyjęć',
         description:
           'Artykuły z marżą o 5 punktów niższą albo o 10 wyższą niż wymagana na nomenklaturze, z aktualnej ceny na kasie. Do wyjaśnienia.',
         icon: TrendingDownIcon,
         fromDocuments: 'Z przyjęć PZ i ich korekt',
+      },
+      {
+        path: salesPaths.articleMargins,
+        title: 'Artykuły z za niską marżą',
+        description:
+          'Cała kartoteka: marża z aktualnej ceny na kasie i ostatniego zakupu poniżej wymaganej o wybrany próg. Cadencier osobno.',
+        icon: PercentIcon,
+        fromDocuments: 'Z kartoteki i ostatnich przyjęć PZ',
       },
       {
         path: TOOL_ROUTES.MEAT_PURCHASES.path,
@@ -122,6 +132,14 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
   {
     title: 'Promocje, gratisy i protokoły',
     reports: [
+      {
+        path: salesPaths.currentPromotions,
+        title: 'Aktualne promocje',
+        description:
+          'Promocje trwające dziś z marżą na cenie promocyjnej, żeby wyłapać za tanie. Bez gazetki, na którą sklep nie ma wpływu.',
+        icon: BadgePercentIcon,
+        fromDocuments: 'Z kartoteki, promocji i ostatnich przyjęć PZ',
+      },
       {
         path: salesPaths.promotions,
         title: 'Skuteczność promocji',

@@ -11,6 +11,8 @@ export const salesPaths = {
   priceCheck: `${base}/zakup-bazowy-poza-baza`,
   overpayments: `${base}/przeplacone-artykuly`,
   lowMargins: `${base}/za-niskie-marze`,
+  articleMargins: `${base}/marze-artykulow`,
+  currentPromotions: `${base}/aktualne-promocje`,
   topSales: `${base}/topy`,
   gratis: `${base}/gratisy`,
   protocols: `${base}/protokoly`,

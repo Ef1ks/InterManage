@@ -2,7 +2,8 @@ import { useEffect, useId, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSalesReportsOverview } from '@/features/sales/api'
-import { formatShortDate, parseIsoDate } from '@/lib/dates'
+import { formatLongDate, formatShortDate, parseIsoDate } from '@/lib/dates'
+import { specialDay, specialDayLabel, type SpecialDay } from '@/lib/holidays'
 import type { DashboardChartMetric, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +38,23 @@ const formatTick = (metric: DashboardChartMetric, value: number) =>
   metric === 'QUANTITY' ? compact.format(value) : `${compact.format(value)} zł`
 const formatChange = (change: number) => `${change >= 0 ? '+' : '−'}${percentFormat.format(Math.abs(change))}%`
 const shortDay = (iso: string) => dayMonth.format(parseIsoDate(iso))
+
+/** Święto albo dzień przed świętem w dniu wykresu i w jego odpowiedniku rok temu. */
+type DayNote = { now: SpecialDay | null; before: SpecialDay | null }
+
+const dayNotes = (days: SalesHistory['days'], daysBefore: SalesHistory['days']): DayNote[] =>
+  days.map((day, index) => ({
+    now: specialDay(day.date),
+    before: daysBefore[index] ? specialDay(daysBefore[index].date) : null,
+  }))
+
+/** Opisy dnia: "teraz: święto (…)", "rok temu (pn., 10 listopada 2025): dzień przed świętem (…)". */
+function noteLines(note: DayNote, beforeDate: string | undefined) {
+  const lines: string[] = []
+  if (note.now) lines.push(`teraz: ${specialDayLabel(note.now)}`)
+  if (note.before && beforeDate) lines.push(`rok temu (${formatLongDate(beforeDate)}): ${specialDayLabel(note.before)}`)
+  return lines
+}
 
 /**
  * Wyniki sklepu na pulpicie (na razie tylko właściciel): ostatnie 7 dni ze sprzedażą wobec tych samych dni tygodnia
@@ -109,6 +127,10 @@ function Results({
   const week = weeks[weeks.length - 1]
   const days = current.days.slice(-7)
   const daysBefore = yearAgo.days.slice(-7)
+  const notes = dayNotes(days, daysBefore)
+  const noted = days
+    .map((day, index) => ({ day, lines: noteLines(notes[index], daysBefore[index]?.date) }))
+    .filter((item) => item.lines.length > 0)
 
   return (
     <div className="space-y-6">
@@ -133,17 +155,24 @@ function Results({
         <TrendStrip weeks={weeks} metric={metric} />
       </div>
 
-      <div className="flex gap-5 text-sm text-muted-foreground" aria-hidden>
-        <span className="flex items-center gap-2">
-          <span className="h-3 w-2 rounded-t-[3px] bg-blue-600 dark:bg-blue-500" /> Ostatnie 7 dni
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-3 w-3.5 rounded-t-[3px] border-[1.5px] border-b-0 border-amber-600 bg-amber-600/15 dark:border-amber-700 dark:bg-amber-700/20" />
-          Rok temu
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 text-sm">
+        <div className="flex gap-5 text-muted-foreground" aria-hidden>
+          <span className="flex items-center gap-2">
+            <span className="h-3 w-2 rounded-t-[3px] bg-blue-600 dark:bg-blue-500" /> Ostatnie 7 dni
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-3 w-3.5 rounded-t-[3px] border-[1.5px] border-b-0 border-amber-600 bg-amber-600/15 dark:border-amber-700 dark:bg-amber-700/20" />
+            Rok temu
+          </span>
+        </div>
+        {noted.length > 0 ? (
+          <p role="note" className="font-medium text-red-700 dark:text-red-300">
+            {noted.map(({ day, lines }) => `● ${shortDay(day.date)}: ${lines.join(', ')}`).join(' · ')}
+          </p>
+        ) : null}
       </div>
 
-      <DayChart metric={metric} days={days} daysBefore={daysBefore} />
+      <DayChart metric={metric} days={days} daysBefore={daysBefore} notes={notes} />
 
       <table className="sr-only">
         <caption>{METRICS.find((item) => item.value === metric)?.label} dzień po dniu wobec roku temu</caption>
@@ -162,7 +191,10 @@ function Results({
             const change = changePercent(now, before)
             return (
               <tr key={day.date}>
-                <td>{formatShortDate(day.date)}</td>
+                <td>
+                  {formatShortDate(day.date)}
+                  {noteLines(notes[index], daysBefore[index]?.date).map((line) => `, ${line}`)}
+                </td>
                 <td>{hasNoSales(day.figures) ? 'brak danych' : formatValue(metric, now)}</td>
                 <td>{formatValue(metric, before)}</td>
                 <td>{change == null ? '–' : formatChange(change)}</td>
@@ -225,10 +257,12 @@ function DayChart({
   metric,
   days,
   daysBefore,
+  notes,
 }: {
   metric: DashboardChartMetric
   days: SalesHistory['days']
   daysBefore: SalesHistory['days']
+  notes: DayNote[]
 }) {
   const clipId = useId()
   const [box, WIDTH] = useWidth()
@@ -332,6 +366,9 @@ function DayChart({
                   )}
                 >
                   {weekdayFormat.format(parseIsoDate(day.date))} {shortDay(day.date)}
+                  {notes[index].now || notes[index].before ? (
+                    <tspan className="fill-red-600 dark:fill-red-400"> ●</tspan>
+                  ) : null}
                 </text>
                 <text
                   x={x + slot / 2}
@@ -372,7 +409,15 @@ function DayChart({
 
       {tip && WIDTH > 0 ? (
         <div
-          className="pointer-events-none absolute z-10 w-max -translate-x-1/2 -translate-y-full rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+          className={cn(
+            'pointer-events-none absolute z-10 w-max max-w-72 -translate-y-full rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md',
+            // Skrajne dni: podpowiedź rośnie do środka wykresu, żeby nie wychodziła poza kartę.
+            tip.index === 0
+              ? '-translate-x-6'
+              : tip.index === days.length - 1
+                ? '-translate-x-[calc(100%-1.5rem)]'
+                : '-translate-x-1/2',
+          )}
           style={{
             left: `${((LEFT + (tip.index + 0.5) * slot) / WIDTH) * 100}%`,
             top: `calc(${(tip.top / HEIGHT) * 100}% - 10px)`,
@@ -388,9 +433,20 @@ function DayChart({
             {formatValue(metric, before[tip.index])}
             <span className="text-xs">· {formatShortDate(daysBefore[tip.index].date)}</span>
           </p>
+          <TipNote who="Teraz" note={notes[tip.index].now} />
+          <TipNote who="Rok temu" note={notes[tip.index].before} />
         </div>
       ) : null}
     </div>
+  )
+}
+
+function TipNote({ who, note }: { who: string; note: SpecialDay | null }) {
+  if (!note) return null
+  return (
+    <p className="mt-1 text-xs font-medium text-red-700 dark:text-red-300">
+      {who}: {specialDayLabel(note)}
+    </p>
   )
 }
 

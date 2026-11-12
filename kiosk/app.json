@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Intermanage Kiosk",
+    "slug": "intermanage-kiosk",
+    "scheme": "intermanage-kiosk",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "pl.intermanage.kiosk",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6E5E5",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.NFC"],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      ["react-native-nfc-manager", { "includeNdefEntitlement": false }]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "https://intermanage.pl"
+    }
+  }
+}

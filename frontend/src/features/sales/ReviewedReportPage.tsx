@@ -25,6 +25,7 @@ import {
   PERIOD_FILTERS,
   type PeriodOption,
   periodStart,
+  regionInCategory,
   ReviewedDeliveryRow,
   type ReviewedDelivery,
   STATUS_FILTERS,
@@ -46,6 +47,8 @@ type ArticleLine = {
   brand: string | null
   ean: string | null
   itm8: string
+  purchaseValue: number
+  excessValue: number
 }
 
 type Delivery = Omit<ReviewedDelivery, 'lines'> & {
@@ -83,6 +86,7 @@ export function ReviewedReportPage<D extends Delivery>({
   nothingFoundText,
   renderLines,
   renderBadges,
+  countsExcess = () => true,
 }: {
   storeId: string
   report: ReviewedReport
@@ -111,6 +115,8 @@ export function ReviewedReportPage<D extends Delivery>({
   renderLines: (delivery: D) => ReactNode
   /** Dodatkowe plakietki w wierszu przyjęcia (bez przycisków, bo wiersz sam jest przyciskiem). */
   renderBadges?: (delivery: D) => ReactNode
+  /** Czy kwota `excessValue` artykułu wchodzi do kwoty przyjęcia (przy przeliczeniu w zakładce kategorii). */
+  countsExcess?: (line: D['lines'][number]) => boolean
 }) {
   const [params, setParams] = useSearchParams()
   const filter =
@@ -163,7 +169,21 @@ export function ReviewedReportPage<D extends Delivery>({
   const category =
     categories.find((item) => item.id === categoryParam)?.id ??
     (categoryParam === OTHER_CATEGORY && categories.length > 0 ? OTHER_CATEGORY : ALL_CATEGORIES)
-  const deliveries = filtered.filter((delivery) => inCategory(delivery, category, categories))
+  // W zakładce kategorii przyjęcie pokazuje tylko artykuły tej kategorii, a kwoty liczą się z nich, żeby osoba od
+  // jednej części sklepu (np. świeże) nie dostawała artykułów drugiej (suche) z tego samego bonu.
+  const deliveries = filtered
+    .filter((delivery) => inCategory(delivery, category, categories))
+    .map((delivery) => {
+      if (category === ALL_CATEGORIES) return delivery
+      const lines = delivery.lines.filter((line) => regionInCategory(line.regionCode, category, categories))
+      if (lines.length === delivery.lines.length) return delivery
+      return {
+        ...delivery,
+        lines,
+        linesPurchaseValue: lines.reduce((sum, line) => sum + line.purchaseValue, 0),
+        excessValue: lines.filter(countsExcess).reduce((sum, line) => sum + line.excessValue, 0),
+      }
+    })
   const counts = { open: 0, reported: 0, resolved: 0 }
   deliveries.forEach((delivery) => counts[filterOf(delivery)]++)
   const openExcess = deliveries

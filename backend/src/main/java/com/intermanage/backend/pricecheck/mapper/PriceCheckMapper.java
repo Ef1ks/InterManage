@@ -3,7 +3,9 @@ package com.intermanage.backend.pricecheck.mapper;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.pricecheck.dto.ArticleMarginReport;
 import com.intermanage.backend.pricecheck.dto.CadencierImportResponse;
+import com.intermanage.backend.pricecheck.entity.ArticleMarginVerification;
 import com.intermanage.backend.pricecheck.dto.IncidentImportResponse;
 import com.intermanage.backend.pricecheck.dto.ReportSupplier;
 import com.intermanage.backend.pricecheck.entity.ReportExcludedSupplier;
@@ -36,6 +38,9 @@ public interface PriceCheckMapper {
     ReportSupplier toResponse(ReportExcludedSupplier supplier);
 
     ReportSupplier toResponse(Supplier supplier);
+
+    @Mapping(target = "verifiedBy", source = "verifiedBy.displayName")
+    ArticleMarginReport.Verification toResponse(ArticleMarginVerification verification);
 
     /** {@code settings} pusty = sklep jeszcze nie ustawił minimalnej marży. */
     @Mapping(target = "updatedBy", source = "updatedBy.displayName")

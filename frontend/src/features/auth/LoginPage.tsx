@@ -4,9 +4,11 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import { Form, SwitchField, TextField } from '@/components/form'
 import { AuthLayout } from '@/components/layout/AuthLayout'
 import { Button } from '@/components/ui/button'
-import { useLogin, useMe } from '@/features/auth/api'
+import { AccountSwitcher } from '@/features/auth/AccountSwitcher'
+import { useLogin, useMe, useSwitchAccounts } from '@/features/auth/api'
 import { requestPriceFolderAccess } from '@/features/data-entry/price-files'
 import { ApiError } from '@/lib/api'
+import type { Me } from '@/lib/types'
 
 type LoginForm = {
   username: string
@@ -49,6 +51,9 @@ export function LoginPage() {
       description="Panel zarządzania sklepem."
       footer="Nie pamiętasz hasła? Poproś właściciela sklepu o hasło tymczasowe."
     >
+      <BackgroundAccounts
+        onSwitched={(user) => navigate(user.passwordChangeRequired ? '/ustaw-haslo' : from, { replace: true })}
+      />
       <Form onSubmit={onSubmit} error={errorMessage}>
         <TextField
           label="Login"
@@ -83,5 +88,21 @@ export function LoginPage() {
         </Button>
       </Form>
     </AuthLayout>
+  )
+}
+
+/** Konta, które zostały zalogowane w tle na tym komputerze: przejście na nie PIN-em zamiast hasła. */
+function BackgroundAccounts({ onSwitched }: { onSwitched: (me: Me) => void }) {
+  const accounts = useSwitchAccounts()
+  if (!accounts.data?.length) return null
+
+  return (
+    <section aria-labelledby="background-accounts" className="mb-6 grid gap-3 border-b pb-6">
+      <h2 id="background-accounts" className="text-sm font-medium">
+        Konta zalogowane na tym komputerze
+      </h2>
+      <AccountSwitcher onSwitched={onSwitched} />
+      <p className="text-xs text-muted-foreground">Albo zaloguj się innym kontem:</p>
+    </section>
   )
 }

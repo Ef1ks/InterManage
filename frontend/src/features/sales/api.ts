@@ -20,6 +20,7 @@ import type {
   PeriodSummaryLevel,
   DeliveryLineHints,
   LowMarginReport,
+  ArticleMarginReport,
   OverpaymentReport,
   PriceCheckCategory,
   PriceCheckReport,
@@ -749,6 +750,57 @@ export function useLowMargins(storeId: string, days: number) {
     queryKey: [...reportsKey(storeId), 'low-margins', days],
     queryFn: () => api<LowMarginReport>(`${reportsPath(storeId)}/low-margins?days=${days}`),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Artykuły z marżą poniżej `maxMargin` % (aktualna cena na kasie, ostatni zakup). */
+export function useArticleMargins(storeId: string, maxMargin: number) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article-margins', maxMargin],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<ArticleMarginReport>(`${reportsPath(storeId)}/article-margins?maxMargin=${maxMargin}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Oznacza artykuły jako sprawdzone pod kątem za niskiej marży; zwraca id wpisów do „Cofnij”. */
+export function useArticleMarginVerifications(storeId: string) {
+  const queryClient = useQueryClient()
+  const refresh = () => queryClient.invalidateQueries({ queryKey: [...reportsKey(storeId), 'article-margins'] })
+  const path = `${reportsPath(storeId)}/article-margins/verifications`
+  const verify = useMutation({
+    mutationFn: (body: {
+      items: {
+        itm8: string
+        salePrice: number
+        purchasePrice: number
+        marginPercent: number
+        lastPurchaseDate: string | null
+      }[]
+      note: string
+    }) => api<string[]>(path, { method: 'POST', json: body }),
+    onSuccess: refresh,
+    meta: { invalidates: false },
+  })
+  const cancel = useMutation({
+    mutationFn: (ids: string[]) => api<void>(`${path}/cancel`, { method: 'POST', json: { ids } }),
+    onSuccess: refresh,
+    meta: { invalidates: false },
+  })
+  const restore = useMutation({
+    mutationFn: (ids: string[]) => api<void>(`${path}/restore`, { method: 'POST', json: { ids } }),
+    onSuccess: refresh,
+    meta: { invalidates: false },
+  })
+  return { verify, cancel, restore }
+}
+
+/** Promocje trwające dziś (bez gazetki) z marżą na cenie promocyjnej. */
+export function useCurrentPromotions(storeId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'current-promotions'],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<ArticleMarginReport>(`${reportsPath(storeId)}/current-promotions`),
   })
 }
 

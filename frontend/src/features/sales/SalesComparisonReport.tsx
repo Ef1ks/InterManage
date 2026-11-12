@@ -62,6 +62,7 @@ import type {
   SalesComparisonRow,
   SalesFigures,
 } from '@/lib/types'
+import { specialDayLabel, specialDaysIn } from '@/lib/holidays'
 import { cn } from '@/lib/utils'
 
 /** Okres w adresie strony po polsku, żeby link do raportu otwierał ten sam widok. */
@@ -320,6 +321,8 @@ function PeriodsSummary({
       <p className="text-muted-foreground">
         {daysLabel(days)} do {daysLabel(comparedDays)}
       </p>
+      <SpecialDaysNote label="Aktualny" range={periods.current} />
+      <SpecialDaysNote label={label} range={periods.previous} />
       {days !== comparedDays && (
         <p className="text-amber-700 dark:text-amber-400">
           Okresy mają różną liczbę dni, sumy nie są porównywalne wprost
@@ -351,6 +354,40 @@ function PeriodsSummary({
         </p>
       )}
     </div>
+  )
+}
+
+/** Ile szczególnych dni okres wymienia z datą; przy dłuższych okresach sama liczba świąt i dni przed nimi. */
+const SPECIAL_DAYS_LISTED = 4
+
+const holidaysWord = (count: number) =>
+  count === 1
+    ? 'święto'
+    : count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14)
+      ? 'święta'
+      : 'świąt'
+
+/**
+ * Święta i dni przed świętami w okresie: dzień przed świętem ma większy ruch, a w święto sklep jest zwykle zamknięty,
+ * więc porównanie z okresem bez nich (np. 9.11 wobec 10.11 rok temu, dnia przed 11.11) odbiega od zwykłego.
+ */
+function SpecialDaysNote({ label, range }: { label: string; range: Periods['current'] }) {
+  const special = specialDaysIn(range)
+  if (special.length === 0) return null
+  const holidays = special.filter((item) => item.day.kind === 'holiday').length
+  const eves = special.length - holidays
+  return (
+    <p className="font-medium text-red-700 dark:text-red-300">
+      <span className="font-medium">{label}: </span>
+      {special.length <= SPECIAL_DAYS_LISTED
+        ? special.map(({ date, day }) => `${formatRange({ from: date, to: date })} ${specialDayLabel(day)}`).join(', ')
+        : [
+            holidays > 0 && `${holidays} ${holidaysWord(holidays)}`,
+            eves > 0 && `${eves} ${eves === 1 ? 'dzień' : 'dni'} przed świętem`,
+          ]
+            .filter(Boolean)
+            .join(', ')}
+    </p>
   )
 }
 

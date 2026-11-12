@@ -70,7 +70,18 @@ export function LowMarginReport({ storeId }: { storeId: string }) {
       ...raw.data,
       deliveries: raw.data.deliveries.flatMap((delivery) => {
         const lines = delivery.lines.filter((line) => line.deviation === deviation)
-        return lines.length > 0 ? [{ ...delivery, lines }] : []
+        return lines.length > 0
+          ? [
+              {
+                ...delivery,
+                lines,
+                linesPurchaseValue: lines.reduce((sum, line) => sum + line.purchaseValue, 0),
+                excessValue: lines
+                  .filter((line) => line.deviation === 'LOW')
+                  .reduce((sum, line) => sum + line.excessValue, 0),
+              },
+            ]
+          : []
       }),
     }
   }, [raw.data, deviation])
@@ -83,7 +94,7 @@ export function LowMarginReport({ storeId }: { storeId: string }) {
       storeId={storeId}
       report="LOW_MARGIN"
       query={query}
-      title="Marże poza normą"
+      title="Weryfikacja przyjęć"
       intro={`Przyjęcia z wybranego okresu, w których artykuł ma marżę o co najmniej ${lowGap} punktów procentowych niższą (za niska) albo o co najmniej ${highGap} wyższą (za wysoka) niż marża wymagana na jego nomenklaturze. Marża jest liczona od sprzedaży netto, z ceny zakupu po korektach i z aktualnej ceny zwykłej na kasie, więc po zmianie ceny raport od razu liczy z nowej; trwająca promocja się nie liczy. Raport pomija prasę od Kolportera i artykuły aktywne w cadencier, bo mają z góry ustaloną marżę.`}
       actions={
         raw.data && (
@@ -147,6 +158,7 @@ export function LowMarginReport({ storeId }: { storeId: string }) {
       emptyDeliveryText="W tym przyjęciu nie ma już artykułów z marżą poza normą."
       nothingFoundText="W wybranym okresie żaden artykuł nie miał marży wyraźnie innej niż wymagana."
       renderLines={(delivery) => <LinesTable storeId={storeId} delivery={delivery} />}
+      countsExcess={(line) => line.deviation === 'LOW'}
       renderBadges={(delivery) => (
         <VerificationBadge
           status={delivery.verificationStatus}
@@ -325,8 +337,8 @@ function LinesTable({ storeId, delivery }: { storeId: string; delivery: LowMargi
                   {formatPrice(line.salePrice)}
                   {line.currentPromoPrice != null && (
                     <span
-                      className="mt-0.5 block w-fit rounded-md bg-orange-200 px-1.5 py-0.5 text-xs font-medium text-orange-950 ml-auto dark:bg-orange-900/70 dark:text-orange-100"
-                      title="Artykuł jest teraz w promocji; marża liczy się z ceny zwykłej"
+                      className="mt-0.5 ml-auto block w-fit rounded-md bg-orange-200 px-1.5 py-0.5 text-xs font-medium text-orange-950 dark:bg-orange-900/70 dark:text-orange-100"
+                      title="Artykuł jest teraz w promocji; ocena raportu liczy się z ceny zwykłej"
                     >
                       teraz w promocji {formatPrice(line.currentPromoPrice)}
                       {line.currentPromoTo && ` do ${formatDay(line.currentPromoTo)}`}
@@ -354,6 +366,19 @@ function LinesTable({ storeId, delivery }: { storeId: string; delivery: LowMargi
                   >
                     {formatPercent(line.marginPercent)}
                   </span>
+                  {line.currentPromoMargin != null && (
+                    <span
+                      className={cn(
+                        'mt-1 ml-auto block w-fit rounded-md px-1.5 py-0.5 text-xs font-medium',
+                        line.currentPromoMargin < line.requiredMargin
+                          ? 'bg-red-200 text-red-950 dark:bg-red-900/70 dark:text-red-100'
+                          : 'bg-orange-200 text-orange-950 dark:bg-orange-900/70 dark:text-orange-100',
+                      )}
+                      title={`Marża na cenie promocyjnej ${formatPrice(line.currentPromoPrice)} z tej samej ceny zakupu`}
+                    >
+                      w promocji {formatPercent(line.currentPromoMargin)}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">{formatPercent(line.requiredMargin)}</TableCell>
                 <TableCell className="text-right">{formatPrice(line.targetPurchasePrice)}</TableCell>

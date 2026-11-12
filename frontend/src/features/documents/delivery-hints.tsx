@@ -37,9 +37,13 @@ export function HintBadges({ hint }: { hint: DeliveryLineHint | undefined }) {
   return (
     <>
       {line.currentPromoPrice != null && (
-        <span className={cn(pill, HINT_STYLES.promoNow)} title="Artykuł jest teraz w promocji">
+        <span
+          className={cn(pill, HINT_STYLES.promoNow)}
+          title="Artykuł jest teraz w promocji; marża na cenie promocyjnej z ceny zakupu z tego bonu"
+        >
           teraz w promocji {formatPrice(line.currentPromoPrice)}
           {line.currentPromoTo && ` do ${formatDay(line.currentPromoTo)}`}
+          {line.currentPromoMargin != null && ` · marża ${formatPercent(line.currentPromoMargin)}`}
         </span>
       )}
       {line.promotion && (

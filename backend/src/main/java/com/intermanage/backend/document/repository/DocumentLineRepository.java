@@ -307,7 +307,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                    p.price as listedPrice, t.price as tillPrice, g.itm8 is not null as leaflet,
                    round(cast(r.price as numeric), 2) as referencePrice,
                    c.sale_price as catalogPrice,
-                   coalesce(cp.regular_sale_price, ct.regular_price, c.sale_price) as currentPrice,
+                   coalesce(cp.regular_sale_price, ct.regular_price, ce.regular, c.sale_price) as currentPrice,
                    case when cp.regular_sale_price is not null or ct.regular_price is not null then c.sale_price
                         when c.promo_price is not null and c.promo_from <= cast(:dataTo as date)
                              and c.promo_to >= cast(:dataTo as date) then c.promo_price
@@ -335,6 +335,18 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 where t.store_id = c.store_id and t.itm8 = c.itm8 and t.promo_price = c.sale_price
                     and t.promo_from <= cast(:dataTo as date) and t.promo_to >= cast(:dataTo as date)
                 order by t.file_time desc limit 1) ct on true
+            left join lateral (
+                select greatest(coalesce(
+                    (select t.regular_price from till_promotions t
+                     where t.store_id = c.store_id and t.itm8 = c.itm8 and t.promo_price = c.promo_price
+                       and t.promo_to = c.promo_to
+                     order by t.file_time desc limit 1),
+                    (select pr.regular_sale_price from promotions pr
+                     where pr.store_id = c.store_id and pr.itm8 = c.itm8 and pr.promo_price = c.promo_price
+                       and pr.end_date = c.promo_to
+                     order by pr.start_date desc limit 1)), c.sale_price) as regular
+                where c.promo_price is not null and c.promo_price = c.sale_price
+                  and c.promo_to < cast(:dataTo as date)) ce on true
             left join lateral (
                 select pr.promo_price, pr.end_date from promotions pr
                 where pr.store_id = c.store_id and pr.itm8 = c.itm8

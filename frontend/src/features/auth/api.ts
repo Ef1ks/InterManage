@@ -1,7 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api'
-import type { AvatarChange, BackgroundChange, Me, PermissionCategory, PermissionLevel } from '@/lib/types'
+import type {
+  AvatarChange,
+  BackgroundChange,
+  Me,
+  PermissionCategory,
+  PermissionLevel,
+  PinSettings,
+  SwitchAccount,
+} from '@/lib/types'
 
 export const meQueryKey = ['me'] as const
 
@@ -59,6 +67,96 @@ export function useLogout() {
       queryClient.setQueryData(meQueryKey, null)
     },
   })
+}
+
+export const switchAccountsQueryKey = ['switch-accounts'] as const
+export const pinSettingsQueryKey = ['pin-settings'] as const
+
+/** Konta zalogowane w tle w tej przeglądarce (działa też na stronie logowania). */
+export function useSwitchAccounts() {
+  return useQuery({
+    queryKey: switchAccountsQueryKey,
+    queryFn: () => api<SwitchAccount[]>('/auth/accounts'),
+  })
+}
+
+/**
+ * Wejście na inne konto: dane poprzedniego konta znikają z pamięci zapytań (inne uprawnienia i sklepy),
+ * a nowe konto jest od razu zalogowanym użytkownikiem.
+ */
+function useBecomeAccount<T>(mutationFn: (value: T) => Promise<Me>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    meta: { invalidates: false },
+    onSuccess: (me) => {
+      queryClient.clear()
+      queryClient.setQueryData(meQueryKey, me)
+    },
+    // Błędny PIN może zmienić to, czego wymaga konto (po kilku próbach hasło).
+    onError: () => queryClient.invalidateQueries({ queryKey: switchAccountsQueryKey }),
+  })
+}
+
+/** Loguje kolejne konto hasłem; dotychczasowe zostaje zalogowane w tle. */
+export function useAddAccount() {
+  return useBecomeAccount((credentials: { username: string; password: string; rememberMe: boolean }) =>
+    api<Me>('/auth/accounts', { method: 'POST', json: credentials }),
+  )
+}
+
+export function useSwitchAccount() {
+  return useBecomeAccount(({ id, pin, password }: { id: string; pin?: string; password?: string }) =>
+    api<Me>(`/auth/accounts/${id}/switch`, { method: 'POST', json: { pin, password } }),
+  )
+}
+
+/** Wylogowuje jedno konto w tle. */
+export function useRemoveAccount() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api(`/auth/accounts/${id}`, { method: 'DELETE' }),
+    meta: { invalidates: false },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: switchAccountsQueryKey }),
+  })
+}
+
+/** Wylogowuje wszystkie konta w tej przeglądarce. */
+export function useLogoutAll() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api('/auth/accounts/logout', { method: 'POST' }),
+    meta: { invalidates: false },
+    onSettled: () => {
+      queryClient.clear()
+      queryClient.setQueryData(meQueryKey, null)
+    },
+  })
+}
+
+export function usePinSettings() {
+  return useQuery({ queryKey: pinSettingsQueryKey, queryFn: () => api<PinSettings>('/auth/pin') })
+}
+
+function usePinMutation<T>(mutationFn: (value: T) => Promise<PinSettings>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    meta: { invalidates: false },
+    onSuccess: (settings) => queryClient.setQueryData(pinSettingsQueryKey, settings),
+  })
+}
+
+export function useSetPin() {
+  return usePinMutation((request: { currentPassword: string; pin: string }) =>
+    api<PinSettings>('/auth/pin', { method: 'PUT', json: request }),
+  )
+}
+
+export function useSetPinRequired() {
+  return usePinMutation((required: boolean) =>
+    api<PinSettings>('/auth/pin/required', { method: 'PUT', json: { required } }),
+  )
 }
 
 /** Link z maila: zużywa token i loguje pracownika (z obowiązkiem ustawienia hasła). */

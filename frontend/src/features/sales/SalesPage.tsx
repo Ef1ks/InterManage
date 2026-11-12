@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
+import { ArticleMarginsReport, CurrentPromotionsReport } from '@/features/sales/ArticleMarginReports'
 import { CounterReport } from '@/features/sales/CounterReport'
 import { GratisReport } from '@/features/sales/GratisReport'
 import { LowMarginReport } from '@/features/sales/LowMarginReport'
@@ -50,6 +51,8 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="zakup-bazowy-poza-baza" element={<PriceCheckReport storeId={store.id} />} />
         <Route path="przeplacone-artykuly" element={<OverpaymentReport storeId={store.id} />} />
         <Route path="za-niskie-marze" element={<LowMarginReport storeId={store.id} />} />
+        <Route path="marze-artykulow" element={<ArticleMarginsReport storeId={store.id} />} />
+        <Route path="aktualne-promocje" element={<CurrentPromotionsReport storeId={store.id} />} />
         <Route path="gratisy" element={<GratisReport storeId={store.id} />} />
         <Route path="protokoly" element={<ProtocolReport storeId={store.id} />} />
         <Route path="obroty-dostawcow" element={<SupplierTurnoverReport storeId={store.id} />} />

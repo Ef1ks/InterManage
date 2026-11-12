@@ -62,6 +62,24 @@ export type AvatarChange = {
   previousId: string | null
 }
 
+/** Czego wymaga przejście na konto zalogowane w tle: nic (właściciel konta wyłączył PIN), PIN albo hasło. */
+export type SwitchUnlock = 'NONE' | 'PIN' | 'PASSWORD'
+
+/** Konto zalogowane w tle w tej przeglądarce (Zmień konto). */
+export type SwitchAccount = {
+  id: string
+  displayName: string
+  username: string
+  avatar: UserAvatar | null
+  unlock: SwitchUnlock
+}
+
+/** PIN do przełączania na to konto (Moje konto). */
+export type PinSettings = {
+  hasPin: boolean
+  pinRequired: boolean
+}
+
 export type BackgroundChange = {
   background: UserBackground | null
   /** Zdjęcie, które przestało obowiązywać, do „Przywróć”. */
@@ -2351,6 +2369,8 @@ export type LowMarginLine = {
   /** Artykuł jest dziś w promocji: cena promocyjna i koniec (RRRR-MM-DD); marża i tak z ceny zwykłej. */
   currentPromoPrice: number | null
   currentPromoTo: string | null
+  /** Marża % od sprzedaży netto na cenie promocyjnej (z tej samej ceny zakupu); pusta bez promocji. */
+  currentPromoMargin: number | null
 }
 
 /** Marża za niska albo za wysoka wobec wymaganej. */
@@ -2414,6 +2434,65 @@ export type LowMarginReport = {
   /** Lista dostawców sklepu do wyboru. */
   suppliers: ReportSupplier[]
   deliveries: LowMarginDelivery[]
+}
+
+/** Artykuł w raporcie marż kartoteki albo aktualnych promocji (marże % od sprzedaży netto). */
+export type ArticleMarginItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  nomenclatureCode: string | null
+  regionCode: string | null
+  /** Dostawca ostatniego przyjęcia PZ. */
+  supplierCode: string | null
+  supplierName: string | null
+  vatRate: number
+  /** Cena zakupu netto sztuki: z ostatniego przyjęcia PZ (z ostatniego roku) albo z kartoteki. */
+  purchasePrice: number
+  purchaseSource: 'DELIVERY' | 'CATALOG'
+  lastPurchaseDate: string | null
+  /** Aktualna cena zwykła brutto na kasie. */
+  salePrice: number
+  marginPercent: number
+  requiredMargin: number | null
+  targetPurchasePrice: number | null
+  /** Cena sprzedaży brutto dająca marżę wymaganą przy tej cenie zakupu. */
+  targetSalePrice: number | null
+  promoPrice: number | null
+  promoFrom: string | null
+  promoTo: string | null
+  promoSource: 'LIST' | 'TILL' | null
+  promoMargin: number | null
+  /** Sprzedana ilość w ostatnich 3 miesiącach; pusta bez sprzedaży. */
+  soldQuantity: number | null
+  /** Aktywny w cadencier z CENA_CAD: marża ustalona przez centralę. */
+  cadencier: boolean
+  cadencierPrice: number | null
+  /** Obowiązująca weryfikacja (ceny bez zmian od sprawdzenia); pusta = do kontroli. */
+  verification: ArticleMarginVerification | null
+}
+
+/** Artykuł sprawdzony pod kątem za niskiej marży: kto, kiedy, notatka i ceny z chwili sprawdzenia. */
+export type ArticleMarginVerification = {
+  id: string
+  verifiedAt: string
+  verifiedBy: string | null
+  note: string | null
+  salePrice: number
+  purchasePrice: number
+  marginPercent: number
+}
+
+export type ArticleMarginReport = {
+  today: string
+  /** Raport artykułów: marża poniżej tylu procent; pusty w raporcie promocji. */
+  maxMargin: number | null
+  marginsConfigured: boolean
+  /** Promocje z gazetki pominięte w raporcie aktualnych promocji. */
+  leafletSkipped: number
+  excludedSuppliers: ReportSupplier[]
+  items: ArticleMarginItem[]
 }
 
 /** Własna kategoria raportu zakupu bazowego poza bazą: nazwa i rejony nomenklatury. */

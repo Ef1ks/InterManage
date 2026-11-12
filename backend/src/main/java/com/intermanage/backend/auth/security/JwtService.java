@@ -4,6 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -51,6 +54,10 @@ public class JwtService {
     /** Aplikacja mobilna wysyła token w {@code Authorization: Bearer}, a odnowiony dostaje w tym nagłówku. */
     public static final String REFRESHED_TOKEN_HEADER = "X-Auth-Token";
     public static final String BEARER_PREFIX = "Bearer ";
+    /** Konta zalogowane w tle w tej przeglądarce (przełączanie kont): ich tokeny rozdzielone {@value #ACCOUNTS_SEPARATOR}. */
+    public static final String ACCOUNTS_COOKIE_NAME = "AUTH_ACCOUNTS";
+    private static final String ACCOUNTS_SEPARATOR = "|";
+    private static final String ACCOUNTS_SEPARATOR_REGEX = "\\|";
 
     private static final Logger log = LoggerFactory.getLogger(JwtService.class);
     private static final int MIN_SECRET_BYTES = 32;
@@ -89,6 +96,10 @@ public class JwtService {
 
     /** Token bez ciasteczka (aplikacja mobilna trzyma go sama i wysyła w {@code Authorization: Bearer}). */
     public String issueToken(AppUserPrincipal principal, boolean rememberMe) {
+        return issue(principal, rememberMe).getTokenValue();
+    }
+
+    public Jwt issue(AppUserPrincipal principal, boolean rememberMe) {
         Instant now = Instant.now();
         Duration ttl = rememberMe ? rememberMeTtl : tokenTtl;
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -98,20 +109,63 @@ public class JwtService {
                 .claim(SESSION_VERSION_CLAIM, principal.getSessionVersion())
                 .claim(REMEMBER_ME_CLAIM, rememberMe)
                 .build();
-        return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
-                .getTokenValue();
+        return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims));
     }
 
-    /** Wymienia ważny token na nowy z tym samym „nie wylogowuj mnie”, gdy minęło {@code app.auth.token-refresh-after}. */
-    public void refreshIfDue(HttpServletResponse response, Jwt jwt, AppUserPrincipal principal, boolean bearer) {
+    /**
+     * Wymienia ważny token na nowy z tym samym „nie wylogowuj mnie”, gdy minęło {@code app.auth.token-refresh-after}.
+     * Zwraca, czy wymienił.
+     */
+    public boolean refreshIfDue(HttpServletResponse response, Jwt jwt, AppUserPrincipal principal, boolean bearer) {
         Instant issuedAt = jwt.getIssuedAt();
-        if (issuedAt == null || issuedAt.plus(refreshAfter).isBefore(Instant.now())) {
-            if (bearer) {
-                response.setHeader(REFRESHED_TOKEN_HEADER, issueToken(principal, rememberMe(jwt)));
-            } else {
-                writeTokenCookie(response, principal, rememberMe(jwt));
-            }
+        if (issuedAt != null && !issuedAt.plus(refreshAfter).isBefore(Instant.now())) {
+            return false;
         }
+        if (bearer) {
+            response.setHeader(REFRESHED_TOKEN_HEADER, issueToken(principal, rememberMe(jwt)));
+        } else {
+            writeTokenCookie(response, principal, rememberMe(jwt));
+        }
+        return true;
+    }
+
+    public Optional<Jwt> decode(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(decoder.decode(token));
+        } catch (JwtException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** Tokeny kont zalogowanych w tle z ciasteczka {@value #ACCOUNTS_COOKIE_NAME}, w kolejności zapisu. */
+    public static List<String> accountTokens(HttpServletRequest request) {
+        Cookie cookie = WebUtils.getCookie(request, ACCOUNTS_COOKIE_NAME);
+        if (cookie == null || cookie.getValue().isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(cookie.getValue().split(ACCOUNTS_SEPARATOR_REGEX)).filter(t -> !t.isBlank()).toList();
+    }
+
+    /**
+     * Zapisuje konta w tle. Ciasteczko jest trwałe, gdy któreś konto ma „nie wylogowuj mnie” (token i tak wygasa
+     * wcześniej, jeśli nie ma), inaczej sesyjne. Pusta lista czyści ciasteczko.
+     */
+    public void writeAccountsCookie(HttpServletResponse response, List<Jwt> tokens) {
+        if (tokens.isEmpty()) {
+            clearAccountsCookie(response);
+            return;
+        }
+        boolean persistent = tokens.stream().anyMatch(JwtService::rememberMe);
+        String value = String.join(ACCOUNTS_SEPARATOR, tokens.stream().map(Jwt::getTokenValue).toList());
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                cookie(ACCOUNTS_COOKIE_NAME, value, persistent ? rememberMeTtl : Duration.ofSeconds(-1)).toString());
+    }
+
+    public void clearAccountsCookie(HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie(ACCOUNTS_COOKIE_NAME, "", Duration.ZERO).toString());
     }
 
     /** Token z nagłówka {@code Authorization: Bearer}, pusty bez nagłówka. */
@@ -136,7 +190,7 @@ public class JwtService {
         }
     }
 
-    private static boolean rememberMe(Jwt jwt) {
+    public static boolean rememberMe(Jwt jwt) {
         return Boolean.TRUE.equals(jwt.getClaim(REMEMBER_ME_CLAIM));
     }
 
@@ -145,7 +199,11 @@ public class JwtService {
     }
 
     private ResponseCookie cookie(String value, Duration maxAge) {
-        return ResponseCookie.from(COOKIE_NAME, value)
+        return cookie(COOKIE_NAME, value, maxAge);
+    }
+
+    private ResponseCookie cookie(String name, String value, Duration maxAge) {
+        return ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(secureCookie)
                 .sameSite("Lax")

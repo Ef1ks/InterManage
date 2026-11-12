@@ -411,6 +411,185 @@ class LowMarginIntegrationTests {
                 .andExpect(jsonPath("$.deliveries", hasSize(0)));
     }
 
+    @Test
+    void showsMarginOnCurrentPromotionalPrice() throws Exception {
+        requiredMargin("57", "30");
+        // Zwykła cena 12 zł daje przy zakupie 10 zł marżę 16,67%, a trwająca promocja z kasy 11 zł tylko 9,09%.
+        product(LISTED_LOW, "12.00");
+        jdbc.update("update products set promo_price = 11.00, promo_from = ?::date, promo_to = ?::date where itm8 = ?",
+                today.minusDays(2), today.plusDays(5), LISTED_LOW);
+        delivery(LISTED_LOW, 5, "10", "100.00", "12.00", "570101");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].marginPercent").value(16.67))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].currentPromoPrice").value(11.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].currentPromoMargin").value(9.09));
+    }
+
+    @Test
+    void endedPromotionStillInCatalogCountsFromRegularPrice() throws Exception {
+        requiredMargin("57", "30");
+        // Promocja 2,99 zł skończyła się wczoraj, a kasa nie przysłała jeszcze pliku z ceną 19,99 zł.
+        product(SMALL_DROP, "2.99");
+        jdbc.update("update products set promo_price = 2.99, promo_from = ?::date, promo_to = ?::date where itm8 = ?",
+                today.minusDays(1), today.minusDays(1), SMALL_DROP);
+        jdbc.update("""
+                insert into till_promotions (store_id, itm8, promo_from, promo_to, promo_price, regular_price, file_time)
+                values (?::uuid, ?, ?::date, ?::date, 2.99, 19.99, now())""",
+                store, SMALL_DROP, today.minusDays(1), today.minusDays(1));
+        delivery(SMALL_DROP, 5, "10", "100.00", "19.99", "570101");
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].salePrice").value(19.99))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].deviation").value("HIGH"));
+    }
+
+    @Test
+    void articleMarginsReportWholeCatalogWithCadencierFlag() throws Exception {
+        requiredMargin("57", "30");
+        // Ostatni zakup 10 zł: 12,50 zł daje 20%, 12,51 zł 20,06%.
+        catalogArticle(ON_THRESHOLD, "5900000000101", "12.50", "57 01 01", null, null);
+        delivery(ON_THRESHOLD, 50, "10", "100.00", "12.50", "570101");
+        catalogArticle(ABOVE_THRESHOLD, "5900000000102", "12.51", "57 01 01", null, null);
+        delivery(ABOVE_THRESHOLD, 50, "10", "100.00", "12.51", "570101");
+        // Bez przyjęcia cena zakupu z kartoteki: 12,30 zł z VAT 23% to 10 zł netto, czyli marża 0%.
+        catalogArticle(NO_MARGIN, "5900000000103", "12.30", "57 01 01", (short) 1, "10.00");
+        sold(NO_MARGIN);
+        // Bez sprzedaży w 3 miesiącach i bez przyjęcia artykuł nie żyje, choćby był aktywny i miał stan.
+        catalogArticle(CORRECTED, "5900000000105", "12.30", "57 01 01", (short) 1, "10.00");
+        jdbc.update("update products set stock = 5 where store_id = ?::uuid and itm8 = ?", store, CORRECTED);
+        // Aktywny w cadencier z CENA_CAD trafia do raportu z oznaczeniem.
+        catalogArticle(OTHER_REGION, "5900000000104", "12.30", "57 02 01", (short) 1, "10.00");
+        sold(OTHER_REGION);
+        jdbc.update("update products set cadencier_price = 12.30 where store_id = ?::uuid and itm8 = ?", store,
+                OTHER_REGION);
+        String cadencier = jdbc.queryForObject("""
+                insert into cadencier_imports (store_id, file_name, total_rows)
+                values (?::uuid, 'obecne w cad.xlsx', 1) returning id""", String.class, store);
+        jdbc.update("insert into cadencier_items (store_id, itm8, ean, import_id) values (?::uuid, ?, null, ?::uuid)",
+                store, OTHER_REGION, cadencier);
+
+        // Promocja skończyła się wczoraj, a kartoteka dalej trzyma jej cenę 2,99 zł: liczy się zwykła 19,99 zł (50%).
+        catalogArticle(LISTED, "5900000000106", "2.99", "57 01 01", null, null);
+        jdbc.update("update products set promo_price = 2.99, promo_from = ?::date, promo_to = ?::date where itm8 = ?",
+                today.minusDays(1), today.minusDays(1), LISTED);
+        jdbc.update("""
+                insert into till_promotions (store_id, itm8, promo_from, promo_to, promo_price, regular_price, file_time)
+                values (?::uuid, ?, ?::date, ?::date, 2.99, 19.99, now())""",
+                store, LISTED, today.minusDays(1), today.minusDays(1));
+        delivery(LISTED, 50, "10", "100.00", "19.99", "570101");
+
+        String articles = "/api/stores/" + store + "/reports/article-margins";
+        // Domyślnie marża poniżej 20%.
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maxMargin").value(20))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(NO_MARGIN, OTHER_REGION)))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].purchaseSource").value("CATALOG"))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].marginPercent").value(0.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].soldQuantity").value(4.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + OTHER_REGION + "')].cadencier").value(true));
+        mvc.perform(get(articles + "?maxMargin=25").cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8",
+                        containsInAnyOrder(ON_THRESHOLD, ABOVE_THRESHOLD, NO_MARGIN, OTHER_REGION)))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].purchaseSource").value("DELIVERY"))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].marginPercent").value(20.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].targetSalePrice").value(14.29));
+        mvc.perform(get(articles + "?maxMargin=60").cookie(owner))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].salePrice").value(19.99))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].promoPrice").value(
+                        org.hamcrest.Matchers.contains((Object) null)));
+        mvc.perform(get(articles + "?maxMargin=-1").cookie(owner)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void verifiedArticlesStayVerifiedUntilPricesChange() throws Exception {
+        requiredMargin("57", "30");
+        catalogArticle(ON_THRESHOLD, "5900000000301", "11.00", "57 01 01", null, null);
+        delivery(ON_THRESHOLD, 10, "10", "100.00", "11.00", "570101");
+        // Ostatnia dostawa ponad 3 miesiące temu i brak sprzedaży: artykuł jest zbędny w raporcie.
+        catalogArticle(OLD, "5900000000302", "11.00", "57 01 01", null, null);
+        delivery(OLD, 100, "10", "100.00", "11.00", "570101");
+        String articles = "/api/stores/" + store + "/reports/article-margins";
+
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(ON_THRESHOLD)))
+                .andExpect(jsonPath("$.items[0].verification").isEmpty());
+
+        String json = mvc.perform(post(articles + "/verifications").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"items":[{"itm8":"%s","salePrice":11.00,"purchasePrice":10.0000,"marginPercent":9.09,
+                                           "lastPurchaseDate":"%sT10:00:00"}],
+                                 "note":"cena z gazetki konkurencji"}""".formatted(ON_THRESHOLD, today.minusDays(10))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(json, "$[0]");
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items[0].verification.id").value(id))
+                .andExpect(jsonPath("$.items[0].verification.note").value("cena z gazetki konkurencji"))
+                .andExpect(jsonPath("$.items[0].verification.verifiedBy").isNotEmpty());
+
+        // Cofnięcie i przywrócenie.
+        mvc.perform(post(articles + "/verifications/cancel").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + id + "\"]}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(articles).cookie(owner)).andExpect(jsonPath("$.items[0].verification").isEmpty());
+        mvc.perform(post(articles + "/verifications/restore").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + id + "\"]}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(articles).cookie(owner)).andExpect(jsonPath("$.items[0].verification.id").value(id));
+
+        // Kolejna dostawa, nawet po tej samej cenie: weryfikacja nie obowiązuje, artykuł wraca do kontroli.
+        delivery(ON_THRESHOLD, 2, "10", "100.00", "11.00", "570101");
+        mvc.perform(get(articles).cookie(owner)).andExpect(jsonPath("$.items[0].verification").isEmpty());
+    }
+
+    @Test
+    void currentPromotionsSkipLeaflet() throws Exception {
+        requiredMargin("57", "30");
+        // Promocja z kasy 11 zł przy zakupie 10 zł: marża 9,09%, zwykła 15 zł daje 33,33%.
+        catalogArticle(LISTED, "5900000000201", "15.00", "57 01 01", null, null);
+        jdbc.update("update products set promo_price = 11.00, promo_from = ?::date, promo_to = ?::date where itm8 = ?",
+                today.minusDays(2), today.plusDays(5), LISTED);
+        delivery(LISTED, 5, "10", "100.00", "15.00", "570101");
+        // Promocja z gazetki (utrzymanie cen centrali) nie trafia do raportu.
+        catalogArticle(LEAFLET, "5900000000202", "15.00", "57 01 01", null, null);
+        jdbc.update("update products set promo_price = 11.00, promo_from = ?::date, promo_to = ?::date where itm8 = ?",
+                today.minusDays(2), today.plusDays(5), LEAFLET);
+        delivery(LEAFLET, 5, "10", "100.00", "15.00", "570101");
+        leaflet(LEAFLET);
+        // Bez promocji nie ma go w raporcie.
+        catalogArticle(ON_THRESHOLD, "5900000000203", "15.00", "57 01 01", null, null);
+        delivery(ON_THRESHOLD, 5, "10", "100.00", "15.00", "570101");
+
+        mvc.perform(get("/api/stores/" + store + "/reports/current-promotions").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.leafletSkipped").value(1))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].itm8").value(LISTED))
+                .andExpect(jsonPath("$.items[0].promoPrice").value(11.0))
+                .andExpect(jsonPath("$.items[0].promoSource").value("TILL"))
+                .andExpect(jsonPath("$.items[0].promoMargin").value(9.09))
+                .andExpect(jsonPath("$.items[0].marginPercent").value(33.33));
+    }
+
+    /** Sprzedaż artykułu w bieżącym miesiącu (sumy miesięczne). */
+    private void sold(String itm8) {
+        jdbc.update("""
+                insert into sales_monthly (store_id, month, itm8, quantity, cost_value, sale_value_gross,
+                    sale_value_net, margin_value)
+                values (?::uuid, ?::date, ?, 4, 40, 49.2, 40, 0)""", store, today.withDayOfMonth(1), itm8);
+    }
+
+    /** Artykuł kartoteki z nomenklaturą, kodem VAT i ceną zakupu. */
+    private void catalogArticle(String itm8, String ean, String salePrice, String nomenclature, Short vatCode,
+            String purchasePrice) {
+        product(itm8, salePrice);
+        jdbc.update("""
+                update products set ean = ?, nomenclature = ?, vat_code = ?, purchase_price = ?::numeric, active = true
+                where store_id = ?::uuid and itm8 = ?""", ean, nomenclature, vatCode, purchasePrice, store, itm8);
+    }
+
     private void gaps(String low, String high) {
         jdbc.update("insert into low_margin_settings (store_id, low_gap, high_gap) values (?::uuid, ?::numeric, ?::numeric)",
                 store, low, high);

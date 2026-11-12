@@ -264,6 +264,17 @@ class StaffTimeIntegrationTests {
 
         reader("zly-klucz", "04A2B3C4", null).andExpect(status().isForbidden());
         reader(token, "FFFF", null).andExpect(status().isNotFound());
+
+        mvc.perform(get("/api/time-clock/reader").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.readerName").value("Wejście"))
+                .andExpect(jsonPath("$.storeId").value(store));
+        mvc.perform(get("/api/time-clock/reader")).andExpect(status().isForbidden());
+
+        String readerId = JsonPath.read(settings, "$.readers[0].id");
+        send(owner, delete(staff("/time/settings/readers/" + readerId)), null).andExpect(status().isOk());
+        reader(token, "04A2B3C4", null).andExpect(status().isForbidden());
+        mvc.perform(get("/api/time-clock/reader").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
     }
 
     /**

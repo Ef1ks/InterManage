@@ -2,6 +2,7 @@ package com.intermanage.backend.auth.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -18,12 +19,10 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
-import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.security.AppUserDetailsService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.BackgroundAccounts;
 import com.intermanage.backend.auth.security.JwtAuthenticationFilter;
 import com.intermanage.backend.auth.security.JwtService;
 
@@ -38,11 +37,8 @@ import com.intermanage.backend.auth.security.JwtService;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService, AppUserRepository users,
-            PlatformTransactionManager transactionManager) throws Exception {
-        TransactionTemplate readOnlyTx = new TransactionTemplate(transactionManager);
-        readOnlyTx.setReadOnly(true);
-
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
+            BackgroundAccounts backgroundAccounts) throws Exception {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
@@ -53,6 +49,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/mobile/login",
                                 "/api/auth/activate").permitAll()
+                        // Konta zalogowane w tle: lista i przejście na konto (PIN-em) działają też na stronie
+                        // logowania, gdy żadne konto nie jest aktywne.
+                        .requestMatchers(HttpMethod.GET, "/api/auth/accounts").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/accounts/*/switch", "/api/auth/accounts/logout")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/auth/accounts/*").permitAll()
                         .requestMatchers("/api/time-clock/**").permitAll()
                         // Jedyne endpointy dostępne, zanim użytkownik ustawi własne hasło.
                         .requestMatchers("/api/auth/me", "/api/auth/password/setup").authenticated()
@@ -67,7 +69,7 @@ public class SecurityConfig {
                         .addLogoutHandler((request, response, authentication) -> jwtService.clearTokenCookie(response))
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService, users, readOnlyTx),
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts),
                         AnonymousAuthenticationFilter.class);
 
         return http.build();

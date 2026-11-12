@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -745,10 +746,7 @@ public class StaffTimeService {
     /** Odbicie z czytnika NFC: czytnik przedstawia się kluczem, karta wskazuje pracownika firmy. */
     @Transactional
     public ReaderResult readerPunch(String token, TimeRequests.ReaderPunch request) {
-        StaffTimeReader reader = token == null ? null : readers.findByToken(hash(token)).orElse(null);
-        if (reader == null) {
-            throw ApiException.forbidden("Nieznany czytnik");
-        }
+        StaffTimeReader reader = reader(token);
         Store store = reader.getStore();
         StaffNfcCard card = cards.findByUid(normalizeUid(request.cardUid()))
                 .filter(found -> found.getEmployee().getStore().companyKey().equals(store.companyKey())
@@ -764,6 +762,24 @@ public class StaffTimeService {
     }
 
     public record ReaderResult(String employeeName, String direction, Instant punchedAt) {
+    }
+
+    /** Czytnik (np. kiosk) sprawdza swój klucz i dowiaduje się, w którym sklepie stoi. */
+    @Transactional(readOnly = true)
+    public ReaderInfo readerInfo(String token) {
+        StaffTimeReader reader = reader(token);
+        Store store = reader.getStore();
+        return new ReaderInfo(reader.getName(), store.getId(), store.getNumber(), store.getName());
+    }
+
+    public record ReaderInfo(String readerName, UUID storeId, String storeNumber, String storeName) {
+    }
+
+    /** Czytnik po kluczu; usunięty w Ustawieniach przestaje działać od razu. */
+    private StaffTimeReader reader(String token) {
+        return (token == null ? Optional.<StaffTimeReader>empty() : readers.findByToken(hash(token)))
+                .filter(found -> found.getDeletedAt() == null)
+                .orElseThrow(() -> ApiException.forbidden("Nieznany czytnik"));
     }
 
     /** Wejście i wyjście; wyjście {@code null}, gdy go nie ma (jeszcze w pracy albo zapomniane). */

@@ -40,6 +40,7 @@ import {
   FILTER_PARAMS,
   filterOf,
   inCategory,
+  regionInCategory,
   MoneyPill,
   OTHER_CATEGORY,
   PERIOD_FILTERS,
@@ -142,7 +143,28 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
   const category: CategoryKey =
     categories.find((item) => item.id === categoryParam)?.id ??
     (categoryParam === OTHER_CATEGORY && categories.length > 0 ? OTHER_CATEGORY : ALL_CATEGORIES)
-  const deliveries = inView.filter((delivery) => inCategory(delivery, category, categories))
+  // W zakładce kategorii przyjęcie pokazuje tylko artykuły tej kategorii i z nich liczy kwoty.
+  const deliveries = inView
+    .filter((delivery) => inCategory(delivery, category, categories))
+    .map((delivery) => {
+      if (category === ALL_CATEGORIES) return delivery
+      const lines = delivery.lines.filter((line) => regionInCategory(line.regionCode, category, categories))
+      if (lines.length === delivery.lines.length) return delivery
+      return {
+        ...delivery,
+        lines,
+        linesPurchaseValue: lines.reduce((sum, line) => sum + line.purchaseValue, 0),
+        belowMinimumCount: lines.filter((line) => line.belowMinimum).length,
+        excessValue: lines.reduce((sum, line) => sum + line.excessValue, 0),
+        baseDifferenceValue: lines.reduce(
+          (sum, line) =>
+            line.basePrice == null
+              ? sum
+              : sum + Math.round((line.purchasePrice - line.basePrice) * line.quantity * 100) / 100,
+          0,
+        ),
+      }
+    })
   const counts = { open: 0, reported: 0, resolved: 0 }
   deliveries.forEach((delivery) => counts[filterOf(delivery)]++)
   const open = deliveries.filter((delivery) => filterOf(delivery) === 'open')

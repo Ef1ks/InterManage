@@ -267,7 +267,7 @@ public class LowMarginService {
     }
 
     /** Marża obowiązująca dla kodu z linii ("570101" albo "57 01 01"); {@code null}, gdy nomenklatura jej nie ma. */
-    private static BigDecimal requiredMargin(String nomenclatureCode, Map<String, BigDecimal> required) {
+    static BigDecimal requiredMargin(String nomenclatureCode, Map<String, BigDecimal> required) {
         if (nomenclatureCode == null) {
             return null;
         }
@@ -307,10 +307,12 @@ public class LowMarginService {
             return null;
         }
         BigDecimal regular = regularPrice(article);
-        BigDecimal net = regular.multiply(HUNDRED)
-                .divide(HUNDRED.add(BigDecimal.valueOf(article.getVatRate())), 6, RoundingMode.HALF_UP);
+        BigDecimal net = netOf(regular, article.getVatRate());
         BigDecimal price = value.divide(quantity, 4, RoundingMode.HALF_UP);
-        BigDecimal margin = net.subtract(price).multiply(HUNDRED).divide(net, 2, RoundingMode.HALF_UP);
+        BigDecimal margin = marginOf(net, price);
+        BigDecimal promo = article.getCurrentPromoPrice();
+        BigDecimal promoMargin = promo != null && promo.signum() > 0
+                ? marginOf(netOf(promo, article.getVatRate()), price) : null;
         MarginDeviation deviation = null;
         BigDecimal target = null;
         BigDecimal excess = null;
@@ -328,7 +330,17 @@ public class LowMarginService {
                 value, regular, documentPrice,
                 priceOnDeliveryDay(article).compareTo(documentPrice) > 0 ? promotionOf(article) : null,
                 margin, requiredMargin, target, excess, article.getCorrected(), deviation, article.getCurrentPromoPrice(),
-                article.getCurrentPromoTo());
+                article.getCurrentPromoTo(), promoMargin);
+    }
+
+    /** Cena netto z ceny brutto i stawki VAT w procentach. */
+    static BigDecimal netOf(BigDecimal gross, Short vatRate) {
+        return gross.multiply(HUNDRED).divide(HUNDRED.add(BigDecimal.valueOf(vatRate)), 6, RoundingMode.HALF_UP);
+    }
+
+    /** Marża % od sprzedaży netto przy cenie zakupu netto {@code purchase}. */
+    static BigDecimal marginOf(BigDecimal net, BigDecimal purchase) {
+        return net.subtract(purchase).multiply(HUNDRED).divide(net, 2, RoundingMode.HALF_UP);
     }
 
     /**
