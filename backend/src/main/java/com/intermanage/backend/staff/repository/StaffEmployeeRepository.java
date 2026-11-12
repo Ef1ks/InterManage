@@ -15,7 +15,9 @@ public interface StaffEmployeeRepository extends JpaRepository<StaffEmployee, UU
 
     /** Także po zakończeniu pracy: panel pokazuje ich osobno, żeby dało się przywrócić osobę, która wraca. */
     @EntityGraph(attributePaths = {"store", "user", "user.role", "position", "position.department"})
-    @Query("select e from StaffEmployee e where e.store.id in :storeIds order by lower(e.user.displayName)")
+    @Query("""
+            select e from StaffEmployee e left join e.user u where e.store.id in :storeIds
+            order by lower(coalesce(u.displayName, e.fullName))""")
     List<StaffEmployee> findInStores(Collection<UUID> storeIds);
 
     @EntityGraph(attributePaths = {"store", "user", "user.role", "position", "position.department"})
@@ -46,6 +48,6 @@ public interface StaffEmployeeRepository extends JpaRepository<StaffEmployee, UU
     boolean existsActiveForUser(UUID userId);
 
     /** Id konta i nazwa stanowiska pracowników w trakcie pracy, do listy użytkowników. */
-    @Query("select e.user.id, e.position.name from StaffEmployee e where e.endedAt is null")
+    @Query("select u.id, e.position.name from StaffEmployee e join e.user u where e.endedAt is null")
     List<Object[]> findActivePositionNames();
 }

@@ -519,9 +519,9 @@ public class StaffScheduleService {
         List<UUID> companyStores = store.getNip() == null ? List.of(storeId)
                 : stores.findActiveByNip(store.getNip()).stream().map(Store::getId).toList();
         List<ScheduleSettings.Person> people = employees.findInStores(companyStores).stream()
-                .filter(employee -> employee.getEndedAt() == null)
+                .filter(employee -> employee.getEndedAt() == null && employee.hasAccount())
                 .map(employee -> new ScheduleSettings.Person(employee.getUser().getId(),
-                        employee.getUser().getDisplayName(), employee.getPosition().getName()))
+                        employee.getDisplayName(), employee.getPosition().getName()))
                 .toList();
         Map<UUID, StaffPositionMinimum> counts = staffing(storeId, departmentId);
         List<ScheduleSettings.Minimum> result = activePositions(store, departmentId).stream()
@@ -773,7 +773,7 @@ public class StaffScheduleService {
                             fixed.getOrDefault(id, List.of()), open, actual.getOrDefault(id, Map.of()),
                             timeOffDays, civilHistory.getOrDefault(id, List.of()),
                             showsPay ? Optional.ofNullable(rates.get(id + "/false")) : null)
-                    : new ScheduleResponse.Row(id, employee.getUser().getDisplayName(), employee.getPosition().getId(),
+                    : new ScheduleResponse.Row(id, employee.getDisplayName(), employee.getPosition().getId(),
                             employee.getPosition().getName(), groupOf.get(id), employee.getStore().getNumber(),
                             guest(employee, store, department), null, null, null, null, null, List.of(), cells,
                             List.of(), List.of(), List.of(), null, null, null, null, null, null, false, null, null,
@@ -811,7 +811,7 @@ public class StaffScheduleService {
         int minutes = civilDays.stream().mapToInt(planned -> planned.shift().minutes()).sum();
         List<LocalDate> outOfContract = file == null ? List.of()
                 : days.stream().filter(day -> !mandate(file, day)).toList();
-        return new ScheduleResponse.Row(employee.getId(), employee.getUser().getDisplayName(),
+        return new ScheduleResponse.Row(employee.getId(), employee.getDisplayName(),
                 employee.getPosition().getId(), employee.getPosition().getName(), groupId,
                 employee.getStore().getNumber(), guest(employee, store, department), "zlecenie", minutes, null, null,
                 null, List.of(), cells, List.of(), List.of(), outOfContract, null, null, null, null, null, null, true,
@@ -899,7 +899,7 @@ public class StaffScheduleService {
         List<ScheduleResponse.Warning> contractWarnings = inPeriod.stream().map(Planned::day)
                 .filter(outOfContract::contains).sorted()
                 .map(day -> new ScheduleResponse.Warning(day, "Zmiana poza umową", "daty umowy w Kadrach")).toList();
-        return new ScheduleResponse.Row(employee.getId(), employee.getUser().getDisplayName(),
+        return new ScheduleResponse.Row(employee.getId(), employee.getDisplayName(),
                 employee.getPosition().getId(), employee.getPosition().getName(), groupId,
                 employee.getStore().getNumber(), guest(employee, store, department), contract(file, month.atDay(1), month.atEndOfMonth()),
                 monthHours.worked(), anyEmployment ? monthHours.norm() : null, periodHours.worked(),
@@ -1105,7 +1105,7 @@ public class StaffScheduleService {
                 .sorted(Comparator.comparing((StaffEmployee employee) -> guest(employee, store, department))
                         .thenComparing(employee -> order.getOrDefault(employee.getId(), Integer.MAX_VALUE))
                         .thenComparing(employee -> employee.getPosition().getName().toLowerCase())
-                        .thenComparing(employee -> employee.getUser().getDisplayName().toLowerCase()))
+                        .thenComparing(employee -> employee.getDisplayName().toLowerCase()))
                 .toList();
     }
 
@@ -1236,11 +1236,11 @@ public class StaffScheduleService {
     private static void requireOwned(StaffSchedule schedule, LocalDate day, StaffDepartment department,
             Map<UUID, Store> allowed, StaffEmployee employee) {
         if (!schedule.getDepartment().getId().equals(department.getId())) {
-            throw ApiException.conflict(employee.getUser().getDisplayName() + " ma " + day.format(DATE)
+            throw ApiException.conflict(employee.getDisplayName() + " ma " + day.format(DATE)
                     + " wpis w dziale " + schedule.getDepartment().getName());
         }
         if (!allowed.containsKey(schedule.getStore().getId())) {
-            throw ApiException.conflict(employee.getUser().getDisplayName() + " ma " + day.format(DATE)
+            throw ApiException.conflict(employee.getDisplayName() + " ma " + day.format(DATE)
                     + " wpis w sklepie " + schedule.getStore().getNumber());
         }
     }

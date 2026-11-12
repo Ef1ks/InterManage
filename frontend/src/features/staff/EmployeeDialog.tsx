@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MailIcon, ShieldIcon, UserMinusIcon } from 'lucide-react'
+import { MailIcon, ShieldIcon, UserMinusIcon, UserXIcon } from 'lucide-react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -24,10 +24,11 @@ type EmployeeForm = {
   shifts: StaffShift[]
 }
 
-type Mode = 'invite' | 'existing'
+type Mode = 'plain' | 'invite' | 'existing'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MODES: { value: Mode; label: string }[] = [
+  { value: 'plain', label: 'Bez konta' },
   { value: 'invite', label: 'Nowe konto' },
   { value: 'existing', label: 'Ma już konto' },
 ]
@@ -74,12 +75,14 @@ function EmployeeFormBody({
   const me = useCurrentUser()
   // Nowy pracownik powstaje w wybranym sklepie, a zmiany przechodzą przez bieżący, bo serwer widzi całą firmę.
   const [targetStoreId, setTargetStoreId] = useState(storeId)
-  const { invite, assign, update, end, restore } = useEmployeeActions(targetStoreId)
-  const [mode, setMode] = useState<Mode>('invite')
+  const { invite, createWithoutAccount, assign, update, end, restore } = useEmployeeActions(targetStoreId)
+  const [mode, setMode] = useState<Mode>('plain')
   const [formError, setFormError] = useState<string | null>(null)
   const [loginEdited, setLoginEdited] = useState(false)
   const isNew = employee === undefined
   const existing = isNew && mode === 'existing'
+  // Bez konta: samo imię i nazwisko, bez e-maila, loginu i roli w aplikacji.
+  const withoutAccount = isNew ? mode === 'plain' : !employee.hasAccount
   const { data: accounts = [] } = useStaffAccounts(targetStoreId, isNew)
 
   const {
@@ -104,7 +107,7 @@ function EmployeeFormBody({
   const positionId = useWatch({ control, name: 'positionId' })
   const userId = useWatch({ control, name: 'userId' })
   const name = useDebouncedValue(displayName.trim(), 250)
-  const { data: suggestion } = useLoginSuggestion(storeId, isNew && !existing && !loginEdited ? name : '')
+  const { data: suggestion } = useLoginSuggestion(storeId, isNew && mode === 'invite' && !loginEdited ? name : '')
   useEffect(() => {
     if (!loginEdited && suggestion) setValue('username', suggestion.username)
   }, [loginEdited, suggestion, setValue])
@@ -141,6 +144,17 @@ function EmployeeFormBody({
         {
           onSuccess: () => {
             toast.success('Zapisano zmiany')
+            onDone()
+          },
+          onError,
+        },
+      )
+    } else if (withoutAccount) {
+      createWithoutAccount.mutate(
+        { displayName: values.displayName, positionId: chosenPosition, shifts },
+        {
+          onSuccess: (created) => {
+            toast.success(`${created.displayName} jest już na liście pracowników`)
             onDone()
           },
           onError,
@@ -183,7 +197,7 @@ function EmployeeFormBody({
     end.mutate(target.id, {
       onSuccess: () => {
         toast.success(`${target.displayName}: koniec pracy`, {
-          description: target.ownerAccount ? undefined : 'Konto jest zablokowane.',
+          description: target.ownerAccount || !target.hasAccount ? undefined : 'Konto jest zablokowane.',
           action: {
             label: 'Przywróć',
             onClick: () =>
@@ -203,10 +217,14 @@ function EmployeeFormBody({
         <DialogTitle className="text-lg">{employee ? employee.displayName : 'Dodaj pracownika'}</DialogTitle>
         <DialogDescription>
           {employee
-            ? `Login: ${employee.username}`
-            : existing
-              ? 'Osoba, która ma już konto w aplikacji, dostaje stanowisko w tym sklepie.'
-              : 'Pracownik dostanie e-mail z linkiem do aktywacji konta.'}
+            ? employee.hasAccount
+              ? `Login: ${employee.username}`
+              : 'Bez konta w aplikacji'
+            : withoutAccount
+              ? 'Tylko imię i nazwisko: pracownik jest w grafiku, czasie pracy i kadrach, ale nie loguje się do aplikacji.'
+              : existing
+                ? 'Osoba, która ma już konto w aplikacji, dostaje stanowisko w tym sklepie.'
+                : 'Pracownik dostanie e-mail z linkiem do aktywacji konta.'}
         </DialogDescription>
       </DialogHeader>
 
@@ -254,21 +272,23 @@ function EmployeeFormBody({
               maxLength: { value: 100, message: 'Maksymalnie 100 znaków' },
             })}
           />
-          <TextField
-            label="Adres e-mail"
-            type="email"
-            inputMode="email"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            error={errors.email?.message}
-            {...register('email', {
-              required: isNew || employee?.pendingActivation ? 'Podaj adres e-mail' : false,
-              pattern: { value: EMAIL_PATTERN, message: 'Podaj poprawny adres e-mail' },
-              maxLength: { value: 255, message: 'Maksymalnie 255 znaków' },
-            })}
-          />
-          {isNew && (
+          {!withoutAccount && (
+            <TextField
+              label="Adres e-mail"
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              error={errors.email?.message}
+              {...register('email', {
+                required: isNew || employee?.pendingActivation ? 'Podaj adres e-mail' : false,
+                pattern: { value: EMAIL_PATTERN, message: 'Podaj poprawny adres e-mail' },
+                maxLength: { value: 255, message: 'Maksymalnie 255 znaków' },
+              })}
+            />
+          )}
+          {isNew && !withoutAccount && (
             <TextField
               label="Login"
               autoComplete="off"
@@ -304,12 +324,18 @@ function EmployeeFormBody({
         )}
       />
 
-      {position && (
-        <FormNote icon={<ShieldIcon />}>
-          {keepsOwnerRole
-            ? 'Właściciel zostaje właścicielem, stanowisko nie zmienia jego uprawnień.'
-            : `Uprawnienia w aplikacji: rola ${position.roleName}.`}
+      {withoutAccount ? (
+        <FormNote icon={<UserXIcon />}>
+          Bez konta: nie ma loginu ani uprawnień. Na czytniku odbija się kartą jak każdy pracownik.
         </FormNote>
+      ) : (
+        position && (
+          <FormNote icon={<ShieldIcon />}>
+            {keepsOwnerRole
+              ? 'Właściciel zostaje właścicielem, stanowisko nie zmienia jego uprawnień.'
+              : `Uprawnienia w aplikacji: rola ${position.roleName}.`}
+          </FormNote>
+        )
       )}
 
       <div className="grid gap-2">
@@ -328,7 +354,7 @@ function EmployeeFormBody({
         />
       </div>
 
-      {isNew && !existing && (
+      {isNew && mode === 'invite' && (
         <FormNote icon={<MailIcon />}>
           Po kliknięciu w link pracownik ustawi własne hasło i zaloguje się także na telefonie. Link jest ważny 3 dni, w
           razie potrzeby wyślesz nowy z listy pracowników.
@@ -336,7 +362,7 @@ function EmployeeFormBody({
       )}
 
       <FormActions className="sm:items-center">
-        {employee && employee.userId !== me.id && (
+        {employee && (!employee.hasAccount || employee.userId !== me.id) && (
           <Button
             type="button"
             variant="ghost"
@@ -352,8 +378,12 @@ function EmployeeFormBody({
         <Button type="button" variant="outline" size="lg" onClick={onDone}>
           Anuluj
         </Button>
-        <Button type="submit" size="lg" loading={invite.isPending || assign.isPending || update.isPending}>
-          {employee ? 'Zapisz zmiany' : existing ? 'Dodaj pracownika' : 'Wyślij zaproszenie'}
+        <Button
+          type="submit"
+          size="lg"
+          loading={invite.isPending || createWithoutAccount.isPending || assign.isPending || update.isPending}
+        >
+          {employee ? 'Zapisz zmiany' : mode === 'invite' ? 'Wyślij zaproszenie' : 'Dodaj pracownika'}
         </Button>
       </FormActions>
     </Form>

@@ -173,7 +173,7 @@ public class StaffTimeService {
                         .collect(Collectors.groupingBy(contract -> contract.getEmployee().getId()));
         Comparator<StaffEmployee> byPosition = Comparator
                 .comparing((StaffEmployee employee) -> employee.getPosition().getName().toLowerCase())
-                .thenComparing(employee -> employee.getUser().getDisplayName().toLowerCase());
+                .thenComparing(employee -> employee.getDisplayName().toLowerCase());
         // Karty czasu pracy prowadzi się dla pracowników z umową o pracę (art. 149 KP), a przy zleceniu ewidencję
         // liczby godzin (art. 8a ustawy o minimalnym wynagrodzeniu): wiersz z samymi odbiciami. Reszta działu (B2B,
         // bez umowy) idzie do listy pod tabelą z powodem, żeby nie znikała bez słowa.
@@ -181,7 +181,7 @@ public class StaffTimeService {
                 .filter(employee -> !hasEmploymentIn(contractsOf.getOrDefault(employee.getId(), List.of()), from, to)
                         && !hasMandateIn(contractsOf.getOrDefault(employee.getId(), List.of()), from, to))
                 .sorted(byPosition)
-                .map(employee -> new TimeCardResponse.WithoutCard(employee.getUser().getDisplayName(),
+                .map(employee -> new TimeCardResponse.WithoutCard(employee.getDisplayName(),
                         employee.getPosition().getName(),
                         withoutCardReason(contractsOf.getOrDefault(employee.getId(), List.of()), from, to)))
                 .toList();
@@ -245,7 +245,7 @@ public class StaffTimeService {
                             leaveOn(absences.getOrDefault(id, List.of()), day), pairs.getOrDefault(day, List.of()),
                             decided.getOrDefault(id, List.of()), fileOf, unpaid, tolerance, records, now));
                 }
-                rows.add(new TimeCardResponse.Row(id, employee.getUser().getDisplayName(),
+                rows.add(new TimeCardResponse.Row(id, employee.getDisplayName(),
                         employee.getPosition().getName(), cardOf.get(id), employee.getRcpNumber(), false,
                         cardsOfDays, totals(cardsOfDays)));
             }
@@ -260,7 +260,7 @@ public class StaffTimeService {
                     cardsOfDays.add(civilDayCard(day, entry, employed, leave == null ? null : absence(leave, records),
                             pairs.getOrDefault(day, List.of()), now));
                 }
-                rows.add(new TimeCardResponse.Row(id, employee.getUser().getDisplayName(),
+                rows.add(new TimeCardResponse.Row(id, employee.getDisplayName(),
                         employee.getPosition().getName(), cardOf.get(id), employee.getRcpNumber(), true,
                         cardsOfDays, totals(cardsOfDays)));
             }
@@ -542,7 +542,7 @@ public class StaffTimeService {
         byte[] content = overtimePdf.pdf(new OvertimePdf.Document(variant,
                 new OvertimePdf.Employer(employer.name(), employer.address(), employer.nip(), employer.regon(),
                         employer.representative()),
-                employee.getUser().getDisplayName(), employee.getPosition().getName(),
+                employee.getDisplayName(), employee.getPosition().getName(),
                 employee.getPosition().getDepartment().getName(), decision.getStartAt(), decision.getEndAt(),
                 decision.getNote(), decision.getCreatedBy() == null ? null : decision.getCreatedBy().getDisplayName(),
                 local(decision.getCreatedAt())));
@@ -758,7 +758,7 @@ public class StaffTimeService {
         boolean exit = recent.stream().anyMatch(pair -> pair.out() == null
                 && Duration.between(pair.in(), local(at)).compareTo(MAX_SHIFT) <= 0);
         punches.save(new StaffTimePunch(employee, store, at, TimePunchSource.READER, reader, null));
-        return new ReaderResult(employee.getUser().getDisplayName(), exit ? "OUT" : "IN", at);
+        return new ReaderResult(employee.getDisplayName(), exit ? "OUT" : "IN", at);
     }
 
     public record ReaderResult(String employeeName, String direction, Instant punchedAt) {
@@ -825,7 +825,7 @@ public class StaffTimeService {
         Store store = store(storeId);
         List<StaffEmployee> staff = employees.findInStores(List.of(storeId)).stream()
                 .filter(employee -> employee.getEndedAt() == null)
-                .sorted(Comparator.comparing(employee -> employee.getUser().getDisplayName().toLowerCase()))
+                .sorted(Comparator.comparing(employee -> employee.getDisplayName().toLowerCase()))
                 .toList();
         Map<UUID, String> cardOf = staff.isEmpty() ? Map.of()
                 : cards.findActive(staff.stream().map(StaffEmployee::getId).toList()).stream()
@@ -836,7 +836,7 @@ public class StaffTimeService {
                                 reader.getCreatedAt(), null))
                         .toList(),
                 staff.stream().map(employee -> new TimeSettingsResponse.Card(employee.getId(),
-                        employee.getUser().getDisplayName(), employee.getPosition().getDepartment().getName(),
+                        employee.getDisplayName(), employee.getPosition().getDepartment().getName(),
                         cardOf.get(employee.getId()), employee.getRcpNumber())).toList());
     }
 
@@ -900,8 +900,7 @@ public class StaffTimeService {
         AppUser actor = users.getReferenceById(actorId);
         String uid = normalizeUid(request.cardUid());
         cards.findByUid(uid).filter(card -> !card.getEmployee().getId().equals(employeeId)).ifPresent(card -> {
-            throw ApiException.conflict("Ta karta jest już przypisana: " + card.getEmployee().getUser()
-                    .getDisplayName());
+            throw ApiException.conflict("Ta karta jest już przypisana: " + card.getEmployee().getDisplayName());
         });
         List<StaffNfcCard> current = cards.findActive(List.of(employeeId));
         if (current.stream().anyMatch(card -> card.getCardUid().equals(uid))) {

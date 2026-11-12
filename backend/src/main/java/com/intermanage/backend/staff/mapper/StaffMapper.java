@@ -43,7 +43,8 @@ public interface StaffMapper {
 
     @Mapping(target = "id", source = "employee.id")
     @Mapping(target = "userId", source = "employee.user.id")
-    @Mapping(target = "displayName", source = "employee.user.displayName")
+    @Mapping(target = "displayName", expression = "java(employee.getDisplayName())")
+    @Mapping(target = "hasAccount", expression = "java(employee.hasAccount())")
     @Mapping(target = "username", source = "employee.user.username")
     @Mapping(target = "email", source = "employee.user.email")
     @Mapping(target = "enabled", source = "employee.user.enabled")

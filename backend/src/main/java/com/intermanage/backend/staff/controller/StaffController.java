@@ -22,6 +22,7 @@ import com.intermanage.backend.auth.service.UserService;
 import com.intermanage.backend.staff.dto.AccountOption;
 import com.intermanage.backend.staff.dto.AssignEmployeeRequest;
 import com.intermanage.backend.staff.dto.CreateEmployeeRequest;
+import com.intermanage.backend.staff.dto.CreatePlainEmployeeRequest;
 import com.intermanage.backend.staff.dto.DepartmentRequest;
 import com.intermanage.backend.staff.dto.DepartmentResponse;
 import com.intermanage.backend.staff.dto.EmployeeResponse;
@@ -145,6 +146,15 @@ public class StaffController {
     public EmployeeResponse invite(@PathVariable UUID storeId, @Valid @RequestBody CreateEmployeeRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return employees.invite(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/employees/without-account")
+    @PreAuthorize(EDIT)
+    @ResponseStatus(HttpStatus.CREATED)
+    public EmployeeResponse createWithoutAccount(@PathVariable UUID storeId,
+            @Valid @RequestBody CreatePlainEmployeeRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return employees.createWithoutAccount(storeId, request, principal.getId());
     }
 
     @PostMapping("/employees/existing")

@@ -374,7 +374,7 @@ function EmployeeRow({
             <span className="block truncate font-medium">{employee.displayName}</span>
           )}
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="truncate">{employee.username}</span>
+            <span className="truncate">{employee.hasAccount ? employee.username : 'bez konta'}</span>
             <Status employee={employee} />
           </div>
         </div>
@@ -460,6 +460,7 @@ function RowAction({
 
 /** Jeden znak stanu przy loginie: kropka i krótki tekst zamiast plakietki, bo nowe konta bywają w większości. */
 function Status({ employee }: { employee: StaffEmployee }) {
+  if (!employee.hasAccount) return null
   if (!employee.enabled) {
     return (
       <span className="flex shrink-0 items-center gap-1 text-red-700 dark:text-red-300">

@@ -182,6 +182,35 @@ class StaffIntegrationTests {
     }
 
     @Test
+    void employeeWithoutAccountHasOnlyNameAndPosition() throws Exception {
+        String surname = surname();
+        String employee = id(send(owner, post(path("/employees/without-account")),
+                "{\"displayName\":\" Ewa " + surname + " \",\"positionId\":\"" + cashier + "\",\"shifts\":[]}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.hasAccount").value(false))
+                .andExpect(jsonPath("$.userId").isEmpty())
+                .andExpect(jsonPath("$.username").isEmpty())
+                .andExpect(jsonPath("$.displayName").value("Ewa " + surname))
+                .andExpect(jsonPath("$.positionName").value("Kasjer")));
+        assertThat(jdbc.queryForObject("select count(*) from users where display_name = ?", Integer.class,
+                "Ewa " + surname)).isZero();
+
+        send(owner, put(path("/employees/" + employee)),
+                "{\"displayName\":\"Ewa Nowa " + surname + "\",\"email\":null,\"positionId\":\"" + cashier
+                        + "\",\"shifts\":[]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("Ewa Nowa " + surname));
+        send(owner, post(path("/employees/" + employee + "/invitation")), null).andExpect(status().isConflict());
+
+        send(owner, delete(path("/employees/" + employee)), null).andExpect(status().isNoContent());
+        send(owner, post(path("/employees/" + employee + "/restore")), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.endedAt").isEmpty());
+        mvc.perform(get(path("/employees")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.id == '" + employee + "')].displayName").value("Ewa Nowa " + surname));
+    }
+
+    @Test
     void endingEmploymentBlocksAccountAndRestoreBringsItBack() throws Exception {
         Cookie worker = worker(cashierRole);
         String userId = jdbc.queryForObject("""

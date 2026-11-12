@@ -73,6 +73,8 @@ export type EmployeeInvite = {
   shifts: StaffShift[]
 }
 
+export type EmployeeWithoutAccount = { displayName: string; positionId: string; shifts: StaffShift[] }
+
 export type EmployeeAssignment = { userId: string; positionId: string; shifts: StaffShift[] }
 
 export type EmployeeUpdate = {
@@ -90,6 +92,10 @@ export function useEmployeeActions(storeId: string) {
   const invite = useMutation({
     mutationFn: (request: EmployeeInvite) =>
       api<StaffEmployee>(path(storeId, '/employees'), { method: 'POST', json: request }),
+  })
+  const createWithoutAccount = useMutation({
+    mutationFn: (request: EmployeeWithoutAccount) =>
+      api<StaffEmployee>(path(storeId, '/employees/without-account'), { method: 'POST', json: request }),
   })
   const assign = useMutation({
     mutationFn: (request: EmployeeAssignment) =>
@@ -112,7 +118,7 @@ export function useEmployeeActions(storeId: string) {
     mutationFn: ({ id, request }: { id: string; request: EmployeeTransfer }) =>
       api<StaffEmployee>(path(storeId, `/employees/${id}/transfer`), { method: 'POST', json: request }),
   })
-  return { invite, assign, update, end, restore, resendInvitation, transfer }
+  return { invite, createWithoutAccount, assign, update, end, restore, resendInvitation, transfer }
 }
 
 export function useStructureActions(storeId: string) {

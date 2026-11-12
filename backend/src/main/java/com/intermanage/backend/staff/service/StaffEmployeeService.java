@@ -20,6 +20,7 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.staff.dto.AccountOption;
 import com.intermanage.backend.staff.dto.AssignEmployeeRequest;
 import com.intermanage.backend.staff.dto.CreateEmployeeRequest;
+import com.intermanage.backend.staff.dto.CreatePlainEmployeeRequest;
 import com.intermanage.backend.staff.dto.EmployeeResponse;
 import com.intermanage.backend.staff.dto.ShiftRequest;
 import com.intermanage.backend.staff.dto.TransferEmployeeRequest;
@@ -40,7 +41,8 @@ import com.intermanage.backend.store.repository.StoreRepository;
 import com.intermanage.backend.store.service.StoreService;
 
 /**
- * Pracownicy firmy. Pracownik to konto w aplikacji i stanowisko, a rola konta wynika ze stanowiska. Należy do firmy,
+ * Pracownicy firmy. Pracownik to konto w aplikacji (albo samo imię i nazwisko, gdy nie korzysta z aplikacji) i
+ * stanowisko, a rola konta wynika ze stanowiska. Należy do firmy,
  * więc może przejść do innego sklepu z tym samym NIP-em, a kadry widzą naraz wszystkie swoje sklepy firmy. Stałe
  * godziny mogą być spoza godzin stanowiska, bo zdarzają się wyjątki. Osoba zarządzająca nie może zmieniać kont z
  * większymi uprawnieniami niż jej własne ({@link RoleGrantService}).
@@ -118,6 +120,19 @@ public class StaffEmployeeService {
         return save(store, user, position, request.shifts(), actorId);
     }
 
+    /** Bez konta: tylko imię i nazwisko, więc bez loginu, e-maila i roli. */
+    @Transactional
+    public EmployeeResponse createWithoutAccount(UUID storeId, CreatePlainEmployeeRequest request, UUID actorId) {
+        Store store = store(storeId);
+        StaffPosition position = activePosition(store, request.positionId());
+        AppUser actor = users.getReferenceById(actorId);
+        StaffEmployee employee = employees.saveAndFlush(
+                StaffEmployee.withoutAccount(store, request.displayName().strip(), position, actor));
+        shiftService.replace(List.of(), request.shifts(), hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
+        shifts.flush();
+        return response(employee);
+    }
+
     @Transactional
     public EmployeeResponse assign(UUID storeId, AssignEmployeeRequest request, UUID actorId) {
         Store store = store(storeId);
@@ -138,14 +153,20 @@ public class StaffEmployeeService {
     public EmployeeResponse update(UUID storeId, UUID id, UpdateEmployeeRequest request, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
         AppUser user = employee.getUser();
-        grants.requireGrantable(actorId, user.getRole());
+        requireGrantable(actorId, user);
         if (!employee.getPosition().getId().equals(request.positionId())) {
             StaffPosition position = activePosition(employee.getStore(), request.positionId());
-            grants.requireGrantable(actorId, position.getRole());
+            if (user != null) {
+                grants.requireGrantable(actorId, position.getRole());
+            }
             employee.setPosition(position);
             StaffStructureService.applyRole(employee, position.getRole());
         }
-        userService.updateProfile(user, request.displayName(), request.email());
+        if (user != null) {
+            userService.updateProfile(user, request.displayName(), request.email());
+        } else {
+            employee.setFullName(request.displayName().strip());
+        }
         AppUser actor = users.getReferenceById(actorId);
         shiftService.replace(shifts.findActiveOfEmployees(List.of(id)), request.shifts(),
                 hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
@@ -173,7 +194,7 @@ public class StaffEmployeeService {
     public EmployeeResponse transfer(UUID storeId, UUID id, TransferEmployeeRequest request, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
         AppUser user = employee.getUser();
-        grants.requireGrantable(actorId, user.getRole());
+        requireGrantable(actorId, user);
 
         Store source = employee.getStore();
         Store target = store(request.storeId());
@@ -190,13 +211,15 @@ public class StaffEmployeeService {
             throw ApiException.forbidden("Nie masz dostępu do sklepu " + target.getNumber());
         }
         StaffPosition position = activePosition(target, request.positionId());
-        grants.requireGrantable(actorId, position.getRole());
+        if (user != null) {
+            grants.requireGrantable(actorId, position.getRole());
+        }
 
         AppUser actor = users.getReferenceById(actorId);
         moves.save(new StaffEmployeeMove(employee, source, target, employee.getPosition(), position, actor));
         employee.moveTo(target, position);
         StaffStructureService.applyRole(employee, position.getRole());
-        if (!user.getRole().isOwner()) {
+        if (user != null && !user.getRole().isOwner()) {
             user.getStores().removeIf(store -> store.getId().equals(source.getId()));
             user.getStores().add(target);
         }
@@ -211,12 +234,12 @@ public class StaffEmployeeService {
     public void end(UUID storeId, UUID id, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
         AppUser user = employee.getUser();
-        grants.requireGrantable(actorId, user.getRole());
-        if (user.getId().equals(actorId)) {
+        requireGrantable(actorId, user);
+        if (user != null && user.getId().equals(actorId)) {
             throw ApiException.conflict("Nie możesz zakończyć pracy na własnym koncie");
         }
         employee.markEnded(users.getReferenceById(actorId));
-        if (!user.getRole().isOwner()) {
+        if (user != null && !user.getRole().isOwner()) {
             user.setEnabled(false);
         }
     }
@@ -232,12 +255,16 @@ public class StaffEmployeeService {
         if (position.getDeletedAt() != null) {
             throw ApiException.conflict("Stanowisko tej osoby jest usunięte. Najpierw je przywróć.");
         }
-        grants.requireGrantable(actorId, user.getRole());
-        grants.requireGrantable(actorId, position.getRole());
-        requireNotEmployed(user);
+        if (user != null) {
+            grants.requireGrantable(actorId, user.getRole());
+            grants.requireGrantable(actorId, position.getRole());
+            requireNotEmployed(user);
+        }
         employee.restore();
         StaffStructureService.applyRole(employee, position.getRole());
-        user.setEnabled(true);
+        if (user != null) {
+            user.setEnabled(true);
+        }
         employees.flush();
         return response(employee);
     }
@@ -245,6 +272,9 @@ public class StaffEmployeeService {
     @Transactional
     public void resendInvitation(UUID storeId, UUID id, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
+        if (!employee.hasAccount()) {
+            throw ApiException.conflict("Ten pracownik nie ma konta w aplikacji");
+        }
         grants.requireGrantable(actorId, employee.getUser().getRole());
         userService.resendActivationLink(employee.getUser().getId());
     }
@@ -256,6 +286,13 @@ public class StaffEmployeeService {
         shiftService.replace(List.of(), requested, hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
         shifts.flush();
         return response(employee);
+    }
+
+    /** Pracownik bez konta nie ma uprawnień, więc zmienić go może każdy z {@code STAFF:EDIT}. */
+    private void requireGrantable(UUID actorId, AppUser user) {
+        if (user != null) {
+            grants.requireGrantable(actorId, user.getRole());
+        }
     }
 
     private Set<UUID> accessibleStoreIds(UUID actorId) {

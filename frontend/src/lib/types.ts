@@ -178,9 +178,11 @@ export type StaffDepartment = {
 
 export type StaffEmployee = {
   id: string
-  userId: string
+  /** Puste = pracownik bez konta w aplikacji (samo imię i nazwisko). */
+  userId: string | null
+  hasAccount: boolean
   displayName: string
-  username: string
+  username: string | null
   email: string | null
   enabled: boolean
   pendingActivation: boolean

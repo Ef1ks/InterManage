@@ -19,7 +19,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * Pracownik firmy: konto i stanowisko w sklepie, w którym pracuje teraz. Może przejść do innego sklepu z tym samym
+ * Pracownik firmy: konto (albo samo imię i nazwisko) i stanowisko w sklepie, w którym pracuje teraz. Może przejść do innego sklepu z tym samym
  * NIP-em ({@link StaffEmployeeMove}). Koniec pracy to znacznik, a powrót tej osoby zdejmuje go.
  */
 @Entity
@@ -34,9 +34,13 @@ public class StaffEmployee {
     @JoinColumn(name = "store_id", nullable = false)
     private Store store;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, updatable = false)
+    /** Konto w aplikacji; puste = pracownik bez konta (tylko imię i nazwisko w {@link #fullName}). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", updatable = false)
     private AppUser user;
+
+    @Column(name = "full_name", length = 100)
+    private String fullName;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "position_id", nullable = false)
@@ -71,6 +75,13 @@ public class StaffEmployee {
         this.createdBy = createdBy;
     }
 
+    public static StaffEmployee withoutAccount(Store store, String fullName, StaffPosition position,
+            AppUser createdBy) {
+        StaffEmployee employee = new StaffEmployee(store, null, position, createdBy);
+        employee.fullName = fullName;
+        return employee;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();
@@ -96,6 +107,22 @@ public class StaffEmployee {
 
     public AppUser getUser() {
         return user;
+    }
+
+    public boolean hasAccount() {
+        return user != null;
+    }
+
+    /** Imię i nazwisko: z konta, a bez konta z wpisu pracownika. */
+    public String getDisplayName() {
+        return user != null ? user.getDisplayName() : fullName;
+    }
+
+    public void setFullName(String fullName) {
+        if (user != null) {
+            throw new IllegalStateException("Pracownik z kontem ma imię i nazwisko w koncie");
+        }
+        this.fullName = fullName;
     }
 
     public StaffPosition getPosition() {

@@ -376,7 +376,7 @@ public class StaffRecordService {
         Fte fte = current == null ? null : file.fteOn(current, today);
         Integer remaining = current != null && current.isEmployment()
                 ? LeaveCalculator.forYear(file, today.getYear(), today).remainingDays() : null;
-        return new StaffRecordRow(employee.getId(), employee.getUser().getDisplayName(), employee.getStore().getId(),
+        return new StaffRecordRow(employee.getId(), employee.getDisplayName(), employee.getStore().getId(),
                 employee.getStore().getNumber(), employee.getStore().getName(),
                 employee.getPosition().getDepartment().getId(), employee.getPosition().getDepartment().getName(),
                 employee.getPosition().getName(), employee.getEndedAt(),

@@ -215,10 +215,10 @@ public class StaffStructureService {
         return list(storeId);
     }
 
-    /** Właściciel zostaje właścicielem także na stanowisku z inną rolą. */
+    /** Właściciel zostaje właścicielem także na stanowisku z inną rolą. Pracownik bez konta nie ma roli. */
     static void applyRole(StaffEmployee employee, Role role) {
         AppUser user = employee.getUser();
-        if (!user.getRole().isOwner()) {
+        if (user != null && !user.getRole().isOwner()) {
             user.setRole(role);
         }
     }
