@@ -65,6 +65,11 @@ public final class ScheduleRules {
     public record Days(Predicate<LocalDate> openHoliday, List<DayOff> compensating, boolean flexibleTime) {
 
         public static final Days NONE = new Days(day -> false, List.of(), false);
+
+        /** Bez ruchomego czasu pracy: wcześniejszy start w tej samej dobie daje ostrzeżenie. */
+        public Days(Predicate<LocalDate> openHoliday, List<DayOff> compensating) {
+            this(openHoliday, compensating, false);
+        }
     }
 
     /** {@code day} pusty: dotyczy całego okresu. */
