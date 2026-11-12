@@ -215,7 +215,12 @@ class StaffTimeIntegrationTests {
     @Test
     void lateArrivalIsBalancedAndAttentionCountsOpenDays() throws Exception {
         // Licznik w menu liczy ostatnie 31 dni do dziś: wczoraj spóźnienie i dłuższe zostanie czekają na reakcję.
-        String yesterday = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Warsaw")).minusDays(1).toString();
+        // W zamknięte święto zmiany nie da się ułożyć (409), więc bierzemy ostatni dzień przed dziś, który nim nie jest.
+        java.time.LocalDate open = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Warsaw")).minusDays(1);
+        while (com.intermanage.backend.staff.component.ScheduleCalendar.holiday(open) != null) {
+            open = open.minusDays(1);
+        }
+        String yesterday = open.toString();
         send(owner, put(staff("/schedule/entries")), "{\"departmentId\":\"" + department + "\",\"month\":\""
                 + yesterday.substring(0, 7) + "\",\"changes\":[{\"employeeId\":\"" + employee + "\",\"date\":\""
                 + yesterday + "\",\"start\":\"06:00\",\"end\":\"14:00\",\"storeId\":null}]}")
