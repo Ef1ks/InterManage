@@ -3,6 +3,7 @@ package com.intermanage.backend.staff.mapper;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -61,7 +62,8 @@ public interface StaffMapper {
     @Mapping(target = "shifts", source = "shifts")
     @Mapping(target = "createdAt", source = "employee.createdAt")
     @Mapping(target = "endedAt", source = "employee.endedAt")
-    EmployeeResponse toResponse(StaffEmployee employee, List<StaffShift> shifts);
+    @Mapping(target = "extraPositionIds", source = "extraPositionIds")
+    EmployeeResponse toResponse(StaffEmployee employee, List<StaffShift> shifts, List<UUID> extraPositionIds);
 
     @Mapping(target = "roleName", source = "role.name")
     @Mapping(target = "owner", source = "role.owner")

@@ -39,6 +39,7 @@ import {
   brushHours,
   cellsByDate,
   dayOfWeek,
+  dayPositionsOf,
   formatDay,
   daysBetween,
   formatPay,
@@ -240,6 +241,8 @@ function Loaded({
   const records = useStaffRecords(store.id, useCan('STAFF_RECORDS', 'VIEW'))
   const leaveLeft = new Map(records.data?.map((record) => [record.employeeId, record.remainingLeave]))
   const [brush, setBrush] = useState<Brush>(null)
+  /** Stanowisko do szybkiego wpisywania godzin; puste = stałe stanowisko każdego pracownika. */
+  const [brushPosition, setBrushPosition] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'publish' | 'versions' | 'settings' | 'layout' | null>(null)
   const [copied, setCopied] = useState<ScheduleRow | null>(null)
   const { canEdit, viewedVersion, status, rows, days, versions } = schedule
@@ -293,6 +296,8 @@ function Loaded({
     )
   }
 
+  const positionName = (id: string | null) => schedule.positions.find((position) => position.id === id)?.name ?? ''
+
   const clear = (row: ScheduleRow, day: ScheduleDay) => {
     const cell = cellsByDate(row).get(day.date)
     if (!cell?.start && !cell?.dayOff) return
@@ -305,8 +310,9 @@ function Loaded({
       storeId: cell.storeId,
       dayOff: cell.dayOff,
       forDate: cell.forDate,
+      positionId: cell.positionId,
     }
-    save([{ ...previous, start: null, end: null, storeId: null, dayOff: null, forDate: null }], () =>
+    save([{ ...previous, start: null, end: null, storeId: null, dayOff: null, forDate: null, positionId: null }], () =>
       toast(`Wyczyszczono: ${row.name}, ${formatDay(day.date)}`, {
         action: { label: 'Przywróć', onClick: () => save([previous]) },
       }),
@@ -361,6 +367,13 @@ function Loaded({
       const dayOff = { start: null, end: null, storeId: null, dayOff: brush, forDate: null } as const
       save([{ employeeId: row.employeeId, date: day.date, ...dayOff }])
     } else if (brush) {
+      const allowed = brushPosition === null || dayPositionsOf(schedule, row).some((p) => p.id === brushPosition)
+      if (!allowed || (brushPosition !== null && row.civil)) {
+        toast(`${row.name} nie ma stanowiska ${positionName(brushPosition)} na liście swoich stanowisk`, {
+          description: 'Dodaj je w Pracownikach (edycja pracownika, „Może też pracować na”).',
+        })
+        return
+      }
       save([
         {
           employeeId: row.employeeId,
@@ -369,6 +382,7 @@ function Loaded({
           end: brush.end,
           storeId: null,
           civil: row.civil,
+          positionId: brushPosition === row.positionId ? null : brushPosition,
         },
       ])
     } else setEdited({ row, day, target })
@@ -381,6 +395,7 @@ function Loaded({
   const paste = (target: ScheduleRow) => {
     const source = cellsByDate(rows.find((row) => row.employeeId === copied?.employeeId && !row.civil) ?? target)
     const current = cellsByDate(target)
+    const targetPositions = new Set(dayPositionsOf(schedule, target).map((position) => position.id))
     const wanted: ScheduleChange[] = []
     const previous: ScheduleChange[] = []
     for (const { date, closed } of days) {
@@ -389,11 +404,17 @@ function Loaded({
       if (to?.absent || target.outOfContractDays.includes(date)) continue
       if (closed && !to?.start) continue
       if (from?.absent && !from.start) continue
+      // Stanowisko dnia przechodzi tylko, gdy odbiorca ma je na liście swoich stanowisk.
+      const fromPosition =
+        from?.positionId && targetPositions.has(from.positionId) && from.positionId !== target.positionId
+          ? from.positionId
+          : null
       const same =
         from?.start === to?.start &&
         from?.end === to?.end &&
         from?.dayOff === to?.dayOff &&
-        from?.forDate === to?.forDate
+        from?.forDate === to?.forDate &&
+        fromPosition === (to?.positionId ?? null)
       if (same) continue
       const base = { employeeId: target.employeeId, date }
       wanted.push({
@@ -403,6 +424,7 @@ function Loaded({
         storeId: from?.storeId ?? null,
         dayOff: from?.dayOff ?? null,
         forDate: from?.forDate ?? null,
+        positionId: fromPosition,
       })
       previous.push({
         ...base,
@@ -411,6 +433,7 @@ function Loaded({
         storeId: to?.storeId ?? null,
         dayOff: to?.dayOff ?? null,
         forDate: to?.forDate ?? null,
+        positionId: to?.positionId ?? null,
       })
     }
     if (wanted.length === 0) {
@@ -527,6 +550,22 @@ function Loaded({
             className="flex flex-wrap items-center gap-0.5 rounded-xl bg-muted p-1"
           >
             <span className="px-2 text-xs text-muted-foreground">Wpisuj klikiem</span>
+            {schedule.positions.length > 1 && Object.keys(schedule.dayPositions).length > 0 && (
+              <select
+                aria-label="Stanowisko do wpisywania godzin"
+                title="Stanowisko, na które wpisujesz godziny; puste = stałe stanowisko każdego pracownika"
+                value={brushPosition ?? ''}
+                onChange={(event) => setBrushPosition(event.target.value || null)}
+                className="h-7 rounded-md border border-input bg-background px-1.5 text-xs dark:bg-input/30"
+              >
+                <option value="">Stałe stanowisko</option>
+                {schedule.positions.map((position) => (
+                  <option key={position.id} value={position.id}>
+                    {position.name}
+                  </option>
+                ))}
+              </select>
+            )}
             {brushes.map((hours) => {
               const active = typeof brush === 'object' && brush !== null && sameHours(brush, hours)
               return (
@@ -648,7 +687,13 @@ function Loaded({
       {brush !== null && (
         <BrushCursor
           icon={brush === 'clear' ? <EraserIcon /> : <PaintbrushIcon />}
-          label={brush === 'clear' ? 'Czyść' : typeof brush === 'string' ? brush : shiftLabel(brush)}
+          label={
+            brush === 'clear'
+              ? 'Czyść'
+              : typeof brush === 'string'
+                ? brush
+                : `${shiftLabel(brush)}${brushPosition ? ` · ${positionName(brushPosition)}` : ''}`
+          }
         />
       )}
       {copied !== null && <BrushCursor icon={<ClipboardPasteIcon />} label={`Wklej: ${copied.name}`} />}

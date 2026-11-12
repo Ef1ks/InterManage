@@ -45,6 +45,9 @@ public class StaffScheduleVersionEntry {
     @Column(nullable = false, updatable = false)
     private boolean civil;
 
+    @Column(name = "position_id", updatable = false)
+    private UUID positionId;
+
     protected StaffScheduleVersionEntry() {
     }
 
@@ -55,6 +58,11 @@ public class StaffScheduleVersionEntry {
         this.start = entry.getStart();
         this.end = entry.getEnd();
         this.civil = entry.isCivil();
+        this.positionId = entry.getPositionId();
+    }
+
+    public UUID getPositionId() {
+        return positionId;
     }
 
     public boolean isCivil() {

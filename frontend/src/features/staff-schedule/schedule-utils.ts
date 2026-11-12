@@ -1,5 +1,5 @@
 import { parseIsoDate } from '@/lib/dates'
-import type { ScheduleCell, SchedulePosition, ScheduleRow, StaffDay } from '@/lib/types'
+import type { Schedule, ScheduleCell, SchedulePosition, ScheduleRow, StaffDay } from '@/lib/types'
 import { distinctHours, type ShiftHours } from '@/features/staff/shifts'
 
 const WEEK: StaffDay[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
@@ -106,4 +106,20 @@ export function hoursFor(row: ScheduleRow, position: SchedulePosition | undefine
 /** Godziny do szybkiego wpisywania: wszystkie z działu, bez względu na dzień tygodnia. */
 export function brushHours(positions: SchedulePosition[], rows: ScheduleRow[]): ShiftHours[] {
   return distinctHours([...positions.flatMap((position) => position.shifts), ...rows.flatMap((row) => row.fixedShifts)])
+}
+
+/** Stanowiska, na których pracownik może być danego dnia: stałe i te z jego listy (umie je obsłużyć). */
+export function dayPositionsOf(schedule: Schedule, row: ScheduleRow): SchedulePosition[] {
+  const ids = [row.positionId, ...(schedule.dayPositions[row.employeeId] ?? [])]
+  return ids.flatMap((id) => schedule.positions.filter((position) => position.id === id))
+}
+
+/** Stanowisko komórki: tego dnia albo stałe. */
+export const cellPositionId = (row: ScheduleRow, cell: ScheduleCell | undefined) => cell?.positionId ?? row.positionId
+
+/** Skrót stanowiska do rogu komórki: pierwsze litery słów (Kasa główna → KG), przy jednym słowie dwie litery. */
+export function positionShort(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  const short = words.length > 1 ? words.map((word) => word[0]).join('') : (words[0] ?? '').slice(0, 2)
+  return short.slice(0, 3).toUpperCase()
 }

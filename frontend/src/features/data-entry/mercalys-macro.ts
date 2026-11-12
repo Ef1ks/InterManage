@@ -229,9 +229,9 @@ export function buildItm8Macro(items: Itm8MacroItem[]) {
       `# ${index + 1}/${items.length}: ITM8 ${itm8} · EAN ${item.ean}`,
       `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.eanField}|^a${item.ean}{Enter}`,
-      // Wczytany artykuł ma ITM8; po ZER. pole jest puste, więc stara karta nie uda wczytanej.
+      // Wczytany artykuł ma ITM8; po ZER. pole jest puste, więc stara karta nie uda wczytanej. Pola EAN nie
+      // sprawdzamy: karta pokazuje w nim EAN priorytetowy artykułu, który bywa innym kodem niż wpisany.
       `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*[1-9]\\d*$|${PAGE_TIMEOUT_MS}`,
-      `WEBVALUE|${WINDOW}|${screen.eanField}|^0*${withoutLeadingZeros(item.ean)}$`,
       `WEBCLICK|${WINDOW}|${screen.itm8Button}`,
       `WEBWAIT|${WINDOW}|${screen.newItm8Field}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.newItm8Field}|^a${itm8}{Tab}`,

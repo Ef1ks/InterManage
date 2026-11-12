@@ -51,6 +51,10 @@ public class StaffScheduleEntry {
     @Column(nullable = false, updatable = false)
     private boolean civil;
 
+    /** Stanowisko tego dnia, gdy inne niż stałe pracownika; puste = stałe. */
+    @Column(name = "position_id", updatable = false)
+    private UUID positionId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
     private AppUser createdBy;
@@ -70,12 +74,13 @@ public class StaffScheduleEntry {
 
     public StaffScheduleEntry(StaffSchedule schedule, StaffEmployee employee, LocalDate workDate, LocalTime start,
             LocalTime end, AppUser createdBy) {
-        this(schedule, employee, workDate, start, end, false, createdBy);
+        this(schedule, employee, workDate, start, end, false, null, createdBy);
     }
 
     public StaffScheduleEntry(StaffSchedule schedule, StaffEmployee employee, LocalDate workDate, LocalTime start,
-            LocalTime end, boolean civil, AppUser createdBy) {
+            LocalTime end, boolean civil, UUID positionId, AppUser createdBy) {
         this.schedule = schedule;
+        this.positionId = positionId;
         this.employee = employee;
         this.workDate = workDate;
         this.start = start;
@@ -92,6 +97,10 @@ public class StaffScheduleEntry {
     public void markDeleted(AppUser by) {
         deletedAt = Instant.now();
         deletedBy = by;
+    }
+
+    public UUID getPositionId() {
+        return positionId;
     }
 
     public StaffSchedule getSchedule() {

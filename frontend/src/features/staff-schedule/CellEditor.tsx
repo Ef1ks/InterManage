@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import type { ScheduleChange } from '@/features/staff-schedule/api'
 import {
   absenceOf,
+  cellPositionId,
   cellsByDate,
+  dayPositionsOf,
   dayMonth,
   dayOffReason,
   daysBetween,
@@ -123,7 +125,10 @@ function EditorBody({
 }) {
   const { row, day } = edited
   const cell = cellsByDate(row).get(day.date)
-  const position = schedule.positions.find((candidate) => candidate.id === row.positionId)
+  // Stanowisko dnia tylko z listy pracownika; godziny do wyboru idą za wybranym stanowiskiem.
+  const allowedPositions = row.civil ? [] : dayPositionsOf(schedule, row)
+  const [dayPosition, setDayPosition] = useState(cellPositionId(row, cell))
+  const position = schedule.positions.find((candidate) => candidate.id === dayPosition)
   const options = hoursFor(row, position, day.date)
   const [targetStore, setTargetStore] = useState(cell?.storeId ?? storeId)
   // Dzień w innym sklepie zdarza się rzadko, więc wybór sklepu jest schowany, dopóki dzień nie jest gdzie indziej.
@@ -143,7 +148,7 @@ function EditorBody({
   const markOff = (dayOff: ScheduleDayOffKind, forDate: string | null) =>
     onChange({ employeeId: row.employeeId, date: day.date, start: null, end: null, storeId: null, dayOff, forDate })
 
-  const save = (hours: ShiftHours) =>
+  const save = (hours: ShiftHours, positionId = dayPosition) =>
     onChange({
       employeeId: row.employeeId,
       date: day.date,
@@ -151,7 +156,14 @@ function EditorBody({
       end: hours.end,
       storeId: targetStore === storeId ? null : targetStore,
       civil: row.civil,
+      positionId: positionId === row.positionId ? null : positionId,
     })
+
+  /** Zmiana stanowiska przy ułożonych godzinach zapisuje się od razu; bez godzin dotyczy następnego wpisu. */
+  const pickPosition = (positionId: string) => {
+    setDayPosition(positionId)
+    if (current && positionId !== cellPositionId(row, cell)) save(current, positionId)
+  }
 
   return (
     <div className="grid gap-3">
@@ -252,6 +264,28 @@ function EditorBody({
               {store.number}
             </Button>
           ))}
+        </div>
+      )}
+
+      {!day.closed && allowedPositions.length > 1 && (
+        <div className="grid gap-1">
+          <p className="text-xs text-muted-foreground">Stanowisko tego dnia</p>
+          <div role="group" aria-label="Stanowisko tego dnia" className="flex flex-wrap gap-1">
+            {allowedPositions.map((candidate) => (
+              <Button
+                key={candidate.id}
+                type="button"
+                size="sm"
+                variant={dayPosition === candidate.id ? 'default' : 'outline'}
+                aria-pressed={dayPosition === candidate.id}
+                title={candidate.id === row.positionId ? 'Stałe stanowisko' : undefined}
+                onClick={() => pickPosition(candidate.id)}
+              >
+                {candidate.name}
+                {candidate.id === row.positionId && <span className="opacity-60">(stałe)</span>}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 

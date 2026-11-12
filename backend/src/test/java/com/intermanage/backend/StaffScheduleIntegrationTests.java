@@ -106,6 +106,39 @@ class StaffScheduleIntegrationTests {
     }
 
     @Test
+    void dayPositionComesFromEmployeeListAndCountsInStaffing() throws Exception {
+        String positions = send(owner, post(staff("/positions")), "{\"departmentId\":\"" + department
+                + "\",\"name\":\"Sala\",\"roleId\":\"" + role + "\",\"shifts\":[]}")
+                .andReturn().getResponse().getContentAsString();
+        String hall = first(positions, "$[?(@.name=='Kasy')].positions[?(@.name=='Sala')].id");
+        String dayOnHall = "{\"employeeId\":\"" + employee + "\",\"date\":\"2026-12-01\",\"start\":\"06:00\","
+                + "\"end\":\"14:00\",\"storeId\":null,\"positionId\":\"" + hall + "\"}";
+
+        // Stanowiska spoza listy pracownika nie da się wpisać na dzień.
+        change(owner, dayOnHall).andExpect(status().isConflict());
+
+        String people = send(owner, get(staff("/employees")), null).andReturn().getResponse().getContentAsString();
+        String name = first(people, "$[?(@.id=='" + employee + "')].displayName");
+        String email = first(people, "$[?(@.id=='" + employee + "')].email");
+        send(owner, put(staff("/employees/" + employee)), "{\"displayName\":\"" + name + "\",\"email\":\"" + email
+                + "\",\"positionId\":\"" + position + "\",\"shifts\":[],\"extraPositionIds\":[\"" + hall + "\"]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.extraPositionIds[0]").value(hall));
+
+        change(owner, dayOnHall)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows[0].cells[0].positionId").value(hall))
+                .andExpect(jsonPath("$.dayPositions['" + employee + "'][0]").value(hall))
+                .andExpect(jsonPath("$.positions[?(@.name=='Sala')].counts[0]").value(1))
+                .andExpect(jsonPath("$.positions[?(@.name=='Kasjer')].counts[0]").value(0));
+
+        // Stałe stanowisko zapisuje się jako puste, więc dotychczasowe grafiki się nie zmieniają.
+        change(owner, dayOnHall.replace(hall, position))
+                .andExpect(jsonPath("$.rows[0].cells[0].positionId").isEmpty())
+                .andExpect(jsonPath("$.positions[?(@.name=='Kasjer')].counts[0]").value(1));
+    }
+
+    @Test
     void changingHoursKeepsPreviousEntryAsDeleted() throws Exception {
         change(owner, cell(employee, "2026-12-01", "06:00", "14:00", null)).andExpect(status().isOk());
         change(owner, cell(employee, "2026-12-01", "07:00", "15:00", null))

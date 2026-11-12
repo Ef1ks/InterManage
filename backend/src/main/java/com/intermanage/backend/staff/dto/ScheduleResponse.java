@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.intermanage.backend.staff.entity.ScheduleDayOffKind;
@@ -13,11 +14,13 @@ import com.intermanage.backend.store.dto.StoreSummary;
 /**
  * Grafik działu na miesiąc. Układający widzi stan bieżący z wymiarem i ostrzeżeniami, a pozostali ostatnią publikację,
  * bez liczb z umów. {@code status}: DRAFT nigdy nie opublikowany, PUBLISHED zgodny z ostatnią wersją, CHANGED zmieniony po
- * publikacji. {@code viewedVersion}: oglądana stara wersja, tylko do odczytu.
+ * publikacji. {@code viewedVersion}: oglądana stara wersja, tylko do odczytu. {@code dayPositions}: pracownik → stanowiska
+ * działu poza stałym, które można mu wpisać na dzień (umie je obsłużyć).
  */
 public record ScheduleResponse(UUID departmentId, String month, String status, boolean canEdit, boolean canConfigure,
         Integer viewedVersion, LocalDate periodStart, LocalDate periodEnd, List<Version> versions, List<Day> days,
-        List<Position> positions, List<Group> groups, List<Row> rows, List<StoreSummary> stores, boolean showsPay) {
+        List<Position> positions, List<Group> groups, List<Row> rows, List<StoreSummary> stores, boolean showsPay,
+        Map<UUID, List<UUID>> dayPositions) {
 
     /** Własna grupa pracowników. Bez grup tabela dzieli ludzi według stanowisk. */
     public record Group(UUID id, String name) {
@@ -31,7 +34,7 @@ public record ScheduleResponse(UUID departmentId, String month, String status, b
     public record Day(LocalDate date, String holiday, boolean closed) {
     }
 
-    /** {@code counts}: obsada kolejnych dni z {@link ScheduleResponse#days}. */
+    /** {@code counts}: obsada kolejnych dni z {@link ScheduleResponse#days}, według stanowiska tego dnia. */
     public record Position(UUID id, String name, Integer minCount, Integer targetCount, List<ShiftResponse> shifts, List<Integer> counts) {
     }
 
@@ -59,7 +62,7 @@ public record ScheduleResponse(UUID departmentId, String month, String status, b
      */
     public record Cell(LocalDate date, String start, String end, UUID storeId, String store, boolean absent,
             String absence, ScheduleDayOffKind dayOff, LocalDate forDate, StaffRecordResponse.Leave leave,
-            Integer timeOffMinutes, TimeOffInitiative timeOffInitiative) {
+            Integer timeOffMinutes, TimeOffInitiative timeOffInitiative, UUID positionId) {
     }
 
     public record Warning(LocalDate date, String message, String basis) {

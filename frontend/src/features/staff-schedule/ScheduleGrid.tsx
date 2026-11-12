@@ -9,6 +9,7 @@ import {
   dayMonth,
   dayNumber,
   dayOffReason,
+  positionShort,
   formatPay,
   hoursLabel,
   weekdayLabel,
@@ -128,6 +129,22 @@ export function ScheduleGrid({
   const staffing = positions.filter(
     (position) => position.minCount !== null || position.targetCount !== null || position.counts.some(Boolean),
   )
+  /** Stanowisko dnia, gdy inne niż stałe (do skrótu w komórce). */
+  const dayPositionName = (row: ScheduleRow, cell: ScheduleCell | undefined) =>
+    cell?.positionId && cell.positionId !== row.positionId
+      ? (positions.find((position) => position.id === cell.positionId)?.name ?? null)
+      : null
+  /** Kto tego dnia jest na stanowisku: liczone tak jak obsada z serwera (zmiana w tym sklepie, bez nieobecności). */
+  const peopleOn = (positionId: string, date: string) => [
+    ...new Set(
+      rows
+        .filter((row) => {
+          const cell = row.cells.find((candidate) => candidate.date === date)
+          return cell?.start && !cell.store && !cell.absent && (cell.positionId ?? row.positionId) === positionId
+        })
+        .map((row) => row.name),
+    ),
+  ]
   const order = groups.flatMap((group) => group.rows)
   const today = todayIso()
 
@@ -260,6 +277,7 @@ export function ScheduleGrid({
                       >
                         <DayCell
                           cell={visible(cells.get(day.date), day)}
+                          dayPosition={dayPositionName(row, cells.get(day.date))}
                           flagged={flagged.has(day.date)}
                           label={`${row.name}${row.civil ? ' (zlecenie)' : ''}, ${day.date}${row.outOfContractDays.includes(day.date) ? ', brak umowy' : ''}`}
                           position={`${rowIndex}:${column}`}
@@ -320,6 +338,7 @@ export function ScheduleGrid({
                     key={day.date}
                     day={day}
                     count={position.counts[index]}
+                    people={peopleOn(position.id, day.date)}
                     minCount={position.minCount}
                     targetCount={position.targetCount}
                   />
@@ -375,11 +394,14 @@ function RowCopy({
 function StaffingCell({
   day,
   count,
+  people,
   minCount,
   targetCount,
 }: {
   day: ScheduleDay
   count: number
+  /** Kto jest tego dnia na stanowisku, do podpowiedzi. */
+  people: string[]
   minCount: number | null
   targetCount: number | null
 }) {
@@ -387,13 +409,17 @@ function StaffingCell({
   const short = goal !== null && minCount !== null && count < minCount
   const belowTarget = goal !== null && !short && targetCount !== null && count < targetCount
   const reached = goal !== null && count >= goal
-  const title = short
+  const status = short
     ? `Brakuje ${minCount! - count} do minimum`
     : belowTarget
       ? `Brakuje ${targetCount! - count} do celu`
       : reached && targetCount !== null && count > targetCount
         ? `${count - targetCount} ponad cel`
-        : undefined
+        : null
+  const title =
+    [status, people.length > 0 ? `Na stanowisku: ${people.join(', ')}` : count === 0 ? 'Nikt nie obsadza' : null]
+      .filter(Boolean)
+      .join('\n') || undefined
   return (
     <td
       title={title}
@@ -466,6 +492,7 @@ function visible(cell: ScheduleCell | undefined, day: ScheduleDay) {
 
 function DayCell({
   cell,
+  dayPosition,
   flagged,
   label,
   position,
@@ -474,6 +501,8 @@ function DayCell({
   onKeyDown,
 }: {
   cell: ScheduleCell | undefined
+  /** Stanowisko tego dnia, gdy inne niż stałe: skrót w rogu komórki. */
+  dayPosition: string | null
   flagged: boolean
   label: string
   position: string
@@ -512,6 +541,14 @@ function DayCell({
       <>
         <span className="block leading-tight">{clock(cell!.start!)}</span>
         <span className="block leading-tight">{clock(cell!.end!)}</span>
+        {dayPosition && (
+          <span
+            aria-hidden
+            className="absolute bottom-0 left-0 rounded-tr-sm bg-foreground px-0.5 text-[0.5rem] leading-tight font-semibold text-background"
+          >
+            {positionShort(dayPosition)}
+          </span>
+        )}
         {timeOff !== null && (
           <span
             aria-hidden
@@ -528,6 +565,7 @@ function DayCell({
     flagged && 'ring-2 ring-red-600 ring-inset dark:ring-red-400',
   )
   const title = [
+    dayPosition ? `stanowisko tego dnia: ${dayPosition}` : null,
     isOff ? dayOffReason(cell!) : null,
     timeOff !== null
       ? `czas wolny za nadgodziny ${hoursLabel(timeOff)} (${cell!.timeOffInitiative === 'EMPLOYER' ? 'z inicjatywy pracodawcy, 1,5 h za 1 h' : 'na wniosek pracownika, 1 h za 1 h'})`

@@ -202,6 +202,8 @@ export type StaffEmployee = {
   createdAt: string
   /** Koniec pracy w sklepie; da się cofnąć. */
   endedAt: string | null
+  /** Stanowiska działu poza stałym, na których pracownik może pracować w poszczególne dni (grafik). */
+  extraPositionIds: string[]
 }
 
 export type ContractKind = 'EMPLOYMENT' | 'MANDATE' | 'B2B'
@@ -3755,6 +3757,8 @@ export type ScheduleCell = {
   /** Czas wolny za nadgodziny tego dnia w minutach (art. 151² KP); tylko dla układającego. */
   timeOffMinutes: number | null
   timeOffInitiative: TimeOffInitiative | null
+  /** Stanowisko tego dnia, gdy inne niż stałe pracownika; puste = stałe. */
+  positionId: string | null
 }
 
 /** Na wniosek pracownika godzina za godzinę, z inicjatywy pracodawcy półtorej godziny za godzinę (art. 151² KP). */
@@ -3855,6 +3859,8 @@ export type Schedule = {
   stores: StoreSummary[]
   /** Dział liczy wynagrodzenia, a oglądający układa jego grafik. */
   showsPay: boolean
+  /** Pracownik → stanowiska działu poza stałym, które można mu wpisać na dzień (umie je obsłużyć). */
+  dayPositions: Record<string, string[]>
 }
 
 export type ScheduleSettings = {

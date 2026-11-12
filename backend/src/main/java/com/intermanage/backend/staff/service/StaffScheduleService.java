@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -92,6 +93,7 @@ import com.intermanage.backend.staff.repository.StaffEmployeeRepository;
 import com.intermanage.backend.staff.repository.StaffLeaveRepository;
 import com.intermanage.backend.staff.repository.StaffOpenHolidayRepository;
 import com.intermanage.backend.staff.repository.StaffDepartmentPaySettingRepository;
+import com.intermanage.backend.staff.repository.StaffEmployeePositionRepository;
 import com.intermanage.backend.staff.repository.StaffFlexibleTimeSettingRepository;
 import com.intermanage.backend.staff.repository.StaffHourlyRateRepository;
 import com.intermanage.backend.staff.repository.StaffOvertimeTimeOffRepository;
@@ -152,6 +154,7 @@ public class StaffScheduleService {
     private final StaffOvertimeTimeOffRepository timeOffs;
     private final StaffDepartmentPaySettingRepository paySettings;
     private final StaffFlexibleTimeSettingRepository flexibleTime;
+    private final StaffEmployeePositionRepository employeePositions;
     private final StaffHourlyRateRepository hourlyRates;
 
     public StaffScheduleService(StaffScheduleRepository schedules, StaffScheduleEntryRepository entries,
@@ -166,7 +169,8 @@ public class StaffScheduleService {
             StaffLeaveRepository leaves, StaffEmployeeService employeeService, StoreRepository stores,
             AppUserRepository users, StaffLeaveDays leaveDays, StaffTimeService timeService,
             StaffOvertimeTimeOffRepository timeOffs, StaffDepartmentPaySettingRepository paySettings,
-            StaffHourlyRateRepository hourlyRates, StaffFlexibleTimeSettingRepository flexibleTime) {
+            StaffHourlyRateRepository hourlyRates, StaffFlexibleTimeSettingRepository flexibleTime,
+            StaffEmployeePositionRepository employeePositions) {
         this.schedules = schedules;
         this.entries = entries;
         this.versions = versions;
@@ -197,21 +201,22 @@ public class StaffScheduleService {
         this.paySettings = paySettings;
         this.hourlyRates = hourlyRates;
         this.flexibleTime = flexibleTime;
+        this.employeePositions = employeePositions;
     }
 
     /** Zmiana w grafiku albo w jego opublikowanej wersji, sprowadzona do tego, co potrzebne w tabeli. */
     private record Planned(UUID employeeId, LocalDate day, LocalTime start, LocalTime end, Store store, UUID scheduleId,
-            boolean civil) {
+            boolean civil, UUID positionId) {
 
         Planned(StaffScheduleEntry entry) {
             this(entry.getEmployee().getId(), entry.getWorkDate(), entry.getStart(), entry.getEnd(),
-                    entry.getSchedule().getStore(), entry.getSchedule().getId(), entry.isCivil());
+                    entry.getSchedule().getStore(), entry.getSchedule().getId(), entry.isCivil(), entry.getPositionId());
         }
 
         Planned(StaffScheduleVersionEntry entry) {
             this(entry.getEmployee().getId(), entry.getWorkDate(), entry.getStart(), entry.getEnd(),
                     entry.getVersion().getSchedule().getStore(), entry.getVersion().getSchedule().getId(),
-                    entry.isCivil());
+                    entry.isCivil(), entry.getPositionId());
         }
 
         Shift shift() {
@@ -259,7 +264,10 @@ public class StaffScheduleService {
 
         List<ScheduleChangeRequest.Change> wanted = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        for (ScheduleChangeRequest.Change change : request.changes()) {
+        Map<UUID, Set<UUID>> skills = dayPositions(request.changes().stream()
+                .map(ScheduleChangeRequest.Change::employeeId).collect(Collectors.toSet()), department);
+        for (ScheduleChangeRequest.Change requested : request.changes()) {
+            ScheduleChangeRequest.Change change = requested;
             if (!seen.add(change.employeeId() + "/" + change.date() + "/" + change.isCivil())) {
                 throw ApiException.badRequest("Ten sam dzień pracownika podano dwa razy");
             }
@@ -269,6 +277,7 @@ public class StaffScheduleService {
             if (change.dayOff() != null && change.start() != null) {
                 throw ApiException.badRequest("Dzień jest albo zmianą, albo dniem wolnym");
             }
+            change = change.withPosition(dayPosition(employee, change, skills));
             if (change.isCivil()) {
                 // Wiersz zlecenia ma tylko godziny: dni wolne dotyczą umowy o pracę.
                 if (change.dayOff() != null) {
@@ -812,7 +821,10 @@ public class StaffScheduleService {
                 positions(store, department, departmentPositions, days, rows),
                 layoutGroups.stream().map(group -> new ScheduleResponse.Group(group.getId(), group.getName())).toList(),
                 rows,
-                employeeService.companyStores(store.getId(), principal.getId()), showsPay);
+                employeeService.companyStores(store.getId(), principal.getId()), showsPay,
+                dayPositions(rows.stream().map(ScheduleResponse.Row::employeeId).collect(Collectors.toSet()), department)
+                        .entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue()))));
     }
 
     /**
@@ -1070,7 +1082,8 @@ public class StaffScheduleService {
                     off == null ? null : off.forDate(),
                     leave && records ? new StaffRecordResponse.Leave(leaveOn.getId(), leaveOn.getKind(),
                             leaveOn.getStartDate(), leaveOn.getEndDate(), leaveOn.getDays()) : null,
-                    free == null ? null : free.getMinutes(), free == null ? null : free.getInitiative()));
+                    free == null ? null : free.getMinutes(), free == null ? null : free.getInitiative(),
+                    planned == null ? null : planned.positionId()));
         }
         return result;
     }
@@ -1091,9 +1104,9 @@ public class StaffScheduleService {
         return departmentPositions.stream().map(position -> {
             // Osoba z umową o pracę i zleceniem tego dnia to jedna osoba na sali.
             List<Integer> counts = days.stream().map(day -> (int) rows.stream()
-                    .filter(row -> position.getId().equals(row.positionId()))
                     .filter(row -> row.cells().stream().anyMatch(cell -> cell.date().equals(day)
-                            && cell.start() != null && cell.store() == null && !cell.absent()))
+                            && cell.start() != null && cell.store() == null && !cell.absent()
+                            && position.getId().equals(cell.positionId() != null ? cell.positionId() : row.positionId())))
                     .map(ScheduleResponse.Row::employeeId).distinct().count()).toList();
             StaffPositionMinimum count = staffing.get(position.getId());
             return new ScheduleResponse.Position(position.getId(), position.getName(),
@@ -1172,7 +1185,8 @@ public class StaffScheduleService {
         }
         StaffSchedule schedule = schedule(target, department, change.date().withDayOfMonth(1), actor);
         StaffEmployee employee = employees.getReferenceById(change.employeeId());
-        return new StaffScheduleEntry(schedule, employee, change.date(), start, end, change.isCivil(), actor);
+        return new StaffScheduleEntry(schedule, employee, change.date(), start, end, change.isCivil(),
+                change.positionId(), actor);
     }
 
     /**
@@ -1248,7 +1262,37 @@ public class StaffScheduleService {
     private static boolean same(StaffScheduleEntry entry, ScheduleChangeRequest.Change change, Store store) {
         UUID target = change.storeId() == null ? store.getId() : change.storeId();
         return change.start() != null && change.end() != null && entry.getSchedule().getStore().getId().equals(target)
-                && entry.getStart().equals(parseTime(change.start())) && entry.getEnd().equals(parseTime(change.end()));
+                && entry.getStart().equals(parseTime(change.start())) && entry.getEnd().equals(parseTime(change.end()))
+                && Objects.equals(entry.getPositionId(), change.positionId());
+    }
+
+    /** Pracownik → stanowiska działu poza stałym, które umie obsłużyć (tylko je wpisuje się na dzień). */
+    private Map<UUID, Set<UUID>> dayPositions(Collection<UUID> employeeIds, StaffDepartment department) {
+        if (employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        return employeePositions.findActive(employeeIds).stream()
+                .filter(skill -> skill.getPosition().getDepartment().getId().equals(department.getId()))
+                .collect(Collectors.groupingBy(skill -> skill.getEmployee().getId(),
+                        Collectors.mapping(skill -> skill.getPosition().getId(), Collectors.toCollection(LinkedHashSet::new))));
+    }
+
+    /**
+     * Stanowisko dnia do zapisu: stałe albo puste = puste, inne tylko z listy stanowisk pracownika w tym dziale. Dni wolne
+     * i wiersz zlecenia stanowiska nie mają.
+     */
+    private static UUID dayPosition(StaffEmployee employee, ScheduleChangeRequest.Change change,
+            Map<UUID, Set<UUID>> skills) {
+        UUID position = change.positionId();
+        if (position == null || change.start() == null || change.isCivil()
+                || position.equals(employee.getPosition().getId())) {
+            return null;
+        }
+        if (!skills.getOrDefault(employee.getId(), Set.of()).contains(position)) {
+            throw ApiException.conflict(employee.getDisplayName()
+                    + " nie ma tego stanowiska na liście swoich stanowisk. Dodaj je w Pracownikach.");
+        }
+        return position;
     }
 
     /** Dzień w innym dziale albo sklepie bez dostępu należy do kogoś innego: nie nadpisujemy go po cichu. */

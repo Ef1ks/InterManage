@@ -9,11 +9,16 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+/**
+ * {@code extraPositionIds}: stanowiska działu poza stałym, na których pracownik może pracować w poszczególne dni (grafik);
+ * {@code null} = bez zmian.
+ */
 public record UpdateEmployeeRequest(
         @NotBlank(message = "Podaj imię i nazwisko")
         @Size(max = 100, message = "Maksymalnie 100 znaków") String displayName,
         @Email(message = "Podaj poprawny adres e-mail")
         @Size(max = 255, message = "Maksymalnie 255 znaków") String email,
         @NotNull(message = "Wybierz stanowisko") UUID positionId,
-        @NotNull @Size(max = 50, message = "Maksymalnie 50 godzin pracy") List<@Valid ShiftRequest> shifts) {
+        @NotNull @Size(max = 50, message = "Maksymalnie 50 godzin pracy") List<@Valid ShiftRequest> shifts,
+        @Size(max = 50, message = "Maksymalnie 50 stanowisk") List<UUID> extraPositionIds) {
 }

@@ -25,6 +25,8 @@ export type ScheduleChange = {
   forDate?: string | null
   /** Godziny na umowie zlecenia (osobny wiersz). */
   civil?: boolean
+  /** Stanowisko tego dnia, gdy inne niż stałe; puste = stałe. */
+  positionId?: string | null
 }
 
 const scheduleKey = ({ storeId, departmentId, month }: ScheduleScope, version: number | null) =>

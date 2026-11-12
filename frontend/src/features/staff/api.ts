@@ -82,6 +82,8 @@ export type EmployeeUpdate = {
   email: string | null
   positionId: string
   shifts: StaffShift[]
+  /** Stanowiska działu poza stałym, na których może pracować w poszczególne dni; pomijane = bez zmian. */
+  extraPositionIds?: string[]
 }
 
 export type EmployeeTransfer = { storeId: string; positionId: string; shifts: StaffShift[] }

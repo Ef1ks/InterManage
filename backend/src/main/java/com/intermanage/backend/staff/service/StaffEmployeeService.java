@@ -33,6 +33,7 @@ import com.intermanage.backend.staff.entity.StaffPosition;
 import com.intermanage.backend.staff.entity.StaffShift;
 import com.intermanage.backend.staff.mapper.StaffMapper;
 import com.intermanage.backend.staff.repository.StaffEmployeeMoveRepository;
+import com.intermanage.backend.staff.repository.StaffEmployeePositionRepository;
 import com.intermanage.backend.staff.repository.StaffEmployeeRepository;
 import com.intermanage.backend.staff.repository.StaffPositionRepository;
 import com.intermanage.backend.staff.repository.StaffShiftRepository;
@@ -56,6 +57,7 @@ public class StaffEmployeeService {
     private final StaffEmployeeMoveRepository moves;
     private final StaffPositionRepository positions;
     private final StaffShiftRepository shifts;
+    private final StaffEmployeePositionRepository employeePositions;
     private final StaffShiftService shiftService;
     private final StoreRepository stores;
     private final AppUserRepository users;
@@ -68,7 +70,8 @@ public class StaffEmployeeService {
     public StaffEmployeeService(StaffEmployeeRepository employees, StaffEmployeeMoveRepository moves,
             StaffPositionRepository positions, StaffShiftRepository shifts, StaffShiftService shiftService,
             StoreRepository stores, AppUserRepository users, UserService userService, RoleGrantService grants,
-            StaffMapper mapper, StoreService storeService, StoreMapper storeMapper) {
+            StaffMapper mapper, StoreService storeService, StoreMapper storeMapper,
+            StaffEmployeePositionRepository employeePositions) {
         this.employees = employees;
         this.moves = moves;
         this.positions = positions;
@@ -81,6 +84,7 @@ public class StaffEmployeeService {
         this.mapper = mapper;
         this.storeService = storeService;
         this.storeMapper = storeMapper;
+        this.employeePositions = employeePositions;
     }
 
     @Transactional(readOnly = true)
@@ -89,8 +93,10 @@ public class StaffEmployeeService {
         Map<UUID, List<StaffShift>> byEmployee = all.isEmpty() ? Map.of()
                 : shifts.findActiveOfEmployees(all.stream().map(StaffEmployee::getId).toList()).stream()
                         .collect(Collectors.groupingBy(shift -> shift.getEmployee().getId()));
+        Map<UUID, List<UUID>> extra = extraPositions(all.stream().map(StaffEmployee::getId).toList());
         return all.stream()
-                .map(employee -> mapper.toResponse(employee, byEmployee.getOrDefault(employee.getId(), List.of())))
+                .map(employee -> mapper.toResponse(employee, byEmployee.getOrDefault(employee.getId(), List.of()),
+                        extra.getOrDefault(employee.getId(), List.of())))
                 .toList();
     }
 
@@ -224,6 +230,9 @@ public class StaffEmployeeService {
         shiftService.replace(shifts.findActiveOfEmployees(List.of(id)), request.shifts(),
                 hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
         shifts.flush();
+        if (request.extraPositionIds() != null) {
+            saveExtraPositions(employee, request.extraPositionIds(), actor);
+        }
         return response(employee);
     }
 
@@ -355,7 +364,44 @@ public class StaffEmployeeService {
     }
 
     private EmployeeResponse response(StaffEmployee employee) {
-        return mapper.toResponse(employee, shifts.findActiveOfEmployees(List.of(employee.getId())));
+        return mapper.toResponse(employee, shifts.findActiveOfEmployees(List.of(employee.getId())),
+                extraPositions(List.of(employee.getId())).getOrDefault(employee.getId(), List.of()));
+    }
+
+    private Map<UUID, List<UUID>> extraPositions(List<UUID> employeeIds) {
+        if (employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        return employeePositions.findActive(employeeIds).stream().collect(Collectors.groupingBy(
+                skill -> skill.getEmployee().getId(), Collectors.mapping(skill -> skill.getPosition().getId(),
+                        Collectors.toList())));
+    }
+
+    /**
+     * Zastępuje listę dodatkowych stanowisk: tylko aktywne stanowiska działu pracownika, bez stałego. Usunięte dostają
+     * znacznik, a niezmienione zostają.
+     */
+    private void saveExtraPositions(StaffEmployee employee, List<UUID> wanted, AppUser actor) {
+        StaffPosition home = employee.getPosition();
+        Set<UUID> target = new java.util.LinkedHashSet<>(wanted);
+        target.remove(home.getId());
+        for (UUID id : target) {
+            StaffPosition position = activePosition(employee.getStore(), id);
+            if (!position.getDepartment().getId().equals(home.getDepartment().getId())) {
+                throw ApiException.badRequest("Dodatkowe stanowisko musi być w dziale " + home.getDepartment().getName());
+            }
+        }
+        for (var current : employeePositions.findAllActive(employee.getId())) {
+            if (!target.remove(current.getPosition().getId())) {
+                current.markDeleted(actor);
+            }
+        }
+        employeePositions.flush();
+        for (UUID id : target) {
+            employeePositions.save(new com.intermanage.backend.staff.entity.StaffEmployeePosition(employee,
+                    positions.getReferenceById(id), actor));
+        }
+        employeePositions.flush();
     }
 
     private void requireNotEmployed(AppUser user) {

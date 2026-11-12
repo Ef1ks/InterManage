@@ -3,7 +3,15 @@ import { MailIcon, ShieldIcon, UserMinusIcon, UserXIcon } from 'lucide-react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
-import { Form, FormActions, FormNote, SegmentedField, SelectField, TextField } from '@/components/form'
+import {
+  Form,
+  FormActions,
+  FormNote,
+  MultiComboboxField,
+  SegmentedField,
+  SelectField,
+  TextField,
+} from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCurrentUser } from '@/features/auth/api'
@@ -22,6 +30,7 @@ type EmployeeForm = {
   userId: string
   positionId: string
   shifts: StaffShift[]
+  extraPositionIds: string[]
 }
 
 type Mode = 'plain' | 'invite' | 'existing'
@@ -100,6 +109,7 @@ function EmployeeFormBody({
       userId: '',
       positionId: employee?.positionId ?? '',
       shifts: employee?.shifts ?? [],
+      extraPositionIds: employee?.extraPositionIds ?? [],
     },
   })
 
@@ -122,6 +132,10 @@ function EmployeeFormBody({
     value: candidate.id,
     label: `${candidate.departmentName} · ${candidate.name}`,
   }))
+  // Dodatkowe stanowiska: tylko z działu stałego stanowiska, bez niego samego (grafik działu wpisuje je na dzień).
+  const extraOptions = positions
+    .filter((candidate) => candidate.departmentName === position?.departmentName && candidate.id !== positionId)
+    .map((candidate) => ({ value: candidate.id, label: candidate.name }))
   const keepsOwnerRole =
     employee?.ownerAccount || (existing && accounts.some((account) => account.id === userId && account.owner))
   const accountOptions = accounts.map((account) => ({
@@ -139,7 +153,15 @@ function EmployeeFormBody({
       update.mutate(
         {
           id: employee.id,
-          request: { displayName: values.displayName, email: values.email || null, positionId: chosenPosition, shifts },
+          request: {
+            displayName: values.displayName,
+            email: values.email || null,
+            positionId: chosenPosition,
+            shifts,
+            extraPositionIds: values.extraPositionIds.filter((id) =>
+              extraOptions.some((option) => option.value === id),
+            ),
+          },
         },
         {
           onSuccess: () => {
@@ -336,6 +358,22 @@ function EmployeeFormBody({
               : `Uprawnienia w aplikacji: rola ${position.roleName}.`}
           </FormNote>
         )
+      )}
+
+      {employee && extraOptions.length > 0 && (
+        <Controller
+          control={control}
+          name="extraPositionIds"
+          render={({ field }) => (
+            <MultiComboboxField
+              label="Może też pracować na"
+              description="Stanowiska, które ta osoba umie obsłużyć. W grafiku można jej je wpisać na wybrane dni."
+              options={extraOptions}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
       )}
 
       <div className="grid gap-2">
