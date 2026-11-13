@@ -38,13 +38,16 @@ public final class PriceControlFile {
                 + "_" + ProtoFile.loginPart(username) + ".traite0";
     }
 
-    /** EAN w pliku: 8-13 cyfr dopełnione do 13, GTIN-14 z zerem na początku jako EAN-13; inne kody = {@code null}. */
+    /**
+     * EAN w pliku: 8-13 cyfr i krótki kod wewnętrzny do 6 cyfr dopełnione do 13, GTIN-14 z zerem na początku jako
+     * EAN-13; inne kody = {@code null}.
+     */
     public static String ean(String code) {
         String digits = code == null ? "" : code.trim();
         if (digits.matches("0\\d{13}")) {
             digits = digits.substring(1);
         }
-        if (!digits.matches("\\d{8,13}") || digits.matches("0+")) {
+        if (!digits.matches("\\d{1,6}|\\d{8,13}") || digits.matches("0+")) {
             return null;
         }
         return "0".repeat(13 - digits.length()) + digits;

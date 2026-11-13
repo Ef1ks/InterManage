@@ -343,9 +343,17 @@ export function paddedScaleCode(ean: string) {
   return ean.padEnd(13, '0')
 }
 
-/** EAN z samych cyfr o długości innej niż 8, 12, 13, 14 (kod zastępczy z faktury się nie liczy). */
+/**
+ * EAN z samych cyfr o długości 7, 9-11 albo ponad 14 (kod zastępczy z faktury się nie liczy). Krótki kod do 6 cyfr
+ * nie jest błędem: to kod wewnętrzny artykułu, a Mercalys go przyjmuje.
+ */
 export function incompleteEan(row: DataEntryRow) {
-  return !row.eanFallback && /^\d+$/.test(row.ean) && !/^(\d{8}|\d{12,14})$/.test(row.ean)
+  return !row.eanFallback && /^\d+$/.test(row.ean) && !/^(\d{1,6}|\d{8}|\d{12,14})$/.test(row.ean)
+}
+
+/** Krótki kod wewnętrzny (do 6 cyfr): nie ma cyfry kontrolnej do sprawdzenia. */
+export function shortCode(ean: string) {
+  return /^\d{1,6}$/.test(ean)
 }
 
 /** Cyfra kontrolna GTIN (EAN-8, UPC-12, EAN-13, GTIN-14), jak {@code ProductCodeSources.validGtin}. */
@@ -369,8 +377,8 @@ export function validGtin(code: string) {
 export function eanError(row: DataEntryRow, checkedOnly = true): string | null {
   if (row.ean === '' || row.eanFallback || serviceKind(row)) return null
   if (checkedOnly && row.eanChecked !== undefined && row.eanChecked !== row.ean) return null
-  if (incompleteEan(row)) return `Niepełny EAN: ${row.ean.length} cyfr (EAN ma 8 albo 13 cyfr)`
-  if (row.known) return null
+  if (incompleteEan(row)) return `Niepełny EAN: ${row.ean.length} cyfr (EAN ma 8 albo 13 cyfr, kod wewnętrzny do 6)`
+  if (row.known || shortCode(row.ean)) return null
   const digits = row.ean.replace(/^0+/, '')
   if (/^2[1-9]\d{10,11}$/.test(digits)) return null
   if (!/^\d+$/.test(row.ean)) return 'EAN to same cyfry'

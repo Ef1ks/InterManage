@@ -66,9 +66,9 @@ public final class ProductFile {
         return digits.matches("\\d{2,10}") ? digits : CN;
     }
 
-    /** Tylko kod z cyfr; kod zastępczy (nazwa, indeks) to brak EAN-u. */
+    /** Tylko kod z cyfr (krótki kod wewnętrzny do 6 cyfr też, Mercalys go przyjmuje); kod zastępczy (nazwa, indeks) to brak EAN-u. */
     private static String ean(String ean) {
-        return ean != null && ean.strip().matches("\\d{8,14}") ? ean.strip() : null;
+        return ean != null && ean.strip().matches("\\d{1,6}|\\d{8,14}") ? ean.strip() : null;
     }
 
     /** Jednostka programu sklepu: P sztuka, K kilogram, L litr. */

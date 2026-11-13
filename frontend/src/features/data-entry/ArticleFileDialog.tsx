@@ -60,7 +60,7 @@ function articlesOf(rows: DataEntryRow[], allowLongNames: boolean) {
   for (const row of rows) {
     if (row.ean === '' && row.name === '') continue
     const key = articleKey(row)
-    if (row.eanFallback || !key || !/^\d{8,14}$/.test(row.ean)) {
+    if (row.eanFallback || !key || !/^(\d{1,6}|\d{8,14})$/.test(row.ean)) {
       withoutEan++
     } else if (!articles.has(key)) {
       const kind = !row.known ? 'new' : needsProductFile(row) ? 'changed' : 'same'

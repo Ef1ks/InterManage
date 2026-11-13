@@ -119,7 +119,7 @@ public class DataEntryProductFileService {
 
     /** EAN szkicu: kod z cyfr jak w pliku, bez zer wiodących; kod zastępczy (nazwa, indeks) = brak. */
     private static String draftEan(String ean) {
-        if (ean == null || !ean.strip().matches("\\d{8,14}")) {
+        if (ean == null || !ean.strip().matches("\\d{1,6}|\\d{8,14}")) {
             return null;
         }
         String stripped = ean.strip().replaceFirst("^0+", "");

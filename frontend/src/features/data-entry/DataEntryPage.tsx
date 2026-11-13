@@ -893,7 +893,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // Plik .lst: zaznaczone artykuły, a bez zaznaczenia wszystkie widoczne (także po filtrze); tylko prawdziwe EAN-y.
   const lstSource = chosenArticles.length > 0 ? chosenArticles : viewRows.filter(isArticle)
   const lstEans = [
-    ...new Set(lstSource.filter((row) => !row.eanFallback && /^\d{8,14}$/.test(row.ean)).map((row) => row.ean)),
+    ...new Set(
+      lstSource.filter((row) => !row.eanFallback && /^(\d{1,6}|\d{8,14})$/.test(row.ean)).map((row) => row.ean),
+    ),
   ]
   const [savingLst, setSavingLst] = useState(false)
   const saveLst = async () => {
@@ -968,7 +970,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // Etykiety cenowe: zaznaczone artykuły, a bez zaznaczenia wszystkie; tylko z prawdziwym EAN-em.
   const labelSource = chosenArticles.length > 0 ? chosenArticles : rows.filter(isArticle)
   const labelLines: LabelLine[] = labelSource
-    .filter((row) => !row.eanFallback && /^\d{8,14}$/.test(row.ean))
+    .filter((row) => !row.eanFallback && /^(\d{1,6}|\d{8,14})$/.test(row.ean))
     .map((row) => ({ ean: row.ean, quantity: row.quantity }))
 
   const conflicts = priceConflicts(rows)
@@ -1176,7 +1178,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const orderBlockedTitle =
     badEanTitle ??
     (order.invalid.length > 0
-      ? `Popraw ilości w tabeli: w zamówieniu tylko liczby całkowite od 1 do 99 (${order.invalid.map((line) => line.ean).join(', ')})`
+      ? `Popraw ilości w tabeli (${order.invalid.length} poz.): w zamówieniu tylko liczby całkowite od 1 do 99`
       : null)
   const [savingOrder, setSavingOrder] = useState(false)
   const copyTransferMacro = async () => {
@@ -1209,7 +1211,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         description: [
           fileName,
           `Pozycji: ${order.lines.length}`,
-          order.skipped > 0 && `pominięto bez EAN-u albo ilości: ${order.skipped}`,
+          order.skipped > 0 && `pominięto bez EAN-u, z kodem wagi albo bez ilości: ${order.skipped}`,
           !folderReady && 'pobrany: folder protokołów nie jest wybrany w tej przeglądarce',
         ]
           .filter(Boolean)

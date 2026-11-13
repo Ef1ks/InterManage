@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794570170.191206,
-    "seen": 1794570218.846894,
-    "ast_hash": "880f1776e6a0bfd3296bb6b3167df1af",
+    "mtime": 1794571180.3199887,
+    "seen": 1794571230.288096,
+    "ast_hash": "6fd77754361f4d090cf4f3a3ebaa3a3a",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1446,9 +1446,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-prices/CalculationEditor.tsx": {
-    "mtime": 1794061656.519958,
-    "seen": 1794061853.9442432,
-    "ast_hash": "6574545b9c362642163cf9db0b0a52a4",
+    "mtime": 1794570745.5526135,
+    "seen": 1794570832.981904,
+    "ast_hash": "2a8f2024ae79a7a0765dbfdd1c214617",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-prices/CalculationsList.tsx": {
@@ -4458,9 +4458,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryService.java": {
-    "mtime": 1794551510.29082,
-    "seen": 1794551966.1065278,
-    "ast_hash": "48fdfb0abdd8ca93d16398f4b589bca0",
+    "mtime": 1794571101.5611472,
+    "seen": 1794571230.061122,
+    "ast_hash": "fd19b20486a7fb51e1b2973fcbd4603f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntrySuggestionService.java": {
@@ -4494,9 +4494,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1794510419.2898026,
-    "seen": 1794544922.7635417,
-    "ast_hash": "7c7ac58c06434fc6579a1c7c5cd3a918",
+    "mtime": 1794571134.769899,
+    "seen": 1794571230.2185051,
+    "ast_hash": "4754c3e735d0bfc6d57868d29383de75",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4524,9 +4524,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/rows.ts": {
-    "mtime": 1794551648.834315,
-    "seen": 1794551966.2727416,
-    "ast_hash": "3f85d143c2898a215644f6d0d484b8e2",
+    "mtime": 1794571101.563752,
+    "seen": 1794571230.2237601,
+    "ast_hash": "c8c119a1eee98a8a57edcb1b6a66ad76",
     "semantic_hash": ""
   },
   "frontend/src/store/dataEntryDraftSlice.ts": {
@@ -5244,9 +5244,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/ProductFile.java": {
-    "mtime": 1793707072.7311363,
-    "seen": 1793707434.4361274,
-    "ast_hash": "0ba7b41d3ddfdb95416ab31efc8e599f",
+    "mtime": 1794571101.5616758,
+    "seen": 1794571230.048098,
+    "ast_hash": "ae3d926496c63a9b6a57cb4587dd257f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/ProductFileRequest.java": {
@@ -5256,9 +5256,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryProductFileService.java": {
-    "mtime": 1793657026.2905245,
-    "seen": 1793657320.5587611,
-    "ast_hash": "5900df4f297fb681aba3abbab070e122",
+    "mtime": 1794571101.562188,
+    "seen": 1794571230.061122,
+    "ast_hash": "726fde91b818866c408376fc3bb0b60c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/component/ProductCodeReportParser.java": {
@@ -5694,9 +5694,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/PriceControlFile.java": {
-    "mtime": 1793623551.8871453,
-    "seen": 1793623652.9420798,
-    "ast_hash": "0d85760ea31280a8a2288f35c9621035",
+    "mtime": 1794571118.2304058,
+    "seen": 1794571230.048098,
+    "ast_hash": "7802188f7bc0d19589cfce46ec3614fa",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/PriceControlFileItem.java": {
@@ -6786,9 +6786,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/ArticleFileDialog.tsx": {
-    "mtime": 1793797784.8197324,
-    "seen": 1793797904.2538774,
-    "ast_hash": "f5a522ea09df6eec4f79fbe34979c120",
+    "mtime": 1794571101.5642753,
+    "seen": 1794571230.217977,
+    "ast_hash": "90fcda8b0df304b0797ff6089702e754",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/controller/OverpaymentController.java": {
@@ -7038,9 +7038,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/order-file.ts": {
-    "mtime": 1793940987.1941695,
-    "seen": 1793941338.2227032,
-    "ast_hash": "d8fa04c20b7a0d6cb7aa00a7acb0b510",
+    "mtime": 1794571133.4965472,
+    "seen": 1794571230.2227073,
+    "ast_hash": "49d2ac66fee1752ba742cc3fbb3316ac",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/TransferReceipt.tsx": {

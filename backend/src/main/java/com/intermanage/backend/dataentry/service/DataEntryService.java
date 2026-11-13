@@ -78,7 +78,7 @@ public class DataEntryService {
     /** Ilość × cena może różnić się od wartości pozycji o zaokrąglenie; więcej to rabat albo cena sprzed korekty. */
     private static final BigDecimal VALUE_TOLERANCE = new BigDecimal("0.01");
     private static final Pattern RATE = Pattern.compile("^(\\d+(?:[.,]\\d+)?)\\s*%");
-    private static final Pattern XML_EAN = Pattern.compile("\\d{8,14}");
+    private static final Pattern XML_EAN = Pattern.compile("\\d{1,6}|\\d{8,14}");
     private static final Pattern FULL_EAN = Pattern.compile("\\d{8}|\\d{12,14}");
     static final int CATALOG_PAGE_SIZE = 100;
     /** {@code eanSource} pozycji wczytanej z przypięcia kodu dostawcy do artykułu. */

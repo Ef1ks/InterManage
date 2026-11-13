@@ -249,6 +249,131 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
     })
   }
 
+  const summary = (
+    <Card className="gap-3 p-4">
+      {formError && <FormAlert>{formError}</FormAlert>}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-1 tabular-nums">
+          <div>
+            <dt className="text-xs text-muted-foreground">
+              {hasManualPrice ? 'Twoja cena 1 kg' : 'Cena sprzedaży 1 kg'}
+            </dt>
+            <dd className="flex items-center gap-2">
+              {editingPrice ? (
+                <NumberInput
+                  ref={(element) => element?.focus()}
+                  label="Własna cena sprzedaży 1 kg"
+                  unit="zł"
+                  value={manualPrice}
+                  onChange={setManualPrice}
+                  onBlur={() => setEditingPrice(false)}
+                  onEnter={() => setEditingPrice(false)}
+                  invalid={hasManualPrice && manualParsed.error !== undefined}
+                />
+              ) : (
+                <span className="text-2xl font-semibold tracking-tight">
+                  {hasManualPrice ? formatMoney(manualParsed.value) : formatMoney(calculatedPrice)}
+                </span>
+              )}
+              {canEdit && !editingPrice && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={hasManualPrice ? 'Zmień własną cenę' : 'Ustaw własną cenę'}
+                  title={hasManualPrice ? 'Zmień własną cenę' : 'Ustaw własną cenę'}
+                  onClick={() => {
+                    if (!hasManualPrice) setManualPrice(toInputValue(calculatedPrice))
+                    setEditingPrice(true)
+                  }}
+                >
+                  <PencilIcon />
+                </Button>
+              )}
+            </dd>
+          </div>
+          {hasManualPrice && (
+            <div>
+              <dt className="text-xs text-muted-foreground">Wyliczona</dt>
+              <dd className="flex items-center gap-2 font-medium">
+                {formatMoney(calculatedPrice)}
+                {canEdit && (
+                  <Button
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => {
+                      setManualPrice('')
+                      setEditingPrice(false)
+                    }}
+                  >
+                    Wróć do wyliczonej
+                  </Button>
+                )}
+              </dd>
+            </div>
+          )}
+          <div>
+            <dt className="text-xs text-muted-foreground">Koszt 1 kg</dt>
+            <dd className="font-medium">{formatMoney(costPerKg)}</dd>
+          </div>
+          {mode === 'PER_BATCH' && (
+            <div>
+              <dt className="text-xs text-muted-foreground">Koszt przepisu</dt>
+              <dd className="font-medium">{formatMoney(totals.total)}</dd>
+            </div>
+          )}
+          {totals.weight > 0 && (
+            <div title="Waga składników przed obróbką - gotowego wyrobu wychodzi zwykle mniej">
+              <dt className="text-xs text-muted-foreground">Waga surowców</dt>
+              <dd className="font-medium">
+                {totals.unweighed > 0 && '> '}
+                {formatQuantity(totals.weight)} kg
+              </dd>
+            </div>
+          )}
+          {mode === 'PER_BATCH' && batchYieldPercent !== null && (
+            <div title="Ile gotowego wyrobu wychodzi z wagi surowców">
+              <dt className="text-xs text-muted-foreground">Wydajność</dt>
+              <dd className="font-medium">{formatQuantity(batchYieldPercent)}%</dd>
+            </div>
+          )}
+          {product?.salePrice != null && (
+            <div>
+              <dt className="text-xs text-muted-foreground">Na półce</dt>
+              <dd className="font-medium text-muted-foreground">{formatMoney(product.salePrice)}</dd>
+            </div>
+          )}
+        </dl>
+        {canEdit && (
+          <Button size="xl" loading={save.isPending} disabled={!dirty && calculation !== undefined} onClick={submit}>
+            {calculation ? 'Zapisz zmiany' : 'Zapisz kalkulację'}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {priceError ? (
+          <span className="text-destructive">Twoja cena: {priceError}.</span>
+        ) : hasManualPrice ? (
+          'Do eksportu idzie Twoja cena. Przy odświeżaniu cen zapytamy, czy ją zostawić, gdy wyliczona się zmieni.'
+        ) : (
+          `Koszt 1 kg + ${formatQuantity(markupPercent)}% marży${ownMarkup ? ' docelowej' : ''} + VAT ${vatRate}%, zaokrąglone w górę do ,99 zł.${ownMarkup ? ' Marża zostaje przy odświeżaniu cen.' : ''}`
+        )}
+      </p>
+      {totals.unweighed > 0 && totals.weight > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Waga surowców bez {totals.unweighed === 1 ? 'jednego składnika' : `${totals.unweighed} składników`} na sztuki
+          - podaj przy nich, ile waży 1 szt.
+        </p>
+      )}
+      {totals.missing > 0 && (
+        <p className="flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400">
+          <CircleAlertIcon aria-hidden className="size-4 shrink-0" />
+          {totals.missing === 1 ? 'Jeden składnik nie ma' : `${totals.missing} składniki nie mają`} ceny ani w
+          dostawach, ani w kartotece - koszt jest zaniżony.
+        </p>
+      )}
+    </Card>
+  )
+
   return (
     <>
       <BackLink to={pricePaths.list}>Wszystkie kalkulacje</BackLink>
@@ -426,136 +551,15 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
             )}
           </Card>
 
-          <Card className="sticky bottom-4 z-10 gap-3 p-4 shadow-[0_8px_24px_-12px_rgb(0_0_0/0.25)]">
-            {formError && <FormAlert>{formError}</FormAlert>}
-            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-              <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-1 tabular-nums">
-                <div>
-                  <dt className="text-xs text-muted-foreground">
-                    {hasManualPrice ? 'Twoja cena 1 kg' : 'Cena sprzedaży 1 kg'}
-                  </dt>
-                  <dd className="flex items-center gap-2">
-                    {editingPrice ? (
-                      <NumberInput
-                        ref={(element) => element?.focus()}
-                        label="Własna cena sprzedaży 1 kg"
-                        unit="zł"
-                        value={manualPrice}
-                        onChange={setManualPrice}
-                        onBlur={() => setEditingPrice(false)}
-                        onEnter={() => setEditingPrice(false)}
-                        invalid={hasManualPrice && manualParsed.error !== undefined}
-                      />
-                    ) : (
-                      <span className="text-2xl font-semibold tracking-tight">
-                        {hasManualPrice ? formatMoney(manualParsed.value) : formatMoney(calculatedPrice)}
-                      </span>
-                    )}
-                    {canEdit && !editingPrice && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={hasManualPrice ? 'Zmień własną cenę' : 'Ustaw własną cenę'}
-                        title={hasManualPrice ? 'Zmień własną cenę' : 'Ustaw własną cenę'}
-                        onClick={() => {
-                          if (!hasManualPrice) setManualPrice(toInputValue(calculatedPrice))
-                          setEditingPrice(true)
-                        }}
-                      >
-                        <PencilIcon />
-                      </Button>
-                    )}
-                  </dd>
-                </div>
-                {hasManualPrice && (
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Wyliczona</dt>
-                    <dd className="flex items-center gap-2 font-medium">
-                      {formatMoney(calculatedPrice)}
-                      {canEdit && (
-                        <Button
-                          variant="link"
-                          className="h-auto p-0 text-xs"
-                          onClick={() => {
-                            setManualPrice('')
-                            setEditingPrice(false)
-                          }}
-                        >
-                          Wróć do wyliczonej
-                        </Button>
-                      )}
-                    </dd>
-                  </div>
-                )}
-                <div>
-                  <dt className="text-xs text-muted-foreground">Koszt 1 kg</dt>
-                  <dd className="font-medium">{formatMoney(costPerKg)}</dd>
-                </div>
-                {mode === 'PER_BATCH' && (
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Koszt przepisu</dt>
-                    <dd className="font-medium">{formatMoney(totals.total)}</dd>
-                  </div>
-                )}
-                {totals.weight > 0 && (
-                  <div title="Waga składników przed obróbką - gotowego wyrobu wychodzi zwykle mniej">
-                    <dt className="text-xs text-muted-foreground">Waga surowców</dt>
-                    <dd className="font-medium">
-                      {totals.unweighed > 0 && '> '}
-                      {formatQuantity(totals.weight)} kg
-                    </dd>
-                  </div>
-                )}
-                {mode === 'PER_BATCH' && batchYieldPercent !== null && (
-                  <div title="Ile gotowego wyrobu wychodzi z wagi surowców">
-                    <dt className="text-xs text-muted-foreground">Wydajność</dt>
-                    <dd className="font-medium">{formatQuantity(batchYieldPercent)}%</dd>
-                  </div>
-                )}
-                {product?.salePrice != null && (
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Na półce</dt>
-                    <dd className="font-medium text-muted-foreground">{formatMoney(product.salePrice)}</dd>
-                  </div>
-                )}
-              </dl>
-              {canEdit && (
-                <Button
-                  size="xl"
-                  loading={save.isPending}
-                  disabled={!dirty && calculation !== undefined}
-                  onClick={submit}
-                >
-                  {calculation ? 'Zapisz zmiany' : 'Zapisz kalkulację'}
-                </Button>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {priceError ? (
-                <span className="text-destructive">Twoja cena: {priceError}.</span>
-              ) : hasManualPrice ? (
-                'Do eksportu idzie Twoja cena. Przy odświeżaniu cen zapytamy, czy ją zostawić, gdy wyliczona się zmieni.'
-              ) : (
-                `Koszt 1 kg + ${formatQuantity(markupPercent)}% marży${ownMarkup ? ' docelowej' : ''} + VAT ${vatRate}%, zaokrąglone w górę do ,99 zł.${ownMarkup ? ' Marża zostaje przy odświeżaniu cen.' : ''}`
-              )}
-            </p>
-            {totals.unweighed > 0 && totals.weight > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Waga surowców bez {totals.unweighed === 1 ? 'jednego składnika' : `${totals.unweighed} składników`} na
-                sztuki - podaj przy nich, ile waży 1 szt.
-              </p>
-            )}
-            {totals.missing > 0 && (
-              <p className="flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400">
-                <CircleAlertIcon aria-hidden className="size-4 shrink-0" />
-                {totals.missing === 1 ? 'Jeden składnik nie ma' : `${totals.missing} składniki nie mają`} ceny ani w
-                dostawach, ani w kartotece - koszt jest zaniżony.
-              </p>
-            )}
-          </Card>
+          {!canEdit && summary}
         </div>
 
-        {canEdit && <ProductPanel storeId={storeId} addedIds={addedIds} onAdd={add} />}
+        {canEdit && (
+          <div className="grid gap-4 lg:sticky lg:top-4">
+            <ProductPanel storeId={storeId} addedIds={addedIds} onAdd={add} />
+            {summary}
+          </div>
+        )}
       </div>
 
       <AlertDialog open={blocker.state === 'blocked'} onOpenChange={(open) => !open && blocker.reset?.()}>
@@ -791,7 +795,7 @@ function ProductPanel({
   const typedEnough = query.trim().replace(/\s+/g, '').length >= MIN_SEARCH_LENGTH
 
   return (
-    <Card className="gap-3 p-4 lg:sticky lg:top-4">
+    <Card className="gap-3 p-4">
       <div>
         <h2 className="text-base font-semibold">Składniki z kartoteki</h2>
         <p className="text-sm text-muted-foreground">Cena z ostatniej dostawy, a bez dostawy - z kartoteki.</p>
@@ -805,7 +809,7 @@ function ProductPanel({
           />
         )}
       </div>
-      <div aria-live="polite" className="-mx-1 max-h-[min(32rem,60vh)] overflow-y-auto overscroll-contain px-1">
+      <div aria-live="polite" className="-mx-1 max-h-[min(24rem,40vh)] overflow-y-auto overscroll-contain px-1">
         {!typedEnough || !longEnough ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Wpisz co najmniej {MIN_SEARCH_LENGTH} znaki. Słowa w dowolnej kolejności, np. „smiet 30”.
