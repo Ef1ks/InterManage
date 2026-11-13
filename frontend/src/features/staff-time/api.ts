@@ -4,6 +4,7 @@ import { api, downloadFile, printFile } from '@/lib/api'
 import type {
   ScheduleDepartment,
   TimeAttention,
+  TimePresence,
   TimeBalance,
   TimeCards,
   TimeDecisionKind,
@@ -51,6 +52,16 @@ function viewShape(from: string | undefined, to: string | undefined) {
   if (!from || !to) return null
   const days = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1
   return days === 1 ? 'day' : days === 7 ? 'week' : 'month'
+}
+
+/** Pulpit: obecni teraz wobec grafiku. Odbicia przychodzą z czytnika, więc co minutę. */
+export function useTimePresence(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['staff-time', storeId, 'presence'],
+    queryFn: () => api<TimePresence>(path(storeId, '/presence')),
+    enabled,
+    refetchInterval: 60_000,
+  })
 }
 
 /** Licznik w menu i przy działach: dni do reakcji kierownika z ostatnich 31 dni. */

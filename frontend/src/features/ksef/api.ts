@@ -32,8 +32,9 @@ export type EnteredFilter = 'ALL' | 'ENTERED' | 'NOT_ENTERED'
 export type KindFilter = 'ALL' | 'INVOICES' | 'CORRECTIONS'
 
 /**
- * Filtry listy; {@code internalId}: "ALL" (wszystkie widoczne w sklepie), "OWN" (tylko z IDWew sklepu), konkretny
- * IDWew sklepu albo "NONE" (tylko bez IDWew). Daty RRRR-MM-DD.
+ * Filtry listy; {@code internalId}: "ALL" (wszystkie widoczne w sklepie), "MINE" (faktury sklepu po IDWew, adresie
+ * dostawy i przyjęciu PZ oraz nierozpoznane), "OWN" (tylko z IDWew sklepu), konkretny IDWew sklepu albo "NONE"
+ * (tylko bez IDWew); {@code myDeliveries}: tylko z PZ w sklepie i korekty faktur, które je mają. Daty RRRR-MM-DD.
  */
 export type KsefFilters = {
   query: string
@@ -43,6 +44,9 @@ export type KsefFilters = {
   kind: KindFilter
   internalId: string
   showSkipped: boolean
+  myDeliveries: boolean
+  /** Bez korekt tylko na kwoty (nieodczytane zostają). */
+  quantityChanges: boolean
 }
 
 /** Faktury stronami po 100; filtry, sortowanie i sumy liczą się w bazie, kolejne strony dochodzą przy przewijaniu. */
@@ -57,6 +61,8 @@ export function useKsefInvoices(storeId: string, filters: KsefFilters, sort: Sor
         entered: filters.entered,
         kind: filters.kind,
         showSkipped: String(filters.showSkipped),
+        myDeliveries: String(filters.myDeliveries),
+        quantityChanges: String(filters.quantityChanges),
       })
       if (filters.query) params.set('query', filters.query)
       if (filters.from) params.set('from', filters.from)
@@ -103,7 +109,13 @@ export function usePrintInvoice(storeId: string) {
 /** Bon dostawy przyjęcia z tą fakturą - także z innego sklepu tej samej firmy. */
 export function useDownloadCompanyDeliveryNote(storeId: string) {
   return useMutation({
-    mutationFn: ({ invoiceId, document }: { invoiceId: string; document: Pick<KsefInvoiceDocument, 'id' | 'number'> }) =>
+    mutationFn: ({
+      invoiceId,
+      document,
+    }: {
+      invoiceId: string
+      document: Pick<KsefInvoiceDocument, 'id' | 'number'>
+    }) =>
       downloadFile(
         `${ksefPath(storeId)}/invoices/${invoiceId}/documents/${document.id}/delivery-note`,
         `bon-dostawy-${document.number}.pdf`,
@@ -144,7 +156,10 @@ export function useInvoiceDocumentLinks(storeId: string) {
   return {
     link: useMutation({
       mutationFn: ({ invoiceId, documentId }: { invoiceId: string; documentId: string }) =>
-        api<KsefInvoice>(`${ksefPath(storeId)}/invoices/${invoiceId}/documents`, { method: 'POST', json: { documentId } }),
+        api<KsefInvoice>(`${ksefPath(storeId)}/invoices/${invoiceId}/documents`, {
+          method: 'POST',
+          json: { documentId },
+        }),
       onSuccess,
     }),
     unlink: useMutation({

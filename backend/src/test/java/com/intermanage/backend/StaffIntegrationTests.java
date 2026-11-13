@@ -245,6 +245,33 @@ class StaffIntegrationTests {
     }
 
     @Test
+    void onlyOwnerDeletesEndedEmployeeAndCanBringItBack() throws Exception {
+        String employee = id(send(owner, post(path("/employees/without-account")),
+                "{\"displayName\":\"Ola " + surname() + "\",\"positionId\":\"" + cashier + "\",\"shifts\":[]}")
+                .andExpect(status().isCreated()));
+
+        // Pracującej osoby się nie usuwa, najpierw koniec pracy.
+        send(owner, post(path("/employees/" + employee + "/delete")), null).andExpect(status().isConflict());
+        send(owner, delete(path("/employees/" + employee)), null).andExpect(status().isNoContent());
+
+        Cookie hr = worker(createRole("{\"STAFF\":\"EDIT\"}"));
+        send(hr, post(path("/employees/" + employee + "/delete")), null).andExpect(status().isForbidden());
+
+        send(owner, post(path("/employees/" + employee + "/delete")), null).andExpect(status().isNoContent());
+        mvc.perform(get(path("/employees")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.id == '" + employee + "')]").isEmpty());
+        send(owner, post(path("/employees/" + employee + "/restore")), null).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("select count(*) from staff_employees where id = ?::uuid", Integer.class,
+                employee)).isOne();
+
+        send(owner, post(path("/employees/" + employee + "/undelete")), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.endedAt").isNotEmpty());
+        mvc.perform(get(path("/employees")).cookie(owner))
+                .andExpect(jsonPath("$[?(@.id == '" + employee + "')]").isNotEmpty());
+    }
+
+    @Test
     void endingEmploymentBlocksAccountAndRestoreBringsItBack() throws Exception {
         Cookie worker = worker(cashierRole);
         String userId = jdbc.queryForObject("""

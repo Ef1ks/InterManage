@@ -8,11 +8,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -288,7 +290,7 @@ public class StaffTimeService {
     private TimeCardResponse.DayCard civilDayCard(LocalDate day, StaffScheduleEntry entry, boolean alongside,
             String absence, List<Pair> pairs, LocalDateTime now) {
         TimeCard.Interval shift = entry == null ? null : shift(entry);
-        List<TimeCard.Interval> closed = pairs.stream().filter(pair -> pair.out() != null)
+        List<TimeCard.Interval> closed = pairs.stream().filter(Pair::lasts)
                 .map(pair -> new TimeCard.Interval(pair.in(), pair.out())).toList();
         List<TimeCard.Interval> worked = !alongside ? closed : shift == null ? List.of()
                 : closed.stream()
@@ -343,7 +345,7 @@ public class StaffTimeService {
         // Dzień nieobecności nie jest dniem pracy: odbicia tego dnia to czas poza grafikiem.
         TimeCard.Interval plannedShift = leave == null ? shift : null;
         TimeCard.Interval civilShift = civilEntry == null ? null : shift(civilEntry);
-        List<TimeCard.Interval> worked = withoutCivil(pairs.stream().filter(pair -> pair.out() != null)
+        List<TimeCard.Interval> worked = withoutCivil(pairs.stream().filter(Pair::lasts)
                 .map(pair -> new TimeCard.Interval(pair.in(), pair.out())).toList(), civilShift);
         List<StaffTimeDecision> ofDay = decisionsOfEmployee.stream()
                 .filter(decision -> decision.getWorkDate().equals(day)).toList();
@@ -444,6 +446,87 @@ public class StaffTimeService {
     public record Attention(int total, List<Department> departments) {
 
         public record Department(UUID departmentId, int count) {
+        }
+    }
+
+    /**
+     * Obecność na pulpicie: kto jest teraz w pracy w sklepie (wejście odbite w tym sklepie, bez wyjścia, nie starsze niż
+     * {@link #MAX_SHIFT}) wobec osób, które według grafiku sklepu mają teraz zmianę (także goście z innych sklepów).
+     * Bez dni nieobecności z Kadr i godzin zlecenia. Grafik bierze bieżące wpisy, jak karty czasu pracy.
+     */
+    @Transactional(readOnly = true)
+    public Presence presence(UUID storeId) {
+        LocalDateTime now = LocalDateTime.now(StoreTime.ZONE);
+        LocalDate today = now.toLocalDate();
+        List<StaffScheduleEntry> shifts = entries.findInStore(storeId, today.minusDays(1), today);
+        Set<UUID> ids = new HashSet<>(punches.findEmployeeIdsInStore(storeId, instant(now.minus(MAX_SHIFT))));
+        shifts.forEach(entry -> ids.add(entry.getEmployee().getId()));
+        if (ids.isEmpty()) {
+            return new Presence(now, 0, 0, 0, List.of(), List.of(), null, 0);
+        }
+        Map<UUID, List<StaffLeave>> absences = leaves.findActive(ids).stream()
+                .collect(Collectors.groupingBy(leave -> leave.getEmployee().getId()));
+        Map<UUID, Pair> inside = new HashMap<>();
+        punches.findOfEmployees(ids, instant(now.minus(MAX_SHIFT).minus(MAX_SHIFT)), instant(now.plusMinutes(1)))
+                .stream().collect(Collectors.groupingBy(punch -> punch.getEmployee().getId()))
+                .forEach((id, list) -> {
+                    List<Pair> pairs = pairs(list);
+                    Pair last = pairs.getLast();
+                    if (last.out() == null && last.inPunch().getStore().getId().equals(storeId)
+                            && !last.in().isBefore(now.minus(MAX_SHIFT))) {
+                        inside.put(id, last);
+                    }
+                });
+
+        List<StaffScheduleEntry> working = shifts.stream()
+                .filter(entry -> leaveOn(absences.getOrDefault(entry.getEmployee().getId(), List.of()),
+                        entry.getWorkDate()) == null)
+                .toList();
+        Map<UUID, StaffScheduleEntry> nowShift = new HashMap<>();
+        working.stream().filter(entry -> {
+            TimeCard.Interval shift = shift(entry);
+            return !shift.start().isAfter(now) && shift.end().isAfter(now);
+        }).forEach(entry -> nowShift.putIfAbsent(entry.getEmployee().getId(), entry));
+        long todayCount = working.stream().filter(entry -> entry.getWorkDate().equals(today))
+                .map(entry -> entry.getEmployee().getId()).distinct().count();
+        List<StaffScheduleEntry> later = working.stream()
+                .filter(entry -> entry.getWorkDate().equals(today) && shift(entry).start().isAfter(now)
+                        && !nowShift.containsKey(entry.getEmployee().getId()))
+                .toList();
+        LocalTime nextStart = later.stream().map(StaffScheduleEntry::getStart).min(Comparator.naturalOrder())
+                .orElse(null);
+        int nextCount = (int) later.stream().filter(entry -> entry.getStart().equals(nextStart)).count();
+
+        List<Presence.Person> missing = nowShift.values().stream()
+                .filter(entry -> !inside.containsKey(entry.getEmployee().getId()))
+                .sorted(Comparator.comparing((StaffScheduleEntry entry) -> shift(entry).start())
+                        .thenComparing(entry -> entry.getEmployee().getDisplayName().toLowerCase()))
+                .map(entry -> person(entry.getEmployee(), entry, null))
+                .toList();
+        List<Presence.Person> unscheduled = inside.entrySet().stream()
+                .filter(item -> !nowShift.containsKey(item.getKey()))
+                .sorted(Comparator.comparing(item -> item.getValue().in()))
+                .map(item -> person(item.getValue().inPunch().getEmployee(), null, item.getValue().in()))
+                .toList();
+        return new Presence(now, inside.size(), nowShift.size(), (int) todayCount, missing, unscheduled, nextStart,
+                nextCount);
+    }
+
+    private static Presence.Person person(StaffEmployee employee, StaffScheduleEntry entry, LocalDateTime since) {
+        return new Presence.Person(employee.getId(), employee.getDisplayName(), employee.getPosition().getName(),
+                entry == null ? null : entry.getStart(), entry == null ? null : entry.getEnd(), since);
+    }
+
+    /**
+     * {@code present}: osoby w pracy teraz, {@code scheduledNow}: osoby ze zmianą w tej chwili, {@code missing}: ze zmianą,
+     * ale bez wejścia, {@code unscheduled}: w pracy bez zmiany w tej chwili, {@code nextStart}: najbliższe rozpoczęcie
+     * zmiany dziś i ile osób wtedy zaczyna.
+     */
+    public record Presence(LocalDateTime at, int present, int scheduledNow, int scheduledToday, List<Person> missing,
+            List<Person> unscheduled, LocalTime nextStart, int nextCount) {
+
+        public record Person(UUID employeeId, String name, String position, LocalTime start, LocalTime end,
+                LocalDateTime since) {
         }
     }
 
@@ -728,7 +811,7 @@ public class StaffTimeService {
                 TimeCard.Interval shift = entry == null || leave != null ? null : shift(entry);
                 StaffScheduleEntry civilEntry = civil.getOrDefault(id, Map.of()).get(day);
                 List<TimeCard.Interval> worked = withoutCivil(pairs.getOrDefault(day, List.of()).stream()
-                        .filter(pair -> pair.out() != null).map(pair -> new TimeCard.Interval(pair.in(), pair.out()))
+                        .filter(Pair::lasts).map(pair -> new TimeCard.Interval(pair.in(), pair.out()))
                         .toList(), civilEntry == null ? null : shift(civilEntry));
                 LocalDate current = day;
                 List<TimeCard.Decision> ofDay = decided.getOrDefault(id, List.of()).stream()
@@ -791,6 +874,14 @@ public class StaffTimeService {
 
         LocalDateTime out() {
             return outPunch == null ? null : local(outPunch.getPunchedAt());
+        }
+
+        /**
+         * Zamknięta para, która trwa co najmniej minutę. Godziny są obcinane do minut, więc wejście i wyjście w tej
+         * samej minucie (np. karta przyłożona dwa razy) dają odcinek zerowy: para jest zamknięta, ale bez czasu.
+         */
+        boolean lasts() {
+            return outPunch != null && out().isAfter(in());
         }
     }
 

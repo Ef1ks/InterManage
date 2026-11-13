@@ -103,10 +103,13 @@ public class KsefController {
             @RequestParam(defaultValue = "ALL") KsefInvoiceSearch.Kind kind,
             @RequestParam(required = false) String internalId,
             @RequestParam(defaultValue = "false") boolean showSkipped,
+            @RequestParam(defaultValue = "false") boolean myDeliveries,
+            @RequestParam(defaultValue = "false") boolean quantityChanges,
             @RequestParam(defaultValue = "issueDate") String sort,
             @RequestParam(defaultValue = "desc") String direction) {
         return invoiceService.list(storeId, page,
-                new KsefInvoiceSearch.Filter(query, from, to, entered, kind, internalId, showSkipped), sort, direction);
+                new KsefInvoiceSearch.Filter(query, from, to, entered, kind, internalId, showSkipped,
+                        myDeliveries, quantityChanges), sort, direction);
     }
 
     @PutMapping("/invoices/{id}/entered")

@@ -241,12 +241,64 @@ public class KsefInvoiceReader {
     }
 
     /**
+     * Adresy z Podmiotów 3 (odbiorca, miejsce dostawy…), każdy w jednej linii: po nich sklep rozpoznaje faktury bez
+     * IDWew (baza SCA PR podaje sklep tylko adresem). Bez Podmiotu 3 z adresem - pusta lista.
+     */
+    public List<String> thirdPartyAddresses(byte[] xml) {
+        Xml root = parse(xml);
+        if (!"Faktura".equals(root.name())) {
+            throw new InvalidInvoiceException("To nie jest faktura KSeF (" + root.name() + ")", null);
+        }
+        List<String> addresses = new ArrayList<>();
+        for (Xml subject : root.children("Podmiot3")) {
+            for (String element : List.of("Adres", "AdresKoresp")) {
+                Xml address = subject.child(element);
+                String line = String.join(", ", java.util.stream.Stream.of(address.text("AdresL1"),
+                        address.text("AdresL2")).filter(Objects::nonNull).toList());
+                if (!line.isBlank()) {
+                    addresses.add(line);
+                }
+            }
+        }
+        return addresses;
+    }
+
+    /**
      * Pola pozycji, w których dostawcy podają kod towaru: {@code GTIN}, {@code Indeks} (kod dostawcy, czasem EAN),
      * nazwa i wpisy {@code DodatkowyOpis} z numerem tej pozycji ({@code extras}: klucz → wartość, np. "EAN").
      * {@code cn} to kod Nomenklatury Scalonej pozycji (do pliku CADBEZP).
      */
     public record LineCodes(String number, boolean beforeCorrection, String gtin, String index, String name,
             Map<String, String> extras, String cn) {
+    }
+
+    /**
+     * Refaktura bazy SCA PR: kod dostawcy w bazie ({@code DodatkowyOpis} "DDDKodDostawcy") i numer faktury dostawcy
+     * ("DDDNrFaDostawcy"); przy zwykłej fakturze oba {@code null}.
+     */
+    public record BaseSupplier(String code, String supplierInvoice) {
+    }
+
+    public BaseSupplier baseSupplier(byte[] xml) {
+        Xml root = parse(xml);
+        if (!"Faktura".equals(root.name())) {
+            throw new InvalidInvoiceException("To nie jest faktura KSeF (" + root.name() + ")", null);
+        }
+        String code = null;
+        String number = null;
+        for (Xml description : root.child("Fa").children("DodatkowyOpis")) {
+            String key = description.text("Klucz");
+            String value = description.text("Wartosc");
+            if (key == null || value == null || value.isBlank()) {
+                continue;
+            }
+            if (code == null && "DDDKodDostawcy".equals(key.strip())) {
+                code = value.strip();
+            } else if (number == null && "DDDNrFaDostawcy".equals(key.strip())) {
+                number = value.strip();
+            }
+        }
+        return new BaseSupplier(code, number);
     }
 
     /** Teksty z pól WZ faktury, tak jak je wystawił dostawca (np. "DD nr 14803/10/2026/DD (2026-10-21)", "1497"). */

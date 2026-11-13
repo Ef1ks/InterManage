@@ -36,6 +36,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { useCan } from '@/features/auth/api'
 import { bonNumber, countFormat, documentPaths, formatMoney } from '@/features/documents/format'
 import { DocumentPicker } from '@/features/ksef/DocumentPicker'
+import { QuantityChangeBadge } from '@/features/ksef/QuantityChangeBadge'
 import {
   type EnteredFilter,
   type KindFilter,
@@ -87,6 +88,8 @@ const EMPTY_FILTERS: Omit<KsefFilters, 'query'> = {
   kind: 'ALL',
   internalId: 'ALL',
   showSkipped: false,
+  myDeliveries: false,
+  quantityChanges: false,
 }
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
@@ -142,9 +145,11 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
   const toggleSort = (key: KsefColumn) => setSort(nextSort(sort, key))
   const today = todayIso()
 
+  const hasInternalIds = overview.internalIds.length > 0
   const internalIdOptions = [
-    { value: 'ALL', label: 'Z IDWew sklepu i bez IDWew' },
-    { value: 'OWN', label: 'Tylko z IDWew sklepu' },
+    { value: 'ALL', label: hasInternalIds ? 'Z IDWew sklepu i bez IDWew' : 'Wszystkie faktury firmy' },
+    { value: 'MINE', label: 'Moje i nierozpoznane' },
+    ...(hasInternalIds ? [{ value: 'OWN', label: 'Tylko z IDWew sklepu' }] : []),
     // Przy kilku IDWew sklepu można zawęzić do jednego.
     ...(overview.internalIds.length > 1
       ? overview.internalIds.map((item) => ({
@@ -152,7 +157,7 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
           label: `Tylko ${item.name ? `${item.name} (${item.internalId})` : item.internalId}`,
         }))
       : []),
-    { value: 'NONE', label: 'Tylko bez IDWew' },
+    ...(hasInternalIds ? [{ value: 'NONE', label: 'Tylko bez IDWew' }] : []),
   ]
 
   return (
@@ -201,14 +206,28 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
             value={filters.kind}
             onChange={(value) => set('kind', value)}
           />
-          {overview.internalIds.length > 0 && (
-            <SelectField
-              label="IDWew"
-              className="w-72"
-              options={internalIdOptions}
-              value={filters.internalId}
-              onChange={(value) => set('internalId', value)}
-            />
+          <SelectField
+            label="Sklep"
+            className="w-72"
+            options={internalIdOptions}
+            value={filters.internalId}
+            onChange={(value) => set('internalId', value)}
+          />
+          <label
+            className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+            title="Faktury z przyjęciem PZ w tym sklepie i korekty faktur, które mają tu przyjęcie (także faktur sprzed KSeF)"
+          >
+            <Switch checked={filters.myDeliveries} onCheckedChange={(value) => set('myDeliveries', value)} />
+            Do moich PZ
+          </label>
+          {filters.kind !== 'INVOICES' && (
+            <label
+              className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+              title="Bez korekt, które zmieniają tylko kwoty (cena, rabat); korekty jeszcze nieodczytane zostają"
+            >
+              <Switch checked={filters.quantityChanges} onCheckedChange={(value) => set('quantityChanges', value)} />
+              Tylko zmiany ilości
+            </label>
           )}
           <label htmlFor={switchId} className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
             <Switch
@@ -470,6 +489,7 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
               {invoiceTypeLabel(invoice.invoiceType)}
             </span>
           )}
+          <QuantityChangeBadge value={invoice.quantityChange} />
         </div>
         {invoice.correctedInvoices != null && invoice.correctedInvoices.length > 0 && (
           <div

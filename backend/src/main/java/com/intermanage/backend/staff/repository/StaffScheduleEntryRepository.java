@@ -43,4 +43,12 @@ public interface StaffScheduleEntryRepository extends JpaRepository<StaffSchedul
     /** Pracownicy z wpisem w tym grafiku, także spoza działu i sklepu: stoją w nim jako goście. */
     @Query("select distinct e.employee.id from StaffScheduleEntry e where e.schedule.id = :scheduleId and e.deletedAt is null")
     List<UUID> findEmployeeIds(UUID scheduleId);
+
+    /** Zmiany w grafikach sklepu (także gości z innych sklepów) do pulpitu: kto ma teraz być w pracy. */
+    @EntityGraph(attributePaths = {"employee", "employee.position", "schedule", "schedule.store"})
+    @Query("""
+            select e from StaffScheduleEntry e
+            where e.schedule.store.id = :storeId and e.workDate between :from and :to and e.deletedAt is null
+                and e.civil = false""")
+    List<StaffScheduleEntry> findInStore(UUID storeId, LocalDate from, LocalDate to);
 }

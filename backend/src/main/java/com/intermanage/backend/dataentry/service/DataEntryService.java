@@ -30,7 +30,6 @@ import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.common.exception.ApiException;
-import com.intermanage.backend.dataentry.component.CorrectionRows;
 import com.intermanage.backend.dataentry.component.InvoiceXml;
 import com.intermanage.backend.dataentry.component.Measure;
 import com.intermanage.backend.dataentry.component.ProductCodeSources;
@@ -48,8 +47,10 @@ import com.intermanage.backend.dataentry.entity.PriceRoundingRule;
 import com.intermanage.backend.dataentry.repository.DataEntryCatalogRepository;
 import com.intermanage.backend.dataentry.repository.DataEntryProductLinkRepository;
 import com.intermanage.backend.dataentry.repository.DataEntrySuggestionRepository;
+import com.intermanage.backend.ksef.component.CorrectionRows;
 import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
+import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
@@ -205,7 +206,15 @@ public class DataEntryService {
         List<String> candidates = lineCodes.stream()
                 .flatMap(line -> keys.stream().flatMap(key -> ProductCodeSources.candidates(line, key).stream()))
                 .map(DataEntryService::key).filter(Objects::nonNull).distinct().toList();
-        Map<String, CatalogProduct> known = lookupByKey(storeId, candidates);
+        // Baza SCA PR podaje w indeksie pozycji ITM8 artykułu (np. 06717224), więc jej faktury i korekty szukają też po
+        // ITM8; u innych dostawców indeks trafiałby w przypadkowe ITM8.
+        boolean byItm8 = KsefCorrectedInvoiceService.IGNORED_SELLER_NIPS
+                .contains(DataEntryLinkService.digits(summary.sellerNip()));
+        Map<String, CatalogProduct> known = new HashMap<>(lookupByKey(storeId, candidates, byItm8));
+        if (byItm8) {
+            known.putAll(baseItm8Products(storeId, candidates.stream().filter(code -> !known.containsKey(code))
+                    .filter(code -> code.length() <= 8).toList()));
+        }
         Predicate<String> inCatalog = code -> known.containsKey(key(code));
 
         // Bez EAN-u kolumna dostaje inny kod z faktury (najpierw z wybranego źródła) albo nazwę, żeby pozycję dało się
@@ -224,7 +233,10 @@ public class DataEntryService {
             fallbacks.add(fallback);
             String code = ean != null ? ean : fallback != null ? fallback.code() : null;
             List<String> codesOfLine = new ArrayList<>();
-            if (code != null && (ean == null || !known.containsKey(key(ean)) || incompleteEan(ean))) {
+            // Przypięcie szukamy też przy artykule trafionym spoza GTIN-u (indeks, kod w nazwie): ręczne przypięcie ma
+            // pierwszeństwo, bo kod z nazwy mięsa bazy zwykle nie jest kodem sklepu i trafia w przypadkowy artykuł.
+            if (code != null && (ean == null || !known.containsKey(key(ean)) || incompleteEan(ean)
+                    || !ProductCodeSources.GTIN.equals(pick.source()))) {
                 codesOfLine.add(DataEntryLinkService.code(code));
                 ProductCodeSources.rawCodes(lineCodes.get(i), keys).stream().map(DataEntryLinkService::code)
                         .filter(other -> !codesOfLine.contains(other)).forEach(codesOfLine::add);
@@ -251,8 +263,12 @@ public class DataEntryService {
             String eanSource = pick.source();
             BigDecimal vat = vatPercent(line.rate());
             CatalogProduct product = ean != null ? known.get(key(ean)) : null;
+            if (product != null && product.byItm8() && product.catalogEan() != null) {
+                // Kod z indeksu to ITM8, a nie EAN: w kolumnie i w pliku XML ma być EAN artykułu.
+                ean = product.catalogEan();
+            }
             DataEntryProductLinkRepository.ActiveLink link = null;
-            if (product == null || incompleteEan(ean)) {
+            if (product == null || incompleteEan(ean) || !ProductCodeSources.GTIN.equals(eanSource)) {
                 link = linkCodes.get(i).stream().map(linked::get).filter(Objects::nonNull).findFirst().orElse(null);
                 CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
                 if (linkedProduct != null) {
@@ -705,6 +721,36 @@ public class DataEntryService {
         String code = subfamily.substring(0, length);
         String name = names.get(code);
         return name != null ? code + " " + name : code;
+    }
+
+    /**
+     * ITM8 bazy SCA PR spoza kartoteki i multikodów (baza fakturuje własnym kodem, np. 61653837): artykuł po EAN-ie,
+     * pod którym ten ITM8 przyszedł w przyjęciu PZ albo w pliku dostawy z bazy. Klucz = ITM8 bez zer wiodących,
+     * artykuł z {@code byItm8}, więc w kolumnie EAN staje EAN z kartoteki.
+     */
+    private Map<String, CatalogProduct> baseItm8Products(UUID storeId, List<String> itm8s) {
+        if (itm8s.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> eanOf = new HashMap<>();
+        for (DataEntryCatalogRepository.Itm8Ean row : catalog.findEansOfItm8s(storeId, itm8s.toArray(String[]::new))) {
+            eanOf.putIfAbsent(row.getItm8(), row.getEan());
+        }
+        Map<String, CatalogProduct> byEan = lookupByKey(storeId, eanOf.values().stream().map(DataEntryService::key)
+                .filter(Objects::nonNull).distinct().toList());
+        Map<String, CatalogProduct> found = new HashMap<>();
+        eanOf.forEach((itm8, ean) -> {
+            CatalogProduct product = byEan.get(key(ean));
+            if (product != null && !product.draft()) {
+                found.put(itm8, new CatalogProduct(itm8, product.itm8(),
+                        product.catalogEan() != null ? product.catalogEan() : ean, product.name(), product.brand(),
+                        product.purchasePrice(), product.vatPercent(), product.catalogVat(), product.salePrice(),
+                        product.cadencier(), product.cadencierPrice(), product.promoPrice(), product.promoTo(),
+                        product.unit(), product.netContent(), product.subfamilyCode(), product.stock(),
+                        product.rotation(), true, false));
+            }
+        });
+        return found;
     }
 
     private Map<String, CatalogProduct> lookupByKey(UUID storeId, List<String> keys) {

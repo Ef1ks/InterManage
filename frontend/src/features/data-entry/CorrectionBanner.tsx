@@ -18,13 +18,13 @@ import { todayIso } from '@/lib/dates'
 import type { CorrectionDelivery } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { cn } from '@/lib/utils'
-import type { DraftCorrection, DraftInvoice } from '@/store/dataEntryDraftSlice'
+import type { DraftCorrection, DraftDelivery, DraftInvoice } from '@/store/dataEntryDraftSlice'
 
-import { useCorrectionDeliveries, useCorrectionDeliveryLines } from './api'
+import { useCorrectionBons, useCorrectionDeliveries } from './api'
 import { buildCorrectionMacro, planCorrectionMacro } from './correction-macro'
-import { belowRequiredMargin, type DataEntryRow, type Pricing, serviceKind } from './rows'
+import { type DataEntryRow, serviceKind } from './rows'
 
-type Delivery = NonNullable<DraftCorrection['delivery']>
+type Delivery = DraftDelivery
 
 const toDelivery = (item: CorrectionDelivery): Delivery => ({
   id: item.id,
@@ -45,7 +45,6 @@ export function CorrectionBanner({
   invoice,
   correction,
   rows,
-  pricing,
   macroOpen,
   onMacroOpenChange,
   onDelivery,
@@ -55,22 +54,28 @@ export function CorrectionBanner({
   invoice: DraftInvoice
   correction: DraftCorrection
   rows: DataEntryRow[]
-  pricing: Pricing
   macroOpen: boolean
   onMacroOpenChange: (open: boolean) => void
-  /** `auto`: bon podpięty sam, bez kroku cofania. */
-  onDelivery: (delivery: Delivery | null, auto?: boolean) => void
+  /** `auto`: bon podpięty sam, bez kroku cofania; `extra`: kolejne bony tej samej korekty. */
+  onDelivery: (delivery: Delivery | null, auto?: boolean, extra?: Delivery[]) => void
   onLinkRow: (row: DataEntryRow) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const { delivery, corrected, reason } = correction
+  const extra = useMemo(() => correction.extraDeliveries ?? [], [correction.extraDeliveries])
   const undecided = delivery === undefined
   const candidates = useCorrectionDeliveries(storeId, invoice.id, '', delivery === null || undecided)
   const matched = useMemo(() => (candidates.data ?? []).filter((item) => item.matched), [candidates.data])
 
+  // Jeden pasujący bon podpina się sam; przy kilku (faktura bazy z kilkoma WZ) wszystkie z artykułami korekty, od
+  // największej liczby (tak podaje je serwer): makro wpisze przy każdym artykule jego bon.
+  const auto = useMemo(
+    () => (matched.length === 1 ? matched : matched.filter((item) => item.commonArticles > 0)),
+    [matched],
+  )
   useEffect(() => {
-    if (undecided && matched.length === 1) onDelivery(toDelivery(matched[0]), true)
-  }, [undecided, matched, onDelivery])
+    if (undecided && auto.length > 0) onDelivery(toDelivery(auto[0]), true, auto.slice(1).map(toDelivery))
+  }, [undecided, auto, onDelivery])
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl bg-sky-200 px-4 py-3 text-sky-950 dark:bg-sky-950/60 dark:text-sky-100">
@@ -129,6 +134,11 @@ export function CorrectionBanner({
           </p>
         )}
         {delivery && !delivery.id && <p className="text-xs">wpisany ręcznie, spoza raportów</p>}
+        {extra.length > 0 && (
+          <p className="text-xs" title="Artykuły korekty są na kilku bonach: makro wpisze przy każdym jego bon">
+            oraz bon {extra.map((item) => item.number).join(', ')}
+          </p>
+        )}
       </div>
 
       <Button
@@ -156,10 +166,9 @@ export function CorrectionBanner({
         <MacroDialog
           storeId={storeId}
           invoiceId={invoice.id}
-          delivery={delivery}
+          deliveries={[delivery, ...extra]}
           hasBeforeRows={correction.hasBeforeRows}
           rows={rows}
-          pricing={pricing}
           open={macroOpen}
           onOpenChange={onMacroOpenChange}
           onLinkRow={onLinkRow}
@@ -238,6 +247,14 @@ function DeliveryPicker({
                             faktura korygowana
                           </span>
                         )}
+                        {item.commonArticles > 0 && (
+                          <span
+                            className="rounded-md bg-sky-200 px-1.5 py-0.5 text-xs font-medium text-sky-950 dark:bg-sky-900 dark:text-sky-50"
+                            title="Tyle artykułów z korekty jest w tym przyjęciu"
+                          >
+                            artykuły korekty: {item.commonArticles}
+                          </span>
+                        )}
                       </span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {[
@@ -279,42 +296,38 @@ function DeliveryPicker({
 function MacroDialog({
   storeId,
   invoiceId,
-  delivery,
+  deliveries,
   hasBeforeRows,
   rows,
-  pricing,
   open,
   onOpenChange,
   onLinkRow,
 }: {
   storeId: string
   invoiceId: string | null
-  delivery: Delivery
+  deliveries: Delivery[]
   hasBeforeRows: boolean
   rows: DataEntryRow[]
-  pricing: Pricing
   open: boolean
   onOpenChange: (open: boolean) => void
   onLinkRow: (row: DataEntryRow) => void
 }) {
-  const lines = useCorrectionDeliveryLines(storeId, invoiceId, open ? delivery.id : null)
+  const lines = useCorrectionBons(storeId, invoiceId, deliveries, open)
+  const numbers = deliveries.map((item) => item.number).join(', ')
   const articles = useMemo(
     () => rows.filter((row) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null),
     [rows],
   )
-  const waiting = delivery.id !== null && (lines.isPending || lines.isError)
+  const waiting = lines.pending || lines.error
   const plan = useMemo(
-    () =>
-      waiting
-        ? null
-        : planCorrectionMacro(articles, hasBeforeRows, lines.data ?? null, (row) => belowRequiredMargin(row, pricing)),
-    [waiting, articles, hasBeforeRows, lines.data, pricing],
+    () => (waiting ? null : planCorrectionMacro(articles, hasBeforeRows, lines.bons)),
+    [waiting, articles, hasBeforeRows, lines.bons],
   )
 
   const copy = async () => {
     if (!plan) return
     try {
-      await navigator.clipboard.writeText(buildCorrectionMacro(delivery.number, plan.items, todayIso()))
+      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso()))
     } catch {
       toast.error('Nie udało się skopiować makra do schowka')
       return
@@ -331,7 +344,9 @@ function MacroDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-4 p-6 sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Makro korekty bonu {delivery.number}</DialogTitle>
+          <DialogTitle>
+            {deliveries.length > 1 ? `Makro korekty bonów ${numbers}` : `Makro korekty bonu ${numbers}`}
+          </DialogTitle>
           <DialogDescription>
             {hasBeforeRows
               ? 'Korekta podaje stan po zmianie: ilości i ceny są z faktury.'
@@ -341,7 +356,7 @@ function MacroDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {lines.isError ? (
+        {lines.error ? (
           <p className="text-sm text-destructive">Nie udało się wczytać bonu.</p>
         ) : !plan ? (
           <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
@@ -363,15 +378,13 @@ function MacroDialog({
                       <tr key={item.key}>
                         <td className="max-w-0 px-3 py-1.5">
                           <span className="block truncate font-medium">{item.name}</span>
-                          <span className="block text-xs text-muted-foreground tabular-nums">{item.ean}</span>
+                          <span className="block text-xs text-muted-foreground tabular-nums">
+                            {item.ean}
+                            {deliveries.length > 1 && ` · bon ${item.bonNumber}`}
+                          </span>
                           {item.added && (
                             <span className="mt-0.5 mr-1 inline-block rounded-md bg-sky-300 px-1.5 py-0.5 text-xs font-semibold text-sky-950 dark:bg-sky-800 dark:text-sky-50">
                               dochodzi do bonu
-                            </span>
-                          )}
-                          {item.lowMargin && (
-                            <span className="mt-0.5 inline-block rounded-md bg-red-300 px-1.5 py-0.5 text-xs font-semibold text-red-950 dark:bg-red-900 dark:text-red-50">
-                              za niska marża, 2 × Enter po ilości
                             </span>
                           )}
                         </td>

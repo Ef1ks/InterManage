@@ -124,6 +124,13 @@ export function useEmployeeActions(storeId: string) {
   const restore = useMutation({
     mutationFn: (id: string) => api<StaffEmployee>(path(storeId, `/employees/${id}/restore`), { method: 'POST' }),
   })
+  /** Usunięcie osoby po zakończeniu pracy, tylko właściciel; to znacznik, `undelete` go zdejmuje. */
+  const remove = useMutation({
+    mutationFn: (id: string) => api<void>(path(storeId, `/employees/${id}/delete`), { method: 'POST' }),
+  })
+  const undelete = useMutation({
+    mutationFn: (id: string) => api<StaffEmployee>(path(storeId, `/employees/${id}/undelete`), { method: 'POST' }),
+  })
   const resendInvitation = useMutation({
     mutationFn: (id: string) => api<void>(path(storeId, `/employees/${id}/invitation`), { method: 'POST' }),
   })
@@ -140,6 +147,8 @@ export function useEmployeeActions(storeId: string) {
     update,
     end,
     restore,
+    remove,
+    undelete,
     resendInvitation,
     transfer,
   }

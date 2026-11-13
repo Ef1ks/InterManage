@@ -96,6 +96,7 @@ import { type RootState, useAppDispatch, useAppSelector } from '@/store'
 import {
   type DataEntryDraft,
   type DraftCorrection,
+  type DraftDelivery,
   EMPTY_DATA_ENTRY,
   setDataEntryDraft,
   setDataEntrySaved,
@@ -108,7 +109,7 @@ import {
   lookupProducts,
   useDataEntryNomenclature,
   useLinkProduct,
-  useCorrectionDeliveryLines,
+  useCorrectionBons,
   useLoadedKsefInvoice,
   useMarkInvoice,
   useSaveTemporaryXml,
@@ -371,10 +372,19 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     suppliers && !supplier && !invoice?.supplier && invoice?.sellerNip?.replace(/\D/g, '').length === 10
       ? invoice.sellerNip.replace(/\D/g, '')
       : null
-  const correctionLines = useCorrectionDeliveryLines(
-    store.id,
-    invoice?.id ?? null,
-    invoice?.correction?.delivery?.id ?? null,
+  // Linie wszystkich bonów korekty (główny i kolejne) do przypinania pozycji.
+  const draftCorrection = invoice?.correction
+  const correctionDeliveries = useMemo(
+    () => (draftCorrection?.delivery ? [draftCorrection.delivery, ...(draftCorrection.extraDeliveries ?? [])] : []),
+    [draftCorrection],
+  )
+  const correctionBons = useCorrectionBons(store.id, invoice?.id ?? null, correctionDeliveries)
+  const correctionLines = useMemo(
+    () =>
+      correctionBons.bons.some((bon) => bon.lines !== null)
+        ? correctionBons.bons.flatMap((bon) => bon.lines ?? [])
+        : undefined,
+    [correctionBons.bons],
   )
   const { data: supplierPrices } = useSupplierSalePrices(store.id)
   // Stała cena sprzedaży dostawcy (Ustawienia sklepu): cena sugerowana wszystkich artykułów dokumentu.
@@ -1022,11 +1032,17 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // ---------- bon faktury korygującej
 
   const chooseCorrectionDelivery = useCallback(
-    (delivery: NonNullable<DraftCorrection['delivery']> | null, auto = false) => {
+    (delivery: NonNullable<DraftCorrection['delivery']> | null, auto = false, extra: DraftDelivery[] = []) => {
       const before = currentDraft()
       if (!before.invoice?.correction) return
       setDraft(
-        { ...before, invoice: { ...before.invoice, correction: { ...before.invoice.correction, delivery } } },
+        {
+          ...before,
+          invoice: {
+            ...before.invoice,
+            correction: { ...before.invoice.correction, delivery, extraDeliveries: extra },
+          },
+        },
         { record: !auto },
       )
     },
@@ -1329,7 +1345,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           invoice={invoice}
           correction={invoice.correction}
           rows={rows}
-          pricing={pricing}
           macroOpen={correctionMacroOpen}
           onMacroOpenChange={setCorrectionMacroOpen}
           onDelivery={chooseCorrectionDelivery}
@@ -2033,7 +2048,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onUnlinked={onUnlinked}
         inTable={tableEans}
         lastSaleDate={canSeeSales ? (salesOverview.data?.lastSaleDate ?? addDays(todayIso(), -1)) : null}
-        bonLines={correctionLines.data}
+        bonLines={correctionLines}
       />
 
       <SplitQuantityDialog rows={splitTargets} onClose={() => setSplitTargets([])} onSplit={splitRows} />

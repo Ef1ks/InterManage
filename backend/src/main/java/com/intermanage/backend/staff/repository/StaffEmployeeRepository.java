@@ -13,10 +13,13 @@ import com.intermanage.backend.staff.entity.StaffEmployee;
 
 public interface StaffEmployeeRepository extends JpaRepository<StaffEmployee, UUID> {
 
-    /** Także po zakończeniu pracy: panel pokazuje ich osobno, żeby dało się przywrócić osobę, która wraca. */
+    /**
+     * Także po zakończeniu pracy: panel pokazuje ich osobno, żeby dało się przywrócić osobę, która wraca. Bez usuniętych
+     * przez właściciela.
+     */
     @EntityGraph(attributePaths = {"store", "user", "user.role", "position", "position.department"})
     @Query("""
-            select e from StaffEmployee e left join e.user u where e.store.id in :storeIds
+            select e from StaffEmployee e left join e.user u where e.store.id in :storeIds and e.deletedAt is null
             order by lower(coalesce(u.displayName, e.fullName))""")
     List<StaffEmployee> findInStores(Collection<UUID> storeIds);
 

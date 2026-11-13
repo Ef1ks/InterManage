@@ -23,6 +23,6 @@ public record InvoiceBulkRequest(@NotNull Action action,
     }
 
     public record Filter(String query, String internalId, String kind, DataEntryInvoiceService.ListStatus status,
-            Boolean showSkipped) {
+            Boolean showSkipped, Boolean myDeliveries, Boolean quantityChanges) {
     }
 }

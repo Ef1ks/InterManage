@@ -67,6 +67,15 @@ public interface KsefInvoiceRepository extends JpaRepository<KsefInvoice, UUID>,
             order by i.issueDate desc, i.id""")
     List<UUID> findUnreadStoredCorrections(String nip, Collection<String> ignored, Pageable page);
 
+    /** Korekty firmy z XML w bazie, których zmiany ilości nie liczono obecną regułą ({@code rule}). */
+    @Query("""
+            select i.id from KsefInvoice i
+            where i.nip = :nip and i.invoiceType like 'Kor%'
+              and (i.quantityChangeRule is null or i.quantityChangeRule < :rule)
+              and exists (select 1 from KsefInvoiceXml x where x.invoiceId = i.id)
+            order by i.id""")
+    List<UUID> findCorrectionsToClassify(String nip, short rule, Pageable page);
+
     /** Korekty firmy bez odczytanych faktur korygowanych i bez XML (do pobrania z KSeF), od najnowszej. */
     @Query("""
             select i from KsefInvoice i

@@ -14,15 +14,19 @@ import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentSearch;
+import com.intermanage.backend.ksef.component.DeliveryAddress;
+import com.intermanage.backend.ksef.entity.KsefBaseSupplierCode;
 import com.intermanage.backend.ksef.entity.KsefConnection;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 import com.intermanage.backend.ksef.entity.KsefInvoiceEntry;
 import com.intermanage.backend.ksef.entity.KsefSkippedSupplier;
 
+import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -42,7 +46,20 @@ public final class KsefInvoiceSearch {
      * {@link #WITHOUT_INTERNAL_ID} (tylko bez IDWew) albo {@code null} (wszystkie widoczne w sklepie).
      */
     public record Filter(String query, LocalDate from, LocalDate to, Entered entered, Kind kind, String internalId,
-            boolean showSkipped) {
+            boolean showSkipped, boolean myDeliveries, boolean quantityChanges) {
+
+        public Filter(String query, LocalDate from, LocalDate to, Entered entered, Kind kind, String internalId,
+                boolean showSkipped) {
+            this(query, from, to, entered, kind, internalId, showSkipped, false, false);
+        }
+    }
+
+    /**
+     * Sklep, dla którego liczy się lista: jego IDWew, ulica z numerem z adresu sklepu ({@link DeliveryAddress#storeKey},
+     * {@code null} bez adresu) i ulice wszystkich sklepów firmy (do rozpoznania faktur niczyich).
+     */
+    public record Scope(UUID storeId, String nip, Collection<String> ownInternalIds, String ownAddressKey,
+            Collection<String> companyAddressKeys) {
     }
 
     public enum Entered {
@@ -55,6 +72,12 @@ public final class KsefInvoiceSearch {
 
     public static final String WITHOUT_INTERNAL_ID = "NONE";
     public static final String OWN_INTERNAL_IDS = "OWN";
+    /**
+     * Moje i nierozpoznane: faktury sklepu (jego IDWew, bez IDWew z adresem dostawy sklepu, z przyjęciem PZ w sklepie;
+     * korekta też przez fakturę, którą koryguje) i wszystkie, których nie da się przypisać żadnemu sklepowi firmy
+     * (np. korekta faktury sprzed KSeF bez PZ), żeby żadna nie zginęła.
+     */
+    public static final String MINE = "MINE";
 
     private static final Map<String, String> SORTABLE = Map.of(
             "issueDate", "issueDate",
@@ -78,10 +101,30 @@ public final class KsefInvoiceSearch {
 
     public static Specification<KsefInvoice> matching(UUID storeId, String nip, Collection<String> ownInternalIds,
             Filter filter) {
+        return matching(new Scope(storeId, nip, ownInternalIds, null, List.of()), filter);
+    }
+
+    public static Specification<KsefInvoice> matching(Scope scope, Filter filter) {
+        UUID storeId = scope.storeId();
+        String nip = scope.nip();
+        Collection<String> ownInternalIds = scope.ownInternalIds();
         return (root, query, cb) -> {
             List<Predicate> all = new ArrayList<>();
             all.add(cb.equal(root.get("nip"), nip));
-            all.add(visibleInStore(root, query, cb, ownInternalIds, filter.internalId()));
+            if (MINE.equals(filter.internalId())) {
+                all.add(visibleInStore(root, query, cb, ownInternalIds, null));
+                all.add(mineOrUnknown(root, query, cb, scope));
+            } else {
+                all.add(visibleInStore(root, query, cb, ownInternalIds, filter.internalId()));
+            }
+            if (filter.myDeliveries()) {
+                all.add(toMyDeliveries(root, query, cb, scope));
+            }
+            if (filter.quantityChanges()) {
+                // Bez korekt tylko na kwoty; korekta jeszcze nieodczytana zostaje, żeby nie zginęła.
+                all.add(cb.or(cb.notLike(root.get("invoiceType"), "Kor%"), cb.isNull(root.get("quantityChange")),
+                        cb.isTrue(root.get("quantityChange"))));
+            }
             if (!filter.showSkipped()) {
                 all.add(cb.not(cb.exists(skippedSupplier(root, query, cb, storeId))));
             }
@@ -108,10 +151,32 @@ public final class KsefInvoiceSearch {
                         cb.like(plain(cb, root.get("invoiceNumber")), contains),
                         cb.like(plain(cb, root.get("sellerName")), contains),
                         cb.like(root.get("sellerNip"), contains),
-                        cb.like(plain(cb, root.get("ksefNumber")), contains)));
+                        cb.like(plain(cb, root.get("ksefNumber")), contains),
+                        cb.like(plain(cb, root.get("baseSupplierInvoice")), contains),
+                        cb.like(root.get("baseSupplierCode"), contains),
+                        cb.exists(baseSupplierNamed(root, query, cb, contains))));
             }
             return cb.and(all.toArray(Predicate[]::new));
         };
+    }
+
+    /**
+     * Refaktura bazy, której kod dostawcy w bazie firma przypisała dostawcy pasującemu do słowa (nazwa albo NIP):
+     * po wpisaniu "artek" są też faktury Artka wystawione przez bazę.
+     */
+    private static Subquery<Integer> baseSupplierNamed(Root<KsefInvoice> root, CriteriaQuery<?> query,
+            CriteriaBuilder cb, String contains) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<KsefBaseSupplierCode> code = subquery.from(KsefBaseSupplierCode.class);
+        subquery.select(cb.literal(1)).where(
+                cb.isNotNull(root.get("baseSupplierCode")),
+                cb.equal(code.get("nip"), root.get("nip")),
+                cb.isNull(code.get("deletedAt")),
+                cb.equal(code.get("code"),
+                        cb.function("ltrim", String.class, root.get("baseSupplierCode"), cb.literal("0"))),
+                cb.or(cb.like(plain(cb, code.get("name")), contains),
+                        cb.like(cb.coalesce(code.<String>get("supplierNip"), ""), contains)));
+        return subquery;
     }
 
     /**
@@ -176,7 +241,7 @@ public final class KsefInvoiceSearch {
     }
 
     /** Sklepy firmy: z połączeniem KSeF z tym NIP-em. */
-    private static Subquery<UUID> companyStores(CriteriaQuery<?> query, CriteriaBuilder cb, String nip) {
+    private static Subquery<UUID> companyStores(CommonAbstractCriteria query, CriteriaBuilder cb, String nip) {
         Subquery<UUID> subquery = query.subquery(UUID.class);
         Root<KsefConnection> connection = subquery.from(KsefConnection.class);
         subquery.select(connection.get("storeId")).where(cb.equal(connection.get("nip"), nip));
@@ -215,6 +280,170 @@ public final class KsefInvoiceSearch {
                 link.get("document").get("store").get("id").in(companyStores(query, cb, nip)),
                 cb.isNull(link.get("document").get("errorMarkedAt")),
                 cb.isNull(link.get("unlinkedAt")));
+        return subquery;
+    }
+
+    /** Warunek na fakturze ({@code invoice}) budowany w podanym zapytaniu (główne albo podzapytanie). */
+    private interface InvoiceCondition {
+        Predicate on(Path<KsefInvoice> invoice, CommonAbstractCriteria query);
+    }
+
+    /** {@link #MINE}: moja (wprost albo przez fakturę korygowaną) albo niczyja. */
+    private static Predicate mineOrUnknown(Root<KsefInvoice> root, CriteriaQuery<?> query, CriteriaBuilder cb,
+            Scope scope) {
+        InvoiceCondition mine = (invoice, q) -> mineDirect(invoice, q, cb, scope);
+        InvoiceCondition assigned = (invoice, q) -> assignedDirect(invoice, q, cb, scope);
+        Predicate correctedMine = cb.or(
+                cb.exists(correctedMatching(root, query, cb, scope.nip(), mine)),
+                cb.exists(correctedDelivery(root, query, cb, scope.storeId(), null)));
+        Predicate unknown = cb.and(
+                cb.not(assignedDirect(root, query, cb, scope)),
+                cb.not(cb.exists(correctedMatching(root, query, cb, scope.nip(), assigned))),
+                cb.not(cb.exists(correctedDelivery(root, query, cb, null, scope.nip()))));
+        return cb.or(mineDirect(root, query, cb, scope), correctedMine, unknown);
+    }
+
+    /**
+     * Do moich przyjęć: faktura z przyjęciem PZ (albo przypiętym dokumentem) w sklepie, a korekta - gdy takie ma
+     * faktura, którą koryguje (także faktura sprzed KSeF: po numerze w PZ).
+     */
+    private static Predicate toMyDeliveries(Root<KsefInvoice> root, CriteriaQuery<?> query, CriteriaBuilder cb,
+            Scope scope) {
+        InvoiceCondition delivered = (invoice, q) -> documentInStore(invoice, q, cb, scope.storeId());
+        return cb.or(
+                documentInStore(root, query, cb, scope.storeId()),
+                cb.exists(correctedDelivery(root, query, cb, scope.storeId(), null)),
+                cb.exists(correctedMatching(root, query, cb, scope.nip(), delivered)));
+    }
+
+    /** Faktura sklepu sama z siebie: jego IDWew, bez IDWew z jego adresem dostawy albo z PZ w sklepie. */
+    private static Predicate mineDirect(Path<KsefInvoice> invoice, CommonAbstractCriteria query, CriteriaBuilder cb,
+            Scope scope) {
+        List<Predicate> any = new ArrayList<>();
+        if (!scope.ownInternalIds().isEmpty()) {
+            any.add(cb.exists(internalIdsOf(invoice, query, cb, scope.ownInternalIds())));
+        }
+        if (scope.ownAddressKey() != null) {
+            any.add(cb.and(cb.not(cb.exists(internalIdsOf(invoice, query, cb, null))),
+                    addressOf(invoice, cb, scope.ownAddressKey())));
+        }
+        any.add(documentInStore(invoice, query, cb, scope.storeId()));
+        return cb.or(any.toArray(Predicate[]::new));
+    }
+
+    /** Faktura przypisana któremuś sklepowi firmy: ma IDWew, adres dostawy któregoś sklepu albo dokument. */
+    private static Predicate assignedDirect(Path<KsefInvoice> invoice, CommonAbstractCriteria query,
+            CriteriaBuilder cb, Scope scope) {
+        List<Predicate> any = new ArrayList<>();
+        any.add(cb.exists(internalIdsOf(invoice, query, cb, null)));
+        for (String key : scope.companyAddressKeys()) {
+            any.add(addressOf(invoice, cb, key));
+        }
+        any.add(cb.exists(documentOf(invoice, query, cb, null, scope.nip())));
+        return cb.or(any.toArray(Predicate[]::new));
+    }
+
+    private static Predicate addressOf(Path<KsefInvoice> invoice, CriteriaBuilder cb, String storeKey) {
+        // Bez adresu "" zamiast null: inaczej not(...) przy fakturze niczyjej dałoby null i ją odrzuciło.
+        Expression<String> address = cb.coalesce(invoice.<String>get("deliveryAddress"), "");
+        return cb.like(address, "%" + DeliveryAddress.likeFragment(storeKey) + "%");
+    }
+
+    private static Predicate documentInStore(Path<KsefInvoice> invoice, CommonAbstractCriteria query,
+            CriteriaBuilder cb, UUID storeId) {
+        return cb.exists(documentOf(invoice, query, cb, storeId, null));
+    }
+
+    /**
+     * Przyjęcie PZ z numerem faktury albo dokument przypięty do niej - w sklepie {@code storeId} albo (gdy null)
+     * w którymkolwiek sklepie firmy {@code nip}.
+     */
+    private static Subquery<Integer> documentOf(Path<KsefInvoice> invoice, CommonAbstractCriteria query,
+            CriteriaBuilder cb, UUID storeId, String nip) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<KsefInvoice> same = subquery.from(KsefInvoice.class);
+        Subquery<Integer> delivery = subquery.subquery(Integer.class);
+        Root<Document> document = delivery.from(Document.class);
+        delivery.select(cb.literal(1)).where(
+                storeOf(document.get("store").get("id"), delivery, cb, storeId, nip),
+                cb.equal(document.get("type"), DocumentType.PZ),
+                cb.isNull(document.get("errorMarkedAt")),
+                cb.equal(cb.upper(document.get("supplierDocumentNumber")), cb.upper(same.get("invoiceNumber"))));
+        Subquery<Integer> linked = subquery.subquery(Integer.class);
+        Root<DocumentKsefInvoice> link = linked.from(DocumentKsefInvoice.class);
+        linked.select(cb.literal(1)).where(
+                cb.equal(link.get("invoice"), same),
+                storeOf(link.get("document").get("store").get("id"), linked, cb, storeId, nip),
+                cb.isNull(link.get("document").get("errorMarkedAt")),
+                cb.isNull(link.get("unlinkedAt")));
+        subquery.select(cb.literal(1)).where(cb.equal(same, invoice),
+                cb.or(cb.exists(delivery), cb.exists(linked)));
+        return subquery;
+    }
+
+    private static Predicate storeOf(Path<UUID> store, CommonAbstractCriteria query, CriteriaBuilder cb,
+            UUID storeId, String nip) {
+        return storeId != null ? cb.equal(store, storeId) : store.in(companyStores(query, cb, nip));
+    }
+
+    /** IDWew faktury - wszystkie ({@code among} = null) albo spośród podanych. */
+    private static Subquery<Integer> internalIdsOf(Path<KsefInvoice> invoice, CommonAbstractCriteria query,
+            CriteriaBuilder cb, Collection<String> among) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<KsefInvoice> same = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, KsefInvoice.InternalIdRef> ids = same.join("internalIds");
+        Predicate equal = cb.equal(same, invoice);
+        subquery.select(cb.literal(1)).where(among == null ? equal : cb.and(equal, ids.get("internalId").in(among)));
+        return subquery;
+    }
+
+    /**
+     * Korekta ({@code root}) koryguje fakturę firmy spełniającą {@code condition}: po numerze KSeF faktury
+     * korygowanej albo po NIP-ie sprzedawcy i numerze (bez względu na wielkość liter).
+     */
+    private static Subquery<Integer> correctedMatching(Root<KsefInvoice> root, CriteriaQuery<?> query,
+            CriteriaBuilder cb, String nip, InvoiceCondition condition) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<KsefInvoice> correction = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, KsefInvoice.CorrectedRef> ref = correction.join("correctedInvoices");
+        // Dwa osobne podzapytania zamiast "numer KSeF albo NIP i numer": z OR baza nie bierze indeksów i przegląda
+        // wszystkie faktury firmy dla każdej korekty. Po NIP-ie i numerze tylko faktury sprzed KSeF (bez numeru KSeF).
+        Subquery<Integer> byKsefNumber = subquery.subquery(Integer.class);
+        Root<KsefInvoice> found = byKsefNumber.from(KsefInvoice.class);
+        byKsefNumber.select(cb.literal(1)).where(
+                cb.equal(found.get("nip"), nip),
+                cb.equal(found.get("ksefNumber"), ref.get("ksefNumber")),
+                condition.on(found, byKsefNumber));
+        Subquery<Integer> byNumber = subquery.subquery(Integer.class);
+        Root<KsefInvoice> same = byNumber.from(KsefInvoice.class);
+        byNumber.select(cb.literal(1)).where(
+                cb.isNull(ref.get("ksefNumber")),
+                cb.equal(same.get("nip"), nip),
+                cb.equal(same.get("sellerNip"), correction.get("sellerNip")),
+                cb.equal(cb.upper(same.get("invoiceNumber")), cb.upper(ref.get("invoiceNumber"))),
+                condition.on(same, byNumber));
+        subquery.select(cb.literal(1)).where(cb.equal(correction, root),
+                cb.or(cb.exists(byKsefNumber), cb.exists(byNumber)));
+        return subquery;
+    }
+
+    /**
+     * Korekta ({@code root}) koryguje fakturę, której numer jest numerem dokumentu dostawcy w przyjęciu PZ - w sklepie
+     * {@code storeId} albo (gdy null) w sklepie firmy {@code nip}. Działa też dla faktur sprzed KSeF.
+     */
+    private static Subquery<Integer> correctedDelivery(Root<KsefInvoice> root, CriteriaQuery<?> query,
+            CriteriaBuilder cb, UUID storeId, String nip) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<KsefInvoice> correction = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, KsefInvoice.CorrectedRef> ref = correction.join("correctedInvoices");
+        Subquery<Integer> delivery = subquery.subquery(Integer.class);
+        Root<Document> document = delivery.from(Document.class);
+        delivery.select(cb.literal(1)).where(
+                storeOf(document.get("store").get("id"), delivery, cb, storeId, nip),
+                cb.equal(document.get("type"), DocumentType.PZ),
+                cb.isNull(document.get("errorMarkedAt")),
+                cb.equal(cb.upper(document.get("supplierDocumentNumber")), cb.upper(ref.get("invoiceNumber"))));
+        subquery.select(cb.literal(1)).where(cb.equal(correction, root), cb.exists(delivery));
         return subquery;
     }
 

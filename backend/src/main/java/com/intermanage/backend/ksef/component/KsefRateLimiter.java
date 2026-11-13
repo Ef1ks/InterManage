@@ -40,7 +40,11 @@ public class KsefRateLimiter {
     public enum Operation {
         METADATA("wyszukiwanie faktur", 2, 10, 16),
         INVOICE("pobieranie faktur", 2, 10, 50),
-        AUTH("logowanie", 1, 4, 15);
+        AUTH("logowanie", 1, 4, 15),
+        /** Zlecenie eksportu paczki faktur (KSeF: 8/s, 16/min, 20/h). */
+        EXPORT("eksport paczki faktur", 1, 8, 12),
+        /** Status eksportu (KSeF: 10/s, 60/min, 600/h); pobranie części paczki nie ma limitu. */
+        EXPORT_STATUS("status eksportu", 2, 30, 300);
 
         final String label;
         final int perSecond;

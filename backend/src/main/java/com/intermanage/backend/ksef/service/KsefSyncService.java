@@ -239,27 +239,34 @@ public class KsefSyncService {
         }
     }
 
-    /** Nowe faktury dochodzą, znane są uaktualniane (scalanie po numerze KSeF). */
     private void save(String nip, List<KsefInvoiceMetadata> page, Progress counts) {
         if (page.isEmpty()) {
             return;
         }
-        transaction.executeWithoutResult(status -> {
-            Map<String, KsefInvoice> existing = invoices.findByKsefNumbers(nip,
-                            page.stream().map(KsefInvoiceMetadata::ksefNumber).toList())
-                    .stream().collect(Collectors.toMap(KsefInvoice::getKsefNumber, Function.identity()));
-            for (KsefInvoiceMetadata metadata : page) {
-                KsefInvoice invoice = existing.get(metadata.ksefNumber());
-                if (invoice == null) {
-                    invoice = new KsefInvoice(nip, metadata);
-                    existing.put(metadata.ksefNumber(), invoice);
-                    invoices.save(invoice);
-                    counts.created++;
-                } else {
-                    invoice.update(metadata);
-                }
+        counts.created += transaction.execute(status -> saveMetadata(nip, page));
+    }
+
+    /**
+     * Nowe faktury dochodzą, znane są uaktualniane (scalanie po numerze KSeF); w bieżącej transakcji, zwraca liczbę
+     * nowych. Też dla eksportu paczek, który bywa szybszy niż pobieranie metadanych.
+     */
+    public int saveMetadata(String nip, List<KsefInvoiceMetadata> page) {
+        Map<String, KsefInvoice> existing = invoices.findByKsefNumbers(nip,
+                        page.stream().map(KsefInvoiceMetadata::ksefNumber).toList())
+                .stream().collect(Collectors.toMap(KsefInvoice::getKsefNumber, Function.identity()));
+        int created = 0;
+        for (KsefInvoiceMetadata metadata : page) {
+            KsefInvoice invoice = existing.get(metadata.ksefNumber());
+            if (invoice == null) {
+                invoice = new KsefInvoice(nip, metadata);
+                existing.put(metadata.ksefNumber(), invoice);
+                invoices.save(invoice);
+                created++;
+            } else {
+                invoice.update(metadata);
             }
-        });
+        }
+        return created;
     }
 
     private void saveCursor(String nip, Instant cursor) {

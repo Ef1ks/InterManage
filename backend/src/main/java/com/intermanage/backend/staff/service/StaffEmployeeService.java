@@ -331,6 +331,29 @@ public class StaffEmployeeService {
         return response(employee);
     }
 
+    /**
+     * Usunięcie przez właściciela: tylko osoba po zakończeniu pracy (konto jest już zablokowane). To znacznik, więc wpis
+     * zostaje w bazie (dawne dni grafiku, karty czasu pracy) i da się go przywrócić.
+     */
+    @Transactional
+    public void delete(UUID storeId, UUID id, UUID actorId) {
+        StaffEmployee employee = employeeInCompany(storeId, id, actorId);
+        if (employee.getEndedAt() == null) {
+            throw ApiException.conflict("Najpierw zakończ pracę tej osoby, potem ją usuń");
+        }
+        employee.markDeleted(users.getReferenceById(actorId));
+    }
+
+    @Transactional
+    public EmployeeResponse undelete(UUID storeId, UUID id, UUID actorId) {
+        StaffEmployee employee = employees.findWithDetails(id)
+                .filter(found -> companyStoreIds(storeId, actorId).contains(found.getStore().getId()))
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono pracownika"));
+        employee.undelete();
+        employees.flush();
+        return response(employee);
+    }
+
     @Transactional
     public void resendInvitation(UUID storeId, UUID id, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
@@ -417,7 +440,8 @@ public class StaffEmployeeService {
     /** Pracownik z dowolnego sklepu firmy, ale tylko ze sklepu, do którego użytkownik ma dostęp. */
     StaffEmployee employeeInCompany(UUID storeId, UUID id, UUID actorId) {
         return employees.findWithDetails(id)
-                .filter(employee -> companyStoreIds(storeId, actorId).contains(employee.getStore().getId()))
+                .filter(employee -> employee.getDeletedAt() == null
+                        && companyStoreIds(storeId, actorId).contains(employee.getStore().getId()))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono pracownika"));
     }
 

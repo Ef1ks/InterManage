@@ -1,6 +1,11 @@
 import type { CorrectionDeliveryLine } from '@/lib/types'
 
-import { correctionBonLine, correctionFinishLines, correctionStartLines } from './mercalys-macro'
+import {
+  correctionArticleLines,
+  correctionBonLine,
+  correctionFinishLines,
+  correctionStartLines,
+} from './mercalys-macro'
 import type { DataEntryRow } from './rows'
 
 /**
@@ -13,12 +18,15 @@ export const CORRECTION_MACRO_CONFIG = {
   afterBon: 800,
   /** Po drugim Enterze, przed EAN-em. */
   afterBonSkip: 100,
-  /** Po EAN-ie program ładuje linię bonu: bez przerwy wpisana ilość przepadała i zostawała ilość z bonu. */
-  afterEan: 300,
+  /**
+   * Najdłużej tyle makro czeka, aż Mercalys wczyta artykuł po EAN-ie (cena z bonu w polu), wyczyści wiersz po bonie
+   * i przyjmie ilość i cenę. Dłużej = makro staje z komunikatem, zamiast pisać w złe pola.
+   */
+  load: 20000,
+  /** Artykuł spoza bonu nie ma na co czekać: zwykła przerwa po EAN-ie. */
+  afterEan: 800,
   /** Krócej niż 300 ms program nie nadąża między ilością a ceną. */
   afterQuantity: 300,
-  /** Pusty Enter między ilością a ceną. */
-  afterSkip: 300,
   /** Po ostatnim Enterze program zapisuje pozycję: przy krótszej przerwie nie nadążał z kolejnym numerem bonu. */
   afterPrice: 1000,
   /** Program sklepu dostaje cenę z taką liczbą miejsc po przecinku. */
@@ -31,8 +39,13 @@ export type CorrectionRow = Pick<
   'id' | 'ean' | 'eanFallback' | 'itm8' | 'name' | 'quantity' | 'unitNet' | 'before'
 >
 
+/** Bon korekty i jego linie po wcześniejszych korektach; `lines` = `null`, gdy bonu nie ma w raportach. */
+export type CorrectionBon = { number: string; lines: CorrectionDeliveryLine[] | null }
+
 export type CorrectionMacroItem = {
   key: string
+  /** Bon, na którym jest artykuł: makro wpisuje go w Nr BL przy tej pozycji (korekta bazy dotyczy kilku WZ). */
+  bonNumber: string
   ean: string
   name: string
   /** Stan bonu; `null`, gdy bonu nie ma w raportach. */
@@ -44,8 +57,6 @@ export type CorrectionMacroItem = {
   bonDiffers: boolean
   /** Korekta dopisuje artykuł, którego nie ma na bonie (zamiana artykułu, np. sałata masłowa na lodową). */
   added: boolean
-  /** Marża poniżej wymaganej w tabeli: program sklepu pokazuje po ilości powiadomienie do zamknięcia dwoma Enterami. */
-  lowMargin: boolean
 }
 
 export type CorrectionMacroProblem<Row extends CorrectionRow = CorrectionRow> = {
@@ -125,22 +136,24 @@ function changedState(row: CorrectionRow) {
 }
 
 /**
- * Plan makra z wierszy tabeli (artykuły, bez kaucji i dostawy). `lines`: linie bonu po wcześniejszych korektach, `null`
- * gdy bonu nie ma w raportach. Korekta z wierszami „przed” (`hasBeforeRows`) podaje stan po korekcie, więc ilość i cenę
+ * Plan makra z wierszy tabeli (artykuły, bez kaucji i dostawy). `bons`: bony korekty, pierwszy główny; artykuł idzie na
+ * bon, na którym jest (faktura bazy obejmuje kilka WZ, więc jedna korekta poprawia kilka bonów w jednym protokole), a bez
+ * trafienia na główny. Linie `null` = bonu nie ma w raportach. Korekta z wierszami „przed” (`hasBeforeRows`) podaje stan po korekcie, więc ilość i cenę
  * bierzemy z pozycji. Korekta bez nich podaje różnice: ilość to stan bonu plus pozycja, a cena z bonu, bo jej nie
  * zmienia. Artykułu spoza bonu makro nie wpisuje: program nie znalazłby linii, a kolejne klawisze trafiłyby w złe pola.
  * Wyjątkiem jest zamiana artykułu (`before.quantity` = 0): korekta sama mówi, że dochodzi do dostawy.
- * `lowMargin`: czy wiersz tabeli ma marżę poniżej wymaganej.
  */
 export function planCorrectionMacro<Row extends CorrectionRow>(
   rows: Row[],
   hasBeforeRows: boolean,
-  lines: CorrectionDeliveryLine[] | null,
-  lowMargin: (row: Row) => boolean = () => false,
+  bons: CorrectionBon[],
 ): CorrectionMacroPlan<Row> {
-  const bon = lines ? mergeBonLines(lines) : null
+  const merged = bons.map((item) => ({ number: item.number, lines: item.lines ? mergeBonLines(item.lines) : null }))
+  const main = merged[0]
+  // Linie znane choć dla jednego bonu: wtedy artykuł spoza wszystkich bonów to problem, a nie bon spoza raportów.
+  const bon = merged.some((item) => item.lines !== null) ? merged : null
   const plan: CorrectionMacroPlan<Row> = { items: [], problems: [], unchanged: 0 }
-  const groups = new Map<string, { line: CorrectionDeliveryLine | null; rows: Row[] }>()
+  const groups = new Map<string, { line: CorrectionDeliveryLine | null; bonNumber: string; rows: Row[] }>()
 
   for (const row of rows) {
     const changes = hasBeforeRows ? changedState(row) : difference(row) !== null
@@ -148,7 +161,16 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
       plan.unchanged += 1
       continue
     }
-    const line = bon ? bonLineOf(bon, row) : null
+    let line: CorrectionDeliveryLine | null = null
+    let bonNumber = main?.number ?? ''
+    for (const item of merged) {
+      const found = item.lines ? bonLineOf(item.lines, row) : null
+      if (found) {
+        line = found
+        bonNumber = item.number
+        break
+      }
+    }
     const added = row.before?.quantity === 0 && /^\d+$/.test(row.ean) && !row.eanFallback
     if (!line && !added && (bon || !/^\d+$/.test(row.ean) || row.eanFallback)) {
       if (changes) {
@@ -170,18 +192,17 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
       })
       continue
     }
-    const id = line ? `bon:${key(line.itm8) || key(line.ean)}` : `ean:${key(row.ean)}`
-    const group = groups.get(id) ?? { line, rows: [] }
+    const id = `${bonNumber}:${line ? `bon:${key(line.itm8) || key(line.ean)}` : `ean:${key(row.ean)}`}`
+    const group = groups.get(id) ?? { line, bonNumber, rows: [] }
     group.rows.push(row)
     groups.set(id, group)
   }
 
-  for (const [id, { line, rows: grouped }] of groups) {
+  for (const [id, { line, bonNumber, rows: grouped }] of groups) {
     const first = grouped[0]
     const ean = first.ean
     const bonQuantity = line?.quantity ?? null
     const bonPrice = line?.purchasePrice ?? null
-    const low = grouped.some(lowMargin)
     if (hasBeforeRows) {
       if (!grouped.some(changedState)) {
         plan.unchanged += grouped.length
@@ -203,6 +224,7 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
       const before = sum(grouped, (row) => row.before?.quantity ?? row.quantity ?? 0)
       plan.items.push({
         key: id,
+        bonNumber,
         ean,
         name: first.name,
         bonQuantity,
@@ -211,7 +233,6 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
         price: round(quantity === 0 ? (grouped[grouped.length - 1].unitNet ?? 0) : value / quantity, 4),
         bonDiffers: bonQuantity !== null && !same(before, bonQuantity),
         added: bon !== null && line === null,
-        lowMargin: low,
       })
       continue
     }
@@ -231,6 +252,7 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
     } else {
       plan.items.push({
         key: id,
+        bonNumber,
         ean,
         name: first.name,
         bonQuantity,
@@ -239,7 +261,6 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
         price,
         bonDiffers: false,
         added: false,
-        lowMargin: low,
       })
     }
   }
@@ -282,10 +303,12 @@ export const formatMacroQuantity = (value: number) => String(round(value, 3)).re
 export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACRO_CONFIG.priceDigits).replace('.', ',')
 
 /**
- * Skrypt makra: nowy protokół, numer bonu i kroki osobno dla każdej pozycji, po potwierdzeniu pracownika zakończenie;
- * linie z `#` odtwarzacz pomija. `today`: termin płatności, RRRR-MM-DD. CRLF jak w Windows.
+ * Skrypt makra: nowy protokół, numer bonu pozycji i kroki osobno dla każdej pozycji (pozycje różnych bonów w jednym
+ * protokole), po potwierdzeniu pracownika zakończenie; linie z `#` odtwarzacz pomija. `today`: termin płatności,
+ * RRRR-MM-DD. CRLF jak w Windows.
  */
-export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroItem[], today: string) {
+export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string) {
+  const bonNumbers = [...new Set(items.map((item) => item.bonNumber))].join(', ')
   const c = CORRECTION_MACRO_CONFIG
   const out: string[] = []
   // Odtwarzacz sam czeka 50 ms po każdej linii, więc przerwa 0 to brak linii SLEEP.
@@ -293,24 +316,26 @@ export function buildCorrectionMacro(bonNumber: string, items: CorrectionMacroIt
     out.push(`KEY|${name}`)
     if (sleep > 0) out.push(`SLEEP|${sleep}`)
   }
-  const enter = (text: string, sleep: number) => {
-    out.push(`TEXT|${text}`)
-    key('{Enter}', sleep)
-  }
 
-  out.push(`# Korekta bonu ${bonNumber}: ${items.length} poz.`, ...correctionStartLines(today))
+  out.push(`# Korekta bonu ${bonNumbers}: ${items.length} poz.`, ...correctionStartLines(today))
   for (const item of items) {
-    out.push(`# EAN ${item.ean}`, correctionBonLine(bonNumber), `SLEEP|${c.afterBon}`)
+    out.push(`# EAN ${item.ean}, bon ${item.bonNumber}`, correctionBonLine(item.bonNumber), `SLEEP|${c.afterBon}`)
     key('{Enter}', c.afterBonSkip)
-    enter(item.ean, c.afterEan)
-    enter(formatMacroQuantity(item.quantity), c.afterQuantity)
-    if (item.lowMargin) {
-      key('{Enter}', c.afterQuantity)
-      key('{Enter}', c.afterQuantity)
-    }
-    key('{Enter}', c.afterSkip)
-    enter(formatMacroPrice(item.price), c.afterPrice)
+    out.push(
+      ...correctionArticleLines(
+        {
+          ean: item.ean,
+          quantity: round(item.quantity, 3),
+          quantityText: formatMacroQuantity(item.quantity),
+          priceText: formatMacroPrice(item.price),
+          // Bon spoza raportów (cena nieznana) też ma linię w Mercalys, więc czekamy; artykuł dopisany nie ma.
+          waitForPrice: !item.added && item.bonPrice !== 0,
+        },
+        { load: c.load, afterEan: c.afterEan, afterQuantity: c.afterQuantity },
+      ),
+      `SLEEP|${c.afterPrice}`,
+    )
   }
-  out.push(...correctionFinishLines(bonNumber, items.length))
+  out.push(...correctionFinishLines(bonNumbers, items.length))
   return out.join('\r\n') + '\r\n'
 }

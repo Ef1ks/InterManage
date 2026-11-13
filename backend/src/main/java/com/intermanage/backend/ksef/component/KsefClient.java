@@ -171,6 +171,111 @@ public class KsefClient {
                 .retrieve().body(byte[].class));
     }
 
+    /** Certyfikat klucza publicznego MF do szyfrowania klucza symetrycznego (DER w Base64) i jego identyfikator. */
+    public record PublicKey(String certificate, String publicKeyId) {
+    }
+
+    /** Obowiązujący dziś klucz publiczny MF do szyfrowania klucza paczki (bez logowania). */
+    public PublicKey symmetricKeyEncryptionKey() {
+        JsonNode certificates = call(() -> rest.get().uri("/security/public-key-certificates")
+                .retrieve().body(JsonNode.class));
+        Instant now = Instant.now();
+        for (JsonNode certificate : certificates) {
+            boolean forKeys = false;
+            for (JsonNode usage : certificate.path("usage")) {
+                forKeys |= "SymmetricKeyEncryption".equals(usage.asString(""));
+            }
+            Instant validFrom = OffsetDateTime.parse(certificate.path("validFrom").asString()).toInstant();
+            Instant validTo = OffsetDateTime.parse(certificate.path("validTo").asString()).toInstant();
+            if (forKeys && !now.isBefore(validFrom) && now.isBefore(validTo)) {
+                return new PublicKey(certificate.path("certificate").asString(),
+                        certificate.path("publicKeyId").asString(null));
+            }
+        }
+        throw new KsefException("KSeF nie podał klucza publicznego do szyfrowania paczki faktur", null);
+    }
+
+    /** Część paczki: kolejność, adres do pobrania (bez tokenu i limitów) i skrót SHA-256 zaszyfrowanej części. */
+    public record ExportPart(int ordinalNumber, String method, String url, String encryptedPartHash) {
+    }
+
+    /**
+     * Stan eksportu: {@code code} 100 w toku, 200 gotowe, inne to błąd ({@code description}). Przy gotowej paczce
+     * części i dane do kolejnego eksportu: {@code truncated} (paczka ucięta na 10 tys. faktur albo 1 GB, kolejny
+     * eksport od {@code lastPermanentStorageDate}) i {@code permanentStorageHwmDate} (poniżej dane są kompletne).
+     */
+    public record ExportStatus(int code, String description, List<ExportPart> parts, int invoiceCount,
+            boolean truncated, Instant lastPermanentStorageDate, Instant permanentStorageHwmDate) {
+
+        public boolean inProgress() {
+            return code == 100;
+        }
+
+        public boolean ready() {
+            return code == 200;
+        }
+    }
+
+    /**
+     * Zlecenie eksportu XML faktur zakupowych (Podmiot 2) trwale zapisanych w zakresie, rosnąco; zakres do 100 dni,
+     * {@code to} przycięte do znacznika kompletności. Klucz AES paczki przychodzi zaszyfrowany kluczem publicznym MF.
+     */
+    public String startPurchaseExport(String accessToken, Instant from, Instant to, String encryptedKey,
+            String initializationVector, String publicKeyId) {
+        Map<String, Object> encryption = new java.util.LinkedHashMap<>();
+        encryption.put("encryptedSymmetricKey", encryptedKey);
+        encryption.put("initializationVector", initializationVector);
+        if (publicKeyId != null) {
+            encryption.put("publicKeyId", publicKeyId);
+        }
+        Map<String, Object> body = Map.of(
+                "encryption", encryption,
+                "filters", Map.of(
+                        "subjectType", "Subject2",
+                        "dateRange", Map.of(
+                                "dateType", "PermanentStorage",
+                                "from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC).toString(),
+                                "to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC).toString(),
+                                "restrictToPermanentStorageHwmDate", true)));
+        return call(() -> rest.post().uri("/invoices/exports")
+                .headers(headers -> headers.setBearerAuth(accessToken))
+                .contentType(MediaType.APPLICATION_JSON).body(body)
+                .retrieve().body(JsonNode.class).path("referenceNumber").asString());
+    }
+
+    public ExportStatus exportStatus(String accessToken, String referenceNumber) {
+        JsonNode root = call(() -> rest.get().uri("/invoices/exports/{referenceNumber}", referenceNumber)
+                .headers(headers -> headers.setBearerAuth(accessToken))
+                .retrieve().body(JsonNode.class));
+        JsonNode status = root.path("status");
+        JsonNode pack = root.path("package");
+        List<ExportPart> parts = new ArrayList<>();
+        for (JsonNode part : pack.path("parts")) {
+            parts.add(new ExportPart(part.path("ordinalNumber").asInt(), part.path("method").asString("GET"),
+                    part.path("url").asString(), part.path("encryptedPartHash").asString(null)));
+        }
+        parts.sort(java.util.Comparator.comparingInt(ExportPart::ordinalNumber));
+        return new ExportStatus(status.path("code").asInt(), describe(status), parts,
+                pack.path("invoiceCount").asInt(0), pack.path("isTruncated").asBoolean(false),
+                instant(pack.path("lastPermanentStorageDate")), instant(pack.path("permanentStorageHwmDate")));
+    }
+
+    /** Część paczki z adresu ze statusu: bez tokenu (adres jest podpisany) i bez limitów API. */
+    public byte[] exportPart(ExportPart part) {
+        return call(() -> RestClient.create().method(org.springframework.http.HttpMethod.valueOf(part.method()))
+                .uri(java.net.URI.create(part.url()))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, (request, response) -> {
+                    throw new KsefException("Nie udało się pobrać części paczki faktur (HTTP "
+                            + response.getStatusCode().value() + ")", null, response.getStatusCode().is5xxServerError());
+                })
+                .body(byte[].class));
+    }
+
+    private static Instant instant(JsonNode value) {
+        return value.isMissingNode() || value.isNull() ? null : OffsetDateTime.parse(value.asString()).toInstant();
+    }
+
     private static <T> T call(Supplier<T> request) {
         try {
             return request.get();

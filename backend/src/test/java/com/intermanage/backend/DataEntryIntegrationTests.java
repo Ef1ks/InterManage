@@ -160,6 +160,162 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void baseInvoiceFindsArticleByItm8InIndex() throws Exception {
+        // Baza SCA PR podaje w indeksie ITM8 artykułu z zerem na początku; w kolumnie EAN ma być EAN z kartoteki.
+        String nip = jdbc.queryForObject("select nip from ksef_connections where store_id = ?::uuid", String.class,
+                storeId);
+        String baseInvoice = jdbc.queryForObject("""
+                insert into ksef_invoices (id, ksef_number, invoice_number, issue_date, invoicing_date,
+                    permanent_storage_date, seller_nip, seller_name, net_amount, gross_amount, vat_amount, currency,
+                    invoice_type, has_attachment, created_at, updated_at, nip)
+                values (gen_random_uuid(), ?, '0695421740', date '2026-11-09', now(), now(), '7821977018',
+                    'SCA PR POLSKA', -10, -10.5, -0.5, 'PLN', 'Kor', false, now(), now(), ?) returning id""",
+                String.class, "7821977018-20261110-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(),
+                nip);
+        String xml = """
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)">FA</KodFormularza></Naglowek>
+                  <Fa><KodWaluty>PLN</KodWaluty><P_1>2026-11-09</P_1><P_2>0695421740</P_2><RodzajFaktury>KOR</RodzajFaktury>
+                    <FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>MLEKO 3,2% 1L</P_7><Indeks>00000101</Indeks>
+                      <P_8A>szt</P_8A><P_8B>-2</P_8B><P_9A>2.00</P_9A><P_11>-4.00</P_11><P_12>5</P_12></FaWiersz>
+                    <FaWiersz><NrWierszaFa>2</NrWierszaFa><P_7>JOGURT 400G</P_7><Indeks>61653837</Indeks>
+                      <P_8A>szt</P_8A><P_8B>-1</P_8B><P_9A>3.00</P_9A><P_11>-3.00</P_11><P_12>5</P_12></FaWiersz>
+                  </Fa>
+                </Faktura>""";
+        jdbc.update("insert into ksef_invoice_xml (invoice_id, content, downloaded_at) values (?::uuid, ?, now())",
+                UUID.fromString(baseInvoice), xml.getBytes(StandardCharsets.UTF_8));
+        // Własny ITM8 bazy, którego nie ma w kartotece: EAN z linii przyjęcia PZ prowadzi do artykułu sklepu.
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
+                    updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', 1, 1, 1, 0, 0) returning id""", String.class, storeId);
+        String pz = jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                    sale_value_gross, first_import_id, last_import_id)
+                values (?::uuid, 'PZ', '777700', now(), 1, 3, 0, ?::uuid, ?::uuid) returning id""", String.class,
+                storeId, documentImport, documentImport);
+        jdbc.update("""
+                insert into document_lines (id, document_id, line_number, itm8, ean, name, quantity, purchase_value)
+                values (gen_random_uuid(), ?::uuid, 1, '0000061653837', '5900000000036', 'JOGURT', 1, 3)""", pz);
+        mvc.perform(get(url("/invoices/" + baseInvoice)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines[0].ean").value("5900000000012"))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000101"))
+                .andExpect(jsonPath("$.lines[1].ean").value("5900000000036"))
+                .andExpect(jsonPath("$.lines[1].product.itm8").value("0000000000102"));
+    }
+
+    @Test
+    void baseCorrectionPicksDeliveryByWzNumbersAndArticles() throws Exception {
+        // Faktura bazy z dwoma WZ (numery WZ = nr dok. dostawcy w PZ), korekta artykułu z drugiego przyjęcia.
+        String nip = jdbc.queryForObject("select nip from ksef_connections where store_id = ?::uuid", String.class,
+                storeId);
+        String originalKsef = "7821977018-20261106-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
+        String original = insertBaseInvoice(nip, originalKsef, "0956335475", "Vat", """
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)">FA</KodFormularza></Naglowek>
+                  <Fa><P_2>0956335475</P_2><WZ>09516050250</WZ><WZ>09516050639</WZ><RodzajFaktury>VAT</RodzajFaktury></Fa>
+                </Faktura>""");
+        String correction = insertBaseInvoice(nip,
+                "7821977018-20261110-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(), "0695421999",
+                "Kor", """
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)">FA</KodFormularza></Naglowek>
+                  <Fa><P_2>0695421999</P_2><RodzajFaktury>KOR</RodzajFaktury>
+                    <DaneFaKorygowanej><DataWystFaKorygowanej>2026-11-06</DataWystFaKorygowanej>
+                      <NrFaKorygowanej>0956335475</NrFaKorygowanej><NrKSeF>1</NrKSeF>
+                      <NrKSeFFaKorygowanej>%s</NrKSeFFaKorygowanej></DaneFaKorygowanej>
+                    <FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>JOGURT</P_7><Indeks>00000102</Indeks>
+                      <P_8B>-1</P_8B><P_9A>3.00</P_9A><P_11>-3.00</P_11><P_12>5</P_12></FaWiersz>
+                  </Fa>
+                </Faktura>""".formatted(originalKsef));
+        String first = insertDelivery("1078200", "09516050250", "0000000000101", "5900000000012");
+        String second = insertDelivery("1070900", "09516050639", "0000000000102", "5900000000036");
+        mvc.perform(get(url("/invoices/" + correction + "/correction-deliveries")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(second))
+                .andExpect(jsonPath("$[0].matched").value(true))
+                .andExpect(jsonPath("$[0].commonArticles").value(1))
+                .andExpect(jsonPath("$[1].id").value(first))
+                .andExpect(jsonPath("$[1].commonArticles").value(0));
+        assertThat(original).isNotNull();
+    }
+
+    @Test
+    void baseMeatLineFindsArticleByScaleCodeInName() throws Exception {
+        // Mięso od bazy: indeks 03466053 spoza kartoteki, w nazwie kod towaru i kod wagowy 2436010000002, a multikody
+        // mają kod wagowy 2436010000000 przy artykule sklepu.
+        String nip = jdbc.queryForObject("select nip from ksef_connections where store_id = ?::uuid", String.class,
+                storeId);
+        String productImport = jdbc.queryForObject("select id from product_imports where store_id = ?::uuid limit 1",
+                String.class, storeId);
+        insertProduct(productImport, "0000099058426", "0000000990584", "FILET SWIEZY KL A", "KURCZAK", "kg", "1",
+                "24.99", "24 36 01");
+        String codes = jdbc.queryForObject("""
+                insert into product_code_imports (store_id, file_name, report_generated_at, total_rows)
+                values (?::uuid, 'Multikody.xlsx', now(), 1) returning id""", String.class, storeId);
+        jdbc.update("""
+                insert into product_codes (store_id, itm8, ean, prio, first_import_id, last_import_id)
+                values (?::uuid, '0000099058426', '2436010000000', false, ?::uuid, ?::uuid)""", storeId, codes, codes);
+        String invoice = insertBaseInvoice(nip,
+                "7821977018-20261105-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase(), "0695412473",
+                "Kor", """
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)">FA</KodFormularza></Naglowek>
+                  <Fa><P_2>0695412473</P_2><RodzajFaktury>KOR</RodzajFaktury>
+                    <FaWiersz><NrWierszaFa>2</NrWierszaFa><P_7>FILET Z KURCZAKA 0000130111768 2436010000002</P_7>
+                      <Indeks>03466053</Indeks><P_8A>KG</P_8A><P_8B>15</P_8B><P_9A>13.99</P_9A><P_11>209.85</P_11>
+                      <P_12>5</P_12></FaWiersz>
+                  </Fa>
+                </Faktura>""");
+        mvc.perform(get(url("/invoices/" + invoice)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000099058426"));
+
+        // Kod z nazwy mięsa zwykle nie jest kodem sklepu: indeks przypięty ręcznie ma pierwszeństwo.
+        mvc.perform(post(url("/links")).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sellerNip\":\"7821977018\",\"code\":\"03466053\",\"itm8\":\"0000000000102\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(url("/invoices/" + invoice)).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000102"))
+                .andExpect(jsonPath("$.lines[0].ean").value("5900000000036"))
+                .andExpect(jsonPath("$.lines[0].eanSource").value("LINK"));
+    }
+
+    private String insertBaseInvoice(String nip, String ksefNumber, String number, String type, String xml) {
+        String id = jdbc.queryForObject("""
+                insert into ksef_invoices (id, ksef_number, invoice_number, issue_date, invoicing_date,
+                    permanent_storage_date, seller_nip, seller_name, net_amount, gross_amount, vat_amount, currency,
+                    invoice_type, has_attachment, created_at, updated_at, nip)
+                values (gen_random_uuid(), ?, ?, date '2026-11-06', now(), now(), '7821977018', 'SCA PR POLSKA',
+                    10, 10.5, 0.5, 'PLN', ?, false, now(), now(), ?) returning id""", String.class, ksefNumber,
+                number, type, nip);
+        jdbc.update("insert into ksef_invoice_xml (invoice_id, content, downloaded_at) values (?::uuid, ?, now())",
+                UUID.fromString(id), xml.getBytes(StandardCharsets.UTF_8));
+        return id;
+    }
+
+    /** Przyjęcie PZ od bazy z jedną linią; zwraca id. */
+    private String insertDelivery(String number, String supplierDocumentNumber, String itm8, String ean) {
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, total_lines, saved_lines, created_count,
+                    updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', 1, 1, 1, 0, 0) returning id""", String.class, storeId);
+        String id = jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, supplier_code, supplier_document_number,
+                    report_supplier_document_number, line_count, purchase_value, sale_value_gross, first_import_id,
+                    last_import_id)
+                values (?::uuid, 'PZ', ?, now(), '538', ?, ?, 1, 3, 0, ?::uuid, ?::uuid) returning id""",
+                String.class, storeId, number, supplierDocumentNumber, supplierDocumentNumber, documentImport,
+                documentImport);
+        jdbc.update("""
+                insert into document_lines (id, document_id, line_number, itm8, ean, name, quantity, purchase_value)
+                values (gen_random_uuid(), ?::uuid, 1, ?, ?, 'TOWAR', 1, 3)""", id, itm8, ean);
+        return id;
+    }
+
+    @Test
     void loadsInvoiceLinesWithCatalogProducts() throws Exception {
         mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
                 .andExpect(status().isOk())

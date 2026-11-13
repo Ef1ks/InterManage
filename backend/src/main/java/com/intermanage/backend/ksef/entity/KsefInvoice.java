@@ -103,6 +103,33 @@ public class KsefInvoice {
     @Column(name = "corrected_error", length = 500)
     private String correctedError;
 
+    /**
+     * Adresy z Podmiotów 3 faktury znormalizowane przez
+     * {@link com.intermanage.backend.ksef.component.DeliveryAddress#normalizeAll}, odczytane z XML
+     * ({@link #getAddressReadAt()}); po nich sklep rozpoznaje faktury bez IDWew.
+     */
+    @Column(name = "delivery_address", length = 2000)
+    private String deliveryAddress;
+
+    @Column(name = "address_read_at")
+    private Instant addressReadAt;
+
+    /** Korekta zmienia ilości (a nie tylko kwoty), z XML; {@code null} = nieodczytane albo nie korekta. */
+    @Column(name = "quantity_change")
+    private Boolean quantityChange;
+
+    /** Wersja reguły, którą policzono {@link #quantityChange} (V132); starsza liczy się od nowa w tle. */
+    @Column(name = "quantity_change_rule")
+    private Short quantityChangeRule;
+
+    /** Refaktura bazy: kod dostawcy w bazie z XML ("DDDKodDostawcy", np. 09295), V133. */
+    @Column(name = "base_supplier_code", length = 20)
+    private String baseSupplierCode;
+
+    /** Refaktura bazy: numer faktury dostawcy z XML ("DDDNrFaDostawcy"), baza ucina go do 10 znaków. */
+    @Column(name = "base_supplier_invoice", length = 100)
+    private String baseSupplierInvoice;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -191,6 +218,40 @@ public class KsefInvoice {
         correctedError = error;
     }
 
+    /** Adres dostawy z XML (już znormalizowany, przycięty do długości kolumny); {@code null} = brak Podmiotu 3. */
+    public void recordDeliveryAddress(String normalized) {
+        deliveryAddress = normalized == null || normalized.length() <= 2000 ? normalized
+                : normalized.substring(0, 2000);
+        addressReadAt = Instant.now();
+    }
+
+    public void recordQuantityChange(Boolean quantityChange, short rule) {
+        this.quantityChange = quantityChange;
+        this.quantityChangeRule = rule;
+    }
+
+    /** Kod dostawcy i numer jego faktury z refaktury bazy; oba puste przy zwykłej fakturze. */
+    public void recordBaseSupplier(String code, String supplierInvoice) {
+        baseSupplierCode = cut(code, 20);
+        baseSupplierInvoice = cut(supplierInvoice, 100);
+    }
+
+    private static String cut(String value, int length) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String stripped = value.strip();
+        return stripped.length() <= length ? stripped : stripped.substring(0, length);
+    }
+
+    public String getBaseSupplierCode() {
+        return baseSupplierCode;
+    }
+
+    public String getBaseSupplierInvoice() {
+        return baseSupplierInvoice;
+    }
+
     public boolean isCorrection() {
         return invoiceType != null && invoiceType.startsWith("Kor");
     }
@@ -277,6 +338,18 @@ public class KsefInvoice {
 
     public String getCorrectedError() {
         return correctedError;
+    }
+
+    public String getDeliveryAddress() {
+        return deliveryAddress;
+    }
+
+    public Instant getAddressReadAt() {
+        return addressReadAt;
+    }
+
+    public Boolean getQuantityChange() {
+        return quantityChange;
     }
 
     public Instant getCreatedAt() {

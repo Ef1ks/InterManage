@@ -27,12 +27,15 @@ import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.repository.DocumentKsefInvoiceRepository;
 import com.intermanage.backend.document.repository.DocumentRepository;
+import com.intermanage.backend.ksef.component.DeliveryAddress;
 import com.intermanage.backend.ksef.component.KsefClient;
 import com.intermanage.backend.ksef.component.KsefInvoicePdf;
 import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 import com.intermanage.backend.ksef.component.KsefRateLimiter;
 import com.intermanage.backend.ksef.dto.KsefInvoicePage;
 import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
+import com.intermanage.backend.ksef.entity.KsefBaseSupplierCode;
+import com.intermanage.backend.ksef.repository.KsefBaseSupplierCodeRepository;
 import com.intermanage.backend.ksef.dto.KsefOverview;
 import com.intermanage.backend.ksef.entity.KsefConnection;
 import com.intermanage.backend.ksef.entity.KsefInternalId;
@@ -81,6 +84,8 @@ public class KsefInvoiceService {
     private final DocumentKsefInvoiceRepository documentLinks;
     private final StoreRepository stores;
     private final KsefInvoiceReader reader;
+    private final KsefCorrectedInvoiceService xmlReading;
+    private final KsefBaseSupplierCodeRepository baseSupplierCodes;
 
     public KsefInvoiceService(KsefInvoiceRepository invoices, KsefConnectionRepository connections,
             KsefInternalIdRepository internalIds, KsefSkippedSupplierRepository skippedSuppliers,
@@ -88,8 +93,11 @@ public class KsefInvoiceService {
             KsefMapper mapper, KsefInvoicePdf invoicePdf, KsefInvoiceXmlRepository xmlFiles,
             KsefRateLimiter limiter, KsefSyncService syncService, KsefSyncStateRepository syncStates,
             KsefInvoiceEntryRepository entries, DocumentKsefInvoiceRepository documentLinks, StoreRepository stores,
-            KsefInvoiceReader reader) {
+            KsefInvoiceReader reader, KsefCorrectedInvoiceService xmlReading,
+            KsefBaseSupplierCodeRepository baseSupplierCodes) {
         this.reader = reader;
+        this.baseSupplierCodes = baseSupplierCodes;
+        this.xmlReading = xmlReading;
         this.documentLinks = documentLinks;
         this.stores = stores;
         this.invoices = invoices;
@@ -145,8 +153,7 @@ public class KsefInvoiceService {
         if (nip == null) {
             return new KsefInvoicePage(List.of(), 0, false, 0, BigDecimal.ZERO, BigDecimal.ZERO);
         }
-        Specification<KsefInvoice> matching = KsefInvoiceSearch.matching(storeId, nip, ownInternalIds(storeId),
-                filter);
+        Specification<KsefInvoice> matching = KsefInvoiceSearch.matching(scope(storeId, nip), filter);
         if (extra != null) {
             matching = matching.and(extra);
         }
@@ -165,8 +172,7 @@ public class KsefInvoiceService {
         if (nip == null) {
             return List.of();
         }
-        Specification<KsefInvoice> matching = KsefInvoiceSearch.matching(storeId, nip, ownInternalIds(storeId),
-                filter);
+        Specification<KsefInvoice> matching = KsefInvoiceSearch.matching(scope(storeId, nip), filter);
         if (extra != null) {
             matching = matching.and(extra);
         }
@@ -245,6 +251,7 @@ public class KsefInvoiceService {
                         : ApiException.badRequest("KSeF: " + e.getMessage());
             }
             xmlFiles.save(new KsefInvoiceXml(invoice.getId(), content, depositNet(content)));
+            xmlReading.readXml(invoice, content);
             return content;
         });
     }
@@ -299,6 +306,10 @@ public class KsefInvoiceService {
                         Collectors.mapping(DocumentKsefInvoice::getDocument, Collectors.toList())));
         Map<UUID, String> storeNames = new HashMap<>();
         stores.findAllById(companyStores).forEach(store -> storeNames.put(store.getId(), storeLabel(store)));
+        Map<String, String> baseNames = new HashMap<>();
+        page.stream().filter(invoice -> invoice.getBaseSupplierCode() != null).map(KsefInvoice::getNip).distinct()
+                .forEach(nip -> baseSupplierCodes.findByNipAndDeletedAtIsNull(nip).forEach(
+                        code -> baseNames.put(nip + ":" + code.getCode(), code.getName())));
         return page.stream()
                 .map(invoice -> {
                     KsefInvoiceEntry entry = marked.get(invoice.getId());
@@ -306,7 +317,9 @@ public class KsefInvoiceService {
                             documentsOf(storeId, deliveries.getOrDefault(normalized(invoice.getInvoiceNumber()),
                                     List.of()), linked.getOrDefault(invoice.getId(), List.of())),
                             skipped.contains(invoice.getSellerNip()),
-                            entry != null ? storeNames.get(entry.getId().storeId()) : null);
+                            entry != null ? storeNames.get(entry.getId().storeId()) : null,
+                            invoice.getBaseSupplierCode() == null ? null : baseNames.get(invoice.getNip() + ":"
+                                    + KsefBaseSupplierCode.normalize(invoice.getBaseSupplierCode())));
                 })
                 .toList();
     }
@@ -382,6 +395,19 @@ public class KsefInvoiceService {
         return invoices.findBySellerAndNumber(nip, sellerNip, normalized(invoiceNumber.strip())).stream()
                 .filter(invoice -> KsefInvoiceSearch.visibleInStore(invoice, own)).findFirst()
                 .map(invoice -> summaries(storeId, List.of(invoice)).getFirst());
+    }
+
+    /** Zakres listy: IDWew sklepu i ulice z numerem sklepów firmy (do faktur bez IDWew rozpoznawanych po adresie). */
+    private KsefInvoiceSearch.Scope scope(UUID storeId, String nip) {
+        Map<UUID, String> keys = new HashMap<>();
+        for (Store store : stores.findAllById(connections.findStoreIdsByNip(nip))) {
+            String key = DeliveryAddress.storeKey(store.getAddress());
+            if (key != null) {
+                keys.put(store.getId(), key);
+            }
+        }
+        return new KsefInvoiceSearch.Scope(storeId, nip, ownInternalIds(storeId), keys.get(storeId),
+                Set.copyOf(keys.values()));
     }
 
     private Set<String> ownInternalIds(UUID storeId) {

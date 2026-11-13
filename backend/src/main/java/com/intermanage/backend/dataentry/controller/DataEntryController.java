@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,6 +30,8 @@ import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.InvoiceXml;
 import com.intermanage.backend.dataentry.component.PriceControlFile;
+import com.intermanage.backend.dataentry.dto.BaseSupplierCodeItem;
+import com.intermanage.backend.dataentry.dto.BaseSupplierCodeRequest;
 import com.intermanage.backend.dataentry.dto.CatalogListItem;
 import com.intermanage.backend.dataentry.dto.CatalogListPage;
 import com.intermanage.backend.dataentry.dto.CatalogListRequest;
@@ -66,6 +69,7 @@ import com.intermanage.backend.dataentry.dto.XmlDocument;
 import com.intermanage.backend.dataentry.dto.XmlExportItem;
 import com.intermanage.backend.dataentry.entity.DataEntryPriceControlFile;
 import com.intermanage.backend.dataentry.entity.DataEntryXmlExport;
+import com.intermanage.backend.dataentry.service.BaseSupplierCodeService;
 import com.intermanage.backend.dataentry.service.DataEntryCorrectionService;
 import com.intermanage.backend.dataentry.service.DataEntryInvoiceService;
 import com.intermanage.backend.dataentry.service.DataEntryLinkService;
@@ -104,13 +108,15 @@ public class DataEntryController {
     private final DataEntryProductFileService productFileService;
     private final DataEntryPriceControlService priceControlService;
     private final DataEntryCorrectionService corrections;
+    private final BaseSupplierCodeService baseSupplierCodes;
 
     public DataEntryController(DataEntryService service, DataEntrySuggestionService suggestionService,
             DataEntryProtocolService protocolService, DataEntryLinkService linkService,
             DataEntryInvoiceService invoiceService, DataEntryXmlService xmlService,
             DataEntryProductFileService productFileService, DataEntryPriceControlService priceControlService,
-            DataEntryCorrectionService corrections) {
+            DataEntryCorrectionService corrections, BaseSupplierCodeService baseSupplierCodes) {
         this.service = service;
+        this.baseSupplierCodes = baseSupplierCodes;
         this.suggestionService = suggestionService;
         this.protocolService = protocolService;
         this.linkService = linkService;
@@ -127,7 +133,9 @@ public class DataEntryController {
     /**
      * Okno wczytywania: faktury ({@code kind=INVOICES}) albo korekty ({@code CORRECTIONS}) sklepu, strony po 100;
      * {@code status}: NEW do wczytania (domyślnie, pobrane też), DONE wczytane i nie moje, ALL; {@code internalId} jak
-     * w Fakturach KSeF (puste = IDWew sklepu i bez IDWew, OWN, NONE).
+     * w Fakturach KSeF (puste = IDWew sklepu i bez IDWew, OWN, NONE, MINE = moje i nierozpoznane);
+     * {@code myDeliveries}: tylko faktury z przyjęciem PZ w sklepie i korekty faktur, które je mają;
+     * {@code quantityChanges}: bez korekt tylko na kwoty (nieodczytane zostają).
      */
     @GetMapping("/invoices")
     @PreAuthorize(INVOICES)
@@ -135,9 +143,11 @@ public class DataEntryController {
             @RequestParam(required = false) String query, @RequestParam(required = false) String internalId,
             @RequestParam(defaultValue = "INVOICES") String kind,
             @RequestParam(defaultValue = "NEW") DataEntryInvoiceService.ListStatus status,
-            @RequestParam(defaultValue = "false") boolean showSkipped) {
+            @RequestParam(defaultValue = "false") boolean showSkipped,
+            @RequestParam(defaultValue = "false") boolean myDeliveries,
+            @RequestParam(defaultValue = "false") boolean quantityChanges) {
         return invoiceService.list(storeId, page, query, internalId, "CORRECTIONS".equals(kind), status,
-                showSkipped);
+                showSkipped, myDeliveries, quantityChanges);
     }
 
     /** Znacznik faktury: LOADED po wczytaniu do tabeli, NOT_MINE "nie moja faktura" (DOWNLOADED daje pobranie PDF). */
@@ -219,6 +229,40 @@ public class DataEntryController {
     @PreAuthorize(VIEW)
     public SkippedSupplier restoreSkippedSupplier(@PathVariable UUID storeId, @PathVariable UUID id) {
         return invoiceService.restoreSkipped(storeId, id);
+    }
+
+    /**
+     * Kody dostawców z refaktur bazy SCA PR ("DDDKodDostawcy") z przypisaniem do dostawcy; wspólne dla firmy. Po
+     * przypisaniu wyszukiwarka faktur znajduje refaktury po nazwie dostawcy.
+     */
+    @GetMapping("/base-supplier-codes")
+    @PreAuthorize(VIEW)
+    public List<BaseSupplierCodeItem> baseSupplierCodes(@PathVariable UUID storeId) {
+        return baseSupplierCodes.list(storeId);
+    }
+
+    /** Przypisanie kodu: {@code supplierId} z listy dostawców sklepu albo sama nazwa; poprzednie dostaje znacznik. */
+    @PutMapping("/base-supplier-codes/{code}")
+    @PreAuthorize(VIEW)
+    public BaseSupplierCodeItem.Assignment assignBaseSupplierCode(@PathVariable UUID storeId,
+            @PathVariable String code, @Valid @RequestBody BaseSupplierCodeRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return baseSupplierCodes.assign(storeId, code, request, principal.getId());
+    }
+
+    @DeleteMapping("/base-supplier-codes/assignments/{id}")
+    @PreAuthorize(VIEW)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeBaseSupplierCode(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        baseSupplierCodes.remove(storeId, id, principal.getId());
+    }
+
+    @PostMapping("/base-supplier-codes/assignments/{id}/restore")
+    @PreAuthorize(VIEW)
+    public BaseSupplierCodeItem.Assignment restoreBaseSupplierCode(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return baseSupplierCodes.restore(storeId, id, principal.getId());
     }
 
     /** Pozycje faktury z KSeF z artykułami z kartoteki; {@code source}: skąd wziąć EAN (domyślnie AUTO). */

@@ -1,4 +1,11 @@
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import type { SortState } from '@/lib/table-sort'
@@ -12,6 +19,8 @@ import type {
   DataEntryInvoiceItem,
   DataEntryInvoicePage,
   DataEntrySkippedSupplier,
+  BaseSupplierCode,
+  BaseSupplierCodeAssignment,
   DataEntryXmlDocument,
   DataEntryXmlExport,
   InvoiceClosing,
@@ -100,6 +109,33 @@ export function useCorrectionDeliveries(storeId: string, invoiceId: string | nul
     // Przy zmianie wyszukiwania poprzedni wynik zostaje na ekranie, przy innej fakturze nie: podpiąłby się jej bon.
     placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[4] === invoiceId ? previous : undefined),
   })
+}
+
+/**
+ * Linie kilku bonów korekty naraz (główny i kolejne): `lines` = `null`, gdy bonu nie ma w raportach albo linie się
+ * jeszcze wczytują (`pending`).
+ */
+export function useCorrectionBons(
+  storeId: string,
+  invoiceId: string | null,
+  deliveries: { id: string | null; number: string }[],
+  enabled = true,
+) {
+  const results = useQueries({
+    queries: deliveries.map((delivery) => ({
+      queryKey: ['stores', storeId, 'data-entry', 'correction-delivery-lines', invoiceId, delivery.id],
+      queryFn: () =>
+        api<CorrectionDeliveryLine[]>(
+          `${path(storeId)}/invoices/${invoiceId}/correction-deliveries/${delivery.id}/lines`,
+        ),
+      enabled: enabled && invoiceId !== null && delivery.id !== null,
+    })),
+  })
+  return {
+    bons: deliveries.map((delivery, index) => ({ number: delivery.number, lines: results[index]?.data ?? null })),
+    pending: deliveries.some((delivery, index) => delivery.id !== null && results[index]?.isPending),
+    error: results.some((result) => result.isError),
+  }
 }
 
 /** Linie bonu po wcześniejszych korektach; `documentId` puste = bon spoza raportów albo jeszcze nie potrzebne. */
@@ -194,9 +230,16 @@ export type InvoicePickerFilters = {
   kind: 'INVOICES' | 'CORRECTIONS'
   /** NEW: do wczytania, DONE: wczytane, pobrane i nie moje, ALL: wszystkie. */
   status: 'NEW' | 'DONE' | 'ALL'
-  /** ALL: IDWew sklepu i bez IDWew (domyślnie), OWN: tylko IDWew sklepu, NONE: tylko bez IDWew. */
-  internalId: 'ALL' | 'OWN' | 'NONE'
+  /**
+   * MINE: faktury sklepu (IDWew, adres dostawy, PZ w sklepie; korekta też przez fakturę korygowaną) i nierozpoznane
+   * (domyślnie), ALL: IDWew sklepu i bez IDWew, OWN: tylko IDWew sklepu, NONE: tylko bez IDWew.
+   */
+  internalId: 'MINE' | 'ALL' | 'OWN' | 'NONE'
   showSkipped: boolean
+  /** Tylko faktury z przyjęciem PZ w sklepie i korekty faktur, które je mają. */
+  myDeliveries: boolean
+  /** Przy korektach: bez korekt tylko na kwoty (nieodczytane zostają). */
+  quantityChanges: boolean
 }
 
 const invoicesKey = (storeId: string) => ['stores', storeId, 'data-entry', 'invoices'] as const
@@ -212,6 +255,8 @@ export function useDataEntryInvoices(storeId: string, filters: InvoicePickerFilt
         status: filters.status,
         internalId: filters.internalId,
         showSkipped: String(filters.showSkipped),
+        myDeliveries: String(filters.myDeliveries),
+        quantityChanges: String(filters.quantityChanges),
       })
       if (query) params.set('query', query)
       return api<DataEntryInvoicePage>(`${path(storeId)}/invoices?${params}`)
@@ -309,6 +354,48 @@ export function useSkipSupplier(storeId: string) {
               method: 'POST',
             }),
     onSuccess: () => refresh(),
+    meta: { invalidates: false },
+  })
+}
+
+const baseCodesKey = (storeId: string) => ['stores', storeId, 'data-entry', 'base-supplier-codes'] as const
+
+/** Kody dostawców z refaktur bazy z przypisaniami (wspólne dla firmy). */
+export function useBaseSupplierCodes(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: baseCodesKey(storeId),
+    queryFn: () => api<BaseSupplierCode[]>(`${path(storeId)}/base-supplier-codes`),
+    enabled,
+  })
+}
+
+/** Przypisanie kodu z bazy do dostawcy z listy albo nazwy, usunięcie (znacznik) i przywrócenie. */
+export function useBaseSupplierCodeChange(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (
+      action:
+        | { type: 'assign'; code: string; supplierId: string | null; name: string | null }
+        | { type: 'remove'; id: string }
+        | { type: 'restore'; id: string },
+    ) =>
+      action.type === 'assign'
+        ? api<BaseSupplierCodeAssignment>(`${path(storeId)}/base-supplier-codes/${encodeURIComponent(action.code)}`, {
+            method: 'PUT',
+            json: { supplierId: action.supplierId, name: action.name },
+          })
+        : action.type === 'remove'
+          ? api<void>(`${path(storeId)}/base-supplier-codes/assignments/${action.id}`, { method: 'DELETE' }).then(
+              () => null,
+            )
+          : api<BaseSupplierCodeAssignment>(`${path(storeId)}/base-supplier-codes/assignments/${action.id}/restore`, {
+              method: 'POST',
+            }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: baseCodesKey(storeId) }),
+        queryClient.invalidateQueries({ queryKey: invoicesKey(storeId) }),
+      ]),
     meta: { invalidates: false },
   })
 }

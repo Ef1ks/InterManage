@@ -92,19 +92,20 @@ public class DataEntryInvoiceService {
      */
     @Transactional(readOnly = true)
     public DataEntryInvoicePage list(UUID storeId, int page, String query, String internalId, boolean corrections,
-            ListStatus status, boolean showSkipped) {
-        KsefInvoicePage found = ksefInvoices.list(storeId, page, filter(query, internalId, corrections, showSkipped),
+            ListStatus status, boolean showSkipped, boolean myDeliveries, boolean quantityChanges) {
+        KsefInvoicePage found = ksefInvoices.list(storeId, page,
+                filter(query, internalId, corrections, showSkipped, myDeliveries, quantityChanges),
                 extra(storeId, status, showSkipped), "issueDate", "desc");
         return new DataEntryInvoicePage(items(storeId, found.invoices()), found.page(), found.hasMore(),
                 found.matchingCount());
     }
 
     private static KsefInvoiceSearch.Filter filter(String query, String internalId, boolean corrections,
-            boolean showSkipped) {
+            boolean showSkipped, boolean myDeliveries, boolean quantityChanges) {
         return new KsefInvoiceSearch.Filter(query, null, null, KsefInvoiceSearch.Entered.ALL,
                 corrections ? KsefInvoiceSearch.Kind.CORRECTIONS : KsefInvoiceSearch.Kind.INVOICES,
                 internalId == null || internalId.isBlank() || "ALL".equals(internalId) ? null : internalId,
-                showSkipped);
+                showSkipped, myDeliveries, quantityChanges);
     }
 
     /**
@@ -243,7 +244,8 @@ public class DataEntryInvoiceService {
             InvoiceBulkRequest.Filter filter = request.filter();
             ids = ksefInvoices.ids(storeId,
                     filter(filter.query(), filter.internalId(), "CORRECTIONS".equals(filter.kind()),
-                            Boolean.TRUE.equals(filter.showSkipped())),
+                            Boolean.TRUE.equals(filter.showSkipped()), Boolean.TRUE.equals(filter.myDeliveries()),
+                            Boolean.TRUE.equals(filter.quantityChanges())),
                     extra(storeId, filter.status() != null ? filter.status() : ListStatus.NEW,
                             Boolean.TRUE.equals(filter.showSkipped())),
                     BULK_LIMIT);

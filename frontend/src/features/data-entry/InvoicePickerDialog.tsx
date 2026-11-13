@@ -39,6 +39,7 @@ import { Switch } from '@/components/ui/switch'
 import { bonNumber, formatMoney } from '@/features/documents/format'
 import { useKsefOverview } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
+import { QuantityChangeBadge } from '@/features/ksef/QuantityChangeBadge'
 import { ApiError } from '@/lib/api'
 import type {
   DataEntryInvoice,
@@ -62,6 +63,7 @@ import {
   useSkippedSuppliers,
   useSkipSupplier,
 } from './api'
+import { BaseSupplierCodesButton } from './BaseSupplierCodesDialog'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { PRINT_VARIANT_LABELS, useInvoiceFiles } from './invoice-files'
 
@@ -107,7 +109,15 @@ function Steps({ storeId, onConfirm }: { storeId: string; onConfirm: (invoice: D
 }
 
 const FILTERS_KEY = 'intermanage.dataEntryInvoicePicker'
-const DEFAULT_FILTERS: InvoicePickerFilters = { kind: 'INVOICES', status: 'NEW', internalId: 'ALL', showSkipped: false }
+const DEFAULT_FILTERS: InvoicePickerFilters = {
+  kind: 'INVOICES',
+  status: 'NEW',
+  internalId: 'MINE',
+  showSkipped: false,
+  myDeliveries: false,
+  quantityChanges: true,
+}
+const INTERNAL_IDS: InvoicePickerFilters['internalId'][] = ['MINE', 'ALL', 'OWN', 'NONE']
 
 function storedFilters(): InvoicePickerFilters {
   try {
@@ -115,8 +125,10 @@ function storedFilters(): InvoicePickerFilters {
     return {
       kind: value?.kind === 'CORRECTIONS' ? 'CORRECTIONS' : 'INVOICES',
       status: value?.status === 'DONE' || value?.status === 'ALL' ? value.status : 'NEW',
-      internalId: value?.internalId === 'OWN' || value?.internalId === 'NONE' ? value.internalId : 'ALL',
+      internalId: value?.internalId && INTERNAL_IDS.includes(value.internalId) ? value.internalId : 'MINE',
       showSkipped: value?.showSkipped === true,
+      myDeliveries: value?.myDeliveries === true,
+      quantityChanges: value?.quantityChanges !== false,
     }
   } catch {
     return DEFAULT_FILTERS
@@ -217,8 +229,11 @@ function ListStep({
 
   const overview = useKsefOverview(storeId)
   const hasInternalIds = (overview.data?.internalIds.length ?? 0) > 0
-  // Bez IDWew sklepu filtr nie ma znaczenia: sklep widzi wszystkie faktury firmy.
-  const effective = hasInternalIds ? filters : { ...filters, internalId: 'ALL' as const }
+  // Bez IDWew sklepu zawężenie po IDWew nie ma znaczenia (sklep widzi wszystkie faktury firmy), „Moje” działa dalej.
+  const effective =
+    hasInternalIds || filters.internalId === 'MINE' || filters.internalId === 'ALL'
+      ? filters
+      : { ...filters, internalId: 'ALL' as const }
   const invoices = useDataEntryInvoices(storeId, effective, debounced)
   const list = invoices.data?.pages.flatMap((page) => page.invoices) ?? []
   const matching = invoices.data?.pages[0]?.matchingCount ?? 0
@@ -362,7 +377,11 @@ function ListStep({
       </DialogHeader>
 
       <div className="flex flex-col gap-2.5">
-        <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: numer faktury, dostawca, NIP" />
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Szukaj: numer faktury, dostawca (też refaktury bazy), NIP"
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
             label="Rodzaj"
@@ -383,19 +402,49 @@ function ListStep({
               { value: 'ALL', label: 'Wszystkie' },
             ]}
           />
-          {hasInternalIds && (
-            <Segmented
-              label="IDWew"
-              value={filters.internalId}
-              onChange={(value) => set('internalId', value)}
-              options={[
-                { value: 'ALL', label: 'Sklep i bez IDWew', title: 'Faktury z IDWew tego sklepu i bez IDWew' },
-                { value: 'OWN', label: 'Tylko IDWew sklepu' },
-                { value: 'NONE', label: 'Bez IDWew' },
-              ]}
-            />
-          )}
+          <Segmented
+            label="Sklep"
+            value={effective.internalId}
+            onChange={(value) => set('internalId', value)}
+            options={[
+              {
+                value: 'MINE',
+                label: 'Moje',
+                title:
+                  'Faktury tego sklepu (IDWew, adres dostawy, przyjęcie PZ; korekta po fakturze, którą koryguje) ' +
+                  'i te, których nie da się przypisać żadnemu sklepowi, np. korekty faktur sprzed KSeF',
+              },
+              {
+                value: 'ALL',
+                label: hasInternalIds ? 'Sklep i bez IDWew' : 'Wszystkie',
+                title: hasInternalIds ? 'Faktury z IDWew tego sklepu i bez IDWew' : 'Wszystkie faktury firmy',
+              },
+              ...(hasInternalIds
+                ? [
+                    { value: 'OWN' as const, label: 'Tylko IDWew sklepu' },
+                    { value: 'NONE' as const, label: 'Bez IDWew' },
+                  ]
+                : []),
+            ]}
+          />
           <div className="ml-auto flex items-center gap-3">
+            <label
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              title="Faktury z przyjęciem PZ w tym sklepie i korekty faktur, które mają tu przyjęcie (także faktur sprzed KSeF)"
+            >
+              <Switch checked={filters.myDeliveries} onCheckedChange={(value) => set('myDeliveries', value)} />
+              Do moich PZ
+            </label>
+            {filters.kind === 'CORRECTIONS' && (
+              <label
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+                title="Bez korekt, które zmieniają tylko kwoty (cena, rabat); korekty jeszcze nieodczytane zostają"
+              >
+                <Switch checked={filters.quantityChanges} onCheckedChange={(value) => set('quantityChanges', value)} />
+                Tylko zmiany ilości
+              </label>
+            )}
+            <BaseSupplierCodesButton storeId={storeId} />
             <SupplierRules storeId={storeId} rules={rules.data ?? []} />
             <label
               className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -616,6 +665,7 @@ function InvoiceRow({
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
             <span className="truncate">{invoice.invoiceNumber}</span>
+            <QuantityChangeBadge value={invoice.quantityChange} />
             {/* Dokument w systemie sklepu zamyka sprawę: „zakończona” zastępuje „wczytana”, żeby nie wprowadzić jej drugi raz. */}
             {item.status && (documents.length === 0 || item.status === 'NOT_MINE') && (
               <Badge className={STATUS_BADGES[item.status].className}>{STATUS_BADGES[item.status].label}</Badge>
@@ -657,6 +707,25 @@ function InvoiceRow({
           </span>
           <span className="block truncate text-xs text-muted-foreground">
             {formatDate(invoice.issueDate)} · {supplier}
+            {invoice.baseSupplierCode && (
+              <>
+                {' · za '}
+                <span
+                  className={cn(
+                    'font-medium',
+                    invoice.baseSupplierName ? 'text-foreground' : 'text-amber-700 dark:text-amber-300',
+                  )}
+                  title={
+                    invoice.baseSupplierName
+                      ? `Refaktura bazy: kod dostawcy w bazie ${invoice.baseSupplierCode}`
+                      : 'Kod dostawcy w bazie bez przypisania: przypisz go w „Kody z bazy”'
+                  }
+                >
+                  {invoice.baseSupplierName ?? `kod ${invoice.baseSupplierCode}`}
+                </span>
+                {invoice.baseSupplierInvoice && ` (fa ${invoice.baseSupplierInvoice})`}
+              </>
+            )}
             {invoice.internalIds.length > 0 ? (
               <>
                 {' · IDWew '}

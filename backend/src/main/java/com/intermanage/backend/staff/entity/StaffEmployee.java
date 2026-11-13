@@ -60,6 +60,14 @@ public class StaffEmployee {
     @Column(name = "ended_at")
     private Instant endedAt;
 
+    /** Usunięty przez właściciela (po końcu pracy): znika z list, zostaje w bazie i da się go przywrócić. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     /** Numer karty RCP do Symfonii: nadaje go baza z sekwencji przy zakładaniu (V112), potem się nie zmienia. */
     @Generated
     @Column(name = "rcp_number", insertable = false, updatable = false)
@@ -95,6 +103,20 @@ public class StaffEmployee {
     public void restore() {
         endedAt = null;
         endedBy = null;
+    }
+
+    public void markDeleted(AppUser by) {
+        deletedAt = Instant.now();
+        deletedBy = by;
+    }
+
+    public void undelete() {
+        deletedAt = null;
+        deletedBy = null;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
     }
 
     public UUID getId() {

@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.repository.RoleRepository;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.security.JwtService;
 
 import jakarta.servlet.http.Cookie;
@@ -51,6 +54,9 @@ class AccountSwitchIntegrationTests {
 
     @Autowired
     PasswordEncoder passwordEncoder;
+
+    @Autowired
+    JwtService jwtService;
 
     @Test
     void switchesBetweenAccountsWithPin() throws Exception {
@@ -176,6 +182,58 @@ class AccountSwitchIntegrationTests {
                 .andExpect(status().isOk());
         mvc.perform(get("/api/auth/pin").cookie(annaToken))
                 .andExpect(jsonPath("$.hasPin").value(true));
+    }
+
+    @Test
+    void accountOpenedBeforeLockHourGoesToBackground() throws Exception {
+        String anna = createAccount("Anna Po Pracy");
+        String jan = createAccount("Jan Po Pracy");
+        Cookie annaToken = login(anna);
+        mvc.perform(put("/api/auth/pin").cookie(annaToken).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"pin\":\"2468\"}"))
+                .andExpect(status().isOk());
+        MvcResult added = mvc.perform(post("/api/auth/accounts").cookie(annaToken).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + jan + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie background = cookie(added, JwtService.ACCOUNTS_COOKIE_NAME);
+
+        // Konto otwarte teraz działa.
+        mvc.perform(get("/api/auth/me").cookie(cookie(added, JwtService.COOKIE_NAME), background))
+                .andExpect(status().isOk());
+
+        // Jan otwarty przedwczoraj: przed ostatnią 17:00, więc idzie do tła, a żądanie jest bez logowania.
+        Cookie janStale = new Cookie(JwtService.COOKIE_NAME,
+                jwtService.issue(principal(jan), false, Instant.now().minus(Duration.ofDays(2))).getTokenValue());
+        MvcResult locked = mvc.perform(get("/api/auth/me").cookie(janStale, background))
+                .andExpect(status().isUnauthorized())
+                .andReturn();
+        assertThat(locked.getResponse().getCookie(JwtService.COOKIE_NAME).getMaxAge()).isZero();
+        Cookie bothInBackground = cookie(locked, JwtService.ACCOUNTS_COOKIE_NAME);
+        mvc.perform(get("/api/auth/accounts").cookie(bothInBackground))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[1].username").value(jan))
+                .andExpect(jsonPath("$[1].unlock").value("PASSWORD"));
+
+        // Przejście w tym samym żądaniu co blokada widzi już Jana w tle.
+        mvc.perform(switchRequest(id(anna), "{\"pin\":\"2468\"}").cookie(janStale, background))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value(anna));
+
+        // Konto bez wymogu PIN-u blokada pomija (otwiera się i tak jednym kliknięciem).
+        mvc.perform(put("/api/auth/pin/required").cookie(annaToken).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"required\":false}"))
+                .andExpect(status().isOk());
+        Cookie annaStale = new Cookie(JwtService.COOKIE_NAME,
+                jwtService.issue(principal(anna), false, Instant.now().minus(Duration.ofDays(2))).getTokenValue());
+        mvc.perform(get("/api/auth/me").cookie(annaStale))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value(anna));
+    }
+
+    private AppUserPrincipal principal(String username) {
+        return AppUserPrincipal.from(users.findWithRoleById(UUID.fromString(id(username))).orElseThrow());
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder switchRequest(String userId,

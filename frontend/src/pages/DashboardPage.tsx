@@ -3,24 +3,38 @@ import { Link } from 'react-router'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { hasPermission, useCurrentUser } from '@/features/auth/api'
+import { AttentionCard } from '@/features/dashboard/AttentionCard'
+import { PresenceCard } from '@/features/dashboard/PresenceCard'
 import { StoreResultsPanel } from '@/features/dashboard/StoreResultsPanel'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
+import { cn } from '@/lib/utils'
 
 export function DashboardPage() {
   const me = useCurrentUser()
   const { data: categories = [] } = usePermissionCategories()
   const tools = categories.filter((category) => hasPermission(me, category.code))
   const store = useCurrentStore()
+  const showResults = me.owner
+  const showPresence = hasPermission(me, 'STAFF_TIME')
 
   return (
     <>
       <PageHeader title={`Witaj, ${me.displayName}`} description={`Rola: ${me.roleName}`} />
 
-      {/* Najważniejsze informacje sklepu, dokładane stopniowo. Wyniki na razie tylko dla właściciela. */}
-      {me.owner && store ? (
-        <div className="mb-6">
-          <StoreResultsPanel storeId={store.id} storeNumber={store.number} />
+      {/* Najważniejsze informacje sklepu, dokładane stopniowo: wyniki (na razie tylko właściciel) na 2/3 szerokości,
+          obok obecność i sprawy do reakcji. Bez wyników kafelki stoją obok siebie. */}
+      {store ? (
+        <div className={cn('mb-6 grid gap-4', showResults ? 'lg:grid-cols-3' : 'sm:grid-cols-2')}>
+          {showResults ? (
+            <div className="min-w-0 lg:col-span-2">
+              <StoreResultsPanel storeId={store.id} storeNumber={store.number} />
+            </div>
+          ) : null}
+          <div className={showResults ? 'flex min-w-0 flex-col gap-4' : 'contents'}>
+            {showPresence ? <PresenceCard storeId={store.id} /> : null}
+            <AttentionCard storeId={store.id} />
+          </div>
         </div>
       ) : null}
 

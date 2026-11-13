@@ -36,6 +36,7 @@ import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 import com.intermanage.backend.ksef.repository.KsefInvoiceRepository;
+import com.intermanage.backend.ksef.repository.KsefInvoiceXmlRepository;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
 import com.intermanage.backend.supplier.entity.Supplier;
 import com.intermanage.backend.supplier.repository.SupplierRepository;
@@ -61,11 +62,13 @@ public class DataEntryCorrectionService {
     private final DeliveryCorrectionService corrections;
     private final SupplierRepository suppliers;
     private final DataEntryService dataEntry;
+    private final KsefInvoiceXmlRepository xmlFiles;
 
     public DataEntryCorrectionService(KsefInvoiceService ksefInvoices, KsefInvoiceReader reader,
             KsefInvoiceRepository invoices, DocumentRepository documents, DocumentKsefInvoiceRepository ksefLinks,
             DocumentKsefLinkService ksefLinkService, DeliveryCorrectionService corrections,
-            SupplierRepository suppliers, DataEntryService dataEntry) {
+            SupplierRepository suppliers, DataEntryService dataEntry, KsefInvoiceXmlRepository xmlFiles) {
+        this.xmlFiles = xmlFiles;
         this.ksefInvoices = ksefInvoices;
         this.reader = reader;
         this.invoices = invoices;
@@ -90,8 +93,13 @@ public class DataEntryCorrectionService {
                 .map(Supplier::getCode).collect(Collectors.toSet());
 
         Map<UUID, CorrectionDelivery> result = new LinkedHashMap<>();
-        matched(storeId, invoiceId, invoice.sellerNip(), listed, sellerCodes)
-                .forEach(document -> result.put(document.getId(), delivery(document, true)));
+        List<Document> matched = matched(storeId, invoiceId, invoice.sellerNip(), listed, sellerCodes);
+        Set<String> articles = matched.size() > 1 ? correctionArticles(storeId, invoiceId) : Set.of();
+        matched.stream()
+                .map(document -> delivery(document, true, articles.isEmpty() ? 0 : common(storeId, document, articles)))
+                // Najpierw przyjęcie z największą liczbą artykułów korekty (faktura bazy ma kilka WZ, więc kilka PZ).
+                .sorted(Comparator.comparingInt(CorrectionDelivery::commonArticles).reversed())
+                .forEach(delivery -> result.put(delivery.id(), delivery));
 
         List<String> words = DocumentSearch.words(query);
         if (!words.isEmpty() || !sellerCodes.isEmpty()) {
@@ -104,7 +112,7 @@ public class DataEntryCorrectionService {
                     .getContent().stream()
                     .sorted(Comparator.comparing(document -> !sellerCodes.contains(document.getSupplierCode())))
                     .limit(CANDIDATES)
-                    .forEach(document -> result.putIfAbsent(document.getId(), delivery(document, false)));
+                    .forEach(document -> result.putIfAbsent(document.getId(), delivery(document, false, 0)));
         }
         return List.copyOf(result.values());
     }
@@ -169,6 +177,7 @@ public class DataEntryCorrectionService {
         String nip = ksefLinkService.nip(storeId);
         if (nip != null) {
             List<KsefInvoice> originals = new ArrayList<>();
+            // Faktura zbiorcza (np. baza SCA PR) podaje dokumenty WZ, a ich numery są numerem dokumentu dostawcy w PZ.
             if (!ksefNumbers.isEmpty()) {
                 originals.addAll(invoices.findByKsefNumbers(nip, ksefNumbers));
             }
@@ -176,6 +185,13 @@ public class DataEntryCorrectionService {
                 invoices.findByInvoiceNumbers(nip, numbers).stream()
                         .filter(original -> Objects.equals(original.getSellerNip(), sellerNip))
                         .forEach(originals::add);
+            }
+            List<String> deliveryNotes = originals.stream().map(original -> xmlFiles.findById(original.getId()))
+                    .flatMap(java.util.Optional::stream).flatMap(xml -> wzNumbers(xml.getContent()).stream())
+                    .map(number -> number.toUpperCase(Locale.ROOT)).distinct().toList();
+            if (!deliveryNotes.isEmpty()) {
+                documents.findDeliveriesBySupplierDocument(storeId, deliveryNotes)
+                        .forEach(document -> found.put(document.getId(), document));
             }
             if (!originals.isEmpty()) {
                 ksefLinks.findActiveByInvoiceIds(storeId, originals.stream().map(KsefInvoice::getId).distinct().toList())
@@ -198,8 +214,39 @@ public class DataEntryCorrectionService {
         return found;
     }
 
-    private static CorrectionDelivery delivery(Document document, boolean matched) {
+    private List<String> wzNumbers(byte[] xml) {
+        try {
+            return reader.deliveryNotes(xml);
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            return List.of();
+        }
+    }
+
+    /** Kody artykułów korekty bez zer wiodących: GTIN i indeks (u bazy to ITM8) każdej pozycji. */
+    private Set<String> correctionArticles(UUID storeId, UUID invoiceId) {
+        try {
+            return reader.lineCodes(ksefInvoices.xml(storeId, invoiceId).content()).stream()
+                    .flatMap(line -> java.util.stream.Stream.of(line.gtin(), line.index()))
+                    .map(DataEntryService::key).filter(code -> code != null && !code.isBlank())
+                    .collect(Collectors.toSet());
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            return Set.of();
+        }
+    }
+
+    /** Ile artykułów korekty jest w liniach przyjęcia (po ITM8 albo EAN-ie, bez zer wiodących). */
+    private int common(UUID storeId, Document document, Set<String> articles) {
+        return documents.findWithLines(storeId, DocumentType.PZ, document.getId())
+                .map(delivery -> (int) delivery.getLines().stream()
+                        .filter(line -> articles.contains(DataEntryService.key(line.getItm8()))
+                                || articles.contains(DataEntryService.key(line.getEan())))
+                        .count())
+                .orElse(0);
+    }
+
+    private static CorrectionDelivery delivery(Document document, boolean matched, int commonArticles) {
         return new CorrectionDelivery(document.getId(), document.getNumber(), document.getDocumentDate(),
-                document.getSupplierName(), document.getSupplierDocumentNumber(), document.getPurchaseValue(), matched);
+                document.getSupplierName(), document.getSupplierDocumentNumber(), document.getPurchaseValue(), matched,
+                commonArticles);
     }
 }

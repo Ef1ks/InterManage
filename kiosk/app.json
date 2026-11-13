@@ -15,20 +15,35 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.NFC"],
+      "permissions": [
+        "android.permission.NFC"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
-      ["react-native-nfc-manager", { "includeNdefEntitlement": false }]
+      [
+        "react-native-nfc-manager",
+        {
+          "includeNdefEntitlement": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "https://intermanage.pl"
+      "apiUrl": "https://intermanage.pl",
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "8233ae16-74c9-4fa1-9549-957091cc9ab5"
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-package com.intermanage.backend.dataentry.component;
+package com.intermanage.backend.ksef.component;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -9,7 +9,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
-import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 
 /**
  * Pary wierszy korekty: pozycja po korekcie i jej wiersz "przed korektą" ({@code StanPrzed}). Większość dostawców daje

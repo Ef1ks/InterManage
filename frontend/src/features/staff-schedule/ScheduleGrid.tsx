@@ -1,5 +1,5 @@
-import { Fragment, type KeyboardEvent } from 'react'
-import { ClipboardPasteIcon, CopyIcon, TriangleAlertIcon } from 'lucide-react'
+import { Fragment, useState, type KeyboardEvent } from 'react'
+import { CheckIcon, ChevronDownIcon, ClipboardPasteIcon, CopyIcon, TriangleAlertIcon } from 'lucide-react'
 
 import {
   absenceOf,
@@ -50,6 +50,16 @@ const HEAD = 'sticky top-0 z-20 border-r border-b border-border bg-card'
 const WEEK_START = 'border-l-2 border-l-foreground/20'
 const isMonday = (date: string) => weekdayLabel(date) === 'pn'
 const NAME = 'sticky left-0 z-10 border-r border-b border-border bg-card'
+const STAFFING_KEY = 'intermanage.scheduleStaffingOpen'
+
+/** Rozwinięta obsada, zapamiętana w przeglądarce; domyślnie zwinięta do jednego wiersza. */
+function readStaffingOpen() {
+  try {
+    return localStorage.getItem(STAFFING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 // Na telefonie przyklejone sumy i nazwiska zajęłyby cały ekran, więc zostają tylko nazwiska.
 const SUM = 'z-10 border-b border-l border-border bg-card md:sticky md:right-0'
 
@@ -124,11 +134,19 @@ export function ScheduleGrid({
         }))
   ).filter((group) => group.rows.length > 0)
   if (guests.length > 0) groups.push({ key: 'guests', name: 'Z innych sklepów i działów', rows: guests })
+  const [staffingOpen, setStaffingOpen] = useState(readStaffingOpen)
+  const toggleStaffing = (open: boolean) => {
+    setStaffingOpen(open)
+    try {
+      localStorage.setItem(STAFFING_KEY, open ? '1' : '0')
+    } catch {
+      // Bez localStorage stan zostaje tylko do odświeżenia strony.
+    }
+  }
   const editable = onCell !== undefined
   const showSums = rows.some((row) => row.monthMinutes !== null)
-  const staffing = positions.filter(
-    (position) => position.minCount !== null || position.targetCount !== null || position.counts.some(Boolean),
-  )
+  // Obsada pilnuje tylko stanowisk z minimum albo celem; bez nich nie ma czego sprawdzać.
+  const staffing = positions.filter((position) => position.minCount !== null || position.targetCount !== null)
   /** Stanowisko dnia, gdy inne niż stałe (do skrótu w komórce). */
   const dayPositionName = (row: ScheduleRow, cell: ScheduleCell | undefined) =>
     cell?.positionId && cell.positionId !== row.positionId
@@ -301,51 +319,77 @@ export function ScheduleGrid({
           ))}
         </tbody>
         {staffing.length > 0 && (
-          // Obsada przyklejona do dołu: przy długiej liście widać ją razem z dniami, które się układa.
+          // Obsada przyklejona do dołu: przy długiej liście widać ją razem z dniami, które się układa. Zwinięta
+          // to jeden wiersz z brakami dnia, bo kilkanaście stanowisk zasłaniało cały grafik.
           <tfoot className="sticky bottom-0 z-20">
             <tr>
               <th
                 scope="colgroup"
-                className={cn(
-                  NAME,
-                  'z-30 border-t-2 border-t-foreground/15 bg-muted px-3 py-1.5 text-left text-xs font-medium text-muted-foreground',
-                )}
+                className={cn(NAME, 'z-30 border-t-2 border-t-foreground/15 bg-muted p-0 text-left')}
               >
-                Obsada na dzień
-              </th>
-              <td
-                colSpan={days.length + (showSums ? 1 : 0)}
-                className="border-t-2 border-b border-border border-t-foreground/15 bg-muted"
-              />
-            </tr>
-            {staffing.map((position) => (
-              <tr key={position.id}>
-                <th scope="row" className={cn(NAME, 'z-30 px-3 py-1 text-left font-normal')}>
-                  <span className="block truncate text-sm font-medium">{position.name}</span>
-                  {(position.minCount !== null || position.targetCount !== null) && (
-                    <span className="block text-muted-foreground">
-                      {[
-                        position.minCount !== null ? `min. ${position.minCount}` : null,
-                        position.targetCount !== null ? `cel ${position.targetCount}` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  )}
-                </th>
-                {days.map((day, index) => (
-                  <StaffingCell
-                    key={day.date}
-                    day={day}
-                    count={position.counts[index]}
-                    people={peopleOn(position.id, day.date)}
-                    minCount={position.minCount}
-                    targetCount={position.targetCount}
+                <button
+                  type="button"
+                  aria-expanded={staffingOpen}
+                  onClick={() => toggleStaffing(!staffingOpen)}
+                  className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <ChevronDownIcon
+                    aria-hidden
+                    className={cn('size-3.5 transition-transform', !staffingOpen && '-rotate-90')}
                   />
-                ))}
-                {showSums && <td className={SUM} />}
-              </tr>
-            ))}
+                  Obsada na dzień
+                  <span className="font-normal opacity-70">
+                    {staffingOpen ? 'zwiń' : `${staffing.length} stanowisk`}
+                  </span>
+                </button>
+              </th>
+              {staffingOpen ? (
+                <td
+                  colSpan={days.length + (showSums ? 1 : 0)}
+                  className="border-t-2 border-b border-border border-t-foreground/15 bg-muted"
+                />
+              ) : (
+                <>
+                  {days.map((day, index) => (
+                    <StaffingSummaryCell key={day.date} day={day} index={index} positions={staffing} />
+                  ))}
+                  {showSums && <td className={cn(SUM, 'border-t-2 border-t-foreground/15 bg-muted')} />}
+                </>
+              )}
+            </tr>
+            {staffingOpen &&
+              staffing.map((position) => (
+                <tr key={position.id}>
+                  <th scope="row" className={cn(NAME, 'z-30 px-3 py-0.5 text-left font-normal')}>
+                    <span className="flex items-baseline gap-1.5">
+                      <span className="truncate text-xs font-medium" title={position.name}>
+                        {position.name}
+                      </span>
+                      {(position.minCount !== null || position.targetCount !== null) && (
+                        <span className="shrink-0 text-[0.625rem] text-muted-foreground">
+                          {[
+                            position.minCount !== null ? `min. ${position.minCount}` : null,
+                            position.targetCount !== null ? `cel ${position.targetCount}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                  {days.map((day, index) => (
+                    <StaffingCell
+                      key={day.date}
+                      day={day}
+                      count={position.counts[index]}
+                      people={peopleOn(position.id, day.date)}
+                      minCount={position.minCount}
+                      targetCount={position.targetCount}
+                    />
+                  ))}
+                  {showSums && <td className={SUM} />}
+                </tr>
+              ))}
           </tfoot>
         )}
       </table>
@@ -424,7 +468,7 @@ function StaffingCell({
     <td
       title={title}
       className={cn(
-        'h-10 border-r border-b border-border bg-card p-0 text-center tabular-nums',
+        'h-7 border-r border-b border-border bg-card p-0 text-center tabular-nums',
         isMonday(day.date) && WEEK_START,
         day.closed && 'bg-muted',
       )}
@@ -446,6 +490,67 @@ function StaffingCell({
           </span>
         </span>
       )}
+    </td>
+  )
+}
+
+/**
+ * Zwinięta obsada w jednej kratce dnia: ile stanowisk ma mniej niż minimum (czerwień) albo niż cel (bursztyn),
+ * a gdy wszystko obsadzone, ptaszek. Szczegóły w podpowiedzi.
+ */
+function StaffingSummaryCell({
+  day,
+  index,
+  positions,
+}: {
+  day: ScheduleDay
+  index: number
+  positions: Schedule['positions']
+}) {
+  const base = cn(
+    'h-7 border-t-2 border-r border-b border-border border-t-foreground/15 bg-card p-0 text-center tabular-nums',
+    isMonday(day.date) && WEEK_START,
+  )
+  if (day.closed) return <td className={cn(base, 'bg-muted')} />
+  const short: string[] = []
+  const below: string[] = []
+  for (const position of positions) {
+    const count = position.counts[index]
+    if (position.minCount !== null && count < position.minCount)
+      short.push(`${position.name} ${count}/${position.minCount}`)
+    else if (position.targetCount !== null && count < position.targetCount)
+      below.push(`${position.name} ${count}/${position.targetCount}`)
+  }
+  if (short.length === 0 && below.length === 0) {
+    const checked = positions.some((position) => position.minCount !== null || position.targetCount !== null)
+    return (
+      <td className={base} title={checked ? 'Wszystkie stanowiska obsadzone' : undefined}>
+        {checked && (
+          <span className="flex size-full items-center justify-center bg-emerald-300 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50">
+            <CheckIcon aria-label="Obsadzone" className="size-3.5" />
+          </span>
+        )}
+      </td>
+    )
+  }
+  const title = [
+    short.length > 0 ? `Poniżej minimum: ${short.join(', ')}` : null,
+    below.length > 0 ? `Poniżej celu: ${below.join(', ')}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return (
+    <td className={base} title={title}>
+      <span
+        className={cn(
+          'flex size-full items-center justify-center text-sm font-semibold',
+          short.length > 0
+            ? 'bg-red-300 text-red-950 dark:bg-red-800 dark:text-red-50'
+            : 'bg-amber-300 text-amber-950 dark:bg-amber-700 dark:text-amber-50',
+        )}
+      >
+        {short.length > 0 ? short.length : below.length}
+      </span>
     </td>
   )
 }

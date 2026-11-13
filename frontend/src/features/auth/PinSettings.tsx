@@ -74,15 +74,15 @@ export function PinSettings() {
             <TextField
               label="Obecne hasło"
               type="password"
-              autoComplete="current-password"
+              noSave
               error={errors.currentPassword?.message}
               {...register('currentPassword', { required: 'Podaj obecne hasło' })}
             />
             <TextField
               label={hasPin ? 'Nowy PIN' : 'PIN'}
               type="password"
+              noSave
               inputMode="numeric"
-              autoComplete="off"
               maxLength={8}
               hint="Od 4 do 8 cyfr. Po 5 błędnych próbach przejście wymaga hasła."
               error={errors.pin?.message}
@@ -94,8 +94,8 @@ export function PinSettings() {
             <TextField
               label="Powtórz PIN"
               type="password"
+              noSave
               inputMode="numeric"
-              autoComplete="off"
               maxLength={8}
               error={errors.confirmPin?.message}
               {...register('confirmPin', {

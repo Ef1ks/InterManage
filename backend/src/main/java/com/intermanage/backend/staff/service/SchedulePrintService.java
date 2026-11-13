@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -87,8 +88,8 @@ public class SchedulePrintService {
                         (first, second) -> first, LinkedHashMap::new));
         Set<String> symbols = new HashSet<>();
         Map<String, String> dayPositions = new LinkedHashMap<>();
-        boolean otherStores = false;
-        boolean custom = !schedule.groups().isEmpty();
+        Set<String> otherStores = new TreeSet<>();
+        boolean minutesUsed = false;
 
         List<SchedulePdf.Section> sections = new ArrayList<>();
         for (Bucket bucket : buckets(schedule)) {
@@ -108,8 +109,9 @@ public class SchedulePrintService {
                     switch (printed.kind()) {
                         case WORK -> {
                             minutes += minutes(cell.start(), cell.end());
+                            minutesUsed |= printed.top().contains(":") || printed.bottom().contains(":");
                             if (cell.store() != null) {
-                                otherStores = true;
+                                otherStores.add(cell.store());
                             } else if (printed.note() != null) {
                                 dayPositions.put(printed.note(), positionNames.get(cell.positionId()));
                             }
@@ -119,8 +121,8 @@ public class SchedulePrintService {
                         }
                     }
                 }
-                String note = row.guest() ? join("sklep " + row.homeStore(), row.positionName())
-                        : custom ? row.positionName() : null;
+                // Stanowisko jest już w nagłówku sekcji, więc pod nazwiskiem stoi tylko, skąd jest gość.
+                String note = row.guest() ? join("sklep " + row.homeStore(), row.positionName()) : null;
                 people.add(new SchedulePdf.Person(row.name(), note, row.civil(), cells, minutes));
             }
             if (!people.isEmpty()) {
@@ -128,23 +130,44 @@ public class SchedulePrintService {
             }
         }
 
-        List<String> legend = new ArrayList<>();
-        String marks = SYMBOL_ORDER.stream().filter(symbols::contains)
-                .map(symbol -> symbol + " – " + SYMBOLS.get(symbol)).collect(Collectors.joining("; "));
-        if (!marks.isEmpty()) {
-            legend.add("Oznaczenia: " + marks + ".");
+        List<SchedulePdf.LegendItem> legend = new ArrayList<>();
+        legend.add(new SchedulePdf.LegendItem(SchedulePdf.Cell.work("6", "14", null),
+                "Praca: u góry godzina rozpoczęcia, na dole zakończenia"));
+        if (minutesUsed) {
+            legend.add(new SchedulePdf.LegendItem(SchedulePdf.Cell.work("13:30", "21:45", null),
+                    "Małe cyfry to minuty (13:30–21:45)"));
         }
-        if (otherStores) {
-            legend.add("Numer pod godzinami (np. " + store.getNumber() + "): tego dnia praca w innym sklepie o tym"
-                    + " numerze.");
+        for (String symbol : SYMBOL_ORDER) {
+            if (symbols.contains(symbol)) {
+                SchedulePdf.Kind kind = ABSENCES.containsValue(symbol) || symbol.equals("N") ? SchedulePdf.Kind.ABSENCE
+                        : SchedulePdf.Kind.OFF;
+                legend.add(new SchedulePdf.LegendItem(new SchedulePdf.Cell(kind, symbol, "", null),
+                        capitalize(SYMBOLS.get(symbol))));
+            }
         }
-        if (!dayPositions.isEmpty()) {
-            legend.add("Skrót pod godzinami: tego dnia praca na innym stanowisku: " + dayPositions.entrySet().stream()
-                    .map(entry -> entry.getKey() + " – " + entry.getValue()).collect(Collectors.joining("; ")) + ".");
+        for (String number : otherStores) {
+            legend.add(new SchedulePdf.LegendItem(SchedulePdf.Cell.work("6", "14", number),
+                    "Praca tego dnia w sklepie nr " + number));
         }
-        return new SchedulePdf.Sheet(departmentName, store.getName() + " · sklep " + store.getNumber(),
-                YearMonth.parse(schedule.month()), versionLabel(schedule), LocalDateTime.now(StoreTime.ZONE), days,
-                sections, legend);
+        dayPositions.forEach((symbol, name) -> legend.add(new SchedulePdf.LegendItem(
+                SchedulePdf.Cell.work("6", "14", symbol), "Praca tego dnia na stanowisku: " + name)));
+        String place = store.getAddress() != null && !store.getAddress().isBlank() ? store.getAddress()
+                : store.getName();
+        return new SchedulePdf.Sheet(departmentName, place + " · sklep " + store.getNumber(),
+                YearMonth.parse(schedule.month()), versionLabel(schedule), draft(schedule),
+                LocalDateTime.now(StoreTime.ZONE), days, sections, legend);
+    }
+
+    /** Grafik, którego pracownicy jeszcze nie dostali: bieżący stan bez publikacji albo ze zmianami po niej. */
+    private static boolean draft(ScheduleResponse schedule) {
+        if (schedule.viewedVersion() != null) {
+            return false;
+        }
+        return schedule.versions().isEmpty() || schedule.canEdit() && "CHANGED".equals(schedule.status());
+    }
+
+    private static String capitalize(String text) {
+        return text.isEmpty() ? text : text.substring(0, 1).toUpperCase() + text.substring(1);
     }
 
     private record Bucket(String name, List<ScheduleResponse.Row> rows) {

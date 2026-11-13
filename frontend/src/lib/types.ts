@@ -1815,6 +1815,14 @@ export type KsefInvoice = {
   supplierSkipped: boolean
   /** Przy korekcie: numery faktur, które koryguje (z XML); `null`, dopóki XML korekty nie został odczytany. */
   correctedInvoices: string[] | null
+  /** Przy korekcie: czy zmienia ilości, a nie tylko kwoty (z XML); `null` przed odczytem i przy fakturze. */
+  quantityChange: boolean | null
+  /** Refaktura bazy: kod dostawcy w bazie z XML (np. 09295), `null` przy zwykłej fakturze. */
+  baseSupplierCode: string | null
+  /** Refaktura bazy: numer faktury dostawcy (baza ucina go do 10 znaków). */
+  baseSupplierInvoice: string | null
+  /** Dostawca przypisany do kodu z bazy w ustawieniach okna wczytywania faktur. */
+  baseSupplierName: string | null
 }
 
 /**
@@ -2693,7 +2701,10 @@ export type DataEntryCorrection = {
   corrected: { number: string | null; issueDate: string | null; ksefNumber: string | null }[]
 }
 
-/** Przyjęcie PZ do faktury korygującej; `matched`: przyjęcie faktury, którą korekta koryguje. */
+/**
+ * Przyjęcie PZ do faktury korygującej; `matched`: przyjęcie faktury, którą korekta koryguje (także po numerze WZ
+ * z XML faktury), `commonArticles`: ile artykułów korekty jest w przyjęciu (przy kilku dopasowanych, inaczej 0).
+ */
 export type CorrectionDelivery = {
   id: string
   number: string
@@ -2702,6 +2713,7 @@ export type CorrectionDelivery = {
   supplierDocumentNumber: string | null
   purchaseValue: number
   matched: boolean
+  commonArticles: number
 }
 
 /** Linia przyjęcia po wcześniejszych korektach, z artykułem z kartoteki (`null`: nie ma go w kartotece). */
@@ -2822,6 +2834,24 @@ export type DataEntrySkippedSupplier = {
   sellerName: string | null
   mode: SupplierRuleMode
   createdAt: string
+}
+
+/** Przypisanie kodu dostawcy z bazy SCA PR do dostawcy (wspólne dla firmy). */
+export type BaseSupplierCodeAssignment = {
+  id: string
+  name: string
+  supplierNip: string | null
+  supplierId: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+/** Kod dostawcy z refaktur bazy (`DDDKodDostawcy`) z liczbą faktur i przypisaniem. */
+export type BaseSupplierCode = {
+  code: string
+  invoices: number
+  lastIssueDate: string | null
+  assignment: BaseSupplierCodeAssignment | null
 }
 
 /** Wynik działania zbiorczego na fakturach: znaczniki do „Cofnij”. */
@@ -3900,6 +3930,28 @@ export type TimeDecisionKind = 'EMPLOYER_ORDER' | 'EMPLOYEE_REQUEST' | 'REJECTED
 
 /** Dni do reakcji kierownika (czeka na decyzję, brak, brak wyjścia) z ostatnich 31 dni, po działach. */
 export type TimeAttention = { total: number; departments: { departmentId: string; count: number }[] }
+
+/** Osoba na kafelku obecności: ze zmianą teraz (start, end) albo w pracy bez zmiany (since = wejście). */
+export type PresencePerson = {
+  employeeId: string
+  name: string
+  position: string
+  start: string | null
+  end: string | null
+  since: string | null
+}
+
+/** Pulpit: kto jest teraz w pracy (odbite wejście w sklepie) wobec grafiku sklepu w tej chwili. */
+export type TimePresence = {
+  at: string
+  present: number
+  scheduledNow: number
+  scheduledToday: number
+  missing: PresencePerson[]
+  unscheduled: PresencePerson[]
+  nextStart: string | null
+  nextCount: number
+}
 
 /** Czas lokalny sklepu jako RRRR-MM-DDTGG:MM(:SS). */
 export type TimeSegment = {

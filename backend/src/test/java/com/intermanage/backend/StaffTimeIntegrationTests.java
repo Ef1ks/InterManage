@@ -12,10 +12,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +36,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.common.component.StoreTime;
+import com.intermanage.backend.staff.component.ScheduleCalendar;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;
@@ -127,6 +133,32 @@ class StaffTimeIntegrationTests {
 
         // Odcinka, którego nie ma w karcie, nie da się rozstrzygnąć.
         decide("OVERTIME", "15:00", "16:00", "EMPLOYER_ORDER").andExpect(status().isConflict());
+    }
+
+    @Test
+    void presenceComparesPunchedWithScheduleNow() throws Exception {
+        LocalDateTime start = LocalDateTime.now(StoreTime.ZONE).minusHours(1).truncatedTo(ChronoUnit.MINUTES);
+        Assumptions.assumeTrue(ScheduleCalendar.holiday(start.toLocalDate()) == null, "w zamknięte święto nie ma zmian");
+        send(owner, put(staff("/schedule/entries")), "{\"departmentId\":\"" + department + "\",\"month\":\""
+                + YearMonth.from(start) + "\",\"changes\":[{\"employeeId\":\"" + employee + "\",\"date\":\""
+                + start.toLocalDate() + "\",\"start\":\"" + start.toLocalTime() + "\",\"end\":\""
+                + start.toLocalTime().plusHours(3) + "\",\"storeId\":null}]}")
+                .andExpect(status().isOk());
+
+        // Zmiana trwa, a wejścia nie ma: osoba czeka na liście „nie odbili się”.
+        send(owner, get(staff("/time/presence")), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.present").value(0))
+                .andExpect(jsonPath("$.scheduledNow").value(1))
+                .andExpect(jsonPath("$.missing", hasSize(1)))
+                .andExpect(jsonPath("$.missing[0].employeeId").value(employee));
+
+        send(owner, post(staff("/time/punches")), "{\"employeeId\":\"" + employee + "\",\"at\":\""
+                + start.plusMinutes(5) + ":00\"}").andExpect(status().isNoContent());
+        send(owner, get(staff("/time/presence")), null)
+                .andExpect(jsonPath("$.present").value(1))
+                .andExpect(jsonPath("$.scheduledNow").value(1))
+                .andExpect(jsonPath("$.missing", hasSize(0)))
+                .andExpect(jsonPath("$.unscheduled", hasSize(0)));
     }
 
     @Test

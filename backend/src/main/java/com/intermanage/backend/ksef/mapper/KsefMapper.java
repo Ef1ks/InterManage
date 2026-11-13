@@ -41,8 +41,10 @@ public interface KsefMapper {
     @Mapping(target = "enteredStore", source = "enteredStore")
     @Mapping(target = "deliveries", source = "deliveries")
     @Mapping(target = "correctedInvoices", expression = "java(correctedInvoices(invoice))")
+    @Mapping(target = "baseSupplierName", source = "baseSupplierName")
     KsefInvoiceSummary toSummary(KsefInvoice invoice, KsefInvoiceEntry entry,
-            List<KsefInvoiceSummary.Delivery> deliveries, boolean supplierSkipped, String enteredStore);
+            List<KsefInvoiceSummary.Delivery> deliveries, boolean supplierSkipped, String enteredStore,
+            String baseSupplierName);
 
     default List<String> correctedInvoices(KsefInvoice invoice) {
         if (!invoice.isCorrection() || invoice.getCorrectedReadAt() == null) {

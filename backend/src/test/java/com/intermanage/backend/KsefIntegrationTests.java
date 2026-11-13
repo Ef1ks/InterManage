@@ -26,18 +26,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.spec.MGF1ParameterSpec;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.OAEPParameterSpec;
+import javax.crypto.spec.PSource;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,8 +74,12 @@ import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.document.service.DocumentKsefLinkService;
 import com.intermanage.backend.ksef.component.KsefClient;
 import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
+import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
 import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
+import com.intermanage.backend.ksef.service.KsefExportService;
 import com.jayway.jsonpath.JsonPath;
+
+import tools.jackson.databind.json.JsonMapper;
 
 import jakarta.servlet.http.Cookie;
 
@@ -96,6 +115,15 @@ class KsefIntegrationTests {
 
     @Autowired
     DocumentKsefLinkService ksefLinks;
+
+    @Autowired
+    KsefExportService exports;
+
+    @Autowired
+    KsefConnectionRepository connections;
+
+    @Autowired
+    JsonMapper jsonMapper;
 
     @MockitoBean
     KsefClient ksef;
@@ -843,6 +871,144 @@ class KsefIntegrationTests {
                 + "and nip = ?", String.class, nip);
         send(owner, post(path + "/" + other + "/document"), "{\"documentId\":\"" + wz2 + "\"}")
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void exportReadsDeliveryAddressesAndListsMyInvoices() throws Exception {
+        Cookie owner = login();
+        String makowa = createStore(owner);
+        String batorego = createStore(owner, nip);
+        jdbc.update("update stores set address = 'ul. Makowa 14, 65-382 Zielona Góra' where id = ?::uuid", makowa);
+        jdbc.update("update stores set address = 'ul. Stefana Batorego 81, 65-735 Zielona Góra' where id = ?::uuid",
+                batorego);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, makowa, nip, "haslo-testowe").andExpect(status().isOk());
+        send(owner, post(url(batorego, "/settings/connection/link")), "{\"nip\":\"" + nip + "\"}")
+                .andExpect(status().isOk());
+
+        // Faktury bazy bez IDWew: sklep tylko w adresie Podmiotu 3; KOR/PZ zna dopiero paczka (_metadata.json).
+        String base = "7821977018";
+        OffsetDateTime stored = OffsetDateTime.now(ZoneOffset.UTC).minusHours(2);
+        List<KsefInvoiceMetadata> metadata = List.of(
+                invoice("FV/M", base, "SCA", stored, "Vat", null),
+                invoice("FV/B", base, "SCA", stored.plusMinutes(1), "Vat", null),
+                invoice("FV/X", base, "SCA", stored.plusMinutes(2), "Vat", null),
+                invoice("KOR/M", base, "SCA", stored.plusMinutes(3), "Kor", null),
+                invoice("KOR/B", base, "SCA", stored.plusMinutes(4), "Kor", null),
+                invoice("KOR/OLD", base, "SCA", stored.plusMinutes(5), "Kor", null),
+                invoice("KOR/PZ", base, "SCA", stored.plusMinutes(6), "Kor", null));
+        when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
+                false, false, OffsetDateTime.now(ZoneOffset.UTC), metadata.subList(0, 6)));
+        syncAndWait(owner, makowa).andExpect(jsonPath("$.syncMessage").value("Pobrano 6 faktur"));
+        jdbc.update("update ksef_sync_states set export_cursor = ? where nip = ?",
+                java.sql.Timestamp.from(Instant.now().minus(1, ChronoUnit.DAYS)), nip);
+
+        Map<String, String> xml = Map.of(
+                "FV/M", invoiceXml("VAT", "UL.MAKOWA 14", "65-001 ZIELONA GÓRA", null),
+                "FV/B", invoiceXml("VAT", "65-247 Zielona Góra", "ul. Stefana Batorego  81", null),
+                // Refaktura bazy: towar Artka, kod dostawcy w bazie 09295 i numer faktury Artka w DodatkowyOpis.
+                "FV/X", invoiceXml("VAT", null, null, null).replace("</Fa>", "<DodatkowyOpis><NrWiersza>1"
+                        + "</NrWiersza><Klucz>DDDNrFaDostawcy</Klucz><Wartosc>F61577/26/</Wartosc></DodatkowyOpis>"
+                        + "<DodatkowyOpis><Klucz>DDDKodDostawcy</Klucz><Wartosc>09295</Wartosc></DodatkowyOpis></Fa>"),
+                "KOR/M", invoiceXml("KOR", null, null, "FV/M").replace("</Fa>", "<FaWiersz><NrWierszaFa>1"
+                        + "</NrWierszaFa><P_7>MLEKO</P_7><P_8B>-2</P_8B><P_9A>3.00</P_9A></FaWiersz></Fa>"),
+                "KOR/B", invoiceXml("KOR", null, null, "FV/B"),
+                "KOR/OLD", invoiceXml("KOR", null, null, "FV/2025/OLD"),
+                "KOR/PZ", invoiceXml("KOR", null, null, "FV/2025/PZ"));
+        KeyPair rsa = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+        when(ksef.symmetricKeyEncryptionKey()).thenReturn(new KsefClient.PublicKey(
+                Base64.getEncoder().encodeToString(rsa.getPublic().getEncoded()), null));
+        AtomicReference<byte[]> encryptedPackage = new AtomicReference<>();
+        when(ksef.startPurchaseExport(eq("token"), any(), any(), anyString(), anyString(), any())).thenAnswer(call -> {
+            Cipher unwrap = Cipher.getInstance("RSA/ECB/OAEPPadding");
+            unwrap.init(Cipher.DECRYPT_MODE, rsa.getPrivate(), new OAEPParameterSpec("SHA-256", "MGF1",
+                    MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT));
+            byte[] key = unwrap.doFinal(Base64.getDecoder().decode(call.<String>getArgument(3)));
+            ByteArrayOutputStream zip = new ByteArrayOutputStream();
+            try (ZipOutputStream out = new ZipOutputStream(zip)) {
+                for (KsefInvoiceMetadata invoice : metadata) {
+                    out.putNextEntry(new ZipEntry(invoice.ksefNumber() + ".xml"));
+                    out.write(xml.get(invoice.invoiceNumber()).getBytes(StandardCharsets.UTF_8));
+                }
+                out.putNextEntry(new ZipEntry("_metadata.json"));
+                out.write(jsonMapper.writeValueAsBytes(Map.of("invoices", metadata)));
+            }
+            Cipher aes = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            aes.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"),
+                    new IvParameterSpec(Base64.getDecoder().decode(call.<String>getArgument(4))));
+            encryptedPackage.set(aes.doFinal(zip.toByteArray()));
+            return "REF-1";
+        });
+        KsefClient.ExportPart part = new KsefClient.ExportPart(1, "GET", "https://storage/part-1", null);
+        when(ksef.exportStatus("token", "REF-1")).thenReturn(new KsefClient.ExportStatus(200, "ok", List.of(part),
+                metadata.size(), false, null, Instant.now()));
+        when(ksef.exportPart(part)).thenAnswer(call -> encryptedPackage.get());
+
+        assertThat(exports.export(connections.findById(UUID.fromString(makowa)).orElseThrow()))
+                .isEqualTo(new KsefExportService.Result(7, 1));
+        assertThat(jdbc.queryForObject("select count(*) from ksef_invoice_xml where invoice_id in "
+                + "(select id from ksef_invoices where nip = ?)", Integer.class, nip)).isEqualTo(7);
+
+        // Przyjęcie PZ faktury sprzed KSeF w sklepie przy Makowej: jej korekta jest „do moich PZ”.
+        insertDelivery(makowa, "PZ1", "FV/2025/PZ");
+        list(owner, makowa, "&internalId=MINE").andExpect(jsonPath("$.invoices[*].invoiceNumber")
+                .value(containsInAnyOrder("FV/M", "FV/X", "KOR/M", "KOR/OLD", "KOR/PZ")));
+        list(owner, batorego, "&internalId=MINE").andExpect(jsonPath("$.invoices[*].invoiceNumber")
+                .value(containsInAnyOrder("FV/B", "FV/X", "KOR/B", "KOR/OLD")));
+        list(owner, makowa, "&kind=CORRECTIONS&myDeliveries=true")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("KOR/PZ")));
+        list(owner, batorego, "&kind=CORRECTIONS&myDeliveries=true").andExpect(jsonPath("$.matchingCount").value(0));
+        // Tylko korekty zmieniające ilości: KOR/M zwraca towar, pozostałe nie mają pozycji z ilością.
+        assertThat(jdbc.queryForObject("select quantity_change from ksef_invoices where invoice_number = 'KOR/M' "
+                + "and nip = ?", Boolean.class, nip)).isTrue();
+        list(owner, makowa, "&internalId=MINE&kind=CORRECTIONS&quantityChanges=true")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("KOR/M")))
+                .andExpect(jsonPath("$.invoices[0].quantityChange").value(true));
+        // Rozpoznanie starszą regułą liczy się od nowa z XML w bazie.
+        jdbc.update("update ksef_invoices set quantity_change = false, quantity_change_rule = 1 where nip = ? "
+                + "and invoice_number = 'KOR/M'", nip);
+        correctedInvoices.read(nip);
+        assertThat(jdbc.queryForObject("select quantity_change from ksef_invoices where invoice_number = 'KOR/M' "
+                + "and nip = ?", Boolean.class, nip)).isTrue();
+        // Bez filtra sklep dalej widzi wszystkie faktury bez IDWew.
+        list(owner, batorego, "").andExpect(jsonPath("$.matchingCount").value(7));
+
+        // Kod dostawcy z bazy przypisany nazwą: wyszukiwarka znajduje refakturę po nazwie, kodzie i numerze Artka.
+        assertThat(jdbc.queryForObject("select base_supplier_code from ksef_invoices where invoice_number = 'FV/X' "
+                + "and nip = ?", String.class, nip)).isEqualTo("09295");
+        list(owner, makowa, "&query=artek").andExpect(jsonPath("$.matchingCount").value(0));
+        mvc.perform(get("/api/stores/" + makowa + "/data-entry/base-supplier-codes").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].code").value("09295"))
+                .andExpect(jsonPath("$[0].invoices").value(1))
+                .andExpect(jsonPath("$[0].assignment").doesNotExist());
+        send(owner, put("/api/stores/" + makowa + "/data-entry/base-supplier-codes/09295"), "{\"name\":\"ARTEK\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("ARTEK"));
+        list(owner, batorego, "&internalId=MINE&query=artek")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("FV/X")))
+                .andExpect(jsonPath("$.invoices[0].baseSupplierName").value("ARTEK"))
+                .andExpect(jsonPath("$.invoices[0].baseSupplierInvoice").value("F61577/26/"));
+        list(owner, makowa, "&query=F61577").andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("FV/X")));
+    }
+
+    /** Faktura FA(3) z adresem odbiorcy w Podmiocie 3 (bez IDWew) i przy korekcie z fakturą korygowaną. */
+    private static String invoiceXml(String kind, String line1, String line2, String correctedNumber) {
+        String third = line1 == null ? "" : """
+                <Podmiot3><DaneIdentyfikacyjne><BrakID>1</BrakID><Nazwa>TRYTOMA</Nazwa></DaneIdentyfikacyjne>
+                  <Adres><KodKraju>PL</KodKraju><AdresL1>%s</AdresL1><AdresL2>%s</AdresL2></Adres><Rola>2</Rola>
+                </Podmiot3>""".formatted(line1, line2);
+        String corrected = correctedNumber == null ? "" : """
+                <DaneFaKorygowanej><DataWystFaKorygowanej>2026-10-10</DataWystFaKorygowanej>
+                  <NrFaKorygowanej>%s</NrFaKorygowanej><NrKSeFN>1</NrKSeFN></DaneFaKorygowanej>"""
+                .formatted(correctedNumber);
+        return """
+                <Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+                  <Naglowek><KodFormularza kodSystemowy="FA (3)">FA</KodFormularza></Naglowek>
+                  %s
+                  <Fa><RodzajFaktury>%s</RodzajFaktury>%s</Fa>
+                </Faktura>""".formatted(third, kind, corrected);
     }
 
     /** Minimalna faktura korygująca FA(3) z jedną fakturą korygowaną (spoza KSeF, bez numeru KSeF). */

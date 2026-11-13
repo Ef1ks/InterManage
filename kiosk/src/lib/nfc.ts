@@ -14,6 +14,16 @@ import { normalizeUid } from './uid'
 
 export type NfcState = 'unsupported' | 'disabled' | 'ready'
 
+/**
+ * Biblioteka sprawdza długość zapisu ze stałej natywnej `MIFARE_BLOCK_SIZE`, a w nowej architekturze RN stałe
+ * modułu do JS nie dochodzą (`undefined`), więc każdy zapis kończył się błędem „data should be a non-empty
+ * Array[undefined]”. Blok MIFARE Classic ma zawsze 16 bajtów (`MifareClassic.BLOCK_SIZE`).
+ */
+const MIFARE_BLOCK_SIZE = 16
+if (NfcManager.MIFARE_BLOCK_SIZE !== MIFARE_BLOCK_SIZE) {
+  Object.defineProperty(NfcManager, 'MIFARE_BLOCK_SIZE', { value: MIFARE_BLOCK_SIZE })
+}
+
 /** Wszystkie operacje na NFC idą po kolei: odbicia i programowanie nie mogą naraz trzymać czytnika. */
 let chain: Promise<unknown> = Promise.resolve()
 function exclusive<T>(task: () => Promise<T>): Promise<T> {
@@ -80,7 +90,7 @@ export type CardRead = {
 export type CardWrite = { uid: string; written: boolean; problem: string | null }
 
 function encode(rcpNumber: number) {
-  const block = new Array<number>(16).fill(0)
+  const block = new Array<number>(MIFARE_BLOCK_SIZE).fill(0)
   MAGIC.forEach((byte, i) => (block[i] = byte))
   block[5] = (rcpNumber >>> 24) & 0xff
   block[6] = (rcpNumber >>> 16) & 0xff

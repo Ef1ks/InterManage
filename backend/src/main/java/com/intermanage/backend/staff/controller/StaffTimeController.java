@@ -127,6 +127,13 @@ public class StaffTimeController {
         return time.attention(storeId, principal);
     }
 
+    /** Pulpit: kto jest teraz w pracy wobec grafiku sklepu. */
+    @GetMapping("/presence")
+    @PreAuthorize(VIEW)
+    public StaffTimeService.Presence presence(@PathVariable UUID storeId) {
+        return time.presence(storeId);
+    }
+
     @GetMapping
     @PreAuthorize(VIEW)
     public TimeCardResponse view(@PathVariable UUID storeId, @RequestParam UUID departmentId,

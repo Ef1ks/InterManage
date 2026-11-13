@@ -92,6 +92,21 @@ public class BackgroundAccounts {
         return new Account(jwtService.issue(principal, rememberMe), principal);
     }
 
+    /**
+     * Odkłada aktywne konto do tła (ono samo zostaje zalogowane, ale wraca dopiero po PIN-ie). Przy pełnej liście
+     * wypada najdawniej odłożone konto.
+     */
+    public void moveToBackground(HttpServletRequest request, HttpServletResponse response, AppUserPrincipal active,
+            boolean rememberMe) {
+        List<Account> accounts = new ArrayList<>(read(request, active.getId()));
+        accounts.add(fresh(active, rememberMe));
+        while (accounts.size() > MAX) {
+            accounts.removeFirst();
+        }
+        jwtService.writeAccountsCookie(request, response, accounts.stream().map(Account::token).toList());
+        jwtService.clearTokenCookie(response);
+    }
+
     /** Odnawia tokeny kont w tle; woła go filtr, gdy odnawia token aktywnego konta. */
     public void refresh(HttpServletRequest request, HttpServletResponse response, UUID activeUserId) {
         if (JwtService.accountTokens(request).isEmpty()) {

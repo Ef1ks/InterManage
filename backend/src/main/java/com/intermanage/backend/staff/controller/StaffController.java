@@ -45,6 +45,7 @@ public class StaffController {
 
     private static final String VIEW = "hasAuthority('STAFF:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT = "hasAuthority('STAFF:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String OWNER = "hasAuthority('ROLE_OWNER') and @storeAccess.canAccess(authentication, #storeId)";
 
     private final StaffStructureService structure;
     private final StaffEmployeeService employees;
@@ -215,6 +216,22 @@ public class StaffController {
     public EmployeeResponse restore(@PathVariable UUID storeId, @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return employees.restore(storeId, id, principal.getId());
+    }
+
+    /** Usunięcie pracownika po zakończeniu pracy: tylko właściciel, znacznik do cofnięcia. */
+    @PostMapping("/employees/{id}/delete")
+    @PreAuthorize(OWNER)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        employees.delete(storeId, id, principal.getId());
+    }
+
+    @PostMapping("/employees/{id}/undelete")
+    @PreAuthorize(OWNER)
+    public EmployeeResponse undelete(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return employees.undelete(storeId, id, principal.getId());
     }
 
     @PostMapping("/employees/{id}/invitation")

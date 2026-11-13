@@ -168,8 +168,8 @@ function UnlockForm({
         key={account.unlock}
         label={usesPin ? 'PIN' : 'Hasło konta'}
         type="password"
+        noSave
         inputMode={usesPin ? 'numeric' : undefined}
-        autoComplete={usesPin ? 'off' : 'current-password'}
         maxLength={usesPin ? 8 : undefined}
         autoFocus
         hint={usesPin ? undefined : 'To konto nie ma PIN-u albo PIN został zablokowany po błędnych próbach.'}
@@ -208,6 +208,10 @@ function AddAccountForm({ onBack, onAdded }: { onBack: () => void; onAdded: (me:
       <TextField
         label="Login"
         autoComplete="off"
+        data-1p-ignore="true"
+        data-lpignore="true"
+        data-bwignore="true"
+        data-form-type="other"
         autoCapitalize="none"
         spellCheck={false}
         autoFocus
@@ -217,7 +221,7 @@ function AddAccountForm({ onBack, onAdded }: { onBack: () => void; onAdded: (me:
       <TextField
         label="Hasło"
         type="password"
-        autoComplete="off"
+        noSave
         error={errors.password?.message}
         {...register('password', { required: 'Podaj hasło' })}
       />

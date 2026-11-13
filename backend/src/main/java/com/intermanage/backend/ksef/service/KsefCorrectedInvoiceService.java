@@ -17,6 +17,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.intermanage.backend.ksef.component.CorrectionKind;
+import com.intermanage.backend.ksef.component.DeliveryAddress;
 import com.intermanage.backend.ksef.component.KsefClient;
 import com.intermanage.backend.ksef.component.KsefInvoiceReader;
 import com.intermanage.backend.ksef.component.KsefRateLimiter;
@@ -111,11 +113,12 @@ public class KsefCorrectedInvoiceService {
     }
 
     public Result read(String nip) {
+        reclassify(nip);
         Set<String> ignored = ignoredSellers(nip);
         int fromStored = 0;
         for (UUID id : invoices.findUnreadStoredCorrections(nip, ignored, PageRequest.of(0, STORED_BATCH))) {
             transaction.executeWithoutResult(status -> xmlFiles.findById(id)
-                    .ifPresent(xml -> record(invoices.getReferenceById(id), xml.getContent())));
+                    .ifPresent(xml -> readXml(invoices.getReferenceById(id), xml.getContent())));
             fromStored++;
         }
         Optional<KsefConnection> connection = connections.findByNip(nip).stream()
@@ -149,7 +152,7 @@ public class KsefCorrectedInvoiceService {
                 if (!xmlFiles.existsById(invoice.getId())) {
                     xmlFiles.save(new KsefInvoiceXml(invoice.getId(), content, depositNet(content)));
                 }
-                invoices.findById(invoice.getId()).ifPresent(found -> record(found, content));
+                invoices.findById(invoice.getId()).ifPresent(found -> readXml(found, content));
             });
             downloaded++;
         }
@@ -173,6 +176,64 @@ public class KsefCorrectedInvoiceService {
             invoice.recordCorrected(refs, null);
         } catch (KsefInvoiceReader.InvalidInvoiceException e) {
             invoice.recordCorrected(Set.of(), truncate("Nie udało się odczytać faktury: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Z XML faktury to, czego nie ma w metadanych: adres dostawy z Podmiotów 3 (sklep faktury bez IDWew) i przy
+     * korekcie faktury korygowane. W bieżącej transakcji; nieczytelny XML zostawia adres pusty.
+     */
+    public void readXml(KsefInvoice invoice, byte[] xml) {
+        try {
+            invoice.recordDeliveryAddress(DeliveryAddress.normalizeAll(reader.thirdPartyAddresses(xml)));
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            invoice.recordDeliveryAddress(null);
+        }
+        try {
+            KsefInvoiceReader.BaseSupplier base = reader.baseSupplier(xml);
+            invoice.recordBaseSupplier(base.code(), base.supplierInvoice());
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            invoice.recordBaseSupplier(null, null);
+        }
+        if (invoice.isCorrection()) {
+            record(invoice, xml);
+            classify(invoice, xml);
+        }
+    }
+
+    /**
+     * Zmiana ilości tylko przy korektach bazy SCA PR ({@link #IGNORED_SELLER_NIPS}): tylko te sklep wprowadza sam,
+     * a pozostałych dostawców filtr ilości nie ukrywa (puste = pokazywane).
+     */
+    private void classify(KsefInvoice invoice, byte[] xml) {
+        Boolean changes = null;
+        if (IGNORED_SELLER_NIPS.contains(invoice.getSellerNip())) {
+            try {
+                changes = CorrectionKind.changesQuantity(reader.read(xml).lines(), reader.lineCodes(xml));
+            } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+                changes = null;
+            }
+        }
+        invoice.recordQuantityChange(changes, CorrectionKind.RULE);
+    }
+
+    /** Korekty z XML w bazie rozpoznane starszą regułą (albo wcale) liczą się od nowa; zwraca ich liczbę. */
+    int reclassify(String nip) {
+        int count = 0;
+        while (true) {
+            List<UUID> ids = invoices.findCorrectionsToClassify(nip, CorrectionKind.RULE,
+                    PageRequest.of(0, STORED_BATCH));
+            if (ids.isEmpty()) {
+                return count;
+            }
+            transaction.executeWithoutResult(status -> {
+                for (UUID id : ids) {
+                    KsefInvoice invoice = invoices.getReferenceById(id);
+                    xmlFiles.findById(id).ifPresentOrElse(xml -> classify(invoice, xml.getContent()),
+                            () -> invoice.recordQuantityChange(null, CorrectionKind.RULE));
+                }
+            });
+            count += ids.size();
         }
     }
 

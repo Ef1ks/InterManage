@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SwitchAccountDialog } from '@/features/auth/AccountSwitcher'
 import { useCurrentUser, useLogout } from '@/features/auth/api'
+import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
@@ -47,6 +48,7 @@ const SIDEBAR_TRANSITION_MS = 200
 export function AppLayout() {
   // Ceny z kasy (pliki TRACEART) sprawdzane w tle na każdej stronie aplikacji.
   usePriceFileWatcher()
+  useWorkdayLock()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)
   const dispatch = useAppDispatch()
   const location = useLocation()

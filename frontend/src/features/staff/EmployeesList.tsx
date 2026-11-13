@@ -1,12 +1,21 @@
 import { useState } from 'react'
-import { ArrowRightLeftIcon, ChevronRightIcon, LinkIcon, MailIcon, PencilIcon, PlusIcon, UndoIcon } from 'lucide-react'
+import {
+  ArrowRightLeftIcon,
+  ChevronRightIcon,
+  LinkIcon,
+  MailIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+  UndoIcon,
+} from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
-import { useCan } from '@/features/auth/api'
+import { useCan, useMe } from '@/features/auth/api'
 import { recordPaths } from '@/features/staff-records/api'
 import { staffPaths, useEmployeeActions, useStaffEmployees, useStaffStructure } from '@/features/staff/api'
 import { EmployeeDialog } from '@/features/staff/EmployeeDialog'
@@ -38,7 +47,8 @@ export function EmployeesList({ storeId, stores }: { storeId: string; stores: St
   const canSeeRecords = useCan('STAFF_RECORDS')
   const employees = useStaffEmployees(storeId)
   const structure = useStaffStructure(storeId)
-  const { resendInvitation, restore } = useEmployeeActions(storeId)
+  const isOwner = useMe().data?.owner ?? false
+  const { resendInvitation, restore, remove, undelete } = useEmployeeActions(storeId)
   const { text, setText, debounced } = useSearchParamText('szukaj')
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
@@ -315,6 +325,30 @@ export function EmployeesList({ storeId, stores }: { storeId: string; stores: St
                       >
                         <UndoIcon />
                         Przywróć
+                      </Button>
+                    )}
+                    {isOwner && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Usuń z listy (tylko właściciel)"
+                        aria-label={`Usuń ${employee.displayName}`}
+                        className="text-destructive hover:text-destructive"
+                        loading={remove.isPending && remove.variables === employee.id}
+                        onClick={() =>
+                          remove.mutate(employee.id, {
+                            onSuccess: () =>
+                              toast.success(`${employee.displayName}: usunięto`, {
+                                action: {
+                                  label: 'Przywróć',
+                                  onClick: () => undelete.mutate(employee.id, { onError }),
+                                },
+                              }),
+                            onError,
+                          })
+                        }
+                      >
+                        <Trash2Icon />
                       </Button>
                     )}
                   </li>

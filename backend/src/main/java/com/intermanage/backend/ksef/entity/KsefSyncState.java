@@ -32,7 +32,46 @@ public class KsefSyncState {
     @Column(name = "sync_message", length = 1000)
     private String syncMessage;
 
+    /** XML faktur trwale zapisanych do tej chwili jest już z eksportu paczek w bazie (V130). */
+    @Column(name = "export_cursor")
+    private Instant exportCursor;
+
+    @Column(name = "exported_at")
+    private Instant exportedAt;
+
+    @Column(name = "export_ok")
+    private Boolean exportOk;
+
+    @Column(name = "export_message", length = 1000)
+    private String exportMessage;
+
     protected KsefSyncState() {
+    }
+
+    public void recordExport(boolean ok, String message) {
+        exportedAt = Instant.now();
+        exportOk = ok;
+        exportMessage = message;
+    }
+
+    public void setExportCursor(Instant exportCursor) {
+        this.exportCursor = exportCursor;
+    }
+
+    public Instant getExportCursor() {
+        return exportCursor;
+    }
+
+    public Instant getExportedAt() {
+        return exportedAt;
+    }
+
+    public Boolean getExportOk() {
+        return exportOk;
+    }
+
+    public String getExportMessage() {
+        return exportMessage;
     }
 
     public KsefSyncState(String nip) {

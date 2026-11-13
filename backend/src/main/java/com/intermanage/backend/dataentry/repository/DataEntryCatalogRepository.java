@@ -482,4 +482,35 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
             select distinct left(ltrim(ean, '0'), 6) from eans
             where ltrim(ean, '0') ~ '^24[0-9]{10,11}$'""", nativeQuery = true)
     List<String> findUsedScaleCodes(UUID storeId);
+    /** ITM8 (bez zer wiodących) i EAN, pod którym przyszedł. */
+    interface Itm8Ean {
+        String getItm8();
+
+        String getEan();
+    }
+
+    /**
+     * EAN, pod którym ITM8 bazy SCA PR przyszedł do sklepu: najnowsze przyjęcie PZ (raport dokumentów), a bez niego plik
+     * dostawy z bazy. Baza fakturuje własnym ITM8 (np. 61653837), którego często nie ma w kartotece ani w multikodach,
+     * a EAN prowadzi do artykułu sklepu. {@code itm8s}: kody bez zer wiodących.
+     */
+    @Query(nativeQuery = true, value = """
+            select distinct on (found.itm8) found.itm8, found.ean
+            from (
+                select ltrim(l.itm8, '0') as itm8, l.ean, d.document_date::date as seen, 0 as source
+                from document_lines l
+                join documents d on d.id = l.document_id
+                where l.itm8 = any(array(select lpad(code, 13, '0') from unnest(cast(:itm8s as text[])) code))
+                  and d.store_id = :storeId and d.type = 'PZ' and d.error_marked_at is null
+                  and l.ean ~ '^[0-9]{8,14}$'
+                union all
+                select ltrim(b.itm8, '0'), b.ean, bd.delivery_date, 1
+                from base_delivery_lines b
+                join base_deliveries bd on bd.id = b.delivery_id
+                where ltrim(b.itm8, '0') = any(cast(:itm8s as text[]))
+                  and bd.store_id = :storeId and bd.replaced_at is null
+                  and b.ean ~ '^[0-9]{8,14}$'
+            ) found
+            order by found.itm8, found.source, found.seen desc""")
+    List<Itm8Ean> findEansOfItm8s(UUID storeId, String[] itm8s);
 }

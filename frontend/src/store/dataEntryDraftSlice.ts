@@ -4,12 +4,17 @@ import type { DataEntryRow } from '@/features/data-entry/rows'
 import type { DataEntryCorrection } from '@/lib/types'
 import { isUuid } from '@/lib/uuid'
 
+export type DraftDelivery = { id: string | null; number: string; date: string | null; supplierName: string | null }
+
 /**
  * Korekta wczytana do tabeli: co koryguje i bon, do którego należy. `delivery`: `undefined` = jeszcze nie wybrany
  * (bon faktury korygowanej podpina się sam), `null` = do wybrania, `id` puste = numer wpisany ręcznie, spoza raportów.
+ * `extraDeliveries`: kolejne bony tej samej korekty (faktura bazy obejmuje kilka WZ, więc artykuły korekty są na kilku
+ * bonach); makro wpisuje przy każdym artykule bon, na którym jest. Brak w starszych szkicach.
  */
 export type DraftCorrection = DataEntryCorrection & {
-  delivery?: { id: string | null; number: string; date: string | null; supplierName: string | null } | null
+  delivery?: DraftDelivery | null
+  extraDeliveries?: DraftDelivery[]
 }
 
 /**

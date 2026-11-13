@@ -49,6 +49,24 @@ class SchedulePdfTests {
     }
 
     @Test
+    void kitchenFitsOnePage() throws IOException {
+        List<ScheduleResponse.Row> rows = new ArrayList<>();
+        String[] names = { "Bartek", "Ewa Nowak", "Kasia", "Marek Wiśniewski", "Ola", "Piotr", "Zosia Kowalczyk",
+                "Tomek", "Agnieszka", "Michał", "Grażyna", "Staszek", "Ania" };
+        for (int i = 0; i < names.length; i++) {
+            rows.add(row(names[i], i % 3 == 0 ? FLOOR : CASHIER, false, cells(i)));
+        }
+        byte[] content = pdf.pdf(SchedulePrintService.sheet(schedule(rows), "Kuchnia", store()));
+        String out = System.getProperty("schedule.out");
+        if (out != null) {
+            Files.write(Path.of(out.replace(".pdf", "-kuchnia.pdf")), content);
+        }
+        try (PdfReader reader = new PdfReader(content)) {
+            assertThat(reader.getNumberOfPages()).isEqualTo(1);
+        }
+    }
+
+    @Test
     void printsOnlyAnnualLeaveByName() {
         LocalDate day = MONTH.atDay(2);
         ScheduleResponse.Row row = row("Jan Kowalski", CASHIER, false, List.of(
@@ -67,7 +85,8 @@ class SchedulePdfTests {
         assertThat(cells.get(4).top()).isEqualTo("W5");
         // Godziny pod urlopem to rozkład dnia urlopu, nie praca.
         assertThat(person.minutes()).isEqualTo(480);
-        assertThat(String.join(" ", sheet.legend())).contains("N – nieobecność").doesNotContain("turnus");
+        assertThat(sheet.legend()).extracting(item -> item.sample().top() + " " + item.text())
+                .contains("N Nieobecność").noneMatch(text -> text.contains("turnus"));
     }
 
     private static List<ScheduleResponse.Cell> cells(int seed) {
@@ -76,6 +95,11 @@ class SchedulePdfTests {
             int n = day.getDayOfMonth() + seed;
             if (n % 7 == 0) {
                 cells.add(cell(day, null, null, false, null, ScheduleDayOffKind.W5));
+            } else if (seed % 10 == 0 && day.getDayOfMonth() % 9 == 4) {
+                cells.add(new ScheduleResponse.Cell(day, "07:00", "15:00", UUID.randomUUID(), "10024", false, null,
+                        null, null, null, null, null, null));
+            } else if (n % 9 == 0) {
+                cells.add(cell(day, null, null, false, null, ScheduleDayOffKind.W));
             } else if (n % 11 == 0) {
                 cells.add(cell(day, null, null, true, "ANNUAL", null));
             } else if (n % 2 == 0) {
@@ -108,7 +132,8 @@ class SchedulePdfTests {
                 .toList();
         return new ScheduleResponse(UUID.randomUUID(), MONTH.toString(), "PUBLISHED", false, false, null,
                 MONTH.atDay(1), MONTH.atEndOfMonth(),
-                List.of(new ScheduleResponse.Version(1, Instant.parse("2026-11-20T10:00:00Z"), "Kierownik", false)),
+                rows.size() == 13 ? List.of()
+                        : List.of(new ScheduleResponse.Version(1, Instant.parse("2026-11-20T10:00:00Z"), "Kierownik", false)),
                 days,
                 List.of(new ScheduleResponse.Position(CASHIER, "Kasjer", null, null, List.of(), List.of()),
                         new ScheduleResponse.Position(FLOOR, "Sala", null, null, List.of(), List.of())),

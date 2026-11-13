@@ -11,7 +11,10 @@ import java.util.UUID;
  * przyjęcie PZ z jej numerem albo dokument przypięty ręcznie) albo ktoś ją oznaczył ręcznie w sklepie firmy
  * ({@code enteredBy}, {@code enteredAt}, {@code enteredStoreId}, {@code enteredStore}). {@code internalIds} to IDWew
  * z Podmiotu 3. {@code correctedInvoices}: przy korekcie numery faktur, które koryguje ({@code null}, dopóki XML korekty
- * nie został odczytany).
+ * nie został odczytany), {@code quantityChange}: czy korekta zmienia ilości, a nie tylko kwoty ({@code null} przed
+ * odczytem i przy zwykłej fakturze). Refaktura bazy: {@code baseSupplierCode} kod dostawcy w bazie,
+ * {@code baseSupplierInvoice} numer faktury dostawcy, {@code baseSupplierName} dostawca przypisany do kodu w firmie
+ * ({@code null} bez przypisania).
  */
 public record KsefInvoiceSummary(
         UUID id,
@@ -36,7 +39,11 @@ public record KsefInvoiceSummary(
         String enteredStore,
         List<Delivery> deliveries,
         boolean supplierSkipped,
-        List<String> correctedInvoices) {
+        List<String> correctedInvoices,
+        Boolean quantityChange,
+        String baseSupplierCode,
+        String baseSupplierInvoice,
+        String baseSupplierName) {
 
     /**
      * Dokument sklepu firmy z tą fakturą: przyjęcie PZ z jej numerem ({@code linked} = false) albo przyjęcie lub

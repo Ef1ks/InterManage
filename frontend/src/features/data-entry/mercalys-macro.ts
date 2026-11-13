@@ -606,6 +606,11 @@ const CORRECTION_SCREEN = {
   createText: 'Utworzy',
   detailButton: 'btnB3_Detail_LnkBouton',
   bonField: 'txtZ19_NumBL_TxtBox',
+  eanField: 'txtZ6_CodeArticle_TxtBox',
+  /** Pusty wiersz ma `0,000`; po EAN-ie Mercalys wpisuje ilość z bonu (np. `4,000`). */
+  quantityField: 'txnZ9_Quantite_TxtBox',
+  /** Pusty wiersz ma `0,00`; po EAN-ie cena zakupu z bonu. */
+  priceField: 'txpZ16_PAUnitaireHT_TxtBox',
   closeButton: 'btnB3_Cloturer_LnkBouton',
   closeText: 'zatwierdzi',
 } as const
@@ -637,6 +642,64 @@ export function correctionStartLines(today: string) {
 /** Numer bonu pozycji: zawsze w swoim polu, więc klawisze nie trafią w inne okno ani pole. */
 export const correctionBonLine = (bonNumber: string) =>
   `WEBKEY|${WINDOW}|${CORRECTION_SCREEN.bonField}|^a${bonNumber}{Enter}`
+
+/**
+ * Wzorzec liczby z Mercalys: pole po wyjściu dopisuje zera (4 → 4,000, 1,5 → 1,500), a tysiące bywają rozdzielone spacją.
+ */
+const numberPattern = (value: number, digits: number) => {
+  const [whole, fraction = ''] = value.toFixed(digits).split('.')
+  const sign = whole.startsWith('-') ? '-' : ''
+  const integer = whole.replace('-', '').split('').join('[ \\x{A0}]?')
+  const decimals = fraction.replace(/0+$/, '')
+  return decimals === ''
+    ? `^${sign}${integer}(,0{0,${digits}})?$`
+    : `^${sign}${integer},${decimals}0{0,${digits - decimals.length}}$`
+}
+
+/** Wartość różna od zera (0,000, 0,00 i puste pole to wiersz bez wczytanego artykułu). */
+const NON_ZERO = '^(?!-?0*(,0*)?$)-?[0-9 \\x{A0}]+(,[0-9]+)?$'
+const ZERO_OR_EMPTY = '^0*(,0*)?$'
+
+export type CorrectionArticleStep = {
+  ean: string
+  quantity: number
+  /** Ilość wpisana do pola, np. `1,5`. */
+  quantityText: string
+  priceText: string
+  /**
+   * Czekać po EAN-ie na cenę z bonu. Nie na ilość: pozycja wyzerowana wcześniejszą korektą ma po wczytaniu dalej 0.
+   * `false`, gdy artykułu nie ma na bonie albo ma tam cenę 0 (wtedy zwykła przerwa).
+   */
+  waitForPrice: boolean
+}
+
+/**
+ * Pozycja korekty po numerze bonu. Najpierw pusty wiersz (cena 0,00), potem EAN w swoim polu i czekanie, aż Mercalys
+ * wczyta artykuł z bonu (cena różna od zera): przy lagu klawisze nie trafią już w złe pola. Ilość i cena idą w swoje
+ * pola i są sprawdzane przed zapisem pozycji Enterem w polu ceny.
+ */
+export function correctionArticleLines(
+  step: CorrectionArticleStep,
+  timing: { load: number; afterEan: number; afterQuantity: number },
+) {
+  const screen = CORRECTION_SCREEN
+  const out = [
+    `WEBVALUE|${WINDOW}|${screen.priceField}|${ZERO_OR_EMPTY}|${timing.load}`,
+    `WEBKEY|${WINDOW}|${screen.eanField}|^a${step.ean}{Enter}`,
+    step.waitForPrice
+      ? `WEBVALUE|${WINDOW}|${screen.priceField}|${NON_ZERO}|${timing.load}`
+      : `SLEEP|${timing.afterEan}`,
+  ]
+  out.push(
+    `WEBKEY|${WINDOW}|${screen.quantityField}|^a${step.quantityText}{Enter}`,
+    `SLEEP|${timing.afterQuantity}`,
+    `WEBVALUE|${WINDOW}|${screen.quantityField}|${numberPattern(step.quantity, 3)}|${timing.load}`,
+    `WEBKEY|${WINDOW}|${screen.priceField}|^a${step.priceText}`,
+    `WEBVALUE|${WINDOW}|${screen.priceField}|^${step.priceText}$|${timing.load}`,
+    `KEY|{Enter}`,
+  )
+  return out
+}
 
 /** Zakończenia nie da się cofnąć, więc decyduje pracownik; „Nie” zostawia otwarty dokument do sprawdzenia. */
 export function correctionFinishLines(bonNumber: string, count: number) {
