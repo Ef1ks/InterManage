@@ -48,6 +48,7 @@ export const isOffset = (segment: TimeSegment) =>
 export const STATUS_STYLES: Record<TimeSegmentStatus, { label: string; bar: string }> = {
   OK: { label: 'Praca w grafiku', bar: 'bg-emerald-400 dark:bg-emerald-600' },
   BREAK: { label: 'Przerwa niepłatna', bar: 'bg-zinc-300 dark:bg-zinc-600' },
+  PAID_BREAK: { label: 'Przerwa płatna (liczy się)', bar: 'bg-lime-300 dark:bg-lime-700' },
   TOLERATED_OVERTIME: {
     label: 'Poza grafikiem w tolerancji (nie liczy się)',
     bar: 'bg-zinc-300 dark:bg-zinc-600',
@@ -82,6 +83,7 @@ export const LEGEND: TimeSegmentStatus[] = [
   'JUSTIFIED',
   'OFFSET_SHORTFALL',
   'OFFSET_OVERTIME',
+  'PAID_BREAK',
   'BREAK',
 ]
 

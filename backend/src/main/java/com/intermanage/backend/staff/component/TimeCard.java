@@ -44,6 +44,7 @@ public final class TimeCard {
     public enum Status {
         OK(true),
         BREAK(false),
+        PAID_BREAK(true),
         TOLERATED_OVERTIME(false),
         TOLERATED_SHORTFALL(true),
         PENDING(false),
@@ -106,8 +107,13 @@ public final class TimeCard {
         }
     }
 
-    /** Przerwa niepłatna działu: godziny w ciągu dnia. */
-    public record Break(LocalTime start, LocalTime end) {
+    /** Przerwa działu: godziny w ciągu dnia; płatna wlicza się do czasu pracy. */
+    public record Break(LocalTime start, LocalTime end, boolean paid) {
+
+        /** Przerwa niepłatna. */
+        public Break(LocalTime start, LocalTime end) {
+            this(start, end, false);
+        }
     }
 
     public record Decision(TimeSegmentKind kind, LocalDateTime start, LocalDateTime end, TimeDecisionKind decision) {
@@ -124,15 +130,28 @@ public final class TimeCard {
     public record Day(List<Segment> segments, int planned, int worked, int overtime, int pending, int shortfall) {
     }
 
+    public static Day day(LocalDate date, Interval planned, List<Interval> worked, List<Break> departmentBreaks,
+            int toleranceMinutes, List<Decision> decisions) {
+        return day(date, planned, worked, List.of(), departmentBreaks, toleranceMinutes, decisions);
+    }
+
     /**
      * @param date dzień karty (dla przerw)
      * @param planned zmiana z grafiku albo {@code null} (dzień bez pracy w grafiku, także urlop)
      * @param worked zamknięte odcinki z odbić (wejście-wyjście), rozłączne
+     * @param takenBreaks przerwy odbite na kiosku (od wyjścia na przerwę do kolejnego wejścia). Gdy są, zastępują
+     *        godziny przerw działu: mieszczą się w długości przerw działu (najpierw płatnych, które liczą się do pracy,
+     *        potem niepłatnych), a nadwyżka to brak do decyzji.
      */
-    public static Day day(LocalDate date, Interval planned, List<Interval> worked, List<Break> unpaidBreaks,
-            int toleranceMinutes, List<Decision> decisions) {
+    public static Day day(LocalDate date, Interval planned, List<Interval> worked, List<Interval> takenBreaks,
+            List<Break> departmentBreaks, int toleranceMinutes, List<Decision> decisions) {
         List<Interval> attended = worked.stream().sorted(Comparator.comparing(Interval::start)).toList();
-        List<Interval> breaks = breaks(date, planned, unpaidBreaks);
+        List<Interval> unpaidWindows = breaks(date, planned, departmentBreaks, false);
+        List<Interval> taken = planned == null ? List.of()
+                : takenBreaks.stream().map(planned::intersect).filter(java.util.Objects::nonNull)
+                        .sorted(Comparator.comparing(Interval::start)).toList();
+        // Odbita przerwa zastępuje sztywne godziny przerw działu: czas pracy w tych godzinach liczy się normalnie.
+        List<Interval> breaks = taken.isEmpty() ? unpaidWindows : List.of();
         List<Segment> segments = new ArrayList<>();
 
         for (Interval interval : attended) {
@@ -142,9 +161,9 @@ public final class TimeCard {
                     segments.add(new Segment(Part.WORK, work.start(), work.end(), work.minutes(), Status.OK));
                 }
                 for (Interval rest : breaks) {
-                    Interval taken = rest.intersect(inside);
-                    if (taken != null) {
-                        segments.add(new Segment(Part.BREAK, taken.start(), taken.end(), taken.minutes(),
+                    Interval inBreak = rest.intersect(inside);
+                    if (inBreak != null) {
+                        segments.add(new Segment(Part.BREAK, inBreak.start(), inBreak.end(), inBreak.minutes(),
                                 Status.BREAK));
                     }
                 }
@@ -155,9 +174,35 @@ public final class TimeCard {
             }
         }
         if (planned != null) {
+            List<Interval> notMissing = new ArrayList<>(breaks);
+            notMissing.addAll(taken);
+            notMissing.sort(Comparator.comparing(Interval::start));
             for (Interval missing : planned.minus(attended)) {
-                for (Interval gap : missing.minus(breaks)) {
+                for (Interval gap : missing.minus(notMissing)) {
                     segments.add(decided(Part.SHORTFALL, gap, toleranceMinutes, decisions));
+                }
+            }
+            int paidLeft = minutes(breaks(date, planned, departmentBreaks, true));
+            int unpaidLeft = minutes(unpaidWindows);
+            for (Interval rest : taken) {
+                Interval remaining = rest;
+                int paid = Math.min(paidLeft, remaining.minutes());
+                if (paid > 0) {
+                    LocalDateTime cut = remaining.start().plusMinutes(paid);
+                    segments.add(new Segment(Part.BREAK, remaining.start(), cut, paid, Status.PAID_BREAK));
+                    paidLeft -= paid;
+                    remaining = cut.isBefore(remaining.end()) ? new Interval(cut, remaining.end()) : null;
+                }
+                int unpaid = remaining == null ? 0 : Math.min(unpaidLeft, remaining.minutes());
+                if (unpaid > 0) {
+                    LocalDateTime cut = remaining.start().plusMinutes(unpaid);
+                    segments.add(new Segment(Part.BREAK, remaining.start(), cut, unpaid, Status.BREAK));
+                    unpaidLeft -= unpaid;
+                    remaining = cut.isBefore(remaining.end()) ? new Interval(cut, remaining.end()) : null;
+                }
+                if (remaining != null) {
+                    // Przerwa dłuższa niż przerwy działu: reszta jest brakiem jak spóźnienie.
+                    segments.add(decided(Part.SHORTFALL, remaining, toleranceMinutes, decisions));
                 }
             }
         }
@@ -166,8 +211,7 @@ public final class TimeCard {
             segments = balanced(segments, decisions);
         }
 
-        int plannedMinutes = planned == null ? 0
-                : planned.minutes() - breaks.stream().mapToInt(Interval::minutes).sum();
+        int plannedMinutes = planned == null ? 0 : planned.minutes() - minutes(unpaidWindows);
         int counted = 0;
         int overtime = 0;
         int pending = 0;
@@ -252,15 +296,20 @@ public final class TimeCard {
         return new Segment(part, interval.start(), interval.end(), minutes, status);
     }
 
-    /** Przerwy niepłatne w czasie zmiany (zmiana przez północ bierze przerwy obu dni). */
-    private static List<Interval> breaks(LocalDate date, Interval planned, List<Break> unpaid) {
+    private static int minutes(List<Interval> intervals) {
+        return intervals.stream().mapToInt(Interval::minutes).sum();
+    }
+
+    /** Przerwy płatne albo niepłatne w czasie zmiany (zmiana przez północ bierze przerwy obu dni). */
+    private static List<Interval> breaks(LocalDate date, Interval planned, List<Break> departmentBreaks,
+            boolean paid) {
         if (planned == null) {
             return List.of();
         }
         List<Interval> result = new ArrayList<>();
         for (LocalDate day : List.of(date, date.plusDays(1))) {
-            for (Break rest : unpaid) {
-                if (!rest.end().isAfter(rest.start())) {
+            for (Break rest : departmentBreaks) {
+                if (rest.paid() != paid || !rest.end().isAfter(rest.start())) {
                     continue;
                 }
                 Interval window = new Interval(day.atTime(rest.start()), day.atTime(rest.end()));

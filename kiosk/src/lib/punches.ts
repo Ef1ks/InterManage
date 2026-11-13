@@ -58,6 +58,21 @@ export async function punch(cardUid: string): Promise<PunchOutcome> {
   }
 }
 
+/** Wybór „Przerwa” zaraz po wyjściu: serwer zamienia to wyjście na wyjście na przerwę. */
+export async function markBreak(punchId: string): Promise<PunchOutcome> {
+  try {
+    return {
+      kind: 'ok',
+      result: await api<PunchResult>(`/time-clock/punches/${punchId}/break`, {
+        method: 'POST',
+        auth: { kind: 'reader' },
+      }),
+    }
+  } catch (error) {
+    return { kind: 'error', message: error instanceof Error ? error.message : 'Nie udało się zapisać przerwy.' }
+  }
+}
+
 async function enqueue(pending: Pending): Promise<PunchOutcome> {
   queue = [...queue, pending].slice(-MAX_QUEUE)
   await persist()

@@ -3915,6 +3915,7 @@ export type TimeSegmentPart = 'WORK' | 'BREAK' | 'OVERTIME' | 'SHORTFALL'
 export type TimeSegmentStatus =
   | 'OK'
   | 'BREAK'
+  | 'PAID_BREAK'
   | 'TOLERATED_OVERTIME'
   | 'TOLERATED_SHORTFALL'
   | 'PENDING'
@@ -3972,7 +3973,8 @@ export type TimeDayCard = {
   plannedStart: string | null
   plannedEnd: string | null
   absence: LeaveKind | 'OTHER' | null
-  punches: { id: string; at: string; source: 'READER' | 'SIMULATED' }[]
+  /** {@code breakStart}: wyjście na przerwę (wybór „Przerwa” na kiosku). */
+  punches: { id: string; at: string; source: 'READER' | 'SIMULATED'; breakStart: boolean }[]
   /** Wejście bez wyjścia; {@code missingExit}: ponad 16 h temu, czyli zapomniane wyjście. */
   openSince: string | null
   missingExit: boolean
@@ -3985,6 +3987,8 @@ export type TimeDayCard = {
   /** Godziny zlecenia z grafiku: odbicia w nich nie wchodzą do karty umowy o pracę. */
   civilStart: string | null
   civilEnd: string | null
+  /** Trwająca przerwa odbita na kiosku: od wyjścia na przerwę, jeszcze bez powrotu. */
+  breakSince: string | null
 }
 
 export type TimeTotals = { planned: number; worked: number; overtime: number; pending: number; shortfall: number }

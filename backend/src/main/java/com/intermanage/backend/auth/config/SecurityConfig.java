@@ -1,5 +1,7 @@
 package com.intermanage.backend.auth.config;
 
+import jakarta.servlet.DispatcherType;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -48,6 +50,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**", "/api/auth/mobile/login")
                         .ignoringRequestMatchers(request -> JwtService.bearerToken(request) != null))
                 .authorizeHttpRequests(auth -> auth
+                        // Nieobsłużony wyjątek idzie do /error drugim przejściem (ERROR), w którym filtr JWT nie
+                        // działa, więc bez tego błąd serwera wracał jako 401, a front przy 401 wylogowuje.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/mobile/login",
                                 "/api/auth/activate").permitAll()
                         // Konta zalogowane w tle: lista i przejście na konto (PIN-em) działają też na stronie

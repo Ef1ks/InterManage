@@ -36,10 +36,12 @@ public record TimeCardResponse(UUID departmentId, LocalDate from, LocalDate to, 
      */
     public record DayCard(LocalDate date, LocalDateTime plannedStart, LocalDateTime plannedEnd, String absence,
             List<Punch> punches, LocalDateTime openSince, boolean missingExit, List<Segment> segments, int planned,
-            int worked, int overtime, int pending, int shortfall, LocalDateTime civilStart, LocalDateTime civilEnd) {
+            int worked, int overtime, int pending, int shortfall, LocalDateTime civilStart, LocalDateTime civilEnd,
+            LocalDateTime breakSince) {
     }
 
-    public record Punch(UUID id, LocalDateTime at, String source) {
+    /** {@code breakStart}: wyjście na przerwę (wybór „Przerwa” na kiosku), a nie koniec pracy. */
+    public record Punch(UUID id, LocalDateTime at, String source, boolean breakStart) {
     }
 
     /**

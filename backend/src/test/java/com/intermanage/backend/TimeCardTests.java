@@ -87,6 +87,45 @@ class TimeCardTests {
         assertThat(out.worked()).isEqualTo(450);
     }
 
+    private static final List<TimeCard.Break> PAID_AND_UNPAID = List.of(
+            new TimeCard.Break(LocalTime.of(9, 0), LocalTime.of(9, 15), true),
+            new TimeCard.Break(LocalTime.of(11, 0), LocalTime.of(11, 30), false));
+
+    @Test
+    void takenBreakFitsDepartmentBreaksPaidFirst() {
+        // Przerwa 12:00-12:45 z kiosku zamiast godzin przerw działu: 15 min płatnej, 30 min niepłatnej.
+        TimeCard.Day day = TimeCard.day(DAY, SHIFT, List.of(interval("06:00", "12:00"), interval("12:45", "14:00")),
+                List.of(interval("12:00", "12:45")), PAID_AND_UNPAID, 0, List.of());
+
+        assertThat(day.planned()).isEqualTo(450);
+        assertThat(day.shortfall()).isZero();
+        assertThat(day.worked()).isEqualTo(360 + 15 + 75);
+        assertThat(day.segments()).filteredOn(segment -> segment.part() == Part.BREAK)
+                .extracting(TimeCard.Segment::minutes, TimeCard.Segment::status)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(15, Status.PAID_BREAK),
+                        org.assertj.core.groups.Tuple.tuple(30, Status.BREAK));
+    }
+
+    @Test
+    void takenBreakLongerThanDepartmentBreaksIsShortfall() {
+        TimeCard.Day day = TimeCard.day(DAY, SHIFT, List.of(interval("06:00", "12:00"), interval("13:00", "14:00")),
+                List.of(interval("12:00", "13:00")), PAID_AND_UNPAID, 0, List.of());
+
+        assertThat(day.shortfall()).isEqualTo(15);
+        assertThat(day.segments()).filteredOn(segment -> segment.part() == Part.SHORTFALL)
+                .extracting(TimeCard.Segment::start).containsExactly(at("12:45"));
+    }
+
+    @Test
+    void takenBreakReplacesDepartmentBreakHours() {
+        // Praca w godzinach przerwy niepłatnej działu (11:00-11:30) liczy się, bo przerwa była o innej porze.
+        TimeCard.Day day = TimeCard.day(DAY, SHIFT, List.of(interval("06:00", "12:00"), interval("12:30", "14:00")),
+                List.of(interval("12:00", "12:30")), PAID_AND_UNPAID, 0, List.of());
+
+        assertThat(day.shortfall()).isZero();
+        assertThat(day.worked()).isEqualTo(360 + 15 + 90);
+    }
+
     @Test
     void lateArrivalBalancedByLateExit() {
         List<TimeCard.Decision> balance = List.of(new TimeCard.Decision(TimeSegmentKind.BALANCE,

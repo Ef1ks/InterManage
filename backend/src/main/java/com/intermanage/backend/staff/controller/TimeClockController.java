@@ -1,7 +1,10 @@
 package com.intermanage.backend.staff.controller;
 
+import java.util.UUID;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -42,6 +45,13 @@ public class TimeClockController {
     public StaffTimeService.ReaderResult punch(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
     String authorization, @Valid @RequestBody TimeRequests.ReaderPunch request) {
         return time.readerPunch(token(authorization), request);
+    }
+
+    /** Kiosk: pracownik wybrał „Przerwa” zaraz po odbiciu wyjścia ({@code breakAvailable} w odpowiedzi odbicia). */
+    @PostMapping("/punches/{punchId}/break")
+    public StaffTimeService.ReaderResult markBreak(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @PathVariable UUID punchId) {
+        return time.markBreak(token(authorization), punchId);
     }
 
     /** Kiosk przy konfiguracji i starcie: czy klucz działa i w którym sklepie stoi czytnik. */

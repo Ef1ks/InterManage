@@ -161,9 +161,7 @@ public class StaffTimeService {
         Store store = store(storeId);
         StaffDepartment department = department(store, departmentId);
         int tolerance = tolerance(storeId, departmentId);
-        List<TimeCard.Break> unpaid = breaks.findActive(storeId, departmentId).stream()
-                .filter(rest -> !rest.isPaid())
-                .map(rest -> new TimeCard.Break(rest.getStart(), rest.getEnd())).toList();
+        List<TimeCard.Break> unpaid = departmentBreaks(storeId, departmentId);
 
         List<StaffEmployee> team = employees.findInStores(List.of(storeId)).stream()
                 .filter(employee -> employee.getEndedAt() == null
@@ -236,8 +234,11 @@ public class StaffTimeService {
         List<TimeCardResponse.Row> rows = new ArrayList<>();
         for (StaffEmployee employee : team) {
             UUID id = employee.getId();
-            Map<LocalDate, List<Pair>> pairs = pairs(punched.getOrDefault(id, List.of())).stream()
+            List<Pair> allPairs = pairs(punched.getOrDefault(id, List.of()));
+            Map<LocalDate, List<Pair>> pairs = allPairs.stream()
                     .collect(Collectors.groupingBy(pair -> pair.in().toLocalDate()));
+            Map<LocalDate, List<TimeCard.Interval>> takenBreaks = takenBreaks(allPairs);
+            Pair lastPair = allPairs.isEmpty() ? null : allPairs.getLast();
             boolean employed = employment.contains(id);
             if (employed) {
                 List<TimeCardResponse.DayCard> cardsOfDays = new ArrayList<>();
@@ -245,6 +246,7 @@ public class StaffTimeService {
                     cardsOfDays.add(dayCard(day, planned.getOrDefault(id, Map.of()).get(day),
                             civil.getOrDefault(id, Map.of()).get(day),
                             leaveOn(absences.getOrDefault(id, List.of()), day), pairs.getOrDefault(day, List.of()),
+                            takenBreaks.getOrDefault(day, List.of()), onBreakSince(lastPair, day, now),
                             decided.getOrDefault(id, List.of()), fileOf, unpaid, tolerance, records, now));
                 }
                 rows.add(new TimeCardResponse.Row(id, employee.getDisplayName(),
@@ -271,6 +273,12 @@ public class StaffTimeService {
                 has(principal, AppUserPrincipal.OWNER_AUTHORITY), tolerance,
                 days.stream().map(day -> new TimeCardResponse.Day(day, ScheduleCalendar.holiday(day))).toList(), rows,
                 withoutCard);
+    }
+
+    /** Przerwy działu w sklepie, płatne i niepłatne. */
+    private List<TimeCard.Break> departmentBreaks(UUID storeId, UUID departmentId) {
+        return breaks.findActive(storeId, departmentId).stream()
+                .map(rest -> new TimeCard.Break(rest.getStart(), rest.getEnd(), rest.isPaid())).toList();
     }
 
     private static boolean hasEmploymentIn(List<StaffContract> contracts, LocalDate from, LocalDate to) {
@@ -312,12 +320,12 @@ public class StaffTimeService {
                 .filter(punch -> !alongside || shift != null && !local(punch.getPunchedAt()).isBefore(shift.start())
                         && !local(punch.getPunchedAt()).isAfter(shift.end()))
                 .map(punch -> new TimeCardResponse.Punch(punch.getId(), local(punch.getPunchedAt()),
-                        punch.getSource().name()))
+                        punch.getSource().name(), punch.isBreakStart()))
                 .toList();
         int workedMinutes = segments.stream().mapToInt(TimeCardResponse.Segment::minutes).sum();
         return new TimeCardResponse.DayCard(day, shift == null ? null : shift.start(),
                 shift == null ? null : shift.end(), absence, punchList, open == null ? null : open.in(), missingExit,
-                segments, shift == null ? 0 : minutes(shift), workedMinutes, 0, 0, 0, null, null);
+                segments, shift == null ? 0 : minutes(shift), workedMinutes, 0, 0, 0, null, null, null);
     }
 
     private static int minutes(TimeCard.Interval interval) {
@@ -338,7 +346,8 @@ public class StaffTimeService {
 
     private TimeCardResponse.DayCard dayCard(LocalDate day, StaffScheduleEntry entry, StaffScheduleEntry civilEntry,
             StaffLeave leave,
-            List<Pair> pairs, List<StaffTimeDecision> decisionsOfEmployee,
+            List<Pair> pairs, List<TimeCard.Interval> takenBreaks, LocalDateTime breakSince,
+            List<StaffTimeDecision> decisionsOfEmployee,
             Map<UUID, StaffTimeDecisionFileRepository.Summary> fileOf, List<TimeCard.Break> unpaid, int tolerance,
             boolean records, LocalDateTime now) {
         TimeCard.Interval shift = entry == null ? null : shift(entry);
@@ -349,7 +358,7 @@ public class StaffTimeService {
                 .map(pair -> new TimeCard.Interval(pair.in(), pair.out())).toList(), civilShift);
         List<StaffTimeDecision> ofDay = decisionsOfEmployee.stream()
                 .filter(decision -> decision.getWorkDate().equals(day)).toList();
-        TimeCard.Day computed = TimeCard.day(day, plannedShift, worked, unpaid, tolerance, ofDay.stream()
+        TimeCard.Day computed = TimeCard.day(day, plannedShift, worked, takenBreaks, unpaid, tolerance, ofDay.stream()
                 .map(decision -> new TimeCard.Decision(decision.getKind(), decision.getStartAt(), decision.getEndAt(),
                         decision.getDecision()))
                 .toList());
@@ -378,13 +387,46 @@ public class StaffTimeService {
                 .flatMap(pair -> pair.out() == null ? java.util.stream.Stream.of(pair.inPunch())
                         : java.util.stream.Stream.of(pair.inPunch(), pair.outPunch()))
                 .map(punch -> new TimeCardResponse.Punch(punch.getId(), local(punch.getPunchedAt()),
-                        punch.getSource().name()))
+                        punch.getSource().name(), punch.isBreakStart()))
                 .toList();
         return new TimeCardResponse.DayCard(day, shift == null ? null : shift.start(),
                 shift == null ? null : shift.end(), leave == null ? null : absence(leave, records), punchList,
                 open == null ? null : open.in(), missingExit, segments, computed.planned(), computed.worked(),
                 computed.overtime(), computed.pending(), computed.shortfall(),
-                civilShift == null ? null : civilShift.start(), civilShift == null ? null : civilShift.end());
+                civilShift == null ? null : civilShift.start(), civilShift == null ? null : civilShift.end(),
+                breakSince);
+    }
+
+    /** Ile przerwa trwa najdłużej: dłuższa luka po wyjściu „na przerwę” to już koniec pracy, nie przerwa. */
+    private static final Duration MAX_BREAK = Duration.ofHours(4);
+
+    /**
+     * Przerwy odbite na kiosku: od wyjścia oznaczonego jako przerwa do kolejnego wejścia (nie dłużej niż
+     * {@link #MAX_BREAK}), według dnia pary, którą przerwa przerwała.
+     */
+    static Map<LocalDate, List<TimeCard.Interval>> takenBreaks(List<Pair> pairs) {
+        Map<LocalDate, List<TimeCard.Interval>> result = new HashMap<>();
+        for (int index = 0; index + 1 < pairs.size(); index++) {
+            Pair pair = pairs.get(index);
+            if (pair.outPunch() == null || !pair.outPunch().isBreakStart()) {
+                continue;
+            }
+            LocalDateTime back = pairs.get(index + 1).in();
+            if (back.isAfter(pair.out()) && Duration.between(pair.out(), back).compareTo(MAX_BREAK) <= 0) {
+                result.computeIfAbsent(pair.in().toLocalDate(), key -> new ArrayList<>())
+                        .add(new TimeCard.Interval(pair.out(), back));
+            }
+        }
+        return result;
+    }
+
+    /** Trwająca przerwa: ostatnie odbicie to wyjście na przerwę w dniu {@code day} i jeszcze nie minęła. */
+    private static LocalDateTime onBreakSince(Pair last, LocalDate day, LocalDateTime now) {
+        if (last == null || last.outPunch() == null || !last.outPunch().isBreakStart()
+                || !last.in().toLocalDate().equals(day) || Duration.between(last.out(), now).compareTo(MAX_BREAK) > 0) {
+            return null;
+        }
+        return last.out();
     }
 
     /**
@@ -794,8 +836,10 @@ public class StaffTimeService {
         Map<UUID, Map<LocalDate, Integer>> result = new HashMap<>();
         for (StaffEmployee employee : tracked) {
             UUID id = employee.getId();
-            Map<LocalDate, List<Pair>> pairs = pairs(punched.getOrDefault(id, List.of())).stream()
+            List<Pair> allPairs = pairs(punched.getOrDefault(id, List.of()));
+            Map<LocalDate, List<Pair>> pairs = allPairs.stream()
                     .collect(Collectors.groupingBy(pair -> pair.in().toLocalDate()));
+            Map<LocalDate, List<TimeCard.Interval>> takenBreaks = takenBreaks(allPairs);
             LocalDate start = firstDay.get(id).isAfter(from) ? firstDay.get(id) : from;
             Map<LocalDate, Integer> days = new HashMap<>();
             for (LocalDate day = start; !day.isAfter(until); day = day.plusDays(1)) {
@@ -804,8 +848,7 @@ public class StaffTimeService {
                         ? new Place(employee.getStore().getId(), employee.getPosition().getDepartment().getId())
                         : new Place(entry.getSchedule().getStore().getId(), entry.getSchedule().getDepartment().getId());
                 Rules rules = rulesOf.computeIfAbsent(place, key -> new Rules(
-                        breaks.findActive(key.storeId(), key.departmentId()).stream().filter(rest -> !rest.isPaid())
-                                .map(rest -> new TimeCard.Break(rest.getStart(), rest.getEnd())).toList(),
+                        departmentBreaks(key.storeId(), key.departmentId()),
                         tolerance(key.storeId(), key.departmentId())));
                 StaffLeave leave = leaveOn(absences.getOrDefault(id, List.of()), day);
                 TimeCard.Interval shift = entry == null || leave != null ? null : shift(entry);
@@ -819,7 +862,8 @@ public class StaffTimeService {
                         .map(decision -> new TimeCard.Decision(decision.getKind(), decision.getStartAt(),
                                 decision.getEndAt(), decision.getDecision()))
                         .toList();
-                days.put(day, TimeCard.day(day, shift, worked, rules.unpaid(), rules.tolerance(), ofDay).worked());
+                days.put(day, TimeCard.day(day, shift, worked, takenBreaks.getOrDefault(day, List.of()),
+                        rules.unpaid(), rules.tolerance(), ofDay).worked());
             }
             result.put(id, days);
         }
@@ -838,13 +882,63 @@ public class StaffTimeService {
         StaffEmployee employee = card.getEmployee();
         Instant at = request.punchedAt() == null ? Instant.now() : request.punchedAt();
         List<Pair> recent = pairs(punches.findOfEmployees(List.of(employee.getId()), at.minus(MAX_SHIFT), at));
-        boolean exit = recent.stream().anyMatch(pair -> pair.out() == null
-                && Duration.between(pair.in(), local(at)).compareTo(MAX_SHIFT) <= 0);
-        punches.save(new StaffTimePunch(employee, store, at, TimePunchSource.READER, reader, null));
-        return new ReaderResult(employee.getDisplayName(), exit ? "OUT" : "IN", at);
+        Pair open = recent.stream().filter(pair -> pair.out() == null
+                && Duration.between(pair.in(), local(at)).compareTo(MAX_SHIFT) <= 0).findFirst().orElse(null);
+        boolean exit = open != null;
+        Pair last = recent.isEmpty() ? null : recent.getLast();
+        boolean breakEnded = !exit && last != null && last.outPunch() != null && last.outPunch().isBreakStart()
+                && Duration.between(last.out(), local(at)).compareTo(MAX_BREAK) <= 0;
+        StaffTimePunch saved = punches.save(new StaffTimePunch(employee, store, at, TimePunchSource.READER, reader,
+                null));
+        return new ReaderResult(saved.getId(), employee.getDisplayName(), exit ? "OUT" : "IN", at,
+                exit && !hadBreak(recent, open), breakEnded);
     }
 
-    public record ReaderResult(String employeeName, String direction, Instant punchedAt) {
+    /** Czy w dniu pracy, który kończy wyjście ({@code open}), była już przerwa: wtedy kiosk o nią nie pyta. */
+    private static boolean hadBreak(List<Pair> recent, Pair open) {
+        LocalDate workDay = open.in().toLocalDate();
+        return recent.stream().anyMatch(pair -> pair.outPunch() != null && pair.outPunch().isBreakStart()
+                && pair.in().toLocalDate().equals(workDay));
+    }
+
+    /**
+     * {@code breakAvailable}: wyjście, które kiosk może jeszcze zamienić na przerwę ({@link #markBreak}); bez wyboru
+     * zostaje końcem pracy. {@code breakEnded}: wejście po przerwie.
+     */
+    public record ReaderResult(UUID punchId, String employeeName, String direction, Instant punchedAt,
+            boolean breakAvailable, boolean breakEnded) {
+    }
+
+    /** Ile po odbiciu wyjścia kiosk może je zamienić na przerwę. */
+    private static final Duration BREAK_CHOICE = Duration.ofMinutes(2);
+
+    /**
+     * Wybór „Przerwa” na kiosku zaraz po wyjściu: odbicie tego czytnika, będące wyjściem, najwyżej
+     * {@link #BREAK_CHOICE} po zapisaniu i bez wcześniejszej przerwy tego dnia pracy.
+     */
+    @Transactional
+    public ReaderResult markBreak(String token, UUID punchId) {
+        StaffTimeReader reader = reader(token);
+        StaffTimePunch punch = punches.findById(punchId)
+                .filter(found -> found.getDeletedAt() == null && found.getReader() != null
+                        && found.getReader().getId().equals(reader.getId()))
+                .orElseThrow(() -> ApiException.notFound("Nie ma takiego odbicia"));
+        if (Duration.between(punch.getCreatedAt(), Instant.now()).compareTo(BREAK_CHOICE) > 0) {
+            throw ApiException.conflict("Na wybór przerwy jest " + BREAK_CHOICE.toMinutes() + " min po odbiciu");
+        }
+        StaffEmployee employee = punch.getEmployee();
+        List<Pair> recent = pairs(punches.findOfEmployees(List.of(employee.getId()),
+                punch.getPunchedAt().minus(MAX_SHIFT), punch.getPunchedAt().plusSeconds(1)));
+        Pair closed = recent.stream().filter(pair -> pair.outPunch() != null
+                && pair.outPunch().getId().equals(punch.getId())).findFirst()
+                .orElseThrow(() -> ApiException.conflict("To odbicie jest wejściem, a nie wyjściem"));
+        if (!punch.isBreakStart()) {
+            if (hadBreak(recent, closed)) {
+                throw ApiException.conflict("Przerwa w tym dniu już była");
+            }
+            punch.markBreakStart();
+        }
+        return new ReaderResult(punch.getId(), employee.getDisplayName(), "OUT", punch.getPunchedAt(), false, false);
     }
 
     /** Czytnik (np. kiosk) sprawdza swój klucz i dowiaduje się, w którym sklepie stoi. */

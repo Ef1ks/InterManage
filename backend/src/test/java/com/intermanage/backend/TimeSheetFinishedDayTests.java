@@ -37,6 +37,6 @@ class TimeSheetFinishedDayTests {
 
     private static TimeCardResponse.DayCard day(LocalDate date, int endHour, LocalDateTime openSince) {
         return new TimeCardResponse.DayCard(date, date.atTime(7, 0), date.atTime(endHour, 0), null, List.of(),
-                openSince, false, List.of(), 480, 480, 0, 0, 0, null, null);
+                openSince, false, List.of(), 480, 480, 0, 0, 0, null, null, null);
     }
 }

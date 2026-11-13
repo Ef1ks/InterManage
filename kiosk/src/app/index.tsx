@@ -1,18 +1,20 @@
 import * as Haptics from 'expo-haptics'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Animated, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Logo } from '@/components/Logo'
 import { UsbCardInput } from '@/components/UsbCardInput'
 import { useKiosk } from '@/lib/kiosk'
 import { listenForCards, nfcState, openNfcSettings, type NfcState } from '@/lib/nfc'
-import { flushQueue, pendingCount, punch, type PunchOutcome } from '@/lib/punches'
+import { flushQueue, markBreak, pendingCount, punch, type PunchOutcome } from '@/lib/punches'
 import { useTheme, type Theme } from '@/lib/theme'
 
 /** Jak długo wynik odbicia stoi na ekranie. */
 const RESULT_MS = 4_000
+/** Jak długo przy wyjściu czeka wybór „Koniec pracy” / „Przerwa”; bez wyboru zostaje koniec pracy. */
+const CHOICE_MS = 8_000
 const FLUSH_INTERVAL_MS = 30_000
 
 const timeFormat = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' })
@@ -29,6 +31,13 @@ export default function PunchScreen() {
   const busy = useRef(false)
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [appear] = useState(() => new Animated.Value(0))
+  /** Wyjście zamienione na przerwę: `saving` w trakcie zapisu. */
+  const [breakChoice, setBreakChoice] = useState<'none' | 'saving' | 'done'>('none')
+
+  const dismissAfter = useCallback((ms: number) => {
+    if (clearTimer.current) clearTimeout(clearTimer.current)
+    clearTimer.current = setTimeout(() => setOutcome(null), ms)
+  }, [])
 
   const handleCard = useCallback(
     async (uid: string) => {
@@ -38,20 +47,41 @@ export default function PunchScreen() {
         const result = await punch(uid)
         if (result.kind === 'repeat') return
         setOutcome(result)
+        setBreakChoice('none')
         setPending(pendingCount())
         void Haptics.notificationAsync(
           result.kind === 'error' ? Haptics.NotificationFeedbackType.Error : Haptics.NotificationFeedbackType.Success,
         )
         appear.setValue(0)
         Animated.timing(appear, { toValue: 1, duration: 180, useNativeDriver: true }).start()
-        if (clearTimer.current) clearTimeout(clearTimer.current)
-        clearTimer.current = setTimeout(() => setOutcome(null), RESULT_MS)
+        dismissAfter(result.kind === 'ok' && result.result.breakAvailable ? CHOICE_MS : RESULT_MS)
       } finally {
         busy.current = false
       }
     },
-    [appear],
+    [appear, dismissAfter],
   )
+
+  const chooseBreak = useCallback(async () => {
+    if (outcome?.kind !== 'ok' || breakChoice !== 'none') return
+    setBreakChoice('saving')
+    if (clearTimer.current) clearTimeout(clearTimer.current)
+    const result = await markBreak(outcome.result.punchId)
+    if (result.kind === 'ok') {
+      setBreakChoice('done')
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    } else {
+      setBreakChoice('none')
+      setOutcome(result)
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+    }
+    dismissAfter(RESULT_MS)
+  }, [outcome, breakChoice, dismissAfter])
+
+  const finishWork = useCallback(() => {
+    if (clearTimer.current) clearTimeout(clearTimer.current)
+    setOutcome(null)
+  }, [])
 
   // NFC urządzenia czyta karty tylko, gdy ekran odbić jest na wierzchu (tryb kart sam przejmuje czytnik).
   useFocusEffect(
@@ -105,7 +135,13 @@ export default function PunchScreen() {
               transform: [{ scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }],
             }}
           >
-            <Result outcome={outcome} t={t} />
+            <Result
+              outcome={outcome}
+              t={t}
+              breakChoice={breakChoice}
+              onBreak={() => void chooseBreak()}
+              onFinish={finishWork}
+            />
           </Animated.View>
         ) : (
           <Prompt t={t} nfc={nfc} />
@@ -173,19 +209,48 @@ function Prompt({ t, nfc }: { t: Theme; nfc: NfcState | null }) {
   )
 }
 
-function Result({ outcome, t }: { outcome: PunchOutcome; t: Theme }) {
+type ResultProps = {
+  outcome: PunchOutcome
+  t: Theme
+  breakChoice: 'none' | 'saving' | 'done'
+  onBreak: () => void
+  onFinish: () => void
+}
+
+function Result({ outcome, t, breakChoice, onBreak, onFinish }: ResultProps) {
   if (outcome.kind === 'ok') {
-    const entry = outcome.result.direction === 'IN'
-    const firstName = outcome.result.employeeName.split(' ')[0]
+    const { result } = outcome
+    const entry = result.direction === 'IN'
+    const firstName = result.employeeName.split(' ')[0]
+    const time = timeFormat.format(new Date(result.punchedAt))
+    if (breakChoice === 'done') {
+      return (
+        <View style={[styles.panel, { backgroundColor: t.warnBg, borderColor: 'transparent' }]}>
+          <Text style={{ color: t.warnText, fontSize: 18, fontWeight: '600' }}>PRZERWA · {time}</Text>
+          <Text style={[styles.panelTitle, { color: t.warnText }]}>Miłej przerwy, {firstName}</Text>
+          <Text style={{ color: t.warnText, fontSize: 17, textAlign: 'center' }}>
+            Po powrocie przyłóż kartę jak zwykle.
+          </Text>
+        </View>
+      )
+    }
+    const tone = entry ? { bg: t.okBg, text: t.okText } : { bg: t.infoBg, text: t.infoText }
     return (
-      <View style={[styles.panel, { backgroundColor: entry ? t.okBg : t.infoBg, borderColor: 'transparent' }]}>
-        <Text style={{ color: entry ? t.okText : t.infoText, fontSize: 18, fontWeight: '600' }}>
-          {entry ? 'WEJŚCIE' : 'WYJŚCIE'} · {timeFormat.format(new Date(outcome.result.punchedAt))}
+      <View style={[styles.panel, { backgroundColor: tone.bg, borderColor: 'transparent' }]}>
+        <Text style={{ color: tone.text, fontSize: 18, fontWeight: '600' }}>
+          {entry ? (result.breakEnded ? 'KONIEC PRZERWY' : 'WEJŚCIE') : 'WYJŚCIE'} · {time}
         </Text>
-        <Text style={[styles.panelTitle, { color: entry ? t.okText : t.infoText }]}>
-          {entry ? `Dzień dobry, ${firstName}` : `Do widzenia, ${firstName}`}
+        <Text style={[styles.panelTitle, { color: tone.text }]}>
+          {entry
+            ? result.breakEnded
+              ? `Witaj z powrotem, ${firstName}`
+              : `Dzień dobry, ${firstName}`
+            : `Do widzenia, ${firstName}`}
         </Text>
-        <Text style={{ color: entry ? t.okText : t.infoText, fontSize: 17 }}>{outcome.result.employeeName}</Text>
+        <Text style={{ color: tone.text, fontSize: 17 }}>{result.employeeName}</Text>
+        {!entry && result.breakAvailable ? (
+          <BreakChoice t={t} saving={breakChoice === 'saving'} onBreak={onBreak} onFinish={onFinish} />
+        ) : null}
       </View>
     )
   }
@@ -210,7 +275,82 @@ function Result({ outcome, t }: { outcome: PunchOutcome; t: Theme }) {
   )
 }
 
+/**
+ * Wybór po wyjściu: odbicie jest już zapisane jako koniec pracy, „Przerwa” je zamienia. Pasek pod przyciskami
+ * odmierza czas do zamknięcia (samo `scaleX`, na natywnym sterowniku).
+ */
+function BreakChoice({
+  t,
+  saving,
+  onBreak,
+  onFinish,
+}: {
+  t: Theme
+  saving: boolean
+  onBreak: () => void
+  onFinish: () => void
+}) {
+  const [left] = useState(() => new Animated.Value(1))
+  useEffect(() => {
+    const animation = Animated.timing(left, {
+      toValue: 0,
+      duration: CHOICE_MS,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    })
+    animation.start()
+    return () => animation.stop()
+  }, [left])
+  useEffect(() => {
+    if (saving) left.stopAnimation()
+  }, [saving, left])
+  return (
+    <View style={{ alignSelf: 'stretch', marginTop: 16, gap: 12 }}>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onFinish}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.choice,
+            { backgroundColor: t.primary, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+          ]}
+        >
+          <Text style={[styles.choiceText, { color: t.primaryText }]}>Koniec pracy</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onBreak}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.choice,
+            {
+              backgroundColor: t.warnBg,
+              opacity: saving ? 0.6 : pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            },
+          ]}
+        >
+          <Text style={[styles.choiceText, { color: t.warnText }]}>{saving ? 'Zapisuję…' : 'Przerwa'}</Text>
+        </Pressable>
+      </View>
+      <View style={{ height: 4, borderRadius: 2, overflow: 'hidden', backgroundColor: t.card }}>
+        <Animated.View
+          style={{
+            flex: 1,
+            backgroundColor: t.primary,
+            transformOrigin: 'left',
+            transform: [{ scaleX: left }],
+          }}
+        />
+      </View>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  choice: { flex: 1, minHeight: 72, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  choiceText: { fontSize: 22, fontWeight: '700' },
   screen: { flex: 1, padding: 24 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
   store: { fontSize: 18, fontWeight: '600' },

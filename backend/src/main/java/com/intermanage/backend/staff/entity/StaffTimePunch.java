@@ -62,6 +62,13 @@ public class StaffTimePunch {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /** Wyjście na przerwę (wybór „Przerwa” na kiosku), a nie koniec pracy. */
+    @Column(name = "break_start", nullable = false)
+    private boolean breakStart;
+
+    @Column(name = "break_marked_at")
+    private Instant breakMarkedAt;
+
     protected StaffTimePunch() {
     }
 
@@ -87,6 +94,23 @@ public class StaffTimePunch {
     public void restore() {
         deletedAt = null;
         deletedBy = null;
+    }
+
+    public void markBreakStart() {
+        breakStart = true;
+        breakMarkedAt = Instant.now();
+    }
+
+    public boolean isBreakStart() {
+        return breakStart;
+    }
+
+    public StaffTimeReader getReader() {
+        return reader;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 
     public UUID getId() {

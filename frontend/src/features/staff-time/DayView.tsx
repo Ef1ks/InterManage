@@ -146,7 +146,9 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                       segment.status === 'REJECTED' &&
                         'bg-[repeating-linear-gradient(135deg,transparent_0_4px,rgb(0_0_0/0.18)_4px_6px)]',
                     )
-                    const position = { left: at(start), width: width(start, end) }
+                    // Odcinek z kilku minut ma na osi ułamek piksela: najmniejsza szerokość, żeby dało się go zobaczyć
+                    // i kliknąć.
+                    const position = { left: at(start), width: width(start, end), minWidth: '0.75rem' }
                     return decidable(segment) && cards.canDecide ? (
                       <button
                         key={segment.part + segment.start}
@@ -156,7 +158,7 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                         onClick={() => onSegment(row, segment)}
                         className={cn(
                           shared,
-                          'cursor-pointer outline-none transition-[box-shadow] hover:ring-2 hover:ring-foreground/60 focus-visible:ring-3 focus-visible:ring-ring',
+                          'z-10 cursor-pointer outline-none transition-[box-shadow] hover:ring-2 hover:ring-foreground/60 focus-visible:ring-3 focus-visible:ring-ring',
                           segment.status === 'PENDING' && 'ring-2 ring-amber-700 dark:ring-amber-300',
                         )}
                         style={position}
@@ -187,10 +189,23 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                       }}
                     />
                   )}
+                  {day?.breakSince && (
+                    <span
+                      title={`Na przerwie od ${clockOf(day.breakSince)}`}
+                      className="absolute top-1.5 bottom-1.5 rounded-sm bg-[repeating-linear-gradient(135deg,var(--color-zinc-300)_0_4px,transparent_4px_8px)] dark:bg-[repeating-linear-gradient(135deg,var(--color-zinc-600)_0_4px,transparent_4px_8px)]"
+                      style={{
+                        left: at(minuteOf(day.breakSince, date)),
+                        width: width(
+                          minuteOf(day.breakSince, date),
+                          Math.max(nowMinute ?? 0, minuteOf(day.breakSince, date) + 5),
+                        ),
+                      }}
+                    />
+                  )}
                   {day?.punches.map((punch) => (
                     <span
                       key={punch.id}
-                      title={`Odbicie ${clockOf(punch.at)}${punch.source === 'SIMULATED' ? ' (symulator)' : ''}`}
+                      title={`${punch.breakStart ? 'Wyjście na przerwę' : 'Odbicie'} ${clockOf(punch.at)}${punch.source === 'SIMULATED' ? ' (symulator)' : ''}`}
                       className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-foreground"
                       style={{ left: at(minuteOf(punch.at, date)) }}
                     />

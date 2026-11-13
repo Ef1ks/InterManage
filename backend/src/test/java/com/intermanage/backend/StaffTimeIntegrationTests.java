@@ -314,6 +314,36 @@ class StaffTimeIntegrationTests {
                 .andExpect(status().isForbidden());
     }
 
+    /** Kiosk po wyjściu pyta o przerwę: jedna na dzień pracy, powrót kończy ją zwykłym odbiciem. */
+    @Test
+    void kioskTurnsExitIntoBreakOncePerDay() throws Exception {
+        String settings = send(owner, post(staff("/time/settings/readers")), "{\"name\":\"Kiosk\"}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String token = JsonPath.read(settings, "$.readers[0].token");
+        send(owner, put(staff("/time/settings/cards/" + employee)), "{\"cardUid\":\"0AB1\"}")
+                .andExpect(status().isOk());
+
+        String entry = reader(token, "0AB1", "2026-12-01T04:58:00Z")
+                .andExpect(jsonPath("$.breakAvailable").value(false)).andReturn().getResponse().getContentAsString();
+        String entryId = JsonPath.read(entry, "$.punchId");
+        String exit = reader(token, "0AB1", "2026-12-01T09:00:00Z").andExpect(jsonPath("$.direction").value("OUT"))
+                .andExpect(jsonPath("$.breakAvailable").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String exitId = JsonPath.read(exit, "$.punchId");
+
+        mvc.perform(post("/api/time-clock/punches/" + entryId + "/break").header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/time-clock/punches/" + exitId + "/break").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        reader(token, "0AB1", "2026-12-01T09:30:00Z").andExpect(jsonPath("$.direction").value("IN"))
+                .andExpect(jsonPath("$.breakEnded").value(true));
+        reader(token, "0AB1", "2026-12-01T13:02:00Z").andExpect(jsonPath("$.direction").value("OUT"))
+                .andExpect(jsonPath("$.breakAvailable").value(false));
+        day().andExpect(jsonPath("$.rows[0].days[0].punches[1].breakStart").value(true))
+                .andExpect(jsonPath("$.rows[0].days[0].punches[2].breakStart").value(false));
+    }
+
     /**
      * Karta ewidencji i zestawienia miesiąca: dzień, który minął, ma czas z odbić, w tym pora nocna (5-6). Excel i
      * plik R2Płatnika wskazują pracownika numerem karty RCP nadanym przy zakładaniu, a godziny Excel ma dziesiętne.

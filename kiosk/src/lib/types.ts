@@ -8,9 +8,14 @@ export type ReaderInfo = {
 }
 
 export type PunchResult = {
+  punchId: string
   employeeName: string
   direction: 'IN' | 'OUT'
   punchedAt: string
+  /** Wyjście, które można jeszcze zamienić na przerwę (nie było dziś przerwy). */
+  breakAvailable: boolean
+  /** Wejście po przerwie. */
+  breakEnded: boolean
 }
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
