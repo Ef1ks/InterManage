@@ -608,6 +608,7 @@ const CORRECTION_SCREEN = {
   createText: 'Utworzy',
   detailButton: 'btnB3_Detail_LnkBouton',
   bonField: 'txtZ19_NumBL_TxtBox',
+  /** Kod artykułu: ITM8 albo EAN (EAN z kilkoma ITM8 otwiera okno wyboru, więc makro wpisuje ITM8 z bonu). */
   eanField: 'txtZ6_CodeArticle_TxtBox',
   /** Pusty wiersz ma `0,000`; po EAN-ie Mercalys wpisuje ilość z bonu (np. `4,000`). */
   quantityField: 'txnZ9_Quantite_TxtBox',
@@ -664,7 +665,8 @@ const NON_ZERO = '^(?!-?0*(,0*)?$)-?[0-9 \\x{A0}]+(,[0-9]+)?$'
 const ZERO_OR_EMPTY = '^0*(,0*)?$'
 
 export type CorrectionArticleStep = {
-  ean: string
+  /** ITM8 z bonu (13 cyfr), a bez niego EAN: pole kodu artykułu przyjmuje oba. */
+  code: string
   quantity: number
   /** Ilość wpisana do pola, np. `1,5`. */
   quantityText: string
@@ -688,7 +690,7 @@ export function correctionArticleLines(
   const screen = CORRECTION_SCREEN
   const out = [
     `WEBVALUE|${WINDOW}|${screen.priceField}|${ZERO_OR_EMPTY}|${timing.load}`,
-    `WEBKEY|${WINDOW}|${screen.eanField}|^a${step.ean}{Enter}`,
+    `WEBKEY|${WINDOW}|${screen.eanField}|^a${step.code}{Enter}`,
     step.waitForPrice
       ? `WEBVALUE|${WINDOW}|${screen.priceField}|${NON_ZERO}|${timing.load}`
       : `SLEEP|${timing.afterEan}`,

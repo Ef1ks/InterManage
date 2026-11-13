@@ -383,7 +383,9 @@ function MacroDialog({
                         <td className="max-w-0 px-3 py-1.5">
                           <span className="block truncate font-medium">{item.name}</span>
                           <span className="block text-xs text-muted-foreground tabular-nums">
-                            {item.ean}
+                            {fromBase && item.itm8
+                              ? `ITM8 ${item.itm8.replace(/^0+/, '')} · EAN ${item.ean}`
+                              : item.ean}
                             {deliveries.length > 1 && ` · bon ${item.bonNumber}`}
                           </span>
                           {item.added && (

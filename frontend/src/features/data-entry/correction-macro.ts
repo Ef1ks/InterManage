@@ -47,6 +47,12 @@ export type CorrectionMacroItem = {
   /** Bon, na którym jest artykuł: makro wpisuje go w Nr BL przy tej pozycji (korekta bazy dotyczy kilku WZ). */
   bonNumber: string
   ean: string
+  /**
+   * ITM8 z linii bonu (13 cyfr z zerami). W korekcie bazy makro wpisuje go zamiast EAN-u, bo EAN z kilkoma ITM8 otwiera
+   * w Mercalys okno wyboru; u zwykłych dostawców wystarcza EAN. `null`, gdy artykułu nie ma na bonie albo bonu nie ma
+   * w raportach (wtedy EAN).
+   */
+  itm8: string | null
   name: string
   /** Stan bonu; `null`, gdy bonu nie ma w raportach. */
   bonQuantity: number | null
@@ -74,6 +80,16 @@ export type CorrectionMacroPlan<Row extends CorrectionRow = CorrectionRow> = {
 }
 
 const key = (code: string | null | undefined) => (code ?? '').replace(/^0+/, '')
+
+/** ITM8 linii bonu do pola kodu artykułu: 13 cyfr z zerami, jak w Mercalys. */
+const bonItm8 = (line: CorrectionDeliveryLine | null) => {
+  const digits = (line?.itm8 ?? '').replace(/\D/g, '')
+  return digits === '' || /^0+$/.test(digits) || digits.length > 13 ? null : digits.padStart(13, '0')
+}
+
+/** Kod, który makro wpisuje w pole artykułu: w korekcie bazy ITM8 z bonu, poza nią i bez niego EAN. */
+export const correctionArticleCode = (item: Pick<CorrectionMacroItem, 'ean' | 'itm8'>, fromBase: boolean) =>
+  (fromBase ? item.itm8 : null) ?? item.ean
 
 const round = (value: number, digits: number) => Number(value.toFixed(digits))
 
@@ -226,6 +242,7 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
         key: id,
         bonNumber,
         ean,
+        itm8: bonItm8(line),
         name: first.name,
         bonQuantity,
         bonPrice,
@@ -254,6 +271,7 @@ export function planCorrectionMacro<Row extends CorrectionRow>(
         key: id,
         bonNumber,
         ean,
+        itm8: bonItm8(line),
         name: first.name,
         bonQuantity,
         bonPrice,
@@ -302,7 +320,7 @@ export const formatMacroQuantity = (value: number) => String(round(value, 3)).re
 
 export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACRO_CONFIG.priceDigits).replace('.', ',')
 
-/** NIP bazy SCA PR (dostawca 538): jej korekty idą protokołem typu 10, a nie 8. */
+/** NIP bazy SCA PR (dostawca 538): jej korekty idą protokołem typu 9, a nie 8. */
 const BASE_SELLER_NIP = '7821977018'
 
 export const isBaseSeller = (nip: string | null | undefined) => nip?.replace(/\D/g, '') === BASE_SELLER_NIP
@@ -324,12 +342,17 @@ export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string
 
   out.push(`# Korekta bonu ${bonNumbers}: ${items.length} poz.`, ...correctionStartLines(today, fromBase))
   for (const item of items) {
-    out.push(`# EAN ${item.ean}, bon ${item.bonNumber}`, correctionBonLine(item.bonNumber), `SLEEP|${c.afterBon}`)
+    const code = correctionArticleCode(item, fromBase)
+    out.push(
+      `# ${code === item.ean ? 'EAN' : 'ITM8'} ${code}, bon ${item.bonNumber}`,
+      correctionBonLine(item.bonNumber),
+      `SLEEP|${c.afterBon}`,
+    )
     key('{Enter}', c.afterBonSkip)
     out.push(
       ...correctionArticleLines(
         {
-          ean: item.ean,
+          code,
           quantity: round(item.quantity, 3),
           quantityText: formatMacroQuantity(item.quantity),
           priceText: formatMacroPrice(item.price),
