@@ -644,6 +644,10 @@ export type TopSalesQuery = {
   limit: number
   minQuantity: number
   filter: string[]
+  /** Marki z kartoteki. */
+  brands: string[]
+  /** Kody ostatniego dostawcy z przyjęć PZ. */
+  suppliers: string[]
   compared: string[]
   rankStore: string
 }
@@ -665,6 +669,8 @@ export function useTopSales(storeId: string, query: TopSalesQuery, enabled: bool
         rankStore: query.rankStore,
       })
       query.filter.forEach((code) => params.append('nomenclatures', code))
+      query.brands.forEach((brand) => params.append('brands', brand))
+      query.suppliers.forEach((supplier) => params.append('suppliers', supplier))
       query.compared.forEach((store) => params.append('compareStores', store))
       return api<TopSalesReport>(`${reportsPath(storeId)}/top-sales?${params}`)
     },

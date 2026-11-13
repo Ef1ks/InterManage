@@ -173,6 +173,52 @@ class TopSalesIntegrationTests {
     }
 
     @Test
+    void filtersByBrandAndLastSupplier() throws Exception {
+        jdbc.update("update products set brand = ? where store_id = ?::uuid and itm8 = ?", "Milka ", store, BEST);
+        jdbc.update("update products set brand = ? where store_id = ?::uuid and itm8 = ?", "MILKA", store, SECOND);
+        jdbc.update("update products set brand = ? where store_id = ?::uuid and itm8 = ?", "WASA", store,
+                OTHER_FAMILY);
+        sale(store, salesImport, BEST, "2026-10-05", 100, "100.00", "200.00");
+        sale(store, salesImport, SECOND, "2026-10-05", 50, "50.00", "500.00");
+        sale(store, salesImport, OTHER_FAMILY, "2026-10-05", 10, "10.00", "20.00");
+        String importId = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-11-01 08:00:00', date '2026-08-01',
+                    date '2026-10-31', 3, 3, 3, 0, 0) returning id""", String.class, store);
+        // SECOND przywiózł najpierw 538, potem 777: liczy się ostatnie przyjęcie.
+        delivery(importId, "PZ1", "2026-08-01 00:00", SECOND, "538");
+        delivery(importId, "PZ2", "2026-09-01 00:00", SECOND, "777");
+        delivery(importId, "PZ3", "2026-09-01 00:00", BEST, "538");
+
+        mvc.perform(get(url("metric=QUANTITY&level=STORE")).cookie(owner))
+                .andExpect(jsonPath("$.brands[*].name", contains("MILKA", "WASA")))
+                .andExpect(jsonPath("$.brands[0].articleCount").value(2));
+
+        mvc.perform(get(url("metric=QUANTITY&level=STORE&brands=milka")).cookie(owner))
+                .andExpect(jsonPath("$.groups[0].rows[*].itm8", contains(BEST, SECOND)))
+                .andExpect(jsonPath("$.brands[*].name", contains("MILKA", "WASA")));
+
+        mvc.perform(get(url("metric=QUANTITY&level=STORE&suppliers=538")).cookie(owner))
+                .andExpect(jsonPath("$.groups[0].rows[*].itm8", contains(BEST)));
+
+        mvc.perform(get(url("metric=QUANTITY&level=STORE&suppliers=777&brands=WASA")).cookie(owner))
+                .andExpect(jsonPath("$.groups", hasSize(0)));
+    }
+
+    private void delivery(String importId, String number, String date, String itm8, String supplier) {
+        String document = jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                    sale_value_gross, first_import_id, last_import_id)
+                values (?::uuid, 'PZ', ?, ?::timestamp, 1, 10, 0, ?::uuid, ?::uuid) returning id""",
+                String.class, store, number, date, importId, importId);
+        jdbc.update("""
+                insert into document_lines (document_id, line_number, itm8, quantity, purchase_value, supplier_code,
+                    supplier_name)
+                values (?::uuid, 1, ?, 5, 10, ?, 'DOSTAWCA')""", document, itm8, supplier);
+    }
+
+    @Test
     void rejectsWrongLimit() throws Exception {
         mvc.perform(get(url("metric=QUANTITY&limit=0")).cookie(owner)).andExpect(status().isBadRequest());
     }

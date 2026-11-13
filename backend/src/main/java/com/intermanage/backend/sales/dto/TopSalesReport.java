@@ -7,11 +7,16 @@ import java.util.UUID;
 
 /**
  * Topy sprzedażowe. Grupy są w kolejności kodów nomenklatury, wiersze od najlepszego. {@code rankStoreId} to sklep,
- * z którego jest ranking; {@code stores} ma go na początku, dalej porównywane sklepy.
+ * z którego jest ranking; {@code stores} ma go na początku, dalej porównywane sklepy. {@code brands}: marki do wyboru
+ * w filtrze.
  */
 public record TopSalesReport(LocalDate from, LocalDate to, TopSalesMetric metric, TopSalesLevel level, int limit,
         BigDecimal minQuantity, int maxPromotionMarginPercent, UUID rankStoreId, List<Store> stores,
-        List<Group> groups) {
+        List<Group> groups, List<Brand> brands) {
+
+    /** Marka z artykułów sklepu rankingu (po filtrze nomenklatury), wielkimi literami, z liczbą artykułów. */
+    public record Brand(String name, int articleCount) {
+    }
 
     /**
      * Sklep w raporcie. {@code articleCount} to artykuły w rankingu, {@code promotionSkipped} wypadłe przez promocję

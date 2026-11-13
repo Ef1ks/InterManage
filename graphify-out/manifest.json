@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794551624.8045957,
-    "seen": 1794551966.3057299,
-    "ast_hash": "2c6c836f2b4a13b010e7182ab653024f",
+    "mtime": 1794552553.1452982,
+    "seen": 1794552638.1989708,
+    "ast_hash": "ad6f817fca7520e711950df6376d72d6",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794551916.8221488,
-    "seen": 1794551966.3356597,
-    "ast_hash": "de6492d529277c8fcd01c619b4cdb048",
+    "mtime": 1794552589.769137,
+    "seen": 1794552638.2278247,
+    "ast_hash": "a0c00f7f54374832dfb76bd98fb24b6a",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794408811.8474338,
-    "seen": 1794408946.1639373,
-    "ast_hash": "44d3cbb0e5cc1e4c253da87dc76b8b41",
+    "mtime": 1794552553.1462991,
+    "seen": 1794552638.1847079,
+    "ast_hash": "ce08553f087cb78d5b5eb7caa60c3b4f",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -6852,9 +6852,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/controller/TopSalesController.java": {
-    "mtime": 1793807538.8715107,
-    "seen": 1793808732.693412,
-    "ast_hash": "12ccf924307dc674f1395cc91efcb488",
+    "mtime": 1794552515.672755,
+    "seen": 1794552638.0827775,
+    "ast_hash": "7e320a930aad8760d793f48e0b4804b9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/ArticleProtocolResponse.java": {
@@ -6876,21 +6876,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/TopSalesReport.java": {
-    "mtime": 1793807538.079806,
-    "seen": 1793808732.6969595,
-    "ast_hash": "273781e30c31ad78411b67415fd50eb9",
+    "mtime": 1794552515.672755,
+    "seen": 1794552638.0892956,
+    "ast_hash": "87dbea82f344b5336d02ea082f44a9cb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/TopSalesService.java": {
-    "mtime": 1794551555.2209115,
-    "seen": 1794551966.2026632,
-    "ast_hash": "c67f070648e8d338a366908b4409ecf3",
+    "mtime": 1794552515.671747,
+    "seen": 1794552638.094592,
+    "ast_hash": "eeacb8ab91cc96b5dd48bd451172078b",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/TopSalesIntegrationTests.java": {
-    "mtime": 1793808929.1825318,
-    "seen": 1793819217.0145404,
-    "ast_hash": "df7101eb3cb28847f9166c3cecd4c644",
+    "mtime": 1794552534.5909717,
+    "seen": 1794552638.1420877,
+    "ast_hash": "96c1b61054c5369a7fcf79a8c97605bf",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/NomenclatureNav.tsx": {
@@ -6900,9 +6900,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/TopSalesReport.tsx": {
-    "mtime": 1793811121.06197,
-    "seen": 1793819217.0413265,
-    "ast_hash": "087ecc5d38758a72f48f493dc395a55e",
+    "mtime": 1794552553.1474466,
+    "seen": 1794552638.1847079,
+    "ast_hash": "4d882cdcb61e80fc422e403562cf99aa",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/Percent.java": {

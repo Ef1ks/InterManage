@@ -1309,6 +1309,8 @@ export type TopSalesReport = {
     noCostSkipped: number
   }[]
   groups: TopSalesGroup[]
+  /** Marki do filtra (wielkimi literami) z artykułów sklepu rankingu po filtrze nomenklatury. */
+  brands: { name: string; articleCount: number }[]
 }
 
 /** Sprzedaż dzień po dniu do wykresu; każdy dzień okresu, bez sprzedaży z zerami. */

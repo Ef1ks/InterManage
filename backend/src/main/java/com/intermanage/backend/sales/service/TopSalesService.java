@@ -5,8 +5,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -21,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.component.Percent;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.repository.DocumentLineRepository;
+import com.intermanage.backend.document.repository.DocumentLineRepository.LastSupplier;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.promotion.service.PromotionReportService;
@@ -28,6 +32,7 @@ import com.intermanage.backend.sales.component.RegionGroups;
 import com.intermanage.backend.sales.dto.TopSalesLevel;
 import com.intermanage.backend.sales.dto.TopSalesMetric;
 import com.intermanage.backend.sales.dto.TopSalesReport;
+import com.intermanage.backend.sales.dto.TopSalesReport.Brand;
 import com.intermanage.backend.sales.dto.TopSalesReport.Group;
 import com.intermanage.backend.sales.dto.TopSalesReport.OtherStore;
 import com.intermanage.backend.sales.dto.TopSalesReport.Partner;
@@ -45,6 +50,9 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * Top ilościowy pomija artykuły z promocji o marży do {@value #MAX_PROMOTION_MARGIN_PERCENT}%, bo taka ilość to efekt
  * ceny, a nie prawdziwy hit. Topy marży pomijają sprzedaż z zerowym kosztem FIFO: marża 100% jest wtedy fałszywa.
  * Żaden top nie liczy rejonów, które nie są towarem ({@link RegionGroups#isNotGoods}).
+ * <p>
+ * Filtr marki porównuje markę z kartoteki bez wielkości liter i nadmiarowych spacji. Filtr dostawcy bierze ostatniego
+ * dostawcę artykułu z przyjęć PZ sklepu (dostawca z kartoteki bywa błędny), po kodzie dostawcy, w każdym sklepie.
  */
 @Service
 public class TopSalesService {
@@ -54,15 +62,20 @@ public class TopSalesService {
     /** Grupa całego sklepu w obliczeniach. */
     private static final String WHOLE_STORE = "*";
     private static final String UNASSIGNED = "";
+    /** Paczka ITM8 w zapytaniu o ostatniego dostawcę (limit parametrów JDBC). */
+    private static final int SUPPLIER_BATCH = 5000;
 
     private final SaleRepository sales;
     private final PromotionReportService promotions;
     private final NomenclatureRepository nomenclatures;
     private final StoreRepository stores;
     private final StorePartnerRepository partners;
+    private final DocumentLineRepository lines;
 
     public TopSalesService(SaleRepository sales, PromotionReportService promotions,
-            NomenclatureRepository nomenclatures, StoreRepository stores, StorePartnerRepository partners) {
+            NomenclatureRepository nomenclatures, StoreRepository stores, StorePartnerRepository partners,
+            DocumentLineRepository lines) {
+        this.lines = lines;
         this.sales = sales;
         this.promotions = promotions;
         this.nomenclatures = nomenclatures;
@@ -83,8 +96,8 @@ public class TopSalesService {
 
     @Transactional(readOnly = true)
     public TopSalesReport report(UUID storeId, LocalDate from, LocalDate to, TopSalesMetric metric,
-            TopSalesLevel level, int limit, BigDecimal minQuantity, List<String> filter, List<UUID> compareStores,
-            UUID rankStore) {
+            TopSalesLevel level, int limit, BigDecimal minQuantity, List<String> filter, List<String> brands,
+            List<String> suppliers, List<UUID> compareStores, UUID rankStore) {
         ReportPeriod.check(from, to);
         if (limit < 1 || limit > MAX_LIMIT) {
             throw ApiException.badRequest("Liczba wyników musi być od 1 do " + MAX_LIMIT);
@@ -104,10 +117,16 @@ public class TopSalesService {
         }
 
         sales.tuneForReport();
-        List<String> codes = filter == null ? List.of() : filter;
+        Filter chosen = new Filter(filter == null ? List.of() : filter,
+                brands == null ? Set.of()
+                        : brands.stream().map(TopSalesService::brandKey).filter(key -> !key.isEmpty())
+                                .collect(Collectors.toSet()),
+                suppliers == null ? Set.of()
+                        : suppliers.stream().map(String::trim).filter(code -> !code.isEmpty())
+                                .collect(Collectors.toSet()));
         Map<UUID, Standing> standings = new HashMap<>();
         for (UUID id : storeIds) {
-            standings.put(id, standing(id, from, to, metric, level, minQuantity, codes));
+            standings.put(id, standing(id, from, to, metric, level, minQuantity, chosen));
         }
 
         Map<UUID, Store> byId = stores.findAllById(storeIds).stream()
@@ -125,13 +144,27 @@ public class TopSalesService {
                 .map(entry -> group(entry.getKey(), entry.getValue(), names, limit, others))
                 .toList();
         return new TopSalesReport(from, to, metric, level, limit, minQuantity, MAX_PROMOTION_MARGIN_PERCENT, ranked,
-                shown, groups);
+                shown, groups, standings.get(ranked).brands);
     }
 
     /** Ranking jednego sklepu: grupy w kolejności kodów (bez nomenklatury na końcu), artykuły od najlepszego. */
     private Standing standing(UUID storeId, LocalDate from, LocalDate to, TopSalesMetric metric, TopSalesLevel level,
-            BigDecimal minQuantity, List<String> filter) {
-        List<ArticleSales> articles = sales.sumArticles(storeId, from, to);
+            BigDecimal minQuantity, Filter filter) {
+        List<ArticleSales> articles = sales.sumArticles(storeId, from, to).stream()
+                .filter(article -> matches(article.getSubfamilyCode(), filter.nomenclatures())
+                        && sold(article, metric, minQuantity))
+                .toList();
+        // Marki do wyboru liczą się przed filtrem marki i dostawcy, żeby wybór jednej nie chował pozostałych.
+        Map<String, Integer> brandCounts = new TreeMap<>();
+        articles.stream().map(article -> brandKey(article.getBrand())).filter(key -> !key.isEmpty())
+                .forEach(key -> brandCounts.merge(key, 1, Integer::sum));
+        List<Brand> brands = brandCounts.entrySet().stream()
+                .map(entry -> new Brand(entry.getKey(), entry.getValue())).toList();
+        Set<String> supplied = filter.suppliers().isEmpty() ? null : suppliedBy(storeId, articles, filter.suppliers());
+        articles = articles.stream()
+                .filter(article -> filter.brands().isEmpty() || filter.brands().contains(brandKey(article.getBrand())))
+                .filter(article -> supplied == null || supplied.contains(article.getItm8()))
+                .toList();
         Set<String> lowMargin = metric == TopSalesMetric.QUANTITY && !articles.isEmpty()
                 ? promotions.lowMarginPromotionArticles(storeId, from, to, MAX_PROMOTION_MARGIN_PERCENT)
                 : Set.of();
@@ -141,9 +174,6 @@ public class TopSalesService {
         int promotionSkipped = 0;
         int noCostSkipped = 0;
         for (ArticleSales article : articles) {
-            if (!matches(article.getSubfamilyCode(), filter) || !sold(article, metric, minQuantity)) {
-                continue;
-            }
             if (lowMargin.contains(article.getItm8())) {
                 promotionSkipped++;
             } else if (metric != TopSalesMetric.QUANTITY && article.getCostValue().signum() <= 0) {
@@ -155,7 +185,26 @@ public class TopSalesService {
         Comparator<ArticleSales> best = Comparator.comparing((ArticleSales article) -> value(article, metric))
                 .reversed().thenComparing(ArticleSales::getItm8);
         groups.values().forEach(group -> group.sort(best));
-        return new Standing(groups, promotionSkipped, noCostSkipped);
+        return new Standing(groups, promotionSkipped, noCostSkipped, brands);
+    }
+
+    /** ITM8 artykułów, których ostatnie przyjęcie PZ w sklepie było od jednego z dostawców. */
+    private Set<String> suppliedBy(UUID storeId, List<ArticleSales> articles, Set<String> supplierCodes) {
+        List<String> itm8s = articles.stream().map(ArticleSales::getItm8).toList();
+        Set<String> result = new HashSet<>();
+        for (int start = 0; start < itm8s.size(); start += SUPPLIER_BATCH) {
+            lines.findLastSuppliers(storeId, itm8s.subList(start, Math.min(itm8s.size(), start + SUPPLIER_BATCH)))
+                    .stream()
+                    .filter(last -> supplierCodes.contains(last.getSupplierCode().trim()))
+                    .map(LastSupplier::getItm8)
+                    .forEach(result::add);
+        }
+        return result;
+    }
+
+    /** Marka bez wielkości liter i nadmiarowych spacji; pusta, gdy jej nie ma. */
+    static String brandKey(String brand) {
+        return brand == null ? "" : brand.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
     }
 
     private static boolean matches(String subfamilyCode, List<String> filter) {
@@ -223,10 +272,12 @@ public class TopSalesService {
         private final Map<String, List<ArticleSales>> groups;
         private final int promotionSkipped;
         private final int noCostSkipped;
+        private final List<Brand> brands;
         private final Map<String, OtherPlace> places = new HashMap<>();
 
-        Standing(Map<String, List<ArticleSales>> groups, int promotionSkipped, int noCostSkipped) {
+        Standing(Map<String, List<ArticleSales>> groups, int promotionSkipped, int noCostSkipped, List<Brand> brands) {
             this.groups = groups;
+            this.brands = brands;
             this.promotionSkipped = promotionSkipped;
             this.noCostSkipped = noCostSkipped;
             for (List<ArticleSales> group : groups.values()) {
@@ -249,6 +300,9 @@ public class TopSalesService {
             return new OtherStore(storeId, place.rank, article.getQuantity(), article.getMarginValue(),
                     Percent.of(article.getMarginValue(), article.getSaleValueGross()));
         }
+    }
+
+    private record Filter(List<String> nomenclatures, Set<String> brands, Set<String> suppliers) {
     }
 
     private record OtherPlace(int rank, ArticleSales article) {

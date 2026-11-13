@@ -13,6 +13,7 @@ import {
   useSalesReportsOverview,
   useTopSales,
   useTopSalesPartners,
+  useTurnoverSuppliers,
 } from '@/features/sales/api'
 import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { NomenclatureNav, type NomenclatureNavItem } from '@/features/sales/NomenclatureNav'
@@ -74,6 +75,7 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
   const overview = useSalesReportsOverview(storeId)
   const nomenclatures = useSalesNomenclatures(storeId)
   const partners = useTopSalesPartners(storeId)
+  const suppliers = useTurnoverSuppliers(storeId)
   const { params, update } = useReportParams()
 
   const lastSaleDate = lastCompleteDay(overview.data?.lastSaleDate)
@@ -83,6 +85,8 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
   const metric = METRICS.find((item) => item.param === params.get('top'))?.value ?? 'QUANTITY'
   const level = LEVELS.find((item) => item.param === params.get('poziom'))?.value ?? 'REGION'
   const filter = useMemo(() => [...new Set(params.getAll('nom'))].sort(), [params])
+  const brands = useMemo(() => [...new Set(params.getAll('marka'))].sort(), [params])
+  const supplierCodes = useMemo(() => [...new Set(params.getAll('dostawca'))].sort(), [params])
   const compared = useMemo(() => [...new Set(params.getAll('sklep'))].sort(), [params])
   const rankParam = params.get('ranking')
   const rankStore = rankParam && compared.includes(rankParam) ? rankParam : storeId
@@ -106,11 +110,23 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
       limit,
       minQuantity: metric === 'MARGIN_PERCENT' ? minQuantity : 0,
       filter,
+      brands,
+      suppliers: supplierCodes,
       compared,
       rankStore,
     },
     valid && !overview.isPending,
   )
+
+  // Wybrane marki zostają na liście, nawet gdy w nowym okresie ich nie ma, żeby dało się je odznaczyć.
+  const brandOptions = useMemo(() => {
+    const known = report.data?.brands ?? []
+    const names = new Set(known.map((brand) => brand.name))
+    return [
+      ...brands.filter((brand) => !names.has(brand)).map((brand) => ({ value: brand, label: brand })),
+      ...known.map((brand) => ({ value: brand.name, label: brand.name, hint: `${brand.articleCount} art.` })),
+    ]
+  }, [report.data?.brands, brands])
 
   const storeOptions = [
     { value: storeId, label: 'Ten sklep' },
@@ -187,6 +203,25 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
             placeholder={
               nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
             }
+          />
+          <MultiComboboxField
+            label="Marka"
+            description="Marka z kartoteki. Ta sama marka bywa zapisana na kilka sposobów, wybierz wszystkie."
+            options={brandOptions}
+            value={brands}
+            onChange={(next) => update({ marka: next })}
+            placeholder={report.data ? 'Szukaj marki…' : 'Wczytuję marki…'}
+          />
+          <MultiComboboxField
+            label="Dostawca"
+            description="Ostatni dostawca artykułu z przyjęć PZ. Puste = wszyscy."
+            options={(suppliers.data ?? []).map((supplier) => ({
+              value: supplier.code,
+              label: `${supplier.code} ${supplier.name}`,
+            }))}
+            value={supplierCodes}
+            onChange={(next) => update({ dostawca: next })}
+            placeholder={suppliers.data?.length === 0 ? 'Brak przyjęć PZ' : 'Szukaj po kodzie albo nazwie…'}
           />
           {(partners.data?.length ?? 0) > 0 && (
             <div className="flex flex-wrap items-start gap-3">

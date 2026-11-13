@@ -32,7 +32,8 @@ public class TopSalesController {
 
     /**
      * Top za okres {@code from}-{@code to}: {@code limit} najlepszych artykułów w każdej pozycji poziomu {@code level}.
-     * {@code nomenclatures} (powtarzane, kody dowolnego poziomu) zawęża raport, {@code compareStores} dokłada sklepy
+     * {@code nomenclatures} (powtarzane, kody dowolnego poziomu), {@code brands} (marki z kartoteki) i {@code suppliers}
+     * (kody ostatniego dostawcy z przyjęć PZ) zawężają raport, {@code compareStores} dokłada sklepy
      * zaprzyjaźnione, a {@code rankStore} wskazuje, z którego sklepu jest ranking (domyślnie {@code storeId}).
      */
     @GetMapping
@@ -44,10 +45,12 @@ public class TopSalesController {
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "0") BigDecimal minQuantity,
             @RequestParam(required = false) List<String> nomenclatures,
+            @RequestParam(required = false) List<String> brands,
+            @RequestParam(required = false) List<String> suppliers,
             @RequestParam(required = false) List<UUID> compareStores,
             @RequestParam(required = false) UUID rankStore) {
-        return topSalesService.report(storeId, from, to, metric, level, limit, minQuantity, nomenclatures,
-                compareStores, rankStore);
+        return topSalesService.report(storeId, from, to, metric, level, limit, minQuantity, nomenclatures, brands,
+                suppliers, compareStores, rankStore);
     }
 
     /** Sklepy zaprzyjaźnione do porównania. */
