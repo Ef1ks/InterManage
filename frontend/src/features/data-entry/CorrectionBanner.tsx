@@ -309,7 +309,7 @@ function MacroDialog({
   invoiceId: string | null
   deliveries: Delivery[]
   hasBeforeRows: boolean
-  /** Korekta bazy SCA PR: protokół typu 10 zamiast 8. */
+  /** Korekta bazy SCA PR: protokół typu 9 zamiast 8. */
   fromBase: boolean
   rows: DataEntryRow[]
   open: boolean

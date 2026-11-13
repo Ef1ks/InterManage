@@ -601,8 +601,8 @@ const CORRECTION_SCREEN = {
   typeField: 'lstZ2_TypeProtocole_TxtBox',
   /** 8 = korekta dostawy, błąd dostawcy. */
   supplierErrorType: '8',
-  /** 10 = korekta dostawy z bazy (SCA PR, dostawca 538). */
-  baseErrorType: '10',
+  /** 9 = korekta dostawy z bazy (SCA PR, dostawca 538). */
+  baseErrorType: '9',
   dueDateField: 'txdZ6_DateEcheance_TxtBox',
   approveButton: 'btnB4_Valider_LnkBouton',
   createText: 'Utworzy',
