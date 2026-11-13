@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794552589.769137,
-    "seen": 1794552638.2278247,
-    "ast_hash": "a0c00f7f54374832dfb76bd98fb24b6a",
+    "mtime": 1794561981.2947412,
+    "seen": 1794562031.3932524,
+    "ast_hash": "a8de7acd236a1b172683dfc40e8aa4dd",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1302,9 +1302,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DocumentImportIntegrationTests.java": {
-    "mtime": 1794310619.066676,
-    "seen": 1794310902.9444897,
-    "ast_hash": "88b81f84a81f7b1b15914f70641c6578",
+    "mtime": 1794564023.3469565,
+    "seen": 1794564123.319425,
+    "ast_hash": "f9a49d1729ca3847fc5daffef7666be9",
     "semantic_hash": ""
   },
   "frontend/src/components/FileDropZone.tsx": {
@@ -2340,9 +2340,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/component/DocumentReportParser.java": {
-    "mtime": 1793097229.8865018,
-    "seen": 1793098001.8975291,
-    "ast_hash": "e338a6a6a7ec3286b0a672f5b6704a11",
+    "mtime": 1794564006.0808103,
+    "seen": 1794564123.1798913,
+    "ast_hash": "e07ea11eaf3cf4101c5637d126dc9d92",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/controller/DeliveryReportController.java": {
@@ -2424,9 +2424,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/dto/DocumentLineRow.java": {
-    "mtime": 1793097229.8906755,
-    "seen": 1793098001.8975291,
-    "ast_hash": "bdfb44678dbfaa8b4a2749a99e79c74b",
+    "mtime": 1794563999.257351,
+    "seen": 1794564123.184207,
+    "ast_hash": "4012016a7d84446a60cf5dca77bb4cbe",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/dto/DocumentPage.java": {
@@ -7722,15 +7722,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/CorrectionBanner.tsx": {
-    "mtime": 1794550953.9084997,
-    "seen": 1794551105.7612798,
-    "ast_hash": "bede522f9bf818b0784a2a237af8b09a",
+    "mtime": 1794561952.6647143,
+    "seen": 1794562031.3238978,
+    "ast_hash": "80afc2cd61e92d7b86250a2d7ae6df14",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/correction-macro.ts": {
-    "mtime": 1794550942.0154996,
-    "seen": 1794551105.7649474,
-    "ast_hash": "22698a1a656ee2d8a9f71c92909c59fd",
+    "mtime": 1794561958.0691066,
+    "seen": 1794562031.3269024,
+    "ast_hash": "2717ce0203240e7fa39e1dd2d8a29247",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/transfer-macro.ts": {
@@ -7986,9 +7986,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794550939.6367874,
-    "seen": 1794551105.766501,
-    "ast_hash": "0050616d7bdbc9f2fdf55a34137ed86e",
+    "mtime": 1794561891.2510948,
+    "seen": 1794562031.3279026,
+    "ast_hash": "1c0986be48f003f95dca98a5c9929895",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {

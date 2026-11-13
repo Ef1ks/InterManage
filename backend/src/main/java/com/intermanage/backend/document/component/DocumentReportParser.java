@@ -10,13 +10,11 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -98,7 +96,7 @@ public class DocumentReportParser {
         private int totalLines;
         private final List<DocumentLineRow> lines = new ArrayList<>();
         private final Map<String, DocumentLineRow> headerByDocument = new HashMap<>();
-        private final Set<String> seenLines = new HashSet<>();
+        private final Map<String, DocumentLineRow> seenLines = new HashMap<>();
         private final Map<String, Integer> skipped = new LinkedHashMap<>();
         private final List<String> errors = new ArrayList<>();
         private int errorCount;
@@ -128,7 +126,12 @@ public class DocumentReportParser {
                 }
                 DocumentLineRow line = toLine(type, cells);
                 String document = type.name() + " " + line.documentNumber();
-                if (!seenLines.add(document + "/" + line.lineKey())) {
+                DocumentLineRow previous = seenLines.putIfAbsent(document + "/" + line.lineKey(), line);
+                if (previous != null) {
+                    if (previous.sameExceptSupplierName(line)) {
+                        // Podwójny wiersz z drugą nazwą tego samego kodu dostawcy: zostaje pierwszy.
+                        return;
+                    }
                     throw new IllegalArgumentException("linia " + line.lineNumber() + " z ITM8 " + line.itm8()
                             + " dokumentu " + line.documentNumber() + " (" + type.singular().toLowerCase(Locale.ROOT)
                             + ") występuje w pliku więcej niż raz");

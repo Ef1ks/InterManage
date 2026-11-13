@@ -37,4 +37,17 @@ public record DocumentLineRow(
     public String lineKey() {
         return lineNumber + "/" + itm8;
     }
+
+    /**
+     * Ta sama linia różniąca się tylko nazwą dostawcy: gdy kod dostawcy ma w systemie sklepu dwie nazwy, raport
+     * podwaja wiersz (PPP 240490000005 z 12.10.2024, kod 90: NORIMPEX i LACOSTA).
+     */
+    public boolean sameExceptSupplierName(DocumentLineRow other) {
+        return equals(new DocumentLineRow(other.type, other.documentNumber, other.documentDate,
+                other.supplierDocumentNumber, other.lineNumber, other.supplierCode, supplierName,
+                other.nomenclatureCode, other.nomenclatureName, other.itm8, other.ean, other.name, other.brand,
+                other.unit, other.quantity, other.purchasePrice, other.salePriceCurrent, other.salePriceDocument,
+                other.purchaseValue, other.saleValueGross, other.saleValueNet, other.vatRate, other.vatValue,
+                other.marginValue, other.marginPercent));
+    }
 }

@@ -231,6 +231,14 @@ class DocumentImportIntegrationTests {
         upload(owner, report(STORE_NUMBER, line("PZ", number, "", 1, "1", "1", "1"), line("PZ", number, "", 1, "2", "1", "2")))
                 .andExpect(status().isBadRequest());
 
+        // Kod dostawcy z dwiema nazwami: raport podwaja linię, różni się tylko nazwa, więc zostaje pierwsza.
+        String doubled = docNumber();
+        upload(owner, report(STORE_NUMBER, withSupplier(line("PPP", doubled, "", 1, "12", "0", "0"), "90", "NORIMPEX SP Z O.O."),
+                withSupplier(line("PPP", doubled, "", 1, "12", "0", "0"), "90", "LACOSTA SP Z O.O.")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalLines").value(2))
+                .andExpect(jsonPath("$.savedLines").value(1));
+
         List<String[]> rows = reportRows(STORE_NUMBER, 5, List.<String[]>of(line("PZ", docNumber(), "", 1, "1", "1", "1")));
         upload(owner, workbook(rows)).andExpect(status().isBadRequest());
 
