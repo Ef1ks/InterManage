@@ -69,7 +69,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * spoza bazy przywozi ten sam towar pod własnym ITM8. Przyjęcie ze statusem wyjaśniania zostaje w raporcie bez
  * względu na datę. Przyjęcie, w którym każdy taki artykuł był najwyżej {@value #INCIDENT_DAYS} dni wcześniej
  * w incydencie zamówienia do bazy (baza go nie dowiozła), trafia do osobnej kategorii. Minimalna marża z ustawień nie decyduje o wejściu do raportu, tylko
- * oznacza linie z marżą na bonie (po korektach, % od sprzedaży netto) poniżej niej i liczy, o ile za drogo. Raport
+ * oznacza linie z marżą na bonie (po korektach, % od sprzedaży brutto) poniżej niej i liczy, o ile za drogo. Raport
  * liczy się w locie, więc korekta przypięta do przyjęcia od razu go zmienia, a status wyjaśniania z dostawcą zostaje
  * przy przyjęciu.
  */
@@ -384,14 +384,17 @@ public class PriceCheckService {
             BigDecimal purchaseValue = line.purchaseValue() != null ? line.purchaseValue()
                     : line.purchasePrice().multiply(quantity).setScale(2, RoundingMode.HALF_UP);
             BigDecimal saleNet = line.saleValueNet();
-            boolean hasSale = saleNet != null && saleNet.signum() > 0;
+            BigDecimal saleGross = line.saleValueGross();
+            // Marża od sprzedaży brutto, jak w Mercalys (Margin).
+            boolean hasSale = saleNet != null && saleNet.signum() > 0 && saleGross != null && saleGross.signum() > 0;
             BigDecimal marginPercent = hasSale ? saleNet.subtract(purchaseValue).multiply(HUNDRED)
-                    .divide(saleNet, 2, RoundingMode.HALF_UP) : null;
+                    .divide(saleGross, 2, RoundingMode.HALF_UP) : null;
             BigDecimal salePriceNet = hasSale ? saleNet.divide(quantity, 4, RoundingMode.HALF_UP) : null;
             boolean belowMinimum = minMargin != null && marginPercent != null
                     && marginPercent.compareTo(minMargin) < 0;
-            BigDecimal targetPurchasePrice = minMargin != null && salePriceNet != null
-                    ? salePriceNet.multiply(HUNDRED.subtract(minMargin)).divide(HUNDRED, 4, RoundingMode.HALF_UP)
+            BigDecimal targetPurchasePrice = minMargin != null && hasSale
+                    ? saleNet.subtract(saleGross.multiply(minMargin).divide(HUNDRED, 6, RoundingMode.HALF_UP))
+                            .divide(quantity, 4, RoundingMode.HALF_UP)
                     : null;
             BigDecimal excessValue = belowMinimum
                     ? line.purchasePrice().subtract(targetPurchasePrice).multiply(quantity)

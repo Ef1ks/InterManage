@@ -23,6 +23,7 @@ import {
 } from '@/features/sales/api'
 import { type DateRange, formatRange } from '@/features/sales/periods'
 import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
+import { marginShare } from '@/lib/margin'
 import type { ArticleDelivery, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -81,8 +82,8 @@ type Series = {
 const averagePrice = (figures: SalesFigures) =>
   figures.quantity > 0 ? figures.saleValueGross / figures.quantity : null
 
-const marginPercent = (figures: SalesFigures) =>
-  figures.marginValue != null && figures.saleValueNet !== 0 ? (figures.marginValue / figures.saleValueNet) * 100 : null
+/** % marży od sprzedaży brutto (`lib/margin`). */
+const marginPercent = (figures: SalesFigures) => marginShare(figures.marginValue, figures.saleValueGross)
 
 /**
  * Okno z wykresem sprzedaży wiersza raportu. Przy artykule na górze jego bieżące dane z kartoteki (stan, rotacja,

@@ -21,7 +21,7 @@ const MODES: { value: MeatReportMode; label: string }[] = [
 
 /**
  * Porównanie sklepów jak w arkuszu: cena zakupu netto za kg z WZ, cena sprzedaży brutto za kg z dnia dostawy i marża
- * (od sprzedaży netto). Stan w adresie: `od`, `do`, `tryb=srednia`, `sklep` (powtarzany).
+ * (od sprzedaży brutto). Stan w adresie: `od`, `do`, `tryb=srednia`, `sklep` (powtarzany).
  */
 export function MeatReportView({ store }: { store: StoreSummary }) {
   const { data: me } = useMe()
@@ -178,7 +178,7 @@ const TABLES: { kind: Kind; title: string; legend: [string, string]; note: strin
     kind: 'margin',
     title: 'Marża',
     legend: ['najniższa marża', 'najwyższa marża'],
-    note: 'Marża od sprzedaży netto: (sprzedaż bez VAT − zakup) ÷ sprzedaż bez VAT.',
+    note: 'Marża od sprzedaży brutto: (sprzedaż bez VAT − zakup) ÷ sprzedaż z VAT.',
   },
 ]
 
@@ -326,12 +326,14 @@ function summarize(kind: Kind, report: MeatReport): (number | null)[] {
       return average(sold.map(({ cell }) => cell.salePrice))
     }
     let net = 0
+    let gross = 0
     let cost = 0
     sold.forEach(({ row, cell }) => {
       net += cell.salePrice! / (1 + row.vatPercent / 100)
+      gross += cell.salePrice!
       cost += cell.purchasePrice!
     })
-    return net > 0 ? (net - cost) / net : null
+    return gross > 0 ? (net - cost) / gross : null
   })
 }
 

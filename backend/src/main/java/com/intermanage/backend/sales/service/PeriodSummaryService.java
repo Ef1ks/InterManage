@@ -319,8 +319,8 @@ public class PeriodSummaryService {
     private static Figures figures(Sums sums, BigDecimal storeGross) {
         BigDecimal afterLosses = sums.margin().subtract(sums.loss());
         return new Figures(sums.saleNet(), sums.saleGross(), sums.cost(), sums.margin(),
-                Percent.of(sums.margin(), sums.saleNet()), sums.loss(), Percent.of(sums.loss(), sums.saleGross()),
-                afterLosses, Percent.of(afterLosses, sums.saleNet()), Percent.of(sums.saleGross(), storeGross));
+                Percent.of(sums.margin(), sums.saleGross()), sums.loss(), Percent.of(sums.loss(), sums.saleGross()),
+                afterLosses, Percent.of(afterLosses, sums.saleGross()), Percent.of(sums.saleGross(), storeGross));
     }
 
     private record Sums(BigDecimal saleNet, BigDecimal saleGross, BigDecimal cost, BigDecimal margin,

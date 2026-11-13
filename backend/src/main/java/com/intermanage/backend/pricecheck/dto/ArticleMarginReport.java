@@ -31,7 +31,7 @@ public record ArticleMarginReport(
 
     /**
      * Artykuł. {@code salePrice}: aktualna cena zwykła brutto na kasie, {@code marginPercent}: marża z niej (% od
-     * sprzedaży netto) przy cenie zakupu {@code purchasePrice}; {@code targetSalePrice}: cena brutto dająca marżę
+     * sprzedaży brutto) przy cenie zakupu {@code purchasePrice}; {@code targetSalePrice}: cena brutto dająca marżę
      * wymaganą przy tej cenie zakupu, {@code targetPurchasePrice}: cena zakupu dająca marżę wymaganą przy cenie zwykłej.
      * {@code promoPrice} / {@code promoMargin}: promocja trwająca dziś i marża na niej. {@code cadencier}: aktywny
      * w cadencier z CENA_CAD ({@code cadencierPrice}), marża ustalona przez centralę.

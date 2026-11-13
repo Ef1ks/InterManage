@@ -113,7 +113,7 @@ export function ArticleMarginsReport({ storeId }: { storeId: string }) {
       mode="low"
       query={query}
       title="Artykuły z za niską marżą"
-      intro={`Artykuły, które żyją: sprzedane albo przyjęte na PZ w ostatnich 3 miesiącach (aktywność i stan z kartoteki nic tu nie znaczą), z marżą poniżej ${maxMargin}%. Marża jest liczona od sprzedaży netto, z aktualnej ceny zwykłej na kasie i ceny zakupu z ostatniego przyjęcia PZ z ostatniego roku (bez niego z kartoteki). Marża wymagana na nomenklaturze jest obok do porównania. Sprawdzony artykuł oznacz jako zweryfikowany: przechodzi do osobnej zakładki i wraca do kontroli przy zmianie ceny sprzedaży albo zakupu i przy kolejnej dostawie. Artykuły aktywne w cadencier z ceną cadencier są w osobnej zakładce, bo marżę ustala im centrala.`}
+      intro={`Artykuły, które żyją: sprzedane albo przyjęte na PZ w ostatnich 3 miesiącach (aktywność i stan z kartoteki nic tu nie znaczą), z marżą poniżej ${maxMargin}%. Marża jest liczona od sprzedaży brutto, z aktualnej ceny zwykłej na kasie i ceny zakupu z ostatniego przyjęcia PZ z ostatniego roku (bez niego z kartoteki). Marża wymagana na nomenklaturze jest obok do porównania. Sprawdzony artykuł oznacz jako zweryfikowany: przechodzi do osobnej zakładki i wraca do kontroli przy zmianie ceny sprzedaży albo zakupu i przy kolejnej dostawie. Artykuły aktywne w cadencier z ceną cadencier są w osobnej zakładce, bo marżę ustala im centrala.`}
       filterParams={['marza']}
       filters={
         <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -151,7 +151,7 @@ export function CurrentPromotionsReport({ storeId }: { storeId: string }) {
       mode="promo"
       query={query}
       title="Aktualne promocje"
-      intro="Promocje trwające dziś (z listy promocji i z plików kasy) z marżą na cenie promocyjnej, żeby wyłapać te, które są za tanie. Cena zakupu z ostatniego przyjęcia PZ z ostatniego roku, bez niego z kartoteki; marża od sprzedaży netto. Raport pomija artykuły z gazetki (utrzymanie cen z centrali), bo na te promocje sklep nie ma wpływu, a artykuły aktywne w cadencier są w osobnej zakładce."
+      intro="Promocje trwające dziś (z listy promocji i z plików kasy) z marżą na cenie promocyjnej, żeby wyłapać te, które są za tanie. Cena zakupu z ostatniego przyjęcia PZ z ostatniego roku, bez niego z kartoteki; marża od sprzedaży brutto. Raport pomija artykuły z gazetki (utrzymanie cen z centrali), bo na te promocje sklep nie ma wpływu, a artykuły aktywne w cadencier są w osobnej zakładce."
       itemFilter={filter.matches}
       filterParams={['marza']}
       filters={

@@ -20,7 +20,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
- * Ustawienia weryfikacji cen w sklepie: minimalna akceptowana marża (% od sprzedaży netto) towaru z bazy kupionego
+ * Ustawienia weryfikacji cen w sklepie: minimalna akceptowana marża (% od sprzedaży brutto) towaru z bazy kupionego
  * u innego dostawcy. Pusta = raport niczego nie zgłasza. Ustawia ją osoba z {@code SALES:EDIT}.
  */
 @Entity

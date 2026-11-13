@@ -131,7 +131,7 @@ export function StoreSettingsPage() {
                     Marża wymagana
                   </h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Jaką marżę (% od sprzedaży netto) chcemy osiągać na nomenklaturze: na całym rejonie albo osobno na
+                    Jaką marżę (% od sprzedaży brutto) chcemy osiągać na nomenklaturze: na całym rejonie albo osobno na
                     rodzinie i podrodzinie. We wprowadzaniu danych marża artykułu poniżej progu jest czerwona, a kolumna
                     „Cena sug.” podaje cenę sprzedaży, przy której artykuł go osiąga, zaokrągloną według przedziałów
                     poniżej (artykuł z CENA_CAD ma w niej cenę cadencier).

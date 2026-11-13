@@ -46,7 +46,8 @@ class CounterReportTests {
 
         CounterReport.Subfamily salads = deli.families().getFirst().subfamilies().getFirst();
         assertThat(salads.name()).isEqualTo("SALATKI");
-        assertThat(salads.values().get(1).marginPercent()).isEqualByComparingTo("50");
+        // Marża od sprzedaży brutto: 20 z 42.
+        assertThat(salads.values().get(1).marginPercent()).isEqualByComparingTo("47.62");
         // Surówek drugi sklep nie sprzedał.
         assertThat(deli.families().getFirst().subfamilies().get(1).values().get(1)).isNull();
         assertThat(report.total().get(1).saleValueGross()).isEqualByComparingTo("42");

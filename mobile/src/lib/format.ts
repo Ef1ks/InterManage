@@ -43,9 +43,9 @@ export function addDays(iso: string, days: number) {
 
 export const withoutLeadingZeros = (code: string | null | undefined) => code?.replace(/^0+/, '') ?? ''
 
-/** Marża % od sprzedaży netto, jak w aplikacji. */
+/** Marża % od sprzedaży brutto, jak w aplikacji. */
 export function marginPercent(salePriceGross: number | null, purchaseNet: number | null, vatPercent: number | null) {
   if (salePriceGross == null || purchaseNet == null || vatPercent == null || salePriceGross <= 0) return null
   const net = salePriceGross / (1 + vatPercent / 100)
-  return ((net - purchaseNet) / net) * 100
+  return ((net - purchaseNet) / salePriceGross) * 100
 }

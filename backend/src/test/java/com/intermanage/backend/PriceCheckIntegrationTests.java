@@ -117,7 +117,7 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[0].baseDifferenceValue").value(4.05))
                 .andExpect(jsonPath("$.deliveries[0].lines.length()").value(2))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].itm8").value(CADENCIER_ITEM))
-                .andExpect(jsonPath("$.deliveries[0].lines[0].marginPercent").value(5.41))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].marginPercent").value(5.15))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].targetPurchasePrice").value(nullValue()))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].cadencierPrice").value(4.49))
                 .andExpect(jsonPath("$.deliveries[0].lines[1].itm8").value(BASE_ITEM))
@@ -135,9 +135,9 @@ class PriceCheckIntegrationTests {
         mvc.perform(get(url(storeId)).cookie(owner))
                 .andExpect(jsonPath("$.deliveries[0].belowMinimumCount").value(2))
                 // (3,50 - 3,70 * 80%) * 10 = 5,40 i (3,80 - 4,00 * 80%) * 5 = 3,00
-                .andExpect(jsonPath("$.deliveries[0].excessValue").value(8.4))
+                .andExpect(jsonPath("$.deliveries[0].excessValue").value(8.97))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].belowMinimum").value(true))
-                .andExpect(jsonPath("$.deliveries[0].lines[0].targetPurchasePrice").value(2.96));
+                .andExpect(jsonPath("$.deliveries[0].lines[0].targetPurchasePrice").value(2.923));
 
         // Status wyjaśniania: zgłoszone dostawcy, cofnięcie wraca do "do wyjaśnienia", przywrócenie.
         String history = mvc.perform(post(url(storeId) + "/documents/" + delivery + "/reviews").cookie(owner)
@@ -157,7 +157,7 @@ class PriceCheckIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(reviewId));
 
-        // Korekta obniża cenę artykułu z cadencier: zostaje w raporcie, ale marża (21,62%) jest już w normie.
+        // Korekta obniża cenę artykułu z cadencier: zostaje w raporcie, ale marża (20,59% od sprzedaży brutto) jest już w normie.
         String correction = insertDocument(storeId, documentImport, "WZ", "WZ0001", today.minusDays(5), "100");
         insertLine(correction, 1, CADENCIER_ITEM, "100", "0", "-6.00", "0");
         mvc.perform(post("/api/stores/" + storeId + "/documents/pz/" + delivery + "/corrections").cookie(owner)
@@ -170,7 +170,7 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[0].belowMinimumCount").value(1))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].itm8").value(BASE_ITEM))
                 .andExpect(jsonPath("$.deliveries[0].lines[1].belowMinimum").value(false))
-                .andExpect(jsonPath("$.deliveries[0].excessValue").value(3.0));
+                .andExpect(jsonPath("$.deliveries[0].excessValue").value(3.2));
 
         // Starsza lista jest odrzucana, nowsza bez jednego artykułu go usuwa i zawęża raport.
         uploadCadencier(storeId, owner, storeNumber, "27/10/2026  15:02:59", CADENCIER_ITEM)

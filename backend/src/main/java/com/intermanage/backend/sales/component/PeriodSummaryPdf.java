@@ -320,9 +320,9 @@ public class PeriodSummaryPdf {
             legend.setSpacingBefore(s(6));
             Phrase phrase = new Phrase();
             phrase.add(new Phrase("Jak czytać: ", font(bold, s(6.5f), INK)));
-            phrase.add(new Phrase("Kwoty w tabeli w pełnych złotych. Marża % od sprzedaży netto. Straty to "
+            phrase.add(new Phrase("Kwoty w tabeli w pełnych złotych. Marża % od sprzedaży brutto. Straty to "
                     + "likwidacje w cenach zakupu, % od sprzedaży brutto. Marża po stratach = marża − straty, % od "
-                    + "sprzedaży netto. Udział = sprzedaż brutto rejonu w sprzedaży brutto sklepu. Budżet marży i max "
+                    + "sprzedaży brutto. Udział = sprzedaż brutto rejonu w sprzedaży brutto sklepu. Budżet marży i max "
                     + "strat ustawia się w Ustawieniach sklepu: na zielono procent w budżecie, na czerwono marża "
                     + "poniżej budżetu i straty powyżej limitu.", font(regular, s(6.5f), MUTED)));
             PdfPCell cell = new PdfPCell(phrase);

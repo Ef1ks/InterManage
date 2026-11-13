@@ -110,8 +110,8 @@ function ArticleView({ storeId, itm8 }: { storeId: string; itm8: string }) {
                 label="Marża"
                 value={money(history.data.total.marginValue)}
                 hint={
-                  history.data.total.marginValue != null && history.data.total.saleValueNet > 0
-                    ? percent((history.data.total.marginValue / history.data.total.saleValueNet) * 100)
+                  history.data.total.marginValue != null && history.data.total.saleValueGross > 0
+                    ? percent((history.data.total.marginValue / history.data.total.saleValueGross) * 100)
                     : null
                 }
               />
@@ -198,7 +198,7 @@ function ArticleSummary({
           value={money(article.purchasePrice)}
           hint={lastPurchase != null ? `ostatnia dostawa ${money(lastPurchase)}` : null}
         />
-        <Tile label="Marża" value={percent(margin)} hint="od sprzedaży netto" />
+        <Tile label="Marża" value={percent(margin)} hint="od sprzedaży brutto" />
         <Tile label="Rotacja" value={quantity(article.rotation)} hint="tygodniowo" />
         {article.cadencierPrice != null && article.cadencierPrice > 0 && (
           <Tile label="Cena cadencier" value={money(article.cadencierPrice)} />

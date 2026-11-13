@@ -362,7 +362,7 @@ public class CounterReportPdf {
         Phrase phrase = new Phrase();
         phrase.add(new Phrase("Jak czytać: ", font(bold, 6.5f, INK)));
         phrase.add(new Phrase("Kwoty w pełnych złotych, ilość w sztukach i kilogramach razem. Zakup to koszt FIFO "
-                + "sprzedanego towaru. Marża = sprzedaż netto − zakup FIFO, % od sprzedaży netto. Udział = sprzedaż "
+                + "sprzedanego towaru. Marża = sprzedaż netto − zakup FIFO, % od sprzedaży brutto. Udział = sprzedaż "
                 + "brutto pozycji w sprzedaży brutto wybranych rejonów lady w sklepie."
                 + (compared ? " Na zielono najwyższa, na czerwono najniższa marża % w wierszu." : "")
                 + " „–” = brak sprzedaży w sklepie.", font(regular, 6.5f, MUTED)));

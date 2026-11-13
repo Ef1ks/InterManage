@@ -220,7 +220,7 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
                   <NumberHead>Sprzedaż netto</NumberHead>
                   <NumberHead>Sprzedaż brutto</NumberHead>
                   <NumberHead>Zakup FIFO</NumberHead>
-                  <NumberHead hint="% od sprzedaży netto · budżet">Marża</NumberHead>
+                  <NumberHead hint="% od sprzedaży brutto · budżet">Marża</NumberHead>
                   <NumberHead hint="likwidacje · % od brutto · max">Straty</NumberHead>
                   <NumberHead hint="marża − straty">Marża po stratach</NumberHead>
                   <NumberHead hint="w sprzedaży sklepu" className="pr-4">
@@ -247,8 +247,8 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
       )}
 
       <p className="mt-3 max-w-4xl text-xs leading-relaxed text-muted-foreground">
-        Marża w % od sprzedaży netto. Straty to likwidacje w cenach zakupu, w % od sprzedaży brutto. Marża po stratach =
-        marża − straty, w % od sprzedaży netto. Budżet marży i max strat ustawia się w Ustawieniach sklepu. Rejon
+        Marża w % od sprzedaży brutto. Straty to likwidacje w cenach zakupu, w % od sprzedaży brutto. Marża po stratach =
+        marża − straty, w % od sprzedaży brutto. Budżet marży i max strat ustawia się w Ustawieniach sklepu. Rejon
         rozwija się do rodzin, podrodzin i artykułów: sprzedaż według nomenklatury artykułu z kartoteki, straty według
         nomenklatury linii likwidacji.
       </p>

@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.Margin;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.InvoiceXml;
@@ -677,21 +678,20 @@ public class DataEntryService {
     }
 
     /**
-     * Marża % od sprzedaży netto: (sprzedaż netto − zakup netto sztuki) / sprzedaż netto. Zakup sztuki: cena z
-     * faktury za jedną sztukę z kolumny Ilość bez względu na jednostkę (szt., op., pak, kg); waga nie zmienia marży.
+     * Marża % od sprzedaży brutto ({@link Margin}): (sprzedaż netto − zakup netto sztuki) / sprzedaż brutto. Zakup
+     * sztuki: cena z faktury za jedną sztukę z kolumny Ilość bez względu na jednostkę (szt., op., pak, kg); waga nie
+     * zmienia marży.
      */
     static BigDecimal marginPercent(ExportRequest.Row row) {
         BigDecimal purchase = row.unitNet();
         if (purchase == null || row.salePrice() == null || row.salePrice().signum() <= 0 || row.vatPercent() == null) {
             return null;
         }
-        BigDecimal saleNet = row.salePrice().multiply(HUNDRED)
-                .divide(HUNDRED.add(row.vatPercent()), 6, RoundingMode.HALF_UP);
-        return saleNet.subtract(purchase).multiply(HUNDRED).divide(saleNet, 1, RoundingMode.HALF_UP);
+        return Margin.percent(row.salePrice(), row.vatPercent(), purchase, 1);
     }
 
     /**
-     * Cena sprzedaży brutto, przy której artykuł osiąga marżę wymaganą: zakup sztuki / (1 − marża) × (1 + VAT),
+     * Cena sprzedaży brutto, przy której artykuł osiąga marżę wymaganą (od sprzedaży brutto, {@link Margin#salePrice}),
      * w górę do grosza, potem do końcówki z przedziałów zaokrąglania. Artykuł z CENA_CAD ma ją jako cenę sugerowaną
      * (bez liczenia). Bez marży wymaganej albo bez ceny zakupu sztuki - pusta.
      */
@@ -709,9 +709,7 @@ public class DataEntryService {
         if (requiredMargin == null || purchase == null || row.vatPercent() == null) {
             return null;
         }
-        // Jedno dzielenie na końcu: pośrednie zaokrąglenie podbijałoby cenę o grosz (2,50 przy 30% i VAT 5% = 3,75).
-        return purchase.multiply(HUNDRED).multiply(HUNDRED.add(row.vatPercent()))
-                .divide(HUNDRED.subtract(requiredMargin).multiply(HUNDRED), 2, RoundingMode.CEILING);
+        return Margin.salePrice(purchase, row.vatPercent(), requiredMargin, 2, RoundingMode.CEILING);
     }
 
     private static String level(Map<String, String> names, String subfamily, int length) {

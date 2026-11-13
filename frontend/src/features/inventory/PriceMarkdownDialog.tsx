@@ -12,15 +12,15 @@ import { useCreatePriceMarkdown, useMarkdownPrices } from '@/features/inventory/
 import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
 import type { SalesArticle } from '@/lib/types'
+import { marginOf } from '@/lib/margin'
 import { cn } from '@/lib/utils'
 
 const percentFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 })
 
-/** Marża od sprzedaży netto przy cenie brutto (jak w ustawianiu promocji); bez ceny zakupu albo VAT-u nieznana. */
+/** Marża od sprzedaży brutto przy cenie brutto (jak w ustawianiu promocji); bez ceny zakupu albo VAT-u nieznana. */
 function marginAt(price: number | null, purchase: number | null, vatPercent: number | null) {
   if (price == null || price <= 0 || purchase == null || vatPercent == null) return null
-  const net = price / (1 + vatPercent / 100)
-  return ((net - purchase) / net) * 100
+  return marginOf(price, vatPercent, purchase)
 }
 
 /** Przycisk przy cenie sprzedaży na karcie artykułu. */
@@ -120,7 +120,7 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
         <Figure
           label="Marża teraz"
           value={marginNow != null ? `${percentFormat.format(marginNow)}%` : '–'}
-          note="od netto"
+          note="od brutto"
           negative={marginNow != null && marginNow < 0}
         />
       </dl>
@@ -148,7 +148,7 @@ function MarkdownForm({ storeId, article, onDone }: { storeId: string; article: 
         <Figure
           label="Marża po przecenie"
           value={margin != null ? `${percentFormat.format(margin)}%` : '–'}
-          note={purchase == null ? 'brak ceny zakupu' : 'od netto, z ostatniej dostawy'}
+          note={purchase == null ? 'brak ceny zakupu' : 'od brutto, z ostatniej dostawy'}
           negative={margin != null && margin < 0}
           strong
         />

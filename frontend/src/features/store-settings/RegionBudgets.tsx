@@ -24,7 +24,7 @@ function parse(text: string, min: number): number | null | undefined {
 }
 
 /**
- * Budżet rejonów do podsumowania sprzedaży i strat: docelowa marża (% od sprzedaży netto) i najwyższe straty
+ * Budżet rejonów do podsumowania sprzedaży i strat: docelowa marża (% od sprzedaży brutto) i najwyższe straty
  * (% od sprzedaży brutto). Rejony ułożone w grupach jak w raporcie; zapis wysyła tylko zmienione wiersze.
  */
 export function RegionBudgets({ storeId }: { storeId: string }) {
@@ -88,7 +88,7 @@ export function RegionBudgets({ storeId }: { storeId: string }) {
             <TableRow className="hover:bg-transparent">
               <TableHead className="pl-4">Rejon</TableHead>
               <TableHead className="w-36 text-right">
-                Marża %<span className="block text-xs font-normal text-muted-foreground">cel, od netto</span>
+                Marża %<span className="block text-xs font-normal text-muted-foreground">cel, od brutto</span>
               </TableHead>
               <TableHead className="w-36 pr-4 text-right">
                 Max straty %<span className="block text-xs font-normal text-muted-foreground">od brutto</span>

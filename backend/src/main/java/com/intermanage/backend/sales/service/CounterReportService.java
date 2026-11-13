@@ -270,7 +270,7 @@ public class CounterReportService {
                 Sum whole = total.stores[store];
                 result.add(sum == null ? null
                         : new Figures(sum.quantity, sum.cost, sum.gross, sum.net, sum.margin,
-                                Percent.of(sum.margin, sum.net),
+                                Percent.of(sum.margin, sum.gross),
                                 whole == null ? null : Percent.of(sum.gross, whole.gross)));
             }
             return result;

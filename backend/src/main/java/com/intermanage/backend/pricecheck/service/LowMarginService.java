@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.Margin;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.entity.DeliveryCorrection;
@@ -59,7 +60,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
  * Marże poza normą. Każde przyjęcie PZ z wybranego okresu (domyślnie {@value #PERIOD_DAYS} dni, najwyżej
- * {@value #MAX_PERIOD_DAYS}): artykuł trafia do raportu, gdy jego marża (% od sprzedaży netto, zakup po korektach) jest
+ * {@value #MAX_PERIOD_DAYS}): artykuł trafia do raportu, gdy jego marża (% od sprzedaży brutto, zakup po korektach) jest
  * o co najmniej próg niższa albo wyższa niż marża wymagana na jego nomenklaturze ({@link NomenclatureMarginService}).
  * Progi w punktach procentowych sklep ustawia sam ({@link LowMarginSettings}), domyślnie 5 w dół i 10 w górę.
  * <p>
@@ -307,12 +308,11 @@ public class LowMarginService {
             return null;
         }
         BigDecimal regular = regularPrice(article);
-        BigDecimal net = netOf(regular, article.getVatRate());
         BigDecimal price = value.divide(quantity, 4, RoundingMode.HALF_UP);
-        BigDecimal margin = marginOf(net, price);
+        BigDecimal margin = marginOf(regular, article.getVatRate(), price);
         BigDecimal promo = article.getCurrentPromoPrice();
         BigDecimal promoMargin = promo != null && promo.signum() > 0
-                ? marginOf(netOf(promo, article.getVatRate()), price) : null;
+                ? marginOf(promo, article.getVatRate(), price) : null;
         MarginDeviation deviation = null;
         BigDecimal target = null;
         BigDecimal excess = null;
@@ -322,7 +322,7 @@ public class LowMarginService {
             } else if (margin.compareTo(requiredMargin.add(highGap)) >= 0) {
                 deviation = MarginDeviation.HIGH;
             }
-            target = net.multiply(HUNDRED.subtract(requiredMargin)).divide(HUNDRED, 4, RoundingMode.HALF_UP);
+            target = targetPurchase(regular, article.getVatRate(), requiredMargin);
             excess = price.subtract(target).multiply(quantity).abs().setScale(2, RoundingMode.HALF_UP);
         }
         return new Line(article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
@@ -333,14 +333,14 @@ public class LowMarginService {
                 article.getCurrentPromoTo(), promoMargin);
     }
 
-    /** Cena netto z ceny brutto i stawki VAT w procentach. */
-    static BigDecimal netOf(BigDecimal gross, Short vatRate) {
-        return gross.multiply(HUNDRED).divide(HUNDRED.add(BigDecimal.valueOf(vatRate)), 6, RoundingMode.HALF_UP);
+    /** Marża % od sprzedaży brutto ({@link Margin}) przy cenie brutto {@code gross} i zakupie netto {@code purchase}. */
+    static BigDecimal marginOf(BigDecimal gross, Short vatRate, BigDecimal purchase) {
+        return Margin.percent(gross, BigDecimal.valueOf(vatRate), purchase, 2);
     }
 
-    /** Marża % od sprzedaży netto przy cenie zakupu netto {@code purchase}. */
-    static BigDecimal marginOf(BigDecimal net, BigDecimal purchase) {
-        return net.subtract(purchase).multiply(HUNDRED).divide(net, 2, RoundingMode.HALF_UP);
+    /** Najwyższa cena zakupu netto, przy której cena brutto {@code gross} daje marżę wymaganą. */
+    static BigDecimal targetPurchase(BigDecimal gross, Short vatRate, BigDecimal requiredMargin) {
+        return Margin.targetPurchase(gross, BigDecimal.valueOf(vatRate), requiredMargin);
     }
 
     /**

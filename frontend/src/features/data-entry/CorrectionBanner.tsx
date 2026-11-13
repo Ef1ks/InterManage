@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import type { DraftCorrection, DraftDelivery, DraftInvoice } from '@/store/dataEntryDraftSlice'
 
 import { useCorrectionBons, useCorrectionDeliveries } from './api'
-import { buildCorrectionMacro, planCorrectionMacro } from './correction-macro'
+import { buildCorrectionMacro, isBaseSeller, planCorrectionMacro } from './correction-macro'
 import { type DataEntryRow, serviceKind } from './rows'
 
 type Delivery = DraftDelivery
@@ -168,6 +168,7 @@ export function CorrectionBanner({
           invoiceId={invoice.id}
           deliveries={[delivery, ...extra]}
           hasBeforeRows={correction.hasBeforeRows}
+          fromBase={isBaseSeller(invoice.sellerNip)}
           rows={rows}
           open={macroOpen}
           onOpenChange={onMacroOpenChange}
@@ -298,6 +299,7 @@ function MacroDialog({
   invoiceId,
   deliveries,
   hasBeforeRows,
+  fromBase,
   rows,
   open,
   onOpenChange,
@@ -307,6 +309,8 @@ function MacroDialog({
   invoiceId: string | null
   deliveries: Delivery[]
   hasBeforeRows: boolean
+  /** Korekta bazy SCA PR: protokół typu 10 zamiast 8. */
+  fromBase: boolean
   rows: DataEntryRow[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -327,7 +331,7 @@ function MacroDialog({
   const copy = async () => {
     if (!plan) return
     try {
-      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso()))
+      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso(), fromBase))
     } catch {
       toast.error('Nie udało się skopiować makra do schowka')
       return

@@ -1,3 +1,5 @@
+import { marginOf } from '@/lib/margin'
+
 const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const percent = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
@@ -17,11 +19,10 @@ export function parsePrice(raw: string): number | null {
   return value > 0 ? value : null
 }
 
-/** Marża jak w całej aplikacji: od sprzedaży netto (brutto bez VAT); null, gdy brakuje którejś ceny. */
+/** Marża jak w całej aplikacji: zysk netto w ułamku sprzedaży brutto (`lib/margin`); null, gdy brakuje którejś ceny. */
 export function margin(purchase: number | null, saleGross: number | null, vatPercent: number): number | null {
   if (purchase == null || saleGross == null || saleGross <= 0) return null
-  const saleNet = saleGross / (1 + vatPercent / 100)
-  return (saleNet - purchase) / saleNet
+  return marginOf(saleGross, vatPercent, purchase) / 100
 }
 
 const MAX_IMAGE_SIDE = 2400

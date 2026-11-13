@@ -18,7 +18,7 @@ public record CounterReport(LocalDate from, LocalDate to, List<String> regionCod
     }
 
     /**
-     * Sumy pozycji w sklepie. Marża % od sprzedaży netto, udział = sprzedaż brutto pozycji w sprzedaży brutto
+     * Sumy pozycji w sklepie. Marża % od sprzedaży brutto, udział = sprzedaż brutto pozycji w sprzedaży brutto
      * wybranych rejonów lady w sklepie (porównuje strukturę sklepów różnej wielkości).
      */
     public record Figures(BigDecimal quantity, BigDecimal costValue, BigDecimal saleValueGross,

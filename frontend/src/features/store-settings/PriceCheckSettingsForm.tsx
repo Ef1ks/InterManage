@@ -22,7 +22,7 @@ function parse(text: string): number | null | undefined {
   return value < -100 || value > 100 ? undefined : value
 }
 
-/** Minimalna akceptowana marża (% od sprzedaży netto) do raportu zakupu bazowego poza bazą. */
+/** Minimalna akceptowana marża (% od sprzedaży brutto) do raportu zakupu bazowego poza bazą. */
 export function PriceCheckSettingsForm({ storeId }: { storeId: string }) {
   const { data, isError, refetch } = usePriceCheckSettings(storeId)
 
@@ -78,7 +78,7 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: PriceC
           inputMode="decimal"
           autoComplete="off"
           error={errors.minMarginPercent?.message}
-          hint="Od sprzedaży netto. Linie poniżej minimum są w raporcie podświetlone; puste pole wyłącza ocenę."
+          hint="Od sprzedaży brutto. Linie poniżej minimum są w raporcie podświetlone; puste pole wyłącza ocenę."
           {...register('minMarginPercent', {
             validate: (value) =>
               parse(value) !== undefined || 'Liczba od -100 do 100, najwyżej dwa miejsca po przecinku',

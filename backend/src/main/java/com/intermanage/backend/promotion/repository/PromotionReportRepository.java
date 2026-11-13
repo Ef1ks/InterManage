@@ -56,7 +56,7 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
 
     /**
      * Artykuły, które w dniach {@code dataFrom}-{@code dataTo} były w promocji (z listy, z gazetki albo rozpoznanej ze
-     * sprzedaży) i na których w sumie z tych dni marża wyniosła najwyżej {@code maxMargin} sprzedaży netto.
+     * sprzedaży) i na których w sumie z tych dni marża wyniosła najwyżej {@code maxMargin} sprzedaży brutto.
      */
     @Query(value = "with leaflet as (" + PromoLeafletRepository.ARTICLE_PERIODS + "), days as (" + SALE_DAYS + "), "
             + PROMO_FLAGS + """
@@ -80,7 +80,7 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
             from promo_days x
             join days d on d.itm8 = x.itm8 and d.sale_date = x.sale_date
             group by d.itm8
-            having sum(d.net) > 0 and sum(d.margin) <= :maxMargin * sum(d.net)
+            having sum(d.gross) > 0 and sum(d.margin) <= :maxMargin * sum(d.gross)
             """, nativeQuery = true)
     List<String> findLowMarginPromotionArticles(UUID storeId, LocalDate dataFrom, LocalDate dataTo,
             LocalDate referenceFrom, BigDecimal priceFactor, int minReferenceDays, BigDecimal maxMargin);

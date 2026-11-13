@@ -504,7 +504,7 @@ function ReportBody({ report, metrics, basis }: { report: Report; metrics: Count
       )}
 
       <p className="mt-3 max-w-4xl text-xs leading-relaxed text-muted-foreground">
-        Zakup to koszt FIFO sprzedanego towaru. Marża = sprzedaż netto − zakup FIFO, % od sprzedaży netto. Udział =
+        Zakup to koszt FIFO sprzedanego towaru. Marża = sprzedaż netto − zakup FIFO, % od sprzedaży brutto. Udział =
         sprzedaż brutto pozycji w sprzedaży brutto wybranych rejonów lady w sklepie, więc porównuje strukturę sklepów
         różnej wielkości.
         {stores.length > 1 && ' Marża %: na zielono najwyższa, na czerwono najniższa w wierszu.'} „–” = brak sprzedaży w

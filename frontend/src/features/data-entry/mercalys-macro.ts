@@ -601,6 +601,8 @@ const CORRECTION_SCREEN = {
   typeField: 'lstZ2_TypeProtocole_TxtBox',
   /** 8 = korekta dostawy, błąd dostawcy. */
   supplierErrorType: '8',
+  /** 10 = korekta dostawy z bazy (SCA PR, dostawca 538). */
+  baseErrorType: '10',
   dueDateField: 'txdZ6_DateEcheance_TxtBox',
   approveButton: 'btnB4_Valider_LnkBouton',
   createText: 'Utworzy',
@@ -619,17 +621,18 @@ const CORRECTION_SCREEN = {
 const BETWEEN_CLOSE_DIALOGS_MS = 2000
 
 /** Nowy protokół z dzisiejszym terminem płatności; po zapisie szczegół otwiera się sam albo przyciskiem. */
-export function correctionStartLines(today: string) {
+export function correctionStartLines(today: string, fromBase = false) {
   const screen = CORRECTION_SCREEN
+  const type = fromBase ? screen.baseErrorType : screen.supplierErrorType
   return [
     `WINOPEN|${PROGRAM_WINDOW}`,
     `WEBENSURE|${WINDOW}|${screen.protocolMenuItem}|${screen.stockTab}`,
     `WEBCLICK|${WINDOW}|${screen.protocolMenuItem}`,
     `WEBWAIT|${WINDOW}|${screen.typeField}||${PAGE_TIMEOUT_MS}`,
-    `WEBKEY|${WINDOW}|${screen.typeField}|^a${screen.supplierErrorType}{Enter}`,
+    `WEBKEY|${WINDOW}|${screen.typeField}|^a${type}{Enter}`,
     `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
     `WEBKEY|${WINDOW}|${screen.dueDateField}|^a${mercalysDate(today)}{Tab}`,
-    `WEBVALUE|${WINDOW}|${screen.typeField}|^0*${screen.supplierErrorType}$`,
+    `WEBVALUE|${WINDOW}|${screen.typeField}|^0*${type}$`,
     `WEBVALUE|${WINDOW}|${screen.dueDateField}|${datePattern(today)}`,
     `WEBCLICK|${WINDOW}|${screen.approveButton}`,
     `WEBWAIT|${DIALOG}|Oui|${screen.createText}|${PAGE_TIMEOUT_MS}`,

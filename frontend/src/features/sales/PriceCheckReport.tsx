@@ -312,7 +312,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
                     aria-hidden
                     className="mr-1.5 inline-block size-2.5 rounded-sm bg-red-200 align-middle dark:bg-red-500/40"
                   />
-                  marża poniżej {formatPercent(report.data.minMarginPercent)} od sprzedaży netto
+                  marża poniżej {formatPercent(report.data.minMarginPercent)} od sprzedaży brutto
                 </>
               )}
             </p>

@@ -302,12 +302,17 @@ export const formatMacroQuantity = (value: number) => String(round(value, 3)).re
 
 export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACRO_CONFIG.priceDigits).replace('.', ',')
 
+/** NIP bazy SCA PR (dostawca 538): jej korekty idą protokołem typu 10, a nie 8. */
+const BASE_SELLER_NIP = '7821977018'
+
+export const isBaseSeller = (nip: string | null | undefined) => nip?.replace(/\D/g, '') === BASE_SELLER_NIP
+
 /**
  * Skrypt makra: nowy protokół, numer bonu pozycji i kroki osobno dla każdej pozycji (pozycje różnych bonów w jednym
  * protokole), po potwierdzeniu pracownika zakończenie; linie z `#` odtwarzacz pomija. `today`: termin płatności,
  * RRRR-MM-DD. CRLF jak w Windows.
  */
-export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string) {
+export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string, fromBase = false) {
   const bonNumbers = [...new Set(items.map((item) => item.bonNumber))].join(', ')
   const c = CORRECTION_MACRO_CONFIG
   const out: string[] = []
@@ -317,7 +322,7 @@ export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string
     if (sleep > 0) out.push(`SLEEP|${sleep}`)
   }
 
-  out.push(`# Korekta bonu ${bonNumbers}: ${items.length} poz.`, ...correctionStartLines(today))
+  out.push(`# Korekta bonu ${bonNumbers}: ${items.length} poz.`, ...correctionStartLines(today, fromBase))
   for (const item of items) {
     out.push(`# EAN ${item.ean}, bon ${item.bonNumber}`, correctionBonLine(item.bonNumber), `SLEEP|${c.afterBon}`)
     key('{Enter}', c.afterBonSkip)

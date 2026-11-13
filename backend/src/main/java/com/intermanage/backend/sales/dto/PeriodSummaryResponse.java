@@ -49,7 +49,7 @@ public record PeriodSummaryResponse(
     }
 
     /**
-     * Liczby wiersza. Marża i marża po stratach w % od sprzedaży netto, straty w % od sprzedaży brutto (jak budżet
+     * Liczby wiersza. Marża i marża po stratach w % od sprzedaży brutto, straty w % od sprzedaży brutto (jak budżet
      * strat), udział = sprzedaż brutto wiersza w sprzedaży brutto sklepu. Procenty puste, gdy nie ma od czego liczyć.
      */
     public record Figures(

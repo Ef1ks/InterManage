@@ -55,6 +55,7 @@ import {
   type Periods,
   resolveCompareMode,
 } from '@/features/sales/periods'
+import { marginShare } from '@/lib/margin'
 import type {
   CounterStoreOption,
   SalesComparison,
@@ -395,9 +396,8 @@ function SpecialDaysNote({ label, range }: { label: string; range: Periods['curr
 const saleValue = (figures: SalesFigures, basis: SaleBasis) =>
   basis === 'gross' ? figures.saleValueGross : figures.saleValueNet
 
-/** % marży od sprzedaży netto, jak w raporcie systemu sklepu; bez marży (koszty garmażu poniżej rejonu) pusty. */
-const marginPercent = (figures: SalesFigures) =>
-  figures.marginValue == null || figures.saleValueNet === 0 ? null : (figures.marginValue / figures.saleValueNet) * 100
+/** % marży od sprzedaży brutto, jak w raporcie systemu sklepu; bez marży (koszty garmażu poniżej rejonu) pusty. */
+const marginPercent = (figures: SalesFigures) => marginShare(figures.marginValue, figures.saleValueGross)
 
 const percentFormat = new Intl.NumberFormat('pl-PL', {
   minimumFractionDigits: 1,

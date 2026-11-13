@@ -95,7 +95,7 @@ export function LowMarginReport({ storeId }: { storeId: string }) {
       report="LOW_MARGIN"
       query={query}
       title="Weryfikacja przyjęć"
-      intro={`Przyjęcia z wybranego okresu, w których artykuł ma marżę o co najmniej ${lowGap} punktów procentowych niższą (za niska) albo o co najmniej ${highGap} wyższą (za wysoka) niż marża wymagana na jego nomenklaturze. Marża jest liczona od sprzedaży netto, z ceny zakupu po korektach i z aktualnej ceny zwykłej na kasie, więc po zmianie ceny raport od razu liczy z nowej; trwająca promocja się nie liczy. Raport pomija prasę od Kolportera i artykuły aktywne w cadencier, bo mają z góry ustaloną marżę.`}
+      intro={`Przyjęcia z wybranego okresu, w których artykuł ma marżę o co najmniej ${lowGap} punktów procentowych niższą (za niska) albo o co najmniej ${highGap} wyższą (za wysoka) niż marża wymagana na jego nomenklaturze. Marża jest liczona od sprzedaży brutto, z ceny zakupu po korektach i z aktualnej ceny zwykłej na kasie, więc po zmianie ceny raport od razu liczy z nowej; trwająca promocja się nie liczy. Raport pomija prasę od Kolportera i artykuły aktywne w cadencier, bo mają z góry ustaloną marżę.`}
       actions={
         raw.data && (
           <ExcludedSuppliersSettings

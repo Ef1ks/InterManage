@@ -20,7 +20,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
- * Marża wymagana na rejonie, rodzinie albo podrodzinie nomenklatury sklepu (% od sprzedaży netto). Obowiązuje
+ * Marża wymagana na rejonie, rodzinie albo podrodzinie nomenklatury sklepu (% od sprzedaży brutto). Obowiązuje
  * najbardziej szczegółowa ustawiona; pusta = bez progu na tym poziomie. Opis w V49__nomenclature_margins.sql.
  */
 @Entity

@@ -1,4 +1,5 @@
 import { todayIso } from '@/lib/dates'
+import { marginOf, salePriceFor } from '@/lib/margin'
 import type {
   DataEntryCatalogProduct,
   DataEntryLine,
@@ -642,12 +643,11 @@ export function productFileRow(row: DataEntryRow) {
   }
 }
 
-/** Marża % od sprzedaży netto przy obecnej cenie sprzedaży (jak w raportach sprzedaży). */
+/** Marża % od sprzedaży brutto przy obecnej cenie sprzedaży (jak w raportach sprzedaży). */
 export function marginPercent(row: DataEntryRow) {
   const purchase = purchasePerPiece(row)
   if (purchase === null || row.salePrice === null || row.salePrice <= 0 || row.vatPercent === null) return null
-  const saleNet = row.salePrice / (1 + row.vatPercent / 100)
-  return ((saleNet - purchase) / saleNet) * 100
+  return marginOf(row.salePrice, row.vatPercent, purchase)
 }
 
 // ---------- marża wymagana i zaokrąglanie cen (Ustawienia sklepu)
@@ -705,7 +705,7 @@ export function roundPrice(price: number, rules: PriceRoundingRule[]) {
 
 /**
  * Cena sugerowana: stała cena dostawcy dokumentu, jeśli ją ma; artykuł z CENA_CAD ma ją bez liczenia. Inaczej cena brutto, przy której artykuł osiąga marżę
- * wymaganą (% od sprzedaży netto), w górę do grosza, potem do końcówki z przedziałów zaokrąglania; ten sam wzór
+ * wymaganą (% od sprzedaży brutto), w górę do grosza, potem do końcówki z przedziałów zaokrąglania; ten sam wzór
  * w eksporcie ({@code DataEntryService.suggestedPrice}).
  */
 export function suggestedPrice(row: DataEntryRow, pricing: Pricing) {
@@ -718,8 +718,8 @@ export function suggestedPrice(row: DataEntryRow, pricing: Pricing) {
   const required = requiredMargin(row, pricing)
   const purchase = purchasePerPiece(row)
   if (required === null || purchase === null || row.vatPercent === null) return null
-  const gross = (purchase / (1 - required / 100)) * (1 + row.vatPercent / 100)
-  return roundPrice(Math.ceil(gross * 100 - 1e-6) / 100, pricing.rounding)
+  const gross = salePriceFor(purchase, row.vatPercent, required)
+  return gross === null ? null : roundPrice(Math.ceil(gross * 100 - 1e-6) / 100, pricing.rounding)
 }
 
 /**

@@ -1172,7 +1172,7 @@ export type DeliCostsOverview = {
 
 export type SalesComparisonLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'PRODUCT'
 
-/** Raport lady: sumy pozycji w jednym sklepie; marża % od netto, udział w sprzedaży brutto wybranych rejonów. */
+/** Raport lady: sumy pozycji w jednym sklepie; marża % od brutto, udział w sprzedaży brutto wybranych rejonów. */
 export type CounterFigures = {
   quantity: number
   costValue: number
@@ -1919,7 +1919,7 @@ export type StorePartners = {
 }
 
 /**
- * Liczby wiersza podsumowania sprzedaży i strat (zł i %). Marża i marża po stratach w % od sprzedaży netto, straty
+ * Liczby wiersza podsumowania sprzedaży i strat (zł i %). Marża i marża po stratach w % od sprzedaży brutto, straty
  * w % od sprzedaży brutto, udział = sprzedaż brutto w sprzedaży brutto sklepu. Procent pusty, gdy nie ma od czego liczyć.
  */
 export type PeriodSummaryFigures = {
@@ -2394,7 +2394,7 @@ export type LowMarginLine = {
   /** Artykuł jest dziś w promocji: cena promocyjna i koniec (RRRR-MM-DD); marża i tak z ceny zwykłej. */
   currentPromoPrice: number | null
   currentPromoTo: string | null
-  /** Marża % od sprzedaży netto na cenie promocyjnej (z tej samej ceny zakupu); pusta bez promocji. */
+  /** Marża % od sprzedaży brutto na cenie promocyjnej (z tej samej ceny zakupu); pusta bez promocji. */
   currentPromoMargin: number | null
 }
 
@@ -2461,7 +2461,7 @@ export type LowMarginReport = {
   deliveries: LowMarginDelivery[]
 }
 
-/** Artykuł w raporcie marż kartoteki albo aktualnych promocji (marże % od sprzedaży netto). */
+/** Artykuł w raporcie marż kartoteki albo aktualnych promocji (marże % od sprzedaży brutto). */
 export type ArticleMarginItem = {
   itm8: string
   ean: string | null

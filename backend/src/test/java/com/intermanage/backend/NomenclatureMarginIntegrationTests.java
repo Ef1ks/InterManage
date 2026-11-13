@@ -173,8 +173,8 @@ class NomenclatureMarginIntegrationTests {
                 .andReturn().getResponse().getContentAsByteArray();
         List<List<String>> rows = read(file);
         assertThat(rows.getFirst().get(9)).isEqualTo("Cena sugerowana");
-        // 2,50 / (1 − 30%) × 1,05 = 3,75
-        assertThat(new BigDecimal(rows.get(1).get(9))).isEqualByComparingTo("3.75");
+        // Marża od sprzedaży brutto: 2,50 × 1,05 / (1 − 30% × 1,05) = 3,8321 → w górę do grosza 3,84
+        assertThat(new BigDecimal(rows.get(1).get(9))).isEqualByComparingTo("3.84");
     }
 
     @Test

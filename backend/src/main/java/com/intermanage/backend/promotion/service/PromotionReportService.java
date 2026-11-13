@@ -97,7 +97,7 @@ public class PromotionReportService {
         return report(from, to, lastDay, listSince, leafletsSince, promotions);
     }
 
-    /** Artykuły, które w okresie były w promocji i zarobiły w niej najwyżej {@code maxMarginPercent}% sprzedaży netto. */
+    /** Artykuły, które w okresie były w promocji i zarobiły w niej najwyżej {@code maxMarginPercent}% sprzedaży brutto. */
     @Transactional(readOnly = true)
     public Set<String> lowMarginPromotionArticles(UUID storeId, LocalDate from, LocalDate to, int maxMarginPercent) {
         sales.tuneForReport();
@@ -156,9 +156,9 @@ public class PromotionReportService {
         return new Promotion(row.getItm8(), row.getEan(), row.getName(), row.getBrand(), row.getRegionCode(),
                 row.getRegionName(), row.getListed(), row.getStartDate(), row.getEndDate(), days,
                 money(regularPrice), money(promoPrice), round(discount, 1), row.getListMarginPercent(),
-                round(quantity, 3), money(row.getPromoGross()), money(margin), round(percent(margin, row.getPromoNet()), 1),
+                round(quantity, 3), money(row.getPromoGross()), money(margin), round(percent(margin, row.getPromoGross()), 1),
                 baseDays, round(baseQuantityPerDay, 3), money(baseMarginPerDay),
-                hasBase ? round(percent(row.getBaseMargin(), row.getBaseNet()), 1) : null, round(quantityPerDay, 3),
+                hasBase ? round(percent(row.getBaseMargin(), row.getBaseGross()), 1) : null, round(quantityPerDay, 3),
                 round(uplift, 2), round(breakEven, 2), money(extraMargin), afterDays, round(afterRatio, 2),
                 money(row.getPromoLosses()), money(usualLosses), verdict);
     }

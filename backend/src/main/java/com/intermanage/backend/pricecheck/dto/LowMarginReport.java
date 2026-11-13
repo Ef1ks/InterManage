@@ -68,7 +68,7 @@ public record LowMarginReport(
 
     /**
      * Artykuł z za niską marżą. Ilość i cena zakupu po korektach. {@code salePrice}: aktualna cena zwykła brutto na kasie
-     * (bez artykułu w kartotece cena katalogowa z dnia przyjęcia), od niej liczy się marża (% od sprzedaży netto);
+     * (bez artykułu w kartotece cena katalogowa z dnia przyjęcia), od niej liczy się marża (% od sprzedaży brutto);
      * {@code documentSalePrice}: cena z dokumentu PZ, {@code promotion}: była promocyjna. {@code targetPurchasePrice}: cena zakupu dająca marżę wymaganą, {@code excessValue}: różnica
      * × ilość (przy za niskiej marży brakująca marża, przy za wysokiej nadwyżka, obie na plus). {@code deviation}: za
      * niska albo za wysoka. {@code currentPromoPrice} / {@code currentPromoTo}: artykuł jest dziś w promocji (cena
@@ -95,7 +95,7 @@ public record LowMarginReport(
             MarginDeviation deviation,
             BigDecimal currentPromoPrice,
             LocalDate currentPromoTo,
-            /** Marża (% od sprzedaży netto) na cenie promocyjnej {@code currentPromoPrice}; {@code null} bez promocji. */
+            /** Marża (% od sprzedaży brutto) na cenie promocyjnej {@code currentPromoPrice}; {@code null} bez promocji. */
             BigDecimal currentPromoMargin) {
     }
 }

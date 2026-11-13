@@ -1,5 +1,6 @@
 import { type ProFile, type ProLine, uniqueProFileName } from '@/features/leaflet/leaflet-rows'
 import type { PromoRow, PromoSetupDraft, PromoTile } from '@/store/promoSetupDraftSlice'
+import { marginOf } from '@/lib/margin'
 
 export const codeKey = (code: string) => code.replace(/^0+/, '')
 
@@ -8,13 +9,12 @@ export function discountedPrice(regularPrice: number | null, discount: number) {
   return regularPrice === null ? null : Math.round(regularPrice * (100 - discount)) / 100
 }
 
-/** Marża % od sprzedaży netto przy cenie promocji i ostatniej cenie zakupu. */
+/** Marża % od sprzedaży brutto przy cenie promocji i ostatniej cenie zakupu. */
 export function promoMargin({ article, price }: PromoRow) {
   if (!article || price === null || price <= 0 || article.vatPercent === null || article.lastPurchasePrice === null) {
     return null
   }
-  const net = price / (1 + article.vatPercent / 100)
-  return ((net - article.lastPurchasePrice) / net) * 100
+  return marginOf(price, article.vatPercent, article.lastPurchasePrice)
 }
 
 /** Kafelek z artykułami i pełnym okresem daje plik. */

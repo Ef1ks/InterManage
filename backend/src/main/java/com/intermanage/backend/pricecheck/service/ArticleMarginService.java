@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.Margin;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.nomenclature.service.NomenclatureMarginService;
@@ -213,15 +214,13 @@ public class ArticleMarginService {
         }
         purchase = purchase.setScale(4, RoundingMode.HALF_UP);
         Short vat = article.getVatRate();
-        BigDecimal margin = LowMarginService.marginOf(LowMarginService.netOf(regular, vat), purchase);
+        BigDecimal margin = LowMarginService.marginOf(regular, vat, purchase);
         BigDecimal requiredMargin = LowMarginService.requiredMargin(article.getNomenclatureCode(), required);
         BigDecimal targetPurchase = null;
         BigDecimal targetSale = null;
         if (requiredMargin != null && requiredMargin.compareTo(HUNDRED) < 0) {
-            targetPurchase = LowMarginService.netOf(regular, vat).multiply(HUNDRED.subtract(requiredMargin))
-                    .divide(HUNDRED, 4, RoundingMode.HALF_UP);
-            targetSale = purchase.multiply(HUNDRED).divide(HUNDRED.subtract(requiredMargin), 6, RoundingMode.HALF_UP)
-                    .multiply(HUNDRED.add(BigDecimal.valueOf(vat))).divide(HUNDRED, 2, RoundingMode.CEILING);
+            targetPurchase = LowMarginService.targetPurchase(regular, vat, requiredMargin);
+            targetSale = Margin.salePrice(purchase, BigDecimal.valueOf(vat), requiredMargin, 2, RoundingMode.CEILING);
         }
         BigDecimal promo = article.getPromoPrice();
         boolean promoNow = promo != null && promo.signum() > 0 && promo.compareTo(regular) < 0;
@@ -233,7 +232,7 @@ public class ArticleMarginService {
                 targetSale, promoNow ? promo : null, promoNow ? article.getPromoFrom() : null,
                 promoNow ? article.getPromoTo() : null,
                 promoNow && article.getPromoSource() != null ? PromoSource.valueOf(article.getPromoSource()) : null,
-                promoNow ? LowMarginService.marginOf(LowMarginService.netOf(promo, vat), purchase) : null,
+                promoNow ? LowMarginService.marginOf(promo, vat, purchase) : null,
                 article.getSoldQuantity(), article.getCadencier(),
                 article.getCadencierPrice(), null);
     }

@@ -20,7 +20,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
- * Budżet rejonu nomenklatury w sklepie: docelowa marża (% od sprzedaży netto) i najwyższe dopuszczalne straty
+ * Budżet rejonu nomenklatury w sklepie: docelowa marża (% od sprzedaży brutto) i najwyższe dopuszczalne straty
  * (likwidacje, % od sprzedaży brutto). Puste = bez budżetu. Ustawia go osoba z {@code SALES:EDIT}.
  */
 @Entity

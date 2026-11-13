@@ -165,12 +165,12 @@ public class TopSalesService {
         return filter.isEmpty() || (subfamilyCode != null && filter.stream().anyMatch(subfamilyCode::startsWith));
     }
 
-    /** Zwroty (ilość do zera) nie są sprzedażą, a procentu nie ma bez sprzedaży netto. */
+    /** Zwroty (ilość do zera) nie są sprzedażą, a procentu nie ma bez sprzedaży brutto. */
     private static boolean sold(ArticleSales article, TopSalesMetric metric, BigDecimal minQuantity) {
         if (article.getQuantity().signum() <= 0) {
             return false;
         }
-        return metric != TopSalesMetric.MARGIN_PERCENT || (article.getSaleValueNet().signum() > 0
+        return metric != TopSalesMetric.MARGIN_PERCENT || (article.getSaleValueGross().signum() > 0
                 && article.getQuantity().compareTo(minQuantity) >= 0);
     }
 
@@ -186,7 +186,7 @@ public class TopSalesService {
         return switch (metric) {
             case QUANTITY -> article.getQuantity();
             case MARGIN -> article.getMarginValue();
-            case MARGIN_PERCENT -> Percent.of(article.getMarginValue(), article.getSaleValueNet());
+            case MARGIN_PERCENT -> Percent.of(article.getMarginValue(), article.getSaleValueGross());
         };
     }
 
@@ -206,12 +206,12 @@ public class TopSalesService {
             BigDecimal net = article.getSaleValueNet();
             rows.add(new Row(rows.size() + 1, article.getItm8(), article.getEan(), article.getName(),
                     article.getBrand(), article.getQuantity(), article.getSaleValueGross(), net,
-                    article.getMarginValue(), Percent.of(article.getMarginValue(), net), elsewhere));
+                    article.getMarginValue(), Percent.of(article.getMarginValue(), article.getSaleValueGross()), elsewhere));
         }
         BigDecimal net = sum(articles, ArticleSales::getSaleValueNet);
         BigDecimal margin = sum(articles, ArticleSales::getMarginValue);
         return new Group(WHOLE_STORE.equals(code) ? null : code, names.get(code), articles.size(),
-                sum(articles, ArticleSales::getQuantity), net, margin, Percent.of(margin, net), rows);
+                sum(articles, ArticleSales::getQuantity), net, margin, Percent.of(margin, sum(articles, ArticleSales::getSaleValueGross)), rows);
     }
 
     private static BigDecimal sum(List<ArticleSales> articles, Function<ArticleSales, BigDecimal> value) {
@@ -247,7 +247,7 @@ public class TopSalesService {
             }
             ArticleSales article = place.article;
             return new OtherStore(storeId, place.rank, article.getQuantity(), article.getMarginValue(),
-                    Percent.of(article.getMarginValue(), article.getSaleValueNet()));
+                    Percent.of(article.getMarginValue(), article.getSaleValueGross()));
         }
     }
 
