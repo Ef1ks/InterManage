@@ -458,6 +458,7 @@ function ItemsTable({
 }) {
   const canEdit = useCan('SALES', 'EDIT')
   const verifying = mode === 'low' && canEdit
+  const selecting = mode === 'low'
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [asking, setAsking] = useState(false)
   const { verify, cancel, restore } = useArticleMarginVerifications(storeId)
@@ -511,7 +512,7 @@ function ItemsTable({
   })
   const [shown, setShown] = useState(PAGE)
   const more = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < sorted.length, shown)
-  const insertable = sorted.filter((item) => item.ean).slice(0, 500)
+  const insertable = sorted.filter((item) => item.ean && selected.has(item.itm8))
 
   return (
     <div className="grid gap-2">
@@ -553,7 +554,7 @@ function ItemsTable({
               }))
             }
             label={`Do wprowadzania danych (${insertable.length})`}
-            title="Artykuły z listy (najwyżej 500) trafią do tabeli wprowadzania danych, gdzie poprawisz ceny"
+            title="Zaznaczone artykuły trafią do tabeli wprowadzania danych, gdzie poprawisz ceny"
             successTitle="Artykuły w tabeli"
             successDescription={(count) =>
               `Artykuły: ${count}. Popraw ceny sprzedaży, wskaż dostawcę i kliknij „Zmień ceny”, żeby wystawić plik.`
@@ -567,7 +568,7 @@ function ItemsTable({
         <Table className="tabular-nums">
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
-              {verifying && (
+              {selecting && (
                 <TableHead className="w-10 pl-4">
                   <input
                     type="checkbox"
@@ -583,7 +584,7 @@ function ItemsTable({
                   />
                 </TableHead>
               )}
-              <SortableHead column="name" sort={sort} onSort={toggle} className={verifying ? undefined : 'pl-4'}>
+              <SortableHead column="name" sort={sort} onSort={toggle} className={selecting ? undefined : 'pl-4'}>
                 Artykuł
               </SortableHead>
               <SortableHead column="sold" sort={sort} onSort={toggle} align="right">
@@ -595,18 +596,14 @@ function ItemsTable({
               <SortableHead column="sale" sort={sort} onSort={toggle} align="right">
                 Cena zwykła
               </SortableHead>
-              {mode === 'promo' && (
-                <SortableHead column="promoTo" sort={sort} onSort={toggle} align="right">
-                  Promocja
-                </SortableHead>
-              )}
-              {mode === 'promo' && (
-                <SortableHead column="promoMargin" sort={sort} onSort={toggle} align="right">
-                  Marża w promocji
-                </SortableHead>
-              )}
+              <SortableHead column="promoTo" sort={sort} onSort={toggle} align="right">
+                Promocja
+              </SortableHead>
+              <SortableHead column="promoMargin" sort={sort} onSort={toggle} align="right">
+                Marża w promocji
+              </SortableHead>
               <SortableHead column="margin" sort={sort} onSort={toggle} align="right">
-                {mode === 'promo' ? 'Marża zwykła' : 'Marża'}
+                Marża zwykła
               </SortableHead>
               <SortableHead column="required" sort={sort} onSort={toggle} align="right">
                 Wymagana
@@ -625,7 +622,7 @@ function ItemsTable({
                 key={item.itm8}
                 item={item}
                 mode={mode}
-                selectable={verifying}
+                selectable={selecting}
                 selected={selected.has(item.itm8)}
                 onToggle={() => toggleOne(item.itm8)}
               />
@@ -774,33 +771,33 @@ function ItemRow({
             : 'z kartoteki'}
         </span>
       </TableCell>
-      <TableCell className="text-right whitespace-normal">
-        {formatPrice(item.salePrice)}
-        {mode === 'low' && item.promoPrice != null && (
+      <TableCell className="text-right">{formatPrice(item.salePrice)}</TableCell>
+      <TableCell className="text-right">
+        {item.promoPrice == null ? (
+          <span className="text-muted-foreground">–</span>
+        ) : (
+          <>
+            <span className="font-semibold">{formatPrice(item.promoPrice)}</span>
+            <span className="block text-xs text-muted-foreground">
+              {item.promoFrom && formatDay(item.promoFrom)}
+              {item.promoTo && ` – ${formatDay(item.promoTo)}`}
+              {item.promoSource && ` · ${item.promoSource === 'LIST' ? 'lista' : 'kasa'}`}
+            </span>
+          </>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        {item.promoMargin == null ? (
+          <span className="text-muted-foreground">–</span>
+        ) : (
           <span
-            className={cn(pill, 'mt-0.5 ml-auto block w-fit', promoStyle)}
-            title="Artykuł jest teraz w promocji; marża na cenie promocyjnej przy tej samej cenie zakupu"
+            className={cn(pill, 'text-sm', promoStyle)}
+            title="Marża na cenie promocyjnej przy tej samej cenie zakupu"
           >
-            w promocji {formatPrice(item.promoPrice)}
-            {item.promoTo && ` do ${formatDay(item.promoTo)}`} · {formatPercent(item.promoMargin)}
+            {formatPercent(item.promoMargin)}
           </span>
         )}
       </TableCell>
-      {mode === 'promo' && (
-        <TableCell className="text-right">
-          <span className="font-semibold">{formatPrice(item.promoPrice)}</span>
-          <span className="block text-xs text-muted-foreground">
-            {item.promoFrom && formatDay(item.promoFrom)}
-            {item.promoTo && ` – ${formatDay(item.promoTo)}`}
-            {item.promoSource && ` · ${item.promoSource === 'LIST' ? 'lista' : 'kasa'}`}
-          </span>
-        </TableCell>
-      )}
-      {mode === 'promo' && (
-        <TableCell className="text-right">
-          <span className={cn(pill, 'text-sm', promoStyle)}>{formatPercent(item.promoMargin)}</span>
-        </TableCell>
-      )}
       <TableCell className="text-right">
         <span className={cn(pill, 'text-sm', mode === 'low' ? (below ? RED : AMBER) : below ? AMBER : '')}>
           {formatPercent(item.marginPercent)}

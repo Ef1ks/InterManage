@@ -70,20 +70,34 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
      * raportem kartoteki, cena zwykła
      * z listy promocji albo z plików kasy, jak w raporcie marż poza normą); {@code promoPrice} / {@code promoFrom} /
      * {@code promoTo}: promocja trwająca {@code :today}. {@code lastPurchasePrice}: wartość / ilość z ostatniego
-     * przyjęcia PZ od {@code :since} (bez gratisów, z bonu, bez korekt; linia z lokalnym ITM8 dostawcy należy do
+     * przyjęcia PZ od {@code :since} (bez gratisów, po korektach przypiętych do przyjęcia jak w raporcie marż poza
+     * normą; przyjęcie, w którym po korekcie artykułu nie ma, się nie liczy; linia z lokalnym ITM8 dostawcy należy do
      * artykułu po EAN-ie), z dostawcą linii. VAT z kodu stawki, bez niego z ostatniego przyjęcia. {@code leaflet}:
      * artykuł jest dziś w gazetce (utrzymanie cen z centrali). {@code cadencier}: aktywny w cadencier z CENA_CAD.
      */
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
-            , delivered as (
-                select coalesce(p.itm8, e.itm8) as itm8, d.document_date, d.number as document_number,
-                       l.supplier_code, l.supplier_name, l.vat_rate, l.purchase_value / l.quantity as price
+            , lines as (
+                select d.id as document_id, d.document_date, d.number as document_number, l.itm8 as line_itm8,
+                       coalesce(p.itm8, e.itm8) as itm8,
+                       max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
+                       max(l.vat_rate) as vat_rate, sum(l.quantity) as quantity,
+                       sum(l.purchase_value) as purchase_value
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
                   and d.document_date >= :since
+                group by d.id, d.document_date, d.number, l.itm8, coalesce(p.itm8, e.itm8)
+            ), """ + DocumentLineRepository.DELIVERY_FIXES + """
+            , delivered as (
+                select l.itm8, l.document_date, l.document_number, l.supplier_code, l.supplier_name, l.vat_rate,
+                       (l.purchase_value + coalesce(f.purchase_value, 0))
+                           / (l.quantity + coalesce(f.quantity, 0)) as price
+                from lines l
+                left join fixes f on f.delivery_id = l.document_id and f.itm8 = l.line_itm8
+                where l.quantity + coalesce(f.quantity, 0) > 0
+                  and l.purchase_value + coalesce(f.purchase_value, 0) > 0
             ), last_purchase as (
                 select distinct on (itm8) itm8, price, document_date, supplier_code, supplier_name, vat_rate
                 from delivered where itm8 is not null

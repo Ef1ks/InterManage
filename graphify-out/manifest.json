@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794561981.2947412,
-    "seen": 1794562031.3932524,
-    "ast_hash": "a8de7acd236a1b172683dfc40e8aa4dd",
+    "mtime": 1794570170.191206,
+    "seen": 1794570218.846894,
+    "ast_hash": "880f1776e6a0bfd3296bb6b3167df1af",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1542,9 +1542,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/deploy.yml": {
-    "mtime": 1792996944.734759,
-    "seen": 1793008277.7887268,
-    "ast_hash": "de8b423b78d6439b5b78a262627a5ea4",
+    "mtime": 1794564711.367218,
+    "seen": 1794570036.9226944,
+    "ast_hash": "3f9cf3ce125b3dbc3359c36ffa89a822",
     "semantic_hash": ""
   },
   "deploy/docker-compose.yml": {
@@ -7080,9 +7080,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/LowMarginIntegrationTests.java": {
-    "mtime": 1794408823.498128,
-    "seen": 1794408946.1171641,
-    "ast_hash": "c2166698d85d8135f93e4209d52a7bb5",
+    "mtime": 1794569950.8855376,
+    "seen": 1794570037.1050575,
+    "ast_hash": "9889065047ee7c7390f4171f61973187",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/LowMarginReport.tsx": {
@@ -10836,9 +10836,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/repository/ArticleMarginRepository.java": {
-    "mtime": 1794408554.1650348,
-    "seen": 1794408784.8695052,
-    "ast_hash": "224e1f9c984a9ac471be229f1e4ce02c",
+    "mtime": 1794569816.7073388,
+    "seen": 1794570037.0327308,
+    "ast_hash": "3c0ef73ea30e21968f9c33110f483fe5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/service/ArticleMarginService.java": {
@@ -10848,9 +10848,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ArticleMarginReports.tsx": {
-    "mtime": 1794551628.9863334,
-    "seen": 1794551966.2905276,
-    "ast_hash": "215484ea819cfa4454c65e9006f89f43",
+    "mtime": 1794570145.7574368,
+    "seen": 1794570218.8009653,
+    "ast_hash": "c09959870f306df59864d73dc6770607",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/dto/ArticleMarginVerificationIdsRequest.java": {

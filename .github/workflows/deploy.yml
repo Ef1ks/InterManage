@@ -103,8 +103,11 @@ jobs:
             cd /opt/intermanage
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
             export IMAGE_TAG=${{ github.sha }}
+            # Każde wdrożenie ma obraz z nowym tagiem; bez -a stare wersje zostawały i zapełniły dysk (224 obrazy).
+            # -a usuwa tylko obrazy nieużywane przez kontenery, więc działająca wersja zostaje do czasu podmiany.
+            docker image prune -af
             docker compose pull
             docker compose up -d --remove-orphans
             docker logout ghcr.io
-            docker image prune -f
+            docker image prune -af
           "

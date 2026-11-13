@@ -503,6 +503,28 @@ class LowMarginIntegrationTests {
     }
 
     @Test
+    void articleMarginsTakePurchasePriceAfterCorrections() throws Exception {
+        requiredMargin("57", "30");
+        // Bon 10 zł za sztukę, korekta obniża wartość o 20 zł: cena zakupu 8 zł, marża przy 12,50 zł 36%.
+        catalogArticle(ON_THRESHOLD, "5900000000401", "12.50", "57 01 01", null, null);
+        String delivery = delivery(ON_THRESHOLD, 10, "10", "100.00", "12.50", "570101");
+        correction(delivery, ON_THRESHOLD, "0", "-20.00");
+        // Korekta zdjęła cały towar z ostatniego przyjęcia: liczy się wcześniejsze po 11 zł.
+        catalogArticle(ABOVE_THRESHOLD, "5900000000402", "12.50", "57 01 01", null, null);
+        delivery(ABOVE_THRESHOLD, 30, "10", "110.00", "12.50", "570101");
+        String wrong = delivery(ABOVE_THRESHOLD, 5, "10", "50.00", "12.50", "570101");
+        correction(wrong, ABOVE_THRESHOLD, "-10", "-50.00");
+
+        mvc.perform(get("/api/stores/" + store + "/reports/article-margins?maxMargin=60").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].purchasePrice").value(8.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].marginPercent").value(36.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ABOVE_THRESHOLD + "')].purchasePrice").value(11.0))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + ABOVE_THRESHOLD + "')].lastPurchaseDate")
+                        .value(today.minusDays(30) + "T10:00:00"));
+    }
+
+    @Test
     void verifiedArticlesStayVerifiedUntilPricesChange() throws Exception {
         requiredMargin("57", "30");
         catalogArticle(ON_THRESHOLD, "5900000000301", "11.00", "57 01 01", null, null);
