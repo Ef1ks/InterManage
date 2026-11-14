@@ -51,6 +51,21 @@ public class StaffProfile {
     @Column(name = "sanitary_until")
     private LocalDate sanitaryUntil;
 
+    @Column(name = "pit2", nullable = false)
+    private boolean pit2 = true;
+
+    @Column(name = "higher_costs", nullable = false)
+    private boolean higherCosts;
+
+    @Column(name = "youth_relief_waived", nullable = false)
+    private boolean youthReliefWaived;
+
+    @Column(name = "student", nullable = false)
+    private boolean student;
+
+    @Column(name = "voluntary_sickness", nullable = false)
+    private boolean voluntarySickness;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "updated_by")
     private AppUser updatedBy;
@@ -76,6 +91,36 @@ public class StaffProfile {
         this.sanitaryUntil = sanitaryUntil;
         this.updatedBy = by;
         this.updatedAt = Instant.now();
+    }
+
+    /** Ustawienia, z których grafik szacuje wypłatę netto. */
+    public void updateTax(boolean pit2, boolean higherCosts, boolean youthReliefWaived, boolean student,
+            boolean voluntarySickness) {
+        this.pit2 = pit2;
+        this.higherCosts = higherCosts;
+        this.youthReliefWaived = youthReliefWaived;
+        this.student = student;
+        this.voluntarySickness = voluntarySickness;
+    }
+
+    public boolean isPit2() {
+        return pit2;
+    }
+
+    public boolean isHigherCosts() {
+        return higherCosts;
+    }
+
+    public boolean isYouthReliefWaived() {
+        return youthReliefWaived;
+    }
+
+    public boolean isStudent() {
+        return student;
+    }
+
+    public boolean isVoluntarySickness() {
+        return voluntarySickness;
     }
 
     public UUID getEmployeeId() {

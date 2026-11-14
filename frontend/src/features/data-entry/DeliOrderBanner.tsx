@@ -48,7 +48,7 @@ export function DeliOrderBanner({ storeId, orderId, rows, onFulfilled, onDismiss
         const path = orderExportPath(storeId, orderId, 'proto')
         toast.success('Zamówienie zrealizowane', {
           description: 'Ilości z tabeli zapisane przy zamówieniu.',
-          action: { label: 'Pobierz PROTO6', onClick: () => downloadFile(path, 'zamowienie.Traite0') },
+          action: { label: 'Pobierz protokół MM', onClick: () => downloadFile(path, 'zamowienie.Traite0') },
           duration: 15_000,
         })
       },

@@ -8,5 +8,6 @@ public enum ImportReportKind {
     SALES,
     DOCUMENTS,
     SUPPLIERS,
-    NOMENCLATURES
+    NOMENCLATURES,
+    CADENCIER
 }

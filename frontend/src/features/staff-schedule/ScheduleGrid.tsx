@@ -45,6 +45,14 @@ const LEGEND = [
   { kind: 'timeoff', label: 'CW: czas wolny za nadgodziny (w rogu: przy krótszej zmianie)' },
 ]
 
+/**
+ * Święto widać w całej kolumnie: zamknięte ma czerwone tło komórek, a nagłówek każdego święta jest czerwony
+ * (zamkniętego mocniej). Szare `bg-muted` ginęło na jasnej karcie.
+ */
+const CLOSED = 'bg-red-100 dark:bg-red-950/70'
+const holidayHead = (day: ScheduleDay) =>
+  day.holiday ? (day.closed ? 'bg-red-200 dark:bg-red-900' : 'bg-red-100 dark:bg-red-950') : undefined
+
 const HEAD = 'sticky top-0 z-20 border-r border-b border-border bg-card'
 /** Grubsza kreska przed poniedziałkiem: tydzień widać bez liczenia kolumn. */
 const WEEK_START = 'border-l-2 border-l-foreground/20'
@@ -179,7 +187,8 @@ export function ScheduleGrid({
   }
 
   return (
-    <div className="max-h-[calc(100dvh-15rem)] min-h-64 overflow-auto rounded-xl ring-1 ring-foreground/10">
+    // Pełne tło karty: puste komórki nie mają własnego, więc na zdjęciu konta prześwitywało szkło.
+    <div className="max-h-[calc(100dvh-15rem)] min-h-64 overflow-auto rounded-xl bg-card ring-1 ring-foreground/10">
       <table className="w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
@@ -199,7 +208,8 @@ export function ScheduleGrid({
                   HEAD,
                   'min-w-7 py-1 text-center font-normal',
                   isMonday(day.date) && WEEK_START,
-                  day.closed && 'bg-muted',
+                  day.closed && CLOSED,
+                  holidayHead(day),
                 )}
               >
                 <DayHead day={day} today={day.date === today} onToggle={onHoliday && (() => onHoliday(day))} />
@@ -289,7 +299,7 @@ export function ScheduleGrid({
                         className={cn(
                           'h-10 border-r border-b border-border p-0',
                           isMonday(day.date) && WEEK_START,
-                          day.closed && 'bg-muted',
+                          day.closed && CLOSED,
                           row.outOfContractDays.includes(day.date) && OUT_OF_CONTRACT,
                         )}
                       >
@@ -470,7 +480,7 @@ function StaffingCell({
       className={cn(
         'h-7 border-r border-b border-border bg-card p-0 text-center tabular-nums',
         isMonday(day.date) && WEEK_START,
-        day.closed && 'bg-muted',
+        day.closed && CLOSED,
       )}
     >
       {goal === null ? (
@@ -511,7 +521,7 @@ function StaffingSummaryCell({
     'h-7 border-t-2 border-r border-b border-border border-t-foreground/15 bg-card p-0 text-center tabular-nums',
     isMonday(day.date) && WEEK_START,
   )
-  if (day.closed) return <td className={cn(base, 'bg-muted')} />
+  if (day.closed) return <td className={cn(base, CLOSED)} />
   const short: string[] = []
   const below: string[] = []
   for (const position of positions) {
@@ -746,13 +756,24 @@ function PayLine({ row, onRate }: { row: ScheduleRow; onRate: () => void }) {
       </button>
     )
   }
+  const pay = row.payDetails
   const title = [
-    `Stawka ${formatPay(row.hourlyRate)}/h od tego miesiąca`,
-    `Godziny miesiąca razy stawka${row.actualUntil ? ', za dni, które minęły, z kart czasu pracy' : ''}`,
-    row.overtimeSupplement
-      ? `w tym dodatek 50% za nieodebrane nadgodziny dobowe: ${formatPay(row.overtimeSupplement)}`
+    `Stawka ${formatPay(row.hourlyRate)}/h od tego miesiąca${row.civil ? ' (zlecenie)' : ''}`,
+    `Brutto: ${formatPay(row.pay ?? 0)}`,
+    pay &&
+      !row.civil &&
+      `• praca: ${formatPay(pay.work)}${row.actualUntil ? ' (za dni, które minęły, z kart czasu pracy)' : ''}`,
+    pay?.overtimeSupplement
+      ? `   w tym dodatek 50% za nieodebrane nadgodziny dobowe: ${formatPay(pay.overtimeSupplement)}`
       : null,
-    'Szacunek: bez dodatków nocnych, za niedziele i święta (100%) i bez składników spoza grafiku. Kliknij, żeby zmienić stawkę.',
+    pay?.leaveMinutes ? `• urlop: ${formatPay(pay.leave)} (${hoursLabel(pay.leaveMinutes)} z grafiku)` : null,
+    pay?.sickMinutes ? `• L4, 80%: ${formatPay(pay.sick)} (${hoursLabel(pay.sickMinutes)} z grafiku)` : null,
+    pay && `Składki ZUS: −${formatPay(pay.social)}`,
+    pay && `Zdrowotna: −${formatPay(pay.health)}`,
+    pay && `Zaliczka PIT: −${formatPay(pay.tax)}`,
+    pay && `Netto: ${formatPay(pay.net)}`,
+    pay?.notes.length ? `Z Kadr: ${pay.notes.join(', ')}` : null,
+    'Szacunek miesiąca: bez dodatków nocnych, za niedziele i święta (100%), składników spoza grafiku, progu 32% i limitów rocznych; L4 za godziny z grafiku zamiast średniej z 12 miesięcy. Kliknij, żeby zmienić stawkę.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -764,6 +785,7 @@ function PayLine({ row, onRate }: { row: ScheduleRow; onRate: () => void }) {
       className="block w-full rounded-sm text-right font-medium text-emerald-800 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:text-emerald-300"
     >
       {formatPay(row.pay ?? 0)}
+      {pay && <span className="block text-xs font-normal text-muted-foreground">netto {formatPay(pay.net)}</span>}
     </button>
   )
 }

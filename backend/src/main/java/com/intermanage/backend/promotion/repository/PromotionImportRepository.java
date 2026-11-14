@@ -20,7 +20,8 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
             + "order by i.importedAt desc, i.id desc")
     List<PromotionImport> findLatest(UUID storeId, Limit limit);
 
-    @Query("select max(i.reportGeneratedAt) from PromotionImport i where i.store.id = :storeId")
+    @Query("select max(i.reportGeneratedAt) from PromotionImport i where i.store.id = :storeId "
+            + "and i.withdrawnAt is null")
     Optional<LocalDateTime> findNewestReportGeneratedAt(UUID storeId);
 
     /** Blokada importu promocji sklepu do końca transakcji, jak przy innych importach. */
@@ -118,6 +119,7 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
                    exists (select 1 from promotion_imports n
                            join promotion_imports l on l.id = p.last_import_id
                            where n.store_id = p.store_id and n.imported_at > l.imported_at
+                             and n.withdrawn_at is null
                              and n.end_from <= p.end_date and p.end_date <= n.end_to) as cancelled
             from promotions p
             where p.store_id = :storeId and p.itm8 = :itm8

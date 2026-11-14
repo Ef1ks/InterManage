@@ -104,16 +104,16 @@ function PriceLabelsDialog({
         if (folderReady) await saveToFolder(folder.key, fileName, blob)
         else saveBlob(blob, fileName)
         await change.mutateAsync({ action: 'labels-generated', ids })
-        saved.push(`${fileName} (${KIND_LABELS[kind]}: ${new Set(ofKind.map((item) => item.ean)).size})`)
+        saved.push(`${KIND_LABELS[kind]}: ${new Set(ofKind.map((item) => item.ean)).size}`)
       }
-      toast.success(saved.length === 1 ? 'Zapisano plik cenówek' : `Zapisano pliki cenówek: ${saved.length}`, {
+      toast.success('Utworzono cenówki', {
         description: `${saved.join(' · ')}${
           folderReady ? '' : ' · pobrane: folder protokołów nie jest wybrany w tej przeglądarce'
         }`,
         duration: 10_000,
       })
     } catch (error) {
-      toast.error(errorMessage(error, 'Nie udało się zapisać pliku cenówek'))
+      toast.error(errorMessage(error, 'Nie udało się utworzyć cenówek'))
     } finally {
       setSaving(false)
     }
@@ -191,8 +191,8 @@ function PriceLabelsDialog({
         <DialogHeader>
           <DialogTitle>Cenówki</DialogTitle>
           <DialogDescription>
-            Czekają tu przeceny i zmiany cen z plików CTRLPRIX (wprowadzanie danych). Plik ETIQUETTE wczyta program
-            sklepu, po jednej cenówce na artykuł; przeceny i zmiany cen idą do osobnych plików, bo mają inne cenówki.
+            Czekają tu przeceny i zmiany cen z wprowadzania danych. Program sklepu wydrukuje po jednej cenówce na
+            artykuł; przeceny i zmiany cen tworzą się osobno, bo mają inne cenówki.
           </DialogDescription>
         </DialogHeader>
 
@@ -216,7 +216,7 @@ function PriceLabelsDialog({
                 onClick={() => void saveFile(pickedPending)}
               >
                 <FileOutputIcon />
-                Utwórz plik ETIQUETTE ({pickedPending.length})
+                Utwórz cenówki ({pickedPending.length})
               </Button>
             </div>
           )}

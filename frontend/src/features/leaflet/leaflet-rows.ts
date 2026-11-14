@@ -5,7 +5,7 @@ import type { LeafletLine } from '@/lib/types'
 /** Folder, z którego program sklepu wczytuje pliki cen promocji .PRO. */
 export const PRO_FOLDER: SavedFolderSpec = {
   key: 'leaflet-pro',
-  label: 'Pliki cen promocji .PRO',
+  label: 'Ceny promocji',
   suggestedPath: 'N:\\ALOA\\PRO\\IMPORT',
 }
 

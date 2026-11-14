@@ -231,6 +231,7 @@ public final class StaffCompliance {
             case CARE -> "Urlop opiekuńczy";
             case REHABILITATION -> "Turnus rehabilitacyjny";
             case B2B_PAID -> "Płatna przerwa (B2B)";
+            case SICK -> "Zwolnienie lekarskie (L4)";
             default -> "Urlop";
         };
     }

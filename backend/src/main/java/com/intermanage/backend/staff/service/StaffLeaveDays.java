@@ -33,6 +33,12 @@ public class StaffLeaveDays {
         this.leaves = leaves;
     }
 
+    /** Dni nieobecności: L4 w dniach kalendarzowych, pozostałe w dniach pracy z grafiku. */
+    @Transactional(readOnly = true)
+    public int count(UUID employeeId, LeaveKind kind, LocalDate from, LocalDate to) {
+        return kind.calendarDays() ? (int) (to.toEpochDay() - from.toEpochDay() + 1) : count(employeeId, from, to);
+    }
+
     @Transactional(readOnly = true)
     public int count(UUID employeeId, LocalDate from, LocalDate to) {
         return (int) entries.findOfEmployees(List.of(employeeId), from, to).stream()
@@ -69,7 +75,7 @@ public class StaffLeaveDays {
             if (leave.getEndDate().isBefore(from) || leave.getStartDate().isAfter(to)) {
                 continue;
             }
-            int days = count(leave.getEmployee().getId(), leave.getStartDate(), leave.getEndDate());
+            int days = count(leave.getEmployee().getId(), leave.getKind(), leave.getStartDate(), leave.getEndDate());
             if (days > leave.getDays()) {
                 requireLimit(leave.getEmployee().getId(), leave.getKind(), leave.getStartDate().getYear(),
                         leave.getId(), days);

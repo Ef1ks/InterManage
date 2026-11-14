@@ -20,8 +20,8 @@ type Format = 'pdf' | 'xlsx' | 'lst' | 'proto' | 'folder'
 const FORMATS: { format: Exclude<Format, 'folder'>; label: string; hint: string; icon: typeof FileTextIcon }[] = [
   { format: 'pdf', label: 'PDF do wydruku', hint: 'Kody kreskowe i miejsce na ilości', icon: FileTextIcon },
   { format: 'xlsx', label: 'Excel', hint: 'EAN, nazwa, marka, ilość', icon: FileSpreadsheetIcon },
-  { format: 'lst', label: 'Lista EAN (.lst)', hint: 'Jeden kod w linii', icon: BarcodeIcon },
-  { format: 'proto', label: 'Plik PROTO6', hint: 'EAN z ilością dla programu sklepu', icon: BarcodeIcon },
+  { format: 'lst', label: 'Lista EAN-ów', hint: 'Jeden kod w linii', icon: BarcodeIcon },
+  { format: 'proto', label: 'Protokół MM', hint: 'EAN z ilością dla programu sklepu', icon: BarcodeIcon },
 ]
 
 /**
@@ -36,7 +36,10 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
   const download = async (format: Exclude<Format, 'folder'>) => {
     setPending(format)
     try {
-      await downloadFile(orderExportPath(storeId, orderId, format), format === 'proto' ? 'zamowienie.Traite0' : `zamowienie.${format}`)
+      await downloadFile(
+        orderExportPath(storeId, orderId, format),
+        format === 'proto' ? 'zamowienie.Traite0' : `zamowienie.${format}`,
+      )
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się pobrać pliku')
     } finally {
@@ -52,8 +55,8 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
         if (protoFolder.suggestedPath) navigator.clipboard?.writeText(protoFolder.suggestedPath).catch(() => {})
         if (!(await folder.pick())) return
       }
-      const fileName = await saveApiFileToFolder(protoFolder.key, orderExportPath(storeId, orderId, 'proto'), 'zamowienie.Traite0')
-      toast.success(`Zapisano ${fileName}`)
+      await saveApiFileToFolder(protoFolder.key, orderExportPath(storeId, orderId, 'proto'), 'zamowienie.Traite0')
+      toast.success('Zapisano protokół MM')
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku')
     } finally {
@@ -66,7 +69,13 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
       <DropdownMenuTrigger
         render={
           compact ? (
-            <Button variant="ghost" size="icon-sm" aria-label="Pobierz zamówienie" title="Pobierz" loading={pending !== null} />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Pobierz zamówienie"
+              title="Pobierz"
+              loading={pending !== null}
+            />
           ) : (
             <Button variant="outline" size="xl" loading={pending !== null} />
           )
@@ -91,7 +100,7 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
             <DropdownMenuItem onClick={saveToFolder} className="items-start gap-2.5 py-2">
               <FolderInputIcon className="mt-0.5" />
               <span className="grid">
-                <span>{folder.name ? `Zapisz PROTO6 w ${folder.name}` : 'Zapisz PROTO6 w folderze…'}</span>
+                <span>{folder.name ? `Zapisz protokół MM w ${folder.name}` : 'Zapisz protokół MM w folderze…'}</span>
                 <span className="text-xs text-muted-foreground">
                   {folder.name
                     ? 'Folder zapamiętany w przeglądarce'

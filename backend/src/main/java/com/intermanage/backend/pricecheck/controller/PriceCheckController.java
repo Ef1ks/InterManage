@@ -51,6 +51,11 @@ public class PriceCheckController {
             "hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT =
             "hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
+    /** Lista cadencier jest kartą w Imporcie danych, więc odczytuje ją i wgrywa też uprawnienie importów. */
+    private static final String CADENCIER_VIEW =
+            "(hasAuthority('SALES:VIEW') or hasAuthority('IMPORTS:VIEW')) and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String CADENCIER_EDIT =
+            "(hasAuthority('SALES:EDIT') or hasAuthority('IMPORTS:EDIT')) and @storeAccess.canAccess(authentication, #storeId)";
 
     private final PriceCheckService priceCheckService;
     private final CadencierService cadencierService;
@@ -74,15 +79,15 @@ public class PriceCheckController {
 
     /** Ile artykułów jest w cadencier i ostatnie wgrania listy. */
     @GetMapping("/cadencier")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(CADENCIER_VIEW)
     public CadencierOverview cadencier(@PathVariable UUID storeId) {
         return cadencierService.overview(storeId);
     }
 
-    /** Lista "OBECNE W CADENCIER" (.xlsx) wgrywana w Ustawieniach sklepu. */
+    /** Lista "OBECNE W CADENCIER" (.xlsx) wgrywana w Imporcie danych. */
     @PostMapping(path = "/cadencier", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize(EDIT)
+    @PreAuthorize(CADENCIER_EDIT)
     public CadencierImportResponse importCadencier(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return cadencierService.importReport(storeId, file, principal.getId());

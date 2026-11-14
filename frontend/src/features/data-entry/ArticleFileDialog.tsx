@@ -211,7 +211,7 @@ function ArticleChoice({
         </Button>
         <Button loading={saving} disabled={picked.length === 0} onClick={() => onSave(picked.map(({ row }) => row))}>
           <PackageCheckIcon />
-          Zapisz plik CADBEZP ({picked.length})
+          Zmień artykuły ({picked.length})
         </Button>
       </DialogFooter>
     </>

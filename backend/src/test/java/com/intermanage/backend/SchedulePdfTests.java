@@ -121,7 +121,7 @@ class SchedulePdfTests {
             List<ScheduleResponse.Cell> cells) {
         return new ScheduleResponse.Row(UUID.randomUUID(), name, position, position == CASHIER ? "Kasjer" : "Sala",
                 null, "10023", false, null, null, null, null, null, List.of(), cells, List.of(), List.of(), List.of(),
-                null, null, null, null, null, null, civil, null, null, null);
+                null, null, null, null, null, null, civil, null, null, null, null);
     }
 
     private static ScheduleResponse schedule(List<ScheduleResponse.Row> rows) {

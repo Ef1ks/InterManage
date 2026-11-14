@@ -74,7 +74,7 @@ public final class ProtoFile {
             }
             if (quantity.abs().compareTo(quantity.signum() < 0 ? MAX_NEGATIVE : MAX) > 0) {
                 throw ApiException.badRequest("Ilość " + quantity.stripTrailingZeros().toPlainString()
-                        + " nie mieści się w pliku PROTO");
+                        + " nie mieści się w protokole");
             }
             long thousandths = quantity.abs().setScale(3, RoundingMode.HALF_UP).movePointRight(3).longValueExact();
             text.append(line.ean().trim())

@@ -64,7 +64,7 @@ public class DataEntryPriceControlService {
         String keyword = supplier.getKeyword() == null ? "" : supplier.getKeyword().trim();
         if (ProtoFile.namePart(keyword).isEmpty()) {
             throw ApiException.badRequest("Dostawca " + supplier.getName()
-                    + " nie ma hasła na liście dostawców, a plik CTRLPRIX ma je w nazwie");
+                    + " nie ma hasła na liście dostawców, a zmiana cen go wymaga");
         }
         List<String> lines = PriceControlFile.lines(request.rows().stream()
                 .map(row -> new PriceControlFile.Line(row.ean(), row.salePrice()))
@@ -118,7 +118,7 @@ public class DataEntryPriceControlService {
     @Transactional(readOnly = true)
     public DataEntryPriceControlFile file(UUID storeId, UUID id) {
         return files.findByIdAndStoreId(id, storeId)
-                .orElseThrow(() -> ApiException.notFound("Nie znaleziono pliku CTRLPRIX"));
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono zmiany cen"));
     }
 
     /** Dostawca wybrany w tabeli, a bez niego dostawca z listy sklepu o NIP-ie sprzedawcy. */

@@ -645,7 +645,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         action: { label: 'Przywróć', onClick: () => setDraft(before) },
       })
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Nie udało się wczytać pliku .lst')
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się wczytać listy EAN-ów')
     } finally {
       setLoadingLst(false)
     }
@@ -911,7 +911,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       if (folderReady) await saveToFolder(LST_FOLDER.key, fileName, lstFile(lstEans))
       else saveBlob(lstFile(lstEans), fileName)
       const skipped = lstSource.length - lstEans.length
-      toast.success(`Zapisano plik ${fileName}`, {
+      toast.success('Zapisano listę EAN-ów', {
         description: [
           `Kodów: ${lstEans.length}`,
           skipped > 0 && `pominięto bez EAN-u i powtórzone: ${skipped}`,
@@ -921,7 +921,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           .join(', '),
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać pliku .lst')
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać listy EAN-ów')
     } finally {
       setSavingLst(false)
     }
@@ -1387,14 +1387,14 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             tone="load"
             tile
             loading={loadingLst}
-            title="Wczytaj do tabeli fakturę z KSeF, plik XML albo listę .lst"
+            title="Wczytaj do tabeli fakturę z KSeF, dokument z dysku albo listę EAN-ów"
           >
             <ActionItem icon={<ReceiptTextIcon />} label="Fakturę z KSeF" onClick={() => setPickerOpen(true)} />
             <ActionItem icon={<FileCodeIcon />} label="Plik XML" onClick={() => openXml('file')} />
             <ActionItem
               icon={<FileUpIcon />}
-              label="Plik .lst"
-              hint="Dopisuje do tabeli kody z pliku .lst: jeden kod w wierszu, trafia do kolumny EAN"
+              label="Lista EAN-ów"
+              hint="Dopisuje do tabeli kody z listy EAN-ów: jeden kod w wierszu, trafia do kolumny EAN"
               onClick={() => lstInput.current?.click()}
             />
             <DropdownMenuSeparator />
@@ -1433,7 +1433,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               filled.length === 0
                 ? 'Najpierw dodaj artykuły do tabeli'
                 : chosenArticles.length > 1
-                  ? `Pliki z zaznaczonych artykułów (${chosenArticles.length}): zamówienie, etykiety, plik .lst`
+                  ? `Pliki z zaznaczonych artykułów (${chosenArticles.length}): zamówienie, etykiety, lista EAN-ów`
                   : 'Protokół, zamówienie, etykiety, zmiana cen i pliki artykułów'
             }
           >
@@ -1553,9 +1553,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <DropdownMenuLabel>Promocja</DropdownMenuLabel>
               <ActionItem
                 icon={<BadgePercentIcon />}
-                label="Plik cen promocji .PRO"
+                label="Ceny promocji"
                 disabled={badEanTitle !== null}
-                hint={badEanTitle ? undefined : 'EAN i cena z kolumny „Cena sprz.”, do folderu plików .PRO'}
+                hint={badEanTitle ? undefined : 'EAN i cena z kolumny „Cena sprz.”, do folderu cen promocji'}
                 onClick={() => setProFileOpen(true)}
               />
             </DropdownMenuGroup>
@@ -1587,7 +1587,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <DropdownMenuLabel>Lista EAN</DropdownMenuLabel>
               <ActionItem
                 icon={<FileTextIcon />}
-                label="Plik .lst"
+                label="Lista EAN-ów"
                 count={lstEans.length}
                 disabled={lstEans.length === 0}
                 hint={
@@ -1866,13 +1866,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
             >
               <TileContent
-                icon={
-                  saved && savedState ? (
-                    <SavedStatus state={savedState} at={saved.at} fileName={saved.fileName} />
-                  ) : (
-                    <FileCodeIcon />
-                  )
-                }
+                icon={saved && savedState ? <SavedStatus state={savedState} at={saved.at} /> : <FileCodeIcon />}
               >
                 Zapisz
               </TileContent>
@@ -2001,7 +1995,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         selectedIds={selectedRows}
         supplierNote={
           supplier?.code
-            ? `Plik CADBEZP dla dostawcy ${supplier.code} ${supplier.name}.`
+            ? `Artykuły przejdą na dostawcę ${supplier.code} ${supplier.name}.`
             : 'Dokument nie ma dostawcy z numerem: wybierz go w pasku, jeśli artykuły mają przejść na innego dostawcę.'
         }
         saving={xmlSave.savingProducts}
@@ -2388,7 +2382,7 @@ function SettingsButton({ storeId, onClick }: { storeId: string; onClick: () => 
       title={
         attention
           ? 'Ceny z kasy wymagają uwagi: brak zgody na odczyt folderu albo błąd sprawdzania'
-          : 'Ustawienia: foldery na plik XML, nowe artykuły, protokoły, pliki .lst i ceny z kasy'
+          : 'Ustawienia: foldery na plik XML, nowe artykuły, protokoły, listy EAN-ów i ceny z kasy'
       }
     >
       <SettingsIcon />
@@ -2401,7 +2395,7 @@ function SettingsButton({ storeId, onClick }: { storeId: string; onClick: () => 
  * Stan zapisu w kafelku Zapisz, w miejscu ikony, więc nie zmienia układu paska: godzina zapisu, a po zmianach w tabeli
  * bursztynowe „zmiany”. Pełny opis w podpowiedzi. Kafelek jest zielony w obu motywach, stąd kolory bez wariantu dark.
  */
-function SavedStatus({ state, at, fileName }: { state: 'saved' | 'changed'; at: string; fileName: string }) {
+function SavedStatus({ state, at }: { state: 'saved' | 'changed'; at: string }) {
   const time = new Date(at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
   return (
     <span
@@ -2411,8 +2405,8 @@ function SavedStatus({ state, at, fileName }: { state: 'saved' | 'changed'; at: 
       )}
       title={
         state === 'saved'
-          ? `Dokument zapisany ${formatSavedAt(at)}: ${fileName}`
-          : `Zapisany ${formatSavedAt(at)}, zmiany po zapisie: ${fileName}`
+          ? `Dokument zapisany ${formatSavedAt(at)}`
+          : `Zapisany ${formatSavedAt(at)}, w tabeli są zmiany po zapisie`
       }
     >
       {state === 'saved' ? (

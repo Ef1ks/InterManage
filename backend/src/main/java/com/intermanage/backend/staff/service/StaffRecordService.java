@@ -126,8 +126,17 @@ public class StaffRecordService {
         }
         profile.update(request.birthDate(), request.educationLevel(), request.educationEndDate(), request.firstJob(),
                 request.medicalExamUntil(), request.bhpTrainingUntil(), request.sanitaryUntil(), actor(actorId));
+        // Puste pole podatkowe = bez zmian, żeby starszy formularz nie wyzerował ustawień.
+        profile.updateTax(orElse(request.pit2(), profile.isPit2()), orElse(request.higherCosts(), profile.isHigherCosts()),
+                orElse(request.youthReliefWaived(), profile.isYouthReliefWaived()),
+                orElse(request.student(), profile.isStudent()),
+                orElse(request.voluntarySickness(), profile.isVoluntarySickness()));
         profiles.saveAndFlush(profile);
         return response(employee, null);
+    }
+
+    private static boolean orElse(Boolean value, boolean current) {
+        return value == null ? current : value;
     }
 
     @Transactional
@@ -244,12 +253,18 @@ public class StaffRecordService {
                             && contract.getPaidLeaveDays() != null && contract.activeOn(request.startDate()))
                     .findFirst().orElseThrow(() -> ApiException.conflict(
                             "Płatna przerwa wymaga umowy B2B z płatnymi dniami wolnymi, a w tym dniu jej nie ma"));
+        } else if (request.kind() == LeaveKind.SICK) {
+            if (active.stream().noneMatch(contract -> contract.getKind() != ContractKind.B2B
+                    && contract.activeOn(request.startDate()))) {
+                throw ApiException.conflict("Zwolnienie lekarskie wpisuje się przy umowie o pracę albo zleceniu, a w "
+                        + "tym dniu żadnej z nich nie ma");
+            }
         } else if (active.stream()
                 .noneMatch(contract -> contract.isEmployment() && contract.activeOn(request.startDate()))) {
             throw ApiException.conflict("Urlopy z Kodeksu pracy przysługują przy umowie o pracę, a w tym dniu jej nie ma");
         }
         // Urlop zużywa dni pracy z grafiku (art. 154² KP); bez ułożonych godzin ma 0 dni.
-        int days = leaveDays.count(id, request.startDate(), request.endDate());
+        int days = leaveDays.count(id, request.kind(), request.startDate(), request.endDate());
         if (b2b != null) {
             int used = b2bUsed(id, request.startDate().getYear(), leaveId);
             if (used + days > b2b.getPaidLeaveDays()) {

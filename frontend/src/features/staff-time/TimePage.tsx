@@ -23,6 +23,7 @@ import {
   useTimeDecisions,
   useTimeDepartments,
 } from '@/features/staff-time/api'
+import { RecordDialog } from '@/features/staff-records/RecordDialogs'
 import { DayView, WithoutCard } from '@/features/staff-time/DayView'
 import { PeriodGrid } from '@/features/staff-time/PeriodGrid'
 import { SegmentDialog, SimulatorDialog, TimeSettingsDialog } from '@/features/staff-time/TimeDialogs'
@@ -70,6 +71,9 @@ function StoreTime({ store }: { store: StoreSummary }) {
   const [picked, setPicked] = useState<{ row: TimeCardRow; segment: TimeSegment } | null>(null)
   const decisions = useTimeDecisions(store.id, department?.id ?? '')
   const attention = useTimeAttention(store.id, useCan('STAFF_TIME', 'EDIT'))
+  // L4 to wpis w Kadrach (dane kadrowe), więc z Czasu pracy tylko z dostępem do nich.
+  const canAddSick = useCan('STAFF_RECORDS', 'EDIT')
+  const [sick, setSick] = useState<string | null>(null)
   const waiting = new Map(attention.data?.departments.map((item) => [item.departmentId, item.count]))
   const month = date.slice(0, 7)
   // Poprzedni okres pokazany do czasu odpowiedzi: dzień rysuje się z jego własnej daty.
@@ -276,6 +280,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
                   balancing={decisions.decide.isPending}
                   onPrint={(row) => printSheet(row.employeeId)}
                   printing={busy}
+                  onSick={canAddSick ? (row) => setSick(row.employeeId) : undefined}
                 />
               ) : (
                 <PeriodGrid
@@ -286,6 +291,16 @@ function StoreTime({ store }: { store: StoreSummary }) {
                 />
               )}
               <WithoutCard people={cards.data.withoutCard} />
+              {sick && (
+                <RecordDialog
+                  storeId={store.id}
+                  employeeId={sick}
+                  editor={{ type: 'leave', date: shownDate, kind: 'SICK' }}
+                  profile={null}
+                  year={Number(shownDate.slice(0, 4))}
+                  onClose={() => setSick(null)}
+                />
+              )}
               <Legend tolerance={cards.data.toleranceMinutes} canDecide={cards.data.canDecide} view={view} />
               {cards.data.canSimulate && dialog === 'simulator' && (
                 <SimulatorDialog

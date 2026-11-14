@@ -63,6 +63,10 @@ public class PromotionImport {
     @Column(name = "missing_count", nullable = false)
     private int missingCount;
 
+    /** Wgranie wycofane (np. lista innego sklepu, V139): jego promocje są w {@code withdrawn_promotions}. */
+    @Column(name = "withdrawn_at", insertable = false, updatable = false)
+    private Instant withdrawnAt;
+
     protected PromotionImport() {
     }
 

@@ -104,8 +104,11 @@ public class PromotionReportParser {
         private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy H:mm:ss");
         /** "Strona: 1 / 64". */
         private static final Pattern PAGE = Pattern.compile("Strona\\s*:\\s*(\\d+)\\s*/\\s*(\\d+)");
-        /** "TRYTOMA  Sp. z o.o. : 10023" po normalizacji. */
-        private static final Pattern STORE_NUMBER = Pattern.compile("sp z o o (\\d{3,})$");
+        /**
+         * "TRYTOMA  Sp. z o.o. : 10023" po normalizacji. W wierszu może stać coś jeszcze (tytuł raportu, data
+         * wydruku), zależnie od tego, jak system ułożył nagłówek, więc numer szukamy w całym wierszu.
+         */
+        private static final Pattern STORE_NUMBER = Pattern.compile("sp z o o (\\d{3,})\\b");
         /** "(DATY KOŃCA 02/11/26 - 02/11/28)". */
         private static final Pattern END_RANGE = Pattern.compile("(\\d{2}/\\d{2}/\\d{2})\\s*-\\s*(\\d{2}/\\d{2}/\\d{2})");
         private static final Pattern DATE = Pattern.compile("\\d{2}/\\d{2}/\\d{2}");
@@ -170,6 +173,16 @@ public class PromotionReportParser {
             if (pageNumber.find()) {
                 declaredPages = Integer.parseInt(pageNumber.group(2));
             }
+            // Numer sklepu przed datą wydruku: oba bywają w jednym wierszu, a data kończy czytanie wiersza.
+            Matcher store = STORE_NUMBER.matcher(normalized);
+            if (store.find()) {
+                if (storeNumber == null) {
+                    storeNumber = store.group(1);
+                }
+                if (!GENERATED_AT.matcher(text).find()) {
+                    return;
+                }
+            }
             Matcher generated = GENERATED_AT.matcher(text);
             if (generated.find()) {
                 if (generatedAt == null) {
@@ -178,13 +191,6 @@ public class PromotionReportParser {
                     } catch (DateTimeParseException ignored) {
                         // Data jest tylko informacyjna.
                     }
-                }
-                return;
-            }
-            Matcher store = STORE_NUMBER.matcher(normalized);
-            if (store.find()) {
-                if (storeNumber == null) {
-                    storeNumber = store.group(1);
                 }
                 return;
             }
@@ -211,7 +217,10 @@ public class PromotionReportParser {
                         Column.MARGIN))) {
                     throw new IllegalArgumentException("na stronie brakuje wiersza z nagłówkami kolumn");
                 }
-                rows.add(row(line, columns, rowIsA));
+                PromotionReportRow row = row(line, columns, rowIsA);
+                if (row != null) {
+                    rows.add(row);
+                }
             } catch (IllegalArgumentException e) {
                 errorCount++;
                 if (errors.size() < ProductReportParser.MAX_REPORTED_ERRORS) {
@@ -220,6 +229,7 @@ public class PromotionReportParser {
             }
         }
 
+        /** Promocja z linii albo {@code null}, gdy linia nie ma nazwy artykułu (pomijana). */
         private PromotionReportRow row(List<Cell> line, Map<Column, Float> columns, boolean rowIsA) {
             float startColumn = columns.get(Column.START);
             int startIndex = -1;
@@ -247,7 +257,8 @@ public class PromotionReportParser {
             }
             String name = middle.stream().map(Cell::text).collect(Collectors.joining(" ")).trim();
             if (name.isEmpty()) {
-                throw new IllegalArgumentException("brak nazwy artykułu");
+                // System sklepu drukuje czasem promocję bez nazwy artykułu; taką linię pomijamy.
+                return null;
             }
             if (name.length() > NAME_LENGTH) {
                 throw new IllegalArgumentException("nazwa jest dłuższa niż " + NAME_LENGTH + " znaków");
@@ -282,6 +293,12 @@ public class PromotionReportParser {
                 throw new InvalidReportException(
                         "Plik zawiera błędne wiersze (" + errorCount + "). Nic nie zostało zaimportowane.", errors,
                         errorCount);
+            }
+            if (storeNumber == null) {
+                // Bez numeru nie wiadomo, czyje to promocje: lista innego sklepu wgrałaby się do wybranego (lokalne
+                // ITM8 99… trafiłyby wtedy na inne artykuły).
+                throw new InvalidReportException("Nie widać numeru sklepu w nagłówku pliku (\"TRYTOMA Sp. z o.o. : "
+                        + "10023\"). Wgraj listę promocji wydrukowaną z systemu sklepu.");
             }
             if (declaredPages != null && declaredPages != pageCount) {
                 throw new InvalidReportException("Raport ma " + declaredPages + " stron, a w pliku jest " + pageCount

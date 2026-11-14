@@ -57,7 +57,15 @@ import { distinctHours, sameHours, shiftLabel, type ShiftHours } from '@/feature
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { addMonths, currentMonth, formatMonth } from '@/lib/dates'
-import type { Schedule, ScheduleDay, ScheduleRow, StaffLeave, StoreSummary, TimeOffInitiative } from '@/lib/types'
+import type {
+  LeaveKind,
+  Schedule,
+  ScheduleDay,
+  ScheduleRow,
+  StaffLeave,
+  StoreSummary,
+  TimeOffInitiative,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const STATUS: Record<Schedule['status'], { label: string; className: string }> = {
@@ -227,7 +235,12 @@ function Loaded({
   const [edited, setEdited] = useState<EditedCell | null>(null)
   // Urlop wpisuje się w Kadrach, bo to dane kadrowe; z grafiku tylko z dostępem do nich.
   const canAddLeave = useCan('STAFF_RECORDS', 'EDIT')
-  const [leave, setLeave] = useState<{ employeeId: string; date: string; entry?: StaffLeave } | null>(null)
+  const [leave, setLeave] = useState<{
+    employeeId: string
+    date: string
+    entry?: StaffLeave
+    kind?: LeaveKind
+  } | null>(null)
   const leaveRemoval = useLeaveRemoval(store.id)
   const removeLeave = (row: ScheduleRow, entry: StaffLeave) => {
     const target = { employeeId: row.employeeId, leaveId: entry.id }
@@ -774,6 +787,10 @@ function Loaded({
           <span className="font-medium tabular-nums">
             {formatPay(rows.reduce((sum, row) => sum + (row.pay ?? 0), 0))}
           </span>
+          <span className="text-muted-foreground" title="Na rękę: brutto minus składki ZUS, zdrowotna i zaliczka PIT">
+            {' '}
+            · netto {formatPay(rows.reduce((sum, row) => sum + (row.payDetails?.net ?? 0), 0))}
+          </span>
           {rows.some((row) => row.hourlyRate === null && !row.guest) && (
             <span className="text-muted-foreground"> · nie wszyscy mają stawkę</span>
           )}
@@ -808,7 +825,7 @@ function Loaded({
           onClear={clear}
           onLeave={
             canAddLeave
-              ? (row, day, entry) => setLeave({ employeeId: row.employeeId, date: day.date, entry })
+              ? (row, day, entry, kind) => setLeave({ employeeId: row.employeeId, date: day.date, entry, kind })
               : undefined
           }
           onRemoveLeave={canAddLeave ? removeLeave : undefined}
@@ -820,7 +837,7 @@ function Loaded({
         <RecordDialog
           storeId={store.id}
           employeeId={leave.employeeId}
-          editor={{ type: 'leave', date: leave.date, entry: leave.entry }}
+          editor={{ type: 'leave', date: leave.date, entry: leave.entry, kind: leave.kind }}
           profile={null}
           year={Number((leave.entry?.startDate ?? leave.date).slice(0, 4))}
           onClose={() => setLeave(null)}

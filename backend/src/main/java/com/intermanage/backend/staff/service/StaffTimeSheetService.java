@@ -51,9 +51,10 @@ public class StaffTimeSheetService {
     private static final DateTimeFormatter RCP_DATE = DateTimeFormatter.ofPattern("dd-MM-yyyy");
     private static final DateTimeFormatter RCP_TIME = DateTimeFormatter.ofPattern("H:mm");
     private static final Charset WINDOWS_1250 = Charset.forName("windows-1250");
-    private static final Map<String, String> ABSENCE_SYMBOLS = Map.of("ANNUAL", "U", "ON_DEMAND", "UŻ", "CHILD_CARE",
-            "OD", "FORCE_MAJEURE", "SW", "CARE", "UO", "REHABILITATION", "TR", "OCCASIONAL", "OK", "UNPAID", "UB",
-            "B2B_PAID", "UP", "OTHER", "N");
+    private static final Map<String, String> ABSENCE_SYMBOLS = Map.ofEntries(Map.entry("ANNUAL", "U"),
+            Map.entry("ON_DEMAND", "UŻ"), Map.entry("CHILD_CARE", "OD"), Map.entry("FORCE_MAJEURE", "SW"),
+            Map.entry("CARE", "UO"), Map.entry("REHABILITATION", "TR"), Map.entry("OCCASIONAL", "OK"),
+            Map.entry("UNPAID", "UB"), Map.entry("B2B_PAID", "UP"), Map.entry("SICK", "L4"), Map.entry("OTHER", "N"));
 
     private final StaffTimeService time;
     private final StaffScheduleDayOffRepository daysOff;

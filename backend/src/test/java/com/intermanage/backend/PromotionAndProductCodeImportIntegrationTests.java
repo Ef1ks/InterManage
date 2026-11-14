@@ -133,6 +133,11 @@ class PromotionAndProductCodeImportIntegrationTests {
                 promotion("07/01/27", "0000099035805", "5419980316691", "PIWO", "29/10/26", "4,17", "9,99", "5,99",
                         "11,68")))
                 .andExpect(status().isConflict());
+        // Bez numeru sklepu w nagłówku nie wiadomo, czyje to promocje (14.11.2026 lista 10025 weszła tak do 10023).
+        uploadPromotions(owner, storeId, promotions(null, "04/11/2026 - 06:00:00", null,
+                promotion("07/01/27", "0000099035805", "5419980316691", "PIWO", "29/10/26", "4,17", "9,99", "5,99",
+                        "11,68")))
+                .andExpect(status().isBadRequest());
         uploadPromotions(owner, storeId, promotions(storeNumber, "04/11/2026 - 06:00:00", 5,
                 promotion("07/01/27", "0000099035805", "5419980316691", "PIWO", "29/10/26", "4,17", "9,99", "5,99",
                         "11,68")))
@@ -301,7 +306,9 @@ class PromotionAndProductCodeImportIntegrationTests {
             }
             PdfContentByte canvas = writer.getDirectContent();
             text(canvas, font, 20, 817, "lun. " + generated + " Strona: " + (page + 1) + " / " + pageTotal);
-            text(canvas, font, 20, 802, "TRYTOMA  Sp. z o.o. : " + storeNumber);
+            if (storeNumber != null) {
+                text(canvas, font, 20, 802, "TRYTOMA  Sp. z o.o. : " + storeNumber);
+            }
             text(canvas, font, 20, 791, "LISTA BIEŻĄCYCH I PRZYSZŁYCH PROMOCJI");
             text(canvas, font, 20, 780, "(DATY KOŃCA 02/11/26 - 02/11/28)");
             for (int column = 0; column < HEADER.length; column++) {

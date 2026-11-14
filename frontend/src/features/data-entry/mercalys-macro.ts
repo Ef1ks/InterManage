@@ -136,7 +136,7 @@ const BASE_FILE_SUPPLIERS = ['538', '88110']
  * (nazwa `…_<nr bonu>_<dostawca>`, zera wiodące dowolne; brak pliku od dostawcy to nie błąd), Wybór, sprawdzenie, że linie
  * są z tego bonu, i kody ITM8 z błędem „ITM nie istnieje” ze wszystkich stron. Kody z wszystkich plików trafiają razem do
  * Schowka. Bez żadnego pliku makro staje. Na końcu powrót na Zakup i Mercalys na pasek zadań. Wymaga odtwarzacza od
- * wersji 44 (etykieta w WEBPICKRE, numer bonu w WEBCOLLECT, WEBCOLLECTED).
+ * wersji 45 (etykieta w WEBPICKRE, także przy pustej liście plików, numer bonu w WEBCOLLECT, WEBCOLLECTED).
  */
 export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[] = []) {
   const screen = BASE_BL_SCREEN

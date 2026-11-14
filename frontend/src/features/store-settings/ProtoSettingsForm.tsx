@@ -114,7 +114,7 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
           label="Folder pliku nowych artykułów"
           autoComplete="off"
           error={errors.productFileFolderPath?.message}
-          hint="Przy zapisie pliku XML we wprowadzaniu danych nowe i zmienione artykuły trafiają tu do pliku (.xls) dla programu sklepu."
+          hint="Przy zapisie pliku XML we wprowadzaniu danych nowe i zmienione artykuły trafiają tu dla programu sklepu."
           {...register('productFileFolderPath', { maxLength: { value: 300, message: 'Najwyżej 300 znaków' } })}
         />
         {settings.updatedAt && (

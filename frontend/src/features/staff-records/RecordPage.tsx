@@ -408,9 +408,20 @@ function Deadlines({ record, canEdit, onEdit }: CardProps) {
         <Fact label="Badania lekarskie do">{formatDate(profile?.medicalExamUntil) || '–'}</Fact>
         <Fact label="Szkolenie BHP do">{formatDate(profile?.bhpTrainingUntil) || '–'}</Fact>
         <Fact label="Badania sanitarne do">{formatDate(profile?.sanitaryUntil) || '–'}</Fact>
+        <Fact label="Podatek i składki">{taxSummary(profile)}</Fact>
       </dl>
     </Section>
   )
+}
+
+/** Ustawienia do szacunku netto w grafiku jednym wierszem; bez profilu domyślne (PIT-2). */
+function taxSummary(profile: StaffRecord['profile']) {
+  const parts = [profile?.pit2 === false ? 'bez PIT-2' : 'PIT-2']
+  if (profile?.higherCosts) parts.push('podwyższone koszty')
+  if (profile?.youthReliefWaived) parts.push('bez ulgi dla młodych')
+  if (profile?.student) parts.push('uczeń / student')
+  if (profile?.voluntarySickness) parts.push('chorobowe przy zleceniu')
+  return parts.join(', ')
 }
 
 function Leave({

@@ -396,6 +396,13 @@
 .app-layout:has(> .app-photo) main {
   --card-surface: color-mix(in oklch, var(--card) 72%, transparent);
 }
+/*
+ * Karta z tabelą to praca na liczbach (grafik, raporty, dokumenty): zawsze pełna, bo zdjęcie prześwitujące
+ * między wierszami utrudnia czytanie. Przezroczyste zostają karty z samym tekstem i formularzami.
+ */
+.app-layout:has(> .app-photo) main [data-slot='card']:has(table) {
+  --card-surface: var(--card);
+}
 .app-layout:has(> .app-photo) main [data-slot='card'] {
   box-shadow: inset 0 1px 0 0 var(--glass-rim), inset 0 0 0 1px var(--glass-edge), 0 12px 32px -18px oklch(0 0 0 / 22%);
 }

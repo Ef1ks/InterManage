@@ -46,6 +46,7 @@ import {
 } from '@/features/imports/import-sources'
 import { ReportHelp } from '@/features/imports/ReportHelp'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
+import { useCadencier, useImportCadencier } from '@/features/sales/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { ApiError } from '@/lib/api'
@@ -53,6 +54,7 @@ import { parseIsoDate } from '@/lib/dates'
 import { formatReportDate } from '@/lib/report-freshness'
 import { ensureFolderAccess, folderAccess, folderSavingSupported } from '@/lib/saved-folders'
 import type {
+  CadencierImport,
   DocumentImport,
   EanChange,
   ImportGuide,
@@ -84,6 +86,8 @@ const REPORT_DESCRIPTIONS: Record<ImportReportKind, string> = {
     'Statystyka Wejścia/Wyjścia: przyjęcia towaru, korekty, likwidacje, zwroty, przeniesienia stanów i inne dokumenty magazynowe. Te same dokumenty można wgrywać wielokrotnie - zostaną uzupełnione.',
   SUPPLIERS:
     'Dostawcy z systemu sklepu. Wgraj listę ponownie, gdy dojdzie nowy dostawca albo zmienią się jego dane. Dostawcy, których zabraknie w nowym pliku, zostają w bazie.',
+  CADENCIER:
+    'Artykuły z formularza zamówień do bazy, kolumny ITM i EAN (np. obecne w cad.xlsx). Nowa lista zastępuje poprzednią w całości: raporty zakupu bazowego poza bazą, marż i zerówek, wprowadzanie danych (niebieska cena) i lista towarów biorą zawsze najnowszą.',
   NOMENCLATURES:
     'Rejony, rodziny i podrodziny z nazwami do raportów (PDF, np. nomenklatury.pdf). Wgraj ją ponownie, gdy w systemie sklepu zmieni się nomenklatura.',
 }
@@ -174,12 +178,14 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const nomenclatures = useNomenclatureImports(store.id)
   const promotions = usePromotionImports(store.id)
   const productCodes = useProductCodeImports(store.id)
+  const cadencier = useCadencier(store.id)
   const uploads = {
     PRODUCTS: useImportProducts(store.id),
     PRODUCT_CODES: useImportProductCodes(store.id),
     PROMOTIONS: useImportPromotions(store.id),
     SALES: useImportSales(store.id),
     DOCUMENTS: useImportDocuments(store.id),
+    CADENCIER: useImportCadencier(store.id),
     SUPPLIERS: useImportSuppliers(store.id),
     NOMENCLATURES: useImportNomenclatures(store.id),
   }
@@ -196,6 +202,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
     PROMOTIONS: lastImportedAt(promotions.data?.imports),
     SALES: lastImportedAt(sales.data?.imports),
     DOCUMENTS: lastImportedAt(documents.data),
+    CADENCIER: lastImportedAt(cadencier.data?.imports),
   }
 
   /**
@@ -278,7 +285,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
     <>
       <PageHeader
         title="Import danych"
-        description={`Raporty z systemu sklepu ${storeLabel(store)}. Bazę danych, multikody, promocje, sprzedaż i dokumenty wgrywaj codziennie, listy dostawców i nomenklatur wtedy, gdy się zmienią.`}
+        description={`Raporty z systemu sklepu ${storeLabel(store)}. Bazę danych, multikody, promocje, sprzedaż, dokumenty i listę cadencier wgrywaj codziennie, listy dostawców i nomenklatur wtedy, gdy się zmienią.`}
         actions={
           canImport && (
             <>
@@ -427,6 +434,29 @@ function StoreImports({ store }: { store: StoreSummary }) {
         </ReportCard>
 
         <ReportCard
+          {...cardProps('CADENCIER')}
+          generatedAt={cadencier.isPending ? undefined : (newestReport(cadencier.data?.imports) ?? null)}
+          meta={
+            cadencier.data &&
+            (cadencier.data.imports.length ? (
+              <>W bazie {numberFormat.format(cadencier.data.itemCount)} artykułów z cadencier</>
+            ) : (
+              <>Lista nie jest jeszcze wgrana</>
+            ))
+          }
+        >
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.CADENCIER}
+              accept={XLSX_EXTENSIONS}
+              result={(result) => <CadencierImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
+        </ReportCard>
+
+        <ReportCard
           {...cardProps('SUPPLIERS')}
           meta={
             suppliers.data && (
@@ -491,7 +521,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
         sales.isError &&
         nomenclatures.isError &&
         promotions.isError &&
-        productCodes.isError ? (
+        productCodes.isError &&
+        cadencier.isError ? (
           <FullPageMessage
             title="Nie udało się wczytać historii importów"
             action={{
@@ -504,6 +535,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
                 nomenclatures.refetch()
                 promotions.refetch()
                 productCodes.refetch()
+                cadencier.refetch()
               },
             }}
             inline
@@ -517,6 +549,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
             nomenclatures={nomenclatures.data?.imports}
             promotions={promotions.data?.imports}
             productCodes={productCodes.data?.imports}
+            cadencier={cadencier.data?.imports}
             loading={
               products.isPending ||
               documents.isPending ||
@@ -524,7 +557,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
               sales.isPending ||
               nomenclatures.isPending ||
               promotions.isPending ||
-              productCodes.isPending
+              productCodes.isPending ||
+              cadencier.isPending
             }
             onShowEanChanges={setEanChangesOf}
           />
@@ -701,10 +735,10 @@ function ProductImportResult({
           <ResultCount label="Zmiana EAN" value={result.eanChangedCount} />
           <ResultCount label="EAN z innego ITM8" value={result.eanMovedCount} />
           {result.draftsMatchedCount > 0 && (
-            <ResultCount label="Nowe artykuły z CADBEZP" value={result.draftsMatchedCount} />
+            <ResultCount label="Nowe artykuły z wprowadzania danych" value={result.draftsMatchedCount} />
           )}
           {result.draftsRemovedCount > 0 && (
-            <ResultCount label="Usunięte z CADBEZP (brak w raporcie)" value={result.draftsRemovedCount} />
+            <ResultCount label="Nowe artykuły, których nie ma w raporcie" value={result.draftsRemovedCount} />
           )}
         </dl>
         {eanChanges > 0 && (
@@ -853,6 +887,24 @@ function ProductCodeImportResult({ result }: { result: ProductCodeImport }) {
   )
 }
 
+function CadencierImportResult({ result }: { result: CadencierImport }) {
+  return (
+    <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <CircleCheckIcon className="text-emerald-600 dark:text-emerald-400" />
+      <AlertTitle>
+        Wgrano {numberFormat.format(result.totalRows)} artykułów
+        {result.reportGeneratedAt && <> z listy {formatReportDate(result.reportGeneratedAt)}</>}
+      </AlertTitle>
+      <AlertDescription>
+        <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
+          <ResultCount label="Nowe" value={result.addedCount} />
+          <ResultCount label="Ubyło" value={result.removedCount} />
+        </dl>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function ResultCount({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex gap-1.5">
@@ -870,6 +922,7 @@ type HistoryRow =
   | { kind: 'nomenclatures'; importedAt: string; item: NomenclatureImport }
   | { kind: 'promotions'; importedAt: string; item: PromotionImport }
   | { kind: 'productCodes'; importedAt: string; item: ProductCodeImport }
+  | { kind: 'cadencier'; importedAt: string; item: CadencierImport }
 
 const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   products: 'Baza danych',
@@ -879,6 +932,7 @@ const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   nomenclatures: 'Lista nomenklatur',
   promotions: 'Lista promocji',
   productCodes: 'Multikody',
+  cadencier: 'Obecne w cadencier',
 }
 
 /** Wszystkie wgrania raportów razem, od najnowszego. */
@@ -890,6 +944,7 @@ function ImportHistory({
   nomenclatures,
   promotions,
   productCodes,
+  cadencier,
   loading,
   onShowEanChanges,
 }: {
@@ -900,6 +955,7 @@ function ImportHistory({
   nomenclatures?: NomenclatureImport[]
   promotions?: PromotionImport[]
   productCodes?: ProductCodeImport[]
+  cadencier?: CadencierImport[]
   loading: boolean
   onShowEanChanges: ShowEanChanges
 }) {
@@ -911,6 +967,7 @@ function ImportHistory({
     ...(nomenclatures ?? []).map((item) => ({ kind: 'nomenclatures' as const, importedAt: item.importedAt, item })),
     ...(promotions ?? []).map((item) => ({ kind: 'promotions' as const, importedAt: item.importedAt, item })),
     ...(productCodes ?? []).map((item) => ({ kind: 'productCodes' as const, importedAt: item.importedAt, item })),
+    ...(cadencier ?? []).map((item) => ({ kind: 'cadencier' as const, importedAt: item.importedAt, item })),
   ].sort((a, b) => b.importedAt.localeCompare(a.importedAt))
 
   if (!loading && rows.length === 0) {
@@ -983,6 +1040,12 @@ function historySummary(row: HistoryRow) {
       return mergeSummary(row.item, 'kodów')
     case 'sales':
       return salesSummary(row.item)
+    case 'cadencier':
+      return [
+        `${numberFormat.format(row.item.totalRows)} artykułów`,
+        `${numberFormat.format(row.item.addedCount)} nowych`,
+        `${numberFormat.format(row.item.removedCount)} ubyło`,
+      ].join(' · ')
   }
 }
 

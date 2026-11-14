@@ -34,8 +34,10 @@ public record StaffRecordResponse(Person person, Profile profile, List<Contract>
             Integer rcpNumber) {
     }
 
+    /** Pola podatkowe ({@code pit2} … {@code voluntarySickness}) służą szacunkowi wypłaty netto w grafiku. */
     public record Profile(LocalDate birthDate, EducationLevel educationLevel, LocalDate educationEndDate,
-            boolean firstJob, LocalDate medicalExamUntil, LocalDate bhpTrainingUntil, LocalDate sanitaryUntil) {
+            boolean firstJob, LocalDate medicalExamUntil, LocalDate bhpTrainingUntil, LocalDate sanitaryUntil,
+            boolean pit2, boolean higherCosts, boolean youthReliefWaived, boolean student, boolean voluntarySickness) {
     }
 
     /** {@code fteNumerator}: etat z chwili zawarcia; późniejsze są w {@code changes}, od najwcześniejszego. */

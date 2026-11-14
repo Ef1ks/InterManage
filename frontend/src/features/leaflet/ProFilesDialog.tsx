@@ -53,21 +53,21 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
         if (folderReady) await saveToFolder(PRO_FOLDER.key, file.fileName, proContent(file))
         else saveBlob(proContent(file), file.fileName)
       }
-      toast.success(`Zapisano pliki .PRO: ${ready.length}`, {
-        description: `${ready.map((file) => `${file.fileName} (${file.tariff})`).join(', ')}${
+      toast.success(`Zapisano ceny promocji: ${ready.length}`, {
+        description: `${ready.map((file) => `kod taryfy ${file.tariff}`).join(', ')}${
           folderReady ? '' : ' · pobrane: folder nie jest wybrany w tej przeglądarce'
         }`,
         duration: 10_000,
       })
       if (labels) {
         try {
-          toast.success('Zapisano plik etykiet', { description: await labels.save(ready, labelsFolderReady) })
+          toast.success('Utworzono etykiety', { description: await labels.save(ready, labelsFolderReady) })
         } catch (error) {
-          toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku etykiet')
+          toast.error(error instanceof ApiError ? error.message : 'Nie udało się utworzyć etykiet')
         }
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać plików .PRO')
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać cen promocji')
     } finally {
       setSaving(false)
     }
@@ -77,7 +77,7 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 p-6 sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Pliki cen promocji .PRO</DialogTitle>
+          <DialogTitle>Ceny promocji</DialogTitle>
           <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
@@ -140,7 +140,7 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
         <div className="flex flex-wrap items-center gap-3">
           <Button size="xl" loading={saving} disabled={ready.length === 0} onClick={save}>
             <FileOutputIcon />
-            Zapisz pliki .PRO{labels ? ' i etykiety' : ''} ({ready.length})
+            Zapisz ceny promocji{labels ? ' i etykiety' : ''} ({ready.length})
           </Button>
           <SavedFolder folder={PRO_FOLDER} />
           {labels && <SavedFolder folder={labels.folder} />}

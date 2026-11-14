@@ -52,7 +52,7 @@ export function DeliveryPickerDialog({ storeId, open, onOpenChange, onOpen }: Pr
         <DialogHeader>
           <DialogTitle>Dokumenty z bazy</DialogTitle>
           <DialogDescription>
-            Otwórz dokument wgrany wcześniej albo przeciągnij nowy plik .xls. Potem wybierzesz nośniki do tabeli.
+            Otwórz dokument wgrany wcześniej albo przeciągnij nowy plik Excel z bazy. Potem wybierzesz nośniki do tabeli.
           </DialogDescription>
         </DialogHeader>
 
@@ -62,7 +62,7 @@ export function DeliveryPickerDialog({ storeId, open, onOpenChange, onOpen }: Pr
           title="Przeciągnij plik z bazy albo kliknij"
           hint=".xls (albo .xlsx, albo sheet001.htm ze strony zapisanej przez Excela), ten sam bon wgrany ponownie zastępuje poprzedni"
           className="py-6"
-          onReject={(name) => toast.error(`${name}: wgraj plik .xls z bazy`)}
+          onReject={(name) => toast.error(`${name}: wgraj plik Excel z bazy`)}
           onFile={(chosen) => {
             setFile(chosen)
             upload.mutate(chosen, {

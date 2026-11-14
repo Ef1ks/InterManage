@@ -21,7 +21,7 @@ export function PurchaseFileButton({ storeId }: { storeId: string }) {
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
         <FileSpreadsheetIcon />
-        Plik CADBEZP
+        Ceny zakupu do kartoteki
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-4 p-6 sm:max-w-3xl">
@@ -89,15 +89,15 @@ function FileForm({ storeId, onClose }: { storeId: string; onClose: () => void }
         )
         if (folderReady) await saveToFolder(folder.key, fileName, blob)
         else saveBlob(blob, fileName)
-        files.push(fileName)
+        files.push(group[0]?.supplier ?? 'bez dostawcy')
       }
       onClose()
-      toast.success(files.length === 1 ? 'Zapisano plik CADBEZP' : `Zapisano pliki CADBEZP: ${files.length}`, {
+      toast.success(`Zapisano ceny zakupu: ${selected.length}`, {
         description: (
           <span className="grid gap-0.5">
             {files.map((file) => (
               <span key={file} className="break-all">
-                {file}
+                Dostawca: {file}
               </span>
             ))}
             {!folderReady && <span>Pobrane: folder nie jest wybrany w tej przeglądarce.</span>}
@@ -115,10 +115,10 @@ function FileForm({ storeId, onClose }: { storeId: string; onClose: () => void }
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="text-lg">Plik CADBEZP z cenami zakupu</DialogTitle>
+        <DialogTitle className="text-lg">Ceny zakupu z przepisów do kartoteki</DialogTitle>
         <DialogDescription>
-          Cena zakupu z przepisu, a pozostałe dane jak w kartotece, także cena sprzedaży i dostawca. Każdy dostawca ma
-          osobny plik.
+          Cena zakupu z przepisu, a pozostałe dane jak w kartotece, także cena sprzedaży i dostawca. Każdy dostawca
+          zapisuje się osobno.
         </DialogDescription>
       </DialogHeader>
 

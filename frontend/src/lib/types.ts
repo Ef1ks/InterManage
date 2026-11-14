@@ -228,6 +228,8 @@ export type LeaveKind =
   | 'UNPAID'
   /** Płatna przerwa przy umowie B2B; dni w roku z umowy. */
   | 'B2B_PAID'
+  /** Zwolnienie lekarskie (L4), w dniach kalendarzowych. */
+  | 'SICK'
 
 export type StaffWarning = { severity: 'ERROR' | 'WARNING' | 'INFO'; message: string; basis: string | null }
 
@@ -261,6 +263,12 @@ export type StaffProfile = {
   medicalExamUntil: string | null
   bhpTrainingUntil: string | null
   sanitaryUntil: string | null
+  /** Ustawienia do szacunku wypłaty netto w grafiku. */
+  pit2: boolean
+  higherCosts: boolean
+  youthReliefWaived: boolean
+  student: boolean
+  voluntarySickness: boolean
 }
 
 export type StaffContract = {
@@ -1046,7 +1054,7 @@ export type SupplierImportOverview = {
 
 /** Raporty z Importu danych (nazwy jak w backendzie, `ImportReportKind`). */
 export type ImportReportKind =
-  'PRODUCTS' | 'PRODUCT_CODES' | 'PROMOTIONS' | 'SALES' | 'DOCUMENTS' | 'SUPPLIERS' | 'NOMENCLATURES'
+  'PRODUCTS' | 'PRODUCT_CODES' | 'PROMOTIONS' | 'SALES' | 'DOCUMENTS' | 'CADENCIER' | 'SUPPLIERS' | 'NOMENCLATURES'
 
 /** Instrukcja właściciela do raportu: jak wygenerować plik i w jakim folderze go szukać. */
 export type ImportGuide = {
@@ -3855,6 +3863,24 @@ export type ScheduleRow = {
    */
   pay: number | null
   overtimeSupplement: number | null
+  /** Rozbicie {@code pay} i szacunek netto z ustawień w Kadrach; razem z {@code pay}. */
+  payDetails: SchedulePay | null
+}
+
+export type SchedulePay = {
+  work: number
+  overtimeSupplement: number
+  /** Urlopy płatne z grafiku: godziny zmian pod urlopem razy stawka (siła wyższa połowa). */
+  leave: number
+  leaveMinutes: number
+  /** Wynagrodzenie chorobowe 80% za godziny zmian pod L4. */
+  sick: number
+  sickMinutes: number
+  social: number
+  health: number
+  tax: number
+  net: number
+  notes: string[]
 }
 
 export type ScheduleDay = { date: string; holiday: string | null; closed: boolean }

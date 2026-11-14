@@ -19,7 +19,15 @@ import {
   isSunday,
 } from '@/features/staff-schedule/schedule-utils'
 import { sameHours, shiftLabel, type ShiftHours } from '@/features/staff/shifts'
-import type { Schedule, ScheduleDay, ScheduleDayOffKind, ScheduleRow, StaffLeave, TimeOffInitiative } from '@/lib/types'
+import type {
+  LeaveKind,
+  Schedule,
+  ScheduleDay,
+  ScheduleDayOffKind,
+  ScheduleRow,
+  StaffLeave,
+  TimeOffInitiative,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export type EditedCell = { row: ScheduleRow; day: ScheduleDay; target: HTMLElement }
@@ -31,7 +39,7 @@ type Props = {
   onChange: (change: ScheduleChange) => void
   onClear: (row: ScheduleRow, day: ScheduleDay) => void
   /** Wpis urlopu w Kadrach (z {@code entry}: poprawa istniejącego); bez dostępu do Kadr nie ma przycisku. */
-  onLeave?: (row: ScheduleRow, day: ScheduleDay, entry?: StaffLeave) => void
+  onLeave?: (row: ScheduleRow, day: ScheduleDay, entry?: StaffLeave, kind?: LeaveKind) => void
   /** Usunięcie urlopu z Kadr, z „Przywróć”. */
   onRemoveLeave?: (row: ScheduleRow, entry: StaffLeave) => void
   /** Czas wolny za nadgodziny (art. 151² KP); puste minuty go usuwają. */
@@ -76,8 +84,8 @@ export function CellEditor({
                 }}
                 onLeave={
                   onLeave &&
-                  ((entry) => {
-                    onLeave(edited.row, edited.day, entry)
+                  ((entry, kind) => {
+                    onLeave(edited.row, edited.day, entry, kind)
                     onClose()
                   })
                 }
@@ -119,7 +127,7 @@ function EditorBody({
   edited: EditedCell
   onChange: (change: ScheduleChange) => void
   onClear: () => void
-  onLeave?: (entry?: StaffLeave) => void
+  onLeave?: (entry?: StaffLeave, kind?: LeaveKind) => void
   onRemoveLeave?: (entry: StaffLeave) => void
   onTimeOff?: (minutes: number | null, initiative: TimeOffInitiative | null) => void
 }) {
@@ -191,6 +199,19 @@ function EditorBody({
             <TreePalmIcon aria-hidden />
           </Button>
         )}
+        {onLeave && !row.civil && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-1.5 font-semibold"
+            title="Zwolnienie lekarskie (L4) od tego dnia (Kadry)"
+            aria-label="Dodaj zwolnienie lekarskie"
+            onClick={() => onLeave(undefined, 'SICK')}
+          >
+            L4
+          </Button>
+        )}
         {schedule.stores.length > 1 && (
           <Button
             type="button"
@@ -227,7 +248,7 @@ function EditorBody({
             {onRemoveLeave && (
               <Button type="button" size="sm" variant="outline" onClick={() => cell.leave && onRemoveLeave(cell.leave)}>
                 <Trash2Icon aria-hidden />
-                Anuluj urlop
+                {cell.leave.kind === 'SICK' ? 'Anuluj L4' : 'Anuluj urlop'}
               </Button>
             )}
           </div>

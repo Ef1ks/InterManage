@@ -49,7 +49,18 @@ public record ScheduleResponse(UUID departmentId, String month, String status, b
             List<LocalDate> owedDays, List<LocalDate> outOfContractDays, Integer monthTargetMinutes,
             Integer carriedMinutes, Integer dailyOvertimeMinutes, LocalDate actualUntil, Integer timeOffMinutes,
             Integer toCompensateMinutes, boolean civil, BigDecimal hourlyRate, BigDecimal pay,
-            BigDecimal overtimeSupplement) {
+            BigDecimal overtimeSupplement, Pay payDetails) {
+    }
+
+    /**
+     * Rozbicie szacowanej wypłaty miesiąca ({@code pay} wiersza = brutto). {@code work}: godziny z nadgodzinami dobowymi
+     * razy stawka z dodatkiem, {@code leave}: urlopy płatne z grafiku (godziny zmian pod urlopem razy stawka, przy sile
+     * wyższej połowa), {@code sick}: wynagrodzenie chorobowe 80% za godziny zmian pod L4. Potrącenia i netto liczy
+     * {@code NetPay} z ustawień w Kadrach.
+     */
+    public record Pay(BigDecimal work, BigDecimal overtimeSupplement, BigDecimal leave, int leaveMinutes,
+            BigDecimal sick, int sickMinutes, BigDecimal social, BigDecimal health, BigDecimal tax, BigDecimal net,
+            List<String> notes) {
     }
 
     /**

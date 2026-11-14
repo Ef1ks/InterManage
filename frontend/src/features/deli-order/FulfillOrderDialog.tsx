@@ -81,10 +81,10 @@ function FulfillForm({
       }
       const path = orderExportPath(storeId, order.id, 'proto')
       try {
-        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'zamowienie.Traite0')
-        toast.success('Zamówienie zrealizowane', { description: `Zapisano ${fileName}` })
+        await saveApiFileToFolder(protoFolder.key, path, 'zamowienie.Traite0')
+        toast.success('Zamówienie zrealizowane', { description: 'Protokół MM zapisany w folderze.' })
       } catch (error) {
-        toast.error('Zamówienie zrealizowane, ale pliku PROTO6 nie zapisano', {
+        toast.error('Zamówienie zrealizowane, ale protokołu MM nie zapisano', {
           description: error instanceof ApiError ? error.message : undefined,
           action: { label: 'Pobierz', onClick: () => downloadFile(path, 'zamowienie.Traite0') },
           duration: 15_000,

@@ -37,7 +37,7 @@ export type RecordEditor =
   | { type: 'contract-change'; contract: StaffContract }
   | { type: 'period'; entry?: StaffWorkPeriod }
   | { type: 'disability'; entry?: StaffDisability }
-  | { type: 'leave'; entry?: StaffLeave; date?: string }
+  | { type: 'leave'; entry?: StaffLeave; date?: string; kind?: LeaveKind }
   | { type: 'profile' }
   | { type: 'opening' }
 
@@ -63,7 +63,9 @@ export function RecordDialog({ storeId, employeeId, editor, profile, earlierJob 
           <PeriodForm {...shared} entry={editor.entry} firstJob={profile?.firstJob ?? false} />
         )}
         {editor?.type === 'disability' && <DisabilityForm {...shared} entry={editor.entry} />}
-        {editor?.type === 'leave' && <LeaveForm {...shared} entry={editor.entry} date={editor.date} />}
+        {editor?.type === 'leave' && (
+          <LeaveForm {...shared} entry={editor.entry} date={editor.date} kind={editor.kind} />
+        )}
         {editor?.type === 'profile' && <ProfileForm {...shared} profile={profile} earlierJob={earlierJob} />}
         {editor?.type === 'opening' && <OpeningForm {...shared} year={year} />}
       </DialogContent>
@@ -523,19 +525,25 @@ function DisabilityForm({ entry, ...props }: FormProps & { entry?: StaffDisabili
 type LeaveValues = { kind: LeaveKind; startDate: string; endDate: string }
 
 /** {@code date}: dzień, od którego zaczyna się nowy urlop (z grafiku). */
-function LeaveForm({ entry, date, ...props }: FormProps & { entry?: StaffLeave; date?: string }) {
+function LeaveForm({
+  entry,
+  date,
+  kind,
+  ...props
+}: FormProps & { entry?: StaffLeave; date?: string; kind?: LeaveKind }) {
   const { save, error, pending } = useEntrySave(props, 'leaves', entry?.id)
   const { control, handleSubmit } = useForm<LeaveValues>({
     defaultValues: {
-      kind: entry?.kind ?? 'ANNUAL',
+      kind: entry?.kind ?? kind ?? 'ANNUAL',
       startDate: entry?.startDate ?? date ?? '',
       endDate: entry?.endDate ?? date ?? '',
     },
   })
+  const sick = useWatch({ control, name: 'kind' }) === 'SICK'
 
   return (
     <Shell
-      title={entry ? 'Urlop' : 'Nowy urlop'}
+      title={sick ? (entry ? 'Zwolnienie lekarskie' : 'Nowe zwolnienie lekarskie') : entry ? 'Urlop' : 'Nowy urlop'}
       error={error}
       pending={pending}
       onCancel={props.onDone}
@@ -553,10 +561,17 @@ function LeaveForm({ entry, date, ...props }: FormProps & { entry?: StaffLeave; 
       />
       <DateInput control={control} name="startDate" label="Od" required="Podaj początek" />
       <DateInput control={control} name="endDate" label="Do" required="Podaj koniec" />
-      <p className="text-sm text-muted-foreground">
-        Dniami urlopu są dni z zaplanowaną pracą w grafiku (art. 154² KP), także w weekend. Dzień bez godzin nie zużywa
-        urlopu ani wymiaru, więc liczba dni rośnie, gdy kierownik ułoży godziny.
-      </p>
+      {sick ? (
+        <p className="text-sm text-muted-foreground">
+          Daty z zaświadczenia lekarskiego (e-ZLA). L4 liczy się w dniach kalendarzowych, zdejmuje z wymiaru godziny
+          zmian z grafiku (art. 130 § 3 KP), a w wypłacie daje 80% stawki za te godziny (art. 92 KP).
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Dniami urlopu są dni z zaplanowaną pracą w grafiku (art. 154² KP), także w weekend. Dzień bez godzin nie
+          zużywa urlopu ani wymiaru, więc liczba dni rośnie, gdy kierownik ułoży godziny.
+        </p>
+      )}
     </Shell>
   )
 }
@@ -569,6 +584,11 @@ type ProfileValues = {
   medicalExamUntil: string
   bhpTrainingUntil: string
   sanitaryUntil: string
+  pit2: boolean
+  higherCosts: boolean
+  youthReliefWaived: boolean
+  student: boolean
+  voluntarySickness: boolean
 }
 
 function ProfileForm({
@@ -587,6 +607,11 @@ function ProfileForm({
       medicalExamUntil: profile?.medicalExamUntil ?? '',
       bhpTrainingUntil: profile?.bhpTrainingUntil ?? '',
       sanitaryUntil: profile?.sanitaryUntil ?? '',
+      pit2: profile?.pit2 ?? true,
+      higherCosts: profile?.higherCosts ?? false,
+      youthReliefWaived: profile?.youthReliefWaived ?? false,
+      student: profile?.student ?? false,
+      voluntarySickness: profile?.voluntarySickness ?? false,
     },
   })
 
@@ -607,6 +632,11 @@ function ProfileForm({
             medicalExamUntil: orNull(values.medicalExamUntil),
             bhpTrainingUntil: orNull(values.bhpTrainingUntil),
             sanitaryUntil: orNull(values.sanitaryUntil),
+            pit2: values.pit2,
+            higherCosts: values.higherCosts,
+            youthReliefWaived: values.youthReliefWaived,
+            student: values.student,
+            voluntarySickness: values.voluntarySickness,
           },
           { onSuccess: props.onDone, onError: (cause) => setError(failed(cause)) },
         )
@@ -629,6 +659,37 @@ function ProfileForm({
       <DateInput control={control} name="medicalExamUntil" label="Badania lekarskie ważne do" optional="Wyczyść" />
       <DateInput control={control} name="bhpTrainingUntil" label="Szkolenie BHP ważne do" optional="Wyczyść" />
       <DateInput control={control} name="sanitaryUntil" label="Badania sanitarne ważne do" optional="Wyczyść" />
+      <p className="pt-1 text-sm font-medium">Podatek i składki (szacunek netto w grafiku)</p>
+      <Toggle
+        control={control}
+        name="pit2"
+        label="Złożył PIT-2"
+        description="Kwota zmniejszająca podatek 300 zł miesięcznie."
+      />
+      <Toggle
+        control={control}
+        name="higherCosts"
+        label="Podwyższone koszty uzyskania przychodu"
+        description="Dojazd z innej miejscowości: 300 zł zamiast 250 zł."
+      />
+      <Toggle
+        control={control}
+        name="youthReliefWaived"
+        label="Zrezygnował z ulgi dla młodych"
+        description="Do 26 lat podatku nie ma; wiek liczy się z daty urodzenia."
+      />
+      <Toggle
+        control={control}
+        name="student"
+        label="Uczeń lub student do 26 lat"
+        description="Zlecenie bez składek ZUS i zdrowotnej."
+      />
+      <Toggle
+        control={control}
+        name="voluntarySickness"
+        label="Dobrowolne chorobowe przy zleceniu"
+        description="Składka 2,45% od zlecenia; przy umowie o pracę u nas jest zawsze."
+      />
     </Shell>
   )
 }

@@ -38,6 +38,6 @@ export async function savePromoLabels(storeId: string, files: ProFile[], folderK
   )
   if (folderReady) await saveToFolder(folderKey, fileName, blob)
   else saveBlob(blob, fileName)
-  const summary = `${LABEL_FORMAT}: ${eans.size}`
+  const summary = `Etykiet: ${eans.size}`
   return folderReady ? summary : `${summary} · pobrane: folder protokołów nie jest wybrany w tej przeglądarce`
 }

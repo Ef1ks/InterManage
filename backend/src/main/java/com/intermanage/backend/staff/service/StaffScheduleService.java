@@ -34,6 +34,7 @@ import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.staff.component.NetPay;
 import com.intermanage.backend.staff.component.PeriodBalance;
 import com.intermanage.backend.staff.component.ScheduleCalendar;
 import com.intermanage.backend.staff.component.ScheduleCalendar.Period;
@@ -801,7 +802,7 @@ public class StaffScheduleService {
                             employee.getPosition().getName(), groupOf.get(id), employee.getStore().getNumber(),
                             guest(employee, store, department), null, null, null, null, null, List.of(), cells,
                             List.of(), List.of(), List.of(), null, null, null, null, null, null, false, null, null,
-                            null));
+                            null, null));
             List<Planned> civilDays = civilByEmployee.getOrDefault(id, List.of());
             StaffFile file = files.get(id);
             boolean bothContracts = file != null && days.stream().anyMatch(day -> mandate(file, day))
@@ -838,12 +839,21 @@ public class StaffScheduleService {
         int minutes = civilDays.stream().mapToInt(planned -> planned.shift().minutes()).sum();
         List<LocalDate> outOfContract = file == null ? List.of()
                 : days.stream().filter(day -> !mandate(file, day)).toList();
+        BigDecimal gross = rate == null ? null : rate.map(value -> money(minutes, value)).orElse(null);
+        ScheduleResponse.Pay details = null;
+        if (gross != null) {
+            boolean employedHere = file != null && days.stream().anyMatch(day -> employment(file, day) != null);
+            NetPay.Result net = NetPay.mandate(gross,
+                    NetPay.Settings.of(file == null ? null : file.profile(), YearMonth.from(days.getFirst())),
+                    employedHere);
+            details = new ScheduleResponse.Pay(gross, BigDecimal.ZERO.setScale(2), BigDecimal.ZERO.setScale(2), 0,
+                    BigDecimal.ZERO.setScale(2), 0, net.social(), net.health(), net.tax(), net.net(), net.notes());
+        }
         return new ScheduleResponse.Row(employee.getId(), employee.getDisplayName(),
                 employee.getPosition().getId(), employee.getPosition().getName(), groupId,
                 employee.getStore().getNumber(), guest(employee, store, department), "zlecenie", minutes, null, null,
                 null, List.of(), cells, List.of(), List.of(), outOfContract, null, null, null, null, null, null, true,
-                rate == null ? null : rate.orElse(null),
-                rate == null ? null : rate.map(value -> money(minutes, value)).orElse(null), null);
+                rate == null ? null : rate.orElse(null), gross, null, details);
     }
 
     private static boolean mandate(StaffFile file, LocalDate day) {
@@ -926,6 +936,8 @@ public class StaffScheduleService {
         List<ScheduleResponse.Warning> contractWarnings = inPeriod.stream().map(Planned::day)
                 .filter(outOfContract::contains).sorted()
                 .map(day -> new ScheduleResponse.Warning(day, "Zmiana poza umową", "daty umowy w Kadrach")).toList();
+        ScheduleResponse.Pay pay = rate == null || rate.isEmpty() ? null
+                : pay(rate.get(), month, inPeriod, absent, file, monthHours, toCompensate);
         return new ScheduleResponse.Row(employee.getId(), employee.getDisplayName(),
                 employee.getPosition().getId(), employee.getPosition().getName(), groupId,
                 employee.getStore().getNumber(), guest(employee, store, department), contract(file, month.atDay(1), month.atEndOfMonth()),
@@ -938,10 +950,46 @@ public class StaffScheduleService {
                 anyEmployment ? carried : null,
                 periodHours.dailyOvertime(), actualUntil, periodHours.timeOff(), anyEmployment ? toCompensate : null,
                 false, rate == null ? null : rate.orElse(null),
-                rate == null ? null : rate.map(value -> money(monthHours.worked() + monthHours.dailyOvertime(), value)
-                        .add(supplement(monthHours.dailyOvertime(), toCompensate, value))).orElse(null),
-                rate == null ? null : rate.map(value -> supplement(monthHours.dailyOvertime(), toCompensate, value))
-                        .orElse(null));
+                pay == null ? null : pay.work().add(pay.leave()).add(pay.sick()),
+                pay == null ? null : pay.overtimeSupplement(), pay);
+    }
+
+    /**
+     * Brutto miesiąca na umowie o pracę i netto z Kadr. Urlop przy stawce godzinowej to stawka razy godziny zmian pod
+     * nim w grafiku (rozporządzenie o wynagrodzeniu za urlop, § 6: składniki stałe za czas urlopu), siła wyższa połowa
+     * (art. 148¹ § 1 KP), urlop opiekuńczy i bezpłatny nic. L4 to wynagrodzenie chorobowe 80% (art. 92 § 1 KP), tu
+     * w przybliżeniu za godziny zmian pod zwolnieniem, a nie ze średniej z 12 miesięcy; ponad 33 dni w roku płaci ZUS.
+     */
+    private static ScheduleResponse.Pay pay(BigDecimal rate, YearMonth month, List<Planned> inPeriod,
+            List<StaffLeave> absent, StaffFile file, PeriodBalance.Sum monthHours, int toCompensate) {
+        BigDecimal supplement = supplement(monthHours.dailyOvertime(), toCompensate, rate);
+        BigDecimal work = money(monthHours.worked() + monthHours.dailyOvertime(), rate).add(supplement);
+        int leaveMinutes = 0;
+        int halfMinutes = 0;
+        int sickMinutes = 0;
+        for (Planned planned : inPeriod) {
+            if (!YearMonth.from(planned.day()).equals(month) || employment(file, planned.day()) == null) {
+                continue;
+            }
+            StaffLeave leave = leaveOn(absent, planned.day());
+            if (leave == null) {
+                continue;
+            }
+            int minutes = planned.shift().minutes();
+            switch (leave.getKind()) {
+                case ANNUAL, ON_DEMAND, CHILD_CARE, OCCASIONAL, REHABILITATION -> leaveMinutes += minutes;
+                case FORCE_MAJEURE -> halfMinutes += minutes;
+                case SICK -> sickMinutes += minutes;
+                default -> {
+                }
+            }
+        }
+        BigDecimal leavePay = money(leaveMinutes, rate)
+                .add(money(halfMinutes, rate).divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP));
+        BigDecimal sickPay = money(sickMinutes, rate).multiply(new BigDecimal("0.8")).setScale(2, RoundingMode.HALF_UP);
+        NetPay.Result net = NetPay.employment(work.add(leavePay), sickPay, NetPay.Settings.of(file.profile(), month));
+        return new ScheduleResponse.Pay(work, supplement, leavePay, leaveMinutes + halfMinutes, sickPay, sickMinutes,
+                net.social(), net.health(), net.tax(), net.net(), net.notes());
     }
 
     /** Minuty razy stawka za godzinę, do grosza. */
@@ -991,8 +1039,10 @@ public class StaffScheduleService {
                 norm = ScheduleCalendar.normMinutes(day) * share;
                 // Dniem urlopu jest tylko dzień z zaplanowaną zmianą: obniża wymiar o pełny dobowy wymiar pracownika
                 // (8 h razy etat, art. 130 § 3 i art. 154²), bez względu na długość zmiany. Dzień bez godzin nic.
+                // L4 obniża wymiar o godziny z rozkładu, których nie przepracowano (art. 130 § 3 KP).
                 if (leave && shift != null) {
-                    norm -= 8 * 60 * share;
+                    norm -= leaveOn(absent, day).getKind() == LeaveKind.SICK ? shift.shift().minutes()
+                            : 8 * 60 * share;
                 }
             }
             StaffOvertimeTimeOff free = timeOff.get(day);

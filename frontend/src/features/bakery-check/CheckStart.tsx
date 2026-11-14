@@ -101,12 +101,12 @@ export function CheckStart({ storeId }: { storeId: string }) {
             ) : bons.isError ? (
               <p className="text-sm text-destructive">Nie udało się wczytać bonów.</p>
             ) : bons.data.length === 0 ? (
-              <p className="rounded-xl border px-4 py-6 text-center text-sm text-muted-foreground">
+              <p className="rounded-xl border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
                 Ten dostawca nie ma bonów z ostatnich 120 dni. Gdy faktura jest już w KSeF, a bonu jeszcze nie ma w
                 raporcie, zacznij weryfikację bez bonu i przypnij fakturę.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border">
+              <div className="overflow-x-auto rounded-xl border bg-card">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -161,7 +161,7 @@ export function CheckStart({ storeId }: { storeId: string }) {
           {checks.data && checks.data.length > 0 && (
             <section>
               <h2 className="mb-3 text-lg font-semibold">Zapisane weryfikacje</h2>
-              <ul className="divide-y rounded-xl border">
+              <ul className="divide-y rounded-xl border bg-card">
                 {checks.data.map((check) => (
                   <li key={check.id}>
                     <button

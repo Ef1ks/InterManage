@@ -107,10 +107,10 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
       }
       const path = incomingTransferExportPath(storeId, transfer.id, 'proto')
       try {
-        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'przyjecie.Traite0')
-        toast.success('Zapisano przyjęte ilości', { description: `Zapisano ${fileName}` })
+        await saveApiFileToFolder(protoFolder.key, path, 'przyjecie.Traite0')
+        toast.success('Zapisano przyjęte ilości', { description: 'Protokół MM zapisany w folderze.' })
       } catch (error) {
-        toast.error('Ilości zapisane, ale pliku PROTO6 nie zapisano', {
+        toast.error('Ilości zapisane, ale protokołu MM nie zapisano', {
           description: error instanceof ApiError ? error.message : undefined,
           action: { label: 'Pobierz', onClick: () => downloadFile(path, 'przyjecie.Traite0') },
           duration: 15_000,
@@ -153,7 +153,7 @@ function ReceiveForm({ storeId, transfer, onDone }: Omit<Props, 'open' | 'onOpen
                 </div>
                 <div className="text-xs text-muted-foreground tabular-nums">
                   w dokumencie {formatQuantity(Math.abs(line.quantity))}
-                  {line.ean ? ` · ${line.ean}` : ' · bez EAN, nie trafi do PROTO6'}
+                  {line.ean ? ` · ${line.ean}` : ' · bez EAN, nie trafi do protokołu MM'}
                   {error && <span className="text-destructive"> · {error}</span>}
                 </div>
               </div>

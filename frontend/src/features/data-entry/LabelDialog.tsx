@@ -58,15 +58,15 @@ export function LabelDialog({ storeId, lines, selection, skipped, open, onOpenCh
       const fallbackName = 'ETIQUETTE.traite0'
       if (!folderReady) {
         await downloadPostedFile(path, body, fallbackName)
-        toast.success('Pobrano plik etykiet', { description: 'Folder protokołów nie jest wybrany w tej przeglądarce.' })
+        toast.success('Pobrano etykiety', { description: 'Folder protokołów nie jest wybrany w tej przeglądarce.' })
       } else {
         const { fileName, blob } = await fetchPostedFile(path, body, fallbackName)
         await saveToFolder(folder.key, fileName, blob)
-        toast.success('Zapisano plik etykiet', { description: fileName })
+        toast.success('Utworzono etykiety')
       }
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku etykiet')
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się utworzyć etykiet')
     } finally {
       setPending(null)
     }

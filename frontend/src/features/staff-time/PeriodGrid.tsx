@@ -38,7 +38,8 @@ export function PeriodGrid({ cards, onDay, onPrint, printing }: Props) {
                 className={cn(
                   'min-w-12 border-b px-1 py-2 text-center font-medium',
                   weekdayLabel(day.date) === 'pn' && 'border-l-2',
-                  day.holiday && 'text-red-700 dark:text-red-300',
+                  // Święto tłem, nie tylko kolorem napisu: sam czerwony skrót dnia łatwo przeoczyć.
+                  day.holiday && 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
                   day.date === today && TODAY_COLUMN,
                 )}
               >

@@ -100,7 +100,7 @@ function HistorySection({
       ) : empty ? (
         <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">{empty}</p>
       ) : (
-        <div className="max-h-80 min-w-0 overflow-auto rounded-lg border">{children}</div>
+        <div className="max-h-80 min-w-0 overflow-auto rounded-lg border bg-card">{children}</div>
       )}
     </section>
   )

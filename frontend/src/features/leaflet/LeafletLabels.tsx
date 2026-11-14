@@ -51,10 +51,10 @@ export function LeafletLabels({ storeId, lines }: { storeId: string; lines: Leaf
         )
         if (folderReady) await saveToFolder(folder.key, fileName, blob)
         else saveBlob(blob, fileName)
-        saved.push(`${chosen}: ${eans.length}`)
+        saved.push(`${LABEL_FORMATS.find((item) => item.format === chosen)?.label ?? chosen}: ${eans.length}`)
       }
       const skipped = formats.reduce((sum, chosen) => sum + counts[chosen].withoutProduct, 0)
-      toast.success(saved.length === 1 ? 'Zapisano plik etykiet' : `Zapisano pliki etykiet: ${saved.length}`, {
+      toast.success('Utworzono etykiety', {
         description: [
           saved.join(', '),
           skipped > 0 ? `bez artykułu z kartoteki pominięto: ${skipped}` : null,
@@ -65,7 +65,7 @@ export function LeafletLabels({ storeId, lines }: { storeId: string; lines: Leaf
         duration: 10_000,
       })
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku etykiet')
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się utworzyć etykiet')
     } finally {
       setPending(null)
     }
@@ -84,7 +84,7 @@ export function LeafletLabels({ storeId, lines }: { storeId: string; lines: Leaf
           title={current.description}
         >
           <TagsIcon />
-          Etykiety {format}
+          Etykiety: {current.label}
           <span className="text-muted-foreground tabular-nums">({counts[format].eans.length})</span>
         </Button>
         <DropdownMenu>
@@ -102,14 +102,14 @@ export function LeafletLabels({ storeId, lines }: { storeId: string; lines: Leaf
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-80">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Format cenówki</DropdownMenuLabel>
+              <DropdownMenuLabel>Rodzaj cenówki</DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuRadioGroup value={format} onValueChange={(value) => setFormat(value as LabelFormat)}>
               {LABEL_FORMATS.map((item) => (
                 <DropdownMenuRadioItem key={item.format} value={item.format}>
                   <span className="flex min-w-0 flex-col">
                     <span className="font-medium">
-                      {item.format}{' '}
+                      {item.label}{' '}
                       <span className="text-muted-foreground tabular-nums">({counts[item.format].eans.length})</span>
                     </span>
                     <span className="text-xs text-muted-foreground">{item.description}</span>
@@ -131,7 +131,7 @@ export function LeafletLabels({ storeId, lines }: { storeId: string; lines: Leaf
             'all',
           )
         }
-        title="Osobny plik etykiet dla każdego formatu z artykułami"
+        title="Etykiety we wszystkich rodzajach cenówek, które mają artykuły"
       >
         <TagsIcon />
         Generuj wszystkie etykiety ({withArticles.length})

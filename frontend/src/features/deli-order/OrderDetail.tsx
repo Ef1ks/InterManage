@@ -392,7 +392,7 @@ function OrderView({ storeId, order }: { storeId: string; order: DeliOrder }) {
               Gdy towar jest wydany,{' '}
               <strong className="font-semibold text-foreground">przypnij dokument ruchu międzymagazynowego</strong>, na
               którym jedzie, kliknij <strong className="font-semibold text-foreground">Potwierdź zrealizowanie</strong>{' '}
-              i wpisz wydane ilości (Enter przechodzi do następnego produktu). Plik PROTO6 zapisze się w wybranym
+              i wpisz wydane ilości (Enter przechodzi do następnego produktu). Protokół MM zapisze się w wybranym
               folderze i program sklepu sam go wczyta.
             </>,
             <>

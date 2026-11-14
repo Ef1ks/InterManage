@@ -8,7 +8,7 @@ import type { ImportReportKind } from '@/lib/types'
  */
 
 /** Raporty wgrywane codziennie, w kolejności odświeżania. Listę dostawców i nomenklatur wgrywa się tylko ręcznie. */
-export const DAILY_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'SALES', 'DOCUMENTS'] as const
+export const DAILY_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'SALES', 'DOCUMENTS', 'CADENCIER'] as const
 
 export type DailyReport = (typeof DAILY_REPORTS)[number]
 
@@ -18,6 +18,7 @@ export const REPORT_TITLES: Record<ImportReportKind, string> = {
   PROMOTIONS: 'Lista promocji',
   SALES: 'Raport sprzedaży',
   DOCUMENTS: 'Raport dokumentów',
+  CADENCIER: 'Obecne w cadencier',
   SUPPLIERS: 'Lista dostawców',
   NOMENCLATURES: 'Lista nomenklatur',
 }
@@ -32,6 +33,7 @@ export const REPORT_EXTENSIONS: Record<DailyReport, string[]> = {
   PROMOTIONS: PDF_EXTENSIONS,
   SALES: XLSX_EXTENSIONS,
   DOCUMENTS: XLSX_EXTENSIONS,
+  CADENCIER: XLSX_EXTENSIONS,
 }
 
 /** Przykład maski w polu ustawień (nazwy plików z systemu sklepu). */
@@ -41,6 +43,7 @@ export const MASK_EXAMPLES: Record<DailyReport, string> = {
   PROMOTIONS: 'Taryfy*',
   SALES: 'sprzedaz*',
   DOCUMENTS: 'Zeszyt*',
+  CADENCIER: 'obecne w cad*',
 }
 
 export const sourceFolderKey = (storeId: string, kind: DailyReport) => `import:${storeId}:${kind}`

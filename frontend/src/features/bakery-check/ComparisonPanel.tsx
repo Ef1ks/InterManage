@@ -92,7 +92,7 @@ export function ComparisonPanel({ storeId, checkId }: { storeId: string; checkId
               Tylko różnice
             </Button>
           </div>
-          <div className="overflow-x-auto rounded-xl border">
+          <div className="overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

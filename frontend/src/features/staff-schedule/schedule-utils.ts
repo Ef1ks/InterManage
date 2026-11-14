@@ -59,6 +59,7 @@ export const ABSENCE: Record<NonNullable<ScheduleCell['absence']>, { symbol: str
   OCCASIONAL: { symbol: 'OK', label: 'Urlop okolicznościowy' },
   UNPAID: { symbol: 'UB', label: 'Urlop bezpłatny' },
   B2B_PAID: { symbol: 'UP', label: 'Płatna przerwa (B2B)' },
+  SICK: { symbol: 'L4', label: 'Zwolnienie lekarskie (L4)' },
   OTHER: { symbol: 'N', label: 'Nieobecność (rodzaj widać w Kadrach)' },
 }
 

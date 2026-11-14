@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 44.0.0.0
+;@Ahk2Exe-SetVersion 45.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 44 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 45 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -1319,12 +1319,19 @@ WebPickRowMatching(title, grid, pattern, timeoutMs, &missing := false) {
     missing := false
     deadline := A_TickCount + timeoutMs
     gridSince := 0
+    pageSince := 0
     Loop {
         gridFound := false
+        pageLoaded := false
         for hwnd in WinGetList(title) {
             for doc in HtmlDocuments(hwnd) {
+                try {
+                    if (doc.readyState = "complete")
+                        pageLoaded := true
+                }
                 rows := GridRows(doc, grid)
-                if (rows.Length > 0)
+                ; Pusta lista (siatka bez wierszy, np. bon bez pliku 88110) też jest listą: wiersza na niej nie będzie.
+                if (rows.Length > 0 || GridPresent(doc, grid))
                     gridFound := true
                 for item in rows {
                     if RegExMatch(RowText(item.row), pattern) {
@@ -1343,6 +1350,14 @@ WebPickRowMatching(title, grid, pattern, timeoutMs, &missing := false) {
             else if (A_TickCount - gridSince >= 2000) {
                 missing := true
                 return "Na liście nie ma wiersza pasującego do `"" pattern "`"."
+            }
+        } else if pageLoaded {
+            ; Strona wczytana, a listy nie ma (Mercalys nie rysuje pustej siatki): pliku też nie ma.
+            if (pageSince = 0)
+                pageSince := A_TickCount
+            else if (A_TickCount - pageSince >= 4000) {
+                missing := true
+                return "Nie ma listy `"" grid "`" w oknie `"" title "`"."
             }
         }
         if (A_TickCount >= deadline) {
@@ -1763,6 +1778,19 @@ WaitForSelection(doc, grid, item, deadline) {
 
 ; Wiersze danych siatki z numerami z setSelectedLigne; pusto, gdy strona jeszcze się ładuje.
 ; Siatka "*" = każda siatka strony (gdy jej nazwy nie znamy); wiersz niesie wtedy nazwę swojej siatki.
+; Czy strona ma siatkę (także pustą): jej ukryte pole fokusu albo tabela o tym id.
+GridPresent(doc, grid) {
+    if (grid = "*")
+        return false
+    try {
+        if (doc.readyState != "complete")
+            return false
+        return WebProp(doc.getElementById(grid "_hiddenFocus"), "tagName") != ""
+            || WebProp(doc.getElementById(grid), "tagName") != ""
+    }
+    return false
+}
+
 GridRows(doc, grid) {
     rows := []
     try {

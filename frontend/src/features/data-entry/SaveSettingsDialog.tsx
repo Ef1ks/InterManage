@@ -63,8 +63,8 @@ export function SaveSettingsDialog({
     const path = `/stores/${storeId}/data-entry/price-control-files/${id}/file`
     try {
       if (await ensureFolderAccess(protoFolder.key)) {
-        const fileName = await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.traite0')
-        toast.success(`Zapisano ${fileName}`)
+        await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.traite0')
+        toast.success('Zapisano zmianę cen')
       } else {
         await downloadFile(path, 'CTRLPRIX.traite0')
       }

@@ -49,7 +49,7 @@ export function ProtocolDialog({ storeId, lines, skipped, open, onOpenChange }: 
       } else {
         const { fileName, blob } = await fetchPostedFile(path, { lines }, fallbackName)
         await saveToFolder(folder.key, fileName, blob)
-        toast.success('Zapisano protokół', { description: fileName })
+        toast.success('Zapisano protokół')
       }
       onOpenChange(false)
     } catch (error) {

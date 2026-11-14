@@ -161,6 +161,7 @@ export type LeaveKind =
   | 'OCCASIONAL'
   | 'UNPAID'
   | 'B2B_PAID'
+  | 'SICK'
 
 /** Własny grafik: ostatnie publikacje, każdy dzień okresu; godziny jako GG:MM:SS. */
 export type MySchedule = {

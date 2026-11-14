@@ -115,7 +115,7 @@ public class PromotionImportService {
 
     private PromotionImportResponse merge(UUID storeId, ParsedPromotionReport report, String fileName, UUID userId) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
-        if (report.storeNumber() != null && !report.storeNumber().equals(store.getNumber())) {
+        if (!store.getNumber().equals(report.storeNumber())) {
             throw ApiException.conflict("To raport sklepu " + report.storeNumber() + ", a wybrany jest sklep "
                     + store.getNumber() + " (" + store.getName() + "). Przełącz sklep albo wgraj właściwy plik.");
         }

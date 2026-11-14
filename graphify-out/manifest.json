@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794646712.2014923,
-    "seen": 1794646892.864814,
-    "ast_hash": "4b72dd61b1256516c71eaa8846b2d07e",
+    "mtime": 1794648973.9593105,
+    "seen": 1794649294.9395926,
+    "ast_hash": "1cbb86207387cdd40dc1cd70e653f233",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794647477.9514277,
-    "seen": 1794647528.1796875,
-    "ast_hash": "3fd873a3391b2d910cd346344e5c0d06",
+    "mtime": 1794661506.304681,
+    "seen": 1794661561.8566115,
+    "ast_hash": "1916dfd82c952b0bc3a716f8e83ea6ac",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1794061656.5229578,
-    "seen": 1794061853.9533098,
-    "ast_hash": "7d27861829108fe2862e799dc6bbcf4d",
+    "mtime": 1794649730.435869,
+    "seen": 1794661561.8038363,
+    "ast_hash": "dbf72ddaf0b1838d3ae602099f52d818",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
@@ -1236,9 +1236,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderDetail.tsx": {
-    "mtime": 1794061713.1915622,
-    "seen": 1794061853.9422448,
-    "ast_hash": "0da016fa8211c6f4db725c0f432010f8",
+    "mtime": 1794649730.4311068,
+    "seen": 1794661561.7948308,
+    "ast_hash": "749143e153e6f757df69a9228c73123f",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderStatusBadge.tsx": {
@@ -1278,9 +1278,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/OrderDownloads.tsx": {
-    "mtime": 1793519339.6912541,
-    "seen": 1793519530.9419649,
-    "ast_hash": "aa84ebc1151d82c3083620e7c4635df9",
+    "mtime": 1794649793.3899877,
+    "seen": 1794661561.7948308,
+    "ast_hash": "9556c3235dfcfa49212a03d48591a931",
     "semantic_hash": ""
   },
   "backend/src/main/resources/fonts/DejaVu-LICENSE.txt": {
@@ -3696,9 +3696,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/IncomingTransfers.tsx": {
-    "mtime": 1794061713.3516188,
-    "seen": 1794061853.9513037,
-    "ast_hash": "8aa3ca125c07496eb5fb0f6cfe509cc8",
+    "mtime": 1794649793.4796946,
+    "seen": 1794661561.8008366,
+    "ast_hash": "b64b3c6c2e00c22c7a8ccfae18dd4560",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/IncomingTransfersBadge.tsx": {
@@ -3714,9 +3714,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/StoreSettingsPage.tsx": {
-    "mtime": 1794551611.3900177,
-    "seen": 1794551966.30273,
-    "ast_hash": "2b2de3c2cdb5682fa8c7123c9cb6372c",
+    "mtime": 1794648240.372337,
+    "seen": 1794648368.5773513,
+    "ast_hash": "615ead96ba45006b7ac653f70871bee1",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/api.ts": {
@@ -3810,9 +3810,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/FulfillOrderDialog.tsx": {
-    "mtime": 1794061713.1553133,
-    "seen": 1794061853.941244,
-    "ast_hash": "11133ee3d75eac47b71dca45003cbafa",
+    "mtime": 1794649745.914839,
+    "seen": 1794661561.7938309,
+    "ast_hash": "24e271569b7f08ec0d36df88329b77eb",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/group-items.ts": {
@@ -3942,9 +3942,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/controller/PriceCheckController.java": {
-    "mtime": 1793800987.1954858,
-    "seen": 1793801472.7001512,
-    "ast_hash": "c2fe73eaa5c79fdbda0b0546f7272858",
+    "mtime": 1794648176.477919,
+    "seen": 1794648368.3601656,
+    "ast_hash": "7c73496700eb79b98b5dc0a494a376c7",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/dto/PriceCheckReport.java": {
@@ -4089,12 +4089,6 @@
     "mtime": 1793205335.7482421,
     "seen": 1793206056.64586,
     "ast_hash": "d6cd2dec3d2949682bb7e9cd98362270",
-    "semantic_hash": ""
-  },
-  "frontend/src/features/store-settings/CadencierUpload.tsx": {
-    "mtime": 1793207899.7406023,
-    "seen": 1793207956.750839,
-    "ast_hash": "8439df22b8e791061ab0296ad11fb835",
     "semantic_hash": ""
   },
   "frontend/src/lib/history-trail.ts": {
@@ -4302,9 +4296,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/ReceiveTransferDialog.tsx": {
-    "mtime": 1794061713.3954122,
-    "seen": 1794061853.9513037,
-    "ast_hash": "37eec3dfbc10b9ad522e7e2e0f729db5",
+    "mtime": 1794649745.9158387,
+    "seen": 1794661561.8018367,
+    "ast_hash": "6e067d42237f1b25dd5d7ee3aacfb71b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/dto/AddDeliOrderItemsRequest.java": {
@@ -4494,9 +4488,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1794647453.0472496,
-    "seen": 1794647528.1130898,
-    "ast_hash": "2bdc825b4beb1d7354d3ae3ee5d7c899",
+    "mtime": 1794649793.7463033,
+    "seen": 1794661561.787831,
+    "ast_hash": "0fe107c914dc1710c499ba822f10bc3d",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4674,9 +4668,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/ProtoFile.java": {
-    "mtime": 1793623550.122895,
-    "seen": 1793623652.9405756,
-    "ast_hash": "171d0c5f9f6535e198a8e5738c51cf79",
+    "mtime": 1794649773.7924936,
+    "seen": 1794661561.5980375,
+    "ast_hash": "89189fcd72eb7ec4a06fdf7c3869191e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/ProtocolRequest.java": {
@@ -4734,15 +4728,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/ProtocolDialog.tsx": {
-    "mtime": 1793634669.8850632,
-    "seen": 1793634709.6030548,
-    "ast_hash": "13b38661a814be26889222a98ce1bedb",
+    "mtime": 1794649730.4269361,
+    "seen": 1794661561.789831,
+    "ast_hash": "b4afb6d73293ce8e104b8bbbdf30decb",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/ProtoSettingsForm.tsx": {
-    "mtime": 1793865577.1297455,
-    "seen": 1793866067.1809556,
-    "ast_hash": "49388edd428cd27371818e100e5e3166",
+    "mtime": 1794649730.4466586,
+    "seen": 1794661561.822128,
+    "ast_hash": "781197b987d21765c9b72232bd6e07db",
     "semantic_hash": ""
   },
   "frontend/src/lib/proto-files.ts": {
@@ -5316,9 +5310,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/component/PromotionReportParser.java": {
-    "mtime": 1793600665.1620345,
-    "seen": 1793600905.8776581,
-    "ast_hash": "87a76fba9063d01102e4dd3d5c076603",
+    "mtime": 1794661321.6994033,
+    "seen": 1794661561.701359,
+    "ast_hash": "045397612a68385d9a1a01de90ffb52b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/controller/PromotionImportController.java": {
@@ -5352,9 +5346,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/entity/PromotionImport.java": {
-    "mtime": 1793600240.4297926,
-    "seen": 1793600905.8776581,
-    "ast_hash": "3f456ebad93aa405e98ee8330ed5c7be",
+    "mtime": 1794661384.4642968,
+    "seen": 1794661561.7033658,
+    "ast_hash": "03e013d04836f988641fb3911e6ef95c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/mapper/PromotionMapper.java": {
@@ -5364,15 +5358,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/repository/PromotionImportRepository.java": {
-    "mtime": 1793638687.939948,
-    "seen": 1793638784.2743993,
-    "ast_hash": "76277b5a6e4a300ed789a16f3be5592b",
+    "mtime": 1794661386.0908122,
+    "seen": 1794661561.7033658,
+    "ast_hash": "3e922e12bdbf356ee39e1b0c2fb73ad3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/promotion/service/PromotionImportService.java": {
-    "mtime": 1793600369.5367486,
-    "seen": 1793600905.8776581,
-    "ast_hash": "752eda0e551dfbed3056b8b303c00c0e",
+    "mtime": 1794661348.702397,
+    "seen": 1794661561.7033658,
+    "ast_hash": "f9e9c1e926a8577a3f9caa1629f5a40c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductFileTests.java": {
@@ -5382,9 +5376,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/PromotionAndProductCodeImportIntegrationTests.java": {
-    "mtime": 1793656651.937556,
-    "seen": 1793656763.5769818,
-    "ast_hash": "7035d306ce67eb03e264c189fde4e3dc",
+    "mtime": 1794661347.8027594,
+    "seen": 1794661561.7680829,
+    "ast_hash": "ad063e92d56e428f5a098e3c0c4f3e5d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/meat/entity/MeatDelivery.java": {
@@ -5664,9 +5658,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/service/PriceFileService.java": {
-    "mtime": 1793894576.7474031,
-    "seen": 1793895304.6673076,
-    "ast_hash": "dbdab6424fe14206d07e479911447354",
+    "mtime": 1794649773.8379152,
+    "seen": 1794661561.701359,
+    "ast_hash": "7d2b9725927a734de19e0659a7d22c33",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PriceFileStatus.tsx": {
@@ -5730,9 +5724,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryPriceControlService.java": {
-    "mtime": 1794302441.3190503,
-    "seen": 1794302716.5196009,
-    "ast_hash": "a4cc687b86bc0b4706911eb144e81e26",
+    "mtime": 1794649773.814948,
+    "seen": 1794661561.6158175,
+    "ast_hash": "9a5f1fdd2da6b3c076a1e03e217f1764",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/PdfBarcodes.java": {
@@ -5994,9 +5988,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/SaveSettingsDialog.tsx": {
-    "mtime": 1793898895.457916,
-    "seen": 1793898938.7486684,
-    "ast_hash": "a29bf7077d9adab714789e186b9e71c2",
+    "mtime": 1794649745.9168408,
+    "seen": 1794661561.789831,
+    "ast_hash": "564b2abb40439efcbb160bcd2f856ea7",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/xml-save.tsx": {
@@ -6066,9 +6060,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/layout/navigation.tsx": {
-    "mtime": 1794589909.372863,
-    "seen": 1794590207.6413836,
-    "ast_hash": "84920f76a1923f7ebacac5d8fbd2c83d",
+    "mtime": 1794649730.4393744,
+    "seen": 1794661561.778831,
+    "ast_hash": "55158e7e721405a90066149fa072a684",
     "semantic_hash": ""
   },
   "frontend/src/features/tools/NavGroupPage.tsx": {
@@ -6126,9 +6120,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/ArticlePriceHistory.tsx": {
-    "mtime": 1794239364.272271,
-    "seen": 1794239469.5285933,
-    "ast_hash": "6994e809ef9cf74a2df7539615c153d9",
+    "mtime": 1794648586.834911,
+    "seen": 1794648674.0546584,
+    "ast_hash": "305484bfc02ea3cc1f445a300ed6184a",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/InventoryPage.tsx": {
@@ -6372,9 +6366,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/BaseDeliveryPage.tsx": {
-    "mtime": 1794061684.5359035,
-    "seen": 1794061853.9312394,
-    "ast_hash": "c43c2223bc6427a55dd24b707781bd1a",
+    "mtime": 1794649793.9274232,
+    "seen": 1794661561.783831,
+    "ast_hash": "f6fcf7e69ad60c52c164206d38673231",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/CarrierDialog.tsx": {
@@ -6390,9 +6384,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/DeliveryPickerDialog.tsx": {
-    "mtime": 1793695946.4177828,
-    "seen": 1793696036.8028362,
-    "ast_hash": "1b2b4683dda1a2c92e1773e745c2f738",
+    "mtime": 1794649730.4129295,
+    "seen": 1794661561.783831,
+    "ast_hash": "dd7f6c53c53e253c7f778ac1d195c229",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/MeaCodesPage.tsx": {
@@ -6414,9 +6408,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/base-rows.ts": {
-    "mtime": 1793892568.9855947,
-    "seen": 1793892641.4227998,
-    "ast_hash": "6097f811a816dc96501c3e5f3e959c20",
+    "mtime": 1794649730.4119294,
+    "seen": 1794661561.7848308,
+    "ast_hash": "eb1440313e4edfb49a91009444b5cfd3",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/paths.ts": {
@@ -6450,9 +6444,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/entity/ImportReportKind.java": {
-    "mtime": 1793657291.7157047,
-    "seen": 1793657320.5918581,
-    "ast_hash": "4d6521020f893d90fd50cc003680a749",
+    "mtime": 1794648177.3156903,
+    "seen": 1794648368.3272061,
+    "ast_hash": "92b40e0bb528ea6b1897992563d9b1d1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/entity/ProductDraft.java": {
@@ -6540,15 +6534,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/import-sources.ts": {
-    "mtime": 1793657413.001231,
-    "seen": 1793657672.0107343,
-    "ast_hash": "8ebb7c8ea684292ff784eec6e8b72ce1",
+    "mtime": 1794648186.662535,
+    "seen": 1794648368.5509377,
+    "ast_hash": "0a351163677c06418d0b690a143642d7",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
-    "mtime": 1794646095.8544319,
-    "seen": 1794646185.8380475,
-    "ast_hash": "cd51375520f52b8635607d43df310335",
+    "mtime": 1794653698.1653216,
+    "seen": 1794661561.783831,
+    "ast_hash": "5158a96d039c7b48b06cd00b9c7a3b41",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/itm8-macro.ts": {
@@ -6582,9 +6576,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/LabelDialog.tsx": {
-    "mtime": 1793702002.8332138,
-    "seen": 1793705687.8560011,
-    "ast_hash": "6eb23553abd08031c9a2beffd5c0ad4d",
+    "mtime": 1794649730.4269361,
+    "seen": 1794661561.7888308,
+    "ast_hash": "ca637006996aa40770c182c8b2b9f39b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/component/TemporaryNoteParser.java": {
@@ -6726,9 +6720,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/LeafletLabels.tsx": {
-    "mtime": 1793740059.9425035,
-    "seen": 1793780902.3441596,
-    "ast_hash": "96341c416c72f3607a99612fe40efcbb",
+    "mtime": 1794649730.4438934,
+    "seen": 1794661561.8068364,
+    "ast_hash": "f9a96ddca636f2f13d1bd706d930c0a6",
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/LeafletPage.tsx": {
@@ -6738,9 +6732,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/ProFilesDialog.tsx": {
-    "mtime": 1793946512.162715,
-    "seen": 1793955940.8295696,
-    "ast_hash": "1eab715b5a410875966aa1be4db4064d",
+    "mtime": 1794649730.4423883,
+    "seen": 1794661561.8068364,
+    "ast_hash": "8e4f6960c0d3eaac02a9dcde944d75d5",
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/api.ts": {
@@ -6750,9 +6744,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/leaflet-rows.ts": {
-    "mtime": 1793903013.4702704,
-    "seen": 1793903419.8856568,
-    "ast_hash": "3a16e308d31efe780d4e413035284a6e",
+    "mtime": 1794649730.4393744,
+    "seen": 1794661561.8068364,
+    "ast_hash": "22296ff40d280a08d311bb44d21130d1",
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/paths.ts": {
@@ -6786,9 +6780,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/ArticleFileDialog.tsx": {
-    "mtime": 1794571101.5642753,
-    "seen": 1794571230.217977,
-    "ast_hash": "90fcda8b0df304b0797ff6089702e754",
+    "mtime": 1794649730.4149292,
+    "seen": 1794661561.7868326,
+    "ast_hash": "d713cdcefe75e946b9292bdf9b73666d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/controller/OverpaymentController.java": {
@@ -6846,9 +6840,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/lst-file.ts": {
-    "mtime": 1794216142.6012254,
-    "seen": 1794216277.028468,
-    "ast_hash": "dbb2e578af3e4095fc4eca40401a2f4f",
+    "mtime": 1794649730.424935,
+    "seen": 1794661561.7908309,
+    "ast_hash": "ac50aad926f275fce5d4e752941c84d0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/controller/TopSalesController.java": {
@@ -6972,9 +6966,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DeliOrderBanner.tsx": {
-    "mtime": 1793853021.6148267,
-    "seen": 1793853378.526716,
-    "ast_hash": "3536f24e63ddf43a511918c3a1a4faaa",
+    "mtime": 1794649730.4311068,
+    "seen": 1794661561.787831,
+    "ast_hash": "ad7ffdd9dcb11a1ce680943d054deb86",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/deli-order-rows.ts": {
@@ -7050,9 +7044,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/ProFileDialog.tsx": {
-    "mtime": 1793869718.1804042,
-    "seen": 1793869796.527299,
-    "ast_hash": "31f4d762b3d2c7cb10c50f3fa251862a",
+    "mtime": 1794649730.4299355,
+    "seen": 1794661561.789831,
+    "ast_hash": "0f52cdfa15c0b9d78a1f5e7deb7cb934",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/pro-file.ts": {
@@ -7200,9 +7194,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/PromoSetupPage.tsx": {
-    "mtime": 1794240473.0797107,
-    "seen": 1794240588.345026,
-    "ast_hash": "e069095fa0c86fd39685365020d64fcf",
+    "mtime": 1794649730.4466586,
+    "seen": 1794661561.8078368,
+    "ast_hash": "eb73032313a07bfeb8082a443023a000",
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/PromoTileCard.tsx": {
@@ -7212,9 +7206,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/api.ts": {
-    "mtime": 1793946525.019465,
-    "seen": 1793955940.8305695,
-    "ast_hash": "07055965f860fc2251cbaf1f9103fa01",
+    "mtime": 1794649730.4456406,
+    "seen": 1794661561.8088367,
+    "ast_hash": "77557edbb908131c53543a34be41873a",
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/paths.ts": {
@@ -7356,9 +7350,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/deli-prices/PurchaseFileButton.tsx": {
-    "mtime": 1793909213.7931948,
-    "seen": 1793909357.738958,
-    "ast_hash": "f79f03c59626df54de1ffaaaf71f7c21",
+    "mtime": 1794649730.4149292,
+    "seen": 1794661561.796831,
+    "ast_hash": "bbc95813a191ddc5a6bf77d060916eda",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/component/ZeroStockPdf.java": {
@@ -7668,15 +7662,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/bakery-check/CheckStart.tsx": {
-    "mtime": 1793987139.131734,
-    "seen": 1793987249.1805446,
-    "ast_hash": "aa2aa1dccd09a361df28c725ea795d25",
+    "mtime": 1794648586.0228918,
+    "seen": 1794648674.0316465,
+    "ast_hash": "221d76e4649b52d8b881cbfccb0ba7ce",
     "semantic_hash": ""
   },
   "frontend/src/features/bakery-check/ComparisonPanel.tsx": {
-    "mtime": 1794061712.5196147,
-    "seen": 1794061853.9312394,
-    "ast_hash": "c14843700a370b39219b4f2b574d7d97",
+    "mtime": 1794648583.6487694,
+    "seen": 1794648674.0316465,
+    "ast_hash": "2907e14b73ea4ecb80a3cae21f86cb0b",
     "semantic_hash": ""
   },
   "frontend/src/features/bakery-check/WzCard.tsx": {
@@ -7986,9 +7980,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794646095.0615306,
-    "seen": 1794646185.845553,
-    "ast_hash": "f56b42af5c40b9eb4faf50ad5f05c45d",
+    "mtime": 1794653698.1922088,
+    "seen": 1794661561.7908309,
+    "ast_hash": "92f2eb3a0cf22df07e324a6596b2551e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -8088,9 +8082,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceLabelsDialog.tsx": {
-    "mtime": 1794302930.482098,
-    "seen": 1794305410.7234068,
-    "ast_hash": "74a8197c6a19d3bd131a893598f61028",
+    "mtime": 1794649730.4378688,
+    "seen": 1794661561.804836,
+    "ast_hash": "ea59fe250f5e94bba2910192ee6d1ec6",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceMarkdownDialog.tsx": {
@@ -8466,9 +8460,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/StaffCompliance.java": {
-    "mtime": 1794473233.9498682,
-    "seen": 1794473632.3222935,
-    "ast_hash": "178006fd248efcf9a26c689f8f5c452d",
+    "mtime": 1794648793.2718618,
+    "seen": 1794649294.8178668,
+    "ast_hash": "73a2d0b4ac30d54f016d74f3a5899a79",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/StaffFile.java": {
@@ -8514,15 +8508,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/StaffProfileRequest.java": {
-    "mtime": 1794068911.6634617,
-    "seen": 1794069976.485551,
-    "ast_hash": "9ee196362c0ae725ca14fcad66d72648",
+    "mtime": 1794648763.676634,
+    "seen": 1794649294.8243701,
+    "ast_hash": "e617722b6d1b681fc11924fc1008bb99",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/StaffRecordResponse.java": {
-    "mtime": 1794473233.945868,
-    "seen": 1794473632.3312995,
-    "ast_hash": "322a1991feb314c3d171aa7da9f62921",
+    "mtime": 1794648763.676634,
+    "seen": 1794649294.8243701,
+    "ast_hash": "2213f3e0761fc35974c5487dc0e63f48",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/StaffRecordRow.java": {
@@ -8562,9 +8556,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/LeaveKind.java": {
-    "mtime": 1794473233.9438689,
-    "seen": 1794473632.3322992,
-    "ast_hash": "8de11ace96c821b52f7fb483e53e66f9",
+    "mtime": 1794648793.2708592,
+    "seen": 1794649294.826084,
+    "ast_hash": "1b74ee200d6315fcac27563cf42a5d86",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffContract.java": {
@@ -8604,9 +8598,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffProfile.java": {
-    "mtime": 1794155321.7616138,
-    "seen": 1794155653.6323473,
-    "ast_hash": "52bc80614d57a28d1eb5511da569be06",
+    "mtime": 1794648763.676634,
+    "seen": 1794649294.8300881,
+    "ast_hash": "a37444eca5255cab4a70f2d68517ca2f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/StaffRecordEntry.java": {
@@ -8682,9 +8676,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffRecordService.java": {
-    "mtime": 1794473239.806281,
-    "seen": 1794473632.3458133,
-    "ast_hash": "34c85dbaba6cfbb11b1fa477defd1c84",
+    "mtime": 1794648793.2741346,
+    "seen": 1794649294.8416226,
+    "ast_hash": "1e4247c3ffe92e7408c1f0fc9adb8a2a",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffLawTests.java": {
@@ -8700,15 +8694,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordDialogs.tsx": {
-    "mtime": 1794473507.7490604,
-    "seen": 1794473632.4180639,
-    "ast_hash": "cafd2e1d2f64865d09d24399e76ba50c",
+    "mtime": 1794649006.4819798,
+    "seen": 1794649294.9305801,
+    "ast_hash": "82f7602e156f451e45812a88f8eb4606",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordPage.tsx": {
-    "mtime": 1794473507.689283,
-    "seen": 1794473632.4180639,
-    "ast_hash": "7361681be733d04ee4681b58e49e375e",
+    "mtime": 1794649006.4829788,
+    "seen": 1794649294.9305801,
+    "ast_hash": "63f4b986ecf6407f7bdb0ab81040513f",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordsList.tsx": {
@@ -8730,9 +8724,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/labels.ts": {
-    "mtime": 1794473466.2957542,
-    "seen": 1794473632.4190638,
-    "ast_hash": "f4253e6cb3bba7b9b28055de5604dbd4",
+    "mtime": 1794648973.9593105,
+    "seen": 1794649294.9305801,
+    "ast_hash": "1f25b2605fee710addfdbf9c0a77fda1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/ScheduleCalendar.java": {
@@ -8772,9 +8766,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleResponse.java": {
-    "mtime": 1794476615.8415823,
-    "seen": 1794477120.369622,
-    "ast_hash": "c0cc1b329934ab69c519ab249e40103f",
+    "mtime": 1794648887.842863,
+    "seen": 1794649294.8228667,
+    "ast_hash": "ee266b19599505a7c7d7938e6e2b7f43",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleSettings.java": {
@@ -8862,9 +8856,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffScheduleService.java": {
-    "mtime": 1794476615.8479002,
-    "seen": 1794477120.3856275,
-    "ast_hash": "7e1fa45662e58e7b621a4dede7b7ff0e",
+    "mtime": 1794648887.8488739,
+    "seen": 1794649294.8416226,
+    "ast_hash": "b713e4918f8f63bd67d09b5f4eace921",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ScheduleLawTests.java": {
@@ -8880,9 +8874,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/CellEditor.tsx": {
-    "mtime": 1794585959.7546432,
-    "seen": 1794586071.5892339,
-    "ast_hash": "cc0e4eb44673737562b8a8814458431a",
+    "mtime": 1794649058.1054587,
+    "seen": 1794649294.9305801,
+    "ast_hash": "8da58dad676fcb9992059d89ba4ee558",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleDialogs.tsx": {
@@ -8892,15 +8886,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleGrid.tsx": {
-    "mtime": 1794500083.5867665,
-    "seen": 1794501081.5334694,
-    "ast_hash": "5a0b2ebe49dbd7603ba0bb4f0fd46d3d",
+    "mtime": 1794649129.9146585,
+    "seen": 1794649294.9305801,
+    "ast_hash": "88796d7b8fa2582a0f93e6cec85a553d",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/SchedulePage.tsx": {
-    "mtime": 1794483227.2096548,
-    "seen": 1794483389.1190333,
-    "ast_hash": "d0ce0c2f26c436910c598743649122db",
+    "mtime": 1794649058.106462,
+    "seen": 1794649294.93158,
+    "ast_hash": "c63bd94b536aedf695f491346cbd37cc",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/api.ts": {
@@ -8910,9 +8904,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/schedule-utils.ts": {
-    "mtime": 1794476838.9588552,
-    "seen": 1794477120.4601796,
-    "ast_hash": "c581f23046676b7f9c012dd1e6e58549",
+    "mtime": 1794648973.960315,
+    "seen": 1794649294.93158,
+    "ast_hash": "6ae47c2a78e61819f9d495bd8b525f00",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/ScheduleOpenHolidayRequest.java": {
@@ -9096,9 +9090,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffLeaveDays.java": {
-    "mtime": 1794131934.503092,
-    "seen": 1794132091.1873443,
-    "ast_hash": "d9c89cbf5d059e7e09f3204eb77c6801",
+    "mtime": 1794648793.2731302,
+    "seen": 1794649294.8416226,
+    "ast_hash": "8ee62872165a1564c27eb317cd70087b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/OvertimePdf.java": {
@@ -9252,15 +9246,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/DayView.tsx": {
-    "mtime": 1794545149.9957943,
-    "seen": 1794545441.1522954,
-    "ast_hash": "a73b5c1f9224328eb859ae35cb686f86",
+    "mtime": 1794649084.8928218,
+    "seen": 1794649294.93158,
+    "ast_hash": "dee35ed1a269214e81ad42861c5e51be",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/PeriodGrid.tsx": {
-    "mtime": 1794165082.8520703,
-    "seen": 1794165156.451425,
-    "ast_hash": "7b1f25f0be83d252b432b6e8241aa572",
+    "mtime": 1794648587.6123846,
+    "seen": 1794648674.0676053,
+    "ast_hash": "ef63b8e87df1687ab39853ee534341a7",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/TimeDialogs.tsx": {
@@ -9270,9 +9264,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/TimePage.tsx": {
-    "mtime": 1794397447.9731472,
-    "seen": 1794399322.8487887,
-    "ast_hash": "23f6f2269e72e379f57345c58412fc39",
+    "mtime": 1794649084.8948212,
+    "seen": 1794649294.93158,
+    "ast_hash": "08207e51e93921d7f8adfc6f2f03c3d1",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/api.ts": {
@@ -9432,15 +9426,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/TimeSheetPdf.java": {
-    "mtime": 1794473233.9508698,
-    "seen": 1794473632.3222935,
-    "ast_hash": "07e2aad1bc91fc3faeba561176ddfcf7",
+    "mtime": 1794648793.2718618,
+    "seen": 1794649294.8188667,
+    "ast_hash": "aeeb220e6a35c701fa143ccfd25134ae",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeSheetService.java": {
-    "mtime": 1794473233.9498682,
-    "seen": 1794473632.3458133,
-    "ast_hash": "30d1517462e76444c545ac48b39beb38",
+    "mtime": 1794648793.2718618,
+    "seen": 1794649294.8416226,
+    "ast_hash": "5b99d08e0c93cd08686dc87649f42242",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/TimeSheetPdfTests.java": {
@@ -10170,9 +10164,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/types.ts": {
-    "mtime": 1794473466.2997544,
-    "seen": 1794473632.4438045,
-    "ast_hash": "a51ef682db0cfadecb48d3de39354eca",
+    "mtime": 1794649126.115813,
+    "seen": 1794649294.9523597,
+    "ast_hash": "bde45cb794f9610711520bf79ba91199",
     "semantic_hash": ""
   },
   "mobile/tsconfig.json": {
@@ -10464,9 +10458,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/week.ts": {
-    "mtime": 1794473466.2997544,
-    "seen": 1794473632.4438045,
-    "ast_hash": "47dc1bd87fa266c1e92cb8d8b726b514",
+    "mtime": 1794649126.115813,
+    "seen": 1794649294.9523597,
+    "ast_hash": "1b39c2e8203124d4e7b4dbeb081716e8",
     "semantic_hash": ""
   },
   "skills-lock.json": {
@@ -11310,9 +11304,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/SchedulePdfTests.java": {
-    "mtime": 1794497960.7232509,
-    "seen": 1794498351.2906651,
-    "ast_hash": "c6aa2a35628c7feb1e4f83a844745db9",
+    "mtime": 1794648904.7234926,
+    "seen": 1794649294.8696425,
+    "ast_hash": "e059be121b01a5a616295126797e36de",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/InvoiceXmlTests.java": {
@@ -11673,6 +11667,24 @@
     "mtime": 1794647400.4410257,
     "seen": 1794647528.1120892,
     "ast_hash": "29da63d3e21b212737299b4c16b7461f",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/component/NetPay.java": {
+    "mtime": 1794648823.3605707,
+    "seen": 1794649294.8168669,
+    "ast_hash": "0a2bd6b5a924ab84c0266aef22a2242e",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/NetPayTests.java": {
+    "mtime": 1794648914.2806146,
+    "seen": 1794649294.8656425,
+    "ast_hash": "8318eaa85eefcece48e626070cee8229",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/PromotionRealFileTests.java": {
+    "mtime": 1794661240.0962021,
+    "seen": 1794661561.7680829,
+    "ast_hash": "86ca45b178018e7c78879b1aa9f6c35d",
     "semantic_hash": ""
   }
 }

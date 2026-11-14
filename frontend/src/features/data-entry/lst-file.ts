@@ -2,7 +2,7 @@ import { todayIso } from '@/lib/dates'
 import type { SavedFolderSpec } from '@/lib/saved-folders'
 
 /** Folder plików .lst z wprowadzania danych, wybrany raz w przeglądarce (Ustawienia zapisu). */
-export const LST_FOLDER: SavedFolderSpec = { key: 'data-entry-lst', label: 'Lista EAN (plik .lst)' }
+export const LST_FOLDER: SavedFolderSpec = { key: 'data-entry-lst', label: 'Lista EAN-ów' }
 
 /**
  * Plik .LST 1:1 jak plik z Impeka (`backend/ImpEklst.lst`): nagłówek `E` + liczba kodów na 7 cyfrach (`E0000025`),

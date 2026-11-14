@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan, useCurrentUser } from '@/features/auth/api'
 import { countFormat } from '@/features/documents/format'
-import { useCadencier, usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
+import { usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
 import {
   useNomenclatureMargins,
   useStorePartnerActions,
@@ -33,7 +33,6 @@ import {
   useSupplierSalePrices,
 } from '@/features/store-settings/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
-import { CadencierUpload } from '@/features/store-settings/CadencierUpload'
 import { NomenclatureMargins } from '@/features/store-settings/NomenclatureMargins'
 import { PriceRoundingRules } from '@/features/store-settings/PriceRoundingRules'
 import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCategories'
@@ -77,7 +76,11 @@ export function StoreSettingsPage() {
     return (
       <>
         <PageHeader title="Ustawienia sklepu" description={storeLabel(store)} />
-        <FullPageMessage title="Brak uprawnień" description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych albo zamówień garmażu." inline />
+        <FullPageMessage
+          title="Brak uprawnień"
+          description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych albo zamówień garmażu."
+          inline
+        />
       </>
     )
   }
@@ -109,8 +112,8 @@ export function StoreSettingsPage() {
                     Budżet rejonów
                   </h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Ile ma wynosić marża i ile najwyżej mogą wynieść straty w każdym rejonie. Podsumowanie sprzedaży
-                    i strat pokazuje procenty w budżecie na zielono, a poza nim na czerwono. Puste pole = bez budżetu.
+                    Ile ma wynosić marża i ile najwyżej mogą wynieść straty w każdym rejonie. Podsumowanie sprzedaży i
+                    strat pokazuje procenty w budżecie na zielono, a poza nim na czerwono. Puste pole = bez budżetu.
                   </p>
                 </div>
                 <div className="max-w-3xl">
@@ -156,10 +159,10 @@ export function StoreSettingsPage() {
                     Stałe ceny dostawców
                   </h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Dostawcy, których wszystkie artykuły sprzedajecie za jedną cenę. We wprowadzaniu danych ta cena
-                    jest ceną sugerowaną każdego artykułu z dokumentu dostawcy (nowego i z kartoteki) i wpisuje się
-                    sama jako cena sprzedaży przy wczytaniu faktury i zmianie dostawcy. Zmieniona cena artykułu
-                    z kartoteki trafia przy zapisie do zmiany cen.
+                    Dostawcy, których wszystkie artykuły sprzedajecie za jedną cenę. We wprowadzaniu danych ta cena jest
+                    ceną sugerowaną każdego artykułu z dokumentu dostawcy (nowego i z kartoteki) i wpisuje się sama jako
+                    cena sprzedaży przy wczytaniu faktury i zmianie dostawcy. Zmieniona cena artykułu z kartoteki trafia
+                    przy zapisie do zmiany cen.
                   </p>
                 </div>
                 <div className="max-w-2xl">
@@ -180,13 +183,12 @@ export function StoreSettingsPage() {
                     Weryfikacja cen
                   </h2>
                   <p className="max-w-2xl text-sm text-muted-foreground">
-                    Artykuł z listy cadencier (formularza zamówień do bazy) kupiony u dostawcy innego niż baza trafia
-                    do raportu „Zakup bazowy poza bazą”. Minimalna marża oznacza w raporcie artykuły, na których sklep
-                    zarabia za mało.
+                    Artykuł z listy cadencier (formularza zamówień do bazy) kupiony u dostawcy innego niż baza trafia do
+                    raportu „Zakup bazowy poza bazą”. Listę wgrywa się w Imporcie danych. Minimalna marża oznacza w
+                    raporcie artykuły, na których sklep zarabia za mało.
                   </p>
                 </div>
                 <div className="grid max-w-2xl gap-4">
-                  <CadencierUpload key={store.id} storeId={store.id} />
                   <PriceCheckSettingsForm key={store.id} storeId={store.id} />
                   <PriceCheckCategories key={store.id} storeId={store.id} />
                 </div>
@@ -237,8 +239,8 @@ export function StoreSettingsPage() {
                   Menu boczne
                 </h2>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Przeciągnij kategorie w kolejności, w jakiej mają stać w menu. Kolejność obowiązuje wszystkich
-                  w tym sklepie; każdy widzi tylko kategorie, do których ma dostęp.
+                  Przeciągnij kategorie w kolejności, w jakiej mają stać w menu. Kolejność obowiązuje wszystkich w tym
+                  sklepie; każdy widzi tylko kategorie, do których ma dostęp.
                 </p>
               </div>
               <div className="max-w-md">
@@ -286,13 +288,14 @@ function SettingsGrid({
   const me = useCurrentUser()
   const budgets = useRegionBudgets(storeId, canEditSales)
   const priceCheck = usePriceCheckSettings(storeId, canEditSales)
-  const cadencier = useCadencier(storeId, canEditSales)
   const margins = useNomenclatureMargins(storeId, canEditSales)
   const partners = useStorePartners(storeId, canEditDocuments)
   const proto = useProtoSettings(storeId, canEditProto)
   const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
-  const budgeted = budgets.data?.filter((budget) => budget.marginPercent != null || budget.maxLossPercent != null).length
+  const budgeted = budgets.data?.filter(
+    (budget) => budget.marginPercent != null || budget.maxLossPercent != null,
+  ).length
   const withMargin = margins.data?.filter((item) => item.marginPercent != null).length
   const accepted = partners.data?.partners.filter((partner) => partner.acceptedAt).length
   const pending = partners.data?.partners.filter((partner) => !partner.acceptedAt && !partner.sent).length ?? 0
@@ -349,17 +352,12 @@ function SettingsGrid({
           to={paths.priceCheck}
           icon={ScaleIcon}
           title="Weryfikacja cen"
-          description="Lista artykułów z cadencier i minimalna marża do raportu zakupu bazowego poza bazą."
+          description="Minimalna marża i własne kategorie do raportów weryfikacji zakupów."
           status={
-            cadencier.data && priceCheck.data
-              ? [
-                  cadencier.data.imports.length
-                    ? `Cadencier: ${countFormat.format(cadencier.data.itemCount)} art.`
-                    : 'Brak listy cadencier',
-                  priceCheck.data.minMarginPercent != null
-                    ? `marża min. ${budgetPercent.format(priceCheck.data.minMarginPercent)}%`
-                    : 'bez minimalnej marży',
-                ].join(' · ')
+            priceCheck.data
+              ? priceCheck.data.minMarginPercent != null
+                ? `Marża min. ${budgetPercent.format(priceCheck.data.minMarginPercent)}%`
+                : 'Bez minimalnej marży'
               : ' '
           }
         />
@@ -480,8 +478,8 @@ function StorePartners({ store }: { store: StoreSummary }) {
           Sklepy zaprzyjaźnione
         </h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Ruch międzymagazynowy można wystawić dla sklepu zaprzyjaźnionego. Sklep zobaczy go w Dokumentach jako
-          dokument do wprowadzenia u siebie.
+          Ruch międzymagazynowy można wystawić dla sklepu zaprzyjaźnionego. Sklep zobaczy go w Dokumentach jako dokument
+          do wprowadzenia u siebie.
         </p>
       </div>
 
@@ -532,7 +530,9 @@ function StorePartners({ store }: { store: StoreSummary }) {
           <div className="flex flex-col items-center gap-1 px-6 py-8 text-center">
             <HandshakeIcon aria-hidden className="mb-1 size-6 text-muted-foreground" />
             <p className="font-medium">Brak sklepów zaprzyjaźnionych</p>
-            <p className="max-w-sm text-sm text-muted-foreground">Zaproś sklep poniżej, a gdy zaakceptuje, pojawi się tutaj.</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Zaproś sklep poniżej, a gdy zaakceptuje, pojawi się tutaj.
+            </p>
           </div>
         ) : (
           <ul className="divide-y">

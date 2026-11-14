@@ -58,7 +58,7 @@ function ProFileForm({ rows, selection, onDone }: Omit<Props, 'open' | 'onOpenCh
       const folderReady = await ensureFolderAccess(PRO_FOLDER.key)
       if (folderReady) await saveToFolder(PRO_FOLDER.key, fileName, proContent({ lines }))
       else saveBlob(proContent({ lines }), fileName)
-      toast.success(`Zapisano plik ${fileName}`, {
+      toast.success('Zapisano ceny promocji', {
         description: `Cen: ${lines.length}, okres ${period}${
           folderReady ? '' : ' · pobrany: folder nie jest wybrany w tej przeglądarce'
         }`,
@@ -66,7 +66,7 @@ function ProFileForm({ rows, selection, onDone }: Omit<Props, 'open' | 'onOpenCh
       })
       onDone()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać pliku .PRO')
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać cen promocji')
     } finally {
       setSaving(false)
     }
@@ -80,7 +80,7 @@ function ProFileForm({ rows, selection, onDone }: Omit<Props, 'open' | 'onOpenCh
       }}
     >
       <DialogHeader>
-        <DialogTitle>Plik cen promocji .PRO</DialogTitle>
+        <DialogTitle>Ceny promocji</DialogTitle>
         <DialogDescription>
           {selection ? 'Z zaznaczonych artykułów' : 'Ze wszystkich artykułów tabeli'}: EAN i cena z kolumny „Cena
           sprz.”. Przy wczytaniu w programie sklepu wpisz kod taryfy i okres.
@@ -134,7 +134,7 @@ function ProFileForm({ rows, selection, onDone }: Omit<Props, 'open' | 'onOpenCh
         )}
         <Button type="submit" size="lg" loading={saving} disabled={!ready}>
           <FileOutputIcon />
-          {fileName ? `Zapisz ${fileName}` : 'Zapisz plik'}
+          Zapisz ceny promocji
         </Button>
       </FormActions>
     </Form>

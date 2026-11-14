@@ -28,6 +28,8 @@ type Props = {
   onPrint: (row: TimeCardRow) => void
   /** Id pracownika, którego karta właśnie się przygotowuje. */
   printing: string | null
+  /** Wpis zwolnienia lekarskiego (L4) w Kadrach od tego dnia; bez dostępu do Kadr nie ma przycisku. */
+  onSick?: (row: TimeCardRow) => void
 }
 
 // Na wąskim ekranie oś godzin przewija się w bok, a nazwisko i sumy zostają na miejscu (jak w tygodniu i miesiącu).
@@ -41,7 +43,7 @@ const DEFAULT_TO = 22 * 60
  * Dzień: każdy pracownik ma pasek godzin. Ramka przerywana to zmiana z grafiku, kolorowe odcinki to czas z odbić
  * (praca, poza grafikiem, braki), kreski to odbicia. Odcinek do decyzji jest przyciskiem.
  */
-export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint, printing }: Props) {
+export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint, printing, onSick }: Props) {
   const rows = cards.rows.map((row) => ({ row, day: row.days.find((day) => day.date === date) }))
   const now = useNow()
   const nowMinute = date === localDate(now) ? now.getHours() * 60 + now.getMinutes() : null
@@ -247,6 +249,18 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                     >
                       <ScaleIcon aria-hidden />
                       Zrównoważ
+                    </Button>
+                  )}
+                  {day && onSick && !row.civil && !day.absence && day.planned > 0 && day.shortfall > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-1 ml-1 font-semibold"
+                      title="Pracownik jest na zwolnieniu lekarskim: wpisz L4 w Kadrach od tego dnia"
+                      onClick={() => onSick(row)}
+                    >
+                      L4
                     </Button>
                   )}
                 </div>

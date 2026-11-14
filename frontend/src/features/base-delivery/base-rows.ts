@@ -170,7 +170,7 @@ export function newArticlesBySupplier(delivery: BaseDelivery, tableRows: DataEnt
 export const PLU_REGIONS = ['32', '33']
 
 /** Folder pliku .lst „Sprawdź PLU”, wybrany raz w przeglądarce (Ustawienia zapisu). */
-export const PLU_FOLDER: SavedFolderSpec = { key: 'base-delivery-plu', label: 'Sprawdź PLU (plik .lst)' }
+export const PLU_FOLDER: SavedFolderSpec = { key: 'base-delivery-plu', label: 'Sprawdź PLU (lista EAN-ów)' }
 
 /**
  * EAN-y artykułów całego dokumentu z rejonów 32 i 33 (rejon z dokumentu albo z kartoteki), bez powtórzeń, w kolejności

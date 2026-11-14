@@ -55,7 +55,7 @@ const PRO_COPY = {
 
 const MODE_OPTIONS: { value: PromoMode; label: string }[] = [
   { value: 'macro', label: 'Makro' },
-  { value: 'pro', label: 'Pliki .PRO' },
+  { value: 'pro', label: 'Ceny promocji z pliku' },
 ]
 
 /** Tryb w adresie: bez parametru makro (główny), {@code ?tryb=pro} pliki .PRO. */
@@ -335,7 +335,7 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
         description={
           macro
             ? `${storeLabel(store)}: artykuły z cenami i własnym końcem promocji, ustawiane automatycznie makrem.`
-            : `${storeLabel(store)}: kilka promocji naraz, każda z własnymi artykułami i okresem, w plikach .PRO.`
+            : `${storeLabel(store)}: kilka promocji naraz, każda z własnymi artykułami i okresem, w cenach promocji dla programu sklepu.`
         }
         actions={
           <>

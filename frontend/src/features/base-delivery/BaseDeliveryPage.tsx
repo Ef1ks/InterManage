@@ -618,11 +618,11 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
       const fileName = `PLU_${draft.delivery.number}.LST`
       if (folderReady) await saveToFolder(PLU_FOLDER.key, fileName, lstFile(plu))
       else saveBlob(lstFile(plu), fileName)
-      toast.success(`Zapisano plik ${fileName}`, {
+      toast.success('Zapisano listę do sprawdzenia PLU', {
         description: `${plu.length} ${plu.length === 1 ? 'EAN' : 'EAN-ów'} z nomenklatury ${PLU_REGIONS.join(' i ')}${folderReady ? '' : ' (pobrany: folder nie jest wybrany w ustawieniach zapisu)'}`,
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać pliku .lst')
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać listy EAN-ów')
     } finally {
       setSavingPlu(false)
     }
@@ -722,7 +722,9 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         )
         if (folderReady) await saveToFolder(productFolder.key, fileName, blob)
         else saveBlob(blob, fileName)
-        saved.push(`${fileName}${folderReady ? '' : ' (pobrany)'}`)
+        saved.push(
+          `dostawca ${supplier?.code ?? group.supplierCode}: ${group.rows.length}${folderReady ? '' : ' (pobrany)'}`,
+        )
         const fresh = group.rows.filter((row) => !row.known)
         if (fresh.length > 0) {
           savedFiles.push({
@@ -772,9 +774,9 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         className="mb-4"
         title="Jak wprowadzić dostawę z bazy"
         steps={[
-          'Wczytaj dokument z bazy (plik .xls) i wybierz nośniki: ich artykuły trafią do tabeli z ilościami w sztukach. Linie, które nie przyjechały, mają ilość 0.',
+          'Wczytaj dokument z bazy (plik Excel) i wybierz nośniki: ich artykuły trafią do tabeli z ilościami w sztukach. Linie, które nie przyjechały, mają ilość 0.',
           'Sprawdź kaucje (czerwona komórka = inna kaucja w dokumencie niż w kartotece; blokuje zmianę cen i protokół) i ujemne marże na cenach cadencier.',
-          'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: plik CADBEZP z danymi z dokumentu. Zmień artykuły: plik CADBEZP z wybranych artykułów tabeli.',
+          'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: dodaje do kartoteki nowe artykuły z danymi z dokumentu. Zmień artykuły: zmienia w kartotece wybrane artykuły tabeli.',
           'Weryfikuj warzywa / mięso pakowane: przenosi artykuły z całego dokumentu (bez tych w promocji) do wprowadzania danych, cena sugerowana z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
           'Filtr w nagłówku każdej kolumny działa jak w Excelu; Ctrl+Z cofa.',
         ]}
@@ -900,7 +902,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                   onClick={saveNewArticles}
                   title={
                     newArticles > 0
-                      ? `Plik CADBEZP z nowymi artykułami całego dokumentu (${newArticles}), dane z dokumentu bazy; osobny plik dla każdego dostawcy`
+                      ? `Dodaje do kartoteki nowe artykuły całego dokumentu (${newArticles}) z danymi z dokumentu bazy, osobno dla każdego dostawcy`
                       : 'Wszystkie artykuły dokumentu są w kartotece'
                   }
                 >
@@ -912,7 +914,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                   size="sm"
                   disabled={rows.length === 0 || saving !== null}
                   onClick={() => setArticleFileOpen(true)}
-                  title="Wybierz artykuły tabeli do pliku CADBEZP, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu"
+                  title="Wybierz artykuły tabeli do zmiany w kartotece, także bez zmian: zmiana przepisuje je na dostawcę dokumentu"
                 >
                   <PackageCheckIcon />
                   Zmień artykuły
@@ -923,7 +925,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                     size="sm"
                     loading={savingPlu}
                     onClick={savePlu}
-                    title={`Plik .lst z EAN-ami artykułów z nomenklatury ${PLU_REGIONS.join(' i ')} (${plu.length}) w folderze „Sprawdź PLU” z ustawień zapisu`}
+                    title={`Lista EAN-ów artykułów z nomenklatury ${PLU_REGIONS.join(' i ')} (${plu.length}) w folderze „Sprawdź PLU” z ustawień zapisu`}
                   >
                     <ScanBarcodeIcon />
                     Sprawdź PLU ({plu.length})
@@ -1228,7 +1230,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         rows={rows}
         selectedIds={selectedRows}
         allowLongNames
-        supplierNote="Osobny plik CADBEZP dla każdego dostawcy z dokumentu (538 baza, 88110 alkohol)."
+        supplierNote="Osobno dla każdego dostawcy z dokumentu (538 baza, 88110 alkohol)."
         saving={saving === 'articles'}
         open={articleFileOpen}
         onOpenChange={setArticleFileOpen}
@@ -1241,9 +1243,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         withXml={false}
-        extraFolders={[
-          { folder: PLU_FOLDER, note: 'Plik .lst z EAN-ami artykułów z nomenklatury 32 i 33 („Sprawdź PLU”).' },
-        ]}
+        extraFolders={[{ folder: PLU_FOLDER, note: 'Lista EAN-ów artykułów z nomenklatury 32 i 33 („Sprawdź PLU”).' }]}
       />
     </>
   )

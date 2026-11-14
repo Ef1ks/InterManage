@@ -387,7 +387,7 @@ function ReceivedCell({ sent, received }: { sent: number; received: number | und
 }
 
 const DOWNLOADS = [
-  { format: 'proto', label: 'Plik PROTO6', hint: 'EAN z przyjętą ilością dla programu sklepu', icon: BarcodeIcon },
+  { format: 'proto', label: 'Protokół MM', hint: 'EAN z przyjętą ilością dla programu sklepu', icon: BarcodeIcon },
   { format: 'xlsx', label: 'Excel', hint: 'Ilość w dokumencie, przyjęta i różnica', icon: FileSpreadsheetIcon },
 ] as const
 
@@ -424,7 +424,8 @@ function TransferDownloads({ storeId, transferId }: { storeId: string; transferI
         if (!(await folder.pick())) return
       }
       const path = incomingTransferExportPath(storeId, transferId, 'proto')
-      toast.success(`Zapisano ${await saveApiFileToFolder(protoFolder.key, path, 'przyjecie.Traite0')}`)
+      await saveApiFileToFolder(protoFolder.key, path, 'przyjecie.Traite0')
+      toast.success('Zapisano protokół MM')
     })
 
   return (
@@ -449,7 +450,7 @@ function TransferDownloads({ storeId, transferId }: { storeId: string; transferI
             <DropdownMenuItem onClick={saveToFolder} className="items-start gap-2.5 py-2">
               <FolderInputIcon className="mt-0.5" />
               <span className="grid">
-                <span>{folder.name ? `Zapisz PROTO6 w ${folder.name}` : 'Zapisz PROTO6 w folderze…'}</span>
+                <span>{folder.name ? `Zapisz protokół MM w ${folder.name}` : 'Zapisz protokół MM w folderze…'}</span>
                 <span className="text-xs text-muted-foreground">
                   {folder.name
                     ? 'Folder zapamiętany w przeglądarce'

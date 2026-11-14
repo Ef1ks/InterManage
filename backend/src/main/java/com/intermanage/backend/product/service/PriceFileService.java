@@ -111,7 +111,7 @@ public class PriceFileService {
     @Transactional
     public PriceFileUploadResponse upload(UUID storeId, List<MultipartFile> files, UUID userId) {
         if (files == null || files.isEmpty()) {
-            throw ApiException.badRequest("Wybierz pliki TRACEART do wczytania");
+            throw ApiException.badRequest("Wybierz pliki cen z kasy do wczytania");
         }
         if (files.size() > MAX_FILES) {
             throw ApiException.badRequest("Naraz można wysłać najwyżej " + MAX_FILES + " plików");
@@ -121,7 +121,7 @@ public class PriceFileService {
             String name = file.getOriginalFilename() != null
                     ? Path.of(file.getOriginalFilename()).getFileName().toString() : "";
             if (PriceFileParser.fileTime(name) == null) {
-                throw ApiException.badRequest("To nie jest plik TRACEART: " + name);
+                throw ApiException.badRequest("To nie jest plik cen z kasy: " + name);
             }
             if (file.getSize() > MAX_FILE_BYTES) {
                 throw ApiException.badRequest("Plik " + name + " jest za duży");
