@@ -45,8 +45,9 @@ import { UsersPage } from '@/features/settings/UsersPage'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { NavGroupPage } from '@/features/tools/NavGroupPage'
 import { ToolPlaceholderPage } from '@/features/tools/ToolPlaceholderPage'
-import type { PermissionCategory } from '@/lib/types'
+import type { PermissionCategory, ToolCategory } from '@/lib/types'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { CashPage } from '@/features/cash/CashPage'
 
 /** Gotowe moduły; reszta kategorii pokazuje stronę "w przygotowaniu". */
 const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
@@ -65,9 +66,10 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   STAFF_RECORDS: <StaffRecordsPage />,
   STAFF_SCHEDULE: <SchedulePage />,
   STAFF_TIME: <TimePage />,
+  CASH_REPORT: <CashPage />,
 }
 
-const toolRoutes = (Object.keys(TOOL_ROUTES) as PermissionCategory[]).map((category) => ({
+const toolRoutes = (Object.keys(TOOL_ROUTES) as ToolCategory[]).map((category) => ({
   // Gwiazdka: moduły mają własne podstrony (np. /zamowienie-garmazu/przychodzace).
   path: `${TOOL_ROUTES[category].path}/*`,
   element: (

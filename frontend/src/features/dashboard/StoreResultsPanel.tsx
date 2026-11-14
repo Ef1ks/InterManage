@@ -1,5 +1,7 @@
 import { useEffect, useId, useState } from 'react'
+import { Link, useNavigate } from 'react-router'
 
+import { useCan } from '@/features/auth/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSalesReportsOverview } from '@/features/sales/api'
 import { formatLongDate, formatShortDate, parseIsoDate } from '@/lib/dates'
@@ -39,6 +41,10 @@ const formatTick = (metric: DashboardChartMetric, value: number) =>
 const formatChange = (change: number) => `${change >= 0 ? '+' : '−'}${percentFormat.format(Math.abs(change))}%`
 const shortDay = (iso: string) => dayMonth.format(parseIsoDate(iso))
 
+/** Porównanie sprzedaży za dzień albo okres z tym samym okresem rok temu (domyślne „Porównaj z” raportu). */
+const dayComparison = (date: string) => `/sprzedaz/porownanie?okres=dzien&data=${date}`
+const rangeComparison = (from: string, to: string) => `/sprzedaz/porownanie?okres=wlasny&od=${from}&do=${to}`
+
 /** Święto albo dzień przed świętem w dniu wykresu i w jego odpowiedniku rok temu. */
 type DayNote = { now: SpecialDay | null; before: SpecialDay | null }
 
@@ -57,9 +63,10 @@ function noteLines(note: DayNote, beforeDate: string | undefined) {
 }
 
 /**
- * Wyniki sklepu na pulpicie (na razie tylko właściciel): ostatnie 7 dni ze sprzedażą wobec tych samych dni tygodnia
+ * Wyniki sklepu na pulpicie (uprawnienie Pełny pulpit): ostatnie 7 dni ze sprzedażą wobec tych samych dni tygodnia
  * rok temu, dwa wykresy nałożone na siebie, a pod nimi pasek zmiany rok do roku z 12 tygodni. Wybór miary jest
- * ustawieniem konta, wspólnym z aplikacją mobilną.
+ * ustawieniem konta, wspólnym z aplikacją mobilną. Z dostępem do raportów sprzedaży klik w dzień albo tydzień
+ * otwiera porównanie sprzedaży za ten okres.
  */
 export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; storeNumber: string }) {
   const overview = useSalesReportsOverview(storeId)
@@ -123,6 +130,8 @@ function Results({
   current: SalesHistory
   yearAgo: SalesHistory
 }) {
+  const navigate = useNavigate()
+  const canCompare = useCan('SALES')
   const weeks = weeklyChanges(metric, current, yearAgo)
   const week = weeks[weeks.length - 1]
   const days = current.days.slice(-7)
@@ -152,7 +161,11 @@ function Results({
             </p>
           ) : null}
         </div>
-        <TrendStrip weeks={weeks} metric={metric} />
+        <TrendStrip
+          weeks={weeks}
+          metric={metric}
+          onPick={canCompare ? (week) => navigate(rangeComparison(week.from, week.to)) : undefined}
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 text-sm">
@@ -172,7 +185,13 @@ function Results({
         ) : null}
       </div>
 
-      <DayChart metric={metric} days={days} daysBefore={daysBefore} notes={notes} />
+      <DayChart
+        metric={metric}
+        days={days}
+        daysBefore={daysBefore}
+        notes={notes}
+        onPick={canCompare ? (date) => navigate(dayComparison(date)) : undefined}
+      />
 
       <table className="sr-only">
         <caption>{METRICS.find((item) => item.value === metric)?.label} dzień po dniu wobec roku temu</caption>
@@ -192,7 +211,11 @@ function Results({
             return (
               <tr key={day.date}>
                 <td>
-                  {formatShortDate(day.date)}
+                  {canCompare ? (
+                    <Link to={dayComparison(day.date)}>{formatShortDate(day.date)}</Link>
+                  ) : (
+                    formatShortDate(day.date)
+                  )}
                   {noteLines(notes[index], daysBefore[index]?.date).map((line) => `, ${line}`)}
                 </td>
                 <td>{hasNoSales(day.figures) ? 'brak danych' : formatValue(metric, now)}</td>
@@ -258,11 +281,13 @@ function DayChart({
   days,
   daysBefore,
   notes,
+  onPick,
 }: {
   metric: DashboardChartMetric
   days: SalesHistory['days']
   daysBefore: SalesHistory['days']
   notes: DayNote[]
+  onPick?: (date: string) => void
 }) {
   const clipId = useId()
   const [box, WIDTH] = useWidth()
@@ -399,7 +424,9 @@ function DayChart({
                   width={slot}
                   height={HEIGHT}
                   fill="transparent"
+                  className={onPick ? 'cursor-pointer' : undefined}
                   onMouseEnter={() => setActive(index)}
+                  onClick={onPick ? () => onPick(day.date) : undefined}
                 />
               </g>
             )
@@ -410,7 +437,7 @@ function DayChart({
       {tip && WIDTH > 0 ? (
         <div
           className={cn(
-            'pointer-events-none absolute z-10 w-max max-w-72 -translate-y-full rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md',
+            'pointer-events-none absolute z-10 w-max max-w-72 -translate-y-full rounded-lg glass-float px-3 py-2 text-sm text-popover-foreground',
             // Skrajne dni: podpowiedź rośnie do środka wykresu, żeby nie wychodziła poza kartę.
             tip.index === 0
               ? '-translate-x-6'
@@ -435,6 +462,7 @@ function DayChart({
           </p>
           <TipNote who="Teraz" note={notes[tip.index].now} />
           <TipNote who="Rok temu" note={notes[tip.index].before} />
+          {onPick ? <p className="mt-1 text-xs text-muted-foreground">Kliknij, aby porównać sprzedaż</p> : null}
         </div>
       ) : null}
     </div>
@@ -454,7 +482,15 @@ const STRIP_WIDTH = 264
 const STRIP_HEIGHT = 40
 
 /** Mały pasek trendu: zmiana rok do roku każdego z ostatnich 12 tygodni, bieżący wyróżniony. */
-function TrendStrip({ weeks, metric }: { weeks: WeekChange[]; metric: DashboardChartMetric }) {
+function TrendStrip({
+  weeks,
+  metric,
+  onPick,
+}: {
+  weeks: WeekChange[]
+  metric: DashboardChartMetric
+  onPick?: (week: WeekChange) => void
+}) {
   const [active, setActive] = useState<number | null>(null)
   const changes = weeks.map((week) => week.change ?? 0)
   const extent = Math.max(5, ...changes.map(Math.abs))
@@ -497,7 +533,12 @@ function TrendStrip({ weeks, metric }: { weeks: WeekChange[]; metric: DashboardC
           const length = Math.max(item.change == null ? 0 : 2, (Math.abs(value) / extent) * room)
           const latest = index === weeks.length - 1
           return (
-            <g key={item.from} onMouseEnter={() => setActive(index)}>
+            <g
+              key={item.from}
+              className={onPick ? 'cursor-pointer' : undefined}
+              onMouseEnter={() => setActive(index)}
+              onClick={onPick ? () => onPick(item) : undefined}
+            >
               <rect x={index * slot} y={0} width={slot} height={STRIP_HEIGHT} fill="transparent" />
               <rect
                 x={index * slot + (slot - bar) / 2}

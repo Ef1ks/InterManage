@@ -7,22 +7,24 @@ import { AttentionCard } from '@/features/dashboard/AttentionCard'
 import { PresenceCard } from '@/features/dashboard/PresenceCard'
 import { StoreResultsPanel } from '@/features/dashboard/StoreResultsPanel'
 import { useCurrentStore } from '@/features/stores/current-store'
-import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
+import { TOOL_ROUTES, isTool, usePermissionCategories } from '@/features/tools/categories'
 import { cn } from '@/lib/utils'
 
 export function DashboardPage() {
   const me = useCurrentUser()
   const { data: categories = [] } = usePermissionCategories()
-  const tools = categories.filter((category) => hasPermission(me, category.code))
+  const tools = categories.flatMap((category) =>
+    isTool(category.code) && hasPermission(me, category.code) ? [{ ...category, code: category.code }] : [],
+  )
   const store = useCurrentStore()
-  const showResults = me.owner
+  const showResults = hasPermission(me, 'DASHBOARD')
   const showPresence = hasPermission(me, 'STAFF_TIME')
 
   return (
     <>
       <PageHeader title={`Witaj, ${me.displayName}`} description={`Rola: ${me.roleName}`} />
 
-      {/* Najważniejsze informacje sklepu, dokładane stopniowo: wyniki (na razie tylko właściciel) na 2/3 szerokości,
+      {/* Najważniejsze informacje sklepu, dokładane stopniowo: wyniki (uprawnienie Pełny pulpit) na 2/3 szerokości,
           obok obecność i sprawy do reakcji. Bez wyników kafelki stoją obok siebie. */}
       {store ? (
         <div className={cn('mb-6 grid gap-4', showResults ? 'lg:grid-cols-3' : 'sm:grid-cols-2')}>

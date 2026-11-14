@@ -21,7 +21,9 @@ public enum PermissionCategory {
     DELI_PRODUCTION("Karty produkcji", "Karty produkcji garmażu (CCP1): formularz do wydruku, ilości ze skanera, baza artykułów"),
     STAFF_RECORDS("Kadry", "Profile pracowników: umowy, staż, urlopy, orzeczenia o niepełnosprawności. Tylko dla osób upoważnionych"),
     STAFF_SCHEDULE("Grafik", "Miesięczne grafiki działów: układanie, publikacja i wersje przekazane pracownikom"),
-    STAFF_TIME("Czas pracy", "Karty czasu pracy z odbić kart NFC: realny czas pracy, akceptacja nadgodzin i spóźnień");
+    STAFF_TIME("Czas pracy", "Karty czasu pracy z odbić kart NFC: realny czas pracy, akceptacja nadgodzin i spóźnień"),
+    DASHBOARD("Pełny pulpit", "Wyniki sklepu na pulpicie: sprzedaż ostatnich 7 dni wobec roku wcześniej i trend tygodni"),
+    CASH_REPORT("Raport kasowy", "Dokumenty KP i KW z wydrukiem i pieczątką sklepu, raport kasowy za okres i historia dokumentów");
 
     private final String label;
     private final String description;

@@ -39,6 +39,10 @@ public class SalesReportController {
      */
     private static final String ARTICLE_VIEW = Access.ARTICLE_STATS;
 
+    /** Wyniki sklepu na pulpicie ({@code DASHBOARD}): tylko sprzedaż całego sklepu, bez artykułu i nomenklatury. */
+    private static final String DASHBOARD_STORE_HISTORY = "hasAuthority('DASHBOARD:VIEW') and #itm8 == null"
+            + " and #parent == null and !#unassigned and (#nomenclatures == null or #nomenclatures.isEmpty())";
+
     private final SalesReportService salesReportService;
     private final DeliCostReportService deliCostReportService;
     private final ArticleCodesService articleCodesService;
@@ -50,9 +54,9 @@ public class SalesReportController {
         this.articleCodesService = articleCodesService;
     }
 
-    /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport. */
+    /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport (też wyniki sklepu na pulpicie). */
     @GetMapping
-    @PreAuthorize(ARTICLE_VIEW)
+    @PreAuthorize("(" + Access.ARTICLE_STATS_AUTHORITIES + " or hasAuthority('DASHBOARD:VIEW')) and " + Access.STORE)
     public SalesReportsOverview overview(@PathVariable UUID storeId) {
         return salesReportService.overview(storeId);
     }
@@ -92,8 +96,8 @@ public class SalesReportController {
      * cały sklep, {@code unassigned=true} = bez nomenklatury), z tym samym filtrem {@code nomenclatures} co porównanie.
      */
     @GetMapping("/sales-history")
-    @PreAuthorize("(hasAuthority('SALES:VIEW') or (" + Access.ARTICLE_STATS_AUTHORITIES + " and #itm8 != null)) "
-            + "and " + Access.STORE)
+    @PreAuthorize("(hasAuthority('SALES:VIEW') or (" + Access.ARTICLE_STATS_AUTHORITIES + " and #itm8 != null)"
+            + " or (" + DASHBOARD_STORE_HISTORY + ")) and " + Access.STORE)
     public SalesHistoryResponse salesHistory(@PathVariable UUID storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,

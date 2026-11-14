@@ -266,11 +266,146 @@
 }
 
 /*
+ * Liquid Glass: materiał warstwy nawigacji i elementów pływających (menu boczne, nagłówek, okna, listy, podpowiedzi,
+ * toasty). Treść (karty, tabele) zostaje pełna, jak w systemach Apple: szkło unosi się nad treścią, a nie jest nią.
+ * Materiał to rozmycie z nasyceniem tego, co pod spodem, zabarwienie kolorem warstwy, jasna krawędź u góry
+ * (światło łapane przez szkło), cienki obrys i miękki cień. Grubość mówi o hierarchii: chrome jest cieńszy
+ * (przez nagłówek widać przewijaną treść), elementy pływające grubsze, bo leżą na treści i muszą być czytelne.
+ * Żadne szkło nie leży na innym szkle: okna i listy są renderowane w portalu, poza menu i nagłówkiem.
+ */
+:root {
+    --glass-chrome: color-mix(in oklch, var(--background) 62%, transparent);
+    --glass-float: color-mix(in oklch, var(--popover) 74%, transparent);
+    --glass-rim: oklch(1 0 0 / 55%);
+    --glass-edge: oklch(0 0 0 / 7%);
+    --glass-shine: linear-gradient(180deg, oklch(1 0 0 / 38%), oklch(1 0 0 / 0%) 42%);
+    --glass-shadow: 0 1px 1px oklch(0 0 0 / 4%), 0 18px 40px -16px oklch(0 0 0 / 22%);
+}
+.dark {
+    --glass-chrome: color-mix(in oklch, var(--background) 58%, transparent);
+    --glass-float: color-mix(in oklch, var(--popover) 72%, transparent);
+    --glass-rim: oklch(1 0 0 / 16%);
+    --glass-edge: oklch(1 0 0 / 9%);
+    --glass-shine: linear-gradient(180deg, oklch(1 0 0 / 9%), oklch(1 0 0 / 0%) 42%);
+    --glass-shadow: 0 1px 1px oklch(0 0 0 / 30%), 0 22px 48px -16px oklch(0 0 0 / 60%);
+}
+
+/* Pasek menu i nagłówek: cienkie szkło, treść przewija się pod nagłówkiem i prześwituje rozmyta. */
+@utility glass-chrome {
+    background-color: var(--glass-chrome);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+}
+
+/* Okna, listy, podpowiedzi: grubsze szkło z połyskiem u góry i jasną krawędzią. */
+@utility glass-float {
+    background-color: var(--glass-float);
+    background-image: var(--glass-shine);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+    backdrop-filter: blur(32px) saturate(190%);
+    box-shadow: inset 0 1px 0 0 var(--glass-rim), inset 0 0 0 1px var(--glass-edge), var(--glass-shadow);
+}
+
+/*
+ * Tło pod szkłem, gdy konto nie ma własnego zdjęcia: kilka bardzo miękkich plam koloru, nieruchomych, żeby szkło
+ * miało co rozmywać. Celowo ledwo widoczne, bo to narzędzie do pracy. Zdjęcie konta (AppBackground) leży nad nimi.
+ */
+.app-layout::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -20;
+    pointer-events: none;
+    background:
+        radial-gradient(42rem 32rem at 8% 0%, oklch(0.9 0.05 250 / 55%), transparent 70%),
+        radial-gradient(36rem 28rem at 100% 12%, oklch(0.92 0.05 200 / 45%), transparent 70%),
+        radial-gradient(40rem 30rem at 70% 100%, oklch(0.93 0.04 300 / 40%), transparent 70%);
+}
+.dark .app-layout::before {
+    background:
+        radial-gradient(42rem 32rem at 8% 0%, oklch(0.35 0.08 255 / 45%), transparent 70%),
+        radial-gradient(36rem 28rem at 100% 12%, oklch(0.32 0.06 200 / 35%), transparent 70%),
+        radial-gradient(40rem 30rem at 70% 100%, oklch(0.3 0.07 300 / 30%), transparent 70%);
+}
+
+/* Toasty (Sonner) z tego samego materiału: kolor i obrys dają zmienne w components/ui/sonner.tsx. */
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+    background-image: var(--glass-shine);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+    backdrop-filter: blur(32px) saturate(190%);
+    box-shadow: inset 0 1px 0 0 var(--glass-rim), var(--glass-shadow);
+}
+
+/* Ograniczona przezroczystość i większy kontrast w systemie: szkło staje się pełną powierzchnią z wyraźną krawędzią. */
+@media (prefers-reduced-transparency: reduce) {
+    :root, .dark {
+        --glass-chrome: var(--background);
+        --glass-float: var(--popover);
+        --glass-shine: none;
+    }
+    .glass-chrome, .glass-float, [data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+    .app-layout::before {
+        display: none;
+    }
+}
+@media (prefers-contrast: more) {
+    :root, .dark {
+        --glass-chrome: var(--background);
+        --glass-float: var(--popover);
+        --glass-shine: none;
+        --glass-edge: var(--foreground);
+    }
+}
+
+/*
  * Zdjęcie w tle (Moje konto → Tło aplikacji): pod treścią strony leży półprzezroczysta warstwa w kolorze tła motywu,
  * więc każdy tekst stojący poza kartami (nagłówki, opisy, link wstecz, podsumowania) jest czytelny, a zdjęcie widać
  * obok treści i przez nią. Sam kolor, bez backdrop-filter: filtr robiłby z <main> blok zawierający dla `fixed`
  * i psuł przyklejone paski.
  */
 .app-layout:has(> .app-photo) main {
-  background: color-mix(in oklch, var(--background) 86%, transparent);
+  position: relative;
+  isolation: isolate;
+}
+/*
+ * Matowe szkło pod treścią: rozmycie leży na pseudo-elemencie, nie na samym <main>, więc <main> nie staje się
+ * blokiem zawierającym dla `fixed` (pseudo-element nie ma potomków). Zdjęcie prześwituje rozmyte, tekst poza
+ * kartami zostaje czytelny.
+ */
+.app-layout:has(> .app-photo) main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: color-mix(in oklch, var(--background) 52%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: inset 1px 0 0 var(--glass-rim), inset -1px 0 0 var(--glass-rim);
+}
+/*
+ * Karty na matowym szkle: tylko lekko przezroczyste, bez własnego rozmycia (pod nimi jest już rozmyte tło, a szkło
+ * na szkle psuje czytelność i wydajność). Jasna krawędź u góry jak w materiale.
+ */
+:root {
+  --card-surface: var(--card);
+}
+.app-layout:has(> .app-photo) main {
+  --card-surface: color-mix(in oklch, var(--card) 72%, transparent);
+}
+.app-layout:has(> .app-photo) main [data-slot='card'] {
+  box-shadow: inset 0 1px 0 0 var(--glass-rim), inset 0 0 0 1px var(--glass-edge), 0 12px 32px -18px oklch(0 0 0 / 22%);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .app-layout:has(> .app-photo) main::before {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .app-layout:has(> .app-photo) main {
+    --card-surface: var(--card);
+  }
 }

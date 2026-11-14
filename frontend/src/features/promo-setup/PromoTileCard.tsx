@@ -464,7 +464,7 @@ function RowEndInput({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} align="end" className="isolate z-50">
-          <Popover.Popup className="origin-(--transform-origin) rounded-2xl bg-popover p-4 text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.25)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
+          <Popover.Popup className="origin-(--transform-origin) rounded-2xl glass-float p-4 text-popover-foreground transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
             <Calendar
               value={value}
               min={min}

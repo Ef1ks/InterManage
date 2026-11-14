@@ -16,17 +16,18 @@ import {
   ShoppingCartIcon,
   TimerIcon,
   UsersIcon,
+  WalletIcon,
   type LucideIcon,
 } from 'lucide-react'
 
 import { api } from '@/lib/api'
-import type { PermissionCategory, PermissionCategoryInfo } from '@/lib/types'
+import type { PermissionCategory, PermissionCategoryInfo, ToolCategory } from '@/lib/types'
 
 /**
  * Ścieżki i ikony narzędzi po stronie frontu. Nazwy i opisy kategorii przychodzą z backendu
  * (PermissionCategory.java) - nowa kategoria wymaga wpisu w obu miejscach.
  */
-export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: LucideIcon }> = {
+export const TOOL_ROUTES: Record<ToolCategory, { path: string; icon: LucideIcon }> = {
   SALES: { path: '/sprzedaz', icon: ChartColumnIcon },
   INVENTORY: { path: '/magazyn', icon: BoxesIcon },
   ORDERS: { path: '/zamowienia', icon: ShoppingCartIcon },
@@ -43,6 +44,12 @@ export const TOOL_ROUTES: Record<PermissionCategory, { path: string; icon: Lucid
   STAFF_RECORDS: { path: '/kadry', icon: IdCardIcon },
   STAFF_SCHEDULE: { path: '/grafik', icon: CalendarDaysIcon },
   STAFF_TIME: { path: '/czas-pracy', icon: TimerIcon },
+  CASH_REPORT: { path: '/raport-kasowy', icon: WalletIcon },
+}
+
+/** Czy kategoria to narzędzie ze stroną (a nie np. zawartość pulpitu). */
+export function isTool(category: PermissionCategory): category is ToolCategory {
+  return category in TOOL_ROUTES
 }
 
 export function usePermissionCategories() {

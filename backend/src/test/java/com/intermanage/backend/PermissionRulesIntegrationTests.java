@@ -97,6 +97,24 @@ class PermissionRulesIntegrationTests {
     }
 
     @Test
+    void fullDashboardShowsStoreResultsOnly() throws Exception {
+        Cookie dashboard = employee("{\"DASHBOARD\":\"VIEW\"}", storeId);
+        mvc.perform(get(store("/reports")).cookie(dashboard)).andExpect(status().isOk());
+        mvc.perform(get(store("/reports/sales-history?from=2026-10-01&to=2026-10-31")).cookie(dashboard))
+                .andExpect(status().isOk());
+        // Bez raportów sprzedaży: artykuł, nomenklatura i porównanie dalej wymagają SALES.
+        for (String path : new String[] {"/reports/sales-history?from=2026-10-01&to=2026-10-31&itm8=0000001234567",
+                "/reports/sales-history?from=2026-10-01&to=2026-10-31&parent=01",
+                "/reports/sales-history?from=2026-10-01&to=2026-10-31&unassigned=true",
+                "/reports/sales-history?from=2026-10-01&to=2026-10-31&nomenclatures=01",
+                "/reports/articles/0000001234567"}) {
+            mvc.perform(get(store(path)).cookie(dashboard)).andExpect(status().isForbidden());
+        }
+        mvc.perform(get("/api/stores/" + createStore() + "/reports").cookie(dashboard))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void readingNeverNeedsEdit() throws Exception {
         // Zamówienia garmażu: podgląd widzi zaproszenia i wyszukuje w kartotece, zaprasza dopiero EDIT.
         Cookie deli = employee("{\"DELI_ORDERS\":\"VIEW\"}", storeId);

@@ -39,7 +39,7 @@ function PickerPopover({
           <Popover.Popup
             initialFocus={initialFocus}
             finalFocus={false}
-            className={cn('rounded-xl border bg-popover p-1.5 text-sm text-popover-foreground shadow-lg outline-none', className)}
+            className={cn('rounded-xl glass-float p-1.5 text-sm text-popover-foreground outline-none', className)}
           >
             {children}
           </Popover.Popup>

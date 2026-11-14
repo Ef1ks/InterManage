@@ -71,7 +71,7 @@ export default function AccountScreen() {
         </Group>
       )}
 
-      {me.owner ? <ChartMetricSetting /> : null}
+      {me.owner || me.permissions.DASHBOARD ? <ChartMetricSetting /> : null}
 
       <Group title="Aplikacja">
         <GroupRow first>

@@ -270,11 +270,9 @@ export function SwitchAccountDialog({
     onOpenChange(next)
   }
 
+  // Bez toastu: po przełączeniu strona przeładowuje się w całości, a nowe konto widać w nagłówku.
   const switched = (next: Me) => {
     changeOpen(false)
-    toast.success(`Przełączono na konto: ${next.displayName}`, {
-      description: `${me.displayName} zostaje zalogowany w tle.`,
-    })
     onSwitched(next)
   }
 

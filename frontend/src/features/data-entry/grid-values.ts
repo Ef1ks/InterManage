@@ -358,8 +358,13 @@ export function withUnit(row: DataEntryRow, unit: SaleUnit): DataEntryRow {
   return remeasured({ ...row, unit, netContent, edited: { ...row.edited, unit: true, netContent: true } })
 }
 
+/**
+ * Miara w nazwie idzie za rodzajem i wagą tylko w nazwie, której nikt nie poprawiał, i nie przy sztukach: chleb
+ * 500G sprzedawany na sztuki zostaje z gramaturą, a zła miara od AI nie przestawia nazwy przy poprawianiu rodzaju.
+ */
 function remeasured(row: DataEntryRow): DataEntryRow {
-  return row.known || row.name === '' ? row : { ...row, name: withMeasure(row.name, row.unit, row.netContent) }
+  if (row.known || row.name === '' || row.edited.name || row.unit === 'szt.') return row
+  return { ...row, name: withMeasure(row.name, row.unit, row.netContent) }
 }
 
 /** Czy komórkę da się wyczyścić klawiszem Delete (rodzaju, wagi, wartości netto i wartości liczonych nie). */

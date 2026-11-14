@@ -48,7 +48,7 @@ export function ReportHelp({
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="start" sideOffset={6} collisionPadding={12} className="z-50">
-            <Popover.Popup className="grid w-80 max-w-[calc(100vw-2rem)] origin-(--transform-origin) gap-3 rounded-xl border bg-popover p-4 text-sm text-popover-foreground shadow-lg outline-none transition-[opacity,scale] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none">
+            <Popover.Popup className="grid w-80 max-w-[calc(100vw-2rem)] origin-(--transform-origin) gap-3 rounded-xl glass-float p-4 text-sm text-popover-foreground outline-none transition-[opacity,scale] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 motion-reduce:transition-none">
               <Popover.Title className="font-semibold">{title}</Popover.Title>
               <p className="text-muted-foreground">{description}</p>
               {requiredColumns && (

@@ -407,12 +407,17 @@ export function DataEntryGrid({
   const paste = (text: string) => {
     const cells = parseTsv(text)
     if (cells.length === 0) return
-    // Jedna wartość w zaznaczonym zakresie wypełnia cały zakres, jak w Excelu.
-    const single = cells.length === 1 && cells[0].length === 1
-    const height = single ? range.bottom - range.top + 1 : cells.length
-    const width = single ? range.right - range.left + 1 : Math.max(...cells.map((line) => line.length))
-    const top = single ? range.top : active.r
-    const left = single ? range.left : active.c
+    // Wklejamy od lewego górnego rogu zaznaczenia (nie od komórki, w której skończyło się przeciąganie), a blok
+    // powtarza się w zaznaczeniu, gdy mieści się w nim całkowitą liczbę razy, jak w Excelu: jedna wartość wypełnia
+    // cały zakres, a skopiowane rejon, rodzina i podrodzina jednego wiersza trafiają do każdego zaznaczonego wiersza.
+    const blockHeight = cells.length
+    const blockWidth = Math.max(...cells.map((line) => line.length))
+    const selectedHeight = range.bottom - range.top + 1
+    const selectedWidth = range.right - range.left + 1
+    const height = selectedHeight % blockHeight === 0 ? selectedHeight : blockHeight
+    const width = selectedWidth % blockWidth === 0 ? selectedWidth : blockWidth
+    const top = range.top
+    const left = range.left
     const next = [...rows]
     while (next.length < top + height) next.push(emptyRow())
     const changedEans: string[] = []
@@ -420,7 +425,7 @@ export function DataEntryGrid({
     for (let i = 0; i < height; i++) {
       let row = next[top + i]
       for (let j = 0; j < width && left + j <= last; j++) {
-        const value = single ? cells[0][0] : cells[i]?.[j]
+        const value = cells[i % blockHeight]?.[j % blockWidth]
         if (value === undefined) continue
         const result = applyText(row, columns[left + j].key, value, names)
         if ('error' in result) {

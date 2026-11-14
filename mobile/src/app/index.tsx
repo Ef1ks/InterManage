@@ -141,7 +141,9 @@ export default function HomeScreen() {
 
         <MyScheduleCard storeNumber={store?.number} />
         {/* Na razie tylko właściciel; dostęp dla innych ról ustalimy później. */}
-        {me.owner && store ? <StoreResultsCard storeId={store.id} storeNumber={store.number} /> : null}
+        {store && (me.owner || me.permissions.DASHBOARD) ? (
+          <StoreResultsCard storeId={store.id} storeNumber={store.number} />
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   )

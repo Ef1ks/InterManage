@@ -60,7 +60,7 @@ export function DateField({ label, value, onChange, min, max, error, hint, short
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner sideOffset={6} align="start" className="isolate z-50">
-            <Popover.Popup className="origin-(--transform-origin) rounded-2xl bg-popover p-4 text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.25)] ring-1 ring-foreground/10 transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
+            <Popover.Popup className="origin-(--transform-origin) rounded-2xl glass-float p-4 text-popover-foreground transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
               {quickPicks.length > 0 && (
                 <div className="mb-3 flex gap-1.5">
                   {quickPicks.map((quick) => (

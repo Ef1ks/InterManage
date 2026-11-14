@@ -457,7 +457,7 @@ function TurnoverTable({ report }: { report: Report }) {
       )}
 
       {counted.length > 0 && (
-        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-popover px-4 py-3 shadow-lg">
+        <div className="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl glass-float px-4 py-3">
           <span className="text-sm text-muted-foreground">
             Zaznaczone: {counted.length} {counted.length === 1 ? 'pozycja' : counted.length < 5 ? 'pozycje' : 'pozycji'}
           </span>

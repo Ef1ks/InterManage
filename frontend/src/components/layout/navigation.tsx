@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   BadgePercentIcon,
+  BanknoteIcon,
   ChefHatIcon,
   ClipboardCheckIcon,
   BeefIcon,
@@ -37,7 +38,7 @@ import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvita
 import { TimeAttentionBadge } from '@/features/staff-time/TimeAttentionBadge'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
-import type { Me, PermissionCategory, PermissionCategoryInfo } from '@/lib/types'
+import type { Me, PermissionCategoryInfo, ToolCategory } from '@/lib/types'
 
 /** Narzędzie w grupie: w zakładkach nad stroną i na kafelkach strony grupy. */
 export type NavItem = {
@@ -64,7 +65,7 @@ export type NavGroup = {
 
 /** Narzędzie z kategorii uprawnień albo strona z własnym warunkiem dostępu (ustawienia, koszty garmażu). */
 type ItemSpec =
-  | { category: PermissionCategory; label?: string; badge?: (me: Me) => ReactNode; section?: string }
+  | { category: ToolCategory; label?: string; badge?: (me: Me) => ReactNode; section?: string }
   | (Omit<NavItem, 'badge'> & { visible: (me: Me) => boolean; badge?: (me: Me) => ReactNode })
 
 type GroupSpec = Omit<NavGroup, 'items'> & { items: ItemSpec[] }
@@ -234,6 +235,14 @@ const GROUPS: GroupSpec[] = [
       { category: 'STAFF_TIME', badge: () => <TimeAttentionBadge /> },
       { category: 'STAFF_RECORDS' },
     ],
+  },
+  {
+    key: 'cash',
+    path: '/kasy',
+    label: 'Kasy',
+    description: 'Raport kasowy: dokumenty KP i KW z wydrukiem i pieczątką sklepu.',
+    icon: BanknoteIcon,
+    items: [{ category: 'CASH_REPORT' }],
   },
   {
     key: 'settings',

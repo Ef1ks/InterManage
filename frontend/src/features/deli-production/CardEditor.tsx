@@ -475,7 +475,7 @@ function CardForm({ store, card }: { store: StoreSummary; card: ProductionCard |
               ref={listRef}
               id="production-article-suggestions"
               role="listbox"
-              className="absolute inset-x-0 top-[3.25rem] z-20 max-h-72 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg"
+              className="absolute inset-x-0 top-[3.25rem] z-20 max-h-72 overflow-y-auto rounded-lg glass-float p-1"
             >
               {suggestions.map((article, index) => (
                 <li

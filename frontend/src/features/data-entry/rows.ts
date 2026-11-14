@@ -604,8 +604,10 @@ function trailingMeasure(name: string): [SaleUnit, number] | null {
 export function measureMismatch(row: DataEntryRow) {
   // Kartoteka i surowa nazwa z faktury mają miarę w różnych miejscach - sprawdzamy tylko nazwy nowych artykułów.
   if (row.known || row.nameFromInvoice || row.name === '') return false
+  // Sztuka może mieć gramaturę w nazwie (chleb 500G na sztuki).
+  if (row.unit === 'szt.') return false
   const found = trailingMeasure(row.name)
-  if (!found) return row.unit !== 'szt.'
+  if (!found) return true
   return found[0] !== row.unit || Math.abs(found[1] - row.netContent) > 0.0005
 }
 

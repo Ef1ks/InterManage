@@ -114,7 +114,7 @@ export function AppLayout() {
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-60 overflow-x-hidden overflow-y-auto border-r bg-background md:sticky md:top-0 md:h-svh md:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 w-60 overflow-x-hidden overflow-y-auto border-r glass-chrome md:sticky md:top-0 md:h-svh md:translate-x-0',
           // Wysuwanie: na telefonie przesunięcie, na pasku z ikonami rozszerzenie i zwężenie.
           'transition-[translate,width,box-shadow] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
           'md:group-has-[[data-wide-page]]/layout:fixed md:group-has-[[data-wide-page]]/layout:h-full',
@@ -135,7 +135,7 @@ export function AppLayout() {
 
       {/* col-start-2: wysunięte menu wypada z siatki, a treść ma zostać w swojej kolumnie. */}
       <div className="flex min-w-0 flex-col md:col-start-2">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background px-4">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b glass-chrome px-4">
           <Button
             variant="ghost"
             size="icon"
@@ -328,8 +328,9 @@ function UserMenu() {
       <SwitchAccountDialog
         open={switchOpen}
         onOpenChange={setSwitchOpen}
+        // Pełne przeładowanie: ekran nie może zostać z danymi i stanem poprzedniego konta.
         // Inne konto może nie mieć dostępu do bieżącej strony, więc zaczyna od pulpitu.
-        onSwitched={(next) => navigate(next.passwordChangeRequired ? '/ustaw-haslo' : '/', { replace: true })}
+        onSwitched={(next) => window.location.replace(next.passwordChangeRequired ? '/ustaw-haslo' : '/')}
       />
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="ghost" />}>

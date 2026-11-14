@@ -63,7 +63,7 @@ export function ColumnFilter({ label, getValues, selected, onChange }: Props) {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} collisionPadding={12} className="z-50">
-          <Popover.Popup className="flex w-72 flex-col gap-2 rounded-xl border bg-popover p-2 text-sm text-popover-foreground shadow-lg outline-none">
+          <Popover.Popup className="flex w-72 flex-col gap-2 rounded-xl glass-float p-2 text-sm text-popover-foreground outline-none">
             <p className="px-1 text-xs font-medium text-muted-foreground">{label}</p>
             <label className="flex items-center gap-2 rounded-lg border border-input bg-background px-2 dark:bg-input/30">
               <SearchIcon aria-hidden className="size-4 text-muted-foreground" />

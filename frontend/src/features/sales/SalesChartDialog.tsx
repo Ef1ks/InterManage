@@ -1419,7 +1419,7 @@ function BarChart({
           origin &&
           createPortal(
             <div
-              className="pointer-events-none fixed z-100 grid w-max gap-1 rounded-lg bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              className="pointer-events-none fixed z-100 grid w-max gap-1 rounded-lg glass-float px-3 py-2 text-sm text-popover-foreground"
               style={{
                 left: Math.min(Math.max(origin.left + center(hovered), 120), window.innerWidth - 120),
                 top: Math.max(8, origin.top + activeTop - 10),

@@ -59,7 +59,7 @@ export function CellEditor({
     <Popover.Root open={edited !== null} onOpenChange={(open) => !open && close()}>
       <Popover.Portal>
         <Popover.Positioner anchor={edited?.target} sideOffset={6} collisionPadding={8} className="isolate z-50">
-          <Popover.Popup className="w-72 origin-(--transform-origin) rounded-2xl bg-popover p-4 text-popover-foreground shadow-[0_12px_32px_-12px_rgb(0_0_0/0.25)] ring-1 ring-foreground/10 outline-none transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
+          <Popover.Popup className="w-72 origin-(--transform-origin) rounded-2xl glass-float p-4 text-popover-foreground outline-none transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
             {edited && (
               <EditorBody
                 key={`${edited.row.employeeId}:${edited.day.date}`}

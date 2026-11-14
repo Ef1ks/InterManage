@@ -17,6 +17,11 @@ export type PermissionCategory =
   | 'STAFF_RECORDS'
   | 'STAFF_SCHEDULE'
   | 'STAFF_TIME'
+  | 'DASHBOARD'
+  | 'CASH_REPORT'
+
+/** Kategorie, które są narzędziem z własną stroną (DASHBOARD to tylko zawartość pulpitu). */
+export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD'>
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -4081,4 +4086,81 @@ export type LossControlGroup = {
   name: string
   color: string
   itm8s: string[]
+}
+
+/** Rodzaj dokumentu kasowego: KP = kasa przyjmie (wpływ), KW = kasa wypłaci (wypłata). */
+export type CashDocumentKind = 'KP' | 'KW'
+
+export type CashDocument = {
+  id: string
+  kind: CashDocumentKind
+  /** Np. „KP 22/11/2026”: kolejny numer w miesiącu, osobno KP i KW. */
+  number: string
+  issueDate: string
+  amount: number
+  /** „Za co” z listy, np. „Utarg z dnia”. */
+  operation: string
+  /** Opis do operacji, np. „ZDRAPKOMAT”. */
+  title: string | null
+  /** Operacja z opisem: treść w raporcie. */
+  content: string
+  counterparty: string | null
+  counterpartyAddress: string | null
+  createdBy: string | null
+  createdAt: string
+  cancelledBy: string | null
+  cancelledAt: string | null
+  cancelReason: string | null
+}
+
+export type CashSettings = {
+  /** Obowiązująca pieczątka; bez niej nie da się wystawić dokumentu. */
+  stamp: { id: string; fileName: string; createdBy: string | null; createdAt: string } | null
+  /** Stan kasy na początek dnia, od którego prowadzony jest raport; bez niego raport liczy od zera. */
+  openingBalance: { date: string; amount: number; createdBy: string | null; createdAt: string } | null
+  /** Ostatni zakończony raport dzienny (23:00); dokumenty mogą mieć datę dopiero po nim. */
+  lastClosedDate: string | null
+}
+
+/** Zakończony raport dzienny (RK 5/11/2026); `closedBy: null` = zamknięty automatycznie o 23:00. */
+export type CashClosingSummary = {
+  id: string
+  number: string
+  reportDate: string
+  openingBalance: number
+  receipts: number
+  payments: number
+  closingBalance: number
+  receiptCount: number
+  paymentCount: number
+  closedBy: string | null
+  closedAt: string
+}
+
+export type CashClosing = {
+  summary: CashClosingSummary
+  /** Dokumenty z chwili zamknięcia. */
+  rows: {
+    documentId: string
+    position: number
+    kind: CashDocumentKind
+    number: string
+    amount: number
+    content: string
+    counterparty: string | null
+    cancelled: boolean
+    balance: number | null
+  }[]
+}
+
+export type CashReport = {
+  from: string
+  to: string
+  openingBalance: number
+  receipts: number
+  payments: number
+  closingBalance: number
+  /** Dokumenty z okresu w kolejności raportu; anulowane z `balance: null`. */
+  rows: { document: CashDocument; balance: number | null }[]
+  settings: CashSettings
 }
