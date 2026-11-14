@@ -1211,12 +1211,11 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.invoices.length()").value(1))
                 .andExpect(jsonPath("$.invoices[0].invoice.id").value(invoiceId))
-                .andExpect(jsonPath("$.invoices[0].status").doesNotExist())
-                .andExpect(jsonPath("$.invoices[0].otherStores.length()").value(0));
+                .andExpect(jsonPath("$.invoices[0].status").doesNotExist());
         mvc.perform(get(url("/invoices?kind=CORRECTIONS")).cookie(owner))
                 .andExpect(jsonPath("$.invoices.length()").value(0));
 
-        // Wczytana w innym sklepie tej samej firmy: tutaj tylko informacja, dalej do wczytania.
+        // Wczytana w innym sklepie tej samej firmy: tutaj nic nie zmienia (liczy się dopiero dokument), dalej do wczytania.
         String other = createStore();
         jdbc.update("""
                 insert into ksef_connections (store_id, nip, certificate_pem, private_key_pem, password_encrypted,
@@ -1230,8 +1229,7 @@ class DataEntryIntegrationTests {
         mvc.perform(get(url("/invoices")).cookie(owner))
                 .andExpect(jsonPath("$.invoices.length()").value(1))
                 .andExpect(jsonPath("$.invoices[0].status").doesNotExist())
-                .andExpect(jsonPath("$.invoices[0].otherStores[0].storeId").value(other))
-                .andExpect(jsonPath("$.invoices[0].otherStores[0].kind").value("LOADED"));
+                .andExpect(jsonPath("$.invoices[0].otherStores").doesNotExist());
 
         // Pobrana (wydruk podstawowy) to tylko informacja: faktura dalej czeka na wczytanie.
         mvc.perform(get(url("/invoices/" + invoiceId + "/pdf")).cookie(owner))

@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 43.0.0.0
+;@Ahk2Exe-SetVersion 44.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 43 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 44 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -199,6 +199,8 @@ PlayMacro(rawClip) {
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
     handledRows := Map() ; WEBIFROW: ile wierszy obsłużono pod daną etykietą (np. pliki jednego kodu MEA)
+    collected := {codes: [], seen: Map()} ; WEBCOLLECT: kody ze wszystkich list tego makra (np. pliki bonu od 538 i 88110)
+    collectRuns := 0
 
     index := 0
     while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW i WEBIFVALUE przeskakują do LABEL
@@ -359,9 +361,22 @@ PlayMacro(rawClip) {
                     return
                 }
             case "WEBPICKRE":
-                ; WEBPICKRE|okno|siatka|wyrażenie regularne|limit w ms: zaznacza pierwszy wiersz, którego tekst pasuje (np. nazwa pliku z numerem bonu)
+                ; WEBPICKRE|okno|siatka|wyrażenie regularne|limit w ms|etykieta: zaznacza pierwszy wiersz, którego tekst pasuje
+                ; (np. nazwa pliku z numerem bonu i dostawcą). Z etykietą lista bez takiego wiersza nie jest błędem: przeskok do
+                ; LABEL|etykieta (np. bon bez pliku alkoholu 88110).
+                missing := false
                 problem := parts.Length < 4 ? "Linia WEBPICKRE wymaga okna, siatki i wyrażenia."
-                    : WebPickRowMatching(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
+                    : WebPickRowMatching(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 && Trim(parts[5]) != "" ? Integer(Trim(parts[5])) : 10000, &missing)
+                if (missing && parts.Length >= 6 && Trim(parts[6]) != "") {
+                    report .= "Brak pliku: " Trim(parts[6]) "`n"
+                    target := LabelLine(lines, Trim(parts[6]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
                 if (problem != "") {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -370,17 +385,27 @@ PlayMacro(rawClip) {
                 ; WEBCOLLECT|okno|siatka|tekst wiersza|kolumna kodu od 0 albo auto|następna strona|lista stron|1 = stop na stronie bez takiego wiersza:
                 ; ze stron listy zbiera kody z wierszy z tym tekstem (np. „ITM nie istnieje”), bez powtórzeń i zer wiodących, i kładzie je do Schowka.
                 ; Mercalys stawia wiersze z błędami na początku listy, więc strona bez błędu kończy przegląd.
+                ; Opcjonalnie |kolumna numeru bonu|numer bonu: każdy wiersz listy musi być z tego bonu, inaczej makro staje
+                ; (otwarty zły plik). Kody z kolejnych WEBCOLLECT w jednym makrze sumują się w Schowku.
                 if (parts.Length < 6) {
                     MsgBox report "Linia WEBCOLLECT wymaga okna, siatki, tekstu, kolumny i następnej strony.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 summary := WebCollect(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Trim(parts[6]), parts.Length >= 7 ? Trim(parts[7]) : "",
-                    parts.Length >= 8 && Trim(parts[8]) = "1")
+                    parts.Length >= 8 && Trim(parts[8]) = "1", collected,
+                    parts.Length >= 10 ? Trim(parts[9]) : "", parts.Length >= 10 ? Trim(parts[10]) : "")
+                collectRuns += 1
                 if (summary.problem != "") {
                     MsgBox report summary.problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 report .= summary.text "`n"
+            case "WEBCOLLECTED":
+                ; WEBCOLLECTED|komunikat: zatrzymuje makro z komunikatem, gdy żaden WEBCOLLECT się nie wykonał (np. nie było pliku bonu)
+                if (collectRuns = 0) {
+                    MsgBox report (parts.Length >= 2 ? Trim(parts[2]) : "Nie zebrano żadnej listy."), "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    return
+                }
             case "WEBSET":
                 ; WEBSET|okno|id pola albo listy|wartość|limit w ms: wpisuje wartość, a lista wybiera pozycję i wywołuje swoją zmianę
                 problem := parts.Length < 4 ? "Linia WEBSET wymaga okna, pola i wartości."
@@ -1290,7 +1315,8 @@ RowText(row) {
 }
 
 ; Zaznacza pierwszy wiersz, którego tekst pasuje do wyrażenia. Lista bez takiego wiersza przez 2 s to błąd, bez czekania do limitu.
-WebPickRowMatching(title, grid, pattern, timeoutMs) {
+WebPickRowMatching(title, grid, pattern, timeoutMs, &missing := false) {
+    missing := false
     deadline := A_TickCount + timeoutMs
     gridSince := 0
     Loop {
@@ -1314,11 +1340,15 @@ WebPickRowMatching(title, grid, pattern, timeoutMs) {
         if gridFound {
             if (gridSince = 0)
                 gridSince := A_TickCount
-            else if (A_TickCount - gridSince >= 2000)
+            else if (A_TickCount - gridSince >= 2000) {
+                missing := true
                 return "Na liście nie ma wiersza pasującego do `"" pattern "`"."
+            }
         }
-        if (A_TickCount >= deadline)
+        if (A_TickCount >= deadline) {
+            missing := gridFound
             return gridFound ? "Na liście nie ma wiersza pasującego do `"" pattern "`"." : "Nie ma listy `"" grid "`" w oknie `"" title "`"."
+        }
         Sleep 100
     }
 }
@@ -1378,19 +1408,45 @@ PageSignature(title, grid, field) {
     return PagerState(title, field).current "|" (rows.Length > 0 ? RowText(rows[1].row) : "")
 }
 
-WebCollect(title, grid, text, column, nextPage, pageField, stopOnEmptyPage := false) {
+; Numer bonu do porównania: same cyfry bez zer wiodących.
+BonDigits(text) {
+    return LTrim(RegExReplace(text, "\D"), "0")
+}
+
+; Ten sam bon: numery równe albo jeden jest końcówką drugiego (lista może pokazywać numer bez przedrostka), od 6 cyfr.
+SameBon(shown, wanted) {
+    if (shown = "" || wanted = "")
+        return false
+    if (shown = wanted)
+        return true
+    shorter := StrLen(shown) < StrLen(wanted) ? shown : wanted
+    longer := StrLen(shown) < StrLen(wanted) ? wanted : shown
+    return StrLen(shorter) >= 6 && SubStr(longer, -StrLen(shorter)) = shorter
+}
+
+WebCollect(title, grid, text, column, nextPage, pageField, stopOnEmptyPage := false, collected := "", bonColumn := "", bonNumber := "") {
+    if !IsObject(collected)
+        collected := {codes: [], seen: Map()}
     codes := []
     seen := Map()
     pages := 0
     matched := 0
     withoutCode := 0
     wanted := RegExReplace(text, "\s+", " ")
+    wantedBon := BonDigits(bonNumber)
     Loop {
         rows := VisibleGridRows(title, grid, 30000)
         if (rows.Length = 0)
             return {problem: "Nie ma listy `"" grid "`" w oknie `"" title "`" (strona " (pages + 1) ").", text: ""}
         pages += 1
         pageMatched := 0
+        if (wantedBon != "" && IsInteger(bonColumn)) {
+            for item in rows {
+                shown := CellText(item.row, Integer(bonColumn))
+                if !SameBon(BonDigits(shown), wantedBon)
+                    return {problem: "Otworzył się inny bon: na liście jest `"" shown "`", a miał być " bonNumber ". Nic nie zebrano z tego pliku.", text: ""}
+            }
+        }
         for item in rows {
             if !InStr(RowText(item.row), wanted)
                 continue
@@ -1427,8 +1483,15 @@ WebCollect(title, grid, text, column, nextPage, pageField, stopOnEmptyPage := fa
                 return {problem: "Lista nie przeszła na stronę " (pages + 1) ".", text: ""}
         }
     }
+    ; Kody z tej listy dochodzą do zebranych wcześniej w tym makrze; Schowek ma zawsze wszystkie.
+    for code in codes {
+        if !collected.seen.Has(code) {
+            collected.seen[code] := true
+            collected.codes.Push(code)
+        }
+    }
     list := ""
-    for code in codes
+    for code in collected.codes
         list .= code "`r`n"
     A_Clipboard := list
     shown := ""
@@ -1439,11 +1502,13 @@ WebCollect(title, grid, text, column, nextPage, pageField, stopOnEmptyPage := fa
         }
         shown .= code "`n"
     }
-    result := "Przejrzane strony: " pages "`nWiersze z błędem `"" text "`": " matched "`n"
+    result := (bonNumber != "" ? "Bon " bonNumber ":`n" : "") "Przejrzane strony: " pages "`nWiersze z błędem `"" text "`": " matched "`n"
     if (withoutCode > 0)
         result .= "BEZ KODU ITM8 (sprawdź ręcznie): " withoutCode "`n"
-    result .= codes.Length = 0 ? "`nNie ma kodów do zebrania, Schowek jest pusty.`n"
-        : "`nKody w Schowku: " codes.Length ". Wklej je w Intermanage (Uzupełnij ITM8).`n`n" shown
+    result .= codes.Length = 0 ? "Nie ma kodów w tym pliku.`n"
+        : "Kody z tego pliku: " codes.Length "`n" shown
+    result .= collected.codes.Length = 0 ? "`nSchowek jest pusty.`n"
+        : "`nKody w Schowku razem: " collected.codes.Length ". Wklej je w Intermanage (Uzupełnij ITM8).`n"
     return {problem: "", text: result}
 }
 

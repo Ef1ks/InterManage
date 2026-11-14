@@ -2806,8 +2806,8 @@ export type InvoiceMarkKind = 'LOADED' | 'DOWNLOADED' | 'NOT_MINE'
 
 /**
  * Faktura w oknie wczytywania: status w sklepie ({@code null} = do wczytania, LOADED wczytana, NOT_MINE nie moja),
- * kiedy sklep ją pobrał albo wydrukował (tylko informacja, pobrana dalej czeka na wczytanie) i znaczniki innych
- * sklepów firmy (wczytana albo pobrana na innym stanowisku).
+ * kiedy sklep ją pobrał albo wydrukował (tylko informacja, pobrana dalej czeka na wczytanie). Inne sklepy firmy
+ * liczą się tylko dokumentem (`invoice.deliveries`), nie samym wczytaniem.
  */
 export type DataEntryInvoiceItem = {
   invoice: KsefInvoice
@@ -2816,12 +2816,6 @@ export type DataEntryInvoiceItem = {
   downloadedAt: string | null
   /** Reguła dostawcy w tym oknie: pomijany albo odkładany do wczytanych. */
   supplierRule: SupplierRuleMode | null
-  otherStores: {
-    storeId: string
-    store: string
-    kind: InvoiceMarkKind
-    at: string
-  }[]
 }
 
 export type DataEntryInvoicePage = {

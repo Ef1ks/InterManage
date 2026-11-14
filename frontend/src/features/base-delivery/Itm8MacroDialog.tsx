@@ -54,10 +54,12 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
 
   /** Makro zbiera z Mercalys kody z błędem „ITM nie istnieje” do Schowka; okno zostaje otwarte, żeby je tu wkleić. */
   const collect = async () => {
-    if (!delivery || !(await copy(buildMissingItm8Macro(delivery.number)))) return
+    if (!delivery) return
+    const suppliers = delivery.lines.map((line) => line.supplierCode)
+    if (!(await copy(buildMissingItm8Macro(delivery.number, suppliers)))) return
     toast.success('Makro w schowku', {
       description:
-        'Wciśnij Alt+E. Kody z błędem „ITM nie istnieje” trafią do schowka, potem kliknij „Wklej ze schowka”.',
+        'Wciśnij Alt+E (odtwarzacz od wersji 44). Makro przejdzie pliki bonu od 538 i 88110, a kody z błędem „ITM nie istnieje” z obu trafią do schowka. Potem kliknij „Wklej ze schowka”.',
       duration: 10_000,
     })
   }

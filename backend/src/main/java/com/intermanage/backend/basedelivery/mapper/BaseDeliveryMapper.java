@@ -37,6 +37,7 @@ public interface BaseDeliveryMapper {
     @Mapping(target = "subfamilyCode", source = "line.subfamilyCode")
     @Mapping(target = "product", source = "product")
     @Mapping(target = "catalogDeposit", source = "catalogDeposit")
+    @Mapping(target = "supplierCode", expression = "java(com.intermanage.backend.basedelivery.component.BaseSupplier.of(line, product))")
     BaseDeliveryLineResponse toLine(BaseDeliveryLine line, CatalogProduct product, Short catalogDeposit);
 
     @Mapping(target = "confirmedBy", source = "confirmedBy.displayName")

@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
-import { bonNumber, formatMoney } from '@/features/documents/format'
+import { formatMoney } from '@/features/documents/format'
 import { useKsefOverview } from '@/features/ksef/api'
 import { formatDate } from '@/features/ksef/format'
 import { QuantityChangeBadge } from '@/features/ksef/QuantityChangeBadge'
@@ -64,6 +64,7 @@ import {
   useSkipSupplier,
 } from './api'
 import { BaseSupplierCodesButton } from './BaseSupplierCodesDialog'
+import { CompletedInvoiceBadge } from './CompletedInvoiceBadge'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { PRINT_VARIANT_LABELS, useInvoiceFiles } from './invoice-files'
 
@@ -162,8 +163,6 @@ const STATUS_BADGES: Record<'LOADED' | 'NOT_MINE', { label: string; className: s
   LOADED: { label: 'wczytana', className: 'bg-violet-200 text-violet-950 dark:bg-violet-900 dark:text-violet-50' },
   NOT_MINE: { label: 'nie moja', className: 'bg-stone-300 text-stone-950 dark:bg-stone-700 dark:text-stone-50' },
 }
-
-const COMPLETED_BADGE = 'bg-emerald-300 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50'
 
 function Badge({ className, children, title }: { className: string; children: React.ReactNode; title?: string }) {
   return (
@@ -577,9 +576,6 @@ function InvoiceRow({
   const supplier = invoice.sellerName ?? invoice.sellerNip
   // Dokument z raportu w sklepie firmy (przyjęcie z jej numerem albo przypięty): faktura jest wczytana z automatu.
   const documents = invoice.deliveries
-  const documentTitle = documents
-    .map((document) => `${document.typeSingular} ${bonNumber(document.number)} (sklep ${document.store})`)
-    .join(', ')
   const failed = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać zmiany')
 
@@ -670,13 +666,6 @@ function InvoiceRow({
             {item.status && (documents.length === 0 || item.status === 'NOT_MINE') && (
               <Badge className={STATUS_BADGES[item.status].className}>{STATUS_BADGES[item.status].label}</Badge>
             )}
-            {documents.length > 0 && (
-              <Badge className={COMPLETED_BADGE} title={`Faktura jest już w systemie sklepu: ${documentTitle}`}>
-                zakończona · {documents[0].type === 'PZ' ? 'w PZ' : documents[0].typeSingular.toLowerCase()}{' '}
-                {bonNumber(documents[0].number)}
-                {documents.length > 1 && ` +${documents.length - 1}`}
-              </Badge>
-            )}
             {item.downloadedAt && (
               <Badge
                 className="bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50"
@@ -685,15 +674,6 @@ function InvoiceRow({
                 pobrana
               </Badge>
             )}
-            {item.otherStores.map((other) => (
-              <Badge
-                key={`${other.storeId}:${other.kind}`}
-                className="bg-sky-200 text-sky-950 dark:bg-sky-900 dark:text-sky-50"
-                title={`${other.kind === 'DOWNLOADED' ? 'Pobrana' : 'Wczytana'} ${formatDate(other.at.slice(0, 10))} w sklepie ${other.store}`}
-              >
-                {other.kind === 'DOWNLOADED' ? 'pobrana' : 'wczytana'} na innym stanowisku: {other.store}
-              </Badge>
-            ))}
             {invoice.supplierSkipped && (
               <Badge className={RULE_BADGES.HIDDEN.className} title="Dostawca pominięty w Fakturach KSeF">
                 pomijany w KSeF
@@ -738,6 +718,9 @@ function InvoiceRow({
         </span>
         <span className="text-right text-sm font-medium">{formatMoney(invoice.netAmount)} zł</span>
       </button>
+      {/* Poza przyciskiem wiersza, bo numer bonu to link (dokument tego sklepu albo bon innego sklepu firmy). */}
+      <CompletedInvoiceBadge storeId={storeId} invoiceId={invoice.id} documents={documents} newTab />
+
       {/* Druk najczęściej potrzebny przy wprowadzaniu: osobny przycisk, wariant jak w oknie (domyślnie podstawowy). */}
       <Button
         variant="ghost"

@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.data.jpa.domain.Specification;
@@ -39,8 +38,6 @@ import com.intermanage.backend.ksef.entity.KsefInvoice;
 import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
 import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
-import com.intermanage.backend.store.entity.Store;
-import com.intermanage.backend.store.repository.StoreRepository;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -68,19 +65,17 @@ public class DataEntryInvoiceService {
     private final KsefInvoiceService ksefInvoices;
     private final DataEntryInvoiceMarkRepository marks;
     private final DataEntrySkippedSupplierRepository skipped;
-    private final StoreRepository stores;
     private final AppUserRepository users;
     private final DataEntryInvoiceMapper mapper;
     private final KsefConnectionRepository connections;
 
     public DataEntryInvoiceService(KsefInvoiceService ksefInvoices, DataEntryInvoiceMarkRepository marks,
-            DataEntrySkippedSupplierRepository skipped, StoreRepository stores, AppUserRepository users,
+            DataEntrySkippedSupplierRepository skipped, AppUserRepository users,
             DataEntryInvoiceMapper mapper, KsefConnectionRepository connections) {
         this.ksefInvoices = ksefInvoices;
         this.connections = connections;
         this.marks = marks;
         this.skipped = skipped;
-        this.stores = stores;
         this.users = users;
         this.mapper = mapper;
     }
@@ -160,9 +155,6 @@ public class DataEntryInvoiceService {
         Map<UUID, List<DataEntryInvoiceMark>> byInvoice = marks
                 .findByInvoiceIdInAndDeletedAtIsNull(invoices.stream().map(KsefInvoiceSummary::id).toList()).stream()
                 .collect(Collectors.groupingBy(DataEntryInvoiceMark::getInvoiceId));
-        Map<UUID, Store> otherStores = stores.findAllById(byInvoice.values().stream().flatMap(List::stream)
-                        .map(DataEntryInvoiceMark::getStoreId).filter(id -> !id.equals(storeId)).distinct().toList())
-                .stream().collect(Collectors.toMap(Store::getId, Function.identity()));
         Map<String, SupplierRuleMode> rules = skipped.findByStoreIdAndDeletedAtIsNullOrderBySellerNameAsc(storeId)
                 .stream().collect(Collectors.toMap(DataEntrySkippedSupplier::getSellerNip,
                         DataEntrySkippedSupplier::getMode, (a, b) -> a));
@@ -175,21 +167,10 @@ public class DataEntryInvoiceService {
                     .orElse(null);
             DataEntryInvoiceMark downloaded = ownMarks.stream()
                     .filter(mark -> mark.getKind() == InvoiceMarkKind.DOWNLOADED).findFirst().orElse(null);
-            List<DataEntryInvoiceItem.OtherStore> others = found.stream()
-                    .filter(mark -> !mark.getStoreId().equals(storeId) && mark.getKind() != InvoiceMarkKind.NOT_MINE)
-                    .filter(mark -> otherStores.containsKey(mark.getStoreId()))
-                    .sorted(Comparator.comparing(DataEntryInvoiceMark::getCreatedAt))
-                    .map(mark -> new DataEntryInvoiceItem.OtherStore(mark.getStoreId(),
-                            label(otherStores.get(mark.getStoreId())), mark.getKind(), mark.getCreatedAt()))
-                    .toList();
             return new DataEntryInvoiceItem(invoice, own != null ? own.getKind() : null,
                     own != null ? own.getCreatedAt() : null, downloaded != null ? downloaded.getCreatedAt() : null,
-                    rules.get(invoice.sellerNip()), others);
+                    rules.get(invoice.sellerNip()));
         }).toList();
-    }
-
-    private static String label(Store store) {
-        return store.getNumber() + " · " + store.getName();
     }
 
     private AppUser user(UUID userId) {

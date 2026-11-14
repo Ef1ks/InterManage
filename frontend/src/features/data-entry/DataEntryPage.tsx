@@ -72,7 +72,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useCan } from '@/features/auth/api'
 import { useSuppliers } from '@/features/documents/api'
-import { bonNumber, documentPaths, formatMoney } from '@/features/documents/format'
+import { documentPaths, formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { documentPrice } from '@/features/base-delivery/base-rows'
 import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
@@ -132,6 +132,7 @@ import { DeliOrderBanner } from './DeliOrderBanner'
 import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
+import { CompletedInvoiceBadge } from './CompletedInvoiceBadge'
 import { InvoicePickerDialog } from './InvoicePickerDialog'
 import { ArticleFileDialog } from './ArticleFileDialog'
 import { ACTION_TILE, ACTION_TONES, ActionItem, ActionMenu, TILE_WIDTH, TileContent } from './ActionMenu'
@@ -2267,18 +2268,7 @@ function DocumentHeading({
           )}
         </>
       )}
-      {documents.length > 0 && (
-        <span
-          className="rounded-md bg-emerald-300 px-2 py-0.5 text-sm font-semibold text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50"
-          title={`Faktura jest już w systemie sklepu: ${documents
-            .map((document) => `${document.typeSingular} ${bonNumber(document.number)} (sklep ${document.store})`)
-            .join(', ')}`}
-        >
-          Zakończona · {documents[0].type === 'PZ' ? 'w PZ' : documents[0].typeSingular.toLowerCase()}{' '}
-          {bonNumber(documents[0].number)}
-          {documents.length > 1 && ` +${documents.length - 1}`}
-        </span>
-      )}
+      {invoice.id && <CompletedInvoiceBadge storeId={storeId} invoiceId={invoice.id} documents={documents} size="lg" />}
       {details.length > 0 && <span>· {details.join(' · ')}</span>}
     </span>
   )

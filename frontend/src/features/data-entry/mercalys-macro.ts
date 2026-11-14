@@ -111,10 +111,11 @@ const BASE_BL_SCREEN = {
   selectionButton: 'btnSelection_LnkBouton',
   /** Przycisk ekranu linii bonu: mówi, że Wybór otworzył bon. */
   detailScreen: 'btnB3_Integration_LnkBouton',
-  /** Lista plików: nazwa `095_<nr bonu>_00538` w kolumnie 0, data w 1. */
+  /** Lista plików: nazwa `095_<nr bonu>_<dostawca>` (00538, 88110) w kolumnie 0, data w 1. */
   filesGrid: 'dgDetail',
-  /** Linie bonu: ITM8 (13 cyfr z zerami) w kolumnie 0, błąd w kolumnie 7. */
+  /** Linie bonu: ITM8 (13 cyfr z zerami) w kolumnie 0, nr bonu w 4, błąd w kolumnie 7. */
   linesGrid: 'dgArticles',
+  bonColumn: '4',
   missingItm8Text: 'ITM nie istnieje',
   /** Kolumna z kodem ITM8 od zera albo `auto`: pierwsza komórka z samym kodem do 8 cyfr. */
   itm8Column: '0',
@@ -127,25 +128,46 @@ const BASE_BL_SCREEN = {
 /** Otwarcie dużego bonu potrafi trwać. */
 const BASE_BL_TIMEOUT_MS = 60000
 
+/** Dostawcy bazy: bon ma w Obsłudze BL bazy osobny plik od każdego (towar 538, alkohol 88110). */
+const BASE_FILE_SUPPLIERS = ['538', '88110']
+
 /**
- * „Zbierz brakujące ITM8”: Zakup → Obsługa BL bazy, wiersz z plikiem bonu (nazwa `…_<nr bonu>_…`, zera wiodące dowolne),
- * Wybór, a z linii bonu ze wszystkich stron kody ITM8 z błędem „ITM nie istnieje” trafiają do Schowka. Na końcu powrót
- * na Zakup i Mercalys na pasek zadań. Wymaga odtwarzacza od wersji 38 (WEBPICKRE, WEBCOLLECT).
+ * „Zbierz brakujące ITM8”: dla każdego dostawcy bonu Zakup → Obsługa BL bazy, wiersz z plikiem tego bonu i tego dostawcy
+ * (nazwa `…_<nr bonu>_<dostawca>`, zera wiodące dowolne; brak pliku od dostawcy to nie błąd), Wybór, sprawdzenie, że linie
+ * są z tego bonu, i kody ITM8 z błędem „ITM nie istnieje” ze wszystkich stron. Kody z wszystkich plików trafiają razem do
+ * Schowka. Bez żadnego pliku makro staje. Na końcu powrót na Zakup i Mercalys na pasek zadań. Wymaga odtwarzacza od
+ * wersji 44 (etykieta w WEBPICKRE, numer bonu w WEBCOLLECT, WEBCOLLECTED).
  */
-export function buildMissingItm8Macro(bonNumber: string) {
+export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[] = []) {
   const screen = BASE_BL_SCREEN
   const digits = bonNumber.replace(/\D/g, '').replace(/^0+/, '')
-  return (
-    [
-      `# Zbierz brakujące ITM8: bon ${bonNumber}`,
-      `WINOPEN|${PROGRAM_WINDOW}`,
+  const suppliers = [
+    ...new Set(
+      [...BASE_FILE_SUPPLIERS, ...supplierCodes]
+        .map((code) => code.replace(/\D/g, '').replace(/^0+/, ''))
+        .filter(Boolean),
+    ),
+  ]
+  const fileSteps = suppliers.flatMap((supplier) => {
+    const label = `bon-${digits}-${supplier}`
+    return [
+      `# Plik bonu ${bonNumber} od dostawcy ${supplier}`,
       `WEBENSURE|${WINDOW}|${MENU.deliveries}|${MENU.purchasesTab}`,
       `WEBOPEN|${WINDOW}|${MENU.deliveries}|${screen.menuItem}`,
       `WEBWAIT|${WINDOW}|${screen.selectionButton}||${PAGE_TIMEOUT_MS}`,
-      `WEBPICKRE|${WINDOW}|${screen.filesGrid}|(?<!\\d)0*${digits}(?!\\d)|${PAGE_TIMEOUT_MS}`,
+      `WEBPICKRE|${WINDOW}|${screen.filesGrid}|(?<!\\d)0*${digits}\\D+0*${supplier}(?!\\d)|${PAGE_TIMEOUT_MS}|${label}`,
       `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
       `WEBWAIT|${WINDOW}|${screen.detailScreen}||${BASE_BL_TIMEOUT_MS}`,
-      `WEBCOLLECT|${WINDOW}|${screen.linesGrid}|${screen.missingItm8Text}|${screen.itm8Column}|${screen.nextPageButton}|${screen.pageList}|${screen.stopOnEmptyPage}`,
+      `WEBCOLLECT|${WINDOW}|${screen.linesGrid}|${screen.missingItm8Text}|${screen.itm8Column}|${screen.nextPageButton}|${screen.pageList}|${screen.stopOnEmptyPage}|${screen.bonColumn}|${bonNumber}`,
+      `LABEL|${label}`,
+    ]
+  })
+  return (
+    [
+      `# Zbierz brakujące ITM8: bon ${bonNumber}, dostawcy ${suppliers.join(', ')}`,
+      `WINOPEN|${PROGRAM_WINDOW}`,
+      ...fileSteps,
+      `WEBCOLLECTED|W Obsłudze BL bazy nie ma pliku bonu ${bonNumber} od dostawców ${suppliers.join(', ')}.`,
       `WEBCLICK|${WINDOW}|${MENU.purchasesTab}`,
       `WINMIN|${PROGRAM_WINDOW}`,
     ].join('\r\n') + '\r\n'
@@ -917,8 +939,13 @@ const MEA_SCREEN = {
 
 /** Pod jednym kodem MEA bywa 1-3 plików cadencier; tyle razy makro bierze najwyżej pierwszy plik z listy. */
 export const MEA_MAX_FILES = 5
-/** Po integracji Acrobat pokazuje raport; czekamy, aż okna przestaną się zmieniać. */
-const MEA_PDF_TIMEOUT_MS = 45000
+/**
+ * Po integracji Acrobat pokazuje raport; czekamy, aż się pojawi i okna przestaną się zmieniać. Integracja dużego pliku
+ * trwa ponad 45 s, a PDF spóźniony za makro zabierał klawisze filtra, więc tyle co sama integracja.
+ */
+const MEA_PDF_TIMEOUT_MS = INTEGRATION_TIMEOUT_MS
+/** Gdy filtr po wpisaniu nie ma kodu, PDF właśnie się otwiera: czekamy, aż ustoi (4 s bez zmian), i go zamykamy. */
+const MEA_LATE_PDF_MS = 8000
 /** Tyle WEBIFVALUE czeka, zanim uzna, że w filtrze jest już ten kod (pole jest od razu, więc krótko). */
 const FILTER_CHECK_MS = 300
 
@@ -943,12 +970,22 @@ export function buildMeaMacro(codes: string[]) {
     out.push(`# Kod MEA ${code}`)
     for (let row = 1; row <= MEA_MAX_FILES; row++) {
       const typed = `${label}-${row}`
+      const retyped = `${typed}-again`
       out.push(
         `# Plik ${row}`,
+        // Raport poprzedniego pliku potrafi otworzyć się dopiero teraz (długa integracja, drugi PDF): zamykamy go, zanim
+        // klawisze filtra trafią w Acrobata.
+        `WINCLOSEALL|${PDF_WINDOW}|0`,
         // Po Powrót w filtrze zostaje ten sam kod, a WEBIFROW i tak liczy tylko wiersze z kodem: kod wpisujemy tylko,
         // gdy w polu jest inny (pasuje = idzie do WEBKEY, nie pasuje = przeskok za nie).
         `WEBIFVALUE|${WINDOW}|${screen.nameFilter}|^(?!${code}$)|${typed}|${FILTER_CHECK_MS}`,
         `WEBKEY|${WINDOW}|${screen.nameFilter}|^a${code}{Enter}`,
+        // PDF, który wyskoczył w trakcie wpisywania, zabrał klawisze: filtr nie ma kodu, więc zamykamy go i wpisujemy jeszcze raz.
+        `WEBIFVALUE|${WINDOW}|${screen.nameFilter}|^(?!${code}$)|${typed}|${FILTER_CHECK_MS}`,
+        `WINCLOSEALL|${PDF_WINDOW}|${MEA_LATE_PDF_MS}`,
+        `WEBIFVALUE|${WINDOW}|${screen.nameFilter}|^(?!${code}$)|${retyped}|${FILTER_CHECK_MS}`,
+        `WEBKEY|${WINDOW}|${screen.nameFilter}|^a${code}{Enter}`,
+        `LABEL|${retyped}`,
         `LABEL|${typed}`,
         // Zintegrowany plik znika z listy (pokazuje tylko „Do przetw.”), więc zawsze pierwszy widoczny plik z kodem;
         // pusta lista = kod skończony, przeskok do następnego.
@@ -965,8 +1002,9 @@ export function buildMeaMacro(codes: string[]) {
         `WEBCLICK|${WINDOW}|${screen.integrateButton}`,
         `WEBWAIT|${DIALOG}|Oui|${screen.integrateText}|${PAGE_TIMEOUT_MS}`,
         `WEBCLICK|${DIALOG}|Oui`,
-        // Raport integracji otwiera się w Acrobacie po 2-3 s; ekran po integracji nie ma już przycisku Integracja,
-        // więc najpierw PDF (WINCLOSEALL czeka, aż się pojawi i ustoi), potem Powrót, gdy już jest.
+        // Raport integracji otwiera się w Acrobacie po końcu integracji (zwykle 2-3 s, przy dużym pliku ponad minutę);
+        // ekran po integracji nie ma już przycisku Integracja, więc najpierw PDF (WINCLOSEALL czeka, aż się pojawi
+        // i ustoi), potem Powrót, gdy już jest.
         `WINCLOSEALL|${PDF_WINDOW}|${MEA_PDF_TIMEOUT_MS}`,
         `WEBWAIT|${WINDOW}|${screen.backButton}||${INTEGRATION_TIMEOUT_MS}`,
         `WEBCLICK|${WINDOW}|${screen.backButton}`,
