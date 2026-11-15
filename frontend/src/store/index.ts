@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import baseDeliveryDraftReducer, { persistBaseDeliveryDrafts } from './baseDeliveryDraftSlice'
 import dataEntryDraftReducer, { persistDataEntryDrafts } from './dataEntryDraftSlice'
 import deliOrderDraftReducer, { persistDrafts } from './deliOrderDraftSlice'
+import protocolEntryDraftReducer, { persistProtocolEntryDrafts } from './protocolEntryDraftSlice'
 import promoSetupDraftReducer, { persistPromoSetup } from './promoSetupDraftSlice'
 import uiReducer from './uiSlice'
 
@@ -14,6 +15,7 @@ export const store = configureStore({
     dataEntryDraft: dataEntryDraftReducer,
     baseDeliveryDraft: baseDeliveryDraftReducer,
     promoSetupDraft: promoSetupDraftReducer,
+    protocolEntryDraft: protocolEntryDraftReducer,
   },
 })
 
@@ -44,6 +46,16 @@ store.subscribe(() => {
   if (drafts !== savedBaseDelivery) {
     savedBaseDelivery = drafts
     persistBaseDeliveryDrafts(drafts)
+  }
+})
+
+// Tabela protokołów też.
+let savedProtocolEntry = store.getState().protocolEntryDraft
+store.subscribe(() => {
+  const drafts = store.getState().protocolEntryDraft
+  if (drafts !== savedProtocolEntry) {
+    savedProtocolEntry = drafts
+    persistProtocolEntryDrafts(drafts)
   }
 })
 

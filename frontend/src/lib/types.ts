@@ -2583,6 +2583,23 @@ export type CadencierOverview = {
   imports: CadencierImport[]
 }
 
+/** Jedno wgranie we wspólnej historii importów; {@code kind} mówi, jakiego raportu dotyczy {@code item}. */
+export type ImportHistoryEntry =
+  | { kind: 'products'; importedAt: string; item: ProductImport }
+  | { kind: 'documents'; importedAt: string; item: DocumentImport }
+  | { kind: 'suppliers'; importedAt: string; item: SupplierImport }
+  | { kind: 'sales'; importedAt: string; item: SalesImport }
+  | { kind: 'nomenclatures'; importedAt: string; item: NomenclatureImport }
+  | { kind: 'promotions'; importedAt: string; item: PromotionImport }
+  | { kind: 'productCodes'; importedAt: string; item: ProductCodeImport }
+  | { kind: 'cadencier'; importedAt: string; item: CadencierImport }
+
+/** Porcja historii importów (po 30, od najnowszego); kolejna od {@code importedAt} ostatniej pozycji. */
+export type ImportHistoryPage = {
+  items: ImportHistoryEntry[]
+  hasMore: boolean
+}
+
 /** Wprowadzanie danych: rodzaj sprzedaży artykułu (JED z kartoteki). */
 export type SaleUnit = 'kg' | 'L' | 'szt.'
 

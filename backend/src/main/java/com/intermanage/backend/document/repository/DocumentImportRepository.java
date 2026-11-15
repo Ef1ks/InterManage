@@ -1,5 +1,6 @@
 package com.intermanage.backend.document.repository;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,6 +19,11 @@ public interface DocumentImportRepository extends JpaRepository<DocumentImport, 
     @EntityGraph(attributePaths = "importedBy")
     @Query("select i from DocumentImport i where i.store.id = :storeId order by i.importedAt desc, i.id desc")
     List<DocumentImport> findLatest(UUID storeId, Limit limit);
+
+    /** Wgrania starsze niż {@code before}: kolejna porcja wspólnej historii importów. */
+    @EntityGraph(attributePaths = "importedBy")
+    @Query("select i from DocumentImport i where i.store.id = :storeId and i.importedAt < :before order by i.importedAt desc, i.id desc")
+    List<DocumentImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
     /** Najnowsze dane w bazie: data wygenerowania najświeższego wgranego raportu. */
     @Query("select max(i.reportGeneratedAt) from DocumentImport i where i.store.id = :storeId")

@@ -1,6 +1,7 @@
 package com.intermanage.backend.promotion.repository;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +21,11 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
     @Query("select i from PromotionImport i left join fetch i.importedBy where i.store.id = :storeId "
             + "order by i.importedAt desc, i.id desc")
     List<PromotionImport> findLatest(UUID storeId, Limit limit);
+
+    /** Wgrania starsze niż {@code before}: kolejna porcja wspólnej historii importów. */
+    @Query("select i from PromotionImport i left join fetch i.importedBy where i.store.id = :storeId and i.importedAt < :before "
+            + "order by i.importedAt desc, i.id desc")
+    List<PromotionImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
     @Query("select max(i.reportGeneratedAt) from PromotionImport i where i.store.id = :storeId "
             + "and i.withdrawnAt is null")

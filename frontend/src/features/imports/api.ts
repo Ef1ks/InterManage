@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { documentsKey, suppliersKey } from '@/features/documents/api'
 import { reportsKey } from '@/features/sales/api'
@@ -7,6 +7,7 @@ import type {
   DocumentImport,
   EanChange,
   ImportGuide,
+  ImportHistoryPage,
   ImportReportKind,
   NomenclatureImport,
   NomenclatureImportOverview,
@@ -194,6 +195,22 @@ export function useProductCodeImports(storeId: string) {
   return useQuery({
     queryKey: productCodeImportsKey(storeId),
     queryFn: () => api<ProductCodeImportOverview>(productCodeImportsPath(storeId)),
+  })
+}
+
+/**
+ * Wspólna historia importów wszystkich raportów, porcjami z serwera (po 30, od najnowszego); kolejną porcję
+ * wyznacza chwila wgrania ostatniej pozycji. Każde wgranie unieważnia wszystkie zapytania, więc lista się odświeża.
+ */
+export function useImportHistory(storeId: string) {
+  return useInfiniteQuery({
+    queryKey: ['stores', storeId, 'imports', 'history'],
+    queryFn: ({ pageParam }) => {
+      const params = pageParam ? `?${new URLSearchParams({ before: pageParam })}` : ''
+      return api<ImportHistoryPage>(`/stores/${storeId}/imports/history${params}`)
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.hasMore ? (last.items.at(-1)?.importedAt ?? null) : null),
   })
 }
 

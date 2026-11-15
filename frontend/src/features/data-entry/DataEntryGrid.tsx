@@ -383,7 +383,7 @@ export function DataEntryGrid({
         let next = row
         for (let c = range.left; c <= range.right; c++) {
           const key = columns[c].key
-          if (!clearable(key)) continue
+          if (!clearable(key) || columns[c].kind === 'computed') continue
           if (key === 'region' || key === 'family' || key === 'subfamily') {
             if (next.subfamilyCode !== null || next.nomenclaturePrefix) next = withSubfamily(next, null)
             continue
@@ -426,7 +426,8 @@ export function DataEntryGrid({
       let row = next[top + i]
       for (let j = 0; j < width && left + j <= last; j++) {
         const value = cells[i % blockHeight]?.[j % blockWidth]
-        if (value === undefined) continue
+        // Kolumny tylko do odczytu (np. nazwa i rejon w tabeli protokołów) wklejanie pomija.
+        if (value === undefined || columns[left + j].kind === 'computed') continue
         const result = applyText(row, columns[left + j].key, value, names)
         if ('error' in result) {
           invalid++

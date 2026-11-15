@@ -37,6 +37,7 @@ import com.intermanage.backend.ksef.entity.KsefConnection;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
 import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
+import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -119,7 +120,8 @@ public class DataEntryInvoiceService {
             }
             Predicate all = cb.conjunction();
             if (!showSkipped) {
-                all = cb.and(all, cb.not(cb.exists(rule(root, query, cb, storeId, SupplierRuleMode.HIDDEN))));
+                all = cb.and(all, cb.not(cb.exists(rule(root, query, cb, storeId, SupplierRuleMode.HIDDEN))),
+                        cb.not(skippedBaseCorrection(root, cb)));
             }
             if (status == ListStatus.NEW) {
                 all = cb.and(all, cb.not(handled));
@@ -128,6 +130,16 @@ public class DataEntryInvoiceService {
             }
             return all;
         };
+    }
+
+    /** Numer korekty bazy SCA PR, którą okno pomija samo (widać ją tylko z {@code showSkipped}). */
+    static final String SKIPPED_BASE_CORRECTION_PREFIX = "KG";
+
+    /** Korekty bazy SCA PR z numerem od "KG" nie są wprowadzane w sklepie, więc okno ich nie pokazuje. */
+    private static Predicate skippedBaseCorrection(Root<KsefInvoice> root, CriteriaBuilder cb) {
+        return cb.and(root.get("sellerNip").in(KsefCorrectedInvoiceService.IGNORED_SELLER_NIPS),
+                cb.like(root.get("invoiceType"), "Kor%"),
+                cb.like(cb.upper(root.get("invoiceNumber")), SKIPPED_BASE_CORRECTION_PREFIX + "%"));
     }
 
     private static Subquery<Integer> handledMark(Root<KsefInvoice> root, CriteriaQuery<?> query, CriteriaBuilder cb,

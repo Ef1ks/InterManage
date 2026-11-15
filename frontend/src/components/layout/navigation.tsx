@@ -4,6 +4,7 @@ import {
   BanknoteIcon,
   ChefHatIcon,
   ClipboardCheckIcon,
+  ClipboardListIcon,
   BeefIcon,
   CookingPotIcon,
   CroissantIcon,
@@ -27,6 +28,7 @@ import { hasPermission } from '@/features/auth/api'
 import { bakeryPath } from '@/features/bakery-check/paths'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
+import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
 import { downloadsPath } from '@/features/downloads/paths'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
@@ -219,6 +221,15 @@ const GROUPS: GroupSpec[] = [
         description: 'Co przeliczyć przed zamknięciem inwentury: pomyłki plus/minus, niepoliczony towar i literówki.',
         icon: ClipboardCheckIcon,
         visible: (me) => hasPermission(me, 'INVENTORY'),
+      },
+      {
+        key: 'protocol-entry',
+        section: STOCK,
+        path: protocolEntryPath,
+        label: 'Protokoły',
+        description: 'Likwidacje, potrzeby sklepu, MM i inne protokoły: skanujesz EAN, wpisujesz ilość, zapisujesz plik.',
+        icon: ClipboardListIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
       { category: 'IMPORTS', section: STORE_DATA },
     ],

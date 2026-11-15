@@ -1,5 +1,6 @@
 package com.intermanage.backend.product.repository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +18,11 @@ public interface ProductImportRepository extends JpaRepository<ProductImport, UU
     @EntityGraph(attributePaths = "importedBy")
     @Query("select i from ProductImport i where i.store.id = :storeId order by i.importedAt desc, i.id desc")
     List<ProductImport> findLatest(UUID storeId, Limit limit);
+
+    /** Wgrania starsze niż {@code before}: kolejna porcja wspólnej historii importów. */
+    @EntityGraph(attributePaths = "importedBy")
+    @Query("select i from ProductImport i where i.store.id = :storeId and i.importedAt < :before order by i.importedAt desc, i.id desc")
+    List<ProductImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
     @Query("select max(i.reportGeneratedAt) from ProductImport i where i.store.id = :storeId")
     Optional<LocalDateTime> findNewestReportGeneratedAt(UUID storeId);

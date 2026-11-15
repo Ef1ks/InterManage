@@ -3,11 +3,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { TagIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { StoreLocationField } from '@/components/StoreLocationField'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
 import { DEFAULT_FOLDER } from '@/lib/proto-files'
 import { ensureFolderAccess, folderSavingSupported, pickFolder } from '@/lib/saved-folders'
 import { formatReportDate } from '@/lib/report-freshness'
+import { folderLocationKey, useStoreLocations } from '@/lib/store-locations'
 import { cn } from '@/lib/utils'
 
 import { checkPriceFiles, priceFolderKey, usePriceFileOverview, usePriceFileWatch } from './price-files'
@@ -21,6 +23,10 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
   const overview = usePriceFileOverview(storeId)
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
+  const locations = useStoreLocations(storeId)
+  /** Ścieżka sklepu bez numeru sklepu w kluczu: klucz przeglądarki ma numer, bo w nazwie pliku go nie ma. */
+  const locationKey = folderLocationKey('price-files')
+  const folderPath = locations.data?.[locationKey] || DEFAULT_FOLDER
 
   if (!folderSavingSupported) return null
 
@@ -44,7 +50,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
   // Okno wyboru i okno zgody działają tylko zaraz po kliknięciu, więc najpierw one, potem sprawdzenie.
   const choose = () => {
     // Domyślna ścieżka do schowka (bez await, żeby nie zużyć gestu kliknięcia): wkleja się ją w pasek adresu okna.
-    navigator.clipboard?.writeText(DEFAULT_FOLDER).catch(() => {})
+    navigator.clipboard?.writeText(folderPath).catch(() => {})
     return withBusy(async () => (await pickFolder(key, 'read')) !== null)
   }
   const allow = () => withBusy(() => ensureFolderAccess(key, 'read'))
@@ -69,8 +75,8 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
             <>
               <span className="font-medium">Wybierz folder z plikami cen</span>
               <span className="block text-xs text-muted-foreground">
-                Ścieżkę <span className="font-mono">{DEFAULT_FOLDER}</span> skopiujemy do schowka. W oknie wyboru wklej
-                ją (Ctrl+V) w pasek adresu u góry, naciśnij Enter i kliknij „Wybierz folder”.
+                Ścieżkę <span className="font-mono">{folderPath}</span> skopiujemy do schowka. W oknie wyboru wklej ją
+                (Ctrl+V) w pasek adresu u góry, naciśnij Enter i kliknij „Wybierz folder”.
               </span>
             </>
           ) : needsAccess ? (
@@ -130,6 +136,13 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
           </div>
         )}
       </div>
+      <StoreLocationField
+        storeId={storeId}
+        locationKey={locationKey}
+        label="Ścieżka folderu w sklepie"
+        className="font-mono"
+        hint={`Wspólna dla wszystkich komputerów sklepu. Bez wpisu: ${DEFAULT_FOLDER}`}
+      />
       <p className="text-xs text-muted-foreground">
         Folder i jego podfolder BACKUP sprawdzamy od razu po wejściu i co 10 minut, gdy aplikacja jest otwarta; pliki z
         dni bez aplikacji wczytują się same, od najstarszego. Cena z pliku nowszego niż raport kartoteki zastępuje cenę

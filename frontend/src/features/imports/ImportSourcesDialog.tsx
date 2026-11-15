@@ -2,28 +2,21 @@ import { useState } from 'react'
 import { ClipboardCopyIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { TextField } from '@/components/form'
+import { StoreLocationField } from '@/components/StoreLocationField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DAILY_REPORTS,
+  importFolderLocationKey,
+  importLocationKey,
   isMacroReport,
   macroPathError,
   MASK_EXAMPLES,
-  readMacroPaths,
-  readMacroPrintNumbers,
-  readMasks,
   REPORT_EXTENSIONS,
   REPORT_TITLES,
   sourceFolderKey,
-  writeMacroPaths,
-  writeMacroPrintNumbers,
-  writeMasks,
   type DailyReport,
-  type MacroPaths,
-  type MacroPrintNumbers,
   type MacroReport,
-  type SourceMasks,
 } from '@/features/imports/import-sources'
 import {
   buildReportSaveMacro,
@@ -31,18 +24,23 @@ import {
   macroPlayerVersion,
   opensItself,
   pathExample,
+  LIST_NUMBER_REPORTS,
+  listNumberError,
   PRINT_NUMBER_REPORTS,
   printNumberError,
   type ReportMacroSettings,
 } from '@/features/imports/report-macros'
 import { useDocumentImports, useSalesImports } from '@/features/imports/api'
+import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ApiError } from '@/lib/api'
 import { folderSavingSupported, useSavedFolder } from '@/lib/saved-folders'
+import { parentFolder, useStoreLocations } from '@/lib/store-locations'
 import type { ImportGuide } from '@/lib/types'
 
 /**
- * Ustawienia „Odśwież dane”: folder każdego codziennego raportu (wybrany raz w tej przeglądarce) i opcjonalna maska
- * nazwy pliku, gdy w folderze leżą też inne pliki. Listy dostawców i nomenklatur wgrywa się tylko ręcznie.
+ * Ustawienia „Odśwież dane”: folder każdego codziennego raportu (ścieżka wspólna dla sklepu, uchwyt wybrany raz w tej
+ * przeglądarce) i opcjonalna maska nazwy pliku, gdy w folderze leżą też inne pliki. Maski, ścieżki zapisu makr
+ * i numery z Mercalys też są ścieżkami sklepu. Listy dostawców i nomenklatur wgrywa się tylko ręcznie.
  */
 export function ImportSourcesDialog({
   open,
@@ -62,7 +60,9 @@ export function ImportSourcesDialog({
           <DialogTitle className="text-lg">Ustawienia importu</DialogTitle>
           <DialogDescription>
             Wskaż, gdzie zapisujesz raporty z systemu sklepu. „Odśwież dane” wgra z każdego folderu najnowszy plik,
-            którego jeszcze nie było. Ustawienia zostają w tej przeglądarce, osobno dla każdego sklepu.
+            którego jeszcze nie było. Ścieżki, nazwy plików i numery z Mercalys są wspólne dla całego sklepu (na dysku
+            sieciowym są takie same na każdym komputerze). Sam folder przeglądarka pamięta u siebie, więc na nowym
+            komputerze wybierz go raz: ścieżkę skopiujemy do schowka.
           </DialogDescription>
         </DialogHeader>
         {folderSavingSupported ? (
@@ -83,29 +83,8 @@ export function ImportSourcesDialog({
 }
 
 function SourceList({ storeId, guides }: { storeId: string; guides: ImportGuide[] }) {
-  const [masks, setMasks] = useState<SourceMasks>(() => readMasks(storeId))
-  const [macroPaths, setMacroPaths] = useState<MacroPaths>(() => readMacroPaths(storeId))
-
-  const changeMacroPath = (kind: MacroReport, path: string) => {
-    const next = { ...macroPaths, [kind]: path }
-    setMacroPaths(next)
-    writeMacroPaths(storeId, next)
-  }
-
-  const [printNumbers, setPrintNumbers] = useState<MacroPrintNumbers>(() => readMacroPrintNumbers(storeId))
-
-  const changePrintNumber = (kind: MacroReport, number: string) => {
-    const next = { ...printNumbers, [kind]: number }
-    setPrintNumbers(next)
-    writeMacroPrintNumbers(storeId, next)
-  }
-
-  const changeMask = (kind: DailyReport, mask: string) => {
-    const next = { ...masks, [kind]: mask }
-    setMasks(next)
-    writeMasks(storeId, next)
-  }
-
+  // Przenosi ustawienia zapisane wcześniej tylko w tej przeglądarce do ścieżek sklepu.
+  useImportSettings(storeId)
   return (
     <ul className="grid gap-3">
       {DAILY_REPORTS.map((kind) => (
@@ -113,41 +92,23 @@ function SourceList({ storeId, guides }: { storeId: string; guides: ImportGuide[
           key={kind}
           storeId={storeId}
           kind={kind}
-          suggestedPath={guides.find((guide) => guide.kind === kind)?.folderPath ?? null}
-          mask={masks[kind] ?? ''}
-          onMaskChange={(mask) => changeMask(kind, mask)}
-          macro={isMacroReport(kind) ? { path: macroPaths[kind] ?? '', printNumber: printNumbers[kind] ?? '' } : null}
-          onMacroPathChange={(path) => isMacroReport(kind) && changeMacroPath(kind, path)}
-          onPrintNumberChange={(number) => isMacroReport(kind) && changePrintNumber(kind, number)}
+          guidePath={guides.find((guide) => guide.kind === kind)?.folderPath ?? null}
         />
       ))}
     </ul>
   )
 }
 
-function SourceRow({
-  storeId,
-  kind,
-  suggestedPath,
-  mask,
-  onMaskChange,
-  macro,
-  onMacroPathChange,
-  onPrintNumberChange,
-}: {
-  storeId: string
-  kind: DailyReport
-  suggestedPath: string | null
-  mask: string
-  onMaskChange: (mask: string) => void
-  /** Ustawienia zapisu makrem; null = raport bez makra. */
-  macro: ReportMacroSettings | null
-  onMacroPathChange: (path: string) => void
-  onPrintNumberChange: (number: string) => void
-}) {
+function SourceRow({ storeId, kind, guidePath }: { storeId: string; kind: DailyReport; guidePath: string | null }) {
   const { name, loaded, pick } = useSavedFolder(sourceFolderKey(storeId, kind), 'read')
   const [picking, setPicking] = useState(false)
   const title = REPORT_TITLES[kind]
+  const locations = useStoreLocations(storeId)
+  const [mask, setMask] = useState('')
+  const [macro, setMacro] = useState<ReportMacroSettings>({ path: '', printNumber: '', listNumber: '' })
+  // Folder raportu: wpisany dla sklepu, bez niego folder pliku z makra, na końcu podpowiedź z instrukcji raportu.
+  const fallbackPath = parentFolder(macro.path) ?? guidePath
+  const suggestedPath = locations.data?.[importFolderLocationKey(kind)] || fallbackPath
 
   const choose = async () => {
     // Bez await: schowek nie zużywa gestu kliknięcia, którego potrzebuje okno wyboru folderu.
@@ -164,8 +125,8 @@ function SourceRow({
   }
 
   return (
-    <li className="grid gap-3 rounded-xl border bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-center">
-      <div className="flex min-w-0 items-center gap-3">
+    <li className="grid gap-3 rounded-xl border bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-start">
+      <div className="flex min-w-0 items-center gap-3 sm:col-span-2">
         {name ? (
           <FolderIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         ) : (
@@ -187,7 +148,7 @@ function SourceRow({
                 adresu okna wyboru
               </>
             ) : (
-              'Nie wybrano folderu: raport wgrywasz ręcznie'
+              'Nie wybrano folderu w tej przeglądarce: raport wgrywasz ręcznie'
             )}
           </div>
         </div>
@@ -195,21 +156,28 @@ function SourceRow({
           {name ? 'Zmień' : 'Wybierz folder'}
         </Button>
       </div>
-      <TextField
+      <StoreLocationField
+        storeId={storeId}
+        locationKey={importFolderLocationKey(kind)}
+        label="Folder raportu w sklepie"
+        className="font-mono"
+        hint={fallbackPath ? `Bez wpisu: ${fallbackPath}` : 'Wspólny dla wszystkich komputerów sklepu'}
+      />
+      <StoreLocationField
+        storeId={storeId}
+        locationKey={importLocationKey(kind, 'mask')}
         label="Nazwa pliku (opcjonalnie)"
-        autoComplete="off"
-        value={mask}
-        onChange={(event) => onMaskChange(event.target.value)}
+        maxLength={200}
+        onDraftChange={setMask}
         hint={`Np. ${MASK_EXAMPLES[kind]} (* = dowolne znaki)`}
       />
-      {macro && isMacroReport(kind) && (
+      {isMacroReport(kind) && (
         <MacroFields
           storeId={storeId}
           kind={kind}
           settings={macro}
           mask={mask}
-          onPathChange={onMacroPathChange}
-          onPrintNumberChange={onPrintNumberChange}
+          onChange={(change) => setMacro((current) => ({ ...current, ...change }))}
         />
       )}
     </li>
@@ -222,19 +190,21 @@ function MacroFields({
   kind,
   settings,
   mask,
-  onPathChange,
-  onPrintNumberChange,
+  onChange,
 }: {
   storeId: string
   kind: MacroReport
   settings: ReportMacroSettings
   mask: string
-  onPathChange: (path: string) => void
-  onPrintNumberChange: (number: string) => void
+  /** Bieżący tekst pól (zapisuje je samo pole, po wyjściu z niego). */
+  onChange: (change: Partial<ReportMacroSettings>) => void
 }) {
   const withPrintNumber = PRINT_NUMBER_REPORTS.includes(kind)
+  const withListNumber = LIST_NUMBER_REPORTS.includes(kind)
   const pathError = macroPathError(kind, settings.path, mask)
-  const numberError = withPrintNumber ? printNumberError(settings.printNumber ?? '') : null
+  const numberError =
+    (withPrintNumber ? printNumberError(settings.printNumber ?? '') : null) ??
+    (withListNumber ? listNumberError(settings.listNumber ?? '') : null)
   // Okres raportu sprzedaży zależy od ostatniego dnia w bazie (ta sama lista co na stronie importu, z pamięci)
   const sales = useSalesImports(storeId)
   const documents = useDocumentImports(storeId)
@@ -262,29 +232,44 @@ function MacroFields({
   return (
     <div
       className={`grid gap-3 sm:col-span-2 sm:items-start ${
-        withPrintNumber ? 'sm:grid-cols-[minmax(0,1fr)_9rem_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto]'
+        withListNumber
+          ? 'sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]'
+          : withPrintNumber
+            ? 'sm:grid-cols-[minmax(0,1fr)_9rem_auto]'
+            : 'sm:grid-cols-[minmax(0,1fr)_auto]'
       }`}
     >
-      <TextField
+      <StoreLocationField
+        storeId={storeId}
+        locationKey={importLocationKey(kind, 'path')}
         label="Zapis z Mercalys (ścieżka pliku)"
-        autoComplete="off"
-        spellCheck={false}
         className="font-mono"
-        value={settings.path}
-        onChange={(event) => onPathChange(event.target.value)}
+        onDraftChange={(path) => onChange({ path })}
         error={pathError ?? undefined}
         hint={pathError ? undefined : `Makro zapisze tu raport z Mercalys, np. ${pathExample(kind)}`}
       />
       {withPrintNumber && (
-        <TextField
+        <StoreLocationField
+          storeId={storeId}
+          locationKey={importLocationKey(kind, 'print')}
           label="Nr wydruku"
-          autoComplete="off"
-          inputMode="numeric"
+          numeric
           maxLength={2}
-          value={settings.printNumber ?? ''}
-          onChange={(event) => onPrintNumberChange(event.target.value.replace(/\D/g, ''))}
-          error={settings.path.trim() ? (numberError ?? undefined) : undefined}
+          onDraftChange={(printNumber) => onChange({ printNumber })}
+          error={settings.path.trim() ? (printNumberError(settings.printNumber ?? '') ?? undefined) : undefined}
           hint="Wydruk Ustawialny w Mercalys"
+        />
+      )}
+      {withListNumber && (
+        <StoreLocationField
+          storeId={storeId}
+          locationKey={importLocationKey(kind, 'list')}
+          label="Nr listy"
+          numeric
+          maxLength={4}
+          onDraftChange={(listNumber) => onChange({ listNumber })}
+          error={settings.path.trim() ? (listNumberError(settings.listNumber ?? '') ?? undefined) : undefined}
+          hint="Innych list w Mercalys"
         />
       )}
       <Button

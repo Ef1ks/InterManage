@@ -28,6 +28,9 @@ const PRINT_SCREEN = {
   byItm8: 'WG ITM8',
   itm8FromField: 'txtZ1_ItmMin_TxtBox',
   approveButton: 'btnB2_Valider_LnkBouton',
+  /** „Innych list....” na ekranie wyboru listy: lista wszystkich list artykułów ze stronami. */
+  otherLists: 'lkbAutres_LinkAviso',
+  listNumberField: 'txtZ1_NumListe_TxtBox',
 }
 
 /** Artykuł → Karta EAN: od razu wybór listy (ar-e054), „WG ITM8” → Zatwierdź → tabela kodów (ar-e056) → Excel. */
@@ -149,10 +152,15 @@ export type ReportMacroSettings = {
   path: string
   /** Numer wydruku ustawialnego w Mercalys (Baza danych). */
   printNumber?: string
+  /** Numer listy artykułów w Mercalys (Obecne w cadencier). */
+  listNumber?: string
 }
 
 /** Raporty, których wydruk w Mercalys ma numer ustawiany w ustawieniach importu. */
-export const PRINT_NUMBER_REPORTS: readonly MacroReport[] = ['PRODUCTS']
+export const PRINT_NUMBER_REPORTS: readonly MacroReport[] = ['PRODUCTS', 'CADENCIER']
+
+/** Raporty z listy artykułów („Innych list…”), której numer ustawia się w ustawieniach importu. */
+export const LIST_NUMBER_REPORTS: readonly MacroReport[] = ['CADENCIER']
 
 export function printNumberError(value: string): string | null {
   const number = value.trim()
@@ -160,12 +168,18 @@ export function printNumberError(value: string): string | null {
   return /^\d{1,2}$/.test(number) ? null : 'Numer wydruku to 1 albo 2 cyfry'
 }
 
+export function listNumberError(value: string): string | null {
+  const number = value.trim()
+  if (!number) return 'Wpisz numer listy z Mercalys'
+  return /^\d{1,4}$/.test(number) ? null : 'Numer listy to od 1 do 4 cyfr'
+}
+
 /** Kroki w Mercalys do chwili, gdy raport ładuje się do Excela; null = raport otwiera pracownik. */
 function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: ReportMacroContext): string[] | null {
-  if (kind === 'PRODUCTS') {
+  if (kind === 'PRODUCTS' || kind === 'CADENCIER') {
     const s = PRINT_SCREEN
     const number = settings.printNumber!.trim()
-    return [
+    const toLists = [
       `WEBENSURE|${WINDOW}|${s.printMenu}|${s.articleTab}`,
       `WEBOPEN|${WINDOW}|${s.printMenu}|${s.printItem}|${s.numberField}`,
       `WEBWAIT|${WINDOW}|${s.numberField}||${PAGE_TIMEOUT_MS}`,
@@ -174,9 +188,23 @@ function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: Re
       `WEBVALUE|${WINDOW}|${s.titleField}|\\S|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${s.excelButton}`,
       `WEBPAGE|${WINDOW}|${s.listPage}|${s.byItm8}|${PAGE_TIMEOUT_MS}`,
-      `WEBCLICK|${WINDOW}|${s.byItm8}`,
-      `WEBWAIT|${WINDOW}|${s.itm8FromField}||${PAGE_TIMEOUT_MS}`,
-      `WEBCLICK|${WINDOW}|${s.approveButton}`,
+    ]
+    if (kind === 'PRODUCTS')
+      return [
+        ...toLists,
+        `WEBCLICK|${WINDOW}|${s.byItm8}`,
+        `WEBWAIT|${WINDOW}|${s.itm8FromField}||${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${WINDOW}|${s.approveButton}`,
+      ]
+    // Obecne w cadencier: „Innych list…”, numer listy z Enterem przewija listę list do jej strony, ale wiersza nie
+    // zaznacza (pole wraca do 0, Zatwierdź nic nie otwiera), więc jak ręcznie: dwuklik w wiersz z numerem listy.
+    const list = String(Number(settings.listNumber!.trim()))
+    return [
+      ...toLists,
+      `WEBCLICK|${WINDOW}|${s.otherLists}`,
+      `WEBWAIT|${WINDOW}|${s.listNumberField}||${PAGE_TIMEOUT_MS}`,
+      `WEBKEY|${WINDOW}|${s.listNumberField}|^a${list}{Enter}`,
+      `WEBDBLROW|${WINDOW}|*|${list}|${PAGE_TIMEOUT_MS}`,
     ]
   }
   if (kind === 'PRODUCT_CODES') {
@@ -248,7 +276,8 @@ function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: Re
 }
 
 /** Czy makro samo otwiera raport w Mercalys (bez pytania pracownika). */
-export const opensItself = (kind: MacroReport) => openSteps(kind, { path: '', printNumber: '0' }, {}) !== null
+export const opensItself = (kind: MacroReport) =>
+  openSteps(kind, { path: '', printNumber: '0', listNumber: '0' }, {}) !== null
 
 /** Przykładowa ścieżka w podpowiedzi pola zapisu. */
 export const pathExample = (kind: MacroReport) =>
@@ -256,7 +285,10 @@ export const pathExample = (kind: MacroReport) =>
 
 /** Czy raport ma wszystko, czego makro potrzebuje (ścieżka sprawdzana osobno). */
 export function macroSettingsReady(kind: MacroReport, settings: ReportMacroSettings) {
-  return !PRINT_NUMBER_REPORTS.includes(kind) || printNumberError(settings.printNumber ?? '') === null
+  return (
+    (!PRINT_NUMBER_REPORTS.includes(kind) || printNumberError(settings.printNumber ?? '') === null) &&
+    (!LIST_NUMBER_REPORTS.includes(kind) || listNumberError(settings.listNumber ?? '') === null)
+  )
 }
 
 /** Jedno makro na podane raporty, po kolei; na końcu Mercalys wraca na pasek zadań. */

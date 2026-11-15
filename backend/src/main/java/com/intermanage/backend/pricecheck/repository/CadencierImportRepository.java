@@ -1,5 +1,6 @@
 package com.intermanage.backend.pricecheck.repository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -18,6 +19,11 @@ public interface CadencierImportRepository extends JpaRepository<CadencierImport
     @Query("select i from CadencierImport i left join fetch i.importedBy where i.store.id = :storeId "
             + "order by i.importedAt desc")
     List<CadencierImport> findLatest(UUID storeId, Limit limit);
+
+    /** Wgrania starsze niż {@code before}: kolejna porcja wspólnej historii importów. */
+    @Query("select i from CadencierImport i left join fetch i.importedBy where i.store.id = :storeId and i.importedAt < :before "
+            + "order by i.importedAt desc")
+    List<CadencierImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
     default Optional<CadencierImport> findNewest(UUID storeId) {
         return findLatest(storeId, Limit.of(1)).stream().findFirst();

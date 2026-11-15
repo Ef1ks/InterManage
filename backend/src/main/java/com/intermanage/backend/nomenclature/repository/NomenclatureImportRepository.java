@@ -1,5 +1,6 @@
 package com.intermanage.backend.nomenclature.repository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +16,10 @@ public interface NomenclatureImportRepository extends JpaRepository<Nomenclature
 
     @Query("select i from NomenclatureImport i left join fetch i.importedBy where i.store.id = :storeId order by i.importedAt desc, i.id desc")
     List<NomenclatureImport> findLatest(UUID storeId, Limit limit);
+
+    /** Wgrania starsze niż {@code before}: kolejna porcja wspólnej historii importów. */
+    @Query("select i from NomenclatureImport i left join fetch i.importedBy where i.store.id = :storeId and i.importedAt < :before order by i.importedAt desc, i.id desc")
+    List<NomenclatureImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
     @Query("select max(i.reportGeneratedAt) from NomenclatureImport i where i.store.id = :storeId")
     Optional<LocalDateTime> findNewestReportGeneratedAt(UUID storeId);

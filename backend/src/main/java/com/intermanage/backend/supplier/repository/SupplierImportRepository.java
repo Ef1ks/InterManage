@@ -1,5 +1,6 @@
 package com.intermanage.backend.supplier.repository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +16,10 @@ public interface SupplierImportRepository extends JpaRepository<SupplierImport, 
 
     @Query("select i from SupplierImport i left join fetch i.importedBy where i.store.id = :storeId order by i.importedAt desc, i.id desc")
     List<SupplierImport> findLatest(UUID storeId, Limit limit);
+
+    /** Wgrania starsze niż {@code before}: kolejna porcja wspólnej historii importów. */
+    @Query("select i from SupplierImport i left join fetch i.importedBy where i.store.id = :storeId and i.importedAt < :before order by i.importedAt desc, i.id desc")
+    List<SupplierImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
     @Query("select max(i.reportGeneratedAt) from SupplierImport i where i.store.id = :storeId")
     Optional<LocalDateTime> findNewestReportGeneratedAt(UUID storeId);

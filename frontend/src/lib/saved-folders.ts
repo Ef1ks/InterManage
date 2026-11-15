@@ -14,7 +14,13 @@ export type SavedFolderSpec = {
   key: string
   /** Co trafia do folderu, np. „Plik .lst”. */
   label: string
+  /** Domyślna ścieżka, gdy sklep nie ustawił swojej (`folder:<key>` w ścieżkach sklepu, `lib/store-locations`). */
   suggestedPath?: string
+  /**
+   * Ścieżka ustawiana gdzie indziej (Ustawienia sklepu → Pliki PROTO): `suggestedPath` jest już ścieżką sklepu,
+   * więc okno folderu nie ma własnego pola.
+   */
+  pathInSettings?: boolean
 }
 
 /** Zapis plików do folderu albo samo czytanie (pliki z systemu sklepu, np. TRACEART). */

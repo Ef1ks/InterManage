@@ -1,10 +1,12 @@
 import { listFolderFiles } from '@/lib/saved-folders'
+import { folderLocationKey, type StoreLocations } from '@/lib/store-locations'
 import type { ImportReportKind } from '@/lib/types'
 
 /*
  * Skąd „Odśwież dane” bierze pliki raportów: folder wybrany raz w przeglądarce (File System Access API, uchwyt
- * w IndexedDB) i opcjonalna maska nazwy pliku (w localStorage), osobno dla każdego sklepu i raportu, bo raporty
- * różnych sklepów leżą w różnych folderach, a kilka raportów bywa w jednym (np. Pobrane).
+ * w IndexedDB) i opcjonalna maska nazwy pliku, osobno dla każdego sklepu i raportu. Raporty leżą na dysku sieciowym,
+ * a w jednym sklepie ścieżki są takie same na każdym komputerze, więc maski, ścieżki folderów i zapisu makr oraz
+ * numery z Mercalys są ścieżkami sklepu na serwerze (`lib/store-locations`): ustawione raz działają u wszystkich.
  */
 
 /** Raporty wgrywane codziennie, w kolejności odświeżania. Listę dostawców i nomenklatur wgrywa się tylko ręcznie. */
@@ -48,30 +50,11 @@ export const MASK_EXAMPLES: Record<DailyReport, string> = {
 
 export const sourceFolderKey = (storeId: string, kind: DailyReport) => `import:${storeId}:${kind}`
 
-const masksKey = (storeId: string) => `intermanage.importMasks.${storeId}`
-
 export type SourceMasks = Partial<Record<DailyReport, string>>
-
-export function readMasks(storeId: string): SourceMasks {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(masksKey(storeId)) ?? '{}')
-    return parsed && typeof parsed === 'object' ? (parsed as SourceMasks) : {}
-  } catch {
-    return {}
-  }
-}
-
-export function writeMasks(storeId: string, masks: SourceMasks) {
-  try {
-    localStorage.setItem(masksKey(storeId), JSON.stringify(masks))
-  } catch {
-    // Bez localStorage maski działają do odświeżenia strony.
-  }
-}
 
 /*
  * Zapis raportów z Mercalys makrem (odtwarzacz od wersji 46, polecenie EXCELSAVE): pełna ścieżka pliku na każdy raport,
- * osobno dla sklepu, w tej przeglądarce. Makro zapisuje tam skoroszyt otwarty przyciskiem Excel w Mercalys, a „Odśwież
+ * wspólna dla sklepu (ścieżki sklepu na serwerze). Makro zapisuje tam skoroszyt otwarty przyciskiem Excel w Mercalys, a „Odśwież
  * dane” bierze go z folderu raportu. Lista promocji jest drukowana tylko do PDF: zapisuje ją PDFSAVE (od wersji 49).
  */
 export const MACRO_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'SALES', 'DOCUMENTS', 'CADENCIER'] as const
@@ -81,26 +64,7 @@ export type MacroReport = (typeof MACRO_REPORTS)[number]
 export const isMacroReport = (kind: DailyReport): kind is MacroReport =>
   (MACRO_REPORTS as readonly string[]).includes(kind)
 
-const macroPathsKey = (storeId: string) => `intermanage.importMacroPaths.${storeId}`
-
 export type MacroPaths = Partial<Record<MacroReport, string>>
-
-export function readMacroPaths(storeId: string): MacroPaths {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(macroPathsKey(storeId)) ?? '{}')
-    return parsed && typeof parsed === 'object' ? (parsed as MacroPaths) : {}
-  } catch {
-    return {}
-  }
-}
-
-export function writeMacroPaths(storeId: string, paths: MacroPaths) {
-  try {
-    localStorage.setItem(macroPathsKey(storeId), JSON.stringify(paths))
-  } catch {
-    // Bez localStorage ścieżki działają do odświeżenia strony.
-  }
-}
 
 /** Opis błędu ścieżki zapisu albo null, gdy jest dobra (pusta też jest dobra: raport bez makra). */
 export function macroPathError(kind: MacroReport, path: string, mask: string): string | null {
@@ -117,25 +81,73 @@ export function macroPathError(kind: MacroReport, path: string, mask: string): s
   return null
 }
 
-const macroPrintsKey = (storeId: string) => `intermanage.importMacroPrints.${storeId}`
-
-/** Numery wydruków ustawialnych w Mercalys (Baza danych), osobno dla sklepu. */
+/** Numery wydruków ustawialnych (Baza danych) albo list artykułów (Obecne w cadencier) w Mercalys. */
 export type MacroPrintNumbers = Partial<Record<MacroReport, string>>
 
-export function readMacroPrintNumbers(storeId: string): MacroPrintNumbers {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(macroPrintsKey(storeId)) ?? '{}')
-    return parsed && typeof parsed === 'object' ? (parsed as MacroPrintNumbers) : {}
-  } catch {
-    return {}
-  }
+/** Pole ustawień raportu w ścieżkach sklepu. */
+export type ImportField = 'mask' | 'path' | 'print' | 'list'
+
+export const importLocationKey = (kind: DailyReport, field: ImportField) => `import:${kind}:${field}`
+
+/** Ścieżka folderu raportu w ścieżkach sklepu (podpowiedź przy wyborze folderu w przeglądarce). */
+export const importFolderLocationKey = (kind: DailyReport) => folderLocationKey(`import:${kind}`)
+
+export type ImportSettings = {
+  masks: SourceMasks
+  macroPaths: MacroPaths
+  printNumbers: MacroPrintNumbers
+  listNumbers: MacroPrintNumbers
+  folders: Partial<Record<DailyReport, string>>
 }
 
-export function writeMacroPrintNumbers(storeId: string, numbers: MacroPrintNumbers) {
-  try {
-    localStorage.setItem(macroPrintsKey(storeId), JSON.stringify(numbers))
-  } catch {
-    // Bez localStorage numery działają do odświeżenia strony.
+export function importSettingsFrom(locations: StoreLocations | undefined): ImportSettings {
+  const settings: ImportSettings = { masks: {}, macroPaths: {}, printNumbers: {}, listNumbers: {}, folders: {} }
+  if (!locations) return settings
+  for (const kind of DAILY_REPORTS) {
+    settings.masks[kind] = locations[importLocationKey(kind, 'mask')]
+    settings.folders[kind] = locations[importFolderLocationKey(kind)]
+    if (isMacroReport(kind)) {
+      settings.macroPaths[kind] = locations[importLocationKey(kind, 'path')]
+      settings.printNumbers[kind] = locations[importLocationKey(kind, 'print')]
+      settings.listNumbers[kind] = locations[importLocationKey(kind, 'list')]
+    }
+  }
+  return settings
+}
+
+/** Ustawienia zapisane wcześniej w tej przeglądarce (localStorage), do jednorazowego przeniesienia na serwer. */
+const LEGACY_KEYS: [string, ImportField][] = [
+  ['intermanage.importMasks.', 'mask'],
+  ['intermanage.importMacroPaths.', 'path'],
+  ['intermanage.importMacroPrints.', 'print'],
+  ['intermanage.importMacroLists.', 'list'],
+]
+
+export function legacyImportLocations(storeId: string): StoreLocations {
+  const result: StoreLocations = {}
+  for (const [prefix, field] of LEGACY_KEYS) {
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(prefix + storeId) ?? '{}')
+      if (!parsed || typeof parsed !== 'object') continue
+      for (const [kind, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if ((DAILY_REPORTS as readonly string[]).includes(kind) && typeof value === 'string' && value.trim()) {
+          result[importLocationKey(kind as DailyReport, field)] = value.trim()
+        }
+      }
+    } catch {
+      // Uszkodzony zapis pomijamy.
+    }
+  }
+  return result
+}
+
+export function clearLegacyImportLocations(storeId: string) {
+  for (const [prefix] of LEGACY_KEYS) {
+    try {
+      localStorage.removeItem(prefix + storeId)
+    } catch {
+      // Bez localStorage nie ma czego czyścić.
+    }
   }
 }
 

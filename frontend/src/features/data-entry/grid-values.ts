@@ -111,6 +111,18 @@ export const BASE_COLUMNS: Column[] = COLUMNS.flatMap((column) => {
   return [column]
 })
 
+/**
+ * Kolumny „Protokołów”: okrojona tabela dla pracowników, bez cen i nomenklatury do zmiany. Edytuje się tylko EAN
+ * i ilość; nazwa i rejon są z kartoteki (tylko do odczytu), stan i rotacja jak we wprowadzaniu danych.
+ */
+export const PROTOCOL_COLUMNS: Column[] = [
+  { key: 'ean', header: 'EAN', width: 9, kind: 'text' },
+  { key: 'quantity', header: 'Ilość', width: 5, align: 'right', kind: 'number' },
+  { key: 'name', header: 'Nazwa', width: 24, kind: 'computed' },
+  { key: 'region', header: 'Rejon', title: 'Rejon nomenklatury', width: 4.5, kind: 'computed' },
+  ...COLUMNS.filter((column) => column.key === 'stock' || column.key === 'rotation'),
+]
+
 export const UNITS: SaleUnit[] = ['kg', 'L', 'szt.']
 
 export type NomenclatureKey = 'region' | 'family' | 'subfamily'

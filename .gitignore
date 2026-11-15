@@ -22,3 +22,6 @@ graphify-out/
 .DS_Store
 Thumbs.db
 *.log
+
+# Instalacja eMEA (Murphysoft) z danymi sklepu i kluczami KSeF
+/emea/

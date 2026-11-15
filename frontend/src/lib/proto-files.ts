@@ -53,7 +53,12 @@ export function useSaveProtoSettings(storeId: string) {
 /** Folder plików PROTO z podpowiedzią ścieżki z ustawień sklepu. */
 export function useProtoFolder(storeId: string): SavedFolderSpec {
   const { data } = useProtoSettings(storeId)
-  return { key: PROTO_FOLDER_KEY, label: 'Protokół', suggestedPath: data?.folderPath ?? DEFAULT_FOLDER }
+  return {
+    key: PROTO_FOLDER_KEY,
+    label: 'Protokół',
+    suggestedPath: data?.folderPath ?? DEFAULT_FOLDER,
+    pathInSettings: true,
+  }
 }
 
 /**
@@ -66,5 +71,6 @@ export function useProductFileFolder(storeId: string): SavedFolderSpec {
     key: 'data-entry-product-file',
     label: 'Plik nowych artykułów',
     suggestedPath: data?.productFileFolderPath ?? undefined,
+    pathInSettings: true,
   }
 }

@@ -28,6 +28,7 @@ import {
   useEanChanges,
   useImportDocuments,
   useImportGuides,
+  useImportHistory,
   useImportNomenclatures,
   useImportProductCodes,
   useImportProducts,
@@ -48,13 +49,11 @@ import {
   macroPathError,
   newestReportFile,
   PDF_EXTENSIONS,
-  readMacroPaths,
-  readMacroPrintNumbers,
-  readMasks,
   REPORT_TITLES,
   sourceFolderKey,
   XLSX_EXTENSIONS,
   type DailyReport,
+  type MacroReport,
 } from '@/features/imports/import-sources'
 import {
   buildReportSaveMacro,
@@ -63,6 +62,7 @@ import {
   macroSettingsReady,
 } from '@/features/imports/report-macros'
 import { ReportHelp } from '@/features/imports/ReportHelp'
+import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { useCadencier, useImportCadencier } from '@/features/sales/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -71,11 +71,13 @@ import { ApiError } from '@/lib/api'
 import { parseIsoDate } from '@/lib/dates'
 import { formatReportDate } from '@/lib/report-freshness'
 import { ensureFolderAccess, folderAccess, folderSavingSupported } from '@/lib/saved-folders'
+import { useLoadMore } from '@/lib/use-load-more'
 import type {
   CadencierImport,
   DocumentImport,
   EanChange,
   ImportGuide,
+  ImportHistoryEntry,
   ImportReportKind,
   NomenclatureImport,
   ProductCodeImport,
@@ -197,6 +199,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const promotions = usePromotionImports(store.id)
   const productCodes = useProductCodeImports(store.id)
   const cadencier = useCadencier(store.id)
+  const importSettings = useImportSettings(store.id)
   const uploads = {
     PRODUCTS: useImportProducts(store.id),
     PRODUCT_CODES: useImportProductCodes(store.id),
@@ -228,9 +231,13 @@ function StoreImports({ store }: { store: StoreSummary }) {
    * po kolei przez to samo wgrywanie co upuszczony plik (wynik i błąd pokazuje karta raportu).
    */
   const refresh = async () => {
+    if (!importSettings.loaded) {
+      toast.info('Wczytuję ustawienia importu, spróbuj za chwilę')
+      return
+    }
     setRefreshing('access')
     setRefreshNotes({})
-    const masks = readMasks(store.id)
+    const { masks } = importSettings.settings
     const notes: Partial<Record<DailyReport, RefreshNote>> = {}
     const ready: DailyReport[] = []
     // Zgody najpierw, wszystkie zaraz po kliknięciu: okno zgody działa tylko bezpośrednio po geście użytkownika.
@@ -291,29 +298,42 @@ function StoreImports({ store }: { store: StoreSummary }) {
     }
   }
 
-  // Makro na wszystkie raporty z zapisaną ścieżką; ścieżki są w ustawieniach importu (localStorage), więc czytane przy kliknięciu.
-  const copyAllMacros = async () => {
+  // Makro na wszystkie raporty z zapisaną ścieżką (ścieżki sklepu z ustawień importu).
+  // Jeden raport (przycisk na karcie) albo wszystkie z ustawieniami (nagłówek strony)
+  const copyMacros = async (kinds: readonly MacroReport[] = MACRO_REPORTS) => {
     // Okres raportu sprzedaży liczy się od ostatniego dnia w bazie, więc bez tej listy makro wzięłoby za mało dni
     if (sales.isPending || documents.isPending) {
       toast.info('Wczytuję stan sprzedaży i dokumentów, spróbuj za chwilę')
       return
     }
-    const paths = readMacroPaths(store.id)
-    const printNumbers = readMacroPrintNumbers(store.id)
-    const masks = readMasks(store.id)
-    const ready = MACRO_REPORTS.map((kind) => ({
-      kind,
-      settings: { path: paths[kind] ?? '', printNumber: printNumbers[kind] },
-    })).filter(
-      ({ kind, settings }) =>
-        settings.path.trim() !== '' &&
-        macroPathError(kind, settings.path, masks[kind] ?? '') === null &&
-        macroSettingsReady(kind, settings),
-    )
+    if (!importSettings.loaded) {
+      toast.info('Wczytuję ustawienia importu, spróbuj za chwilę')
+      return
+    }
+    const { macroPaths: paths, printNumbers, listNumbers, masks } = importSettings.settings
+    const ready = kinds
+      .map((kind) => ({
+        kind,
+        settings: { path: paths[kind] ?? '', printNumber: printNumbers[kind], listNumber: listNumbers[kind] },
+      }))
+      .filter(
+        ({ kind, settings }) =>
+          settings.path.trim() !== '' &&
+          macroPathError(kind, settings.path, masks[kind] ?? '') === null &&
+          macroSettingsReady(kind, settings),
+      )
     if (ready.length === 0) {
-      toast.info('Ustaw ścieżki zapisu z Mercalys', {
-        description: 'W ustawieniach importu wpisz przy raportach, gdzie makro ma je zapisać.',
-      })
+      toast.info(
+        kinds.length === 1
+          ? `${REPORT_TITLES[kinds[0]]}: uzupełnij ustawienia makra`
+          : 'Ustaw ścieżki zapisu z Mercalys',
+        {
+          description:
+            kinds.length === 1
+              ? 'W ustawieniach importu wpisz przy tym raporcie ścieżkę zapisu (i numery z Mercalys, gdy są potrzebne).'
+              : 'W ustawieniach importu wpisz przy raportach, gdzie makro ma je zapisać.',
+        },
+      )
       setSourcesOpen(true)
       return
     }
@@ -324,7 +344,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           lastDocumentDate: lastDocumentDate(documents.data),
         }),
       )
-      const skipped = MACRO_REPORTS.length - ready.length
+      const skipped = kinds.length - ready.length
       toast.success(`Skopiowano makro: ${ready.map(({ kind }) => REPORT_TITLES[kind]).join(', ')}`, {
         description: `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion(ready.map(({ kind }) => kind))}). Raport, którego makro nie otwiera samo, zapyta: po Tak kliknij Excel w Mercalys.${
           skipped > 0 ? ` Bez ścieżki: ${skipped}.` : ''
@@ -341,6 +361,10 @@ function StoreImports({ store }: { store: StoreSummary }) {
     canEditGuide: isOwner,
     refreshNote: kind in lastImported ? refreshNotes[kind as DailyReport] : undefined,
     refreshing: refreshing === kind,
+    onMercalys:
+      canImport && (MACRO_REPORTS as readonly string[]).includes(kind)
+        ? () => void copyMacros([kind as MacroReport])
+        : undefined,
   })
 
   return (
@@ -365,7 +389,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => void copyAllMacros()}
+                onClick={() => void copyMacros()}
                 title="Jedno makro do schowka (Alt+E): po kolei każdy raport z Mercalys zapisany w swoim folderze, potem „Odśwież dane”"
               >
                 <ClipboardCopyIcon data-icon="inline-start" />
@@ -586,54 +610,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
         <h2 id="import-history" className="mb-3 text-base font-semibold">
           Historia importów
         </h2>
-        {products.isError &&
-        documents.isError &&
-        suppliers.isError &&
-        sales.isError &&
-        nomenclatures.isError &&
-        promotions.isError &&
-        productCodes.isError &&
-        cadencier.isError ? (
-          <FullPageMessage
-            title="Nie udało się wczytać historii importów"
-            action={{
-              label: 'Spróbuj ponownie',
-              onClick: () => {
-                products.refetch()
-                documents.refetch()
-                suppliers.refetch()
-                sales.refetch()
-                nomenclatures.refetch()
-                promotions.refetch()
-                productCodes.refetch()
-                cadencier.refetch()
-              },
-            }}
-            inline
-          />
-        ) : (
-          <ImportHistory
-            products={products.data?.imports}
-            documents={documents.data}
-            suppliers={suppliers.data?.imports}
-            sales={sales.data?.imports}
-            nomenclatures={nomenclatures.data?.imports}
-            promotions={promotions.data?.imports}
-            productCodes={productCodes.data?.imports}
-            cadencier={cadencier.data?.imports}
-            loading={
-              products.isPending ||
-              documents.isPending ||
-              suppliers.isPending ||
-              sales.isPending ||
-              nomenclatures.isPending ||
-              promotions.isPending ||
-              productCodes.isPending ||
-              cadencier.isPending
-            }
-            onShowEanChanges={setEanChangesOf}
-          />
-        )}
+        <ImportHistory storeId={store.id} onShowEanChanges={setEanChangesOf} />
       </section>
 
       {eanChangesOf && (
@@ -669,11 +646,14 @@ function ReportCard({
   meta,
   refreshNote,
   refreshing,
+  onMercalys,
   children,
 }: {
   kind: ImportReportKind
   guide: ImportGuide | undefined
   canEditGuide: boolean
+  /** Makro do schowka: ten raport z Mercalys zapisany w jego folderze (tylko raporty z makrem). */
+  onMercalys?: () => void
   /** {@code undefined} w trakcie wczytywania historii i przy raportach bez znacznika aktualności. */
   generatedAt?: string | null
   meta?: ReactNode
@@ -697,6 +677,18 @@ function ReportCard({
             guide={guide}
             canEdit={canEditGuide}
           />
+          {onMercalys && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={onMercalys}
+              title="Makro do schowka (Alt+E): ten raport z Mercalys zapisany w swoim folderze"
+            >
+              <ClipboardCopyIcon data-icon="inline-start" />
+              Zaktualizuj plik
+            </Button>
+          )}
         </div>
         {generatedAt !== undefined && <ReportFreshness generatedAt={generatedAt} className="justify-self-start" />}
         {meta && <p className="text-sm text-muted-foreground tabular-nums">{meta}</p>}
@@ -985,15 +977,7 @@ function ResultCount({ label, value }: { label: string; value: number }) {
   )
 }
 
-type HistoryRow =
-  | { kind: 'products'; importedAt: string; item: ProductImport }
-  | { kind: 'documents'; importedAt: string; item: DocumentImport }
-  | { kind: 'suppliers'; importedAt: string; item: SupplierImport }
-  | { kind: 'sales'; importedAt: string; item: SalesImport }
-  | { kind: 'nomenclatures'; importedAt: string; item: NomenclatureImport }
-  | { kind: 'promotions'; importedAt: string; item: PromotionImport }
-  | { kind: 'productCodes'; importedAt: string; item: ProductCodeImport }
-  | { kind: 'cadencier'; importedAt: string; item: CadencierImport }
+type HistoryRow = ImportHistoryEntry
 
 const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   products: 'Baza danych',
@@ -1006,40 +990,31 @@ const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   cadencier: 'Obecne w cadencier',
 }
 
-/** Wszystkie wgrania raportów razem, od najnowszego. */
-function ImportHistory({
-  products,
-  documents,
-  suppliers,
-  sales,
-  nomenclatures,
-  promotions,
-  productCodes,
-  cadencier,
-  loading,
-  onShowEanChanges,
-}: {
-  products?: ProductImport[]
-  documents?: DocumentImport[]
-  suppliers?: SupplierImport[]
-  sales?: SalesImport[]
-  nomenclatures?: NomenclatureImport[]
-  promotions?: PromotionImport[]
-  productCodes?: ProductCodeImport[]
-  cadencier?: CadencierImport[]
-  loading: boolean
-  onShowEanChanges: ShowEanChanges
-}) {
-  const rows: HistoryRow[] = [
-    ...(products ?? []).map((item) => ({ kind: 'products' as const, importedAt: item.importedAt, item })),
-    ...(documents ?? []).map((item) => ({ kind: 'documents' as const, importedAt: item.importedAt, item })),
-    ...(suppliers ?? []).map((item) => ({ kind: 'suppliers' as const, importedAt: item.importedAt, item })),
-    ...(sales ?? []).map((item) => ({ kind: 'sales' as const, importedAt: item.importedAt, item })),
-    ...(nomenclatures ?? []).map((item) => ({ kind: 'nomenclatures' as const, importedAt: item.importedAt, item })),
-    ...(promotions ?? []).map((item) => ({ kind: 'promotions' as const, importedAt: item.importedAt, item })),
-    ...(productCodes ?? []).map((item) => ({ kind: 'productCodes' as const, importedAt: item.importedAt, item })),
-    ...(cadencier ?? []).map((item) => ({ kind: 'cadencier' as const, importedAt: item.importedAt, item })),
-  ].sort((a, b) => b.importedAt.localeCompare(a.importedAt))
+/**
+ * Wszystkie wgrania raportów razem, od najnowszego. Serwer daje je porcjami po 30, a kolejną dociągamy, gdy koniec
+ * listy zbliża się do dołu ekranu.
+ */
+function ImportHistory({ storeId, onShowEanChanges }: { storeId: string; onShowEanChanges: ShowEanChanges }) {
+  const history = useImportHistory(storeId)
+  const rows: HistoryRow[] = history.data?.pages.flatMap((page) => page.items) ?? []
+  const loading = history.isPending
+  const loadMoreRef = useLoadMore<HTMLTableRowElement>(
+    () => {
+      if (!history.isFetchingNextPage) void history.fetchNextPage()
+    },
+    history.hasNextPage && !history.isFetchNextPageError,
+    rows.length,
+  )
+
+  if (history.isError && !history.data) {
+    return (
+      <FullPageMessage
+        title="Nie udało się wczytać historii importów"
+        action={{ label: 'Spróbuj ponownie', onClick: () => history.refetch() }}
+        inline
+      />
+    )
+  }
 
   if (!loading && rows.length === 0) {
     return (
@@ -1088,6 +1063,22 @@ function ImportHistory({
                 </TableCell>
               </TableRow>
             ))
+          )}
+          {history.isFetchingNextPage && <TableSkeletonRows columns={5} rows={3} />}
+          {history.isFetchNextPageError && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={5} className="py-4 text-center text-sm text-muted-foreground">
+                Nie udało się wczytać starszych importów.{' '}
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void history.fetchNextPage()}>
+                  Spróbuj ponownie
+                </Button>
+              </TableCell>
+            </TableRow>
+          )}
+          {history.hasNextPage && (
+            <TableRow ref={loadMoreRef} aria-hidden className="hover:bg-transparent">
+              <TableCell colSpan={5} className="h-px p-0" />
+            </TableRow>
           )}
         </TableBody>
       </Table>

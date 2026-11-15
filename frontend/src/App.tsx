@@ -10,6 +10,8 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
 import { BakeryCheckPage } from '@/features/bakery-check/BakeryCheckPage'
 import { bakeryPath } from '@/features/bakery-check/paths'
+import { protocolEntryPath } from '@/features/protocol-entry/paths'
+import { ProtocolEntryPage } from '@/features/protocol-entry/ProtocolEntryPage'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
@@ -120,6 +122,15 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <BaseDeliveryPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Protokoły: okrojone wprowadzanie danych (EAN i ilość), ten sam plik protokołu co we wprowadzaniu danych.
+        path: protocolEntryPath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <ProtocolEntryPage />
           </RequireAuth>
         ),
       },

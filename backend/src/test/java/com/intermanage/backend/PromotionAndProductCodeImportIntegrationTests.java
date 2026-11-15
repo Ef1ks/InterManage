@@ -239,6 +239,21 @@ class PromotionAndProductCodeImportIntegrationTests {
                 .andExpect(jsonPath("$.articleCount").value(2))
                 .andExpect(jsonPath("$.imports.length()").value(2));
 
+        // Wspólna historia importów: porcja od najnowszego, kolejna od chwili wgrania ostatniej pozycji.
+        String history = mvc.perform(get("/api/stores/" + storeId + "/imports/history").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].kind").value("productCodes"))
+                .andExpect(jsonPath("$.items[0].item.reportGeneratedAt").value("2026-11-03T06:00:00"))
+                .andExpect(jsonPath("$.items[1].item.reportGeneratedAt").value("2026-11-02T06:38:00"))
+                .andExpect(jsonPath("$.hasMore").value(false))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(get("/api/stores/" + storeId + "/imports/history")
+                .param("before", JsonPath.<String>read(history, "$.items[0].importedAt")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].item.reportGeneratedAt").value("2026-11-02T06:38:00"));
+
         // Starszy raport, inna liczba linii w stopce, powtórzona para.
         uploadCodes(owner, storeId, productCodes(storeNumber, "01/11/2026 - 06:00", 1,
                 code("453", "1304894000009", "SERNIK", "", "Szt", "1", "1", "4.59", "", "0")))
