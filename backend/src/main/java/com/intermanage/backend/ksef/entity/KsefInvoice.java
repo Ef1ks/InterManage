@@ -3,6 +3,7 @@ package com.intermanage.backend.ksef.entity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -99,6 +100,12 @@ public class KsefInvoice {
 
     @Column(name = "corrected_read_at")
     private Instant correctedReadAt;
+
+    /** Numery WZ z XML faktury (V141), tak jak je wystawił dostawca; po nich szuka się faktury z karty reklamacyjnej. */
+    @ElementCollection
+    @CollectionTable(name = "ksef_invoice_delivery_notes", joinColumns = @JoinColumn(name = "invoice_id"))
+    @Column(name = "number", length = 100)
+    private Set<String> deliveryNotes = new HashSet<>();
 
     @Column(name = "corrected_error", length = 500)
     private String correctedError;
@@ -230,6 +237,21 @@ public class KsefInvoice {
         this.quantityChangeRule = rule;
     }
 
+    /** Numery WZ z XML (puste i powtórzone pomijane, przycięte do długości kolumny). */
+    public void recordDeliveryNotes(Collection<String> numbers) {
+        Set<String> found = new HashSet<>();
+        for (String number : numbers) {
+            String value = cut(number, 100);
+            if (value != null) {
+                found.add(value);
+            }
+        }
+        if (!found.equals(deliveryNotes)) {
+            deliveryNotes.clear();
+            deliveryNotes.addAll(found);
+        }
+    }
+
     /** Kod dostawcy i numer jego faktury z refaktury bazy; oba puste przy zwykłej fakturze. */
     public void recordBaseSupplier(String code, String supplierInvoice) {
         baseSupplierCode = cut(code, 20);
@@ -330,6 +352,10 @@ public class KsefInvoice {
 
     public Set<CorrectedRef> getCorrectedInvoices() {
         return correctedInvoices;
+    }
+
+    public Set<String> getDeliveryNotes() {
+        return deliveryNotes;
     }
 
     public Instant getCorrectedReadAt() {

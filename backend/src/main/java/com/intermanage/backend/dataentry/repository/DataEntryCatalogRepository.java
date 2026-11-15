@@ -151,10 +151,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                  where d.store_id = :storeId and l.itm8 = p.itm8 and l.vat_rate is not null
                  order by d.document_date desc limit 1)) as rate) v
             left join lateral (
-                select pr.promo_price, pr.end_date from promotions pr
+                select pr.promo_price, pr.effective_end as end_date from promotions pr
                 where pr.store_id = p.store_id and pr.itm8 = p.itm8 and pr.promo_price = p.sale_price
-                    and pr.start_date <= cast(:today as date) and pr.end_date >= cast(:today as date)
-                order by pr.end_date desc limit 1) lp on true
+                    and pr.start_date <= cast(:today as date) and pr.effective_end >= cast(:today as date)
+                order by pr.effective_end desc limit 1) lp on true
             order by h.key, h.rank, p.updated_at desc""", nativeQuery = true)
     List<CatalogProduct> findByEans(UUID storeId, String[] eans, boolean byItm8, LocalDate today);
 

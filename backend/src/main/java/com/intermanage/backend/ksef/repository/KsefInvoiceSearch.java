@@ -154,10 +154,65 @@ public final class KsefInvoiceSearch {
                         cb.like(plain(cb, root.get("ksefNumber")), contains),
                         cb.like(plain(cb, root.get("baseSupplierInvoice")), contains),
                         cb.like(root.get("baseSupplierCode"), contains),
-                        cb.exists(baseSupplierNamed(root, query, cb, contains))));
+                        cb.exists(baseSupplierNamed(root, query, cb, contains)),
+                        root.get("id").in(withDeliveryNote(query, cb, nip, contains)),
+                        root.get("id").in(correctingNumber(query, cb, nip, contains)),
+                        root.get("id").in(correctingDeliveryNote(query, cb, nip, contains, true)),
+                        root.get("id").in(correctingDeliveryNote(query, cb, nip, contains, false))));
             }
             return cb.and(all.toArray(Predicate[]::new));
         };
+    }
+
+    /*
+     * Wyszukiwanie po powiązaniach: numer WZ z karty reklamacyjnej daje fakturę z tym WZ, a numer faktury (albo jej WZ)
+     * daje też korekty, które ją korygują, żeby od razu sprawdzić, czy korekta jest wprowadzona. Podzapytania nie
+     * zależą od wiersza, więc baza liczy je raz na zapytanie.
+     */
+
+    /** Faktury firmy z numerem WZ pasującym do słowa. */
+    private static Subquery<UUID> withDeliveryNote(CriteriaQuery<?> query, CriteriaBuilder cb, String nip,
+            String contains) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<KsefInvoice> invoice = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, String> note = invoice.join("deliveryNotes");
+        subquery.select(invoice.get("id")).where(cb.equal(invoice.get("nip"), nip),
+                cb.like(plain(cb, note), contains));
+        return subquery;
+    }
+
+    /** Korekty faktury o numerze (albo numerze KSeF) pasującym do słowa; także faktury sprzed KSeF. */
+    private static Subquery<UUID> correctingNumber(CriteriaQuery<?> query, CriteriaBuilder cb, String nip,
+            String contains) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<KsefInvoice> correction = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, KsefInvoice.CorrectedRef> ref = correction.join("correctedInvoices");
+        subquery.select(correction.get("id")).where(cb.equal(correction.get("nip"), nip),
+                cb.or(cb.like(plain(cb, ref.get("invoiceNumber")), contains),
+                        cb.like(plain(cb, ref.get("ksefNumber")), contains)));
+        return subquery;
+    }
+
+    /**
+     * Korekty faktury, która ma numer WZ pasujący do słowa: po numerze KSeF faktury korygowanej ({@code byKsefNumber})
+     * albo, gdy korekta go nie podaje, po NIP-ie sprzedawcy i numerze. Dwa osobne podzapytania, bo z OR baza nie bierze
+     * indeksów (jak w {@link #correctedMatching}).
+     */
+    private static Subquery<UUID> correctingDeliveryNote(CriteriaQuery<?> query, CriteriaBuilder cb, String nip,
+            String contains, boolean byKsefNumber) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<KsefInvoice> correction = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, KsefInvoice.CorrectedRef> ref = correction.join("correctedInvoices");
+        Root<KsefInvoice> corrected = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, String> note = corrected.join("deliveryNotes");
+        Predicate same = byKsefNumber
+                ? cb.equal(corrected.get("ksefNumber"), ref.get("ksefNumber"))
+                : cb.and(cb.isNull(ref.get("ksefNumber")),
+                        cb.equal(corrected.get("sellerNip"), correction.get("sellerNip")),
+                        cb.equal(cb.upper(corrected.get("invoiceNumber")), cb.upper(ref.get("invoiceNumber"))));
+        subquery.select(correction.get("id")).where(cb.equal(correction.get("nip"), nip),
+                cb.equal(corrected.get("nip"), nip), same, cb.like(plain(cb, note), contains));
+        return subquery;
     }
 
     /**

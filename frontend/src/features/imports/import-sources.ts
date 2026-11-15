@@ -69,6 +69,76 @@ export function writeMasks(storeId: string, masks: SourceMasks) {
   }
 }
 
+/*
+ * Zapis raportów z Mercalys makrem (odtwarzacz od wersji 46, polecenie EXCELSAVE): pełna ścieżka pliku na każdy raport,
+ * osobno dla sklepu, w tej przeglądarce. Makro zapisuje tam skoroszyt otwarty przyciskiem Excel w Mercalys, a „Odśwież
+ * dane” bierze go z folderu raportu. Lista promocji jest drukowana tylko do PDF: zapisuje ją PDFSAVE (od wersji 49).
+ */
+export const MACRO_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'SALES', 'DOCUMENTS', 'CADENCIER'] as const
+
+export type MacroReport = (typeof MACRO_REPORTS)[number]
+
+export const isMacroReport = (kind: DailyReport): kind is MacroReport =>
+  (MACRO_REPORTS as readonly string[]).includes(kind)
+
+const macroPathsKey = (storeId: string) => `intermanage.importMacroPaths.${storeId}`
+
+export type MacroPaths = Partial<Record<MacroReport, string>>
+
+export function readMacroPaths(storeId: string): MacroPaths {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(macroPathsKey(storeId)) ?? '{}')
+    return parsed && typeof parsed === 'object' ? (parsed as MacroPaths) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function writeMacroPaths(storeId: string, paths: MacroPaths) {
+  try {
+    localStorage.setItem(macroPathsKey(storeId), JSON.stringify(paths))
+  } catch {
+    // Bez localStorage ścieżki działają do odświeżenia strony.
+  }
+}
+
+/** Opis błędu ścieżki zapisu albo null, gdy jest dobra (pusta też jest dobra: raport bez makra). */
+export function macroPathError(kind: MacroReport, path: string, mask: string): string | null {
+  const value = path.trim()
+  if (!value) return null
+  if (!/^([a-z]:\\|\\\\[^\\]+\\[^\\]+)/i.test(value)) return 'Podaj pełną ścieżkę, np. P:\\Raporty\\multikody.xlsx'
+  if (value.includes('|')) return 'Ścieżka nie może mieć znaku |'
+  const name = value.slice(value.lastIndexOf('\\') + 1)
+  const dot = name.lastIndexOf('.')
+  if (dot <= 0 || !REPORT_EXTENSIONS[kind].includes(name.slice(dot).toLowerCase()))
+    return `Nazwa pliku musi kończyć się na ${REPORT_EXTENSIONS[kind].join(' albo ')}`
+  if (mask.trim() && !maskPattern(mask).test(name.slice(0, dot)))
+    return `Nazwa nie pasuje do maski „${mask.trim()}”, więc „Odśwież dane” pominie ten plik`
+  return null
+}
+
+const macroPrintsKey = (storeId: string) => `intermanage.importMacroPrints.${storeId}`
+
+/** Numery wydruków ustawialnych w Mercalys (Baza danych), osobno dla sklepu. */
+export type MacroPrintNumbers = Partial<Record<MacroReport, string>>
+
+export function readMacroPrintNumbers(storeId: string): MacroPrintNumbers {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(macroPrintsKey(storeId)) ?? '{}')
+    return parsed && typeof parsed === 'object' ? (parsed as MacroPrintNumbers) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function writeMacroPrintNumbers(storeId: string, numbers: MacroPrintNumbers) {
+  try {
+    localStorage.setItem(macroPrintsKey(storeId), JSON.stringify(numbers))
+  } catch {
+    // Bez localStorage numery działają do odświeżenia strony.
+  }
+}
+
 /** Maska jak w Eksploratorze: `*` = dowolny ciąg, `?` = jeden znak, bez wielkości liter; pusta = każdy plik. */
 function maskPattern(mask: string) {
   const source = mask

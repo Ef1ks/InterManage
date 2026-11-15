@@ -120,9 +120,37 @@ class PromotionAndProductCodeImportIntegrationTests {
                 .andExpect(jsonPath("$.missingCount").value(1));
         assertThat(jdbc.queryForObject("select count(*) from promotions where store_id = ?::uuid", Long.class,
                 storeId)).isEqualTo(4);
+        // Promocji, której zabrakło w liście z 03.11, już nie ma: ostatnim dniem jest dzień przed listą.
+        assertThat(jdbc.queryForMap("""
+                select end_date, ended_on, effective_end from promotions
+                where store_id = ?::uuid and itm8 = '0000005803814'""", storeId))
+                .containsEntry("end_date", Date.valueOf(LocalDate.of(2026, 11, 4)))
+                .containsEntry("ended_on", Date.valueOf(LocalDate.of(2026, 11, 3)))
+                .containsEntry("effective_end", Date.valueOf(LocalDate.of(2026, 11, 2)));
+        assertThat(jdbc.queryForObject("""
+                select count(*) from promotions
+                where store_id = ?::uuid and ended_on is null and effective_end = end_date""", Long.class, storeId))
+                .isEqualTo(3);
+
+        // Promocja wraca w późniejszej liście: znowu trwa do daty z listy.
+        uploadPromotions(owner, storeId, promotions(storeNumber, "03/11/2026 - 12:00:00", null,
+                promotion("07/01/27", "0000099035805", "5419980316691", "PIWO FUNKCJONALNE PLAY 330ML", "29/10/26",
+                        "4,17", "9,99", "4,99", "1,00"),
+                promotion("31/12/26", "0000006903715", "5901067411240", "NAPOJ MANGO-POMARANCZA 0.2L", "25/09/26",
+                        null, "2,99", "1,49", "-31,61"),
+                promotion("20/11/26", "0000006903715", "5901067411240", "NAPOJ MANGO-POMARANCZA 0.2L", "05/11/26",
+                        "1,89", "2,99", "1,99", "-2,00"),
+                promotion("04/11/26", "0000005803814", "0000075041670", "PIWO CORONA EXTRA 330ML", "29/10/26",
+                        "3,89", "5,99", "5,99", "16,36")))
+                .andExpect(status().isCreated());
+        assertThat(jdbc.queryForMap("""
+                select ended_on, effective_end from promotions
+                where store_id = ?::uuid and itm8 = '0000005803814'""", storeId))
+                .containsEntry("ended_on", null)
+                .containsEntry("effective_end", Date.valueOf(LocalDate.of(2026, 11, 4)));
 
         mvc.perform(get(promotionsUrl(storeId)).cookie(owner))
-                .andExpect(jsonPath("$.imports.length()").value(2));
+                .andExpect(jsonPath("$.imports.length()").value(3));
 
         // Starszy raport, raport innego sklepu, brakująca strona, ta sama promocja dwa razy i plik, który nie jest PDF.
         uploadPromotions(owner, storeId, promotions(storeNumber, "01/11/2026 - 06:00:00", null,

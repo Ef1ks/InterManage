@@ -180,7 +180,7 @@ public class KsefCorrectedInvoiceService {
     }
 
     /**
-     * Z XML faktury to, czego nie ma w metadanych: adres dostawy z Podmiotów 3 (sklep faktury bez IDWew) i przy
+     * Z XML faktury to, czego nie ma w metadanych: adres dostawy z Podmiotów 3 (sklep faktury bez IDWew), numery WZ i przy
      * korekcie faktury korygowane. W bieżącej transakcji; nieczytelny XML zostawia adres pusty.
      */
     public void readXml(KsefInvoice invoice, byte[] xml) {
@@ -194,6 +194,11 @@ public class KsefCorrectedInvoiceService {
             invoice.recordBaseSupplier(base.code(), base.supplierInvoice());
         } catch (KsefInvoiceReader.InvalidInvoiceException e) {
             invoice.recordBaseSupplier(null, null);
+        }
+        try {
+            invoice.recordDeliveryNotes(reader.deliveryNotes(xml));
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            invoice.recordDeliveryNotes(List.of());
         }
         if (invoice.isCorrection()) {
             record(invoice, xml);

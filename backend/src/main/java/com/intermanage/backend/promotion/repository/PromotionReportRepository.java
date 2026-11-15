@@ -67,9 +67,9 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
                 select p.itm8, cast(g as date)
                 from promotions p
                 cross join lateral generate_series(greatest(p.start_date, cast(:dataFrom as date)),
-                                                   least(p.end_date, cast(:dataTo as date)), interval '1 day') g
+                                                   least(p.effective_end, cast(:dataTo as date)), interval '1 day') g
                 where p.store_id = :storeId
-                  and p.end_date >= cast(:dataFrom as date) and p.start_date <= cast(:dataTo as date)
+                  and p.effective_end >= cast(:dataFrom as date) and p.start_date <= cast(:dataTo as date)
                 union
                 select l.itm8, cast(g as date)
                 from leaflet l
@@ -88,7 +88,7 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
     /** Najwcześniejszy początek promocji z listy, która kończy się w okresie (baza liczy się sprzed niego). */
     @Query(value = """
             select min(start_date) from promotions
-            where store_id = :storeId and end_date between :from and :to
+            where store_id = :storeId and effective_end between :from and :to
             """, nativeQuery = true)
     LocalDate findEarliestStart(UUID storeId, LocalDate from, LocalDate to);
 
@@ -187,10 +187,12 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
                 group by itm8, run
                 having count(*) >= :minDays
             ), candidates as (
-                select true as listed, p.itm8, p.start_date, p.end_date, p.regular_sale_price as regular_price,
+                select true as listed, p.itm8, p.start_date, p.effective_end as end_date,
+                       p.regular_sale_price as regular_price,
                        p.promo_price, p.margin_percent as list_margin_percent
                 from promotions p
-                where p.store_id = :storeId and p.end_date between cast(:from as date) and cast(:to as date)
+                where p.store_id = :storeId and p.effective_end between cast(:from as date) and cast(:to as date)
+                  and p.effective_end >= p.start_date
                 union all
                 select false, e.itm8, e.start_date, e.end_date, round(cast(e.reference_price as numeric), 2),
                        null, null
@@ -200,7 +202,7 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
                   and e.end_date - e.start_date < :maxDays
                   and not exists (select 1 from promotions p
                                   where p.store_id = :storeId and p.itm8 = e.itm8
-                                    and p.start_date <= e.end_date and p.end_date >= e.start_date)
+                                    and p.start_date <= e.end_date and p.effective_end >= e.start_date)
             ), promos as (
                 select c.* from candidates c
                 where not exists (select 1 from leaflet g
@@ -210,9 +212,9 @@ public interface PromotionReportRepository extends JpaRepository<PromotionImport
                 union
                 select p.itm8, cast(g as date)
                 from promotions p
-                cross join lateral generate_series(p.start_date, p.end_date, interval '1 day') g
+                cross join lateral generate_series(p.start_date, p.effective_end, interval '1 day') g
                 where p.store_id = :storeId
-                  and p.end_date >= cast(:dataFrom as date) and p.start_date <= cast(:dataTo as date)
+                  and p.effective_end >= cast(:dataFrom as date) and p.start_date <= cast(:dataTo as date)
                 union
                 select l.itm8, cast(g as date)
                 from leaflet l

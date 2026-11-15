@@ -143,6 +143,9 @@ public class PromotionImportService {
                 decimals(rows, PromotionReportRow::promoPrice),
                 decimals(rows, PromotionReportRow::marginPercent));
         long missing = imports.countMissing(storeId, saved.getId(), report.endFrom(), report.endTo());
+        LocalDate reportDay = report.generatedAt() != null ? report.generatedAt().toLocalDate()
+                : LocalDate.now(STORE_ZONE);
+        imports.markEnded(storeId, saved.getId(), report.endFrom(), report.endTo(), reportDay);
         saved.recordResult((int) counts.getCreated(), (int) counts.getUpdated(), (int) missing);
         return mapper.toResponse(saved);
     }

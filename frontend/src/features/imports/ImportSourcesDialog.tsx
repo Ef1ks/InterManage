@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FolderIcon, FolderOpenIcon } from 'lucide-react'
+import { ClipboardCopyIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { TextField } from '@/components/form'
@@ -7,15 +7,35 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DAILY_REPORTS,
+  isMacroReport,
+  macroPathError,
   MASK_EXAMPLES,
+  readMacroPaths,
+  readMacroPrintNumbers,
   readMasks,
   REPORT_EXTENSIONS,
   REPORT_TITLES,
   sourceFolderKey,
+  writeMacroPaths,
+  writeMacroPrintNumbers,
   writeMasks,
   type DailyReport,
+  type MacroPaths,
+  type MacroPrintNumbers,
+  type MacroReport,
   type SourceMasks,
 } from '@/features/imports/import-sources'
+import {
+  buildReportSaveMacro,
+  lastDocumentDate,
+  macroPlayerVersion,
+  opensItself,
+  pathExample,
+  PRINT_NUMBER_REPORTS,
+  printNumberError,
+  type ReportMacroSettings,
+} from '@/features/imports/report-macros'
+import { useDocumentImports, useSalesImports } from '@/features/imports/api'
 import { ApiError } from '@/lib/api'
 import { folderSavingSupported, useSavedFolder } from '@/lib/saved-folders'
 import type { ImportGuide } from '@/lib/types'
@@ -64,6 +84,21 @@ export function ImportSourcesDialog({
 
 function SourceList({ storeId, guides }: { storeId: string; guides: ImportGuide[] }) {
   const [masks, setMasks] = useState<SourceMasks>(() => readMasks(storeId))
+  const [macroPaths, setMacroPaths] = useState<MacroPaths>(() => readMacroPaths(storeId))
+
+  const changeMacroPath = (kind: MacroReport, path: string) => {
+    const next = { ...macroPaths, [kind]: path }
+    setMacroPaths(next)
+    writeMacroPaths(storeId, next)
+  }
+
+  const [printNumbers, setPrintNumbers] = useState<MacroPrintNumbers>(() => readMacroPrintNumbers(storeId))
+
+  const changePrintNumber = (kind: MacroReport, number: string) => {
+    const next = { ...printNumbers, [kind]: number }
+    setPrintNumbers(next)
+    writeMacroPrintNumbers(storeId, next)
+  }
 
   const changeMask = (kind: DailyReport, mask: string) => {
     const next = { ...masks, [kind]: mask }
@@ -81,6 +116,9 @@ function SourceList({ storeId, guides }: { storeId: string; guides: ImportGuide[
           suggestedPath={guides.find((guide) => guide.kind === kind)?.folderPath ?? null}
           mask={masks[kind] ?? ''}
           onMaskChange={(mask) => changeMask(kind, mask)}
+          macro={isMacroReport(kind) ? { path: macroPaths[kind] ?? '', printNumber: printNumbers[kind] ?? '' } : null}
+          onMacroPathChange={(path) => isMacroReport(kind) && changeMacroPath(kind, path)}
+          onPrintNumberChange={(number) => isMacroReport(kind) && changePrintNumber(kind, number)}
         />
       ))}
     </ul>
@@ -93,12 +131,19 @@ function SourceRow({
   suggestedPath,
   mask,
   onMaskChange,
+  macro,
+  onMacroPathChange,
+  onPrintNumberChange,
 }: {
   storeId: string
   kind: DailyReport
   suggestedPath: string | null
   mask: string
   onMaskChange: (mask: string) => void
+  /** Ustawienia zapisu makrem; null = raport bez makra. */
+  macro: ReportMacroSettings | null
+  onMacroPathChange: (path: string) => void
+  onPrintNumberChange: (number: string) => void
 }) {
   const { name, loaded, pick } = useSavedFolder(sourceFolderKey(storeId, kind), 'read')
   const [picking, setPicking] = useState(false)
@@ -157,6 +202,102 @@ function SourceRow({
         onChange={(event) => onMaskChange(event.target.value)}
         hint={`Np. ${MASK_EXAMPLES[kind]} (* = dowolne znaki)`}
       />
+      {macro && isMacroReport(kind) && (
+        <MacroFields
+          storeId={storeId}
+          kind={kind}
+          settings={macro}
+          mask={mask}
+          onPathChange={onMacroPathChange}
+          onPrintNumberChange={onPrintNumberChange}
+        />
+      )}
     </li>
+  )
+}
+
+/** Ścieżka, pod którą makro zapisze raport z Mercalys, numer wydruku (Baza danych) i makro tylko dla tego raportu. */
+function MacroFields({
+  storeId,
+  kind,
+  settings,
+  mask,
+  onPathChange,
+  onPrintNumberChange,
+}: {
+  storeId: string
+  kind: MacroReport
+  settings: ReportMacroSettings
+  mask: string
+  onPathChange: (path: string) => void
+  onPrintNumberChange: (number: string) => void
+}) {
+  const withPrintNumber = PRINT_NUMBER_REPORTS.includes(kind)
+  const pathError = macroPathError(kind, settings.path, mask)
+  const numberError = withPrintNumber ? printNumberError(settings.printNumber ?? '') : null
+  // Okres raportu sprzedaży zależy od ostatniego dnia w bazie (ta sama lista co na stronie importu, z pamięci)
+  const sales = useSalesImports(storeId)
+  const documents = useDocumentImports(storeId)
+  const waitsForSales = (kind === 'SALES' && sales.isPending) || (kind === 'DOCUMENTS' && documents.isPending)
+  const ready = settings.path.trim() !== '' && pathError === null && numberError === null && !waitsForSales
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        buildReportSaveMacro([{ kind, settings }], {
+          lastSaleDate: sales.data?.lastSaleDate,
+          lastDocumentDate: lastDocumentDate(documents.data),
+        }),
+      )
+      toast.success(`Skopiowano makro: ${REPORT_TITLES[kind]}`, {
+        description: opensItself(kind)
+          ? `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion([kind])}). Makro samo otworzy raport w Mercalys i zapisze plik.`
+          : `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion([kind])}), otwórz raport w Mercalys i kliknij Excel.`,
+      })
+    } catch {
+      toast.error('Nie udało się skopiować makra')
+    }
+  }
+
+  return (
+    <div
+      className={`grid gap-3 sm:col-span-2 sm:items-start ${
+        withPrintNumber ? 'sm:grid-cols-[minmax(0,1fr)_9rem_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto]'
+      }`}
+    >
+      <TextField
+        label="Zapis z Mercalys (ścieżka pliku)"
+        autoComplete="off"
+        spellCheck={false}
+        className="font-mono"
+        value={settings.path}
+        onChange={(event) => onPathChange(event.target.value)}
+        error={pathError ?? undefined}
+        hint={pathError ? undefined : `Makro zapisze tu raport z Mercalys, np. ${pathExample(kind)}`}
+      />
+      {withPrintNumber && (
+        <TextField
+          label="Nr wydruku"
+          autoComplete="off"
+          inputMode="numeric"
+          maxLength={2}
+          value={settings.printNumber ?? ''}
+          onChange={(event) => onPrintNumberChange(event.target.value.replace(/\D/g, ''))}
+          error={settings.path.trim() ? (numberError ?? undefined) : undefined}
+          hint="Wydruk Ustawialny w Mercalys"
+        />
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        disabled={!ready}
+        onClick={() => void copy()}
+        title="Makro do schowka tylko dla tego raportu (Alt+E)"
+      >
+        <ClipboardCopyIcon data-icon="inline-start" />
+        Makro
+      </Button>
+    </div>
   )
 }

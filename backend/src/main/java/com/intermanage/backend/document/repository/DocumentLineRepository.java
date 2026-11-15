@@ -285,7 +285,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select l.document_id, l.itm8, max(p.regular_sale_price) as price
                 from lines l
                 join promotions p on p.store_id = :storeId and p.itm8 = l.article
-                                 and l.day between p.start_date and p.end_date
+                                 and l.day between p.start_date and p.effective_end
                 group by l.document_id, l.itm8
             ), till as (
                 select l.document_id, l.itm8, max(t.regular_price) as price
@@ -326,10 +326,10 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                                  and r.month = cast(date_trunc('month', l.day) as date)
             left join products c on c.store_id = :storeId and c.itm8 = l.article
             left join lateral (
-                select pr.regular_sale_price, pr.end_date from promotions pr
+                select pr.regular_sale_price, pr.effective_end as end_date from promotions pr
                 where pr.store_id = c.store_id and pr.itm8 = c.itm8 and pr.promo_price = c.sale_price
-                    and pr.start_date <= cast(:dataTo as date) and pr.end_date >= cast(:dataTo as date)
-                order by pr.end_date desc limit 1) cp on true
+                    and pr.start_date <= cast(:dataTo as date) and pr.effective_end >= cast(:dataTo as date)
+                order by pr.effective_end desc limit 1) cp on true
             left join lateral (
                 select t.regular_price, t.promo_to from till_promotions t
                 where t.store_id = c.store_id and t.itm8 = c.itm8 and t.promo_price = c.sale_price
@@ -348,10 +348,10 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 where c.promo_price is not null and c.promo_price = c.sale_price
                   and c.promo_to < cast(:dataTo as date)) ce on true
             left join lateral (
-                select pr.promo_price, pr.end_date from promotions pr
+                select pr.promo_price, pr.effective_end as end_date from promotions pr
                 where pr.store_id = c.store_id and pr.itm8 = c.itm8
-                    and pr.start_date <= cast(:dataTo as date) and pr.end_date >= cast(:dataTo as date)
-                order by pr.end_date desc limit 1) cn on true
+                    and pr.start_date <= cast(:dataTo as date) and pr.effective_end >= cast(:dataTo as date)
+                order by pr.effective_end desc limit 1) cn on true
             """, nativeQuery = true)
     List<DeliveryMargin> findDeliveryMargins(UUID storeId, LocalDateTime from, LocalDateTime until,
             String[] documentIds, LocalDate dataFrom, LocalDate dataTo, LocalDate referenceFrom, int minReferenceDays);

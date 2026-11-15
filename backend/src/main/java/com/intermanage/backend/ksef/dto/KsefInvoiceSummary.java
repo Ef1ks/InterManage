@@ -14,7 +14,8 @@ import java.util.UUID;
  * nie został odczytany), {@code quantityChange}: czy korekta zmienia ilości, a nie tylko kwoty ({@code null} przed
  * odczytem i przy zwykłej fakturze). Refaktura bazy: {@code baseSupplierCode} kod dostawcy w bazie,
  * {@code baseSupplierInvoice} numer faktury dostawcy, {@code baseSupplierName} dostawca przypisany do kodu w firmie
- * ({@code null} bez przypisania).
+ * ({@code null} bez przypisania). {@code deliveryNotes}: numery WZ z XML faktury (puste, dopóki XML nie został
+ * odczytany).
  */
 public record KsefInvoiceSummary(
         UUID id,
@@ -43,7 +44,8 @@ public record KsefInvoiceSummary(
         Boolean quantityChange,
         String baseSupplierCode,
         String baseSupplierInvoice,
-        String baseSupplierName) {
+        String baseSupplierName,
+        List<String> deliveryNotes) {
 
     /**
      * Dokument sklepu firmy z tą fakturą: przyjęcie PZ z jej numerem ({@code linked} = false) albo przyjęcie lub

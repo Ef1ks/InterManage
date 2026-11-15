@@ -107,12 +107,13 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
                 select distinct itm8 from leaflet
                 where date_from <= cast(:today as date) and date_to >= cast(:today as date)
             ), list_regular as (
-                select distinct on (pr.itm8) pr.itm8, pr.regular_sale_price as regular, pr.start_date, pr.end_date
+                select distinct on (pr.itm8) pr.itm8, pr.regular_sale_price as regular, pr.start_date,
+                       pr.effective_end as end_date
                 from promotions pr
                 join products p on p.store_id = pr.store_id and p.itm8 = pr.itm8 and pr.promo_price = p.sale_price
                 where pr.store_id = :storeId
-                  and pr.start_date <= cast(:today as date) and pr.end_date >= cast(:today as date)
-                order by pr.itm8, pr.end_date desc
+                  and pr.start_date <= cast(:today as date) and pr.effective_end >= cast(:today as date)
+                order by pr.itm8, pr.effective_end desc
             ), till_regular as (
                 select distinct on (t.itm8) t.itm8, t.regular_price as regular, t.promo_from, t.promo_to
                 from till_promotions t
@@ -121,11 +122,11 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
                   and t.promo_from <= cast(:today as date) and t.promo_to >= cast(:today as date)
                 order by t.itm8, t.file_time desc
             ), list_now as (
-                select distinct on (pr.itm8) pr.itm8, pr.promo_price, pr.start_date, pr.end_date
+                select distinct on (pr.itm8) pr.itm8, pr.promo_price, pr.start_date, pr.effective_end as end_date
                 from promotions pr
                 where pr.store_id = :storeId
-                  and pr.start_date <= cast(:today as date) and pr.end_date >= cast(:today as date)
-                order by pr.itm8, pr.end_date desc
+                  and pr.start_date <= cast(:today as date) and pr.effective_end >= cast(:today as date)
+                order by pr.itm8, pr.effective_end desc
             ), ended_regular as (
                 select p.itm8, greatest(coalesce(
                     (select t.regular_price from till_promotions t

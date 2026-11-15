@@ -905,7 +905,9 @@ class KsefIntegrationTests {
                 java.sql.Timestamp.from(Instant.now().minus(1, ChronoUnit.DAYS)), nip);
 
         Map<String, String> xml = Map.of(
-                "FV/M", invoiceXml("VAT", "UL.MAKOWA 14", "65-001 ZIELONA GÓRA", null),
+                // Faktura zbiorcza bazy z numerami WZ: po nich wyszukiwarka znajduje ją i jej korekty.
+                "FV/M", invoiceXml("VAT", "UL.MAKOWA 14", "65-001 ZIELONA GÓRA", null)
+                        .replace("</Fa>", "<WZ>09516050250</WZ><WZ>09516050251</WZ></Fa>"),
                 "FV/B", invoiceXml("VAT", "65-247 Zielona Góra", "ul. Stefana Batorego  81", null),
                 // Refaktura bazy: towar Artka, kod dostawcy w bazie 09295 i numer faktury Artka w DodatkowyOpis.
                 "FV/X", invoiceXml("VAT", null, null, null).replace("</Fa>", "<DodatkowyOpis><NrWiersza>1"
@@ -991,6 +993,16 @@ class KsefIntegrationTests {
                 .andExpect(jsonPath("$.invoices[0].baseSupplierName").value("ARTEK"))
                 .andExpect(jsonPath("$.invoices[0].baseSupplierInvoice").value("F61577/26/"));
         list(owner, makowa, "&query=F61577").andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("FV/X")));
+
+        // Numer WZ z karty reklamacyjnej (bez zera wiodącego): faktura z tym WZ i korekta, która ją koryguje.
+        list(owner, makowa, "&query=9516050250")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(containsInAnyOrder("FV/M", "KOR/M")));
+        list(owner, makowa, "&query=9516050250&kind=INVOICES")
+                .andExpect(jsonPath("$.invoices[0].deliveryNotes").value(contains("09516050250", "09516050251")));
+        // Numer faktury daje też jej korekty, numer korekty - tylko korektę.
+        list(owner, makowa, "&query=FV/B")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(containsInAnyOrder("FV/B", "KOR/B")));
+        list(owner, makowa, "&query=KOR/B").andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("KOR/B")));
     }
 
     /** Faktura FA(3) z adresem odbiorcy w Podmiocie 3 (bez IDWew) i przy korekcie z fakturą korygowaną. */

@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 45.0.0.0
+;@Ahk2Exe-SetVersion 49.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 45 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 49 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -95,7 +95,7 @@ ToggleAutostart(name, *) {
 ; --- Skróty: program działa stale, więc poza swoimi przypadkami nie może zabierać klawiszy innym programom ---
 
 ; Makro z pierwszej linii poleceń; inny tekst w Schowku zostawia Alt+E programowi, w którym się go nacisnęło.
-IsMacro(text) => RegExMatch(text, "i)^(\s*(#[^\n]*)?\r?\n)*\s*(#[^\n]*\r?\n\s*)*(ASK|CLICK|TEXT|KEY|SLEEP|WEB[A-Z]+|WIN[A-Z]+)\s*[|;]") = 1
+IsMacro(text) => RegExMatch(text, "i)^(\s*(#[^\n]*)?\r?\n)*\s*(#[^\n]*\r?\n\s*)*(ASK|CLICK|TEXT|KEY|SLEEP|WEB[A-Z]+|WIN[A-Z]+|EXCEL[A-Z]+|PDF[A-Z]+)\s*[|;]") = 1
 
 ClipboardHasMacro() {
     try return IsMacro(A_Clipboard)
@@ -197,6 +197,9 @@ PlayMacro(rawClip) {
     report := "" ; podsumowania etapów, pokazane na końcu makra
     closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
+    ; EXCELSAVE: skoroszyty otwarte przed makrem nie są „nowe”, więc makro nie zapisze cudzego pliku
+    excelSeen := InStr(rawClip, "EXCELSAVE") ? ExcelSnapshot() : Map()
+    pdfSeen := InStr(rawClip, "PDFSAVE") ? PdfSnapshot() : Map() ; to samo dla okien PDF
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
     handledRows := Map() ; WEBIFROW: ile wierszy obsłużono pod daną etykietą (np. pliki jednego kodu MEA)
     collected := {codes: [], seen: Map()} ; WEBCOLLECT: kody ze wszystkich list tego makra (np. pliki bonu od 538 i 88110)
@@ -321,6 +324,26 @@ PlayMacro(rawClip) {
                     for hwnd in WinGetList(Trim(parts[2]))
                         try WinMinimize hwnd
                 }
+            case "EXCELSAVE":
+                ; EXCELSAVE|ścieżka pliku|limit w ms: czeka na nowy skoroszyt w Excelu (np. po przycisku Excel w Mercalys),
+                ; zapisuje go pod tą ścieżką (format z końcówki: xlsx, xlsm, xlsb, xls, csv; istniejący plik jest nadpisywany) i zamyka
+                problem := parts.Length < 2 ? "Linia EXCELSAVE wymaga ścieżki pliku."
+                    : ExcelSave(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 120000, excelSeen)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                report .= "Zapisano: " Trim(parts[2]) "`n"
+            case "PDFSAVE":
+                ; PDFSAVE|ścieżka pliku .pdf|limit w ms: czeka na nowe okno PDF (np. raport drukowany z Mercalys), zapisuje
+                ; ten dokument pod tą ścieżką (istniejący plik jest zastępowany) i zamyka okno PDF
+                problem := parts.Length < 2 ? "Linia PDFSAVE wymaga ścieżki pliku."
+                    : PdfSave(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 300000, pdfSeen)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                report .= "Zapisano: " Trim(parts[2]) "`n"
             case "WEBENSURE":
                 ; WEBENSURE|okno|element|przycisk: klika przycisk tylko, gdy elementu nie widać, np. zakładka menu pod innym ekranem
                 problem := parts.Length < 4 ? "Linia WEBENSURE wymaga okna, elementu i przycisku." : WebEnsure(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]))
@@ -680,6 +703,262 @@ WinCloseAll(title, timeoutMs) {
             left += 1
     }
     return left = 0 ? "" : "Acrobat nie zamknął się sam, zamknij PDF-y ręcznie."
+}
+
+; --- Excel: skoroszyt otwarty przez Mercalys zapisany pod podaną ścieżką ---
+
+ExcelFormat(ext) {
+    static formats := Map("xlsx", 51, "xlsm", 52, "xlsb", 50, "xls", 56, "csv", 6)
+    ext := StrLower(ext)
+    return formats.Has(ext) ? formats[ext] : 0
+}
+
+; Obiekt okna skoroszytu (klasa EXCEL7) przez OBJID_NATIVEOM: tak widać każdy uruchomiony Excel,
+; a ComObjActive zwraca tylko pierwszy (Mercalys może otworzyć raport we własnym Excelu).
+ExcelWindowObject(ctrl) {
+    iid := Buffer(16)
+    DllCall("ole32\CLSIDFromString", "WStr", "{00020400-0000-0000-C000-000000000046}", "Ptr", iid) ; IDispatch
+    ptr := 0
+    if (DllCall("oleacc\AccessibleObjectFromWindow", "Ptr", ctrl, "UInt", 0xFFFFFFF0, "Ptr", iid, "Ptr*", &ptr) != 0 || !ptr)
+        return ""
+    return ComValue(9, ptr)
+}
+
+; Otwarte skoroszyty wszystkich Exceli: {key, book, app}; key = okno Excela + pełna nazwa skoroszytu.
+ExcelWorkbooks() {
+    books := []
+    apps := Map()
+    for hwnd in WinGetList("ahk_class XLMAIN") {
+        try controls := WinGetControlsHwnd(hwnd)
+        catch
+            continue
+        for ctrl in controls {
+            try {
+                if (WinGetClass(ctrl) != "EXCEL7")
+                    continue
+                win := ExcelWindowObject(ctrl)
+                if !IsObject(win)
+                    continue
+                app := win.Application
+                appKey := app.Hwnd
+                if !apps.Has(appKey) {
+                    apps[appKey] := true
+                    for wb in app.Workbooks
+                        books.Push({key: appKey ":" wb.FullName, book: wb, app: app})
+                }
+                break
+            }
+        }
+    }
+    return books
+}
+
+ExcelSnapshot() {
+    seen := Map()
+    for item in ExcelWorkbooks()
+        seen[item.key] := true
+    return seen
+}
+
+; Zwraca "", gdy zapisano, a inaczej opis problemu.
+ExcelSave(path, timeoutMs, seen) {
+    SplitPath path, , &dir, &ext
+    format := ExcelFormat(ext)
+    if !format
+        return "Nieznany format pliku `"" path "`". Użyj końcówki .xlsx, .xlsm, .xlsb, .xls albo .csv."
+    if (dir = "" || !DirExist(dir))
+        return "Nie ma folderu `"" dir "`" albo nie ma do niego dostępu."
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for item in ExcelWorkbooks() {
+            if seen.Has(item.key)
+                continue
+            ready := false
+            try ready := item.app.Ready
+            if ready
+                return ExcelSaveWorkbook(item, path, format, seen)
+        }
+        if (A_TickCount >= deadline)
+            return "Excel nie otworzył nowego skoroszytu w ciągu " Round(timeoutMs / 1000) " s."
+        Sleep 500
+    }
+}
+
+ExcelSaveWorkbook(item, path, format, seen) {
+    seen[item.key] := true ; nawet po błędzie kolejny EXCELSAVE nie bierze tego samego skoroszytu
+    app := item.app
+    wb := item.book
+    Sleep 1000 ; skoroszyt dopiero się wczytał
+    alerts := true
+    try alerts := app.DisplayAlerts
+    message := ""
+    Loop 5 { ; zajęty Excel odrzuca wywołanie, więc kilka prób
+        try {
+            app.DisplayAlerts := false ; bez pytania o nadpisanie i format
+            wb.SaveAs(path, format)
+            message := ""
+            break
+        } catch as err {
+            message := err.Message
+            Sleep 1000
+        }
+    }
+    if (message != "") {
+        try app.DisplayAlerts := alerts
+        return "Excel nie zapisał pliku `"" path "`":`n" message
+    }
+    try seen[app.Hwnd ":" wb.FullName] := true
+    try wb.Close(false)
+    wb := ""
+    try app.DisplayAlerts := alerts
+    ; Excel otwarty dla raportu zostaje pusty: bez innych skoroszytów zamykamy go, a cudzych plików nie ruszamy
+    count := -1
+    try count := app.Workbooks.Count
+    if (count = 0)
+        try app.Quit()
+    return ""
+}
+
+; --- PDF: raport z Mercalys otwarty w Acrobacie zapisany pod podaną ścieżką ---
+
+PdfWindows() => WinGetList("ahk_class AcrobatSDIWindow")
+PdfMercalysTemp() => "N:\AVISOCONFIG\TEMP"
+
+PdfSnapshot() {
+    seen := Map()
+    for hwnd in PdfWindows()
+        try seen[hwnd ":" WinGetTitle(hwnd)] := true
+    return seen
+}
+
+; Zwraca "", gdy zapisano, a inaczej opis problemu.
+PdfSave(path, timeoutMs, seen) {
+    SplitPath path, , &dir, &ext
+    if (StrLower(ext) != "pdf")
+        return "Plik `"" path "`" musi kończyć się na .pdf."
+    if (dir = "" || !DirExist(dir))
+        return "Nie ma folderu `"" dir "`" albo nie ma do niego dostępu."
+    since := DateAdd(A_Now, -60, "Seconds") ; plik PDF powstaje dopiero po kliknięciu w Mercalys
+    deadline := A_TickCount + timeoutMs
+    hwnd := 0
+    title := ""
+    Loop {
+        for h in PdfWindows() {
+            t := ""
+            try t := WinGetTitle(h)
+            if (t != "" && !seen.Has(h ":" t)) {
+                hwnd := h
+                title := t
+                break
+            }
+        }
+        if hwnd
+            break
+        if (A_TickCount >= deadline)
+            return "Nie otworzył się nowy PDF w ciągu " Round(timeoutMs / 1000) " s."
+        Sleep 500
+    }
+    seen[hwnd ":" title] := true
+    Sleep 2000 ; dokument jeszcze się wczytuje
+
+    ; Najpierw kopia pliku, który otworzył Acrobat (bez okien), a bez niego „Zapisz jako”.
+    source := PdfSourceFile(title, since)
+    copied := false
+    if (source != "") {
+        try {
+            FileCopy source, path, 1
+            copied := true
+        }
+    }
+    if !copied {
+        problem := PdfSaveAs(hwnd, path)
+        if (problem != "")
+            return problem "`nOkno PDF: " title
+    }
+    if !FileExist(path) || DateDiff(FileGetTime(path, "M"), since, "Seconds") < 0
+        return "Nie powstał plik `"" path "`".`nOkno PDF: " title
+    try WinClose hwnd
+    WinWaitClose("ahk_id " hwnd, , 5)
+    return ""
+}
+
+; Plik PDF o nazwie z tytułu okna (np. „ar-e079[1].pdf - Adobe Acrobat Reader”), zapisany po `since` w folderach
+; tymczasowych Windows i Internet Explorera; "" = nie znaleziono.
+PdfSourceFile(title, since) {
+    if !RegExMatch(title, "i)^(.+?\.pdf)\b", &m)
+        return ""
+    name := m[1]
+    newest := ""
+    newestTime := ""
+    appData := EnvGet("LOCALAPPDATA")
+    ; Mercalys zapisuje wydruki w N:\AVISOCONFIG\TEMP (tam bez podfolderów, bo plików jest tam bardzo dużo)
+    folders := [[PdfMercalysTemp(), ""], [A_Temp, "R"], [appData "\Microsoft\Windows\INetCache", "R"]
+        , [appData "\Microsoft\Windows\Temporary Internet Files", "R"]]
+    for folder in folders {
+        dir := folder[1]
+        if !DirExist(dir)
+            continue
+        try {
+            Loop Files dir "\" name, folder[2] {
+                time := A_LoopFileTimeModified
+                if (DateDiff(time, since, "Seconds") >= 0 && (newestTime = "" || DateDiff(time, newestTime, "Seconds") > 0)) {
+                    newest := A_LoopFileFullPath
+                    newestTime := time
+                }
+            }
+        }
+    }
+    return newest
+}
+
+; Ctrl+Shift+S w oknie PDF i ścieżka w polu nazwy pliku. Stary plik usuwamy wcześniej, żeby nie było pytania o zamianę.
+PdfSaveAs(hwnd, path) {
+    try WinActivate hwnd
+    if !WinWaitActive("ahk_id " hwnd, , 5)
+        return "Okno PDF nie stało się aktywne."
+    exe := ""
+    try exe := WinGetProcessName(hwnd)
+    if FileExist(path) {
+        try FileDelete path
+        catch
+            return "Nie da się zastąpić pliku `"" path "`" (otwarty w innym programie?)."
+    }
+    Send "^+s"
+    dialog := WinWait("ahk_class #32770 ahk_exe " exe, , 20)
+    if !dialog
+        return "Nie otworzyło się okno „Zapisz jako” (Ctrl+Shift+S). W Acrobacie: Edycja → Preferencje → Ogólne, wyłącz „Pokaż magazyn online przy zapisywaniu plików”."
+    ; Prawdziwe klawisze: tekst ustawiony z boku (ControlSetText) okno pokazuje, ale zapisuje pod starą nazwą
+    try {
+        WinActivate dialog
+        WinWaitActive("ahk_id " dialog, , 5)
+        ControlFocus "Edit1", dialog
+        Sleep 200
+        Send "^a"
+        SendText path
+        Sleep 300
+        if (ControlGetText("Edit1", dialog) != path)
+            return "Nie udało się wpisać ścieżki w okno „Zapisz jako”."
+        Send "{Enter}"
+    } catch as err {
+        return "Nie udało się wpisać ścieżki w okno „Zapisz jako”: " err.Message
+    }
+    deadline := A_TickCount + 60000
+    while (A_TickCount < deadline) {
+        if (FileExist(path) && !WinExist("ahk_id " dialog))
+            return ""
+        ; Pytanie o zamianę pliku tu nie powinno paść (stary plik usunięty): odpowiadamy Nie i przerywamy zapis
+        for other in WinGetList("ahk_class #32770 ahk_exe " exe) {
+            if (other != dialog && WinExist("ahk_id " dialog)) {
+                try WinActivate other
+                Send "{Esc}"
+                Sleep 300
+                try WinClose dialog
+                return "Okno „Zapisz jako” zapytało o zamianę innego pliku, zapis przerwany."
+            }
+        }
+        Sleep 300
+    }
+    return "Acrobat nie zapisał pliku w ciągu 60 s."
 }
 
 WinOpen(title) {

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { UseMutationResult } from '@tanstack/react-query'
-import { ArrowRightIcon, CircleAlertIcon, CircleCheckIcon, RefreshCwIcon, SettingsIcon, XIcon } from 'lucide-react'
+import {
+  ArrowRightIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  ClipboardCopyIcon,
+  RefreshCwIcon,
+  SettingsIcon,
+  XIcon,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 
@@ -36,14 +44,24 @@ import {
 import { ImportSourcesDialog } from '@/features/imports/ImportSourcesDialog'
 import {
   DAILY_REPORTS,
+  MACRO_REPORTS,
+  macroPathError,
   newestReportFile,
   PDF_EXTENSIONS,
+  readMacroPaths,
+  readMacroPrintNumbers,
   readMasks,
   REPORT_TITLES,
   sourceFolderKey,
   XLSX_EXTENSIONS,
   type DailyReport,
 } from '@/features/imports/import-sources'
+import {
+  buildReportSaveMacro,
+  lastDocumentDate,
+  macroPlayerVersion,
+  macroSettingsReady,
+} from '@/features/imports/report-macros'
 import { ReportHelp } from '@/features/imports/ReportHelp'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { useCadencier, useImportCadencier } from '@/features/sales/api'
@@ -273,6 +291,50 @@ function StoreImports({ store }: { store: StoreSummary }) {
     }
   }
 
+  // Makro na wszystkie raporty z zapisaną ścieżką; ścieżki są w ustawieniach importu (localStorage), więc czytane przy kliknięciu.
+  const copyAllMacros = async () => {
+    // Okres raportu sprzedaży liczy się od ostatniego dnia w bazie, więc bez tej listy makro wzięłoby za mało dni
+    if (sales.isPending || documents.isPending) {
+      toast.info('Wczytuję stan sprzedaży i dokumentów, spróbuj za chwilę')
+      return
+    }
+    const paths = readMacroPaths(store.id)
+    const printNumbers = readMacroPrintNumbers(store.id)
+    const masks = readMasks(store.id)
+    const ready = MACRO_REPORTS.map((kind) => ({
+      kind,
+      settings: { path: paths[kind] ?? '', printNumber: printNumbers[kind] },
+    })).filter(
+      ({ kind, settings }) =>
+        settings.path.trim() !== '' &&
+        macroPathError(kind, settings.path, masks[kind] ?? '') === null &&
+        macroSettingsReady(kind, settings),
+    )
+    if (ready.length === 0) {
+      toast.info('Ustaw ścieżki zapisu z Mercalys', {
+        description: 'W ustawieniach importu wpisz przy raportach, gdzie makro ma je zapisać.',
+      })
+      setSourcesOpen(true)
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(
+        buildReportSaveMacro(ready, {
+          lastSaleDate: sales.data?.lastSaleDate,
+          lastDocumentDate: lastDocumentDate(documents.data),
+        }),
+      )
+      const skipped = MACRO_REPORTS.length - ready.length
+      toast.success(`Skopiowano makro: ${ready.map(({ kind }) => REPORT_TITLES[kind]).join(', ')}`, {
+        description: `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion(ready.map(({ kind }) => kind))}). Raport, którego makro nie otwiera samo, zapyta: po Tak kliknij Excel w Mercalys.${
+          skipped > 0 ? ` Bez ścieżki: ${skipped}.` : ''
+        }`,
+      })
+    } catch {
+      toast.error('Nie udało się skopiować makra')
+    }
+  }
+
   const cardProps = (kind: ImportReportKind) => ({
     kind,
     guide: guideOf(kind),
@@ -300,6 +362,15 @@ function StoreImports({ store }: { store: StoreSummary }) {
                   {refreshing && refreshing !== 'access' ? `Wgrywanie: ${REPORT_TITLES[refreshing]}` : 'Odśwież dane'}
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => void copyAllMacros()}
+                title="Jedno makro do schowka (Alt+E): po kolei każdy raport z Mercalys zapisany w swoim folderze, potem „Odśwież dane”"
+              >
+                <ClipboardCopyIcon data-icon="inline-start" />
+                Zaktualizuj wszystkie pliki
+              </Button>
               <Button
                 variant="outline"
                 size="icon-lg"

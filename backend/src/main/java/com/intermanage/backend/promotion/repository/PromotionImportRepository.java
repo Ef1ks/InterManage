@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.promotion.entity.PromotionImport;
@@ -67,7 +68,8 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
                     set ean = excluded.ean, name = excluded.name,
                         catalog_purchase_price = excluded.catalog_purchase_price,
                         regular_sale_price = excluded.regular_sale_price, promo_price = excluded.promo_price,
-                        margin_percent = excluded.margin_percent, last_import_id = excluded.last_import_id
+                        margin_percent = excluded.margin_percent, last_import_id = excluded.last_import_id,
+                        ended_on = null
                 returning (xmax = 0) as created
             )
             select (select count(*) from saved where created) as created, (select n from changed) as updated
@@ -87,8 +89,21 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
             """, nativeQuery = true)
     long countMissing(UUID storeId, UUID importId, LocalDate endFrom, LocalDate endTo);
 
+    /**
+     * Promocje z zakresu dat końca raportu, których w nim zabrakło, kończą się: lista pokazuje bieżące i przyszłe
+     * promocje, więc ostatnim dniem takiej promocji jest dzień przed listą ({@code ended_on} = dzień listy).
+     * Promocja, która wróci w późniejszej liście, traci znacznik w {@link #merge}.
+     */
+    @Modifying
+    @Query(value = """
+            update promotions p set ended_on = :reportDay
+            where p.store_id = :storeId and p.last_import_id <> :importId and p.ended_on is null
+              and p.end_date >= :endFrom and p.end_date <= :endTo
+            """, nativeQuery = true)
+    int markEnded(UUID storeId, UUID importId, LocalDate endFrom, LocalDate endTo, LocalDate reportDay);
+
     /** Promocje, które trwają albo dopiero się zaczną (koniec od podanego dnia). */
-    @Query(value = "select count(*) from promotions p where p.store_id = :storeId and p.end_date >= :today",
+    @Query(value = "select count(*) from promotions p where p.store_id = :storeId and p.effective_end >= :today",
             nativeQuery = true)
     long countActive(UUID storeId, LocalDate today);
 
@@ -116,11 +131,7 @@ public interface PromotionImportRepository extends JpaRepository<PromotionImport
             select p.start_date as startDate, p.end_date as endDate,
                    p.catalog_purchase_price as catalogPurchasePrice, p.regular_sale_price as regularSalePrice,
                    p.promo_price as promoPrice, p.margin_percent as marginPercent,
-                   exists (select 1 from promotion_imports n
-                           join promotion_imports l on l.id = p.last_import_id
-                           where n.store_id = p.store_id and n.imported_at > l.imported_at
-                             and n.withdrawn_at is null
-                             and n.end_from <= p.end_date and p.end_date <= n.end_to) as cancelled
+                   p.ended_on is not null as cancelled
             from promotions p
             where p.store_id = :storeId and p.itm8 = :itm8
             order by p.end_date desc, p.start_date desc

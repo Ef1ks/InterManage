@@ -1838,6 +1838,8 @@ export type KsefInvoice = {
   baseSupplierInvoice: string | null
   /** Dostawca przypisany do kodu z bazy w ustawieniach okna wczytywania faktur. */
   baseSupplierName: string | null
+  /** Numery WZ z XML faktury (np. 09516050250 w fakturze zbiorczej bazy); puste, dopóki XML nie został odczytany. */
+  deliveryNotes: string[]
 }
 
 /**

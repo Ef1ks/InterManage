@@ -174,7 +174,11 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
 
       <Card className="mb-4 gap-3 p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
-          <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: nr faktury, dostawca, NIP, nr KSeF" />
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Szukaj: nr faktury, nr WZ, dostawca, NIP, nr KSeF"
+          />
           <DateField
             label="Wystawiona od"
             value={filters.from}
@@ -321,7 +325,13 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
                 </TableRow>
               ) : (
                 invoices.map((invoice) => (
-                  <InvoiceRow key={invoice.id} storeId={storeId} invoice={invoice} canEdit={canEdit} />
+                  <InvoiceRow
+                    key={invoice.id}
+                    storeId={storeId}
+                    invoice={invoice}
+                    canEdit={canEdit}
+                    query={debouncedQuery}
+                  />
                 ))
               )}
             </TableBody>
@@ -410,7 +420,32 @@ function SyncButton({ storeId, running }: { storeId: string; running: boolean })
   )
 }
 
-function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: KsefInvoice; canEdit: boolean }) {
+/** Do porównania z wyszukiwaniem jak w bazie: małe litery bez polskich znaków. */
+function plainText(value: string) {
+  return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l')
+}
+
+/** Numery WZ faktury pasujące do wyszukiwania: pokazują, dlaczego faktura jest na liście. */
+function matchingDeliveryNotes(notes: string[], query: string) {
+  const words = plainText(query).split(/\s+/).filter(Boolean)
+  if (words.length === 0) {
+    return []
+  }
+  return notes.filter((note) => words.some((word) => plainText(note).includes(word)))
+}
+
+function InvoiceRow({
+  storeId,
+  invoice,
+  canEdit,
+  query,
+}: {
+  storeId: string
+  invoice: KsefInvoice
+  canEdit: boolean
+  query: string
+}) {
+  const matchedNotes = matchingDeliveryNotes(invoice.deliveryNotes, query)
   const markEntered = useMarkEntered(storeId)
   const download = useDownloadInvoice(storeId)
   const downloadAs = (format: 'pdf' | 'xml') =>
@@ -497,6 +532,15 @@ function InvoiceRow({ storeId, invoice, canEdit }: { storeId: string; invoice: K
             title={`Koryguje: ${invoice.correctedInvoices.join(', ')}`}
           >
             koryguje {invoice.correctedInvoices.join(', ')}
+          </div>
+        )}
+        {matchedNotes.length > 0 && (
+          <div
+            className="truncate text-xs text-muted-foreground"
+            title={`Dokumenty WZ: ${invoice.deliveryNotes.join(', ')}`}
+          >
+            WZ {matchedNotes.join(', ')}
+            {invoice.deliveryNotes.length > matchedNotes.length && ` (z ${invoice.deliveryNotes.length} na fakturze)`}
           </div>
         )}
         {/* Numer KSeF i IDWew to dane techniczne: mniejszy krój o stałej szerokości i plakietka, żeby nie zlewały się

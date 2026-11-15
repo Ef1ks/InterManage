@@ -431,7 +431,12 @@ public class DocumentService {
 
     private DocumentImportResponse merge(UUID storeId, ParsedDocumentReport report, String fileName, UUID userId) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
-        if (report.storeNumber() != null && !report.storeNumber().equals(store.getNumber())) {
+        if (report.storeNumber() == null) {
+            // Bez numeru nie wiadomo, czyj to raport, a raport innego sklepu wgrałby się do wybranego.
+            throw ApiException.badRequest("Nie widać numeru sklepu w nagłówku raportu. Wgraj raport wydrukowany "
+                    + "z systemu sklepu.");
+        }
+        if (!report.storeNumber().equals(store.getNumber())) {
             throw ApiException.conflict("To raport sklepu " + report.storeNumber() + ", a wybrany jest sklep "
                     + store.getNumber() + " (" + store.getName() + "). Przełącz sklep albo wgraj właściwy plik.");
         }
