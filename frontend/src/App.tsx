@@ -15,6 +15,9 @@ import { ProtocolEntryPage } from '@/features/protocol-entry/ProtocolEntryPage'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { MeaDocumentPage } from '@/features/mea/MeaDocumentPage'
+import { MeaPage } from '@/features/mea/MeaPage'
+import { meaOnlinePath } from '@/features/mea/paths'
 import { LeafletLabelCheckPage } from '@/features/leaflet/LeafletLabelCheckPage'
 import { stocktakePath } from '@/features/stocktake/paths'
 import { StocktakePage } from '@/features/stocktake/StocktakePage'
@@ -139,6 +142,24 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <MeaCodesPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Moduł MEA: lista z portalu Grupy Muszkieterów, uprawnienie jak wprowadzanie danych.
+        path: meaOnlinePath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <MeaPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Dokument MEA z ilościami R1-R4 (jak okno dokumentu w eMEA).
+        path: `${meaOnlinePath}/:number`,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <MeaDocumentPage />
           </RequireAuth>
         ),
       },

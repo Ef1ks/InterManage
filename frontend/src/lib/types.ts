@@ -1186,6 +1186,7 @@ export type DeliCostsOverview = {
 export type SalesComparisonLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'PRODUCT'
 
 /** Raport lady: sumy pozycji w jednym sklepie; marża % od brutto, udział w sprzedaży brutto wybranych rejonów. */
+/** Marża po likwidacjach: sprzedaż netto − zakup FIFO − lossValue (likwidacje PL z okresu, wartość zakupu netto). */
 export type CounterFigures = {
   quantity: number
   costValue: number
@@ -1194,6 +1195,7 @@ export type CounterFigures = {
   marginValue: number
   marginPercent: number | null
   sharePercent: number | null
+  lossValue: number
 }
 
 /** Wartości pozycji w kolejności {@code CounterReport.stores}; {@code null} = brak sprzedaży w sklepie. */
@@ -1217,15 +1219,31 @@ export type CounterReport = {
         code: string
         name: string | null
         values: CounterValues
-        articles: { itm8: string; name: string | null; brand: string | null; values: CounterValues }[]
+        articles: CounterArticle[]
       }[]
     }[]
   }[]
 }
 
+/** Artykuł sklepu w wierszu; inny ITM8 niż wiersza albo linkId = dołączony połączeniem między sklepami. */
+export type CounterSource = { itm8: string; name: string | null; linkId: string | null }
+
+export type CounterArticle = {
+  /** Klucz wiersza: ITM8 artykułu pierwszego sklepu, w którym jest. */
+  itm8: string
+  name: string | null
+  brand: string | null
+  values: CounterValues
+  /** Kolejność CounterReport.stores; null = brak sprzedaży w sklepie. */
+  sources: (CounterSource | null)[]
+}
+
+/** Ten sam towar w dwóch sklepach o różnych kodach (raport lady, porównanie cen mięsa). */
+export type ArticleLinkRequest = { storeId: string; itm8: string; linkedStoreId: string; linkedItm8: string }
+
 export type CounterStoreOption = { id: string; number: string; name: string; partner: boolean }
 
-export type CounterMetric = 'QUANTITY' | 'COST' | 'SALE' | 'MARGIN' | 'MARGIN_PERCENT' | 'SHARE'
+export type CounterMetric = 'QUANTITY' | 'COST' | 'SALE' | 'MARGIN' | 'MARGIN_PERCENT' | 'SHARE' | 'LOSSES'
 
 export type SalesComparisonRow = {
   /** Kod nomenklatury bez spacji ("01", "0101", "010101") albo ITM8; pusty = sprzedaż bez nomenklatury. */
@@ -1423,8 +1441,13 @@ export type ArticleDelivery = {
   originalQuantity: number | null
   originalPurchasePrice: number | null
   originalPurchaseValue: number | null
-  /** Kody MEA artykułu z dostawy z bazy tego przyjęcia (Nr_Bl = nr dok. dostawcy), pusta bez dostawy z bazy. */
+  /**
+   * Kody MEA, na które przyszła dostawa: z dostawy z bazy tego przyjęcia (Nr_Bl = nr dok. dostawcy) i z formularzy
+   * MEA (ITM8 promocyjny w linii przyjęcia); pusta, gdy towar nie przyszedł na gazetkę.
+   */
   meaCodes: string[]
+  /** Te same kody z nazwą i okresem promocji (bez pobranego formularza sam numer). */
+  mea: { number: string; title: string | null; promoFrom: string | null; promoTo: string | null }[]
 }
 
 /** Protokół artykułu: dokument inny niż przyjęcie i korekta; {@code label} to rodzaj do pokazania. */
@@ -3116,6 +3139,11 @@ export type MeatReportCell = {
   salePrice: number | null
   saleDate: string | null
   saleFallback: boolean
+  /** Artykuł sklepu w wierszu (inny niż wiersza, gdy dołączony połączeniem); null = brak. */
+  itm8: string | null
+  name: string | null
+  /** Połączenie między sklepami, które dołączyło artykuł do wiersza. */
+  linkId: string | null
 }
 
 export type MeatReportRow = {
@@ -3487,6 +3515,76 @@ export type MeaOverview = {
     deletedBy: string | null
     codes: string[]
   }[]
+}
+
+/** Zakładki modułu MEA (jak w eMEA), liczone z dat promocji i tego, czy zamówienie złożono. */
+export type MeaTab = 'TO_SEND' | 'SENT_NOT_STARTED' | 'ONGOING' | 'ARCHIVE' | 'OTHER'
+
+/** Pozycja listy MEA z portalu Grupy Muszkieterów. */
+export type MeaListItem = {
+  number: string
+  name: string
+  promoFrom: string | null
+  promoTo: string | null
+  reservationFrom: string | null
+  reservationTo: string | null
+  ordered: boolean
+  tab: MeaTab
+  files: string[]
+}
+
+/** Lista MEA sklepu z portalu. {@code configured}: sklep ma zapisany klucz API. */
+export type MeaList = {
+  configured: boolean
+  dateFrom: string | null
+  items: MeaListItem[]
+}
+
+/**
+ * Pozycja dokumentu MEA z formularza portalu. Ceny bez przedrostka to warunki MEA, `parallel*` to ITM8 równoległy
+ * (CAD w eMEA). `product` to artykuł z kartoteki sklepu (po ITM8, potem EAN-ie i multikodach), `null`, gdy go nie ma.
+ */
+export type MeaDocumentLine = {
+  lp: number
+  meaItm8: string
+  parallelItm8: string | null
+  ean: string | null
+  name: string | null
+  brand: string | null
+  packsPerPallet: number | null
+  unitsPerPack: number | null
+  vatPercent: number | null
+  purchasePrice: number | null
+  parallelPurchasePrice: number | null
+  shelfPrice: number | null
+  parallelShelfPrice: number | null
+  margin: number | null
+  parallelMargin: number | null
+  /** Gwarantowana ilość dni terminu (DLV w eMEA). */
+  guaranteedDays: number | null
+  note: string | null
+  product: DataEntryCatalogProduct | null
+}
+
+/** Dokument MEA: nagłówek z okresami i datami rozrzutów (R1-R4) oraz pozycje. */
+export type MeaDocument = {
+  number: string
+  title: string | null
+  promoFrom: string | null
+  promoTo: string | null
+  reservationFrom: string | null
+  reservationTo: string | null
+  dispatches: string[]
+  lines: MeaDocumentLine[]
+}
+
+/** Stan kluczy API sklepu (bez samych kluczy). */
+export type MeaSettings = {
+  configured: boolean
+  hasSecret: boolean
+  shopId: number | null
+  updatedAt: string | null
+  updatedBy: string | null
 }
 
 /** Wgrana gazetka na liście do otwarcia. */

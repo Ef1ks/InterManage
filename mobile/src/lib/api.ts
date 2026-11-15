@@ -129,6 +129,17 @@ export async function api<T>(path: string, init: { method?: string; json?: unkno
     clearTimeout(timeout)
   }
 
+  // Przekierowanie (np. http → https w Cloudflare) zamienia POST na GET, a backend odpowiada wtedy 405.
+  if (response.redirected && (init.method ?? 'GET') !== 'GET') {
+    const target = redirectOrigin(response.url)
+    throw new ApiError(
+      target
+        ? `Serwer przekierowuje na ${target}. Wpisz ten adres serwera.`
+        : `Serwer ${server} przekierowuje na inny adres. Sprawdź adres serwera.`,
+      response.status,
+    )
+  }
+
   const refreshed = response.headers.get('X-Auth-Token')
   if (refreshed) setToken(refreshed)
 
@@ -142,6 +153,11 @@ export async function api<T>(path: string, init: { method?: string; json?: unkno
   }
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+function redirectOrigin(url: string) {
+  const match = /^(https?:\/\/[^/]+)/i.exec(url)
+  return match && match[1] !== server ? match[1] : null
 }
 
 async function problemMessage(response: Response, hadToken: boolean) {

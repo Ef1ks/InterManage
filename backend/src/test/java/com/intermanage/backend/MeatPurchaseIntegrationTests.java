@@ -219,6 +219,67 @@ class MeatPurchaseIntegrationTests {
     }
 
     @Test
+    void linkedArticlesOfStoresShareOneRow() throws Exception {
+        // Sklep B ma ten sam filet pod własnym, lokalnym ITM8.
+        String localItm8 = "0000099077777";
+        jdbc.update("update products set itm8 = ? where id = ?::uuid", localItm8, filletB);
+        mvc.perform(post(url(storeA, "")).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(deliveryJson(null, waldiA, "WZ A", "2026-10-27", filletA, "13.49")))
+                .andExpect(status().isCreated());
+        mvc.perform(post(url(storeB, "")).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(deliveryJson(null, waldiB, "WZ B", "2026-10-27", filletB, "14.10")))
+                .andExpect(status().isCreated());
+        // Filet A, filet B i wspólny surowiec bez artykułu.
+        report(3);
+
+        String link = mvc.perform(post("/api/stores/" + storeA + "/article-links").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"storeId":"%s","itm8":"%s","linkedStoreId":"%s","linkedItm8":"99077777"}"""
+                                .formatted(storeA, FILLET_ITM8, storeB)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String linkId = JsonPath.read(link, "$.id");
+
+        String report = report(2);
+        String b = "$.rows[0].cells[?(@.storeId == '" + storeB + "')].";
+        assertThat(JsonPath.<List<String>>read(report, b + "itm8")).containsExactly(localItm8);
+        assertThat(JsonPath.<List<Double>>read(report, b + "purchasePrice")).containsExactly(14.10);
+        assertThat(JsonPath.<List<String>>read(report, b + "linkId")).containsExactly(linkId);
+
+        // Artykuł ma jedno połączenie z każdym sklepem, także od drugiej strony.
+        mvc.perform(post("/api/stores/" + storeB + "/article-links").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"storeId":"%s","itm8":"%s","linkedStoreId":"%s","linkedItm8":"4545"}"""
+                                .formatted(storeB, localItm8, storeA)))
+                .andExpect(status().isConflict());
+
+        // Odłączenie to znacznik; „Przywróć” łączy z powrotem.
+        mvc.perform(delete("/api/stores/" + storeA + "/article-links/" + linkId).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        report(3);
+        mvc.perform(post("/api/stores/" + storeA + "/article-links/" + linkId + "/restore").cookie(owner)
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+        report(2);
+
+        // Łączenie zmienia raporty, więc sam podgląd nie wystarcza.
+        Cookie employee = employee("{\"MEAT_PURCHASES\":\"VIEW\"}", storeA);
+        mvc.perform(delete("/api/stores/" + storeA + "/article-links/" + linkId).cookie(employee).with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    private String report(int rows) throws Exception {
+        return mvc.perform(get(url(storeA, "/report")).cookie(owner)
+                        .param("from", "2026-10-20").param("to", "2026-10-31")
+                        .param("stores", storeA, storeB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows", hasSize(rows)))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
     void rejectsUnsupportedFileAndReportsUnavailableModel() throws Exception {
         mvc.perform(multipart(url(storeA, "/scan"))
                         .file(new MockMultipartFile("file", "wz.txt", "text/plain", "tekst".getBytes()))

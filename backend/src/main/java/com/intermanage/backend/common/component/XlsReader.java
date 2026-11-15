@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Component;
 import com.intermanage.backend.common.exception.InvalidWorkbookException;
 
 /**
- * Pierwszy arkusz skoroszytu w starym formacie Excela (.xls, BIFF8 w kontenerze OLE), bez Apache POI; odwrotność
+ * Pierwszy arkusz skoroszytu w starym formacie Excela (.xls, BIFF8 albo BIFF5/7 z Excela 95 w kontenerze OLE), bez Apache POI; odwrotność
  * {@link XlsWriter}. Teksty jak w pliku (kody z zerami wiodącymi), liczby jako tekst bez zbędnych zer ({@code 1},
  * {@code 0.42}), pusta komórka to {@code null}. Daty zapisane jako liczby zostają numerem dnia Excela (pliki, które
  * czytamy, mają daty tekstem).
@@ -42,6 +43,9 @@ public class XlsReader {
     private static final int FORMULA = 0x0006;
     private static final int STRING = 0x0207;
     private static final int BOOLERR = 0x0205;
+    private static final int CODEPAGE = 0x0042;
+    private static final int BIFF8 = 0x0600;
+    private static final int BIFF5 = 0x0500;
 
     /** Wiersze pierwszego arkusza; {@code rows.get(r).get(c)} to komórka (A1 = 0, 0), krótsze wiersze bez pustych na końcu. */
     public List<List<String>> readFirstSheet(byte[] file) throws InvalidWorkbookException {
@@ -177,17 +181,25 @@ public class XlsReader {
         int sheetOffset = -1;
         int position = 0;
         boolean first = true;
+        boolean biff8 = true;
+        // BIFF5/7 (Excel 95) trzyma napisy w 1 bajcie na znak w stronie kodowej z rekordu CODEPAGE.
+        Charset charset = Charset.forName("windows-1252");
         while (position + 4 <= workbook.length) {
             Record record = record(in, position);
             position = next(in, position);
             if (first) {
-                if (record.type() != BOF || in.getShort(4) != 0x0600) {
-                    throw new InvalidWorkbookException("Obsługujemy pliki .xls z Excela 97 i nowszego");
+                int version = in.getShort(4) & 0xFFFF;
+                if (record.type() != BOF || (version != BIFF8 && version != BIFF5)) {
+                    throw new InvalidWorkbookException("Obsługujemy pliki .xls z Excela 95 i nowszego");
                 }
+                biff8 = version == BIFF8;
                 first = false;
                 continue;
             }
-            if (record.type() == SST) {
+            if (record.type() == CODEPAGE && !biff8) {
+                charset = codepage(ByteBuffer.wrap(record.data()).order(ByteOrder.LITTLE_ENDIAN).getShort(0) & 0xFFFF,
+                        charset);
+            } else if (record.type() == SST) {
                 strings = sharedStrings(record);
             } else if (record.type() == BOUNDSHEET && sheetOffset < 0 && (record.data()[5] & 0xFF) == 0) {
                 sheetOffset = ByteBuffer.wrap(record.data()).order(ByteOrder.LITTLE_ENDIAN).getInt(0);
@@ -227,7 +239,8 @@ public class XlsReader {
                     int index = data.getInt(6);
                     cells.put(row(data), col(data), index >= 0 && index < strings.size() ? strings.get(index) : null);
                 }
-                case LABEL, RSTRING -> cells.put(row(data), col(data), new Reader(record, 6).string(2));
+                case LABEL, RSTRING -> cells.put(row(data), col(data),
+                        biff8 ? new Reader(record, 6).string(2) : byteString(record.data(), 6, charset));
                 case NUMBER -> cells.put(row(data), col(data), number(data.getDouble(6)));
                 case RK -> cells.put(row(data), col(data), number(rk(data.getInt(6))));
                 case MULRK -> {
@@ -258,7 +271,8 @@ public class XlsReader {
                 }
                 case STRING -> {
                     if (formulaRow >= 0) {
-                        cells.put(formulaRow, formulaCol, new Reader(record, 0).string(2));
+                        cells.put(formulaRow, formulaCol,
+                                biff8 ? new Reader(record, 0).string(2) : byteString(record.data(), 0, charset));
                         formulaRow = -1;
                     }
                 }
@@ -268,6 +282,20 @@ public class XlsReader {
             }
         }
         return cells.rows();
+    }
+
+    /** Napis BIFF5/7: długość na 2 bajtach i znaki po 1 bajcie w stronie kodowej skoroszytu. */
+    private static String byteString(byte[] data, int at, Charset charset) {
+        int length = (data[at] & 0xFF) | ((data[at + 1] & 0xFF) << 8);
+        return new String(data, at + 2, Math.min(length, data.length - at - 2), charset);
+    }
+
+    private static Charset codepage(int codepage, Charset fallback) {
+        try {
+            return codepage == 1200 ? StandardCharsets.UTF_16LE : Charset.forName("windows-" + codepage);
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
     }
 
     private static int row(ByteBuffer data) {

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Porównanie cen mięsa w sklepach. Wiersz to artykuł (po ITM8, ten sam we wszystkich sklepach) albo pozycja bez
+ * Porównanie cen mięsa w sklepach. Wiersz to artykuł (po ITM8 i połączeniach artykułów między sklepami) albo pozycja bez
  * artykułu (po nazwie z WZ), w trybie {@code SPLIT} osobno dla każdego dnia dostawy. Kolory, sumy i marże liczy front.
  */
 public record MeatReport(LocalDate from, LocalDate to, String mode, List<Store> stores, List<Row> rows) {
@@ -31,8 +31,11 @@ public record MeatReport(LocalDate from, LocalDate to, String mode, List<Store> 
      * @param salePrice     cena sprzedaży brutto za kg: sprzedaż ÷ ilość z dnia dostawy (średnia z dni dostaw);
      *                      bez sprzedaży tego dnia albo bez zakupu ostatnia znana
      * @param saleFallback  {@code salePrice} to ostatnia znana cena (szara), z dnia {@code saleDate}
+     * @param itm8          artykuł sklepu w wierszu (inny niż wiersza, gdy dołączony połączeniem); pusty = brak
+     * @param name          jego nazwa z WZ albo kartoteki
+     * @param linkId        połączenie między sklepami, które dołączyło artykuł do wiersza
      */
     public record Cell(UUID storeId, BigDecimal purchasePrice, int purchaseCount, BigDecimal salePrice,
-            LocalDate saleDate, boolean saleFallback) {
+            LocalDate saleDate, boolean saleFallback, String itm8, String name, UUID linkId) {
     }
 }

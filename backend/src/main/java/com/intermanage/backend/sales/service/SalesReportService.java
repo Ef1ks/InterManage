@@ -3,13 +3,18 @@ package com.intermanage.backend.sales.service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +28,8 @@ import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.repository.ProductRepository;
+import com.intermanage.backend.mea.entity.MeaDocument;
+import com.intermanage.backend.mea.repository.MeaDocumentRepository;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
@@ -68,11 +75,13 @@ public class SalesReportService {
     private final DocumentLineRepository documentLines;
     private final CadencierImportRepository cadencier;
     private final CounterReportService counterReports;
+    private final MeaDocumentRepository meaDocuments;
 
     public SalesReportService(SaleRepository sales, SalesImportRepository imports, ProductRepository products,
             NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper,
             DocumentLineRepository documentLines, CadencierImportRepository cadencier,
-            CounterReportService counterReports) {
+            CounterReportService counterReports, MeaDocumentRepository meaDocuments) {
+        this.meaDocuments = meaDocuments;
         this.cadencier = cadencier;
         this.counterReports = counterReports;
         this.sales = sales;
@@ -256,9 +265,16 @@ public class SalesReportService {
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej, najwyżej {@link #DELIVERY_LIMIT}. */
     public List<ArticleDeliveryResponse> deliveries(UUID storeId, String itm8) {
-        return documentLines.findArticleDeliveries(storeId, itm8.strip(), DELIVERY_LIMIT).stream()
-                .map(salesMapper::toDelivery)
-                .toList();
+        List<DocumentLineRepository.ArticleDelivery> deliveries =
+                documentLines.findArticleDeliveries(storeId, itm8.strip(), DELIVERY_LIMIT);
+        // Nazwa i okres gazetki przy kodzie MEA (z formularzy pobranych z portalu).
+        Set<String> codes = deliveries.stream().map(DocumentLineRepository.ArticleDelivery::getMeaCodes)
+                .filter(Objects::nonNull).flatMap(value -> Arrays.stream(value.split(",")))
+                .collect(Collectors.toSet());
+        Map<String, MeaDocument> mea = codes.isEmpty() ? Map.of()
+                : meaDocuments.findByNumberIn(codes).stream()
+                        .collect(Collectors.toMap(MeaDocument::getNumber, Function.identity()));
+        return deliveries.stream().map(delivery -> salesMapper.toDelivery(delivery, mea)).toList();
     }
 
     /** Ostatnie protokoły artykułu (bez przyjęć i korekt), od najnowszego, najwyżej {@link #PROTOCOL_LIMIT}. */

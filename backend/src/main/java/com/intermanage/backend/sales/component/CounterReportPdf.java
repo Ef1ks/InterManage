@@ -362,10 +362,11 @@ public class CounterReportPdf {
         Phrase phrase = new Phrase();
         phrase.add(new Phrase("Jak czytać: ", font(bold, 6.5f, INK)));
         phrase.add(new Phrase("Kwoty w pełnych złotych, ilość w sztukach i kilogramach razem. Zakup to koszt FIFO "
-                + "sprzedanego towaru. Marża = sprzedaż netto − zakup FIFO, % od sprzedaży brutto. Udział = sprzedaż "
-                + "brutto pozycji w sprzedaży brutto wybranych rejonów lady w sklepie."
+                + "sprzedanego towaru. Marża jest po likwidacjach: sprzedaż netto − zakup FIFO − likwidacje (PL z "
+                + "okresu, wartość zakupu netto), % od sprzedaży brutto. Udział = sprzedaż brutto pozycji w sprzedaży "
+                + "brutto wybranych rejonów lady w sklepie."
                 + (compared ? " Na zielono najwyższa, na czerwono najniższa marża % w wierszu." : "")
-                + " „–” = brak sprzedaży w sklepie.", font(regular, 6.5f, MUTED)));
+                + " „–” = brak sprzedaży i likwidacji w sklepie.", font(regular, 6.5f, MUTED)));
         PdfPCell cell = new PdfPCell(phrase);
         cell.setBorder(Rectangle.TOP);
         cell.setBorderColor(RULE);
@@ -382,9 +383,10 @@ public class CounterReportPdf {
             case QUANTITY -> "Ilość";
             case COST -> "Zakup FIFO";
             case SALE -> basis == Basis.NET ? "Sprzedaż netto" : "Sprzedaż brutto";
-            case MARGIN -> "Marża zł";
-            case MARGIN_PERCENT -> "Marża %";
+            case MARGIN -> "Marża po likw. zł";
+            case MARGIN_PERCENT -> "Marża po likw. %";
             case SHARE -> "Udział %";
+            case LOSSES -> "Likwidacje";
         };
     }
 
@@ -396,6 +398,7 @@ public class CounterReportPdf {
             case MARGIN -> whole(figures.marginValue());
             case MARGIN_PERCENT -> percent(figures.marginPercent());
             case SHARE -> percent(figures.sharePercent());
+            case LOSSES -> whole(figures.lossValue());
         };
     }
 

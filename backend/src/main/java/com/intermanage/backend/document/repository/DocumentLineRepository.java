@@ -386,7 +386,9 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * przyjęcia albo ITM8 z linii przyjęcia) zmieniają ilość i wartość, a przyjęcie, do którego artykuł doszedł tylko
      * korektą (błąd sklepu: zamiana artykułu), też jest dostawą, gdy po korekcie ilość jest dodatnia. Kody MEA
      * z aktywnego dokumentu dostawy z bazy o numerze (Nr_Bl) równym nr dok. dostawcy przyjęcia, z linii tego samego
-     * ITM8 (w pliku 8 cyfr, więc bez zer wiodących).
+     * ITM8 (w pliku 8 cyfr, więc bez zer wiodących), a do tego z formularzy MEA: towar na gazetkę przychodzi pod ITM8
+     * promocyjnym z formularza, więc linia z tym ITM8 przyjęta między początkiem rezerwacji a końcem promocji to
+     * dostawa na to MEA (przy kilku MEA z tym ITM8 to z rozrzutem najbliższym dacie przyjęcia).
      */
     @Query(value = ARTICLE_EANS + """
             , lines as (
@@ -426,15 +428,33 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select delivery_id from fixed where quantity > 0
             )
             select d.id as document_id, d.number as document_number, d.document_date,
-                   (select string_agg(distinct bl.mea_code, ',' order by bl.mea_code)
-                    from base_deliveries b
-                    join base_delivery_lines bl on bl.delivery_id = b.id
-                    where b.store_id = :storeId and b.replaced_at is null and b.number = d.supplier_document_number
-                      and btrim(bl.mea_code) <> ''
-                      and ltrim(bl.itm8, '0') in (select ltrim(x.itm8, '0') from lines x where x.document_id = d.id
-                                                  union
-                                                  select ltrim(x.itm8, '0') from fix_lines x
-                                                  where x.delivery_id = d.id)) as mea_codes,
+                   (select string_agg(distinct code, ',' order by code)
+                    from (select btrim(bl.mea_code) as code
+                          from base_deliveries b
+                          join base_delivery_lines bl on bl.delivery_id = b.id
+                          where b.store_id = :storeId and b.replaced_at is null
+                            and b.number = d.supplier_document_number
+                            and btrim(bl.mea_code) <> ''
+                            and ltrim(bl.itm8, '0') in (select ltrim(x.itm8, '0') from lines x
+                                                        where x.document_id = d.id
+                                                        union
+                                                        select ltrim(x.itm8, '0') from fix_lines x
+                                                        where x.delivery_id = d.id)
+                          union
+                          select m.number
+                          from (select ltrim(x.itm8, '0') as itm8 from lines x where x.document_id = d.id
+                                union
+                                select ltrim(x.itm8, '0') from fix_lines x where x.delivery_id = d.id) a
+                          cross join lateral (
+                              select md.number
+                              from mea_document_lines ml
+                              join mea_documents md on md.id = ml.document_id
+                              where ml.mea_itm8 = a.itm8
+                                and cast(d.document_date as date)
+                                    between coalesce(md.reservation_from, md.promo_from - 45) and md.promo_to
+                              order by abs(cast(d.document_date as date)
+                                           - coalesce(md.dispatch_1, md.promo_from)) nulls last
+                              limit 1) m) codes) as mea_codes,
                    coalesce(r.supplier_code, f.supplier_code) as supplier_code,
                    coalesce(r.supplier_name, f.supplier_name) as supplier_name,
                    coalesce(r.quantity, 0) as quantity, coalesce(r.purchase_value, 0) as purchase_value,
@@ -534,6 +554,42 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<DocumentRepository.DayValue> sumGroupLossesByDay(UUID storeId, String prefix, boolean unassigned,
             String[] codes, LocalDate from, LocalDate to);
+
+    /** Likwidacje artykułu w podrodzinie (jak sprzedaż w raportach: z kartoteki, bez niej z linii). */
+    interface ArticleLoss {
+        String getItm8();
+
+        String getSubfamilyCode();
+
+        String getName();
+
+        String getBrand();
+
+        /** Wartość zakupu netto zlikwidowanego towaru, na plus. */
+        BigDecimal getLossValue();
+    }
+
+    /**
+     * Likwidacje (PL) po artykułach w okresie (wg daty dokumentu, oba końce włącznie) w pozycji nomenklatury
+     * {@code prefix}: podrodzina artykułu z kartoteki, a bez niego nomenklatura linii, więc trafiają tam, gdzie jego
+     * sprzedaż ({@code SaleRepository.sumGroupArticles}).
+     */
+    @Query(value = """
+            select l.itm8 as itm8, n.code as subfamily_code, max(coalesce(p.name, l.name)) as name,
+                   max(nullif(trim(coalesce(p.brand, l.brand)), '')) as brand,
+                   coalesce(-sum(l.purchase_value), 0) as loss_value
+            from document_lines l
+            join documents d on d.id = l.document_id and d.error_marked_at is null
+            left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+            cross join lateral (select coalesce(p.subfamily_code,
+                    nullif(replace(l.nomenclature_code, ' ', ''), '')) as code) n
+            where d.store_id = :storeId and d.type = 'PL'
+              and d.document_date >= cast(:from as timestamp)
+              and d.document_date < cast(:to as timestamp) + interval '1 day'
+              and n.code like :prefix || '%'
+            group by 1, 2
+            """, nativeQuery = true)
+    List<ArticleLoss> sumArticleLosses(UUID storeId, String prefix, LocalDate from, LocalDate to);
 
     /** Wartość zakupu linii jednego typu dokumentu w rejonie nomenklatury (pusty kod = linie bez nomenklatury). */
     interface RegionValue {

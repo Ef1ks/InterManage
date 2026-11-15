@@ -12,6 +12,7 @@ import {
   DatabaseIcon,
   DownloadIcon,
   HashIcon,
+  MegaphoneIcon,
   NewspaperIcon,
   PackageIcon,
   SettingsIcon,
@@ -27,6 +28,7 @@ import {
 import { hasPermission } from '@/features/auth/api'
 import { bakeryPath } from '@/features/bakery-check/paths'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { meaOnlinePath } from '@/features/mea/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
@@ -165,6 +167,14 @@ const GROUPS: GroupSpec[] = [
         label: 'Kody MEA',
         description: 'Kody MEA z dokumentów bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
         icon: HashIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
+      {
+        key: 'mea-online',
+        path: meaOnlinePath,
+        label: 'Moduł MEA',
+        description: 'Lista MEA z portalu Grupy Muszkieterów: gazetki i katalogi, okresy promocji i rezerwacji.',
+        icon: MegaphoneIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
     ],

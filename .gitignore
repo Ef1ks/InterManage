@@ -14,6 +14,8 @@ graphify-out/
 *.[xX][lL][sS]
 # Wzór CADBEZP z Impeka do testu ProductFileTests.sameBytesAsImpekFile
 !backend/src/test/resources/xls/cadbezp-impek.xls
+# Formularz MEA do testu MeaFormParserTests
+!backend/src/test/resources/xls/mea-81534.xls
 *.[xX][lL][sS][xX]
 *.[pP][dD][fF]
 *.[tT][rR][aA][iI][tT][eE]0

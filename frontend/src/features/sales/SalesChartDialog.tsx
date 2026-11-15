@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useCan } from '@/features/auth/api'
 import { bonNumber, documentPaths, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
+import { meaDocumentPath } from '@/features/mea/paths'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
 import { ArticleCodeFields, ArticleCodesCard } from '@/features/sales/ArticleCodes'
 import {
@@ -687,13 +688,39 @@ function ArticleFacts({
  * Ostatnie dostawy artykułu (przyjęcia PZ) od najnowszej: ilość i cena zakupu netto sztuki, przy cenie zmiana względem
  * poprzedniej dostawy (droższa na czerwono, tańsza na zielono). Numer bonu prowadzi do przyjęcia.
  */
+const promoDay = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit' })
+
+/** Gazetka, na którą przyszła dostawa: numer MEA (link do dokumentu), okres promocji, nazwa w podpowiedzi. */
+function MeaBadge({ mea, canOpen }: { mea: ArticleDelivery['mea'][number]; canOpen: boolean }) {
+  const period =
+    mea.promoFrom && mea.promoTo
+      ? `${promoDay.format(parseIsoDate(mea.promoFrom))}–${promoDay.format(parseIsoDate(mea.promoTo))}`
+      : null
+  const title = [`MEA ${mea.number}`, mea.title, period && `promocja ${period}`].filter(Boolean).join(' · ')
+  const pill = 'rounded bg-amber-200 px-1.5 font-semibold text-amber-950 dark:bg-amber-900 dark:text-amber-50'
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1 whitespace-nowrap" title={title}>
+      {canOpen ? (
+        <Link to={meaDocumentPath(mea.number)} className={cn(pill, 'underline-offset-4 hover:underline')}>
+          {mea.number}
+        </Link>
+      ) : (
+        <span className={pill}>{mea.number}</span>
+      )}
+      <CopyButton value={mea.number} label={`Kopiuj kod MEA ${mea.number}`} />
+      {period && <span className="text-xs text-muted-foreground">{period}</span>}
+    </span>
+  )
+}
+
 function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string }) {
   const deliveries = useArticleDeliveries(storeId, itm8)
   const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
+  const canOpenMea = useCan('DATA_ENTRY', 'VIEW')
   const list = deliveries.data
 
-  // Kolumna kodów MEA tylko, gdy któraś dostawa jest z bazy z kodem (towar spoza bazy by jej nie miał).
-  const withMea = list?.some((delivery) => delivery.meaCodes.length > 0) ?? false
+  // Kolumna gazetki tylko, gdy któraś dostawa przyszła na MEA (towar spoza bazy by jej nie miał).
+  const withMea = list?.some((delivery) => delivery.mea.length > 0) ?? false
 
   return (
     // min-w-0: element siatki okna nie może rozpychać go szerokością tabeli.
@@ -726,7 +753,7 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
             <colgroup>
               <col className="w-28" />
               <col className="w-20" />
-              {withMea && <col className="w-28" />}
+              {withMea && <col className="w-36" />}
               <col />
               <col className="w-20" />
               <col className="w-52" />
@@ -739,9 +766,9 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
                 {withMea && (
                   <th
                     className="px-3 py-2 text-left font-medium"
-                    title="Kod MEA z dostawy z bazy (Nr BL = nr dok. dostawcy przyjęcia)"
+                    title="Towar przyszedł na gazetkę: kod MEA z dostawy z bazy albo ITM8 promocyjny z formularza MEA"
                   >
-                    Kod MEA
+                    Gazetka MEA
                   </th>
                 )}
                 <th className="px-3 py-2 text-left font-medium">Dostawca</th>
@@ -771,13 +798,10 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
                   </td>
                   {withMea && (
                     <td className="px-3 py-1">
-                      {delivery.meaCodes.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-x-1">
-                          {delivery.meaCodes.map((code) => (
-                            <span key={code} className="inline-flex items-center whitespace-nowrap">
-                              {code}
-                              <CopyButton value={code} label={`Kopiuj kod MEA ${code}`} />
-                            </span>
+                      {delivery.mea.length > 0 ? (
+                        <div className="grid gap-0.5">
+                          {delivery.mea.map((mea) => (
+                            <MeaBadge key={mea.number} mea={mea} canOpen={canOpenMea} />
                           ))}
                         </div>
                       ) : (

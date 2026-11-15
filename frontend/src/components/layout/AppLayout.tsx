@@ -35,6 +35,7 @@ import { useCurrentUser, useLogout } from '@/features/auth/api'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
+import { useCurrentStore } from '@/features/stores/current-store'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
 import { THEME_LABELS, useThemeChoice, type ThemeChoice } from '@/lib/theme'
@@ -77,6 +78,12 @@ export function AppLayout() {
   }, [location.pathname, dispatch])
 
   useEffect(() => () => window.clearTimeout(hoverTimer.current), [])
+
+  // Tytuł karty: numer bieżącego sklepu, żeby przy kilku kartach było widać, która jest którym sklepem.
+  const currentStore = useCurrentStore()
+  useEffect(() => {
+    document.title = currentStore ? `${currentStore.number} - InterManage` : 'InterManage'
+  }, [currentStore])
 
   // Krótkie opóźnienie: przejechanie kursorem przy krawędzi okna nie rozwija menu.
   const onPointerEnter = (event: React.PointerEvent) => {

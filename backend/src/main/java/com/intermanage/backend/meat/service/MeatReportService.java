@@ -23,6 +23,8 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.service.DataEntryLinkService;
 import com.intermanage.backend.meat.dto.MeatReport;
 import com.intermanage.backend.meat.repository.MeatDeliveryRepository;
+import com.intermanage.backend.product.dto.ArticleLinks;
+import com.intermanage.backend.product.service.ArticleStoreLinkService;
 import com.intermanage.backend.store.dto.StoreSummary;
 import com.intermanage.backend.store.service.StoreService;
 
@@ -40,11 +42,14 @@ public class MeatReportService {
     private final MeatDeliveryRepository deliveries;
     private final StoreService storeService;
     private final AppUserRepository users;
+    private final ArticleStoreLinkService articleLinks;
 
-    public MeatReportService(MeatDeliveryRepository deliveries, StoreService storeService, AppUserRepository users) {
+    public MeatReportService(MeatDeliveryRepository deliveries, StoreService storeService, AppUserRepository users,
+            ArticleStoreLinkService articleLinks) {
         this.deliveries = deliveries;
         this.storeService = storeService;
         this.users = users;
+        this.articleLinks = articleLinks;
     }
 
     public enum Mode {
@@ -66,29 +71,36 @@ public class MeatReportService {
         List<StoreSummary> stores = stores(userId, storeIds);
         List<UUID> ids = stores.stream().map(StoreSummary::id).toList();
 
+        ArticleLinks links = articleLinks.between(ids);
         Map<String, RowData> rows = new LinkedHashMap<>();
         for (MeatDeliveryRepository.ReportLine line : deliveries.findReportLines(ids, from, to)) {
-            String article = line.getItm8() != null ? line.getItm8()
-                    : "WZ " + DataEntryLinkService.code(line.getDocumentName());
+            // Ten sam towar w innym sklepie ma często inny ITM8: połączenia artykułów sklepów dają wspólny wiersz.
+            String itm8 = links.key(line.getStoreId(), line.getItm8());
+            String article = itm8 != null ? itm8 : "WZ " + DataEntryLinkService.code(line.getDocumentName());
             LocalDate date = mode == Mode.SPLIT ? line.getDeliveryDate() : null;
             String key = date == null ? article : article + "|" + date;
-            RowData row = rows.computeIfAbsent(key, k -> new RowData(k, line.getItm8(),
+            RowData row = rows.computeIfAbsent(key, k -> new RowData(k, itm8,
                     line.getItm8() != null ? line.getName() : line.getDocumentName(),
                     line.getItm8() != null ? line.getBrand() : null, date));
             if (row.vatCode == null) {
                 row.vatCode = line.getVatCode();
             }
-            row.cell(line.getStoreId()).purchases.add(new Purchase(line.getDeliveryDate(), line.getUnitPrice()));
+            CellData cell = row.cell(line.getStoreId());
+            if (cell.purchases.isEmpty()) {
+                cell.itm8 = line.getItm8();
+                cell.name = line.getItm8() != null ? line.getName() : line.getDocumentName();
+            }
+            cell.purchases.add(new Purchase(line.getDeliveryDate(), line.getUnitPrice()));
         }
 
-        SalePrices prices = salePrices(rows.values(), ids, to);
+        SalePrices prices = salePrices(rows.values(), ids, to, links);
         List<MeatReport.Row> result = rows.values().stream()
                 .sorted(Comparator.comparing((RowData row) -> row.brand == null ? "￿" : row.brand)
                         .thenComparing(row -> Objects.toString(row.name, ""))
                         .thenComparing(row -> row.date, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(row -> new MeatReport.Row(row.key, row.itm8, row.name, row.brand, row.date,
                         vatPercent(row.vatCode),
-                        ids.stream().map(storeId -> cell(row, storeId, prices)).toList()))
+                        ids.stream().map(storeId -> cell(row, storeId, prices, links)).toList()))
                 .toList();
         return new MeatReport(from, to, mode.name(),
                 stores.stream().map(store -> new MeatReport.Store(store.id(), store.number(), store.name())).toList(),
@@ -109,22 +121,25 @@ public class MeatReportService {
         return selected;
     }
 
-    private MeatReport.Cell cell(RowData row, UUID storeId, SalePrices prices) {
+    private MeatReport.Cell cell(RowData row, UUID storeId, SalePrices prices, ArticleLinks links) {
         CellData data = row.cells.get(storeId);
         List<Purchase> purchases = data == null ? List.of() : data.purchases;
         BigDecimal purchase = average(purchases.stream().map(Purchase::price).toList());
+        String itm8 = storeItm8(row, storeId, links);
+        String name = data == null ? null : data.name;
+        UUID linkId = links.linkId(storeId, itm8);
         if (row.itm8 == null) {
-            return new MeatReport.Cell(storeId, purchase, purchases.size(), null, null, false);
+            return new MeatReport.Cell(storeId, purchase, purchases.size(), null, null, false, null, name, null);
         }
         if (purchases.isEmpty()) {
-            SalePrice last = prices.at(storeId, row.itm8, prices.lastDay(row));
+            SalePrice last = prices.at(storeId, itm8, prices.lastDay(row));
             return new MeatReport.Cell(storeId, null, 0, last == null ? null : last.price(),
-                    last == null ? null : last.date(), true);
+                    last == null ? null : last.date(), true, itm8, name, linkId);
         }
         List<BigDecimal> exact = new ArrayList<>();
         SalePrice latest = null;
         for (LocalDate day : new TreeSet<>(purchases.stream().map(Purchase::date).toList())) {
-            SalePrice price = prices.at(storeId, row.itm8, day);
+            SalePrice price = prices.at(storeId, itm8, day);
             if (price == null) {
                 continue;
             }
@@ -135,14 +150,28 @@ public class MeatReportService {
             }
         }
         if (!exact.isEmpty()) {
-            return new MeatReport.Cell(storeId, purchase, purchases.size(), average(exact), null, false);
+            return new MeatReport.Cell(storeId, purchase, purchases.size(), average(exact), null, false, itm8, name,
+                    linkId);
         }
         return new MeatReport.Cell(storeId, purchase, purchases.size(), latest == null ? null : latest.price(),
-                latest == null ? null : latest.date(), true);
+                latest == null ? null : latest.date(), true, itm8, name, linkId);
+    }
+
+    /** Artykuł sklepu w wierszu: z jego WZ, z połączenia, a bez nich ITM8 wiersza (ten sam we wszystkich sklepach). */
+    private static String storeItm8(RowData row, UUID storeId, ArticleLinks links) {
+        if (row.itm8 == null) {
+            return null;
+        }
+        CellData data = row.cells.get(storeId);
+        if (data != null && data.itm8 != null) {
+            return data.itm8;
+        }
+        String member = links.member(row.itm8, storeId);
+        return member != null ? member : row.itm8;
     }
 
     /** Ceny sprzedaży potrzebne w raporcie, jednym zapytaniem: dni dostaw i dzień, na który bierzemy ostatnią znaną. */
-    private SalePrices salePrices(Iterable<RowData> rows, List<UUID> storeIds, LocalDate to) {
+    private SalePrices salePrices(Iterable<RowData> rows, List<UUID> storeIds, LocalDate to, ArticleLinks links) {
         SalePrices prices = new SalePrices(to);
         List<UUID> stores = new ArrayList<>();
         List<String> itm8s = new ArrayList<>();
@@ -153,13 +182,14 @@ public class MeatReportService {
                 continue;
             }
             for (UUID storeId : storeIds) {
+                String itm8 = storeItm8(row, storeId, links);
                 CellData data = row.cells.get(storeId);
                 List<LocalDate> wanted = data == null ? List.of(prices.lastDay(row))
                         : data.purchases.stream().map(Purchase::date).distinct().toList();
                 for (LocalDate day : wanted) {
-                    if (seen.add(SalePrices.key(storeId, row.itm8, day))) {
+                    if (seen.add(SalePrices.key(storeId, itm8, day))) {
                         stores.add(storeId);
-                        itm8s.add(row.itm8);
+                        itm8s.add(itm8);
                         days.add(day);
                     }
                 }
@@ -251,6 +281,8 @@ public class MeatReportService {
     }
 
     private static final class CellData {
+        String itm8;
+        String name;
         final List<Purchase> purchases = new ArrayList<>();
     }
 }

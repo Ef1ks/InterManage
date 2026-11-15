@@ -182,7 +182,7 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
             <Pressable
               key={item.key}
               onPress={() => {
-                void Haptics.selectionAsync()
+                void Haptics.selectionAsync().catch(() => undefined)
                 item.onPress()
               }}
               accessibilityRole="tab"

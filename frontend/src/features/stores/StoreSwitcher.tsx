@@ -47,7 +47,7 @@ export function StoreSwitcher() {
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} sideOffset={6} className="min-w-(--anchor-width)">
         {me.stores.map((store) => (
-          <SelectItem key={store.id} value={store.id} className="gap-3 px-3 py-2.5">
+          <SelectItem key={store.id} value={store.id} className="gap-3 py-2.5 pr-9 pl-3">
             <span className="tabular-nums text-muted-foreground">{store.number}</span>
             <span className="truncate">{store.name}</span>
           </SelectItem>

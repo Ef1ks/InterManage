@@ -1,12 +1,14 @@
-import { useMemo } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronLeftIcon, ChevronRightIcon, Link2Icon } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 
 import { DateField, MultiComboboxField, SegmentedField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useMe } from '@/features/auth/api'
+import { ArticleLinkDialog, type LinkItem } from '@/features/article-links/ArticleLinkDialog'
+import { shortItm8 } from '@/features/article-links/format'
+import { useCan, useMe } from '@/features/auth/api'
 import { useMeatReport } from '@/features/meat/api'
 import { formatPercent, formatPrice, margin } from '@/features/meat/format'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
@@ -118,7 +120,7 @@ export function MeatReportView({ store }: { store: StoreSummary }) {
           W tym okresie żaden sklep nie wprowadził dokumentu WZ.
         </p>
       )}
-      {report.data && report.data.rows.length > 0 && <ReportTables report={report.data} />}
+      {report.data && report.data.rows.length > 0 && <ReportTables storeId={store.id} report={report.data} />}
     </div>
   )
 }
@@ -182,13 +184,83 @@ const TABLES: { kind: Kind; title: string; legend: [string, string]; note: strin
   },
 ]
 
-function ReportTables({ report }: { report: MeatReport }) {
+function ReportTables({ storeId, report }: { storeId: string; report: MeatReport }) {
+  const canLink = useCan('MEAT_PURCHASES', 'EDIT')
+  const [linking, setLinking] = useState<MeatReportRow | null>(null)
   return (
     <div className="space-y-8">
       {TABLES.map((table) => (
-        <ReportTable key={table.kind} report={report} {...table} />
+        <ReportTable key={table.kind} report={report} canLink={canLink} onLink={setLinking} {...table} />
       ))}
+      {linking && (
+        <MeatLinkDialog
+          storeId={storeId}
+          report={report}
+          row={linking}
+          canEdit={canLink}
+          onClose={() => setLinking(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/** Sklep kupił artykuł w okresie (tylko wtedy jego komórka mówi, który to artykuł). */
+const purchased = (cell: MeatReportCell) => cell.purchasePrice != null
+
+/** Wiersz można połączyć, gdy któryś sklep go nie kupił, a połączony ma zawsze widoczną ikonę. */
+function linkState(report: MeatReport, row: MeatReportRow) {
+  const linked = row.cells.some((cell) => cell.linkId != null)
+  const missing = report.stores.length > 1 && row.cells.some((cell) => !purchased(cell))
+  return { linked, missing }
+}
+
+/** Okno łączenia dla wiersza porównania: źródłem jest artykuł pierwszego sklepu, który go kupił. */
+function MeatLinkDialog({
+  storeId,
+  report,
+  row,
+  canEdit,
+  onClose,
+}: {
+  storeId: string
+  report: MeatReport
+  row: MeatReportRow
+  canEdit: boolean
+  onClose: () => void
+}) {
+  const from = Math.max(0, row.cells.findIndex(purchased))
+  const source = row.cells[from]
+  const targets = report.stores.flatMap((store, index) => {
+    if (index === from || purchased(row.cells[index])) return []
+    const seen = new Set<string>()
+    const candidates: LinkItem[] = []
+    for (const other of report.rows) {
+      const cell = other.cells[index]
+      if (other.itm8 == null || !purchased(cell) || purchased(other.cells[from]) || !cell.itm8) continue
+      if (seen.has(cell.itm8)) continue
+      seen.add(cell.itm8)
+      candidates.push({ itm8: cell.itm8, name: cell.name ?? other.name, brand: other.brand })
+    }
+    return [{ store, candidates }]
+  })
+  return (
+    <ArticleLinkDialog
+      storeId={storeId}
+      open
+      onOpenChange={(open) => !open && onClose()}
+      canEdit={canEdit}
+      source={{
+        store: report.stores[from],
+        item: { itm8: source.itm8 ?? row.itm8!, name: source.name ?? row.name, brand: row.brand },
+      }}
+      linked={row.cells.flatMap((cell, index) =>
+        index !== from && cell.linkId && cell.itm8
+          ? [{ store: report.stores[index], item: { itm8: cell.itm8, name: cell.name }, linkId: cell.linkId }]
+          : [],
+      )}
+      targets={targets}
+    />
   )
 }
 
@@ -201,8 +273,12 @@ function ReportTable({
   title,
   legend,
   note,
+  canLink,
+  onLink,
 }: {
   report: MeatReport
+  canLink: boolean
+  onLink: (row: MeatReportRow) => void
   kind: Kind
   title: string
   legend: [string, string]
@@ -246,7 +322,7 @@ function ReportTable({
               const min = numbers.length > 1 ? Math.min(...numbers) : null
               const max = numbers.length > 1 ? Math.max(...numbers) : null
               return (
-                <TableRow key={row.key}>
+                <TableRow key={row.key} className="group">
                   <TableCell className="font-medium">
                     {row.name ?? '–'}
                     {row.itm8 == null ? (
@@ -257,6 +333,7 @@ function ReportTable({
                         className="ml-1"
                       />
                     )}
+                    {row.itm8 != null && <LinkButton report={report} row={row} canLink={canLink} onLink={onLink} />}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{row.brand ?? '–'}</TableCell>
                   {split && (
@@ -308,6 +385,45 @@ function ReportTable({
         </Table>
       </div>
     </section>
+  )
+}
+
+function LinkButton({
+  report,
+  row,
+  canLink,
+  onLink,
+}: {
+  report: MeatReport
+  row: MeatReportRow
+  canLink: boolean
+  onLink: (row: MeatReportRow) => void
+}) {
+  const { linked, missing } = linkState(report, row)
+  if (!linked && !(canLink && missing)) return null
+  const others = row.cells
+    .map((cell, index) =>
+      cell.linkId && cell.itm8
+        ? `${report.stores[index].name}: ${cell.name ?? shortItm8(cell.itm8)} (${shortItm8(cell.itm8)})`
+        : null,
+    )
+    .filter(Boolean)
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      aria-label={linked ? 'Połączony z artykułem innego sklepu' : 'Połącz z artykułem innego sklepu'}
+      title={linked ? `Połączony:\n${others.join('\n')}` : 'Połącz z tym samym towarem w innym sklepie'}
+      onClick={() => onLink(row)}
+      className={cn(
+        'ml-1',
+        linked
+          ? 'text-sky-700 dark:text-sky-300'
+          : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+      )}
+    >
+      <Link2Icon />
+    </Button>
   )
 }
 

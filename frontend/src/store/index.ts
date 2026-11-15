@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import baseDeliveryDraftReducer, { persistBaseDeliveryDrafts } from './baseDeliveryDraftSlice'
 import dataEntryDraftReducer, { persistDataEntryDrafts } from './dataEntryDraftSlice'
 import deliOrderDraftReducer, { persistDrafts } from './deliOrderDraftSlice'
+import meaOrderDraftReducer, { persistMeaOrderDrafts } from './meaOrderDraftSlice'
 import protocolEntryDraftReducer, { persistProtocolEntryDrafts } from './protocolEntryDraftSlice'
 import promoSetupDraftReducer, { persistPromoSetup } from './promoSetupDraftSlice'
 import uiReducer from './uiSlice'
@@ -16,6 +17,7 @@ export const store = configureStore({
     baseDeliveryDraft: baseDeliveryDraftReducer,
     promoSetupDraft: promoSetupDraftReducer,
     protocolEntryDraft: protocolEntryDraftReducer,
+    meaOrderDraft: meaOrderDraftReducer,
   },
 })
 
@@ -65,6 +67,16 @@ store.subscribe(() => {
   if (state !== savedPromoSetup) {
     savedPromoSetup = state
     persistPromoSetup(state)
+  }
+})
+
+// Ilości wpisane w dokumentach MEA też.
+let savedMeaOrder = store.getState().meaOrderDraft
+store.subscribe(() => {
+  const state = store.getState().meaOrderDraft
+  if (state !== savedMeaOrder) {
+    savedMeaOrder = state
+    persistMeaOrderDrafts(state)
   }
 })
 

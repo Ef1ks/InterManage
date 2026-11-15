@@ -2,13 +2,16 @@ package com.intermanage.backend.sales.mapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
+import com.intermanage.backend.mea.entity.MeaDocument;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
@@ -47,7 +50,8 @@ public interface SalesMapper {
     ZeroStockReport.Item toZeroStockItem(Product product);
 
     /** Ilość, cena i wartość po korektach; z bonu tylko, gdy korekty coś w nich zmieniły. */
-    default ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery) {
+    default ArticleDeliveryResponse toDelivery(DocumentLineRepository.ArticleDelivery delivery,
+            Map<String, MeaDocument> mea) {
         BigDecimal quantity = delivery.getCorrectedQuantity();
         BigDecimal value = delivery.getCorrectedValue();
         BigDecimal originalQuantity = delivery.getQuantity();
@@ -59,7 +63,15 @@ public interface SalesMapper {
                 changed ? originalQuantity : null,
                 changed ? unitPrice(originalValue, originalQuantity) : null,
                 changed ? originalValue : null,
-                delivery.getMeaCodes() == null ? List.of() : List.of(delivery.getMeaCodes().split(",")));
+                delivery.getMeaCodes() == null ? List.of() : List.of(delivery.getMeaCodes().split(",")),
+                delivery.getMeaCodes() == null ? List.of()
+                        : Arrays.stream(delivery.getMeaCodes().split(",")).map(code -> {
+                            MeaDocument document = mea.get(code);
+                            return document == null
+                                    ? new ArticleDeliveryResponse.Mea(code, null, null, null)
+                                    : new ArticleDeliveryResponse.Mea(code, document.getTitle(),
+                                            document.getPromoFrom(), document.getPromoTo());
+                        }).toList());
     }
 
     @Mapping(target = "label", expression = "java(protocolLabel(protocol))")

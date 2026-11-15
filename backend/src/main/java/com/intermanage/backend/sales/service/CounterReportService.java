@@ -3,6 +3,7 @@ package com.intermanage.backend.sales.service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -23,8 +24,12 @@ import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.Percent;
 import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.repository.DocumentLineRepository;
+import com.intermanage.backend.document.repository.DocumentLineRepository.ArticleLoss;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
+import com.intermanage.backend.product.dto.ArticleLinks;
+import com.intermanage.backend.product.service.ArticleStoreLinkService;
 import com.intermanage.backend.sales.component.CounterReportPdf;
 import com.intermanage.backend.sales.dto.CounterReport;
 import com.intermanage.backend.sales.dto.CounterReport.Article;
@@ -48,8 +53,8 @@ import com.intermanage.backend.store.service.StoreService;
  * sklepu, według rejonów, rodzin, podrodzin i artykułów.
  * <p>
  * Porównać można sklepy, do których użytkownik ma dostęp, i sklepy zaprzyjaźnione z bieżącym; najwyżej
- * {@value #MAX_STORES} naraz, bieżący zawsze pierwszy. Artykuły łączą się po ITM8, więc lokalne kody {@code 99…}
- * innych sklepów są osobnymi wierszami.
+ * {@value #MAX_STORES} naraz, bieżący zawsze pierwszy. Artykuły łączą się po ITM8 i po połączeniach z
+ * {@link ArticleStoreLinkService} (lokalne kody {@code 99…} każdego sklepu są inne).
  */
 @Service
 public class CounterReportService {
@@ -67,10 +72,12 @@ public class CounterReportService {
     private final StoreService storeService;
     private final AppUserRepository users;
     private final CounterReportPdf pdf;
+    private final ArticleStoreLinkService articleLinks;
+    private final DocumentLineRepository documentLines;
 
     public CounterReportService(SaleRepository sales, NomenclatureRepository nomenclatures, StoreRepository stores,
             StorePartnerRepository partners, StoreService storeService, AppUserRepository users,
-            CounterReportPdf pdf) {
+            CounterReportPdf pdf, ArticleStoreLinkService articleLinks, DocumentLineRepository documentLines) {
         this.sales = sales;
         this.nomenclatures = nomenclatures;
         this.stores = stores;
@@ -78,6 +85,8 @@ public class CounterReportService {
         this.storeService = storeService;
         this.users = users;
         this.pdf = pdf;
+        this.articleLinks = articleLinks;
+        this.documentLines = documentLines;
     }
 
     /** Sklepy do porównania z bieżącym: dostępne użytkownikowi, potem zaprzyjaźnione (bez bieżącego). */
@@ -112,6 +121,7 @@ public class CounterReportService {
 
         sales.tuneForReport();
         List<List<ArticleSales>> perStore = new ArrayList<>();
+        List<List<ArticleLoss>> lossesPerStore = new ArrayList<>();
         List<CounterReport.Store> shown = new ArrayList<>();
         Map<String, String> names = new HashMap<>();
         for (UUID id : ids) {
@@ -121,6 +131,11 @@ public class CounterReportService {
                 articles.addAll(sales.sumGroupArticles(id, from, to, code));
             }
             perStore.add(articles);
+            List<ArticleLoss> losses = new ArrayList<>();
+            for (String code : codes) {
+                losses.addAll(documentLines.sumArticleLosses(id, code, from, to));
+            }
+            lossesPerStore.add(losses);
             shown.add(new CounterReport.Store(id, store.getNumber(), store.getName(),
                     sales.findCoverage(id).getLastDate()));
             for (Nomenclature item : nomenclatures.findAllByStore(id)) {
@@ -129,7 +144,7 @@ public class CounterReportService {
                 }
             }
         }
-        return build(from, to, codes, names, shown, perStore);
+        return build(from, to, codes, names, shown, perStore, lossesPerStore, articleLinks.between(ids));
     }
 
     /** Wydruk (PDF) z wybranymi miarami; artykuły tylko na życzenie, bo wydłużają wydruk do kilku stron. */
@@ -176,13 +191,44 @@ public class CounterReportService {
         return List.copyOf(ids);
     }
 
+    /**
+     * Drzewo raportu. Wiersz artykułu ma klucz z {@code links} (ten sam ITM8 albo połączone artykuły sklepów), a
+     * stoi w podrodzinie artykułu pierwszego sklepu, który go sprzedał, więc połączony towar sąsiada z inną
+     * nomenklaturą nie robi drugiego wiersza.
+     */
     public static CounterReport build(LocalDate from, LocalDate to, List<String> codes, Map<String, String> names,
-            List<CounterReport.Store> shown, List<List<ArticleSales>> perStore) {
+            List<CounterReport.Store> shown, List<List<ArticleSales>> perStore, ArticleLinks links) {
+        return build(from, to, codes, names, shown, perStore, shown.stream().map(store -> List.<ArticleLoss>of()).toList(),
+                links);
+    }
+
+    /**
+     * Jak wyżej, z likwidacjami (PL) każdego sklepu: odejmują się od marży pozycji, a artykuł zlikwidowany bez
+     * sprzedaży w okresie też ma wiersz (marża na minusie).
+     */
+    public static CounterReport build(LocalDate from, LocalDate to, List<String> codes, Map<String, String> names,
+            List<CounterReport.Store> shown, List<List<ArticleSales>> perStore, List<List<ArticleLoss>> losses,
+            ArticleLinks links) {
         int count = shown.size();
+        Map<String, String> subfamilies = new HashMap<>();
+        for (int store = 0; store < count; store++) {
+            UUID storeId = shown.get(store).id();
+            for (ArticleSales sale : perStore.get(store)) {
+                subfamilies.putIfAbsent(links.key(storeId, sale.getItm8()), sale.getSubfamilyCode());
+            }
+        }
+        for (int store = 0; store < count; store++) {
+            UUID storeId = shown.get(store).id();
+            for (ArticleLoss loss : losses.get(store)) {
+                subfamilies.putIfAbsent(links.key(storeId, loss.getItm8()), loss.getSubfamilyCode());
+            }
+        }
         Node total = new Node(count, null, null);
         for (int store = 0; store < count; store++) {
+            UUID storeId = shown.get(store).id();
             for (ArticleSales sale : perStore.get(store)) {
-                String subfamily = sale.getSubfamilyCode();
+                String key = links.key(storeId, sale.getItm8());
+                String subfamily = subfamilies.get(key);
                 Node node = total;
                 node.add(store, sale);
                 for (int length : new int[] {2, 4, 6}) {
@@ -190,7 +236,23 @@ public class CounterReportService {
                     node = node.child(code, count, null, null);
                     node.add(store, sale);
                 }
-                node.child(sale.getItm8(), count, sale.getName(), sale.getBrand()).add(store, sale);
+                Node article = node.child(key, count, sale.getName(), sale.getBrand());
+                article.add(store, sale);
+                article.source(store, sale.getItm8(), sale.getName(), links.linkId(storeId, sale.getItm8()));
+            }
+            for (ArticleLoss loss : losses.get(store)) {
+                String key = links.key(storeId, loss.getItm8());
+                String subfamily = subfamilies.get(key);
+                Node node = total;
+                node.addLoss(store, loss.getLossValue());
+                for (int length : new int[] {2, 4, 6}) {
+                    String code = subfamily.length() > length ? subfamily.substring(0, length) : subfamily;
+                    node = node.child(code, count, null, null);
+                    node.addLoss(store, loss.getLossValue());
+                }
+                Node article = node.child(key, count, loss.getName(), loss.getBrand());
+                article.addLoss(store, loss.getLossValue());
+                article.source(store, loss.getItm8(), loss.getName(), links.linkId(storeId, loss.getItm8()));
             }
         }
         List<Region> regions = total.sortedByCode().stream()
@@ -205,7 +267,8 @@ public class CounterReportService {
                                                                         .reversed())
                                                                 .map(article -> new Article(article.code,
                                                                         article.name, article.brand,
-                                                                        article.figures(total)))
+                                                                        article.figures(total),
+                                                                        Arrays.asList(article.sources)))
                                                                 .toList()))
                                                 .toList()))
                                 .toList()))
@@ -220,6 +283,7 @@ public class CounterReportService {
         final String name;
         final String brand;
         final Sum[] stores;
+        final CounterReport.Source[] sources;
         final Map<String, Node> children = new HashMap<>();
 
         Node(int count, String code, String name) {
@@ -231,6 +295,21 @@ public class CounterReportService {
             this.name = name;
             this.brand = brand;
             this.stores = new Sum[count];
+            this.sources = new CounterReport.Source[count];
+        }
+
+        /** Pierwszy artykuł sklepu w wierszu (przy połączeniu łańcuchowym sklep może mieć dwa: sumy łączą oba). */
+        void source(int store, String itm8, String name, UUID linkId) {
+            if (sources[store] == null) {
+                sources[store] = new CounterReport.Source(itm8, name, linkId);
+            }
+        }
+
+        void addLoss(int store, BigDecimal value) {
+            if (stores[store] == null) {
+                stores[store] = new Sum();
+            }
+            stores[store].loss = stores[store].loss.add(value);
         }
 
         Node child(String code, int count, String name, String brand) {
@@ -268,10 +347,11 @@ public class CounterReportService {
             for (int store = 0; store < stores.length; store++) {
                 Sum sum = stores[store];
                 Sum whole = total.stores[store];
+                BigDecimal margin = sum == null ? null : sum.margin.subtract(sum.loss);
                 result.add(sum == null ? null
-                        : new Figures(sum.quantity, sum.cost, sum.gross, sum.net, sum.margin,
-                                Percent.of(sum.margin, sum.gross),
-                                whole == null ? null : Percent.of(sum.gross, whole.gross)));
+                        : new Figures(sum.quantity, sum.cost, sum.gross, sum.net, margin,
+                                Percent.of(margin, sum.gross),
+                                whole == null ? null : Percent.of(sum.gross, whole.gross), sum.loss));
             }
             return result;
         }
@@ -283,5 +363,6 @@ public class CounterReportService {
         BigDecimal gross = BigDecimal.ZERO;
         BigDecimal net = BigDecimal.ZERO;
         BigDecimal margin = BigDecimal.ZERO;
+        BigDecimal loss = BigDecimal.ZERO;
     }
 }

@@ -335,6 +335,54 @@ class SalesReportIntegrationTests {
     }
 
     @Test
+    void marksDeliveryOfMeaPromoItm8AsLeaflet() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        String article = insertProduct(storeId, productImport, "SER CAMEMBERT 240G", "26 01 01");
+        jdbc.update("update products set ean = '3410280010564' where store_id = ?::uuid and itm8 = ?",
+                storeId, article);
+        // Formularz MEA (wspólny dla sieci): towar na gazetkę ma własny ITM8 promocyjny.
+        String number = String.valueOf(90000 + (int) (Math.random() * 9999));
+        String promoItm8 = String.valueOf(61000000 + (int) (Math.random() * 999999));
+        String mea = jdbc.queryForObject("""
+                insert into mea_documents (number, title, promo_from, promo_to, reservation_from, reservation_to,
+                    dispatch_1, file_path, line_count, fetched_at, attempts)
+                values (?, 'MEA FRANCJA T51', date '2026-12-17', date '2026-12-23', date '2026-11-13',
+                    date '2026-11-17', date '2026-12-14', 'x.xls', 1, now(), 1) returning id""", String.class,
+                number);
+        jdbc.update("""
+                insert into mea_document_lines (document_id, lp, mea_itm8, ean, name)
+                values (?::uuid, 1, ?, '3410280010564', 'SER CAMEMBERT')""", mea, promoItm8);
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-12-20 08:00:00', date '2026-01-01',
+                    date '2026-12-19', 2, 2, 2, 0, 0) returning id""", String.class, storeId);
+        String padded = "0".repeat(13 - promoItm8.length()) + promoItm8;
+        String forLeaflet = insertDocument(storeId, documentImport, "PZ", "1000300", "2026-12-14 10:00");
+        insertDeliveryLine(forLeaflet, 1, padded, "30", "180.90");
+        // Ten sam ITM8 poza okresem MEA to nie dostawa na gazetkę.
+        String outside = insertDocument(storeId, documentImport, "PZ", "1000400", "2026-03-02 10:00");
+        insertDeliveryLine(outside, 1, padded, "30", "180.90");
+        jdbc.update("update document_lines set ean = '3410280010564' where document_id in (?::uuid, ?::uuid)",
+                forLeaflet, outside);
+
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/deliveries").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].documentId").value(forLeaflet))
+                .andExpect(jsonPath("$[0].meaCodes[0]").value(number))
+                .andExpect(jsonPath("$[0].mea[0].title").value("MEA FRANCJA T51"))
+                .andExpect(jsonPath("$[0].mea[0].promoFrom").value("2026-12-17"))
+                .andExpect(jsonPath("$[1].documentId").value(outside))
+                .andExpect(jsonPath("$[1].meaCodes.length()").value(0));
+    }
+
+    @Test
     void listsArticleProtocolsWithoutDeliveriesAndCorrections() throws Exception {
         Cookie owner = login();
         String storeId = createStore(owner);
