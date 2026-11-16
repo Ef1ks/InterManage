@@ -4,6 +4,7 @@ import {
   CalendarDaysIcon,
   FileOutputIcon,
   ListPlusIcon,
+  RotateCcwIcon,
   ScanBarcodeIcon,
   Trash2Icon,
   WandSparklesIcon,
@@ -16,13 +17,14 @@ import { DateField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Card } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { parseNumber } from '@/features/data-entry/grid-values'
 import { formatDocumentDate, formatMoney, formatPercent, formatPrice } from '@/features/documents/format'
 import { cn } from '@/lib/utils'
 import type { PromoMode, PromoRow, PromoTile } from '@/store/promoSetupDraftSlice'
 
-import { hasPeriod, pastedCodes, promoMargin, rowEndError } from './promo-rows'
+import { hasPeriod, macroRows, pastedCodes, promoMargin, rowEndError } from './promo-rows'
 
 const NO_DISCOUNT = 'brak'
 
@@ -59,6 +61,8 @@ type Props = {
   /** Tryb makra: powód, dla którego nie da się jeszcze ustawić promocji ({@code null} = można). */
   createBlocked?: string | null
   onCreate?: () => void
+  /** Tryb makra: makro od artykułu o tym numerze (od 0), gdy poprzednie stanęło na błędzie. */
+  onResume?: (from: number) => void
 }
 
 /**
@@ -77,6 +81,7 @@ export function PromoTileCard(props: Props) {
       ? String(common)
       : null
   const levelItems = levels.map((level) => ({ value: String(level), label: levelLabel(level) }))
+  const [resumeOpen, setResumeOpen] = useState(false)
 
   return (
     <Card className="gap-3 px-4 py-4">
@@ -189,10 +194,23 @@ export function PromoTileCard(props: Props) {
             </SelectContent>
           </Select>
         )}
+        {macro && props.onResume && (
+          <Button
+            variant="outline"
+            size="lg"
+            className="ml-auto"
+            disabled={Boolean(props.createBlocked)}
+            title="Makro stanęło na błędzie? Wznów od artykułu, na którym się zatrzymało"
+            onClick={() => setResumeOpen(true)}
+          >
+            <RotateCcwIcon />
+            Wznów od…
+          </Button>
+        )}
         {macro ? (
           <Button
             size="lg"
-            className="ml-auto"
+            className={cn(!props.onResume && 'ml-auto')}
             disabled={!props.onCreate || Boolean(props.createBlocked)}
             title={props.createBlocked ?? undefined}
             onClick={props.onCreate}
@@ -220,6 +238,17 @@ export function PromoTileCard(props: Props) {
         <p className="text-xs text-muted-foreground">
           Dodaj automatyczne przeceny pod kafelkami, żeby wybierać obniżkę.
         </p>
+      )}
+      {props.onResume && (
+        <ResumeDialog
+          open={resumeOpen}
+          rows={macroRows(tile)}
+          onOpenChange={setResumeOpen}
+          onPick={(from) => {
+            setResumeOpen(false)
+            props.onResume?.(from)
+          }}
+        />
       )}
     </Card>
   )
@@ -359,6 +388,71 @@ function Row({
         </Button>
       </td>
     </tr>
+  )
+}
+
+/**
+ * Wznowienie makra po błędzie: lista artykułów w kolejności makra, klik kopiuje makro od wybranego. Mercalys zostaje na
+ * wpisywaniu artykułów tej samej operacji, więc nic nie zakłada się od nowa.
+ */
+function ResumeDialog({
+  open,
+  rows,
+  onOpenChange,
+  onPick,
+}: {
+  open: boolean
+  rows: PromoRow[]
+  onOpenChange: (open: boolean) => void
+  onPick: (from: number) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Wznów makro od artykułu</DialogTitle>
+          <DialogDescription>
+            Wybierz artykuł, na którym makro stanęło (EAN z komunikatu błędu albo pierwszy, którego nie ma w operacji w
+            Mercalys). Makro wróci do Mercalys i wpisze artykuły od niego do końca. Mercalys musi stać na wpisywaniu
+            artykułów tej promocji.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-muted text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="w-10 px-2 py-1.5 text-right font-medium">Lp.</th>
+                <th className="w-32 px-2 py-1.5 font-medium">EAN</th>
+                <th className="px-2 py-1.5 font-medium">Nazwa</th>
+                <th className="w-20 px-2 py-1.5 text-right font-medium">Cena</th>
+                <th className="w-20 px-2 py-1.5 font-medium">Koniec</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((row, index) => (
+                <tr
+                  key={row.id}
+                  tabIndex={0}
+                  className="cursor-pointer transition-colors duration-100 hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+                  onClick={() => onPick(index)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') onPick(index)
+                  }}
+                >
+                  <td className="px-2 py-1 text-right tabular-nums">{index + 1}</td>
+                  <td className="px-2 py-1 tabular-nums">{row.article?.ean}</td>
+                  <td className="max-w-0 truncate px-2 py-1" title={row.article?.name ?? undefined}>
+                    {row.article?.name}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums">{formatMoney(row.price)}</td>
+                  <td className="px-2 py-1 tabular-nums">{row.dateTo ? shortDate(row.dateTo) : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

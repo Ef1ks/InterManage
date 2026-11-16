@@ -78,7 +78,25 @@ export function macroPathError(kind: MacroReport, path: string, mask: string): s
     return `Nazwa pliku musi kończyć się na ${REPORT_EXTENSIONS[kind].join(' albo ')}`
   if (mask.trim() && !maskPattern(mask).test(name.slice(0, dot)))
     return `Nazwa nie pasuje do maski „${mask.trim()}”, więc „Odśwież dane” pominie ten plik`
+  if (PERIOD_REPORTS.includes(kind) && mask.trim() && !maskPattern(mask).test(partName(name.slice(0, dot), 1, 2)))
+    return `Maska „${mask.trim()}” nie przepuści części zaległego okresu (np. „${partName(name.slice(0, dot), 1, 2)}”), dopisz * na końcu`
   return null
+}
+
+/**
+ * Raporty z okresem, którego Mercalys nie wydrukuje naraz ponad limit (miesiące): przy dłuższej zaległości makro
+ * drukuje je w częściach, a „Odśwież dane” wgrywa wszystkie nowe pliki po kolei.
+ */
+export const PERIOD_REPORT_MONTHS: Partial<Record<MacroReport, number>> = { SALES: 6, DOCUMENTS: 3 }
+const PERIOD_REPORTS = Object.keys(PERIOD_REPORT_MONTHS) as MacroReport[]
+
+const partName = (base: string, part: number, parts: number) => `${base} ${part} z ${parts}`
+
+/** Ścieżka części okresu („sprzedaz 1 z 3.xlsx”); ostatnia, najnowsza część ma ścieżkę z ustawień. */
+export function partPath(path: string, part: number, parts: number) {
+  if (part === parts) return path
+  const dot = path.lastIndexOf('.')
+  return `${partName(path.slice(0, dot), part, parts)}${path.slice(dot)}`
 }
 
 /** Numery wydruków ustawialnych (Baza danych) albo list artykułów (Obecne w cadencier) w Mercalys. */
@@ -164,6 +182,25 @@ function maskPattern(mask: string) {
 
 /** Najnowszy (po dacie zmiany) plik raportu w jego folderze; podfolderów nie przeszukuje. */
 export async function newestReportFile(storeId: string, kind: DailyReport, mask: string): Promise<File | null> {
+  const files = await reportFiles(storeId, kind, mask)
+  return files.length > 0 ? files[files.length - 1] : null
+}
+
+/**
+ * Pliki do wgrania przy odświeżeniu, od najstarszego: raport z okresem (sprzedaż, dokumenty) bierze wszystkie nowsze
+ * niż ostatnie wgranie, bo makro zapisuje zaległość w częściach; pozostałe tylko najnowszy.
+ */
+export async function newReportFiles(storeId: string, kind: DailyReport, mask: string, since: number) {
+  const files = await reportFiles(storeId, kind, mask)
+  const fresh = files.filter((file) => file.lastModified > since)
+  return {
+    newest: files.length > 0 ? files[files.length - 1] : null,
+    files: (PERIOD_REPORTS as string[]).includes(kind) ? fresh : fresh.slice(-1),
+  }
+}
+
+/** Pliki raportu w jego folderze od najstarszego (po dacie zmiany); podfolderów nie przeszukuje. */
+async function reportFiles(storeId: string, kind: DailyReport, mask: string): Promise<File[]> {
   const extensions = REPORT_EXTENSIONS[kind]
   const pattern = maskPattern(mask)
   const handles = await listFolderFiles(sourceFolderKey(storeId, kind), (name) => {
@@ -172,10 +209,10 @@ export async function newestReportFile(storeId: string, kind: DailyReport, mask:
     // Pliki tymczasowe Excela (~$Raport.xlsx) leżą obok otwartego pliku.
     return !name.startsWith('~$') && pattern.test(name.slice(0, dot))
   })
-  let newest: File | null = null
+  const files: File[] = []
   for (const handle of handles) {
     const file = await handle.getFile().catch(() => null)
-    if (file && (!newest || file.lastModified > newest.lastModified)) newest = file
+    if (file) files.push(file)
   }
-  return newest
+  return files.sort((a, b) => a.lastModified - b.lastModified)
 }

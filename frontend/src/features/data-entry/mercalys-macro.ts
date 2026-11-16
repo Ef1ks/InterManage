@@ -462,7 +462,7 @@ export const PROMO_MACRO_CONFIG = {
   /** Po przeładowaniu strony artykułów, przed Powrót. */
   beforeBack: 500,
   /** Tyle makro czeka po EAN-ie na okno o stawce VAT niezgodnej z kodem CN. */
-  cnDialog: 2000,
+  cnDialog: 200,
   /** Tyle makro sprawdza, czy pole VAT zostało puste albo z 0 (po oknie o kodzie CN). */
   vatCheck: 300,
 } as const
@@ -512,12 +512,36 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
     `SLEEP|${c.afterSave}`,
     `WEBWAIT|${WINDOW}|${screen.enterButton}||${PAGE_TIMEOUT_MS}`,
     `WEBCLICK|${WINDOW}|${screen.enterButton}`,
+    ...promoArticleLines(items, 0),
+    ...promoEndLines(),
   ]
+  return out.join('\r\n') + '\r\n'
+}
+
+/**
+ * Wznowienie makra promocji po błędzie: Mercalys stoi na wpisywaniu artykułów tej operacji, więc makro nie zakłada jej
+ * od nowa, tylko wraca do programu i wpisuje artykuły od {@code from} (numer od 0, jak w pełnym makrze).
+ */
+export function buildPromoResumeMacro({ code, items, from }: { code: string; items: PromoMacroItem[]; from: number }) {
+  const out = [
+    `# Wznowienie promocji ${code}: od artykułu ${from + 1} z ${items.length}`,
+    `WINOPEN|${PROGRAM_WINDOW}`,
+    ...promoArticleLines(items, from),
+    ...promoEndLines(),
+  ]
+  return out.join('\r\n') + '\r\n'
+}
+
+function promoArticleLines(items: PromoMacroItem[], from: number) {
+  const screen = PROMO_SCREEN
+  const c = PROMO_MACRO_CONFIG
+  const out: string[] = []
   items.forEach((item, index) => {
+    if (index < from) return
     const price = item.price.toFixed(2).replace('.', ',')
     const vatLabel = `VAT_OK_${index + 1}`
     out.push(
-      `# EAN ${item.ean}: ${price} do ${item.dateTo}`,
+      `# Artykuł ${index + 1}/${items.length}, EAN ${item.ean}: ${price} do ${item.dateTo}`,
       `WEBWAIT|${WINDOW}|${screen.articleField}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.articleField}|^a${item.ean}{Enter}`,
       `SLEEP|${c.afterEan}`,
@@ -539,16 +563,20 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
       `SLEEP|${c.afterSave}`,
     )
   })
-  out.push(
+  return out
+}
+
+function promoEndLines() {
+  const screen = PROMO_SCREEN
+  return [
     // Po ostatnim zapisie strona artykułów się przeładowuje: klik w starą stronę by przepadł, a schowany program
     // wracał na wierzch po przeładowaniu. Powrót dopiero na nowej stronie, chowanie po wejściu na nagłówek operacji.
     `WEBWAIT|${WINDOW}|${screen.articleField}||${PAGE_TIMEOUT_MS}`,
-    `SLEEP|${c.beforeBack}`,
+    `SLEEP|${PROMO_MACRO_CONFIG.beforeBack}`,
     `WEBCLICK|${WINDOW}|${screen.backButton}`,
     `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
     `WINMIN|${PROGRAM_WINDOW}`,
-  )
-  return out.join('\r\n') + '\r\n'
+  ]
 }
 
 /** Obsługa → Dostawcy (ac-e001): karta dostawcy, a po Excel wybór zakresu kodów do listy. */

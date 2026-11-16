@@ -15,7 +15,7 @@ import { paddedScaleCode } from '@/features/data-entry/rows'
 import { useAddPriceMarkdowns } from '@/features/inventory/api'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
 import { PriceLabelsButton } from '@/features/inventory/PriceLabelsDialog'
-import { buildPromoEntryMacro, mercalysVatCode } from '@/features/data-entry/mercalys-macro'
+import { buildPromoEntryMacro, buildPromoResumeMacro, mercalysVatCode } from '@/features/data-entry/mercalys-macro'
 import { type ProFile, proFileName } from '@/features/leaflet/leaflet-rows'
 import { ProFilesDialog } from '@/features/leaflet/ProFilesDialog'
 import { useSalesReportsOverview } from '@/features/sales/api'
@@ -45,7 +45,15 @@ import {
 
 import { fetchPromoArticles, savePromoLabels } from './api'
 import { DiscountLevelsDialog } from './DiscountLevelsDialog'
-import { codeKey, discountedPrice, hasPeriod, macroBlocked, promoFiles, tileTariff } from './promo-rows'
+import { codeKey, discountedPrice, hasPeriod, macroBlocked, macroRows, promoFiles, tileTariff } from './promo-rows'
+
+const macroItems = (tile: PromoTile) =>
+  macroRows(tile).map((row) => ({
+    ean: row.article!.ean!.replace(/^0+(?=\d{13})/, ''),
+    price: row.price!,
+    dateTo: row.dateTo!,
+    vatCode: mercalysVatCode(row.article!.vatPercent),
+  }))
 import { PromoTileCard } from './PromoTileCard'
 
 const PRO_COPY = {
@@ -243,18 +251,7 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
    * pliku .PRO: dzień początku (dziś) i najpóźniejszego końca.
    */
   const copyMacro = async (tile: PromoTile) => {
-    const items = tile.rows.flatMap((row) =>
-      row.article?.ean && row.price !== null && row.dateTo
-        ? [
-            {
-              ean: row.article.ean.replace(/^0+(?=\d{13})/, ''),
-              price: row.price,
-              dateTo: row.dateTo,
-              vatCode: mercalysVatCode(row.article.vatPercent),
-            },
-          ]
-        : [],
-    )
+    const items = macroItems(tile)
     const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
     const operation = randomOperation()
     const code = tileTariff({ ...draft, operation }, tile)
@@ -304,6 +301,21 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
         toast.error('Nie udało się dodać artykułów do cenówek', {
           description: error instanceof ApiError ? error.message : undefined,
         }),
+    })
+  }
+
+  /** Po błędzie makra: od wskazanego artykułu, bez zakładania operacji od nowa. */
+  const copyResumeMacro = async (tile: PromoTile, from: number) => {
+    const items = macroItems(tile)
+    const code = tileTariff(draft, tile)
+    try {
+      await navigator.clipboard.writeText(buildPromoResumeMacro({ code, items, from }))
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+      return
+    }
+    toast.success(`Skopiowano makro od artykułu ${from + 1} z ${items.length}`, {
+      description: 'Przejdź do Mercalys (ekran wpisywania artykułów promocji) i naciśnij Alt+E.',
     })
   }
 
@@ -434,6 +446,7 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
                 tile={{ ...tile, dateFrom: todayIso() }}
                 createBlocked={macroBlocked({ ...tile, dateFrom: todayIso() })}
                 onCreate={() => void copyMacro(tile)}
+                onResume={(from) => void copyResumeMacro(tile, from)}
               />
             ) : (
               <PromoTileCard

@@ -1,5 +1,5 @@
-import { REPORT_TITLES, type MacroReport } from '@/features/imports/import-sources'
-import { addDays, todayIso } from '@/lib/dates'
+import { PERIOD_REPORT_MONTHS, REPORT_TITLES, partPath, type MacroReport } from '@/features/imports/import-sources'
+import { addDays, toIsoDate, todayIso } from '@/lib/dates'
 
 /*
  * Makra dla odtwarzacza (Alt+E, od wersji 46): raport z Mercalys otwarty w Excelu i zapisany poleceniem EXCELSAVE
@@ -123,6 +123,38 @@ export function salesPeriod(context: ReportMacroContext, today = todayIso()) {
   return { from: firstMissing < yesterday ? firstMissing : yesterday, to: today }
 }
 
+type Period = { from: string; to: string }
+
+/** RRRR-MM-DD plus miesiące; dzień ponad koniec miesiąca przechodzi na ostatni (31.01 + 1 = 28.02). */
+function addMonthsToDate(iso: string, months: number) {
+  const [year, month, day] = iso.split('-').map(Number)
+  const last = new Date(year, month - 1 + months + 1, 0)
+  return toIsoDate(new Date(last.getFullYear(), last.getMonth(), Math.min(day, last.getDate())))
+}
+
+/**
+ * Okres podzielony na części najwyżej po `months` miesięcy (limit wydruku w Mercalys), od najstarszej: makro zapisuje
+ * je po kolei, a ostatnia, najnowsza ma ścieżkę z ustawień.
+ */
+export function splitPeriod(period: Period, months: number): Period[] {
+  const parts: Period[] = []
+  let from = period.from
+  while (from <= period.to) {
+    const end = addDays(addMonthsToDate(from, months), -1)
+    const to = end < period.to ? end : period.to
+    parts.push({ from, to })
+    from = addDays(to, 1)
+  }
+  return parts
+}
+
+/** Części okresu raportu (sprzedaż, dokumenty); raport bez okresu to jedna część bez dat. */
+function periodParts(kind: MacroReport, context: ReportMacroContext): (Period | null)[] {
+  const months = PERIOD_REPORT_MONTHS[kind]
+  if (!months) return [null]
+  return splitPeriod(kind === 'SALES' ? salesPeriod(context) : documentsPeriod(context), months)
+}
+
 /** RRRR-MM-DD jako DDMMRRRR (pole daty w Mercalys) i wzorzec wartości po wpisaniu (DD/MM/RRRR). */
 const typedDate = (iso: string) => `${iso.slice(8, 10)}${iso.slice(5, 7)}${iso.slice(0, 4)}`
 const datePattern = (iso: string) =>
@@ -175,7 +207,7 @@ export function listNumberError(value: string): string | null {
 }
 
 /** Kroki w Mercalys do chwili, gdy raport ładuje się do Excela; null = raport otwiera pracownik. */
-function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: ReportMacroContext): string[] | null {
+function openSteps(kind: MacroReport, settings: ReportMacroSettings, period: Period | null): string[] | null {
   if (kind === 'PRODUCTS' || kind === 'CADENCIER') {
     const s = PRINT_SCREEN
     const number = settings.printNumber!.trim()
@@ -234,7 +266,7 @@ function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: Re
   }
   if (kind === 'SALES') {
     const s = SALES_SCREEN
-    const period = salesPeriod(context)
+    if (!period) return null
     const choose = (field: string, value: string) => [
       `WEBKEY|${WINDOW}|${field}|^a${value}{Tab}`,
       `WEBVALUE|${WINDOW}|${field}|^${value}$|${PAGE_TIMEOUT_MS}`,
@@ -260,7 +292,7 @@ function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: Re
   }
   if (kind === 'DOCUMENTS') {
     const s = DOCUMENTS_SCREEN
-    const period = documentsPeriod(context)
+    if (!period) return null
     return [
       `WEBENSURE|${WINDOW}|${s.statesMenu}|${s.pilotageTab}`,
       `WEBOPEN|${WINDOW}|${s.statesMenu}|${s.menuItem}|${s.dateFrom}`,
@@ -277,7 +309,7 @@ function openSteps(kind: MacroReport, settings: ReportMacroSettings, context: Re
 
 /** Czy makro samo otwiera raport w Mercalys (bez pytania pracownika). */
 export const opensItself = (kind: MacroReport) =>
-  openSteps(kind, { path: '', printNumber: '0', listNumber: '0' }, {}) !== null
+  openSteps(kind, { path: '', printNumber: '0', listNumber: '0' }, { from: todayIso(), to: todayIso() }) !== null
 
 /** Przykładowa ścieżka w podpowiedzi pola zapisu. */
 export const pathExample = (kind: MacroReport) =>
@@ -303,18 +335,20 @@ export function buildReportSaveMacro(
   reports.forEach(({ kind, settings }, index) => {
     const title = REPORT_TITLES[kind]
     const step = reports.length > 1 ? ` (${index + 1} z ${reports.length})` : ''
-    const steps = openSteps(kind, settings, context)
-    lines.push(`# ${title}${step}`)
-    if (steps) lines.push(...steps)
-    else
-      lines.push(
-        `ASK|${title}${step}: otwórz ten raport w Mercalys. Kliknij Tak, a potem przycisk Excel w Mercalys. Nie kończy makro.`,
-      )
-    lines.push(
-      PDF_REPORTS.includes(kind)
-        ? `PDFSAVE|${settings.path.trim()}|${EXCEL_WAIT_MS}`
-        : `EXCELSAVE|${settings.path.trim()}|${EXCEL_WAIT_MS}`,
-    )
+    const parts = periodParts(kind, context)
+    parts.forEach((period, part) => {
+      const steps = openSteps(kind, settings, period)
+      const partLabel =
+        parts.length > 1 && period ? `, część ${part + 1} z ${parts.length}: ${period.from} - ${period.to}` : ''
+      lines.push(`# ${title}${step}${partLabel}`)
+      if (steps) lines.push(...steps)
+      else
+        lines.push(
+          `ASK|${title}${step}: otwórz ten raport w Mercalys. Kliknij Tak, a potem przycisk Excel w Mercalys. Nie kończy makro.`,
+        )
+      const path = partPath(settings.path.trim(), part + 1, parts.length)
+      lines.push(PDF_REPORTS.includes(kind) ? `PDFSAVE|${path}|${EXCEL_WAIT_MS}` : `EXCELSAVE|${path}|${EXCEL_WAIT_MS}`)
+    })
   })
   lines.push(`WINMIN|${PROGRAM_WINDOW}`)
   return lines.join('\r\n') + '\r\n'

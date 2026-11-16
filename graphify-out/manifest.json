@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794825307.011387,
-    "seen": 1794825364.6374831,
-    "ast_hash": "6d16d9f24f4182183f7ca009e630e6e6",
+    "mtime": 1794833923.3597248,
+    "seen": 1794833977.3222237,
+    "ast_hash": "3735c34ef6d91d0f14b6e6cd96c53673",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1794774259.7280045,
-    "seen": 1794804560.0836406,
-    "ast_hash": "784cd33c17d93ca4b25bf67597730a26",
+    "mtime": 1794833868.9207187,
+    "seen": 1794833977.2691271,
+    "ast_hash": "582d8b09ccdcf149c149cacf6d861f56",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
@@ -6528,9 +6528,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/import-sources.ts": {
-    "mtime": 1794774259.7290058,
-    "seen": 1794804560.0836406,
-    "ast_hash": "c8a7e541adf0a22204bfaa8ab373a8b2",
+    "mtime": 1794833859.5587711,
+    "seen": 1794833977.2691271,
+    "ast_hash": "b03045c30db589b2f868f86e6ed906b5",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
@@ -7188,15 +7188,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/PromoSetupPage.tsx": {
-    "mtime": 1794649730.4466586,
-    "seen": 1794661561.8078368,
-    "ast_hash": "eb73032313a07bfeb8082a443023a000",
+    "mtime": 1794833622.5352592,
+    "seen": 1794833736.7958443,
+    "ast_hash": "30ce378fb10b7ae30df2b474d772ab1c",
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/PromoTileCard.tsx": {
-    "mtime": 1794585959.7536428,
-    "seen": 1794586071.580714,
-    "ast_hash": "990cbfa680729b7cd06bd1250769ffa4",
+    "mtime": 1794833675.223149,
+    "seen": 1794833736.7958443,
+    "ast_hash": "f31f1ee02b4db533e1066e48d685c735",
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/api.ts": {
@@ -7212,15 +7212,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/promo-setup/promo-rows.ts": {
-    "mtime": 1794551676.0814269,
-    "seen": 1794551966.2905276,
-    "ast_hash": "4685011aaa7c0f043965c8edfbc0a1f3",
+    "mtime": 1794833620.9532633,
+    "seen": 1794833736.7958443,
+    "ast_hash": "fae50be6e6db4a946468cf71ffef797e",
     "semantic_hash": ""
   },
   "frontend/src/store/promoSetupDraftSlice.ts": {
-    "mtime": 1794239894.945882,
-    "seen": 1794239974.2372894,
-    "ast_hash": "e086a62646832cf328c14c22861a6929",
+    "mtime": 1794827116.4551234,
+    "seen": 1794833736.815867,
+    "ast_hash": "cab9441f762e438959e66a8a6379e9c9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliprice/dto/CalculationImportRequest.java": {
@@ -7974,9 +7974,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794820854.3838105,
-    "seen": 1794821140.685408,
-    "ast_hash": "6e442fa49fcec487431d87227568c488",
+    "mtime": 1794833595.4767456,
+    "seen": 1794833736.7746568,
+    "ast_hash": "0f5988fc29d2da51a9035193f8cb82b5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -10836,9 +10836,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ArticleMarginReports.tsx": {
-    "mtime": 1794825378.1139984,
-    "seen": 1794825456.1336722,
-    "ast_hash": "e565ef9fd6f404c4ff6b50377a83b0f6",
+    "mtime": 1794830797.7447221,
+    "seen": 1794833736.7968438,
+    "ast_hash": "a374a7075b2eac95ff29427665e8fe51",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/dto/ArticleMarginVerificationIdsRequest.java": {
@@ -11748,9 +11748,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/report-macros.ts": {
-    "mtime": 1794686924.3655593,
-    "seen": 1794687797.9811497,
-    "ast_hash": "b9e2baf567953c4eec6fdb1e4d0269c8",
+    "mtime": 1794833890.5041215,
+    "seen": 1794833977.2691271,
+    "ast_hash": "3c99ef29a8ef8fae38231b136f66ee5a",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/use-import-settings.ts": {
@@ -12252,9 +12252,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/MeaLeafletIntegrationTests.java": {
-    "mtime": 1794823418.8652308,
-    "seen": 1794823611.770731,
-    "ast_hash": "4372fa2aebe3f5cc36ab4ed013710b30",
+    "mtime": 1794827863.6750176,
+    "seen": 1794833736.7465816,
+    "ast_hash": "b8149821ff89d1f80ae9a0f2dcb9f593",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/MeaLeafletParserTests.java": {

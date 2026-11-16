@@ -27,6 +27,10 @@ export function rowEndError(tile: PromoTile, row: PromoRow) {
 }
 
 /** Tryb makra: powód, dla którego promocji nie da się jeszcze ustawić, albo {@code null}. */
+/** Wiersze, które trafiają do makra, w jego kolejności (numer artykułu w makrze = miejsce na tej liście). */
+export const macroRows = (tile: PromoTile) =>
+  tile.rows.filter((row) => row.article?.ean && row.price !== null && row.dateTo)
+
 export function macroBlocked(tile: PromoTile) {
   const articles = tile.rows.filter((row) => row.article)
   if (articles.length === 0) return 'Dodaj artykuły do promocji'

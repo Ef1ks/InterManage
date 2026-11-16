@@ -47,7 +47,7 @@ import {
   DAILY_REPORTS,
   MACRO_REPORTS,
   macroPathError,
-  newestReportFile,
+  newReportFiles,
   PDF_EXTENSIONS,
   REPORT_TITLES,
   sourceFolderKey,
@@ -259,20 +259,24 @@ function StoreImports({ store }: { store: StoreSummary }) {
     for (const kind of ready) {
       setRefreshing(kind)
       try {
-        const file = await newestReportFile(store.id, kind, masks[kind] ?? '')
-        if (!file) {
+        const { newest, files } = await newReportFiles(store.id, kind, masks[kind] ?? '', lastImported[kind])
+        if (!newest) {
           notes[kind] = { tone: 'warning', text: 'W folderze nie ma pliku raportu pasującego do ustawień.' }
-        } else if (file.lastModified <= lastImported[kind]) {
+        } else if (files.length === 0) {
           notes[kind] = {
             tone: 'muted',
-            text: `Bez nowego pliku: ${file.name} z ${dateTimeFormat.format(new Date(file.lastModified))} jest już wgrany.`,
+            text: `Bez nowego pliku: ${newest.name} z ${dateTimeFormat.format(new Date(newest.lastModified))} jest już wgrany.`,
           }
         } else {
-          try {
-            await uploads[kind].mutateAsync(file)
-            imported++
-          } catch {
-            failed++
+          // Zaległość zapisana przez makro w częściach: od najstarszego pliku, błąd zatrzymuje resztę.
+          for (const file of files) {
+            try {
+              await uploads[kind].mutateAsync(file)
+              imported++
+            } catch {
+              failed++
+              break
+            }
           }
         }
       } catch (error) {

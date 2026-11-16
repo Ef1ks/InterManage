@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { CircleCheckIcon, TriangleAlertIcon, Undo2Icon, XIcon } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -460,7 +460,23 @@ function ItemsTable({
   const canEdit = useCan('SALES', 'EDIT')
   const verifying = mode === 'low' && canEdit
   const selecting = mode === 'low'
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  // Zaznaczenie przetrwa powrót z innej strony (np. wprowadzania danych): pamięć karty, osobno dla sklepu i zakładki.
+  const selectionKey = `intermanage.articleMarginSelection.${storeId}.${mode}.${view}`
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(sessionStorage.getItem(selectionKey) ?? '[]') as string[])
+    } catch {
+      return new Set()
+    }
+  })
+  useEffect(() => {
+    try {
+      if (selected.size === 0) sessionStorage.removeItem(selectionKey)
+      else sessionStorage.setItem(selectionKey, JSON.stringify([...selected]))
+    } catch {
+      // Bez pamięci karty zaznaczenie po prostu nie przetrwa powrotu.
+    }
+  }, [selected, selectionKey])
   const [asking, setAsking] = useState(false)
   const { verify, cancel, restore } = useArticleMarginVerifications(storeId)
   const onError = (error: unknown) =>
