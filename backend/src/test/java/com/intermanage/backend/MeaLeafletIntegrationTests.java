@@ -41,7 +41,9 @@ import tools.jackson.databind.json.JsonMapper;
 /** Opis gazetki z centrali: pobranie z portalu w tle, wgranie, zastąpienie aktualizacją i pozycja w formularzu MEA po ITM 8 PROMO. */
 @SpringBootTest(properties = {
         "app.bootstrap.owner-username=wlasciciel",
-        "app.bootstrap.owner-password=haslo-wlasciciela"
+        "app.bootstrap.owner-password=haslo-wlasciciela",
+        // Klucz API MEA jest szyfrowany; w CI nie ma APP_SECRET_KEY (lokalnie bywa w backend/.env).
+        "app.secret-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, RecordingAccountMailer.Config.class})
