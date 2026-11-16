@@ -30,7 +30,7 @@ import {
   printNumberError,
   type ReportMacroSettings,
 } from '@/features/imports/report-macros'
-import { useDocumentImports, useSalesImports } from '@/features/imports/api'
+import { useDocumentImports, useImportCoverage, useSalesImports } from '@/features/imports/api'
 import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ApiError } from '@/lib/api'
 import { folderSavingSupported, useSavedFolder } from '@/lib/saved-folders'
@@ -208,7 +208,10 @@ function MacroFields({
   // Okres raportu sprzedaży zależy od ostatniego dnia w bazie (ta sama lista co na stronie importu, z pamięci)
   const sales = useSalesImports(storeId)
   const documents = useDocumentImports(storeId)
-  const waitsForSales = (kind === 'SALES' && sales.isPending) || (kind === 'DOCUMENTS' && documents.isPending)
+  const coverage = useImportCoverage(storeId)
+  const waitsForSales =
+    (kind === 'SALES' && (sales.isPending || coverage.isPending)) ||
+    (kind === 'DOCUMENTS' && (documents.isPending || coverage.isPending))
   const ready = settings.path.trim() !== '' && pathError === null && numberError === null && !waitsForSales
 
   const copy = async () => {
@@ -217,6 +220,8 @@ function MacroFields({
         buildReportSaveMacro([{ kind, settings }], {
           lastSaleDate: sales.data?.lastSaleDate,
           lastDocumentDate: lastDocumentDate(documents.data),
+          salesCovered: coverage.data?.sales,
+          documentsCovered: coverage.data?.documents,
         }),
       )
       toast.success(`Skopiowano makro: ${REPORT_TITLES[kind]}`, {

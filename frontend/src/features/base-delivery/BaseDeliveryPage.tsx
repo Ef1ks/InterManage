@@ -41,6 +41,7 @@ import {
   type ProductFilePayload,
   lookupProducts,
   useDataEntryNomenclature,
+  usePriceControlPendingCount,
 } from '@/features/data-entry/api'
 import { CommandBar, Stat, ToolbarDivider } from '@/features/data-entry/DataEntryPage'
 import { DataEntryGrid, type GridHandle } from '@/features/data-entry/DataEntryGrid'
@@ -55,6 +56,7 @@ import {
   pricingOf,
 } from '@/features/data-entry/grid-values'
 import { savePriceControlFile } from '@/features/data-entry/price-control'
+import { PriceControlPendingBanner } from '@/features/data-entry/PriceControlFilesDialog'
 import { type SavedProductFile, useProductDraftConfirm } from '@/features/data-entry/product-drafts'
 import { ArticleFileDialog } from '@/features/data-entry/ArticleFileDialog'
 import { ProtocolDialog, type ProtocolLine } from '@/features/data-entry/ProtocolDialog'
@@ -265,6 +267,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const mea = useMeaOverview(store.id)
   const gridRef = useRef<GridHandle>(null)
   const [toolbarHeight, setToolbarHeight] = useState(0)
+  const { data: priceControlPending = 0 } = usePriceControlPendingCount(store.id, true)
 
   const canSeeSales = useCanSeeArticleStats()
   const salesOverview = useSalesReportsOverview(store.id, canSeeSales)
@@ -799,6 +802,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 
   return (
     <>
+      <PriceControlPendingBanner storeId={store.id} count={priceControlPending} />
       <PageHeader
         title="Dostawa z bazy"
         // Bon i data są w pasku poleceń, a liczba wybranych nośników przy przycisku „Nośniki”.

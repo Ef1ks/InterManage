@@ -55,6 +55,7 @@ import {
   supplierKey,
   useExpanded,
 } from '@/features/sales/price-review'
+import { ReportExclusions } from '@/features/sales/ReportExclusions'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
 import { matchesSearch } from '@/lib/search'
@@ -185,6 +186,13 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
       <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">Zakup bazowy poza bazą</h2>
         {report.data && <ReportFreshness generatedAt={report.data.documentsReportGeneratedAt} />}
+        <div className="ml-auto">
+          <ReportExclusions
+            storeId={storeId}
+            report="BASE_PURCHASE"
+            description="Artykuły z tych nomenklatur i od tych dostawców nie trafiają do raportu. Listy obowiązują w całym sklepie."
+          />
+        </div>
       </div>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
         Przyjęcia z ostatnich 30 dni, w których artykuł z cadencier (formularza zamówień do bazy) przyszedł od innego

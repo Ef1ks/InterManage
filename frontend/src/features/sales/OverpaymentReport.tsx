@@ -13,7 +13,7 @@ import {
 } from '@/features/documents/format'
 import { useOverpayments } from '@/features/sales/api'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
-import { ExcludedSuppliersSettings } from '@/features/sales/ExcludedSuppliersSettings'
+import { ReportExclusions } from '@/features/sales/ReportExclusions'
 import { ReviewedReportPage } from '@/features/sales/ReviewedReportPage'
 import type { OverpaymentDelivery } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -46,17 +46,11 @@ export function OverpaymentReport({ storeId }: { storeId: string }) {
       title="Przepłacone artykuły"
       intro="Przyjęcia z ostatnich 30 dni, w których artykuł kosztował o ponad 5% więcej niż w jednej z trzech poprzednich dostaw, od dowolnego dostawcy. Poprzednia dostawa liczy się tylko z okresu wybranego w filtrze, bo po długiej przerwie wzrost ceny jest czymś zwykłym, a artykuł bez takiej dostawy nie trafia do raportu. Dostawy z ilością ponad 5 razy większą niż zwykle nie biorą udziału w porównaniu, bo to zwykle krótki termin. Poprzednie ceny są z bonu, sprzed korekt, bo baza zwraca promocję korektą. Sprawdzane przyjęcie liczy się po korektach. Raport pomija mięso, drób, garmażerkę, owoce i warzywa, bo wahania cen są tam normalne, oraz papierosy, kupowane z jednego miejsca, prasę od Kolportera i dostawców wybranych w ustawieniach raportu."
       actions={
-        query.data && (
-          <ExcludedSuppliersSettings
-            storeId={storeId}
-            path="overpayments"
-            report={query.data}
-            description="Dostawy pomijanych dostawców nie trafiają do raportu i nie są też ceną odniesienia dla innych. Lista obowiązuje w całym sklepie."
-            label="Dostawcy pomijani w raporcie"
-            placeholder="Raport obejmuje wszystkich dostawców. Szukaj po kodzie albo nazwie…"
-            readOnlyLabel="Raport pomija dostawców"
-          />
-        )
+        <ReportExclusions
+          storeId={storeId}
+          report="OVERPAYMENT"
+          description="Artykuły z tych nomenklatur i dostawy tych dostawców nie są sprawdzane ani nie są ceną odniesienia dla innych. Listy obowiązują w całym sklepie."
+        />
       }
       filterParams={[REFERENCE_PARAM]}
       filters={

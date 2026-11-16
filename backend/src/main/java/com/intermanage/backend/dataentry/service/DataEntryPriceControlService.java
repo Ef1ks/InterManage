@@ -10,12 +10,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.PriceControlFile;
 import com.intermanage.backend.dataentry.dto.CatalogProduct;
-import com.intermanage.backend.dataentry.dto.PriceControlFileItem;
+import com.intermanage.backend.dataentry.dto.PriceControlFiles;
+import com.intermanage.backend.dataentry.dto.PriceControlSeenRequest;
 import com.intermanage.backend.dataentry.dto.PriceControlRequest;
 import com.intermanage.backend.dataentry.entity.DataEntryPriceControlFile;
 import com.intermanage.backend.dataentry.mapper.PriceControlFileMapper;
@@ -28,12 +30,14 @@ import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
  * Plik CTRLPRIX przy zapisie pliku XML faktury: artykuły z kartoteki ze zmienioną w tabeli ceną sprzedaży. Plik trafia
- * do historii od razu (przeglądarka zapisuje go potem w folderze plików PROTO), więc da się go zapisać ponownie.
+ * do historii od razu (przeglądarka zapisuje go potem w folderze plików PROTO), więc da się go zapisać ponownie. Do czasu,
+ * aż program sklepu go wczyta (końcówka .TraiteN w folderze), jest na liście niewgranych.
  */
 @Service
 public class DataEntryPriceControlService {
 
-    static final int HISTORY_SIZE = 10;
+    /** Tyle ostatnich wgranych plików pokazuje lista (niewgrane są zawsze wszystkie). */
+    static final int HISTORY_SIZE = 20;
     /** {@link DataEntryService#lookup} bierze najwyżej 500 kodów naraz. */
     private static final int LOOKUP_BATCH = 500;
 
@@ -111,16 +115,79 @@ public class DataEntryPriceControlService {
         return result;
     }
 
-    /** 10 ostatnich plików sklepu, od najnowszego. */
+    /** Wszystkie niewgrane pliki sklepu i ostatnie wgrane; usunięte z listy nie wracają. */
     @Transactional(readOnly = true)
-    public List<PriceControlFileItem> history(UUID storeId) {
-        return files.findLatest(storeId, PageRequest.of(0, HISTORY_SIZE)).stream().map(mapper::toItem).toList();
+    public PriceControlFiles history(UUID storeId) {
+        return new PriceControlFiles(
+                files.findPending(storeId).stream().map(mapper::toItem).toList(),
+                files.findLoaded(storeId, PageRequest.of(0, HISTORY_SIZE)).stream().map(mapper::toItem).toList());
+    }
+
+    @Transactional(readOnly = true)
+    public long pendingCount(UUID storeId) {
+        return files.countPending(storeId);
+    }
+
+    /**
+     * Przeglądarka znalazła w folderze plików PROTO pliki z końcówką .TraiteN: program sklepu je wczytał. Niewgrane
+     * stają się wgrane, wgrane dostają wyższą liczbę przetworzeń; pliki innego sklepu i usunięte są pomijane.
+     */
+    @Transactional
+    public PriceControlFiles seen(UUID storeId, PriceControlSeenRequest request, UUID userId) {
+        Map<UUID, Integer> counts = new LinkedHashMap<>();
+        request.files().forEach(seen -> counts.merge(seen.id(), seen.processedCount(), Math::max));
+        if (!counts.isEmpty()) {
+            AppUser by = userId != null ? users.getReferenceById(userId) : null;
+            files.findByStoreIdAndIdIn(storeId, counts.keySet()).stream()
+                    .filter(file -> !file.isDeleted())
+                    .forEach(file -> file.seenProcessed(counts.get(file.getId()), by));
+        }
+        return history(storeId);
+    }
+
+    /** Ręczne oznaczenie: plik wczytano, a przeglądarka nie widzi folderu (inny komputer, plik przeniesiony). */
+    @Transactional
+    public PriceControlFiles markLoaded(UUID storeId, UUID id, UUID userId) {
+        DataEntryPriceControlFile file = active(storeId, id);
+        if (file.isLoaded()) {
+            throw ApiException.conflict("Ta zmiana cen jest już wgrana");
+        }
+        file.markLoaded(userId != null ? users.getReferenceById(userId) : null);
+        return history(storeId);
+    }
+
+    /** Cofnięcie oznaczenia: plik wraca do niewgranych (sprawdzenie folderu znów może go potwierdzić). */
+    @Transactional
+    public PriceControlFiles unmarkLoaded(UUID storeId, UUID id) {
+        active(storeId, id).unmarkLoaded();
+        return history(storeId);
+    }
+
+    /** Usunięcie z listy to znacznik; plik zostaje w bazie i w wyszukiwaniu historii cen artykułu. */
+    @Transactional
+    public PriceControlFiles delete(UUID storeId, UUID id, UUID userId) {
+        active(storeId, id).delete(userId != null ? users.getReferenceById(userId) : null);
+        return history(storeId);
+    }
+
+    @Transactional
+    public PriceControlFiles restore(UUID storeId, UUID id) {
+        file(storeId, id).restore();
+        return history(storeId);
     }
 
     @Transactional(readOnly = true)
     public DataEntryPriceControlFile file(UUID storeId, UUID id) {
         return files.findByIdAndStoreId(id, storeId)
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono zmiany cen"));
+    }
+
+    private DataEntryPriceControlFile active(UUID storeId, UUID id) {
+        DataEntryPriceControlFile file = file(storeId, id);
+        if (file.isDeleted()) {
+            throw ApiException.notFound("Nie znaleziono zmiany cen");
+        }
+        return file;
     }
 
     /** Dostawca wybrany w tabeli, a bez niego dostawca z listy sklepu o NIP-ie sprzedawcy; brak = {@code null}. */

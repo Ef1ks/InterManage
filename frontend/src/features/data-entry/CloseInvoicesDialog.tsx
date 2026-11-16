@@ -26,6 +26,25 @@ const toMacroDocument = (item: InvoiceClosing) => ({ number: item.documentNumber
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
+/** Wybór „Drukuj bony” zostaje w przeglądarce, bo zależy od stanowiska (drukarka przy komputerze). */
+const PRINT_KEY = 'intermanage.closeInvoicesPrint'
+
+function readPrint() {
+  try {
+    return localStorage.getItem(PRINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function savePrint(print: boolean) {
+  try {
+    localStorage.setItem(PRINT_KEY, print ? '1' : '0')
+  } catch {
+    // bez zapisu wybór działa do zamknięcia karty
+  }
+}
+
 type Props = {
   storeId: string
   open: boolean
@@ -42,6 +61,7 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
   const change = useInvoiceClosingChange(storeId)
   // Zaznaczone jest wszystko, więc pamiętamy tylko odznaczone.
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(new Set())
+  const [print, setPrint] = useState(readPrint)
 
   const items = closings.data ?? []
   const pending = items.filter((item) => item.generatedAt === null)
@@ -58,7 +78,7 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
 
   const copyScript = async (picked: InvoiceClosing[]) => {
     try {
-      await navigator.clipboard.writeText(buildDeliveryMacro(picked.map(toMacroDocument)))
+      await navigator.clipboard.writeText(buildDeliveryMacro(picked.map(toMacroDocument), print))
     } catch {
       toast.error('Nie udało się skopiować skryptu do schowka')
       return false
@@ -166,6 +186,26 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
             być uruchomiony, może zostać na pasku zadań.
           </DialogDescription>
         </DialogHeader>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 text-sm hover:bg-accent">
+          <input
+            type="checkbox"
+            checked={print}
+            onChange={(event) => {
+              setPrint(event.target.checked)
+              savePrint(event.target.checked)
+            }}
+            className="mt-0.5 size-4 accent-blue-600"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium">Drukuj bony po zamknięciu</span>
+            <span className="text-xs text-muted-foreground">
+              {print
+                ? 'Każdy bon otwarty w Adobe Acrobat pójdzie od razu do drukarki domyślnej, potem się zamknie (odtwarzacz od wersji 51).'
+                : 'Bony otwarte w Adobe Acrobat zostaną zamknięte bez drukowania.'}
+            </span>
+          </span>
+        </label>
 
         <section aria-label="Do zamknięcia" className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">Do zamknięcia ({pending.length})</h3>

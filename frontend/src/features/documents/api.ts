@@ -20,7 +20,6 @@ import type {
   InvoiceComparison,
   KsefInvoiceCandidate,
   Supplier,
-  DocumentVerificationStatus,
 } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 
@@ -68,12 +67,9 @@ export type DocumentFilters = {
   hiddenSuppliers: string[]
   /** Tylko przyjęcia oznaczone jako błąd (bez tego lista ich nie pokazuje). */
   markedAsError: boolean
-  /** Status weryfikacji przyjęć PZ. */
-  verification: VerificationFilter
 }
 
 /** Filtr weryfikacji przyjęć: wszystkie, bez statusu, w trakcie, zweryfikowane. */
-export type VerificationFilter = 'all' | 'none' | 'in_progress' | 'verified'
 
 /**
  * Lista dokumentów typu stronami po 100 (wyszukiwanie, filtry i sortowanie w bazie); kolejne strony dociąga
@@ -103,7 +99,6 @@ export function useDocuments(
       }
       filters.hiddenSuppliers.forEach((code) => params.append('hiddenSuppliers', code))
       if (filters.markedAsError) params.set('markedAsError', 'true')
-      if (filters.verification !== 'all') params.set('verification', filters.verification)
       return api<DocumentPage>(`${documentsPath(storeId)}/${typeCode}?${params}`)
     },
     initialPageParam: 0,
@@ -111,23 +106,6 @@ export function useDocuments(
     // Przy zmianie wyszukiwania albo sortowania lista nie znika, tylko podmienia się po wczytaniu.
     placeholderData: keepPreviousData,
   })
-}
-
-/**
- * Status weryfikacji przyjęcia PZ i jego zdjęcie; lista i liczniki odświeżają się przez `MutationCache`.
- */
-export function useDocumentVerification(storeId: string, typeCode: string, id: string) {
-  const queryClient = useQueryClient()
-  const path = `${documentsPath(storeId)}/${typeCode.toLowerCase()}/${id}/verification`
-  const onSuccess = (document: Document) =>
-    queryClient.setQueryData([...documentsKey(storeId), typeCode.toLowerCase(), id], document)
-  return {
-    set: useMutation({
-      mutationFn: (status: DocumentVerificationStatus) => api<Document>(path, { method: 'PUT', json: { status } }),
-      onSuccess,
-    }),
-    clear: useMutation({ mutationFn: () => api<Document>(path, { method: 'DELETE' }), onSuccess }),
-  }
 }
 
 /**

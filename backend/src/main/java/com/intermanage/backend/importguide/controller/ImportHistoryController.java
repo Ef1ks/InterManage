@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.importguide.dto.ImportCoverage;
 import com.intermanage.backend.importguide.dto.ImportHistoryPage;
+import com.intermanage.backend.importguide.service.ImportCoverageService;
 import com.intermanage.backend.importguide.service.ImportHistoryService;
 
 /** Wspólna historia importów na dole Importu danych, doczytywana porcjami przy przewijaniu. */
@@ -17,9 +19,18 @@ import com.intermanage.backend.importguide.service.ImportHistoryService;
 public class ImportHistoryController {
 
     private final ImportHistoryService service;
+    private final ImportCoverageService coverage;
 
-    public ImportHistoryController(ImportHistoryService service) {
+    public ImportHistoryController(ImportHistoryService service, ImportCoverageService coverage) {
         this.service = service;
+        this.coverage = coverage;
+    }
+
+    /** Dni objęte wgranymi raportami sprzedaży i dokumentów: makro z Mercalys drukuje to, czego brakuje. */
+    @GetMapping("/api/stores/{storeId}/imports/coverage")
+    @PreAuthorize("hasAuthority('IMPORTS:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public ImportCoverage coverage(@PathVariable UUID storeId) {
+        return coverage.coverage(storeId);
     }
 
     /** Porcja wgrań starszych niż {@code before} (chwila wgrania ostatniej pozycji poprzedniej porcji). */

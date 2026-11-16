@@ -11,7 +11,7 @@ import type { ProtocolKind, ProtoSettings } from '@/lib/types'
  */
 
 /** Klucz zostaje po PROTO6 garmażu, żeby folder wybrany wcześniej dalej działał. */
-const PROTO_FOLDER_KEY = 'deli-order-proto'
+export const PROTO_FOLDER_KEY = 'deli-order-proto'
 /** Domyślna ścieżka u każdego użytkownika: protokoły, zmiana cen i pliki śledzenia cen (TRACEART). */
 export const DEFAULT_FOLDER = 'N:\\AVISOCONFIG\\BACKUP'
 

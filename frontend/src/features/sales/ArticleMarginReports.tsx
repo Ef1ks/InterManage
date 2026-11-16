@@ -5,7 +5,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
-import { SegmentedField, SearchableSelectField, TextField } from '@/components/form'
+import { DateField, FormNote, SegmentedField, SearchableSelectField, SwitchField, TextField } from '@/components/form'
 import { compareSupplierCodes } from '@/lib/supplier-order'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -23,6 +23,7 @@ import {
   useCurrentPromotions,
   usePriceCheckCategories,
 } from '@/features/sales/api'
+import { ReportExclusions } from '@/features/sales/ReportExclusions'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { salesPaths } from '@/features/sales/paths'
 import {
@@ -39,6 +40,7 @@ import { ApiError } from '@/lib/api'
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import type { ArticleMarginItem, ArticleMarginReport } from '@/lib/types'
+import { addDays, todayIso } from '@/lib/dates'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
@@ -69,9 +71,12 @@ const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', ti
 /** Dzień RRRR-MM-DD jako DD.MM. */
 const formatDay = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}`
 
-/** Progi raportu artykułów (`?marza=`): marża poniżej tylu procent; domyślnie 20%. */
-const MAX_MARGINS = [5, 10, 15, 20, 25, 30]
-const DEFAULT_MAX_MARGIN = 20
+/**
+ * Progi raportu artykułów (`?odchylenie=`): marża niższa od wymaganej na nomenklaturze o co najmniej tyle punktów
+ * procentowych (5 = wymagane 30%, jest 25% albo mniej); domyślnie 5.
+ */
+const MIN_GAPS = [5, 10, 15, 20, 25]
+const DEFAULT_MIN_GAP = 5
 
 /** Filtr marży w promocji (`?marza=`). */
 const PROMO_FILTERS: { value: string; label: string; matches: (item: ArticleMarginItem) => boolean }[] = [
@@ -86,14 +91,17 @@ const PROMO_FILTERS: { value: string; label: string; matches: (item: ArticleMarg
   },
 ]
 
-type SortKey = 'name' | 'sold' | 'purchase' | 'sale' | 'margin' | 'required' | 'promoMargin' | 'promoTo'
+type SortKey =
+  'name' | 'sold' | 'sinceDelivery' | 'purchase' | 'sale' | 'margin' | 'gap' | 'required' | 'promoMargin' | 'promoTo'
 
 const SORT_ACCESSORS: SortAccessors<ArticleMarginItem, SortKey> = {
   name: (item) => item.name,
   sold: (item) => item.soldQuantity,
+  sinceDelivery: (item) => item.soldSinceDelivery,
   purchase: (item) => item.purchasePrice,
   sale: (item) => item.salePrice,
   margin: (item) => item.marginPercent,
+  gap: (item) => (item.requiredMargin == null ? null : item.marginPercent - item.requiredMargin),
   required: (item) => item.requiredMargin,
   promoMargin: (item) => item.promoMargin,
   promoTo: (item) => item.promoTo,
@@ -101,43 +109,129 @@ const SORT_ACCESSORS: SortAccessors<ArticleMarginItem, SortKey> = {
 
 /**
  * Artykuły z za niską marżą, nie tylko z przyjęć: marża z aktualnej ceny zwykłej na kasie i ostatniej ceny zakupu
- * poniżej wybranego procentu (25, 20, 15%…). Marża wymagana na nomenklaturze jest tylko do porównania. Artykuły aktywne
+ * niższa od wymaganej na nomenklaturze co najmniej o wybrany próg (5, 10, 15… punktów). Artykuły aktywne
  * w cadencier z CENA_CAD są w osobnej zakładce, bo marżę ustala im centrala.
  */
 export function ArticleMarginsReport({ storeId }: { storeId: string }) {
   const [params, setParams] = useSearchParams()
-  const maxMargin = MAX_MARGINS.find((value) => String(value) === params.get('marza')) ?? DEFAULT_MAX_MARGIN
-  const query = useArticleMargins(storeId, maxMargin)
+  const minGap = MIN_GAPS.find((value) => String(value) === params.get('odchylenie')) ?? DEFAULT_MIN_GAP
+  const date = (key: string) => {
+    const value = params.get(key)
+    return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
+  }
+  const deliveredFrom = date('przyjecie_od')
+  const deliveredTo = date('przyjecie_do')
+  const soldFrom = date('sprzedaz_od')
+  const soldTo = date('sprzedaz_do')
+  const byDelivery = deliveredFrom !== '' || deliveredTo !== ''
+  const bySales = soldFrom !== '' || soldTo !== ''
+  const query = useArticleMargins(storeId, { minGap, deliveredFrom, deliveredTo, soldFrom, soldTo })
+  const today = todayIso()
+  const update = (values: Record<string, string | null>) =>
+    setParams(
+      (old) => {
+        const updated = new URLSearchParams(old)
+        for (const [key, value] of Object.entries(values)) {
+          if (value) updated.set(key, value)
+          else updated.delete(key)
+        }
+        return updated
+      },
+      { replace: true },
+    )
+  const shortcuts = [
+    { label: 'Tydzień temu', value: addDays(today, -6) },
+    { label: '30 dni temu', value: addDays(today, -29) },
+    { label: '90 dni temu', value: addDays(today, -89) },
+  ]
+  const periodError = (from: string, to: string) =>
+    from && to && from > to ? 'Data „od” jest późniejsza niż „do”' : undefined
+
+  /** Para pól od-do w jednej grupie; każde pole ma własną kolumnę, więc długie daty się nie nakładają. */
+  const period = (legend: string, from: string, to: string, fromKey: string, toKey: string) => (
+    <FilterGroup legend={legend}>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <DateField
+          label="Od"
+          value={from}
+          max={to || today}
+          onChange={(next) => update({ [fromKey]: next || null })}
+          error={periodError(from, to)}
+          shortcuts={shortcuts}
+          className="min-w-0"
+        />
+        <DateField
+          label="Do"
+          value={to}
+          min={from || undefined}
+          max={today}
+          onChange={(next) => update({ [toKey]: next || null })}
+          shortcuts={[{ label: 'Dziś', value: today }]}
+          className="min-w-0"
+        />
+      </div>
+    </FilterGroup>
+  )
+
   return (
     <ArticleMarginPage
       storeId={storeId}
       mode="low"
       query={query}
       title="Artykuły z za niską marżą"
-      intro={`Artykuły, które żyją: sprzedane albo przyjęte na PZ w ostatnich 3 miesiącach (aktywność i stan z kartoteki nic tu nie znaczą), z marżą poniżej ${maxMargin}%. Marża jest liczona od sprzedaży brutto, z aktualnej ceny zwykłej na kasie i ceny zakupu z ostatniego przyjęcia PZ z ostatniego roku (bez niego z kartoteki). Marża wymagana na nomenklaturze jest obok do porównania. Sprawdzony artykuł oznacz jako zweryfikowany: przechodzi do osobnej zakładki i wraca do kontroli przy zmianie ceny sprzedaży albo zakupu i przy kolejnej dostawie. Artykuły aktywne w cadencier z ceną cadencier są w osobnej zakładce, bo marżę ustala im centrala.`}
-      filterParams={['marza']}
-      filters={
-        <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          Marża poniżej
-          <SegmentedField
-            label="Marża poniżej"
-            options={MAX_MARGINS.map((value) => ({ value: String(value), label: `${value}%` }))}
-            value={String(maxMargin)}
-            onChange={(next) =>
-              setParams(
-                (old) => {
-                  const updated = new URLSearchParams(old)
-                  if (Number(next) === DEFAULT_MAX_MARGIN) updated.delete('marza')
-                  else updated.set('marza', next)
-                  return updated
-                },
-                { replace: true },
-              )
+      filterParams={['odchylenie', 'przyjecie_od', 'przyjecie_do', 'sprzedaz_od', 'sprzedaz_do']}
+      soldLabel={bySales ? 'Sprzedaż w okresie' : 'Sprzedaż 3 mies.'}
+      sinceDelivery={byDelivery}
+      settings={
+        <ReportExclusions
+          storeId={storeId}
+          report="ARTICLE_MARGIN"
+          description="Artykuły z tych nomenklatur i od tych dostawców nie trafiają do raportu. Listy są wspólne dla sklepu."
+          supplierHint="Liczy się dostawca ostatniego przyjęcia PZ."
+          skipped={
+            query.data && {
+              nomenclatures: query.data.nomenclatureSkipped,
+              suppliers: query.data.supplierSkipped,
             }
-          />
-        </span>
+          }
+          note={
+            query.data && query.data.excludedSuppliers.length > 0 ? (
+              <FormNote>
+                Zawsze pomijani (dostawcy z{' '}
+                <Link to={salesPaths.lowMargins} className="underline underline-offset-4">
+                  weryfikacji przyjęć
+                </Link>
+                ): {query.data.excludedSuppliers.map((supplier) => supplier.name ?? supplier.code).join(', ')}.
+              </FormNote>
+            ) : undefined
+          }
+        />
+      }
+      filters={
+        <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
+          <FilterGroup legend="Marża poniżej wymaganej o co najmniej">
+            <SegmentedField
+              label="Marża poniżej wymaganej o co najmniej"
+              options={MIN_GAPS.map((value) => ({ value: String(value), label: `${value} pkt` }))}
+              value={String(minGap)}
+              onChange={(next) => update({ odchylenie: Number(next) === DEFAULT_MIN_GAP ? null : next })}
+            />
+          </FilterGroup>
+          {period('Przyjęcie PZ', deliveredFrom, deliveredTo, 'przyjecie_od', 'przyjecie_do')}
+          {period('Sprzedaż', soldFrom, soldTo, 'sprzedaz_od', 'sprzedaz_do')}
+        </div>
       }
     />
+  )
+}
+
+/** Grupa filtrów z krótkim podpisem nad polami. */
+function FilterGroup({ legend, children }: { legend: string; children: ReactNode }) {
+  return (
+    <fieldset className="grid min-w-0 content-start gap-2">
+      <legend className="mb-2 text-xs font-medium text-muted-foreground">{legend}</legend>
+      {children}
+    </fieldset>
   )
 }
 
@@ -189,15 +283,23 @@ function ArticleMarginPage({
   filters,
   filterParams,
   itemFilter = () => true,
+  soldLabel = 'Sprzedaż 3 mies.',
+  sinceDelivery = false,
+  settings,
 }: {
   storeId: string
   mode: Mode
   query: UseQueryResult<ArticleMarginReport>
   title: string
-  intro: string
+  intro?: string
   filters: ReactNode
+  /** Przycisk ustawień raportu obok wyszukiwarki. */
+  settings?: ReactNode
   filterParams: string[]
   itemFilter?: (item: ArticleMarginItem) => boolean
+  soldLabel?: string
+  /** Kolumna sprzedaży od ostatniego przyjęcia z okresu filtra przyjęcia. */
+  sinceDelivery?: boolean
 }) {
   const [params, setParams] = useSearchParams()
   const { text: search, setText: setSearch } = useSearchParamText('szukaj')
@@ -259,8 +361,8 @@ function ArticleMarginPage({
     <>
       <span data-wide-page hidden />
       <BackLink to={salesPaths.overview}>Wszystkie raporty</BackLink>
-      <h2 className="mb-1 text-xl font-semibold tracking-tight">{title}</h2>
-      <p className="mb-4 max-w-3xl text-sm text-muted-foreground">{intro}</p>
+      <h2 className={cn('text-xl font-semibold tracking-tight', intro ? 'mb-1' : 'mb-4')}>{title}</h2>
+      {intro && <p className="mb-4 max-w-3xl text-sm text-muted-foreground">{intro}</p>}
 
       {query.isError ? (
         <Card className="items-center px-6 py-8 text-center">
@@ -317,32 +419,30 @@ function ArticleMarginPage({
 
           {view !== 'verified' && <Tiles mode={mode} items={items} report={query.data} />}
 
-          <div className="mb-3 grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Szukaj: artykuł, marka, EAN, ITM8, dostawca"
-            />
-            <SearchableSelectField
-              label="Dostawca ostatniej dostawy"
-              options={[{ value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' }, ...suppliers]}
-              value={supplier}
-              onChange={(next) => setParam('dostawca', next && next !== ALL_SUPPLIERS ? next : null)}
-            />
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:col-span-2">
-              {filters}
-              <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                Sprzedaż
-                <SegmentedField
-                  label="Sprzedaż"
-                  options={[
-                    { value: 'wszystkie', label: 'Wszystkie' },
-                    { value: 'tak', label: 'Sprzedające się (3 mies.)' },
-                  ]}
-                  value={onlySold ? 'tak' : 'wszystkie'}
-                  onChange={(next) => setParam('sprzedaz', next === 'tak' ? 'tak' : null)}
-                />
-              </span>
+          <div className="mb-3 grid gap-4 rounded-xl border bg-card p-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)_auto] md:items-center">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Szukaj: artykuł, marka, EAN, ITM8, dostawca"
+              />
+              <SearchableSelectField
+                label="Dostawca ostatniej dostawy"
+                options={[{ value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' }, ...suppliers]}
+                value={supplier}
+                onChange={(next) => setParam('dostawca', next && next !== ALL_SUPPLIERS ? next : null)}
+              />
+              {settings && <div className="justify-self-start md:justify-self-end">{settings}</div>}
+            </div>
+            <div className="border-t pt-4">{filters}</div>
+            <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+              <SwitchField
+                label="Tylko sprzedające się"
+                description={mode === 'low' ? undefined : 'Ze sprzedażą w ostatnich 3 miesiącach'}
+                checked={onlySold}
+                onCheckedChange={(checked) => setParam('sprzedaz', checked ? 'tak' : null)}
+                className="w-auto border-0 bg-transparent px-0 py-1 hover:bg-transparent dark:bg-transparent dark:hover:bg-transparent"
+              />
               {filtersActive && (
                 <Button
                   variant="ghost"
@@ -374,14 +474,22 @@ function ArticleMarginPage({
                 {filtersActive
                   ? 'Zmień albo wyczyść filtry nad listą.'
                   : view === 'verified'
-                    ? 'Nie ma zweryfikowanych artykułów z marżą poniżej wybranego procentu.'
+                    ? 'Nie ma zweryfikowanych artykułów z marżą poniżej wymaganej o wybrany próg.'
                     : mode === 'low'
-                      ? 'Żaden artykuł w tej zakładce nie ma marży poniżej wybranego procentu.'
+                      ? 'Żaden artykuł w tej zakładce nie ma marży poniżej wymaganej o wybrany próg.'
                       : 'W tej zakładce nie ma trwających promocji.'}
               </p>
             </Card>
           ) : (
-            <ItemsTable key={`${view}:${category}`} storeId={storeId} mode={mode} view={view} items={items} />
+            <ItemsTable
+              key={`${view}:${category}`}
+              storeId={storeId}
+              mode={mode}
+              view={view}
+              items={items}
+              soldLabel={soldLabel}
+              sinceDelivery={sinceDelivery}
+            />
           )}
         </>
       )}
@@ -405,7 +513,7 @@ function Notices({ report, mode }: { report: ArticleMarginReport; mode: Mode }) 
           </span>
         </p>
       )}
-      {report.excludedSuppliers.length > 0 && (
+      {mode === 'promo' && report.excludedSuppliers.length > 0 && (
         <p className="text-muted-foreground">
           Pomijani dostawcy bez marży wymaganej (jak w{' '}
           <Link to={salesPaths.lowMargins} className="underline underline-offset-4">
@@ -451,11 +559,15 @@ function ItemsTable({
   mode,
   view,
   items,
+  soldLabel,
+  sinceDelivery,
 }: {
   storeId: string
   mode: Mode
   view: View
   items: ArticleMarginItem[]
+  soldLabel: string
+  sinceDelivery: boolean
 }) {
   const canEdit = useCan('SALES', 'EDIT')
   const verifying = mode === 'low' && canEdit
@@ -524,7 +636,7 @@ function ItemsTable({
     })
 
   const { sorted, sort, toggle } = useTableSort(items, SORT_ACCESSORS, {
-    key: mode === 'low' ? 'margin' : 'promoMargin',
+    key: mode === 'low' ? 'gap' : 'promoMargin',
     direction: 'asc',
   })
   const [shown, setShown] = useState(PAGE)
@@ -605,8 +717,13 @@ function ItemsTable({
                 Artykuł
               </SortableHead>
               <SortableHead column="sold" sort={sort} onSort={toggle} align="right">
-                Sprzedaż 3 mies.
+                {soldLabel}
               </SortableHead>
+              {sinceDelivery && (
+                <SortableHead column="sinceDelivery" sort={sort} onSort={toggle} align="right">
+                  Sprzedano od dostawy
+                </SortableHead>
+              )}
               <SortableHead column="purchase" sort={sort} onSort={toggle} align="right">
                 Cena zakupu
               </SortableHead>
@@ -639,6 +756,7 @@ function ItemsTable({
                 key={item.itm8}
                 item={item}
                 mode={mode}
+                sinceDelivery={sinceDelivery}
                 selectable={selecting}
                 selected={selected.has(item.itm8)}
                 onToggle={() => toggleOne(item.itm8)}
@@ -717,12 +835,14 @@ function VerifyDialog({
 function ItemRow({
   item,
   mode,
+  sinceDelivery,
   selectable,
   selected,
   onToggle,
 }: {
   item: ArticleMarginItem
   mode: Mode
+  sinceDelivery: boolean
   selectable: boolean
   selected: boolean
   onToggle: () => void
@@ -780,6 +900,16 @@ function ItemRow({
       <TableCell className="text-right">
         {item.soldQuantity == null ? '–' : formatQuantity(item.soldQuantity)}
       </TableCell>
+      {sinceDelivery && (
+        <TableCell className="text-right">
+          {item.soldSinceDelivery == null ? '–' : formatQuantity(item.soldSinceDelivery)}
+          {item.periodDeliveryDate && (
+            <span className="block text-xs text-muted-foreground">
+              od PZ {formatDocumentDate(item.periodDeliveryDate)}
+            </span>
+          )}
+        </TableCell>
+      )}
       <TableCell className="text-right">
         <span className="font-medium">{formatPrice(item.purchasePrice)}</span>
         <span className="block text-xs text-muted-foreground">
@@ -819,6 +949,15 @@ function ItemRow({
         <span className={cn(pill, 'text-sm', mode === 'low' ? (below ? RED : AMBER) : below ? AMBER : '')}>
           {formatPercent(item.marginPercent)}
         </span>
+        {mode === 'low' && item.requiredMargin != null && (
+          <span className="block text-xs text-muted-foreground" title="Odchylenie od marży wymaganej">
+            {(item.marginPercent - item.requiredMargin).toLocaleString('pl-PL', {
+              maximumFractionDigits: 2,
+              signDisplay: 'exceptZero',
+            })}{' '}
+            pkt
+          </span>
+        )}
       </TableCell>
       <TableCell className="text-right">
         {item.requiredMargin == null ? '–' : formatPercent(item.requiredMargin)}

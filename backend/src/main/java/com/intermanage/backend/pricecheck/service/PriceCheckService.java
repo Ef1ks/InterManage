@@ -105,13 +105,15 @@ public class PriceCheckService {
     private final PriceCheckMapper mapper;
     private final SaleRepository sales;
     private final ExcludedSuppliers excludedSuppliers;
+    private final ReportExclusionService exclusions;
 
     public PriceCheckService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             ProductRepository products, CadencierImportRepository cadencierImports,
             IncidentImportRepository incidents, PriceCheckSettingsRepository settings, PriceCheckReviewRepository reviews, StoreRepository stores,
             AppUserRepository users, PriceCheckMapper mapper, SaleRepository sales,
-            ExcludedSuppliers excludedSuppliers) {
+            ExcludedSuppliers excludedSuppliers, ReportExclusionService exclusions) {
+        this.exclusions = exclusions;
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -141,21 +143,86 @@ public class PriceCheckService {
                 .orElse(null);
         LocalDateTime start = from.atStartOfDay();
         LocalDateTime end = to.plusDays(1).atStartOfDay();
-        Set<String> excluded = excludedSuppliers.codes(storeId);
+
+        CadencierImport cadencierImport = cadencierImports.findNewest(storeId).orElse(null);
+        Map<UUID, List<PriceCheckReview>> reviewsByDelivery = reviews.findActive(storeId, ReviewedReport.BASE_PURCHASE).stream()
+                .collect(Collectors.groupingBy(review -> review.getDocument().getId(), LinkedHashMap::new,
+                        Collectors.toList()));
+        Computed computed = compute(storeId, start, end, reviewsByDelivery.keySet(), minMargin, Set.of(), List.of());
+
+        List<Delivery> result = new ArrayList<>();
+        for (Document delivery : computed.deliveries()) {
+            List<Document> ofDelivery = computed.correctionsByDelivery().get(delivery.getId());
+            CorrectedDelivery corrected = computed.correctedByDelivery().get(delivery.getId());
+            List<Line> lines = computed.linesByDelivery().getOrDefault(delivery.getId(), List.of());
+            List<PriceCheckReview> history = reviewsByDelivery.getOrDefault(delivery.getId(), List.of());
+            if (lines.isEmpty() && history.isEmpty()) {
+                continue;
+            }
+            List<PriceCheckReviewResponse> historyResponses = history.stream().map(mapper::toResponse).toList();
+            result.add(new Delivery(delivery.getId(), delivery.getNumber(), delivery.getDocumentDate(),
+                    delivery.getSupplierCode(), delivery.getSupplierName(), delivery.getSupplierDocumentNumber(),
+                    ofDelivery.size(),
+                    !lines.isEmpty() && lines.stream().allMatch(line -> line.incidentDate() != null),
+                    corrected.purchaseValue(),
+                    sum(lines, Line::purchaseValue),
+                    (int) lines.stream().filter(Line::belowMinimum).count(),
+                    sum(lines, Line::excessValue),
+                    sum(lines.stream().filter(line -> line.basePrice() != null).toList(),
+                            line -> line.purchasePrice().subtract(line.basePrice()).multiply(line.quantity())
+                                    .setScale(2, RoundingMode.HALF_UP)),
+                    historyResponses.isEmpty() ? null : historyResponses.getFirst(), historyResponses, lines));
+        }
+        result.sort(Comparator.<Delivery>comparingInt(delivery -> delivery.review() == null ? 0
+                        : STATUS_ORDER.get(delivery.review().status()))
+                .thenComparing(Delivery::documentDate, Comparator.reverseOrder())
+                .thenComparing(Delivery::number, Comparator.reverseOrder()));
+
+        return new PriceCheckReport(from, to, PERIOD_DAYS, minMargin, BASE_SUPPLIER_CODES, computed.cadencierSize(),
+                cadencierImport != null ? cadencierImport.getReportGeneratedAt() : null,
+                cadencierImport != null ? cadencierImport.getImportedAt() : null,
+                documentImports.findLastPeriodTo(storeId).orElse(null),
+                documentImports.findNewestReportGeneratedAt(storeId).orElse(null),
+                INCIDENT_DAYS, incidents.findLastIncidentDate(storeId).orElse(null),
+                result);
+    }
+
+    /**
+     * Artykuły z cadencier od dostawcy spoza bazy w przyjęciach PZ z {@code start}..{@code end}, po przyjęciach (do
+     * weryfikacji przyjęć). Minimalna marża z ustawień oznacza linie jak w raporcie. Pomija dostawców i nomenklatury
+     * z list raportu zakupu poza bazą, a do tego {@code moreSuppliers} i {@code moreNomenclatures}.
+     */
+    Map<UUID, List<Line>> outsideBaseLines(UUID storeId, LocalDateTime start, LocalDateTime end,
+            Set<String> moreSuppliers, List<String> moreNomenclatures) {
+        BigDecimal minMargin = settings.findByStoreId(storeId).map(PriceCheckSettings::getMinMarginPercent)
+                .orElse(null);
+        return compute(storeId, start, end, Set.of(), minMargin, moreSuppliers, moreNomenclatures).linesByDelivery();
+    }
+
+    /** Przyjęcia z liniami raportu, ich korekty i linie po korektach. */
+    private record Computed(List<Document> deliveries, Map<UUID, List<Document>> correctionsByDelivery,
+            Map<UUID, CorrectedDelivery> correctedByDelivery, Map<UUID, List<Line>> linesByDelivery,
+            int cadencierSize) {
+    }
+
+    private Computed compute(UUID storeId, LocalDateTime start, LocalDateTime end, Set<UUID> reviewed,
+            BigDecimal minMargin, Set<String> moreSuppliers, List<String> moreNomenclatures) {
+        Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
+        excluded.addAll(exclusions.supplierCodes(storeId, ReviewedReport.BASE_PURCHASE));
+        excluded.addAll(moreSuppliers);
+        List<String> nomenclatures = new ArrayList<>(exclusions.codes(storeId, ReviewedReport.BASE_PURCHASE));
+        nomenclatures.addAll(moreNomenclatures);
 
         CadencierImport cadencierImport = cadencierImports.findNewest(storeId).orElse(null);
         Cadencier cadencier = cadencierImport == null ? Cadencier.EMPTY
                 : Cadencier.of(cadencierImports.findCurrentItm8s(storeId), cadencierImports.findCurrentEans(storeId));
-        Map<UUID, List<PriceCheckReview>> reviewsByDelivery = reviews.findActive(storeId, ReviewedReport.BASE_PURCHASE).stream()
-                .collect(Collectors.groupingBy(review -> review.getDocument().getId(), LinkedHashMap::new,
-                        Collectors.toList()));
         // Linie wczytujemy tylko dla przyjęć, które odsiała baza, i dla przyjęć ze statusem (także starszych).
         Set<UUID> ids = new LinkedHashSet<>(cadencierImport == null ? List.of()
                 : cadencierImports.findDeliveriesWithCadencierLines(storeId, BASE_SUPPLIER_CODES, start, end));
-        ids.addAll(reviewsByDelivery.keySet());
+        ids.addAll(reviewed);
         List<Document> deliveries = ids.isEmpty() ? List.of() : documents.findWithLines(storeId, ids).stream()
                 .filter(delivery -> delivery.getType() == DocumentType.PZ && !delivery.isMarkedAsError())
-                .filter(delivery -> reviewsByDelivery.containsKey(delivery.getId())
+                .filter(delivery -> reviewed.contains(delivery.getId())
                         || hasCadencierLineFromOtherSupplier(delivery, cadencier, excluded))
                 .toList();
         LocalDateTime oldest = deliveries.stream().map(Document::getDocumentDate).min(Comparator.naturalOrder())
@@ -201,42 +268,16 @@ public class PriceCheckService {
                         oldest.toLocalDate().atStartOfDay().minusDays(BASE_LOOKBACK_DAYS), end, itm8Array,
                         eanKeys.toArray(String[]::new)));
 
-        List<Delivery> result = new ArrayList<>();
+        Map<UUID, List<Line>> linesByDelivery = new HashMap<>();
         for (Document delivery : deliveries) {
-            List<Document> ofDelivery = correctionsByDelivery.get(delivery.getId());
-            CorrectedDelivery corrected = correctedByDelivery.get(delivery.getId());
-            List<Line> lines = flaggedLines(delivery, corrected, minMargin, cadencier, cadencierPrices, basePrices,
-                    incidentIndex, excluded);
-            List<PriceCheckReview> history = reviewsByDelivery.getOrDefault(delivery.getId(), List.of());
-            if (lines.isEmpty() && history.isEmpty()) {
-                continue;
+            List<Line> lines = flaggedLines(delivery, correctedByDelivery.get(delivery.getId()), minMargin, cadencier,
+                    cadencierPrices, basePrices, incidentIndex, excluded, nomenclatures);
+            if (!lines.isEmpty()) {
+                linesByDelivery.put(delivery.getId(), lines);
             }
-            List<PriceCheckReviewResponse> historyResponses = history.stream().map(mapper::toResponse).toList();
-            result.add(new Delivery(delivery.getId(), delivery.getNumber(), delivery.getDocumentDate(),
-                    delivery.getSupplierCode(), delivery.getSupplierName(), delivery.getSupplierDocumentNumber(),
-                    ofDelivery.size(),
-                    !lines.isEmpty() && lines.stream().allMatch(line -> line.incidentDate() != null),
-                    corrected.purchaseValue(),
-                    sum(lines, Line::purchaseValue),
-                    (int) lines.stream().filter(Line::belowMinimum).count(),
-                    sum(lines, Line::excessValue),
-                    sum(lines.stream().filter(line -> line.basePrice() != null).toList(),
-                            line -> line.purchasePrice().subtract(line.basePrice()).multiply(line.quantity())
-                                    .setScale(2, RoundingMode.HALF_UP)),
-                    historyResponses.isEmpty() ? null : historyResponses.getFirst(), historyResponses, lines));
         }
-        result.sort(Comparator.<Delivery>comparingInt(delivery -> delivery.review() == null ? 0
-                        : STATUS_ORDER.get(delivery.review().status()))
-                .thenComparing(Delivery::documentDate, Comparator.reverseOrder())
-                .thenComparing(Delivery::number, Comparator.reverseOrder()));
-
-        return new PriceCheckReport(from, to, PERIOD_DAYS, minMargin, BASE_SUPPLIER_CODES, cadencier.size(),
-                cadencierImport != null ? cadencierImport.getReportGeneratedAt() : null,
-                cadencierImport != null ? cadencierImport.getImportedAt() : null,
-                documentImports.findLastPeriodTo(storeId).orElse(null),
-                documentImports.findNewestReportGeneratedAt(storeId).orElse(null),
-                INCIDENT_DAYS, incidents.findLastIncidentDate(storeId).orElse(null),
-                result);
+        return new Computed(deliveries, correctionsByDelivery, correctedByDelivery, linesByDelivery,
+                cadencier.size());
     }
 
     /** Szybki odsiew przed liczeniem korekt: czy w raporcie przyjęcia jest artykuł z cadencier od innego dostawcy. */
@@ -364,7 +405,7 @@ public class PriceCheckService {
      */
     private static List<Line> flaggedLines(Document delivery, CorrectedDelivery corrected, BigDecimal minMargin,
             Cadencier cadencier, Map<String, BigDecimal> cadencierPrices, BasePrices basePrices,
-            Incidents incidents, Set<String> excluded) {
+            Incidents incidents, Set<String> excluded, List<String> nomenclatures) {
         Map<String, String> supplierByItm8 = new HashMap<>();
         for (DocumentLine line : delivery.getLines()) {
             if (line.getSupplierCode() != null) {
@@ -377,6 +418,7 @@ public class PriceCheckService {
             BigDecimal quantity = line.quantity();
             String cadencierItm8 = cadencier.itm8Of(line.itm8(), line.ean());
             if (cadencierItm8 == null || BASE_SUPPLIER_CODES.contains(supplier) || excluded.contains(supplier)
+                    || ReportExclusionService.matches(line.nomenclatureCode(), nomenclatures)
                     || quantity == null
                     || quantity.signum() <= 0 || line.purchasePrice() == null) {
                 continue;

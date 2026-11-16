@@ -59,6 +59,13 @@ public class LowMarginController {
     }
 
     /** Progi marży sklepu (punkty procentowe od wymaganej); zwraca raport po zmianie. */
+    /** Cały bon przyjęcia z oceną marży, do rozwinięcia przyjęcia w raporcie. */
+    @GetMapping("/deliveries/{documentId}/lines")
+    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public List<LowMarginReport.Line> bonLines(@PathVariable UUID storeId, @PathVariable UUID documentId) {
+        return lowMarginService.bonLines(storeId, documentId);
+    }
+
     @PutMapping("/settings")
     @PreAuthorize("hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
     public LowMarginReport settings(@PathVariable UUID storeId, @Valid @RequestBody LowMarginSettingsRequest request,

@@ -24,5 +24,8 @@ export async function savePriceControlFile(
   else saveBlob(blob, fileName)
   // Serwer dopisał artykuły z pliku do listy cenówek (zmiany cen); pobranie pliku to nie mutacja, więc odświeżamy sami.
   void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'price-markdowns'] })
+  // Nowa zmiana cen czeka na wgranie: licznik w menu i lista od razu ją widzą.
+  void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-pending'] })
+  void queryClient.invalidateQueries({ queryKey: ['stores', storeId, 'data-entry', 'price-control-files'] })
   return { fileName, downloaded: !folderReady, supplierCode: headers.get('X-Supplier-Code') || null }
 }

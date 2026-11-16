@@ -77,7 +77,17 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
   },
   {
     title: 'Weryfikacja zakupów',
+    // Najpierw Weryfikacja przyjęć (zbiera wszystkie anomalie bonu), za nią raporty jej części,
+    // potem kartoteka i dostawcy.
     reports: [
+      {
+        path: salesPaths.lowMargins,
+        title: 'Weryfikacja przyjęć',
+        description:
+          'Całe bony PZ z anomaliami: za niska albo za wysoka marża, zakup drożej niż wcześniej i zakup poza bazą.',
+        icon: TrendingDownIcon,
+        fromDocuments: 'Z przyjęć PZ i ich korekt',
+      },
       {
         path: salesPaths.priceCheck,
         title: 'Zakup bazowy poza bazą',
@@ -95,20 +105,20 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         fromDocuments: 'Z przyjęć PZ i ich korekt',
       },
       {
-        path: salesPaths.lowMargins,
-        title: 'Weryfikacja przyjęć',
-        description:
-          'Artykuły z marżą o 5 punktów niższą albo o 10 wyższą niż wymagana na nomenklaturze, z aktualnej ceny na kasie. Do wyjaśnienia.',
-        icon: TrendingDownIcon,
-        fromDocuments: 'Z przyjęć PZ i ich korekt',
-      },
-      {
         path: salesPaths.articleMargins,
         title: 'Artykuły z za niską marżą',
         description:
           'Cała kartoteka: marża z aktualnej ceny na kasie i ostatniego zakupu poniżej wymaganej o wybrany próg. Cadencier osobno.',
         icon: PercentIcon,
         fromDocuments: 'Z kartoteki i ostatnich przyjęć PZ',
+      },
+      {
+        path: salesPaths.supplierTurnover,
+        title: 'Obroty z dostawcami',
+        description:
+          'Za ile netto kupiliśmy od dostawcy w każdym miesiącu, po nomenklaturze, z korektami. Suma zaznaczonych pozycji.',
+        icon: TruckIcon,
+        fromDocuments: 'Z przyjęć PZ i ich korekt',
       },
       {
         path: TOOL_ROUTES.MEAT_PURCHASES.path,
@@ -118,14 +128,6 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         icon: TOOL_ROUTES.MEAT_PURCHASES.icon,
         fromDocuments: 'Z papierowych dokumentów WZ',
         permission: 'MEAT_PURCHASES',
-      },
-      {
-        path: salesPaths.supplierTurnover,
-        title: 'Obroty z dostawcami',
-        description:
-          'Za ile netto kupiliśmy od dostawcy w każdym miesiącu, po nomenklaturze, z korektami. Suma zaznaczonych pozycji.',
-        icon: TruckIcon,
-        fromDocuments: 'Z przyjęć PZ i ich korekt',
       },
     ],
   },
@@ -201,6 +203,17 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
   },
 ]
 
+/**
+ * Siatka bez pustych miejsc w ostatnim wierszu: 4 kolumny, a gdy liczba kafelków się w nie nie dzieli,
+ * 3 kolumny (6 kafelków = 2 pełne wiersze). Przy 5 pierwszy kafelek jest podwójny (2 + 1, potem 3).
+ */
+function gridLayout(count: number) {
+  if (count % 4 === 0 || count < 3) return { grid: 'xl:grid-cols-4', first: '' }
+  if (count % 3 === 0) return { grid: 'xl:grid-cols-3', first: '' }
+  if (count === 5) return { grid: 'xl:grid-cols-3', first: 'sm:col-span-2' }
+  return { grid: 'xl:grid-cols-4', first: '' }
+}
+
 export function ReportsGrid({ storeId }: { storeId: string }) {
   const me = useCurrentUser()
   const { data } = useSalesReportsOverview(storeId)
@@ -212,19 +225,21 @@ export function ReportsGrid({ storeId }: { storeId: string }) {
 
   return (
     <div className="space-y-8">
-      {REPORT_GROUPS.map((group) => (
-        <section key={group.title}>
-          <h2 className="mb-3 text-base font-semibold">{group.title}</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {group.reports
-              .filter((report) => !report.permission || hasPermission(me, report.permission))
-              .map((report) => (
+      {REPORT_GROUPS.map((group) => {
+        const reports = group.reports.filter((report) => !report.permission || hasPermission(me, report.permission))
+        const layout = gridLayout(reports.length)
+        return (
+          <section key={group.title}>
+            <h2 className="mb-3 text-base font-semibold">{group.title}</h2>
+            <div className={cn('grid gap-3 sm:grid-cols-2', layout.grid)}>
+              {reports.map((report, index) => (
                 <Link
                   key={report.path}
                   to={report.path}
                   className={cn(
                     'group flex flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color,box-shadow] duration-150 outline-none',
                     'hover:border-foreground/20 hover:shadow-[0_2px_8px_-2px_rgb(0_0_0/0.08)] focus-visible:ring-3 focus-visible:ring-ring/50',
+                    index === 0 && layout.first,
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -245,9 +260,10 @@ export function ReportsGrid({ storeId }: { storeId: string }) {
                   </p>
                 </Link>
               ))}
-          </div>
-        </section>
-      ))}
+            </div>
+          </section>
+        )
+      })}
     </div>
   )
 }

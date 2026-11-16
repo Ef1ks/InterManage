@@ -93,7 +93,13 @@ export type ReportMacroContext = {
   lastSaleDate?: string | null
   /** Ostatni dzień objęty wgranymi raportami dokumentów (najpóźniejsze „do” z importów); null = brak. */
   lastDocumentDate?: string | null
+  /** Dni objęte wgranymi raportami (połączone okresy z serwera); z dziur makro drukuje zaległe raporty. */
+  salesCovered?: Period[]
+  documentsCovered?: Period[]
 }
+
+/** Od tego dnia makro uzupełnia dziury w sprzedaży i dokumentach. */
+export const HISTORY_START = '2024-01-01'
 
 /** Najpóźniejszy koniec okresu z wgranych raportów dokumentów. */
 export function lastDocumentDate(imports: { periodTo: string | null }[] | undefined): string | null {
@@ -148,11 +154,34 @@ export function splitPeriod(period: Period, months: number): Period[] {
   return parts
 }
 
-/** Części okresu raportu (sprzedaż, dokumenty); raport bez okresu to jedna część bez dat. */
-function periodParts(kind: MacroReport, context: ReportMacroContext): (Period | null)[] {
+/** Dni od `from` do `to` (włącznie), których nie obejmuje żaden okres z `covered`, jako okresy od najstarszego. */
+export function missingPeriods(covered: Period[], from: string, to: string): Period[] {
+  const gaps: Period[] = []
+  let next = from
+  for (const range of [...covered].sort((a, b) => a.from.localeCompare(b.from))) {
+    if (next > to) break
+    if (range.to < next) continue
+    if (range.from > next) {
+      const end = addDays(range.from, -1)
+      gaps.push({ from: next, to: end < to ? end : to })
+    }
+    next = addDays(range.to, 1)
+  }
+  if (next <= to) gaps.push({ from: next, to })
+  return gaps
+}
+
+/**
+ * Części okresu raportu (sprzedaż, dokumenty), od najstarszej: dziury od HISTORY_START w okresach wgranych raportów,
+ * potem bieżący okres, każde podzielone do limitu Mercalys. Raport bez okresu to jedna część bez dat.
+ */
+export function periodParts(kind: MacroReport, context: ReportMacroContext): (Period | null)[] {
   const months = PERIOD_REPORT_MONTHS[kind]
   if (!months) return [null]
-  return splitPeriod(kind === 'SALES' ? salesPeriod(context) : documentsPeriod(context), months)
+  const current = kind === 'SALES' ? salesPeriod(context) : documentsPeriod(context)
+  const covered = (kind === 'SALES' ? context.salesCovered : context.documentsCovered) ?? []
+  const gaps = missingPeriods(covered, HISTORY_START, addDays(current.from, -1))
+  return [...gaps, current].flatMap((period) => splitPeriod(period, months))
 }
 
 /** RRRR-MM-DD jako DDMMRRRR (pole daty w Mercalys) i wzorzec wartości po wpisaniu (DD/MM/RRRR). */

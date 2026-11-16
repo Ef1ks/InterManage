@@ -6,17 +6,26 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Marże artykułów kartoteki z aktualnych cen: raport artykułów z za niską marżą ({@code maxMargin}: marża
- * poniżej tylu procent) albo raport aktualnych
+ * Marże artykułów kartoteki z aktualnych cen: raport artykułów z za niską marżą ({@code minGap}: marża niższa od
+ * wymaganej co najmniej o tyle punktów procentowych) albo raport aktualnych
  * promocji (bez gazetki; {@code leafletSkipped}: ile promocji z gazetki pominięto). {@code marginsConfigured}: sklep ma
  * marżę wymaganą. {@code excludedSuppliers}: dostawcy bez marży wymaganej (wspólni z raportem marż poza normą).
+ * {@code excludedNomenclatures}: kody nomenklatur pomijanych w raporcie artykułów, {@code nomenclatureSkipped}: ile
+ * artykułów z za niską marżą pominięto przez nie. {@code skippedSuppliers}: własna lista dostawców pomijanych w
+ * raporcie artykułów (po dostawcy ostatniego przyjęcia), {@code supplierSkipped}: ile artykułów pominęła,
+ * {@code suppliers}: dostawcy sklepu do wyboru.
  */
 public record ArticleMarginReport(
         LocalDate today,
-        BigDecimal maxMargin,
+        BigDecimal minGap,
         boolean marginsConfigured,
         int leafletSkipped,
         List<ReportSupplier> excludedSuppliers,
+        List<String> excludedNomenclatures,
+        int nomenclatureSkipped,
+        List<ReportSupplier> skippedSuppliers,
+        int supplierSkipped,
+        List<ReportSupplier> suppliers,
         List<Item> items) {
 
     /** Skąd jest cena zakupu: ostatnie przyjęcie PZ albo kartoteka (bez przyjęcia w ostatnim roku). */
@@ -63,6 +72,10 @@ public record ArticleMarginReport(
             BigDecimal soldQuantity,
             boolean cadencier,
             BigDecimal cadencierPrice,
+            /** Ostatnie przyjęcie PZ w okresie filtra przyjęcia; {@code null} bez filtra. */
+            LocalDateTime periodDeliveryDate,
+            /** Sprzedana ilość od dnia {@code periodDeliveryDate} do dziś; {@code null} bez filtra przyjęcia. */
+            BigDecimal soldSinceDelivery,
             /** Obowiązująca weryfikacja (ceny się nie zmieniły od sprawdzenia); {@code null} = do kontroli. */
             Verification verification) {
 
@@ -70,7 +83,7 @@ public record ArticleMarginReport(
             return new Item(itm8, ean, name, brand, nomenclatureCode, regionCode, supplierCode, supplierName, vatRate,
                     purchasePrice, purchaseSource, lastPurchaseDate, salePrice, marginPercent, requiredMargin,
                     targetPurchasePrice, targetSalePrice, promoPrice, promoFrom, promoTo, promoSource, promoMargin,
-                    soldQuantity, cadencier, cadencierPrice, verification);
+                    soldQuantity, cadencier, cadencierPrice, periodDeliveryDate, soldSinceDelivery, verification);
         }
     }
 

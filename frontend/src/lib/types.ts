@@ -647,14 +647,7 @@ export type DocumentSummary = {
   transferTarget: TransferTarget | null
   /** Przyjęcie oznaczone jako błąd (na liście tylko z filtrem „Oznaczone jako błąd”). */
   errorMarkedAt: string | null
-  /** Weryfikacja przyjęcia PZ ({@code null} = bez statusu): status, kiedy i kto. */
-  verificationStatus: DocumentVerificationStatus | null
-  verificationAt: string | null
-  verificationBy: string | null
 }
-
-/** Weryfikacja przyjęcia PZ: w trakcie (czeka na kierownika) albo zweryfikowane. */
-export type DocumentVerificationStatus = 'IN_PROGRESS' | 'VERIFIED'
 
 /** Zamknięty raport przyjęć, w którym przyjęcie poszło razem ze swoim okresem (daty RRRR-MM-DD). */
 export type DocumentReportClosing = {
@@ -2433,6 +2426,13 @@ export type LowMarginPromotion = 'LIST' | 'TILL' | 'LEAFLET' | 'SALES'
 
 export type ReportSupplier = { code: string; name: string }
 
+/** Listy pomijanych w raporcie weryfikującym zakupy: kody nomenklatur, dostawcy i dostawcy sklepu do wyboru. */
+export type ReportExclusions = {
+  nomenclatures: string[]
+  suppliers: ReportSupplier[]
+  supplierOptions: ReportSupplier[]
+}
+
 export type LowMarginLine = {
   itm8: string
   ean: string | null
@@ -2465,6 +2465,40 @@ export type LowMarginLine = {
 /** Marża za niska albo za wysoka wobec wymaganej. */
 export type LowMarginDeviation = 'LOW' | 'HIGH'
 
+/**
+ * Anomalia artykułu w weryfikacji przyjęć: marża za niska albo za wysoka wobec wymaganej, zakup drożej niż
+ * w poprzednich dostawach i artykuł z cadencier kupiony poza bazą.
+ */
+export type DeliveryAnomaly = 'LOW_MARGIN' | 'HIGH_MARGIN' | 'OVERPAID' | 'OUTSIDE_BASE'
+
+/** Artykuł bonu w weryfikacji przyjęć; bez ceny sprzedaży albo stawki VAT pola marży są puste. */
+export type DeliveryReviewLine = Omit<
+  LowMarginLine,
+  | 'salePrice'
+  | 'documentSalePrice'
+  | 'marginPercent'
+  | 'requiredMargin'
+  | 'targetPurchasePrice'
+  | 'excessValue'
+  | 'deviation'
+> & {
+  salePrice: number | null
+  documentSalePrice: number | null
+  marginPercent: number | null
+  requiredMargin: number | null
+  targetPurchasePrice: number | null
+  excessValue: number | null
+  deviation: LowMarginDeviation | null
+  /** Anomalie artykułu; puste = w normie. */
+  anomalies: DeliveryAnomaly[]
+  /** Przepłacenie wobec poprzednich dostaw, jak w raporcie przepłaconych. */
+  overpaid: OverpaymentLine | null
+  /** Zakup poza bazą, jak w raporcie zakupu poza bazą (z incydentem bazy nie jest anomalią). */
+  outsideBase: PriceCheckLine | null
+  /** Możliwa strata: największa z brakującej marży, nadpłaty i różnicy wobec bazy. */
+  lossValue: number
+}
+
 export type LowMarginDelivery = {
   id: string
   number: string
@@ -2473,17 +2507,24 @@ export type LowMarginDelivery = {
   supplierName: string | null
   supplierDocumentNumber: string | null
   correctionCount: number
+  /** Zakup całego bonu po korektach. */
   linesPurchaseValue: number
+  /** Możliwa strata na artykułach z anomalią. */
   excessValue: number
   review: PriceCheckReview | null
   history: PriceCheckReview[]
-  lines: LowMarginLine[]
-  /** Weryfikacja przyjęcia, ta sama co w Dokumentach ({@code null} = bez statusu). */
-  verificationStatus: DocumentVerificationStatus | null
-  verificationAt: string | null
-  verificationBy: string | null
+  /** Artykuły z anomalią, od największej możliwej straty; reszta bonu: `useLowMarginBon`. */
+  lines: DeliveryReviewLine[]
   /** Faktury KSeF przyjęcia i jego korekt od dostawcy. */
   ksefInvoices: LinkedKsefInvoice[]
+  /** Ile artykułów ma cały bon (pobiera się go dopiero po rozwinięciu przyjęcia). */
+  lineCount: number
+  /** Ile artykułów ma anomalię i ile każdego rodzaju (artykuł może mieć kilka). */
+  anomalyCount: number
+  lowMarginCount: number
+  highMarginCount: number
+  overpaidCount: number
+  outsideBaseCount: number
 }
 
 /** Ocena artykułu przyjęcia na bonie: jak w raporcie marż (odchylenie puste = w normie). */
@@ -2553,11 +2594,15 @@ export type ArticleMarginItem = {
   promoTo: string | null
   promoSource: 'LIST' | 'TILL' | null
   promoMargin: number | null
-  /** Sprzedana ilość w ostatnich 3 miesiącach; pusta bez sprzedaży. */
+  /** Sprzedana ilość w ostatnich 3 miesiącach (z filtrem sprzedaży: w jego okresie); pusta bez sprzedaży. */
   soldQuantity: number | null
   /** Aktywny w cadencier z CENA_CAD: marża ustalona przez centralę. */
   cadencier: boolean
   cadencierPrice: number | null
+  /** Ostatnie przyjęcie PZ w okresie filtra przyjęcia; puste bez filtra. */
+  periodDeliveryDate: string | null
+  /** Sprzedana ilość od dnia `periodDeliveryDate` do dziś; pusta bez filtra przyjęcia. */
+  soldSinceDelivery: number | null
   /** Obowiązująca weryfikacja (ceny bez zmian od sprawdzenia); pusta = do kontroli. */
   verification: ArticleMarginVerification | null
 }
@@ -2575,12 +2620,21 @@ export type ArticleMarginVerification = {
 
 export type ArticleMarginReport = {
   today: string
-  /** Raport artykułów: marża poniżej tylu procent; pusty w raporcie promocji. */
-  maxMargin: number | null
+  /** Raport artykułów: marża niższa od wymaganej o co najmniej tyle punktów procentowych; pusty w raporcie promocji. */
+  minGap: number | null
   marginsConfigured: boolean
   /** Promocje z gazetki pominięte w raporcie aktualnych promocji. */
   leafletSkipped: number
   excludedSuppliers: ReportSupplier[]
+  /** Kody nomenklatur pomijanych w raporcie artykułów (2, 4 albo 6 cyfr). */
+  excludedNomenclatures: string[]
+  /** Ile artykułów z za niską marżą pominięto przez nomenklatury. */
+  nomenclatureSkipped: number
+  /** Własna lista dostawców pomijanych w raporcie artykułów (dostawca ostatniego przyjęcia). */
+  skippedSuppliers: ReportSupplier[]
+  supplierSkipped: number
+  /** Dostawcy sklepu do wyboru. */
+  suppliers: ReportSupplier[]
   items: ArticleMarginItem[]
 }
 
@@ -3216,6 +3270,18 @@ export type PriceControlFileItem = {
   lineCount: number
   createdAt: string
   createdBy: string | null
+  /** Puste = program sklepu jeszcze nie wczytał pliku. */
+  loadedAt: string | null
+  loadedManually: boolean
+  /** N z końcówki .TraiteN: ile razy program sklepu przetworzył plik (puste przy ręcznym oznaczeniu). */
+  processedCount: number | null
+  loadedBy: string | null
+}
+
+/** Zmiany cen sklepu: wszystkie niewgrane (od najstarszego) i ostatnie wgrane. */
+export type PriceControlFiles = {
+  pending: PriceControlFileItem[]
+  loaded: PriceControlFileItem[]
 }
 
 export type PriceFileOverview = {

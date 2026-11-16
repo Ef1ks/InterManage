@@ -29,7 +29,6 @@ import com.intermanage.backend.document.dto.AutoInvoiceMatchesRequest;
 import com.intermanage.backend.document.dto.CorrectionCandidate;
 import com.intermanage.backend.document.dto.DocumentPage;
 import com.intermanage.backend.document.dto.DocumentResponse;
-import com.intermanage.backend.document.dto.DocumentVerificationRequest;
 import com.intermanage.backend.document.dto.DocumentsOverview;
 import com.intermanage.backend.document.dto.InvoiceComparison;
 import com.intermanage.backend.document.dto.InvoiceComparisonMatchRequest;
@@ -46,7 +45,6 @@ import com.intermanage.backend.document.service.DocumentGratisService;
 import com.intermanage.backend.document.service.DocumentKsefLinkService;
 import com.intermanage.backend.document.service.DocumentPrintService;
 import com.intermanage.backend.document.service.DocumentService;
-import com.intermanage.backend.document.service.DocumentVerificationService;
 import com.intermanage.backend.document.service.InvoiceAmountCheckService;
 import com.intermanage.backend.document.service.InvoiceComparisonService;
 
@@ -73,14 +71,12 @@ public class DocumentController {
     private final InvoiceAmountCheckService amountChecks;
     private final InvoiceComparisonService invoiceComparison;
     private final DocumentPrintService prints;
-    private final DocumentVerificationService verificationService;
 
     public DocumentController(DocumentService documentService, DocumentGratisService gratisService,
             DocumentKsefLinkService ksefLinks, DeliveryCorrectionService corrections,
             InvoiceAmountCheckService amountChecks, InvoiceComparisonService invoiceComparison,
-            DocumentPrintService prints, DocumentVerificationService verificationService) {
+            DocumentPrintService prints) {
         this.prints = prints;
-        this.verificationService = verificationService;
         this.invoiceComparison = invoiceComparison;
         this.ksefLinks = ksefLinks;
         this.corrections = corrections;
@@ -106,8 +102,7 @@ public class DocumentController {
      * {@code hideValueFrom} / {@code hideValueTo}: ukrywa dokumenty z kwotą w tym przedziale (granice włącznie,
      * jedna wystarczy), {@code hideValueOf}: {@code purchase} (domyślnie) albo {@code sale} (sprzedaż brutto).
      * {@code hiddenSuppliers}: kody dostawców ukrytych na liście. {@code markedAsError}: tylko przyjęcia oznaczone
-     * jako błąd (bez tego ich nie ma). {@code verification} (przyjęcia): {@code none}, {@code in_progress},
-     * {@code verified}. Domyślnie od najwyższego numeru.
+     * jako błąd (bez tego ich nie ma). Domyślnie od najwyższego numeru.
      */
     @GetMapping("/{type}")
     @PreAuthorize(VIEW)
@@ -120,13 +115,11 @@ public class DocumentController {
             @RequestParam(required = false) BigDecimal hideValueTo,
             @RequestParam(defaultValue = "") List<String> hiddenSuppliers,
             @RequestParam(defaultValue = "false") boolean markedAsError,
-            @RequestParam(required = false) String verification,
             @RequestParam(defaultValue = "number") String sort, @RequestParam(defaultValue = "desc") String direction) {
         return documentService.list(storeId, type, page, query, product, DocumentSearch.Presence.of(invoice),
                 DocumentSearch.Presence.of(corrections), DocumentSearch.Presence.of(closed),
                 DocumentSearch.GratisFilter.of(gratis), DocumentSearch.ValueField.of(hideValueOf), hideValueFrom,
-                hideValueTo, hiddenSuppliers, markedAsError, DocumentSearch.VerificationFilter.of(verification), sort,
-                direction);
+                hideValueTo, hiddenSuppliers, markedAsError, sort, direction);
     }
 
     @GetMapping("/{type}/{id}")
@@ -343,23 +336,6 @@ public class DocumentController {
     public DocumentResponse markAsError(@PathVariable UUID storeId, @PathVariable String type, @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return documentService.markAsError(storeId, type, id, principal.getId());
-    }
-
-    /** Status weryfikacji przyjęcia PZ: w trakcie (dla kierownika) albo zweryfikowane. */
-    @PutMapping("/{type}/{id}/verification")
-    @PreAuthorize(EDIT)
-    public DocumentResponse setVerification(@PathVariable UUID storeId, @PathVariable String type,
-            @PathVariable UUID id, @Valid @RequestBody DocumentVerificationRequest request,
-            @AuthenticationPrincipal AppUserPrincipal principal) {
-        return verificationService.set(storeId, type, id, request.status(), principal.getId());
-    }
-
-    /** Zdejmuje status weryfikacji przyjęcia (zmiana zostaje w historii). */
-    @DeleteMapping("/{type}/{id}/verification")
-    @PreAuthorize(EDIT)
-    public DocumentResponse clearVerification(@PathVariable UUID storeId, @PathVariable String type,
-            @PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
-        return verificationService.set(storeId, type, id, null, principal.getId());
     }
 
     /** Cofa oznaczenie jako błąd. */

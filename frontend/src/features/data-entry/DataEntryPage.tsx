@@ -115,6 +115,7 @@ import {
   useSaveTemporaryXml,
   useSuggest,
   useUnlinkProduct,
+  usePriceControlPendingCount,
 } from './api'
 import { DataEntryGrid, type GridHandle } from './DataEntryGrid'
 import {
@@ -129,6 +130,7 @@ import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
 import { CorrectionBanner } from './CorrectionBanner'
 import { DeliOrderBanner } from './DeliOrderBanner'
+import { PriceControlPendingBanner } from './PriceControlFilesDialog'
 import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
@@ -339,6 +341,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null)
   const [correctionMacroOpen, setCorrectionMacroOpen] = useState(false)
   const [closeInvoicesOpen, setCloseInvoicesOpen] = useState(false)
+  const { data: priceControlPending = 0 } = usePriceControlPendingCount(store.id, true)
   const [pluMacroOpen, setPluMacroOpen] = useState(false)
   const [splitTargets, setSplitTargets] = useState<DataEntryRow[]>([])
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
@@ -1307,6 +1310,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           onDismiss={keepDeliOrderOpen}
         />
       )}
+      <PriceControlPendingBanner storeId={store.id} count={priceControlPending} />
       <PageHeader
         title="Wprowadzanie danych"
         description={

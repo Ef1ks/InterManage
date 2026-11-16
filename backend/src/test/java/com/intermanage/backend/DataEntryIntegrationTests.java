@@ -1080,13 +1080,46 @@ class DataEntryIntegrationTests {
                 "select id::text from data_entry_price_control_files where store_id = ?::uuid", String.class, storeId);
         mvc.perform(get(url("/price-control-files")).cookie(owner))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(id))
-                .andExpect(jsonPath("$[0].supplierCode").value("98"))
-                .andExpect(jsonPath("$[0].invoiceNumber").value("FV/9"))
-                .andExpect(jsonPath("$[0].lineCount").value(3));
+                .andExpect(jsonPath("$.pending[0].id").value(id))
+                .andExpect(jsonPath("$.pending[0].supplierCode").value("98"))
+                .andExpect(jsonPath("$.pending[0].invoiceNumber").value("FV/9"))
+                .andExpect(jsonPath("$.pending[0].lineCount").value(3))
+                .andExpect(jsonPath("$.pending[0].loadedAt").doesNotExist())
+                .andExpect(jsonPath("$.loaded.length()").value(0));
         assertThat(mvc.perform(get(url("/price-control-files/" + id + "/file")).cookie(owner))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray()).isEqualTo(file);
+        mvc.perform(get(url("/price-control-files/pending-count")).cookie(owner))
+                .andExpect(jsonPath("$.count").value(1));
+
+        // Program sklepu wczytał plik (.Traite1 w folderze): plik przechodzi do wgranych, ponowne wczytanie podnosi liczbę.
+        mvc.perform(post(url("/price-control-files/seen")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"files\":[{\"id\":\"" + id + "\",\"processedCount\":1}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pending.length()").value(0))
+                .andExpect(jsonPath("$.loaded[0].id").value(id))
+                .andExpect(jsonPath("$.loaded[0].processedCount").value(1))
+                .andExpect(jsonPath("$.loaded[0].loadedManually").value(false));
+        mvc.perform(post(url("/price-control-files/seen")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"files\":[{\"id\":\"" + id + "\",\"processedCount\":2}]}"))
+                .andExpect(jsonPath("$.loaded[0].processedCount").value(2));
+
+        // Cofnięcie i ręczne oznaczenie, potem usunięcie z listy (znacznik) i przywrócenie.
+        mvc.perform(delete(url("/price-control-files/" + id + "/loaded")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.pending[0].id").value(id));
+        mvc.perform(put(url("/price-control-files/" + id + "/loaded")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.loaded[0].loadedManually").value(true))
+                .andExpect(jsonPath("$.loaded[0].processedCount").doesNotExist());
+        mvc.perform(put(url("/price-control-files/" + id + "/loaded")).cookie(owner).with(csrf()))
+                .andExpect(status().isConflict());
+        mvc.perform(delete(url("/price-control-files/" + id)).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.loaded.length()").value(0));
+        assertThat(jdbc.queryForObject("select deleted_at is not null from data_entry_price_control_files where id = ?::uuid",
+                Boolean.class, id)).isTrue();
+        mvc.perform(post(url("/price-control-files/" + id + "/restore")).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.loaded[0].id").value(id));
 
         // Dostawca nie jest wymagany: bez hasła i spoza listy w nazwie pliku stoi login (jak w etykietach).
         jdbc.update("update suppliers set keyword = null where id = ?::uuid", supplierId);

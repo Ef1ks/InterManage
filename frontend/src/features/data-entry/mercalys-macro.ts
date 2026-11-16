@@ -71,9 +71,10 @@ export type MacroDocument = {
 /**
  * Makro dla odtwarzacza: przywraca Mercalys z paska zadań i otwiera zakładkę Zakup, potem integracja plików, kody na bonach z listy bez Nr Zamów, Nr BL
  * w nagłówkach, a po jednym potwierdzeniu zamknięcia z wydrukiem bonu i powrót do przeglądarki. Bon bez kodu zatrzymuje makro przed nagłówkami,
- * a podsumowanie mówi, czego nie znalazło. CRLF jak w Windows.
+ * a podsumowanie mówi, czego nie znalazło. Z `print` bony otwarte w Acrobacie idą przed zamknięciem do drukarki domyślnej
+ * (PDFPRINTALL, odtwarzacz od wersji 51), bez niego są tylko zamykane. CRLF jak w Windows.
  */
-export function buildDeliveryMacro(documents: MacroDocument[]) {
+export function buildDeliveryMacro(documents: MacroDocument[], print = false) {
   const bl = BL_SCREEN
   const order = ORDER_SCREEN
   return (
@@ -99,7 +100,7 @@ export function buildDeliveryMacro(documents: MacroDocument[]) {
       `WEBWAIT|${WINDOW}|${order.headerButton}`,
       `WEBHEADERS|${WINDOW}|${GRID}|${order.numberColumn}|${order.identificationColumn}|${order.headerButton}|${order.identificationField}|${order.saveHeaderButton}|${DIALOG}|${order.saveHeaderText}|Oui|${order.firstPageButton}|${order.nextPageButton}`,
       `WEBCLOSE|${WINDOW}|${GRID}|${order.numberColumn}|${order.identificationColumn}|${order.closeButton}|${DIALOG}|${order.closeText}|Oui|${order.printCheckbox}|${order.approveCloseButton}|${order.firstPageButton}|${order.nextPageButton}`,
-      `WINCLOSEALL|${PDF_WINDOW}|${PDF_TIMEOUT_MS}`,
+      `${print ? 'PDFPRINTALL' : 'WINCLOSEALL'}|${PDF_WINDOW}|${PDF_TIMEOUT_MS}`,
       `WINMIN|${PROGRAM_WINDOW}`,
     ].join('\r\n') + '\r\n'
   )

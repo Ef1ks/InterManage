@@ -29,10 +29,6 @@ public record DocumentResponse(
         /** Oznaczenie jako błąd: kiedy i kto ({@code null} = dokument się liczy). */
         Instant errorMarkedAt,
         String errorMarkedBy,
-        /** Weryfikacja przyjęcia PZ ({@code null} = bez statusu): status, kiedy i kto. */
-        String verificationStatus,
-        Instant verificationAt,
-        String verificationBy,
         int lineCount,
         BigDecimal purchaseValue,
         BigDecimal saleValueGross,

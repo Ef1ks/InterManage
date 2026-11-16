@@ -5,6 +5,7 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
@@ -30,7 +31,7 @@ import type {
   KsefInvoicePage,
   SupplierRuleMode,
   NomenclatureItem,
-  PriceControlFileItem,
+  PriceControlFiles,
   SuggestionResponse,
   SuggestionStatus,
 } from '@/lib/types'
@@ -565,13 +566,56 @@ export type PriceControlPayload = {
 }
 
 const priceControlKey = (storeId: string) => ['stores', storeId, 'data-entry', 'price-control-files'] as const
+const priceControlCountKey = (storeId: string) => ['stores', storeId, 'data-entry', 'price-control-pending'] as const
 
-/** 10 ostatnich plików CTRLPRIX sklepu (do ponownego zapisu). */
+/** Niewgrane zmiany cen sklepu (wszystkie) i ostatnie wgrane. */
 export function usePriceControlFiles(storeId: string, enabled: boolean) {
   return useQuery({
     queryKey: priceControlKey(storeId),
-    queryFn: () => api<PriceControlFileItem[]>(`${path(storeId)}/price-control-files`),
+    queryFn: () => fetchPriceControlFiles(storeId),
     enabled,
+  })
+}
+
+export const fetchPriceControlFiles = (storeId: string) =>
+  api<PriceControlFiles>(`${path(storeId)}/price-control-files`)
+
+/** Liczba niewgranych zmian cen (licznik w menu i baner), odświeżana co 5 minut. */
+export function usePriceControlPendingCount(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: priceControlCountKey(storeId),
+    queryFn: () => api<{ count: number }>(`${path(storeId)}/price-control-files/pending-count`),
+    enabled,
+    refetchInterval: 5 * 60_000,
+    select: (data) => data.count,
+  })
+}
+
+/** Lista po zmianie (odpowiedź serwera) i nowy licznik; reszty aplikacji to nie dotyczy. */
+export function applyPriceControlFiles(queryClient: QueryClient, storeId: string, files: PriceControlFiles) {
+  queryClient.setQueryData(priceControlKey(storeId), files)
+  queryClient.setQueryData(priceControlCountKey(storeId), { count: files.pending.length })
+}
+
+/** Zmiany cen widziane w folderze z końcówką .TraiteN (program sklepu je wczytał). */
+export const sendPriceControlSeen = (storeId: string, files: { id: string; processedCount: number }[]) =>
+  api<PriceControlFiles>(`${path(storeId)}/price-control-files/seen`, { method: 'POST', json: { files } })
+
+export type PriceControlAction = 'mark-loaded' | 'unmark-loaded' | 'delete' | 'restore'
+
+/** Ręczne oznaczenie wgrania, jego cofnięcie, usunięcie z listy (znacznik) i przywrócenie. */
+export function usePriceControlChange(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, action }: { id: string; action: PriceControlAction }) => {
+      const base = `${path(storeId)}/price-control-files/${id}`
+      if (action === 'mark-loaded') return api<PriceControlFiles>(`${base}/loaded`, { method: 'PUT' })
+      if (action === 'unmark-loaded') return api<PriceControlFiles>(`${base}/loaded`, { method: 'DELETE' })
+      if (action === 'delete') return api<PriceControlFiles>(base, { method: 'DELETE' })
+      return api<PriceControlFiles>(`${base}/restore`, { method: 'POST' })
+    },
+    onSuccess: (files) => applyPriceControlFiles(queryClient, storeId, files),
+    meta: { invalidates: false },
   })
 }
 

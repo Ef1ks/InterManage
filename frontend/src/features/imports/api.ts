@@ -246,3 +246,16 @@ export function useImportProductCodes(storeId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: productCodeImportsKey(storeId) }),
   })
 }
+
+/** Dni objęte wgranymi raportami sprzedaży i dokumentów (połączone okresy): z dziur makro drukuje zaległe raporty. */
+export type ImportCoverage = {
+  sales: { from: string; to: string }[]
+  documents: { from: string; to: string }[]
+}
+
+export function useImportCoverage(storeId: string) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'imports', 'coverage'],
+    queryFn: () => api<ImportCoverage>(`/stores/${storeId}/imports/coverage`),
+  })
+}

@@ -94,11 +94,14 @@ public class OverpaymentService {
     private final SaleRepository sales;
     private final ExcludedSuppliers excludedSuppliers;
     private final ReportExcludedSupplierService reportSuppliers;
+    private final ReportExclusionService exclusions;
 
     public OverpaymentService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             PriceCheckReviewRepository reviews, PriceCheckMapper mapper, SaleRepository sales,
-            ExcludedSuppliers excludedSuppliers, ReportExcludedSupplierService reportSuppliers) {
+            ExcludedSuppliers excludedSuppliers, ReportExcludedSupplierService reportSuppliers,
+            ReportExclusionService exclusions) {
+        this.exclusions = exclusions;
         this.documents = documents;
         this.documentLines = documentLines;
         this.documentImports = documentImports;
@@ -129,14 +132,9 @@ public class OverpaymentService {
                 .map(review -> review.getDocument().getDocumentDate()).min(Comparator.naturalOrder())
                 .filter(date -> date.isBefore(start)).orElse(start);
 
-        List<DeliveryHistory> history = documentLines.findDeliveryHistory(storeId, oldest.minusDays(HISTORY_DAYS),
-                start, until, reviewed.stream().map(UUID::toString).toArray(String[]::new), SYMBOLIC_PRICE,
-                THRESHOLD_FACTOR);
         List<ReportSupplier> skippedSuppliers = reportSuppliers.active(storeId, ReviewedReport.OVERPAYMENT);
-        Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
-        skippedSuppliers.forEach(supplier -> excluded.add(supplier.code()));
-        Map<UUID, List<Line>> linesByDelivery = overpaid(history, start, reviewed, excluded,
-                maxReferenceDays);
+        Map<UUID, List<Line>> linesByDelivery = overpaidLines(storeId, oldest, start, until, reviewed,
+                maxReferenceDays, Set.of(), List.of());
 
         Set<UUID> ids = new LinkedHashSet<>(linesByDelivery.keySet());
         ids.addAll(reviewed);
@@ -166,6 +164,24 @@ public class OverpaymentService {
                 reportSuppliers.options(storeId), result);
     }
 
+    /**
+     * Przepłacone artykuły przyjęć PZ z {@code start}..{@code until} i przyjęć {@code reviewed} (najstarsze od
+     * {@code oldest}), po przyjęciach. Pomija dostawców i nomenklatury z list raportu przepłaconych, a do tego
+     * {@code moreSuppliers} i {@code moreNomenclatures} (np. listy raportu, który z tego korzysta).
+     */
+    Map<UUID, List<Line>> overpaidLines(UUID storeId, LocalDateTime oldest, LocalDateTime start, LocalDateTime until,
+            Set<UUID> reviewed, int maxReferenceDays, Set<String> moreSuppliers, List<String> moreNomenclatures) {
+        List<DeliveryHistory> history = documentLines.findDeliveryHistory(storeId, oldest.minusDays(HISTORY_DAYS),
+                start, until, reviewed.stream().map(UUID::toString).toArray(String[]::new), SYMBOLIC_PRICE,
+                THRESHOLD_FACTOR);
+        Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
+        excluded.addAll(exclusions.supplierCodes(storeId, ReviewedReport.OVERPAYMENT));
+        excluded.addAll(moreSuppliers);
+        List<String> nomenclatures = new ArrayList<>(exclusions.codes(storeId, ReviewedReport.OVERPAYMENT));
+        nomenclatures.addAll(moreNomenclatures);
+        return overpaid(history, start, reviewed, excluded, nomenclatures, maxReferenceDays);
+    }
+
     /** Zastępuje listę dostawców pomijanych w raporcie; zwraca raport po zmianie. */
     @Transactional
     public OverpaymentReport setExcludedSuppliers(UUID storeId, List<String> supplierCodes, UUID userId) {
@@ -175,9 +191,10 @@ public class OverpaymentService {
 
     /** Przepłacone artykuły po przyjęciach, od największej nadpłaty. Historia od najstarszej dostawy. */
     private static Map<UUID, List<Line>> overpaid(List<DeliveryHistory> history, LocalDateTime start,
-            Set<UUID> reviewed, Set<String> excluded, int maxReferenceDays) {
+            Set<UUID> reviewed, Set<String> excluded, List<String> nomenclatures, int maxReferenceDays) {
         Map<String, List<DeliveryHistory>> byArticle = history.stream()
                 .filter(delivery -> !skipped(delivery.getNomenclatureCode()))
+                .filter(delivery -> !ReportExclusionService.matches(delivery.getNomenclatureCode(), nomenclatures))
                 .filter(delivery -> !excluded.contains(delivery.getSupplierCode()))
                 .collect(Collectors.groupingBy(DeliveryHistory::getItm8, LinkedHashMap::new, Collectors.toList()));
         Map<UUID, List<Line>> lines = new HashMap<>();

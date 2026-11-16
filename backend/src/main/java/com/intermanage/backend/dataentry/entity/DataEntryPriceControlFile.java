@@ -62,6 +62,28 @@ public class DataEntryPriceControlFile {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** Program sklepu wczytał plik (końcówka .TraiteN w folderze) albo ktoś oznaczył go ręcznie. */
+    @Column(name = "loaded_at")
+    private Instant loadedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "loaded_by")
+    private AppUser loadedBy;
+
+    @Column(name = "loaded_manually", nullable = false)
+    private boolean loadedManually;
+
+    /** N z końcówki .TraiteN: ile razy program sklepu przetworzył plik; puste przy ręcznym oznaczeniu. */
+    @Column(name = "processed_count")
+    private Integer processedCount;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
+
     protected DataEntryPriceControlFile() {
     }
 
@@ -83,6 +105,57 @@ public class DataEntryPriceControlFile {
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();
+    }
+
+    /**
+     * Plik widziany w folderze z końcówką .TraiteN. Niewgrany staje się wgrany; wgrany dostaje tylko wyższą liczbę
+     * przetworzeń (program wczytał go ponownie).
+     */
+    public boolean seenProcessed(int count, AppUser by) {
+        if (loadedAt == null) {
+            loadedAt = Instant.now();
+            loadedBy = by;
+            loadedManually = false;
+            processedCount = count;
+            return true;
+        }
+        if (processedCount != null && count > processedCount) {
+            processedCount = count;
+            return true;
+        }
+        return false;
+    }
+
+    public void markLoaded(AppUser by) {
+        loadedAt = Instant.now();
+        loadedBy = by;
+        loadedManually = true;
+        processedCount = null;
+    }
+
+    public void unmarkLoaded() {
+        loadedAt = null;
+        loadedBy = null;
+        loadedManually = false;
+        processedCount = null;
+    }
+
+    public void delete(AppUser by) {
+        deletedAt = Instant.now();
+        deletedBy = by;
+    }
+
+    public void restore() {
+        deletedAt = null;
+        deletedBy = null;
+    }
+
+    public boolean isLoaded() {
+        return loadedAt != null;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 
     public UUID getId() {

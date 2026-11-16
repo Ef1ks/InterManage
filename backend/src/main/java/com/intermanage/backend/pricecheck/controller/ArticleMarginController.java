@@ -1,9 +1,11 @@
 package com.intermanage.backend.pricecheck.controller;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,12 +37,21 @@ public class ArticleMarginController {
         this.service = service;
     }
 
-    /** Artykuły z marżą poniżej {@code maxMargin} % (domyślnie 20%). */
+    /**
+     * Artykuły z marżą niższą od wymaganej co najmniej o {@code minGap} punktów procentowych (domyślnie 5); z
+     * {@code deliveredFrom}/{@code deliveredTo} tylko przyjęte na PZ w tym okresie, z {@code soldFrom}/{@code soldTo}
+     * tylko sprzedane w tym okresie (wtedy sprzedana ilość jest z niego).
+     */
     @GetMapping("/article-margins")
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
     public ArticleMarginReport lowMargins(@PathVariable UUID storeId,
-            @RequestParam(required = false) BigDecimal maxMargin) {
-        return service.lowMargins(storeId, maxMargin);
+            @RequestParam(required = false) BigDecimal minGap,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveredFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate deliveredTo,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate soldFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate soldTo) {
+        return service.lowMargins(storeId, minGap, new ArticleMarginService.Period(deliveredFrom, deliveredTo),
+                new ArticleMarginService.Period(soldFrom, soldTo));
     }
 
     /** Oznacza artykuły jako sprawdzone przy podanych cenach; zwraca id wpisów do „Cofnij”. */

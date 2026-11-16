@@ -162,7 +162,7 @@ class LowMarginIntegrationTests {
     }
 
     @Test
-    void deliveryHintsJudgeEveryArticleAndReportShowsDocumentVerification() throws Exception {
+    void deliveryHintsJudgeEveryArticleAndReportLoadsBonSeparately() throws Exception {
         jdbc.update("delete from low_margin_settings where store_id = ?::uuid", store);
         requiredMargin("57", "30");
         // Jedno przyjęcie: za niska (20%), w normie (33%) i za wysoka (50%) marża.
@@ -180,14 +180,15 @@ class LowMarginIntegrationTests {
                         .value(org.hamcrest.Matchers.contains((Object) null)))
                 .andExpect(jsonPath("$.lines[?(@.line.itm8 == '" + LISTED + "')].line.deviation").value("HIGH"));
 
-        // Status weryfikacji z Dokumentów widać w raporcie przy przyjęciu.
-        mvc.perform(put("/api/stores/" + store + "/documents/pz/" + id + "/verification").cookie(owner).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"VERIFIED\"}"))
-                .andExpect(status().isOk());
+        // Raport niesie przy przyjęciu same anomalie i liczbę artykułów, a cały bon pobiera się osobno.
         mvc.perform(get(url()).cookie(owner))
                 .andExpect(jsonPath("$.deliveries[0].id").value(id))
-                .andExpect(jsonPath("$.deliveries[0].verificationStatus").value("VERIFIED"))
-                .andExpect(jsonPath("$.deliveries[0].verificationBy").isNotEmpty());
+                .andExpect(jsonPath("$.deliveries[0].lineCount").value(3))
+                .andExpect(jsonPath("$.deliveries[0].lines[*].itm8", containsInAnyOrder(ON_THRESHOLD, LISTED)));
+        mvc.perform(get(url() + "/deliveries/" + id + "/lines").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[?(@.itm8 == '" + ABOVE_THRESHOLD + "')].anomalies[*]", hasSize(0)));
     }
 
     @Test
@@ -470,8 +471,10 @@ class LowMarginIntegrationTests {
         jdbc.update("insert into cadencier_items (store_id, itm8, ean, import_id) values (?::uuid, ?, null, ?::uuid)",
                 store, OTHER_REGION, cadencier);
 
-        // Promocja skończyła się wczoraj, a kartoteka dalej trzyma jej cenę 2,99 zł: liczy się zwykła 19,99 zł (50%).
-        catalogArticle(LISTED, "5900000000106", "2.99", "57 01 01", null, null);
+        // Promocja skończyła się wczoraj, a kartoteka dalej trzyma jej cenę 2,99 zł: liczy się zwykła 19,99 zł (50%,
+        // wymagane na tej rodzinie 70%).
+        requiredMargin("5702", "70");
+        catalogArticle(LISTED, "5900000000106", "2.99", "57 02 01", null, null);
         jdbc.update("update products set promo_price = 2.99, promo_from = ?::date, promo_to = ?::date where itm8 = ?",
                 today.minusDays(1), today.minusDays(1), LISTED);
         jdbc.update("""
@@ -481,31 +484,191 @@ class LowMarginIntegrationTests {
         delivery(LISTED, 50, "10", "100.00", "19.99", "570101");
 
         String articles = "/api/stores/" + store + "/reports/article-margins";
-        // Domyślnie marża poniżej 20%.
+        // Domyślnie marża niższa od wymaganej (30%, na 57 02 70%) o co najmniej 5 punktów.
         mvc.perform(get(articles).cookie(owner))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.maxMargin").value(20))
-                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(NO_MARGIN, OTHER_REGION)))
+                .andExpect(jsonPath("$.minGap").value(5))
+                .andExpect(jsonPath("$.items[*].itm8",
+                        containsInAnyOrder(ON_THRESHOLD, ABOVE_THRESHOLD, NO_MARGIN, OTHER_REGION, LISTED)))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].purchaseSource").value("CATALOG"))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].marginPercent").value(0.0))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].soldQuantity").value(4.0))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + OTHER_REGION + "')].cadencier").value(true));
-        mvc.perform(get(articles + "?maxMargin=25").cookie(owner))
+        // 10 punktów: 20% przy wymaganych 30% jeszcze wchodzi, 20,06% już nie.
+        mvc.perform(get(articles + "?minGap=10").cookie(owner))
                 .andExpect(jsonPath("$.items[*].itm8",
-                        containsInAnyOrder(ON_THRESHOLD, ABOVE_THRESHOLD, NO_MARGIN, OTHER_REGION)))
+                        containsInAnyOrder(ON_THRESHOLD, NO_MARGIN, OTHER_REGION, LISTED)))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].purchaseSource").value("DELIVERY"))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].marginPercent").value(20.0))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].targetSalePrice").value(14.29));
-        mvc.perform(get(articles + "?maxMargin=60").cookie(owner))
+        mvc.perform(get(articles + "?minGap=25").cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(NO_MARGIN, OTHER_REGION)));
+        mvc.perform(get(articles).cookie(owner))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].salePrice").value(19.99))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].promoPrice").value(
                         org.hamcrest.Matchers.contains((Object) null)));
-        mvc.perform(get(articles + "?maxMargin=-1").cookie(owner)).andExpect(status().isBadRequest());
+        mvc.perform(get(articles + "?minGap=-1").cookie(owner)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void articleMarginsFilterByDeliveryAndSalesPeriod() throws Exception {
+        requiredMargin("57", "30");
+        // Wszystkie z marżą 9,09% (zakup 10 zł, sprzedaż 11 zł): przyjęte 10 i 50 dni temu, sprzedane 40 dni temu.
+        catalogArticle(ON_THRESHOLD, "5900000000501", "11.00", "57 01 01", null, null);
+        delivery(ON_THRESHOLD, 10, "10", "100.00", "11.00", "570101");
+        catalogArticle(ABOVE_THRESHOLD, "5900000000502", "11.00", "57 01 01", null, null);
+        delivery(ABOVE_THRESHOLD, 50, "10", "100.00", "11.00", "570101");
+        catalogArticle(NO_MARGIN, "5900000000503", "11.00", "57 01 01", (short) 1, "8.13");
+        String salesImport = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', now(), ?, ?, 1, 1, 0, 0) returning id""",
+                String.class, store, today.minusDays(60), today.minusDays(1));
+        jdbc.update("""
+                insert into sales (store_id, sale_date, itm8, ean, quantity, cost_value, sale_value_gross, vat_value,
+                    margin_value, import_id)
+                values (?::uuid, ?, ?, null, 7, 0, 77, 0, 0, ?::uuid)""",
+                store, today.minusDays(40), NO_MARGIN, salesImport);
+        String articles = "/api/stores/" + store + "/reports/article-margins";
+
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(ON_THRESHOLD, ABOVE_THRESHOLD, NO_MARGIN)));
+        // Przyjęte w ostatnich 30 dniach.
+        mvc.perform(get(articles + "?deliveredFrom=" + today.minusDays(30)).cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(ON_THRESHOLD)));
+        // Sprzedaż od dnia przyjęcia z okresu: 7 szt. sprzedanych 40 dni temu, przyjęcie 50 dni temu.
+        jdbc.update("""
+                insert into sales (store_id, sale_date, itm8, ean, quantity, cost_value, sale_value_gross, vat_value,
+                    margin_value, import_id)
+                values (?::uuid, ?, ?, null, 7, 0, 77, 0, 0, ?::uuid)""",
+                store, today.minusDays(40), ABOVE_THRESHOLD, salesImport);
+        mvc.perform(get(articles + "?deliveredFrom=" + today.minusDays(60) + "&deliveredTo=" + today.minusDays(20))
+                        .cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(ABOVE_THRESHOLD)))
+                .andExpect(jsonPath("$.items[0].soldSinceDelivery").value(7.0))
+                .andExpect(jsonPath("$.items[0].periodDeliveryDate").value(today.minusDays(50) + "T10:00:00"));
+        mvc.perform(get(articles + "?deliveredFrom=" + today.minusDays(30)).cookie(owner))
+                .andExpect(jsonPath("$.items[0].soldSinceDelivery").value(0.0));
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items[0].soldSinceDelivery").isEmpty());
+        // Sprzedane w okresie: ilość z tego okresu, brzegi ze sprzedaży dziennej.
+        mvc.perform(get(articles + "?soldFrom=" + today.minusDays(45) + "&soldTo=" + today.minusDays(35))
+                        .cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(NO_MARGIN, ABOVE_THRESHOLD)))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + NO_MARGIN + "')].soldQuantity").value(7.0));
+        mvc.perform(get(articles + "?soldFrom=" + today.minusDays(30)).cookie(owner))
+                .andExpect(jsonPath("$.items", hasSize(0)));
+        // Oba warunki naraz.
+        mvc.perform(get(articles + "?soldFrom=" + today.minusDays(45) + "&deliveredFrom=" + today.minusDays(30))
+                        .cookie(owner))
+                .andExpect(jsonPath("$.items", hasSize(0)));
+        mvc.perform(get(articles + "?soldFrom=" + today + "&soldTo=" + today.minusDays(1)).cookie(owner))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void articleMarginsSkipExcludedNomenclatures() throws Exception {
+        requiredMargin("57", "30");
+        catalogArticle(NO_MARGIN, "5900000000601", "12.30", "57 01 01", (short) 1, "10.00");
+        sold(NO_MARGIN);
+        catalogArticle(OTHER_REGION, "5900000000602", "12.30", "57 02 01", (short) 1, "10.00");
+        sold(OTHER_REGION);
+        String articles = "/api/stores/" + store + "/reports/article-margins";
+
+        String exclusions = "/api/stores/" + store + "/reports/exclusions/ARTICLE_MARGIN";
+        mvc.perform(put(exclusions + "/nomenclatures").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"codes\":[\"5702\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nomenclatures", containsInAnyOrder("5702")));
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(NO_MARGIN)))
+                .andExpect(jsonPath("$.excludedNomenclatures", containsInAnyOrder("5702")))
+                .andExpect(jsonPath("$.nomenclatureSkipped").value(1));
+        // Nieznany kod = 400, lista bez zmian; pusta lista przywraca artykuły.
+        mvc.perform(put(exclusions + "/nomenclatures").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"codes\":[\"99\"]}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put(exclusions + "/nomenclatures").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"codes\":[]}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(NO_MARGIN, OTHER_REGION)))
+                .andExpect(jsonPath("$.nomenclatureSkipped").value(0));
+        org.junit.jupiter.api.Assertions.assertEquals(1, jdbc.queryForObject(
+                "select count(*) from report_excluded_nomenclatures where removed_at is not null",
+                Integer.class));
+    }
+
+    @Test
+    void articleMarginsSkipOwnSupplierList() throws Exception {
+        requiredMargin("57", "30");
+        catalogArticle(ON_THRESHOLD, "5900000000701", "11.00", "57 01 01", null, null);
+        delivery(ON_THRESHOLD, 10, "10", "100.00", "11.00", "570101");
+        String articles = "/api/stores/" + store + "/reports/article-margins";
+        String code = jdbc.queryForObject("""
+                select l.supplier_code from document_lines l join documents d on d.id = l.document_id
+                where d.store_id = ?::uuid and l.itm8 = ? limit 1""", String.class, store, ON_THRESHOLD);
+        jdbc.update("""
+                insert into suppliers (store_id, code, name)
+                values (?::uuid, ?, 'DOSTAWCA TESTOWY') on conflict do nothing""", store, code);
+
+        mvc.perform(put("/api/stores/" + store + "/reports/exclusions/ARTICLE_MARGIN/suppliers").cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"supplierCodes\":[\"" + code + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.suppliers[0].code").value(code));
+        mvc.perform(get(articles).cookie(owner))
+                .andExpect(jsonPath("$.items", hasSize(0)))
+                .andExpect(jsonPath("$.supplierSkipped").value(1))
+                .andExpect(jsonPath("$.skippedSuppliers[0].code").value(code));
+        // Lista raportu marż poza normą jej nie zawiera.
+        mvc.perform(get("/api/stores/" + store + "/reports/low-margins").cookie(owner))
+                .andExpect(jsonPath("$.excludedSuppliers", hasSize(0)));
+    }
+
+    @Test
+    void deliveryShowsWholeBonWithAnomalyCategories() throws Exception {
+        requiredMargin("57", "30");
+        // Wcześniejsza dostawa ABOVE_THRESHOLD po 5 zł, teraz po 8 zł (przepłacone); marża przy 12,50 zł w normie.
+        String earlier = document("PZ", 40);
+        line(earlier, ABOVE_THRESHOLD, "10", "50.00", "12.50", "570101", 5);
+        String bon = document("PZ", 5);
+        // Za niska marża: zakup 10 zł, sprzedaż 12,50 zł z VAT 5% (20% przy wymaganych 30%).
+        line(bon, ON_THRESHOLD, "10", "100.00", "12.50", "570101", 5);
+        line(bon, ABOVE_THRESHOLD, "10", "80.00", "12.50", "570101", 5);
+        // W normie: zakup 8 zł, sprzedaż 12,50 zł (31,24%).
+        line(bon, OLD, "10", "80.00", "12.50", "570101", 5);
+        catalogArticle(ON_THRESHOLD, "5900000000801", "12.50", "57 01 01", null, null);
+        catalogArticle(ABOVE_THRESHOLD, "5900000000802", "12.50", "57 01 01", null, null);
+        catalogArticle(OLD, "5900000000803", "12.50", "57 01 01", null, null);
+
+        mvc.perform(get(url()).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveries", hasSize(1)))
+                .andExpect(jsonPath("$.deliveries[0].id").value(bon))
+                .andExpect(jsonPath("$.deliveries[0].lines", hasSize(2)))
+                .andExpect(jsonPath("$.deliveries[0].lineCount").value(3))
+                .andExpect(jsonPath("$.deliveries[0].anomalyCount").value(2))
+                .andExpect(jsonPath("$.deliveries[0].lowMarginCount").value(1))
+                .andExpect(jsonPath("$.deliveries[0].overpaidCount").value(1))
+                .andExpect(jsonPath("$.deliveries[0].linesPurchaseValue").value(260.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[?(@.itm8 == '" + ABOVE_THRESHOLD + "')].anomalies[0]")
+                        .value("OVERPAID"))
+                .andExpect(jsonPath("$.deliveries[0].lines[?(@.itm8 == '" + ABOVE_THRESHOLD
+                        + "')].overpaid.referencePrice").value(5.0))
+                .andExpect(jsonPath("$.deliveries[0].lines[?(@.itm8 == '" + ABOVE_THRESHOLD + "')].lossValue")
+                        .value(30.0));
+
+        // Nomenklatura z listy tego raportu zdejmuje anomalie, więc przyjęcie znika.
+        mvc.perform(put("/api/stores/" + store + "/reports/exclusions/LOW_MARGIN/nomenclatures").cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"codes\":[\"5701\"]}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(url()).cookie(owner)).andExpect(jsonPath("$.deliveries", hasSize(0)));
     }
 
     @Test
     void articleMarginsTakePurchasePriceAfterCorrections() throws Exception {
-        requiredMargin("57", "30");
+        requiredMargin("57", "50");
         // Bon 10 zł za sztukę, korekta obniża wartość o 20 zł: cena zakupu 8 zł, marża przy 12,50 zł 36%.
         catalogArticle(ON_THRESHOLD, "5900000000401", "12.50", "57 01 01", null, null);
         String delivery = delivery(ON_THRESHOLD, 10, "10", "100.00", "12.50", "570101");
@@ -516,7 +679,7 @@ class LowMarginIntegrationTests {
         String wrong = delivery(ABOVE_THRESHOLD, 5, "10", "50.00", "12.50", "570101");
         correction(wrong, ABOVE_THRESHOLD, "-10", "-50.00");
 
-        mvc.perform(get("/api/stores/" + store + "/reports/article-margins?maxMargin=60").cookie(owner))
+        mvc.perform(get("/api/stores/" + store + "/reports/article-margins").cookie(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].purchasePrice").value(8.0))
                 .andExpect(jsonPath("$.items[?(@.itm8 == '" + ON_THRESHOLD + "')].marginPercent").value(36.0))

@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 50.0.0.0
+;@Ahk2Exe-SetVersion 51.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 50 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 51 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -318,6 +318,11 @@ PlayMacro(rawClip) {
                     if (text != "")
                         report .= "`n" text "`n"
                 }
+            case "PDFPRINTALL":
+                ; PDFPRINTALL|okno|limit w ms: jak WINCLOSEALL, ale każdy PDF przed zamknięciem idzie w Acrobacie do drukarki
+                ; domyślnej (Ctrl+P, Enter). PDF, którego nie udało się wydrukować, zostaje otwarty i trafia do podsumowania.
+                if (parts.Length >= 2 && (!closingRan || closedCount > 0))
+                    report .= "`n" PdfPrintAll(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : closingRan ? 20000 : 0) "`n"
             case "WINMIN":
                 ; WINMIN|okno: chowa program na pasek zadań; brak okna nie jest błędem, bo praca jest już skończona
                 if (parts.Length >= 2) {
@@ -679,6 +684,88 @@ WebSelectRow(title, grid, column, timeoutMs, &key := "", handled := Map(), accep
 
 ; Ostatni PDF przychodzi po chwili: zamykamy dopiero, gdy okna i ich tytuły nie zmieniają się przez 4 sekundy.
 WinCloseAll(title, timeoutMs) {
+    WaitForStableWindows(title, timeoutMs)
+    found := WinGetList(title)
+    for hwnd in found
+        try WinClose hwnd
+    left := 0
+    for hwnd in found {
+        if !WinWaitClose("ahk_id " hwnd, , 3)
+            left += 1
+    }
+    return left = 0 ? "" : "Acrobat nie zamknął się sam, zamknij PDF-y ręcznie."
+}
+
+; Jak WinCloseAll, ale każdy dokument najpierw idzie do drukarki domyślnej przez okno drukowania Acrobata (Ctrl+P, Enter),
+; a potem jest zamykany (Ctrl+W): tak samo dla osobnych okien i dla kart w jednym oknie.
+PdfPrintAll(title, timeoutMs) {
+    WaitForStableWindows(title, timeoutMs)
+    printed := 0
+    failed := ""
+    for hwnd in WinGetList(title) {
+        Loop 100 {
+            if !WinExist("ahk_id " hwnd)
+                break
+            name := ""
+            try name := WinGetTitle(hwnd)
+            problem := PrintActivePdf(hwnd)
+            if (problem != "") {
+                failed .= name ": " problem "`n"
+                break
+            }
+            printed += 1
+            try WinActivate hwnd
+            Send "^w"
+            ; Ten sam tytuł po zamknięciu karty = dokument się nie zamknął; dalej nie drukujemy go drugi raz.
+            changed := false
+            Loop 30 {
+                Sleep 100
+                if !WinExist("ahk_id " hwnd) {
+                    changed := true
+                    break
+                }
+                current := ""
+                try current := WinGetTitle(hwnd)
+                if (current != name) {
+                    changed := true
+                    break
+                }
+            }
+            if !changed
+                break
+        }
+    }
+    text := "Wydrukowane bony: " printed
+    if (failed != "")
+        text .= "`nNIE WYDRUKOWANE (PDF zostaje otwarty):`n" failed
+    return text
+}
+
+PrintActivePdf(hwnd) {
+    try {
+        WinActivate hwnd
+        WinWaitActive "ahk_id " hwnd, , 3
+        pid := WinGetPID(hwnd)
+    } catch
+        return "nie da się przełączyć na okno PDF"
+    dialogs := "ahk_class #32770 ahk_pid " pid
+    Send "^p"
+    dialog := WinWait(dialogs, , 15)
+    if !dialog
+        return "nie otworzyło się okno drukowania"
+    Sleep 700 ; okno drukowania wczytuje drukarki, zanim przyjmie Enter
+    try WinActivate "ahk_id " dialog
+    Send "{Enter}"
+    if !WinWaitClose("ahk_id " dialog, , 30)
+        return "okno drukowania się nie zamknęło"
+    ; Postęp drukowania to też okno Acrobata: zamknięcie dokumentu przed jego końcem przerwałoby wydruk.
+    deadline := A_TickCount + 120000
+    while (WinExist(dialogs) && A_TickCount < deadline)
+        Sleep 300
+    return ""
+}
+
+WaitForStableWindows(title, timeoutMs) {
     deadline := A_TickCount + timeoutMs
     last := ""
     changedAt := A_TickCount
@@ -694,15 +781,6 @@ WinCloseAll(title, timeoutMs) {
             break
         Sleep 200
     }
-    found := WinGetList(title)
-    for hwnd in found
-        try WinClose hwnd
-    left := 0
-    for hwnd in found {
-        if !WinWaitClose("ahk_id " hwnd, , 3)
-            left += 1
-    }
-    return left = 0 ? "" : "Acrobat nie zamknął się sam, zamknij PDF-y ręcznie."
 }
 
 ; --- Excel: skoroszyt otwarty przez Mercalys zapisany pod podaną ścieżką ---

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { CircleCheckIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -40,7 +40,11 @@ import {
 import { ApiError } from '@/lib/api'
 import { matchesSearch } from '@/lib/search'
 import { cn } from '@/lib/utils'
+import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
+
+/** Przyjęcia rysujemy porcjami przy przewijaniu, bo w dłuższym okresie są ich setki. */
+const PAGE = 30
 
 type ArticleLine = {
   regionCode: string | null
@@ -49,7 +53,7 @@ type ArticleLine = {
   ean: string | null
   itm8: string
   purchaseValue: number
-  excessValue: number
+  excessValue: number | null
 }
 
 type Delivery = Omit<ReviewedDelivery, 'lines'> & {
@@ -87,13 +91,16 @@ export function ReviewedReportPage<D extends Delivery>({
   nothingFoundText,
   renderLines,
   renderBadges,
+  renderPills,
   countsExcess = () => true,
+  lineExcess = (line) => line.excessValue ?? 0,
 }: {
   storeId: string
   report: ReviewedReport
   query: UseQueryResult<Report<D>>
   title: string
-  intro: ReactNode
+  /** Krótki opis pod tytułem; bez niego od razu raport. */
+  intro?: ReactNode
   /** Przyciski w prawym rogu nagłówka, np. ustawienia raportu. */
   actions?: ReactNode
   /** Dodatkowe ostrzeżenie nad kafelkami. */
@@ -116,8 +123,12 @@ export function ReviewedReportPage<D extends Delivery>({
   renderLines: (delivery: D) => ReactNode
   /** Dodatkowe plakietki w wierszu przyjęcia (bez przycisków, bo wiersz sam jest przyciskiem). */
   renderBadges?: (delivery: D) => ReactNode
-  /** Czy kwota `excessValue` artykułu wchodzi do kwoty przyjęcia (przy przeliczeniu w zakładce kategorii). */
+  /** Plakietki wiersza przyjęcia zamiast domyślnych (liczba artykułów, zakup, kwota). */
+  renderPills?: (delivery: D) => ReactNode
+  /** Czy kwota artykułu wchodzi do kwoty przyjęcia (przy przeliczeniu w zakładce kategorii). */
   countsExcess?: (line: D['lines'][number]) => boolean
+  /** Kwota artykułu do kwoty przyjęcia (domyślnie `excessValue`). */
+  lineExcess?: (line: D['lines'][number]) => number
 }) {
   const [params, setParams] = useSearchParams()
   const filter =
@@ -186,7 +197,7 @@ export function ReviewedReportPage<D extends Delivery>({
         ...delivery,
         lines,
         linesPurchaseValue: lines.reduce((sum, line) => sum + line.purchaseValue, 0),
-        excessValue: lines.filter(countsExcess).reduce((sum, line) => sum + line.excessValue, 0),
+        excessValue: lines.filter(countsExcess).reduce((sum, line) => sum + lineExcess(line), 0),
       }
     })
   const counts = { open: 0, reported: 0, resolved: 0 }
@@ -195,6 +206,17 @@ export function ReviewedReportPage<D extends Delivery>({
     .filter((delivery) => filterOf(delivery) === 'open')
     .reduce((sum, delivery) => sum + delivery.excessValue, 0)
   const shown = filter === 'all' ? deliveries : deliveries.filter((delivery) => filterOf(delivery) === filter)
+  // Kolejność jak na ekranie (grupy statusów), z niej pierwsze `limit` przyjęć; zmiana filtrów zaczyna od nowa.
+  const ordered = STATUS_ORDER.flatMap((status) => shown.filter((delivery) => filterOf(delivery) === status))
+  const listKey = [filter, search, supplier, period, ...filterParams.map((key) => params.get(key))].join('|')
+  const [paging, setPaging] = useState({ key: listKey, limit: PAGE })
+  const limit = paging.key === listKey ? paging.limit : PAGE
+  const visible = new Set(ordered.slice(0, limit).map((delivery) => delivery.id))
+  const more = useLoadMore<HTMLDivElement>(
+    () => setPaging({ key: listKey, limit: limit + PAGE }),
+    limit < ordered.length,
+    limit,
+  )
 
   return (
     <>
@@ -206,7 +228,7 @@ export function ReviewedReportPage<D extends Delivery>({
         {report.data && <ReportFreshness generatedAt={report.data.documentsReportGeneratedAt} />}
         {actions && <div className="ml-auto">{actions}</div>}
       </div>
-      <p className="mb-4 max-w-3xl text-sm text-muted-foreground">{intro}</p>
+      {intro ? <p className="mb-4 max-w-3xl text-sm text-muted-foreground">{intro}</p> : <div className="mb-3" />}
 
       {report.isError ? (
         <Card className="items-center px-6 py-8 text-center">
@@ -312,7 +334,8 @@ export function ReviewedReportPage<D extends Delivery>({
             <div className="grid gap-6">
               {STATUS_ORDER.map((status) => {
                 const group = shown.filter((delivery) => filterOf(delivery) === status)
-                if (group.length === 0) return null
+                const rows = group.filter((delivery) => visible.has(delivery.id))
+                if (rows.length === 0) return null
                 const style = STATUS_STYLES[status]
                 const excess = group.reduce((sum, delivery) => sum + delivery.excessValue, 0)
                 return (
@@ -326,7 +349,7 @@ export function ReviewedReportPage<D extends Delivery>({
                       </span>
                     </h3>
                     <Card className="gap-0 divide-y py-0">
-                      {group.map((delivery) => (
+                      {rows.map((delivery) => (
                         <ReviewedDeliveryRow
                           key={delivery.id}
                           storeId={storeId}
@@ -336,26 +359,30 @@ export function ReviewedReportPage<D extends Delivery>({
                           open={expanded.has(delivery.id)}
                           onToggle={() => toggle(delivery.id)}
                           pills={
-                            <>
-                              <MoneyPill
-                                label={linesLabel}
-                                value={articlesWord(delivery.lines.length)}
-                                tone="neutral"
-                              />
-                              <MoneyPill
-                                label="zakup"
-                                value={`${formatMoney(delivery.linesPurchaseValue)} zł`}
-                                tone="neutral"
-                              />
-                              {delivery.excessValue > 0 && (
+                            renderPills ? (
+                              renderPills(delivery)
+                            ) : (
+                              <>
                                 <MoneyPill
-                                  label={excessLabel}
-                                  value={`${formatMoney(delivery.excessValue)} zł`}
-                                  tone="loss"
+                                  label={linesLabel}
+                                  value={articlesWord(delivery.lines.length)}
+                                  tone="neutral"
                                 />
-                              )}
-                              {renderBadges?.(delivery)}
-                            </>
+                                <MoneyPill
+                                  label="zakup"
+                                  value={`${formatMoney(delivery.linesPurchaseValue)} zł`}
+                                  tone="neutral"
+                                />
+                                {delivery.excessValue > 0 && (
+                                  <MoneyPill
+                                    label={excessLabel}
+                                    value={`${formatMoney(delivery.excessValue)} zł`}
+                                    tone="loss"
+                                  />
+                                )}
+                                {renderBadges?.(delivery)}
+                              </>
+                            )
                           }
                         >
                           {renderLines(delivery)}
@@ -365,6 +392,7 @@ export function ReviewedReportPage<D extends Delivery>({
                   </section>
                 )
               })}
+              {limit < ordered.length && <div ref={more} aria-hidden className="h-1" />}
             </div>
           )}
         </>

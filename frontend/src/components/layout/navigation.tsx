@@ -33,6 +33,7 @@ import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
 import { downloadsPath } from '@/features/downloads/paths'
+import { PriceControlPendingBadge } from '@/features/data-entry/PriceControlPendingBadge'
 import { DeliNewOrdersBadge } from '@/features/deli-order/DeliNewOrdersBadge'
 import { IncomingTransfersBadge } from '@/features/documents/IncomingTransfersBadge'
 import { NewDownloadsBadge } from '@/features/downloads/DownloadUpdatesBanner'
@@ -105,7 +106,7 @@ const GROUPS: GroupSpec[] = [
     description: 'Przyjęcie towaru z faktur i z bazy, faktury KSeF, weryfikacja zakupów i dostawcy.',
     icon: PackageIcon,
     items: [
-      { category: 'DATA_ENTRY', section: RECEIVING },
+      { category: 'DATA_ENTRY', section: RECEIVING, badge: () => <PriceControlPendingBadge /> },
       {
         key: 'base-delivery',
         section: RECEIVING,
@@ -237,7 +238,8 @@ const GROUPS: GroupSpec[] = [
         section: STOCK,
         path: protocolEntryPath,
         label: 'Protokoły',
-        description: 'Likwidacje, potrzeby sklepu, MM i inne protokoły: skanujesz EAN, wpisujesz ilość, zapisujesz plik.',
+        description:
+          'Likwidacje, potrzeby sklepu, MM i inne protokoły: skanujesz EAN, wpisujesz ilość, zapisujesz plik.',
         icon: ClipboardListIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },

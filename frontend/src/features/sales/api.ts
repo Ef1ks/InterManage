@@ -7,6 +7,8 @@ import type {
   ArticleDelivery,
   ArticleMea,
   ArticleProtocol,
+  DeliveryReviewLine,
+  ReportExclusions,
   CadencierImport,
   CadencierOverview,
   CounterMetric,
@@ -88,11 +90,12 @@ export function useDeliCostsOverview(storeId: string, enabled: boolean) {
 }
 
 /** Cała nomenklatura sklepu (ok. 2,5 tys. pozycji) do filtra raportów. */
-export function useSalesNomenclatures(storeId: string) {
+export function useSalesNomenclatures(storeId: string, enabled = true) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'nomenclatures'],
     queryFn: () => api<NomenclatureOption[]>(`${reportsPath(storeId)}/nomenclatures`),
     staleTime: 5 * 60_000,
+    enabled,
   })
 }
 
@@ -768,12 +771,37 @@ export function useLowMargins(storeId: string, days: number) {
   })
 }
 
-/** Artykuły z marżą poniżej `maxMargin` % (aktualna cena na kasie, ostatni zakup). */
-export function useArticleMargins(storeId: string, maxMargin: number) {
+/** Cały bon przyjęcia z oceną marży, pobierany dopiero po rozwinięciu przyjęcia w weryfikacji przyjęć. */
+export function useLowMarginBon(storeId: string, documentId: string) {
   return useQuery({
-    queryKey: [...reportsKey(storeId), 'article-margins', maxMargin],
+    queryKey: [...reportsKey(storeId), 'low-margins', 'bon', documentId],
+    queryFn: () => api<DeliveryReviewLine[]>(`${reportsPath(storeId)}/low-margins/deliveries/${documentId}/lines`),
     staleTime: REPORT_STALE_TIME,
-    queryFn: () => api<ArticleMarginReport>(`${reportsPath(storeId)}/article-margins?maxMargin=${maxMargin}`),
+  })
+}
+
+/** Filtry raportu artykułów z za niską marżą; daty RRRR-MM-DD, puste = bez filtra. */
+export type ArticleMarginFilters = {
+  minGap: number
+  deliveredFrom?: string
+  deliveredTo?: string
+  soldFrom?: string
+  soldTo?: string
+}
+
+/**
+ * Artykuły z marżą niższą od wymaganej o co najmniej `minGap` punktów (aktualna cena na kasie, ostatni zakup), z
+ * okresem przyjęcia PZ i okresem sprzedaży.
+ */
+export function useArticleMargins(storeId: string, filters: ArticleMarginFilters) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') query.set(key, String(value))
+  }
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article-margins', filters],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<ArticleMarginReport>(`${reportsPath(storeId)}/article-margins?${query}`),
     placeholderData: keepPreviousData,
   })
 }
@@ -839,19 +867,40 @@ export function useSetLowMarginGaps(storeId: string) {
   })
 }
 
-export type ExcludedSuppliersReport = 'low-margins' | 'overpayments'
+/** Raporty weryfikujące zakupy z własnymi listami pomijanych nomenklatur i dostawców. */
+export type ExclusionReport = ReviewedReport | 'ARTICLE_MARGIN'
 
-/** Dostawcy pomijani w raporcie. Raport ma w kluczu swoje filtry, więc pobieramy go od nowa, a reszty nie ruszamy. */
-export function useSetExcludedSuppliers(storeId: string, path: ExcludedSuppliersReport) {
+const exclusionsKey = (storeId: string, report: ExclusionReport) => [...reportsKey(storeId), 'exclusions', report]
+const exclusionsPath = (storeId: string, report: ExclusionReport) => `${reportsPath(storeId)}/exclusions/${report}`
+
+/** Pomijane nomenklatury i dostawcy raportu, z dostawcami sklepu do wyboru. */
+export function useReportExclusions(storeId: string, report: ExclusionReport) {
+  return useQuery({
+    queryKey: exclusionsKey(storeId, report),
+    queryFn: () => api<ReportExclusions>(exclusionsPath(storeId, report)),
+  })
+}
+
+/**
+ * Zastępuje jedną z list raportu. Odpowiedź podmienia listy od razu, a raporty pobierają się od nowa, bo zmieniają
+ * się ich artykuły.
+ */
+export function useSetReportExclusions(storeId: string, report: ExclusionReport, list: 'nomenclatures' | 'suppliers') {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (supplierCodes: string[]) =>
-      api<LowMarginReport | OverpaymentReport>(`${reportsPath(storeId)}/${path}/excluded-suppliers`, {
+    mutationFn: (codes: string[]) =>
+      api<ReportExclusions>(`${exclusionsPath(storeId, report)}/${list}`, {
         method: 'PUT',
-        json: { supplierCodes },
+        json: list === 'nomenclatures' ? { codes } : { supplierCodes: codes },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [...reportsKey(storeId), path] }),
-    scope: { id: `${path}-excluded-suppliers-${storeId}` },
+    onSuccess: (data) => {
+      queryClient.setQueryData(exclusionsKey(storeId, report), data)
+      return queryClient.invalidateQueries({
+        queryKey: reportsKey(storeId),
+        predicate: (query) => query.queryKey[2] !== 'exclusions' && query.queryKey[2] !== 'nomenclatures',
+      })
+    },
+    scope: { id: `exclusions-${report}-${list}-${storeId}` },
     meta: { invalidates: false },
   })
 }

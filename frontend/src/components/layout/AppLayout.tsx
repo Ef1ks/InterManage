@@ -33,10 +33,12 @@ import {
 import { SwitchAccountDialog } from '@/features/auth/AccountSwitcher'
 import { useCurrentUser, useLogout } from '@/features/auth/api'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
+import { usePriceControlWatcher } from '@/features/data-entry/price-control-watch'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
+import { useCheckboxDragSelect } from '@/lib/use-checkbox-drag-select'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
 import { THEME_LABELS, useThemeChoice, type ThemeChoice } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -49,6 +51,7 @@ const SIDEBAR_TRANSITION_MS = 200
 export function AppLayout() {
   // Ceny z kasy (pliki TRACEART) sprawdzane w tle na każdej stronie aplikacji.
   usePriceFileWatcher()
+  usePriceControlWatcher()
   useWorkdayLock()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)
   const dispatch = useAppDispatch()
@@ -111,6 +114,9 @@ export function AppLayout() {
   useEffect(() => {
     recordLocation(location.pathname)
   }, [location.key, location.pathname])
+
+  // Przeciągnięcie myszą po polach wyboru zaznacza albo odznacza wiele wierszy naraz (cała aplikacja, też okna).
+  useCheckboxDragSelect()
 
   return (
     // Szerokie strony (data-wide-page) zwijają menu do paska z ikonami (wariant rail); rozwinięte wysuwa się nad treść.

@@ -1,6 +1,7 @@
 package com.intermanage.backend.dataentry.repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,7 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.dataentry.entity.DataEntryPriceControlFile;
 
-/** Pliki CTRLPRIX z wprowadzania danych; lista czyta opis bez treści pliku. */
+/** Pliki CTRLPRIX z wprowadzania danych; listy czytają opis bez treści pliku i bez usuniętych. */
 public interface DataEntryPriceControlFileRepository extends JpaRepository<DataEntryPriceControlFile, UUID> {
 
     interface Summary {
@@ -30,16 +31,36 @@ public interface DataEntryPriceControlFileRepository extends JpaRepository<DataE
         Instant getCreatedAt();
 
         String getCreatedBy();
+
+        Instant getLoadedAt();
+
+        boolean isLoadedManually();
+
+        Integer getProcessedCount();
+
+        String getLoadedBy();
     }
 
-    @Query("""
+    String SUMMARY = """
             select f.id as id, f.fileName as fileName, f.supplierCode as supplierCode, f.supplierName as supplierName,
                    f.invoiceNumber as invoiceNumber, f.lineCount as lineCount, f.createdAt as createdAt,
-                   u.displayName as createdBy
-            from DataEntryPriceControlFile f left join f.createdBy u
-            where f.storeId = :storeId
-            order by f.createdAt desc, f.id desc""")
-    List<Summary> findLatest(UUID storeId, Pageable page);
+                   u.displayName as createdBy, f.loadedAt as loadedAt, f.loadedManually as loadedManually,
+                   f.processedCount as processedCount, l.displayName as loadedBy
+            from DataEntryPriceControlFile f left join f.createdBy u left join f.loadedBy l
+            where f.storeId = :storeId and f.deletedAt is null""";
+
+    /** Pliki, których program sklepu jeszcze nie wczytał, od najstarszego (wszystkie, bo każdy trzeba wgrać). */
+    @Query(SUMMARY + " and f.loadedAt is null order by f.createdAt, f.id")
+    List<Summary> findPending(UUID storeId);
+
+    /** Ostatnie wgrane pliki, od najnowszego. */
+    @Query(SUMMARY + " and f.loadedAt is not null order by f.createdAt desc, f.id desc")
+    List<Summary> findLoaded(UUID storeId, Pageable page);
+
+    @Query("select count(f) from DataEntryPriceControlFile f where f.storeId = :storeId and f.deletedAt is null and f.loadedAt is null")
+    long countPending(UUID storeId);
+
+    List<DataEntryPriceControlFile> findByStoreIdAndIdIn(UUID storeId, Collection<UUID> ids);
 
     Optional<DataEntryPriceControlFile> findByIdAndStoreId(UUID id, UUID storeId);
 

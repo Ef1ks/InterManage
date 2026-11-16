@@ -1,6 +1,7 @@
 package com.intermanage.backend.sales.repository;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -33,4 +34,19 @@ public interface SalesImportRepository extends JpaRepository<SalesImport, UUID> 
     /** Blokada importu sprzedaży sklepu do końca transakcji, jak w {@link DocumentRepository#lockForImport}. */
     @Query(value = "select 1 from (select pg_advisory_xact_lock(hashtextextended(:key, 0))) l", nativeQuery = true)
     int lockForImport(String key);
+
+    /** Okres raportu wgranego sprzedaży i dzień jego wygenerowania (dzień wygenerowania nie jest zapisywany). */
+    interface CoveredPeriod {
+        LocalDate getPeriodFrom();
+
+        LocalDate getPeriodTo();
+
+        LocalDateTime getReportGeneratedAt();
+
+        Instant getImportedAt();
+    }
+
+    @Query("select i.periodFrom as periodFrom, i.periodTo as periodTo, i.reportGeneratedAt as reportGeneratedAt, "
+            + "i.importedAt as importedAt from SalesImport i where i.store.id = :storeId")
+    List<CoveredPeriod> findCoveredPeriods(UUID storeId);
 }

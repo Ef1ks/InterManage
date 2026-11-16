@@ -59,11 +59,21 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
         BigDecimal getCadencierPrice();
 
         boolean getLeaflet();
+
+        /** Ostatnie przyjęcie PZ w okresie filtra przyjęcia; puste bez filtra. */
+        LocalDateTime getPeriodDeliveryDate();
+
+        /** Sprzedana ilość od dnia {@link #getPeriodDeliveryDate()} (włącznie) do dziś; pusta bez filtra przyjęcia. */
+        BigDecimal getSoldSinceDelivery();
     }
 
     /**
-     * Artykuły sklepu z ceną sprzedaży, które żyją: sprzedane od {@code :soldSince} ({@code soldQuantity}, z sum
-     * miesięcznych) albo przyjęte na PZ od {@code :deliveredSince} (cena zakupu z przyjęcia od {@code :since}), i są w najnowszym
+     * Artykuły sklepu z ceną sprzedaży, które żyją: sprzedane w {@code :soldFrom}..{@code :soldTo} ({@code soldQuantity};
+     * pełne miesiące {@code :soldMonthFrom}..{@code :soldMonthTo} z sum miesięcznych, brzegi ze sprzedaży dziennej) albo
+     * przyjęte na PZ od {@code :deliveredSince} (cena zakupu z przyjęcia od {@code :since}). Z {@code :soldFilter} albo
+     * {@code :deliveryFilter} (filtry raportu) zamiast tego muszą spełnić każdy włączony warunek: sprzedaż w okresie,
+     * przyjęcie PZ w {@code :deliveredSince}..{@code :deliveredUntil} (koniec bez niego; {@code periodDeliveryDate} to
+     * ostatnie takie przyjęcie, a {@code soldSinceDelivery} sprzedaż od jego dnia). I są w najnowszym
      * raporcie kartoteki: artykułu, którego w nim zabrakło (EAN przeszedł na nowy ITM8), już się nie sprzedaje, a jego
      * cena w kartotece zostaje stara. Flaga aktywności i stan z kartoteki nic tu nie mówią (stany
      * się nie zgadzają), więc się ich nie używa. {@code regularPrice}: aktualna cena zwykła na kasie
@@ -143,10 +153,32 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
                 where p.store_id = :storeId and p.promo_price is not null and p.promo_price = p.sale_price
                   and p.promo_to < cast(:today as date)
             ), sold as (
-                select m.itm8, sum(m.quantity) as quantity
-                from sales_monthly m
-                where m.store_id = :storeId and m.month >= cast(:soldSince as date)
-                group by m.itm8
+                select x.itm8, sum(x.quantity) as quantity
+                from (
+                    select m.itm8, m.quantity
+                    from sales_monthly m
+                    where m.store_id = :storeId and m.month >= cast(:soldMonthFrom as date)
+                      and m.month < cast(:soldMonthTo as date)
+                    union all
+                    select s.itm8, s.quantity
+                    from sales s
+                    where s.store_id = :storeId
+                      and s.sale_date between cast(:soldFrom as date) and cast(:soldTo as date)
+                      and (s.sale_date < cast(:soldMonthFrom as date) or s.sale_date >= cast(:soldMonthTo as date))
+                ) x
+                group by x.itm8
+            ), period_delivery as (
+                select d.itm8, max(d.document_date) as delivered_at
+                from delivered d
+                where cast(:deliveryFilter as boolean) and d.itm8 is not null
+                  and d.document_date >= :deliveredSince and d.document_date < :deliveredUntil
+                group by d.itm8
+            ), sold_since_delivery as (
+                select s.itm8, sum(s.quantity) as quantity
+                from period_delivery pd
+                join sales s on s.store_id = :storeId and s.itm8 = pd.itm8
+                    and s.sale_date >= cast(pd.delivered_at as date)
+                group by s.itm8
             ), articles as (
                 select p.*, s.quantity as sold_quantity,
                        p.promo_price is not null and p.promo_to >= cast(:today as date)
@@ -156,8 +188,13 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
                 where p.store_id = :storeId and p.sale_price > 0
                   and p.last_seen_import_id = (select i.id from product_imports i where i.store_id = :storeId
                                                order by i.report_generated_at desc limit 1)
-                  and (s.itm8 is not null or exists (select 1 from last_purchase u
-                                                     where u.itm8 = p.itm8 and u.document_date >= :deliveredSince))
+                  and case when cast(:soldFilter as boolean) or cast(:deliveryFilter as boolean) then
+                          (not cast(:soldFilter as boolean) or s.itm8 is not null)
+                          and (not cast(:deliveryFilter as boolean)
+                               or exists (select 1 from period_delivery pd where pd.itm8 = p.itm8))
+                      else s.itm8 is not null or exists (select 1 from last_purchase u
+                                                         where u.itm8 = p.itm8 and u.document_date >= :deliveredSince)
+                      end
             )
             select p.itm8 as itm8, p.ean as ean, p.name as name, p.brand as brand,
                    p.subfamily_code as nomenclatureCode, p.region_code as regionCode,
@@ -183,8 +220,12 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
                    p.purchase_price as catalogPurchasePrice, p.sold_quantity as soldQuantity,
                    coalesce(p.cadencier_price > 0 and c.itm8 is not null, false) as cadencier,
                    case when p.cadencier_price > 0 and c.itm8 is not null then p.cadencier_price end as cadencierPrice,
-                   g.itm8 is not null as leaflet
+                   g.itm8 is not null as leaflet,
+                   pd.delivered_at as periodDeliveryDate,
+                   case when pd.itm8 is not null then coalesce(sd.quantity, 0) end as soldSinceDelivery
             from articles p
+            left join period_delivery pd on pd.itm8 = p.itm8
+            left join sold_since_delivery sd on sd.itm8 = p.itm8
             left join last_purchase u on u.itm8 = p.itm8
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
             left join in_leaflet g on g.itm8 = p.itm8
@@ -194,6 +235,7 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
             left join ended_regular er on er.itm8 = p.itm8
             """, nativeQuery = true)
     List<ArticleMargin> findArticleMargins(UUID storeId, LocalDateTime since, LocalDateTime deliveredSince,
-            LocalDate soldSince, LocalDate today,
+            LocalDateTime deliveredUntil, boolean deliveryFilter, LocalDate soldFrom, LocalDate soldTo,
+            LocalDate soldMonthFrom, LocalDate soldMonthTo, boolean soldFilter, LocalDate today,
             LocalDate dataFrom, LocalDate dataTo);
 }

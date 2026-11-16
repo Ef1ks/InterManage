@@ -32,4 +32,15 @@ public interface DocumentImportRepository extends JpaRepository<DocumentImport, 
     /** Do jakiego dnia sięgają wgrane raporty dokumentów (koniec okresu "Wybór danych"). */
     @Query("select max(i.periodTo) from DocumentImport i where i.store.id = :storeId")
     Optional<LocalDate> findLastPeriodTo(UUID storeId);
+
+    /** Okres raportu wgranych dokumentów ("Wybór danych"). */
+    interface CoveredPeriod {
+        LocalDate getPeriodFrom();
+
+        LocalDate getPeriodTo();
+    }
+
+    @Query("select i.periodFrom as periodFrom, i.periodTo as periodTo from DocumentImport i "
+            + "where i.store.id = :storeId and i.periodFrom is not null and i.periodTo is not null")
+    List<CoveredPeriod> findCoveredPeriods(UUID storeId);
 }

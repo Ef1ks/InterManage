@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.Margin;
+import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.nomenclature.service.NomenclatureMarginService;
@@ -41,8 +42,9 @@ import com.intermanage.backend.sales.repository.SaleRepository;
 
 /**
  * Marże artykułów, które żyją (sprzedaż albo przyjęcie PZ w ostatnich {@value #SOLD_MONTHS} miesiącach;
- * aktywność i stan z kartoteki nic nie mówią), z aktualnych cen, a nie z przyjęć: artykuły z marżą poniżej wybranego procentu (np.
- * 25, 20, 15%; marża wymagana na nomenklaturze tylko do porównania) i aktualne promocje z marżą na cenie promocyjnej. Cena zakupu z ostatniego
+ * aktywność i stan z kartoteki nic nie mówią), z aktualnych cen, a nie z przyjęć: artykuły z marżą niższą od wymaganej na
+ * nomenklaturze co najmniej o wybrany próg (np. 5 punktów: wymagane 30%, jest 25% albo mniej) i aktualne promocje z marżą
+ * na cenie promocyjnej. Cena zakupu z ostatniego
  * przyjęcia PZ z ostatniego roku ({@value #PURCHASE_LOOKBACK_DAYS} dni), bez niego z kartoteki. Dostawców z
  * {@link ExcludedSuppliers} i tych bez marży wymaganej (lista z raportu marż poza normą) raporty pomijają (po dostawcy
  * ostatniego przyjęcia). Promocje z gazetki (utrzymanie cen z centrali) nie trafiają do raportu promocji, bo sklep nie
@@ -54,8 +56,8 @@ public class ArticleMarginService {
     static final int PURCHASE_LOOKBACK_DAYS = 365;
     /** Artykuł „żyje”, gdy sprzedał się w tylu ostatnich miesiącach kalendarzowych (z bieżącym) albo miał przyjęcie. */
     static final int SOLD_MONTHS = 3;
-    /** Domyślnie raport pokazuje artykuły z marżą poniżej tylu procent. */
-    static final int DEFAULT_MAX_MARGIN = 20;
+    /** Domyślnie raport pokazuje artykuły z marżą niższą od wymaganej co najmniej o tyle punktów procentowych. */
+    static final int DEFAULT_MIN_GAP = 5;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     private final ArticleMarginRepository articles;
@@ -67,12 +69,14 @@ public class ArticleMarginService {
     private final PriceCheckMapper mapper;
     private final StoreRepository stores;
     private final AppUserRepository users;
+    private final ReportExclusionService exclusions;
 
     public ArticleMarginService(ArticleMarginRepository articles, NomenclatureMarginService margins,
             ExcludedSuppliers excludedSuppliers,
             ReportExcludedSupplierService reportSuppliers, SaleRepository sales,
             ArticleMarginVerificationRepository verifications, PriceCheckMapper mapper, StoreRepository stores,
-            AppUserRepository users) {
+            AppUserRepository users, ReportExclusionService exclusions) {
+        this.exclusions = exclusions;
         this.verifications = verifications;
         this.mapper = mapper;
         this.stores = stores;
@@ -84,14 +88,23 @@ public class ArticleMarginService {
         this.sales = sales;
     }
 
-    /** Artykuły z marżą poniżej {@code maxMargin} % (bez niego {@value #DEFAULT_MAX_MARGIN}%), od najniższej. */
+    /**
+     * Artykuły z marżą niższą od wymaganej na nomenklaturze co najmniej o {@code minGap} punktów procentowych (bez niego
+     * {@value #DEFAULT_MIN_GAP}), od największego odchylenia. Artykuł bez marży wymaganej nie jest oceniany.
+     */
     @Transactional(readOnly = true)
-    public ArticleMarginReport lowMargins(UUID storeId, BigDecimal maxMargin) {
-        if (maxMargin != null && (maxMargin.signum() < 0 || maxMargin.compareTo(HUNDRED) > 0)) {
-            throw ApiException.badRequest("Marża musi mieć od 0 do 100%.");
+    public ArticleMarginReport lowMargins(UUID storeId, BigDecimal minGap, Period delivered, Period sold) {
+        if (minGap != null && (minGap.signum() < 0 || minGap.compareTo(HUNDRED) > 0)) {
+            throw ApiException.badRequest("Odchylenie musi mieć od 0 do 100 punktów procentowych.");
         }
-        BigDecimal threshold = maxMargin != null ? maxMargin : BigDecimal.valueOf(DEFAULT_MAX_MARGIN);
-        Context context = context(storeId);
+        BigDecimal gap = minGap != null ? minGap : BigDecimal.valueOf(DEFAULT_MIN_GAP);
+        Context context = context(storeId, delivered, sold);
+        List<String> excludedCodes = exclusions.codes(storeId, ReviewedReport.ARTICLE_MARGIN);
+        int nomenclatureSkipped = 0;
+        List<ReportSupplier> skippedSuppliers = reportSuppliers.active(storeId, ReviewedReport.ARTICLE_MARGIN);
+        Set<String> skippedCodes = new HashSet<>();
+        skippedSuppliers.forEach(supplier -> skippedCodes.add(supplier.code()));
+        int supplierSkipped = 0;
         Map<String, ArticleMarginVerification> verified = new HashMap<>();
         verifications.findActive(storeId).forEach(verification -> verified.put(verification.getItm8(), verification));
         List<Item> items = new ArrayList<>();
@@ -100,16 +113,27 @@ public class ArticleMarginService {
                 continue;
             }
             Item item = item(article, context.required());
-            if (item != null && item.marginPercent().compareTo(threshold) < 0) {
+            if (item != null && item.requiredMargin() != null
+                    && item.marginPercent().compareTo(item.requiredMargin().subtract(gap)) <= 0) {
+                if (ReportExclusionService.matches(item.nomenclatureCode(), excludedCodes)) {
+                    nomenclatureSkipped++;
+                    continue;
+                }
+                if (item.supplierCode() != null && skippedCodes.contains(item.supplierCode())) {
+                    supplierSkipped++;
+                    continue;
+                }
                 ArticleMarginVerification verification = verified.get(item.itm8());
                 items.add(verification != null && verification.covers(item.salePrice(), item.purchasePrice(),
                         item.lastPurchaseDate())
                         ? item.withVerification(mapper.toResponse(verification)) : item);
             }
         }
-        items.sort(Comparator.comparing(Item::marginPercent).thenComparing(Item::itm8));
-        return new ArticleMarginReport(context.today(), threshold, !context.required().isEmpty(), 0,
-                context.withoutMargin(), items);
+        items.sort(Comparator.comparing((Item item) -> item.marginPercent().subtract(item.requiredMargin()))
+                .thenComparing(Item::itm8));
+        return new ArticleMarginReport(context.today(), gap, !context.required().isEmpty(), 0,
+                context.withoutMargin(), excludedCodes, nomenclatureSkipped, skippedSuppliers, supplierSkipped,
+                reportSuppliers.options(storeId), items);
     }
 
     /**
@@ -162,7 +186,7 @@ public class ArticleMarginService {
     /** Promocje trwające dziś (bez gazetki) z marżą na cenie promocyjnej, od najniższej marży. */
     @Transactional(readOnly = true)
     public ArticleMarginReport currentPromotions(UUID storeId) {
-        Context context = context(storeId);
+        Context context = context(storeId, Period.NONE, Period.NONE);
         List<Item> items = new ArrayList<>();
         int leaflet = 0;
         for (ArticleMargin article : context.rows()) {
@@ -182,23 +206,57 @@ public class ArticleMarginService {
         }
         items.sort(Comparator.comparing(Item::promoMargin).thenComparing(Item::itm8));
         return new ArticleMarginReport(context.today(), null, !context.required().isEmpty(), leaflet,
-                context.withoutMargin(), items);
+                context.withoutMargin(), List.of(), 0, List.of(), 0, List.of(), items);
     }
 
     private record Context(LocalDate today, Map<String, BigDecimal> required,
             List<ReportSupplier> withoutMargin, Set<String> excluded, List<ArticleMargin> rows) {
     }
 
-    private Context context(UUID storeId) {
+    /**
+     * Okres filtra raportu, oba końce włącznie; pusty koniec: bez przyjęcia od początku roku wstecz
+     * ({@value #PURCHASE_LOOKBACK_DAYS} dni), bez sprzedaży od {@value #SOLD_MONTHS} miesięcy, do dziś.
+     */
+    public record Period(LocalDate from, LocalDate to) {
+        public static final Period NONE = new Period(null, null);
+
+        boolean active() {
+            return from != null || to != null;
+        }
+    }
+
+    private Context context(UUID storeId, Period delivered, Period sold) {
         sales.tuneForReport();
         LocalDate today = LocalDate.now(StoreTime.ZONE);
+        LocalDate deliveredTo = delivered.to() != null ? delivered.to() : today;
+        LocalDate deliveredFrom = delivered.from() != null ? delivered.from()
+                : delivered.active() ? deliveredTo.minusDays(PURCHASE_LOOKBACK_DAYS) : today.minusMonths(SOLD_MONTHS);
+        ReportPeriod.check(deliveredFrom, deliveredTo, ReportPeriod.MAX_DAYS, "Okres przyjęcia");
+        LocalDate soldTo = sold.to() != null ? sold.to() : today;
+        LocalDate soldFrom = sold.from() != null ? sold.from()
+                : sold.active() ? soldTo.withDayOfMonth(1).minusMonths(SOLD_MONTHS - 1L)
+                        : today.withDayOfMonth(1).minusMonths(SOLD_MONTHS - 1L);
+        ReportPeriod.check(soldFrom, soldTo, ReportPeriod.MAX_DAYS, "Okres sprzedaży");
+        if (!soldTo.isBefore(today)) {
+            // Sprzedaży z przyszłości nie ma, a bieżący miesiąc w sumach miesięcznych jest tym samym co dni.
+            soldTo = soldTo.withDayOfMonth(soldTo.lengthOfMonth());
+        }
+        // Pełne miesiące okresu z sum miesięcznych, dni na brzegach ze sprzedaży dziennej.
+        LocalDate monthFrom = soldFrom.getDayOfMonth() == 1 ? soldFrom : soldFrom.withDayOfMonth(1).plusMonths(1);
+        LocalDate monthTo = soldTo.plusDays(1).getDayOfMonth() == 1 ? soldTo.plusDays(1) : soldTo.withDayOfMonth(1);
+        if (monthTo.isBefore(monthFrom)) {
+            monthTo = monthFrom;
+        }
+        LocalDate purchaseSince = today.minusDays(PURCHASE_LOOKBACK_DAYS);
+        if (deliveredFrom.isBefore(purchaseSince)) {
+            purchaseSince = deliveredFrom;
+        }
         List<ReportSupplier> withoutMargin = reportSuppliers.active(storeId, ReviewedReport.LOW_MARGIN);
         Set<String> excluded = new HashSet<>(excludedSuppliers.codes(storeId));
         withoutMargin.forEach(supplier -> excluded.add(supplier.code()));
-        List<ArticleMargin> rows = articles.findArticleMargins(storeId,
-                today.minusDays(PURCHASE_LOOKBACK_DAYS).atStartOfDay(),
-                today.minusMonths(SOLD_MONTHS).atStartOfDay(),
-                today.withDayOfMonth(1).minusMonths(SOLD_MONTHS - 1L), today, today, today);
+        List<ArticleMargin> rows = articles.findArticleMargins(storeId, purchaseSince.atStartOfDay(),
+                deliveredFrom.atStartOfDay(), deliveredTo.plusDays(1).atStartOfDay(), delivered.active(),
+                soldFrom, soldTo, monthFrom, monthTo, sold.active(), today, today, today);
         return new Context(today, margins.effectiveByCode(storeId), withoutMargin, excluded, rows);
     }
 
@@ -236,6 +294,6 @@ public class ArticleMarginService {
                 promoNow && article.getPromoSource() != null ? PromoSource.valueOf(article.getPromoSource()) : null,
                 promoNow ? LowMarginService.marginOf(promo, vat, purchase) : null,
                 article.getSoldQuantity(), article.getCadencier(),
-                article.getCadencierPrice(), null);
+                article.getCadencierPrice(), article.getPeriodDeliveryDate(), article.getSoldSinceDelivery(), null);
     }
 }

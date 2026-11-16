@@ -14,7 +14,7 @@ type FieldShellProps = {
 export function FieldShell({ id, error, hint, className, children }: FieldShellProps) {
   return (
     <div className={cn('grid gap-1.5', className)}>
-      <div className="relative">{children}</div>
+      <div className="relative min-w-0">{children}</div>
       {error ? (
         <p id={`${id}-message`} className="px-1 text-sm text-destructive animate-in fade-in-0 duration-150">
           {error}

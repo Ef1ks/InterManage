@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { ChartColumnIcon, ChevronLeft, ChevronRight, EyeOffIcon, ZoomOut } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
 import { bonNumber, documentPaths, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
+import { findProducts } from '@/features/inventory/api'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
 import { meaDocumentPath } from '@/features/mea/paths'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
@@ -25,7 +27,7 @@ import {
 } from '@/features/sales/api'
 import { type DateRange, formatRange } from '@/features/sales/periods'
 import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
-import { marginShare } from '@/lib/margin'
+import { marginOf, marginShare } from '@/lib/margin'
 import type { ArticleDelivery, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -163,7 +165,41 @@ export function ArticleSalesPanel({
 const chartKey = (target: SalesChartTarget) =>
   target.kind === 'article' ? `a:${target.itm8}` : `g:${target.unassigned ? 'brak' : target.code}`
 
-function ChartContent({
+const withoutZeros = (code: string) => code.replace(/^0+/, '')
+
+/**
+ * Artykuł z kartoteki dla celu okna. Linie dokumentów od dostawców spoza bazy mają lokalny ITM8 dostawcy (`99…`), którego
+ * nie ma w kartotece (IMBIR LUZ pod 99019930 w przyjęciu od KARBO): wtedy szukamy artykułu po EAN-ie, a znaleziony
+ * zastępuje cel, żeby okno pokazało stan, ceny i sprzedaż artykułu sklepu. Bez trafienia zostaje cel z wiersza.
+ */
+function useCatalogTarget(storeId: string, target: SalesChartTarget) {
+  const itm8 = target.kind === 'article' ? target.itm8 : null
+  const ean = target.kind === 'article' && target.ean ? target.ean : null
+  const article = useSalesArticle(storeId, itm8)
+  const byEan = useQuery({
+    queryKey: ['stores', storeId, 'products', 'by-ean', ean],
+    queryFn: () => findProducts(storeId, ean!),
+    enabled: article.data === null && ean != null && /^\d{1,14}$/.test(ean),
+    staleTime: 5 * 60_000,
+  })
+  if (target.kind !== 'article' || article.data !== null || !ean) return { target, foreignItm8: null }
+  // Główny EAN ma pierwszeństwo; kod z multikodów albo dawnej pary daje artykuł tylko, gdy jest jeden.
+  const match =
+    byEan.data?.items.find((item) => item.ean && withoutZeros(item.ean) === withoutZeros(ean)) ??
+    (byEan.data?.total === 1 ? byEan.data.items[0] : undefined)
+  if (!match || match.itm8 === target.itm8) return { target, foreignItm8: null }
+  return {
+    target: { ...target, itm8: match.itm8, name: match.name ?? target.name, brand: match.brand ?? target.brand },
+    foreignItm8: target.itm8,
+  }
+}
+
+function ChartContent(props: Omit<Parameters<typeof ChartBody>[0], 'foreignItm8'>) {
+  const { target, foreignItm8 } = useCatalogTarget(props.storeId, props.target)
+  return <ChartBody key={chartKey(target)} {...props} target={target} foreignItm8={foreignItm8} />
+}
+
+function ChartBody({
   storeId,
   kind,
   target,
@@ -171,6 +207,7 @@ function ChartContent({
   basis,
   lastSaleDate,
   inline = false,
+  foreignItm8 = null,
 }: {
   storeId: string
   kind: ReportKind
@@ -180,6 +217,8 @@ function ChartContent({
   lastSaleDate: string
   /** Na stronie zamiast w oknie: nagłówek bez elementów okna (te wymagają otwartego Dialog). */
   inline?: boolean
+  /** Kod z wiersza spoza kartoteki (lokalny ITM8 dostawcy), zamieniony na artykuł z kartoteki po EAN-ie. */
+  foreignItm8?: string | null
 }) {
   const metrics = metricsFor(kind, target)
   const [rangeKey, setRangeKey] = useState<ChartRange>('month')
@@ -199,12 +238,20 @@ function ChartContent({
   const [codesOpen, setCodesOpen] = useState(false)
   const codeFields =
     target.kind === 'article' ? (
-      <ArticleCodeFields
-        itm8={target.itm8}
-        ean={article.data?.ean ?? target.ean}
-        codesOpen={codesOpen}
-        onToggleCodes={() => setCodesOpen((open) => !open)}
-      />
+      <>
+        <ArticleCodeFields
+          itm8={target.itm8}
+          ean={article.data?.ean ?? target.ean}
+          codesOpen={codesOpen}
+          onToggleCodes={() => setCodesOpen((open) => !open)}
+        />
+        {foreignItm8 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            W dokumencie pod kodem dostawcy {foreignItm8}, którego nie ma w kartotece; pokazujemy artykuł sklepu z tym
+            EAN-em.
+          </p>
+        )}
+      </>
     ) : null
 
   const quantity: Series = { label: 'Ilość', value: (f) => f.quantity, format: formatQuantity, unit: 'ilość' }
@@ -601,10 +648,17 @@ function ArticleFacts({
   const stock = article.stock
   const coverDays = stock != null && stock > 0 && cover && cover.daily > 0 ? stock / cover.daily : null
   const path = article.nomenclaturePath.map((item) => item.name.replace(/^\d+_/, '')).join(' › ')
+  // Marża od sprzedaży brutto (jak w Mercalys): cena zwykła i cena zakupu z kartoteki, przy promocji z kasy też na niej.
+  const marginAt = (price: number | null) =>
+    price != null && price > 0 && article.purchasePrice != null && article.vatPercent != null
+      ? marginOf(price, article.vatPercent, article.purchasePrice)
+      : null
+  const margin = marginAt(article.salePrice)
+  const promoMargin = article.promoPrice != null ? marginAt(article.promoPrice) : null
 
   return (
     <div className="grid gap-3">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-5">
         <Fact label="Stan">
           <span className={cn(article.stock != null && article.stock < 0 && 'text-destructive')}>
             {article.stock == null ? '—' : formatQuantity(article.stock)}
@@ -649,6 +703,24 @@ function ArticleFacts({
         <Fact label="Cena zakupu">
           {article.purchasePrice == null ? '—' : `${formatPrice(article.purchasePrice)} zł`}
         </Fact>
+        <Fact label="Marża">
+          <span
+            className={cn(margin != null && margin < 0 && 'text-destructive')}
+            title="Od sprzedaży brutto: aktualna cena zwykła i cena zakupu z kartoteki"
+          >
+            {margin == null ? '—' : formatPercentValue(margin)}
+          </span>
+          {promoMargin != null && (
+            <span
+              className={cn(
+                'block text-xs font-normal',
+                promoMargin < 0 ? 'text-destructive' : 'text-orange-600 dark:text-orange-400',
+              )}
+            >
+              w promocji {formatPercentValue(promoMargin)}
+            </span>
+          )}
+        </Fact>
       </div>
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
         {supplier && (
@@ -669,6 +741,9 @@ function ArticleFacts({
           </Detail>
         )}
         {article.supplier && <Detail label={supplier ? 'Dostawca w kartotece' : 'Dostawca'}>{article.supplier}</Detail>}
+        <Detail label="Marka">
+          {article.brand?.trim() ? article.brand : <span className="text-muted-foreground">brak w kartotece</span>}
+        </Detail>
         {path && <Detail label="Nomenklatura">{path}</Detail>}
         {article.caseSize != null && <Detail label="W kartonie">{formatQuantity(article.caseSize)}</Detail>}
         {article.vatPercent != null && <Detail label="VAT">{article.vatPercent}%</Detail>}

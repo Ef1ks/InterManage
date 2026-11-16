@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeftIcon,
   CheckCheckIcon,
   DiffIcon,
   FileOutputIcon,
@@ -33,6 +34,7 @@ import {
   withScannedProduct,
   withTrailingEmptyRow,
 } from '@/features/data-entry/rows'
+import { buildTransferMacro, planTransferMacro } from '@/features/data-entry/transfer-macro'
 import { useUndoHistory, useUndoShortcuts } from '@/features/data-entry/undo-history'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
 import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
@@ -280,6 +282,27 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
   const protocolTitle =
     badEanTitle ?? (protocolLines.length === 0 ? 'Najpierw dodaj artykuły z ilością' : 'Wybierz protokół i zapisz plik')
 
+  // ---------- przeniesienie stanów w Mercalys: makro do schowka, jak „Przeniesienie” we wprowadzaniu danych
+  const transferMacro = useMemo(() => planTransferMacro(articles), [articles])
+  const transferTitle =
+    badEanTitle ??
+    (transferMacro.items.length === 0
+      ? 'Najpierw dodaj artykuły z EAN-em i ilością'
+      : 'Do schowka, Alt+E: Przesunięcie stanu w Mercalys, wszystkie artykuły, przeniesienie i wydruk')
+  const copyTransferMacro = async () => {
+    try {
+      await navigator.clipboard.writeText(buildTransferMacro(transferMacro.items))
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+      return
+    }
+    toast.success(`Makro w schowku: ${transferMacro.items.length} poz.`, {
+      description: `Naciśnij Alt+E, a odtwarzacz sam otworzy Mercalys i przeniesie stany.${
+        transferMacro.skipped > 0 ? ` Pominięte bez EAN-u albo ilości: ${transferMacro.skipped}.` : ''
+      }`,
+    })
+  }
+
   return (
     <>
       <PageHeader title="Protokoły" />
@@ -291,7 +314,7 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
         steps={[
           'Zeskanuj albo wpisz EAN w pierwszej kolumnie: artykuł z kartoteki pojawi się z ilością 1, a kursor przejdzie do kolejnego wiersza. Artykuł znajdziesz też w „Lista”.',
           'Popraw ilości. Zmień znak (+/−) zmienia znak ilości zaznaczonych artykułów albo wszystkich.',
-          'Kliknij „Wytwórz protokół”, wybierz rodzaj protokołu i zapisz plik dla programu sklepu.',
+          'Kliknij „Wytwórz protokół”, wybierz rodzaj protokołu i zapisz plik dla programu sklepu. Przeniesienie stanów w Mercalys: „Przeniesienie” kopiuje makro, potem Alt+E.',
         ]}
       />
 
@@ -392,6 +415,16 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
             </div>
           </div>
         )}
+
+        <Button
+          className={cn(ACTION_TONES.load, ACTION_TILE, TILE_WIDTH, 'whitespace-normal')}
+          variant="outline"
+          onClick={() => void copyTransferMacro()}
+          disabled={transferMacro.items.length === 0 || badEanTitle !== null}
+          title={transferTitle}
+        >
+          <TileContent icon={<ArrowRightLeftIcon />}>Przeniesienie</TileContent>
+        </Button>
 
         <Button
           className={cn(ACTION_TONES.make, ACTION_TILE, TILE_WIDTH, 'whitespace-normal')}

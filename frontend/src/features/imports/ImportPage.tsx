@@ -25,6 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useCan, useMe } from '@/features/auth/api'
 import {
   useDocumentImports,
+  useImportCoverage,
   useEanChanges,
   useImportDocuments,
   useImportGuides,
@@ -195,6 +196,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const documents = useDocumentImports(store.id)
   const suppliers = useSupplierImports(store.id)
   const sales = useSalesImports(store.id)
+  const coverage = useImportCoverage(store.id)
   const nomenclatures = useNomenclatureImports(store.id)
   const promotions = usePromotionImports(store.id)
   const productCodes = useProductCodeImports(store.id)
@@ -306,7 +308,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
   // Jeden raport (przycisk na karcie) albo wszystkie z ustawieniami (nagłówek strony)
   const copyMacros = async (kinds: readonly MacroReport[] = MACRO_REPORTS) => {
     // Okres raportu sprzedaży liczy się od ostatniego dnia w bazie, więc bez tej listy makro wzięłoby za mało dni
-    if (sales.isPending || documents.isPending) {
+    if (sales.isPending || documents.isPending || coverage.isPending) {
       toast.info('Wczytuję stan sprzedaży i dokumentów, spróbuj za chwilę')
       return
     }
@@ -346,6 +348,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
         buildReportSaveMacro(ready, {
           lastSaleDate: sales.data?.lastSaleDate,
           lastDocumentDate: lastDocumentDate(documents.data),
+          salesCovered: coverage.data?.sales,
+          documentsCovered: coverage.data?.documents,
         }),
       )
       const skipped = kinds.length - ready.length

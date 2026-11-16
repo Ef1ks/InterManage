@@ -3,6 +3,7 @@ package com.intermanage.backend.dataentry.controller;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
@@ -62,7 +63,8 @@ import com.intermanage.backend.dataentry.dto.ProductDraftRequest;
 import com.intermanage.backend.dataentry.dto.ProductDraftResult;
 import com.intermanage.backend.dataentry.dto.ProductDraftUndoRequest;
 import com.intermanage.backend.dataentry.dto.ProductFileRequest;
-import com.intermanage.backend.dataentry.dto.PriceControlFileItem;
+import com.intermanage.backend.dataentry.dto.PriceControlFiles;
+import com.intermanage.backend.dataentry.dto.PriceControlSeenRequest;
 import com.intermanage.backend.dataentry.dto.PriceControlRequest;
 import com.intermanage.backend.dataentry.dto.TemporaryXmlRequest;
 import com.intermanage.backend.dataentry.dto.XmlDocument;
@@ -430,11 +432,52 @@ public class DataEntryController {
                 principal.getUsername()));
     }
 
-    /** 10 ostatnich plików CTRLPRIX sklepu, od najnowszego. */
+    /** Niewgrane pliki CTRLPRIX sklepu (wszystkie) i ostatnie wgrane. */
     @GetMapping("/price-control-files")
     @PreAuthorize(VIEW)
-    public List<PriceControlFileItem> priceControlFiles(@PathVariable UUID storeId) {
+    public PriceControlFiles priceControlFiles(@PathVariable UUID storeId) {
         return priceControlService.history(storeId);
+    }
+
+    /** Liczba niewgranych zmian cen do licznika w menu. */
+    @GetMapping("/price-control-files/pending-count")
+    @PreAuthorize(VIEW)
+    public Map<String, Long> priceControlPendingCount(@PathVariable UUID storeId) {
+        return Map.of("count", priceControlService.pendingCount(storeId));
+    }
+
+    /** Pliki widziane w folderze z końcówką .TraiteN: program sklepu je wczytał. */
+    @PostMapping("/price-control-files/seen")
+    @PreAuthorize(VIEW)
+    public PriceControlFiles priceControlSeen(@PathVariable UUID storeId,
+            @Valid @RequestBody PriceControlSeenRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return priceControlService.seen(storeId, request, principal.getId());
+    }
+
+    @PutMapping("/price-control-files/{id}/loaded")
+    @PreAuthorize(VIEW)
+    public PriceControlFiles priceControlMarkLoaded(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return priceControlService.markLoaded(storeId, id, principal.getId());
+    }
+
+    @DeleteMapping("/price-control-files/{id}/loaded")
+    @PreAuthorize(VIEW)
+    public PriceControlFiles priceControlUnmarkLoaded(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return priceControlService.unmarkLoaded(storeId, id);
+    }
+
+    @DeleteMapping("/price-control-files/{id}")
+    @PreAuthorize(VIEW)
+    public PriceControlFiles priceControlDelete(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return priceControlService.delete(storeId, id, principal.getId());
+    }
+
+    @PostMapping("/price-control-files/{id}/restore")
+    @PreAuthorize(VIEW)
+    public PriceControlFiles priceControlRestore(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return priceControlService.restore(storeId, id);
     }
 
     /** Plik CTRLPRIX z historii, z tą samą nazwą i treścią. */

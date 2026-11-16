@@ -1,19 +1,17 @@
-import { RotateCcwIcon } from 'lucide-react'
+import { ListIcon } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { SwitchField } from '@/components/form'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { formatDateTime } from '@/features/ksef/format'
-import { ApiError, downloadFile } from '@/lib/api'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
-import { ensureFolderAccess, type SavedFolderSpec, saveApiFileToFolder } from '@/lib/saved-folders'
+import type { SavedFolderSpec } from '@/lib/saved-folders'
 import { useHiddenHint } from '@/lib/use-hidden-hint'
 import { cn } from '@/lib/utils'
 
-import { usePriceControlFiles } from './api'
+import { usePriceControlPendingCount } from './api'
+import { PriceControlFilesDialog } from './PriceControlFilesDialog'
 import { PriceFileStatus } from './PriceFileStatus'
 import { PRODUCT_DRAFT_PROMPT } from './product-drafts'
 import { XML_FOLDER } from './xml-save'
@@ -21,7 +19,7 @@ import { XML_FOLDER } from './xml-save'
 /**
  * Ustawienia zapisu wprowadzania danych: foldery w tej przeglądarce na plik XML faktury, plik nowych artykułów
  * (CADBEZP) i protokoły (pliki PROTO, zmiana cen CTRLPRIX, etykiety, zamówienie), wybrane raz, więc „Zapisz” zapisuje od razu bez pytania
- * o miejsce. Do tego ostatnie zmiany cen z ponownym zapisem, a we wprowadzaniu danych folder cen z kasy. Nazw plików
+ * o miejsce. Do tego zmiany cen czekające na wgranie (okno z listą i ponownym zapisem), a we wprowadzaniu danych folder cen z kasy. Nazw plików
  * z programu sklepu pracownik nie widzi.
  */
 export function SaveSettingsDialog({
@@ -47,7 +45,8 @@ export function SaveSettingsDialog({
 }) {
   const productFolder = useProductFileFolder(storeId)
   const protoFolder = useProtoFolder(storeId)
-  const priceControlFiles = usePriceControlFiles(storeId, open)
+  const { data: pendingCount = 0 } = usePriceControlPendingCount(storeId, open)
+  const [priceControlOpen, setPriceControlOpen] = useState(false)
   const [draftPromptOff, setDraftPromptOff] = useHiddenHint(PRODUCT_DRAFT_PROMPT)
   // Wybrany w tym oknie folder przestaje być brakujący od razu, bez zamykania okna.
   const [picked, setPicked] = useState<string[]>([])
@@ -56,21 +55,6 @@ export function SaveSettingsDialog({
   const changeOpen = (next: boolean) => {
     if (!next) setPicked([])
     onOpenChange(next)
-  }
-
-  /** Ponowny zapis pliku CTRLPRIX z historii w folderze protokołów (bez folderu: pobranie). */
-  const saveAgain = async (id: string) => {
-    const path = `/stores/${storeId}/data-entry/price-control-files/${id}/file`
-    try {
-      if (await ensureFolderAccess(protoFolder.key)) {
-        await saveApiFileToFolder(protoFolder.key, path, 'CTRLPRIX.traite0')
-        toast.success('Zapisano zmianę cen')
-      } else {
-        await downloadFile(path, 'CTRLPRIX.traite0')
-      }
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać zmiany cen')
-    }
   }
 
   const folders = [
@@ -84,75 +68,65 @@ export function SaveSettingsDialog({
   ]
 
   return (
-    <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogContent className="gap-5 p-6 sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{withPriceFiles ? 'Ustawienia zapisu i cen z kasy' : 'Ustawienia zapisu'}</DialogTitle>
-          <DialogDescription>
-            Foldery wybiera się raz w tej przeglądarce. Potem „Zapisz” od razu zapisuje pliki na miejscu.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={changeOpen}>
+        <DialogContent className="gap-5 p-6 sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{withPriceFiles ? 'Ustawienia zapisu i cen z kasy' : 'Ustawienia zapisu'}</DialogTitle>
+            <DialogDescription>
+              Foldery wybiera się raz w tej przeglądarce. Potem „Zapisz” od razu zapisuje pliki na miejscu.
+            </DialogDescription>
+          </DialogHeader>
 
-        {stillMissing.length > 0 && (
-          <p
-            role="alert"
-            className="rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-medium text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-100"
-          >
-            Wybierz zaznaczone foldery i zapisz plik jeszcze raz.
-          </p>
-        )}
+          {stillMissing.length > 0 && (
+            <p
+              role="alert"
+              className="rounded-xl border border-amber-300 bg-amber-100 px-4 py-3 text-sm font-medium text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-100"
+            >
+              Wybierz zaznaczone foldery i zapisz plik jeszcze raz.
+            </p>
+          )}
 
-        <div className="grid gap-4">
-          {folders.map(({ folder, note }) => (
-            <div key={folder.key} className="grid gap-1.5">
-              <p className="text-sm font-medium">{folder.label}</p>
-              <SavedFolder
-                folder={folder}
-                onPicked={() => setPicked((current) => [...current, folder.key])}
-                className={cn(
-                  isMissing(folder) && 'border-amber-400 bg-amber-100/60 dark:border-amber-600 dark:bg-amber-950/40',
-                )}
-              />
-              <p className="text-xs text-muted-foreground">{note}</p>
+          <div className="grid gap-4">
+            {folders.map(({ folder, note }) => (
+              <div key={folder.key} className="grid gap-1.5">
+                <p className="text-sm font-medium">{folder.label}</p>
+                <SavedFolder
+                  folder={folder}
+                  onPicked={() => setPicked((current) => [...current, folder.key])}
+                  className={cn(
+                    isMissing(folder) && 'border-amber-400 bg-amber-100/60 dark:border-amber-600 dark:bg-amber-950/40',
+                  )}
+                />
+                <p className="text-xs text-muted-foreground">{note}</p>
+              </div>
+            ))}
+            {withPriceFiles && <PriceFileStatus storeId={storeId} />}
+            <SwitchField
+              label="Pytaj o wprowadzenie nowych artykułów"
+              description="Okno po zapisie pliku nowych artykułów. Wyłączone działa jak „Tak”: artykuły od razu trafiają do bazy, a powiadomienie pozwala to cofnąć."
+              checked={!draftPromptOff}
+              onCheckedChange={(checked) => setDraftPromptOff(!checked)}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm">
+            <div>
+              <p className="font-medium">Zmiany cen</p>
+              <p className="text-xs text-muted-foreground">
+                {pendingCount > 0
+                  ? `Czekają na wgranie do programu sklepu: ${pendingCount}`
+                  : 'Wszystkie zmiany cen są wgrane do programu sklepu.'}
+              </p>
             </div>
-          ))}
-          {withPriceFiles && <PriceFileStatus storeId={storeId} />}
-          <SwitchField
-            label="Pytaj o wprowadzenie nowych artykułów"
-            description="Okno po zapisie pliku nowych artykułów. Wyłączone działa jak „Tak”: artykuły od razu trafiają do bazy, a powiadomienie pozwala to cofnąć."
-            checked={!draftPromptOff}
-            onCheckedChange={(checked) => setDraftPromptOff(!checked)}
-          />
-        </div>
-
-        {priceControlFiles.data && priceControlFiles.data.length > 0 && (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground">
-              Ostatnie zmiany cen ({priceControlFiles.data.length})
-            </summary>
-            <ul className="mt-2 divide-y rounded-lg border">
-              {priceControlFiles.data.map((file) => (
-                <li key={file.id} className="flex items-center gap-3 px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {file.supplierName ?? file.supplierCode ?? 'Dostawca'}
-                      {file.invoiceNumber ? ` · ${file.invoiceNumber}` : ''}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {formatDateTime(file.createdAt)} · cen: {file.lineCount}
-                      {file.createdBy ? ` · ${file.createdBy}` : ''}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => saveAgain(file.id)} title={file.fileName}>
-                    <RotateCcwIcon />
-                    Zapisz ponownie
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </DialogContent>
-    </Dialog>
+            <Button variant="outline" size="sm" onClick={() => setPriceControlOpen(true)}>
+              <ListIcon />
+              Pokaż zmiany cen
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <PriceControlFilesDialog storeId={storeId} open={priceControlOpen} onOpenChange={setPriceControlOpen} />
+    </>
   )
 }
