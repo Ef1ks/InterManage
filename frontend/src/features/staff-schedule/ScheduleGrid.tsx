@@ -1,4 +1,4 @@
-import { Fragment, useState, type KeyboardEvent } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { CheckIcon, ChevronDownIcon, ClipboardPasteIcon, CopyIcon, TriangleAlertIcon } from 'lucide-react'
 
 import {
@@ -53,7 +53,7 @@ const CLOSED = 'bg-red-100 dark:bg-red-950/70'
 const holidayHead = (day: ScheduleDay) =>
   day.holiday ? (day.closed ? 'bg-red-200 dark:bg-red-900' : 'bg-red-100 dark:bg-red-950') : undefined
 
-const HEAD = 'sticky top-0 z-20 border-r border-b border-border bg-card'
+const HEAD = 'sticky top-(--grid-head-top) z-20 border-r border-b border-border bg-card'
 /** Grubsza kreska przed poniedziałkiem: tydzień widać bez liczenia kolumn. */
 const WEEK_START = 'border-l-2 border-l-foreground/20'
 const isMonday = (date: string) => weekdayLabel(date) === 'pn'
@@ -86,6 +86,8 @@ type Props = {
   leaveLeft?: Map<string, number | null>
   /** Stawka za godzinę przy pracowniku; tylko gdy dział liczy wynagrodzenia, a oglądający układa grafik. */
   onRate?: (row: ScheduleRow) => void
+  /** Gdzie klei się nagłówek dni przy przewijaniu strony (pod nagłówkiem aplikacji i paskiem przycisków). */
+  stickyTop?: string
 }
 
 export function ScheduleLegend() {
@@ -120,8 +122,26 @@ export function ScheduleGrid({
   onPaste,
   leaveLeft,
   onRate,
+  stickyTop = '3.5rem',
 }: Props) {
   const { days, rows, positions } = schedule
+  // Tabela przewija się razem ze stroną (jeden pasek przewijania), a nagłówek dni i obsada kleją się do okna.
+  // Gdy miesiąc nie mieści się w szerokości (telefon), tabela dostaje własny obszar przewijania jak wcześniej,
+  // bo przewijanie w bok tworzy kontener, do którego kleiłyby się nagłówki.
+  const frame = useRef<HTMLDivElement>(null)
+  const table = useRef<HTMLTableElement>(null)
+  const [scrolls, setScrolls] = useState(false)
+  useLayoutEffect(() => {
+    const box = frame.current
+    const inner = table.current
+    if (!box || !inner) return
+    const measure = () => setScrolls(inner.offsetWidth > box.clientWidth + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(box)
+    observer.observe(inner)
+    return () => observer.disconnect()
+  }, [])
   const team = rows.filter((row) => !row.guest)
   const guests = rows.filter((row) => row.guest)
   const custom = schedule.groups.length > 0
@@ -188,8 +208,16 @@ export function ScheduleGrid({
 
   return (
     // Pełne tło karty: puste komórki nie mają własnego, więc na zdjęciu konta prześwitywało szkło.
-    <div className="max-h-[calc(100dvh-15rem)] min-h-64 overflow-auto rounded-xl bg-card ring-1 ring-foreground/10">
-      <table className="w-full border-separate border-spacing-0 text-xs">
+    <div
+      ref={frame}
+      style={{ '--grid-head-top': scrolls ? '0px' : stickyTop } as CSSProperties}
+      className={cn(
+        'rounded-xl bg-card ring-1 ring-foreground/10',
+        // overflow-clip, nie hidden: hidden robi z ramki kontener przewijania i psuje przyklejanie do okna.
+        scrolls ? 'max-h-[calc(100dvh-15rem)] min-h-64 overflow-auto' : 'overflow-clip',
+      )}
+    >
+      <table ref={table} className="w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
             <th

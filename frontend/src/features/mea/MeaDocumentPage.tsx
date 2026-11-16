@@ -398,6 +398,21 @@ function DocumentHeader({
 function AthosSendNote({ document, totals }: { document: MeaDocument; totals: { coli: number; ordered: number } }) {
   const [latest, ...older] = document.athosSends
   const [order] = document.orders
+  const { queued } = document
+  // Plik czeka w kolejce sklepu na „Wyślij wszystkie” z komputera z dostępem do ATHOS.
+  const queuedNote = queued && (
+    <span className="mr-2 rounded bg-amber-200 px-1.5 py-0.5 font-medium text-amber-950 dark:bg-amber-900/70 dark:text-amber-50">
+      W kolejce do ATHOS od{' '}
+      {new Date(queued.queuedAt).toLocaleString('pl-PL', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}{' '}
+      · {queued.colis} COLI
+      {queued.createdBy && ` · ${queued.createdBy}`}
+    </span>
+  )
   // Zapisane z aplikacji, a dziennik ATHOS jeszcze nie pokazał wysyłki (albo nie jest czytany).
   const orderNote = order && (!latest || new Date(latest.sentAt) < new Date(order.savedAt)) && (
     <span className="mr-2 rounded bg-sky-200 px-1.5 py-0.5 font-medium text-sky-950 dark:bg-sky-900 dark:text-sky-50">
@@ -413,7 +428,12 @@ function AthosSendNote({ document, totals }: { document: MeaDocument; totals: { 
     </span>
   )
   if (!latest) {
-    return <p className="mt-1 text-sm text-muted-foreground">{orderNote || 'Nie wysłano jeszcze do ATHOS.'}</p>
+    return (
+      <p className="mt-1 text-sm text-muted-foreground">
+        {queuedNote}
+        {orderNote || (!queuedNote && 'Nie wysłano jeszcze do ATHOS.')}
+      </p>
+    )
   }
   const compare = totals.coli > 0
   const mismatch = (sent: number, entered: number) =>
@@ -427,6 +447,7 @@ function AthosSendNote({ document, totals }: { document: MeaDocument; totals: { 
   })
   return (
     <p className="mt-1 text-sm">
+      {queuedNote}
       {orderNote}
       <span className="rounded bg-emerald-200 px-1.5 py-0.5 font-medium text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50">
         Wysłano z ATHOS {sentAt}

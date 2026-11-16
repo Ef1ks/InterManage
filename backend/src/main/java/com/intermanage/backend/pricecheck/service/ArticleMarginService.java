@@ -222,8 +222,10 @@ public class ArticleMarginService {
             targetPurchase = LowMarginService.targetPurchase(regular, vat, requiredMargin);
             targetSale = Margin.salePrice(purchase, BigDecimal.valueOf(vat), requiredMargin, 2, RoundingMode.CEILING);
         }
+        // Promocja z listy bywa droższa od ceny zwykłej (np. sezonowa cena przed świętami z tańszym zakupem w
+        // promocji), a i tak jest promocją, więc raport ją pokazuje; aktualne promocje odsiewają je wcześniej.
         BigDecimal promo = article.getPromoPrice();
-        boolean promoNow = promo != null && promo.signum() > 0 && promo.compareTo(regular) < 0;
+        boolean promoNow = promo != null && promo.signum() > 0;
         return new Item(article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
                 article.getNomenclatureCode(), article.getRegionCode(), article.getSupplierCode(),
                 article.getSupplierName(), BigDecimal.valueOf(vat), purchase,

@@ -66,6 +66,7 @@ class LowMarginIntegrationTests {
     private Cookie owner;
     private String store;
     private String documentImport;
+    private String productImport;
     private int nextNumber = 100000;
 
     @BeforeEach
@@ -595,6 +596,38 @@ class LowMarginIntegrationTests {
                 .andExpect(jsonPath("$.items[0].marginPercent").value(33.33));
     }
 
+    @Test
+    void articleMarginsSkipArticlesMissingFromLatestCatalogAndShowPromotionAboveRegular() throws Exception {
+        requiredMargin("57", "30");
+        // EAN przeszedł na nowy ITM8: stary artykuł zabrakł w najnowszej kartotece i zostaje ze starą ceną 2,99 zł.
+        catalogArticle(ON_THRESHOLD, "5907589849158", "3.99", "57 01 01", (short) 1, "3.00");
+        sold(ON_THRESHOLD);
+        String older = productImport(today.minusDays(20) + " 07:00");
+        jdbc.update("""
+                insert into products (store_id, itm8, ean, name, sale_price, purchase_price, nomenclature, vat_code,
+                    first_seen_import_id, last_seen_import_id)
+                values (?::uuid, ?, '5907589849158', 'Artykuł', 2.99, 2.40, '57 01 01', 1, ?::uuid, ?::uuid)""",
+                store, OLD, older, older);
+        sold(OLD);
+        // Sezonowa promocja z listy droższa od ceny zwykłej (kasa sprzedaje po 19,99 zł) i tak jest promocją.
+        catalogArticle(LISTED, "5902451065162", "19.99", "57 01 01", (short) 6, "8.99");
+        delivery(LISTED, 3, "12", "200.28", "19.99", "570101");
+        String promotions = jdbc.queryForObject("""
+                insert into promotion_imports (store_id, file_name, total_rows) values (?::uuid, 'Taryfy.pdf', 1)
+                returning id""", String.class, store);
+        promotion(promotions, LISTED, "16.99", "19.99");
+
+        mvc.perform(get("/api/stores/" + store + "/reports/article-margins").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(ON_THRESHOLD, LISTED)))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].salePrice").value(16.99))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].promoPrice").value(19.99))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + LISTED + "')].promoSource").value("LIST"));
+        // Aktualne promocje pokazują tylko obniżki.
+        mvc.perform(get("/api/stores/" + store + "/reports/current-promotions").cookie(owner))
+                .andExpect(jsonPath("$.items", hasSize(0)));
+    }
+
     /** Sprzedaż artykułu w bieżącym miesiącu (sumy miesięczne). */
     private void sold(String itm8) {
         jdbc.update("""
@@ -675,11 +708,24 @@ class LowMarginIntegrationTests {
                 leaflet, today.minusDays(10), today.plusDays(10), itm8);
     }
 
+    /** Kartoteka to jeden raport: wszystkie artykuły testu są w tym samym, najnowszym imporcie. */
+    private String productImport() {
+        if (productImport == null) {
+            productImport = productImport(today + " 07:00");
+        }
+        return productImport;
+    }
+
+    private String productImport(String generatedAt) {
+        return jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, report_generated_at, total_rows, created_count,
+                    updated_count, unchanged_count, missing_count)
+                values (?::uuid, 'BAZA.xlsx', ?::timestamp, 1, 1, 0, 0, 0) returning id""",
+                String.class, store, generatedAt);
+    }
+
     private void product(String itm8, String salePrice) {
-        String productImport = jdbc.queryForObject("""
-                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
-                    unchanged_count, missing_count)
-                values (?::uuid, 'BAZA.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, store);
+        String productImport = productImport();
         jdbc.update("""
                 insert into products (store_id, itm8, ean, name, sale_price, first_seen_import_id, last_seen_import_id)
                 values (?::uuid, ?, '5900000000000', 'Artykuł', ?::numeric, ?::uuid, ?::uuid)""",

@@ -63,7 +63,9 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
 
     /**
      * Artykuły sklepu z ceną sprzedaży, które żyją: sprzedane od {@code :soldSince} ({@code soldQuantity}, z sum
-     * miesięcznych) albo przyjęte na PZ od {@code :deliveredSince} (cena zakupu z przyjęcia od {@code :since}). Flaga aktywności i stan z kartoteki nic tu nie mówią (stany
+     * miesięcznych) albo przyjęte na PZ od {@code :deliveredSince} (cena zakupu z przyjęcia od {@code :since}), i są w najnowszym
+     * raporcie kartoteki: artykułu, którego w nim zabrakło (EAN przeszedł na nowy ITM8), już się nie sprzedaje, a jego
+     * cena w kartotece zostaje stara. Flaga aktywności i stan z kartoteki nic tu nie mówią (stany
      * się nie zgadzają), więc się ich nie używa. {@code regularPrice}: aktualna cena zwykła na kasie
      * ({@code products.sale_price}; gdy kartoteka trzyma cenę promocji, która już się skończyła, a kasa nie przysłała
      * jeszcze pliku z powrotem do zwykłej, cena zwykła tej promocji; gdy jest w niej trwająca promocja rozpoczęta przed
@@ -152,6 +154,8 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
                 from products p
                 left join sold s on s.itm8 = p.itm8
                 where p.store_id = :storeId and p.sale_price > 0
+                  and p.last_seen_import_id = (select i.id from product_imports i where i.store_id = :storeId
+                                               order by i.report_generated_at desc limit 1)
                   and (s.itm8 is not null or exists (select 1 from last_purchase u
                                                      where u.itm8 = p.itm8 and u.document_date >= :deliveredSince))
             )

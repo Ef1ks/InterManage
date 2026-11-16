@@ -2,6 +2,7 @@ package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -97,6 +98,81 @@ class MeaOrderIntegrationTests {
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"lines\":[{\"itm8\":\"61665966\",\"colis\":[1]}]}"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void queuesOrdersPerStoreAndSendsThemLater() throws Exception {
+        Cookie owner = login();
+        String storeNumber = String.valueOf(ThreadLocalRandom.current().nextInt(12_000, 19_999));
+        String storeId = createStore(owner, storeNumber);
+        String otherStoreId = createStore(owner,
+                String.valueOf(ThreadLocalRandom.current().nextInt(12_000, 19_999)));
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(80_000, 89_999));
+        String document = jdbc.queryForObject("""
+                insert into mea_documents (number, title, promo_from, promo_to, reservation_from, reservation_to,
+                    dispatch_1, file_path, line_count, fetched_at, attempts)
+                values (?, 'MEA KOLEJKA', current_date + 30, current_date + 36, current_date - 2, current_date + 2,
+                    current_date + 27, 'x.xls', 1, now(), 1) returning id""", String.class, number);
+        jdbc.update("insert into mea_document_lines (document_id, lp, mea_itm8, name) values (?::uuid, 1, '61665965', 'SER')",
+                document);
+        String base = "/api/stores/" + storeId + "/mea";
+
+        mvc.perform(post(base + "/documents/" + number + "/athos-queue").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"itm8\":\"61665965\",\"colis\":[2]}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("MEA KOLEJKA"))
+                .andExpect(jsonPath("$.colis").value(2));
+        // Drugi plik tego MEA zastępuje pierwszy.
+        String second = mvc.perform(post(base + "/documents/" + number + "/athos-queue").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"itm8\":\"61665965\",\"colis\":[5]}]}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String orderId = JsonPath.read(second, "$.id");
+        mvc.perform(get(base + "/athos-queue").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].colis").value(5));
+        mvc.perform(get(base + "/documents/" + number).cookie(owner))
+                .andExpect(jsonPath("$.queued.colis").value(5))
+                .andExpect(jsonPath("$.orders.length()").value(0));
+        // Kolejka jest osobna dla każdego sklepu.
+        mvc.perform(get("/api/stores/" + otherStoreId + "/mea/athos-queue").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // Usunięcie z kolejki i przywrócenie.
+        mvc.perform(delete(base + "/athos-queue/" + orderId).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(base + "/athos-queue").cookie(owner)).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(base + "/athos-queue/" + orderId + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        // Wysyłka: plik z kolejki, potem potwierdzenie zapisu w folderze.
+        MockHttpServletResponse file = mvc.perform(get(base + "/athos-queue/" + orderId + "/file").cookie(owner))
+                .andExpect(status().isOk())
+                .andReturn().getResponse();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(file.getContentAsByteArray()))) {
+            assertThat(zip.getNextEntry().getName())
+                    .isEqualTo("V" + number + storeNumber.substring(0, 2) + "." + storeNumber.substring(2));
+            assertThat(new String(zip.readAllBytes(), StandardCharsets.US_ASCII))
+                    .isEqualTo(number + "61665965" + "0005" + "0".repeat(28));
+        }
+        mvc.perform(post(base + "/athos-orders/" + orderId + "/saved").cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(base + "/athos-queue").cookie(owner)).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get(base + "/documents/" + number).cookie(owner))
+                .andExpect(jsonPath("$.orders[0].colis").value(5))
+                .andExpect(jsonPath("$.queued").doesNotExist());
+        mvc.perform(get(base + "/athos-queue/" + orderId + "/file").cookie(owner))
+                .andExpect(status().isConflict());
+
+        // Po terminie rezerwacji plik z kolejki już nie wychodzi.
+        String late = JsonPath.read(mvc.perform(post(base + "/documents/" + number + "/athos-queue").cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"itm8\":\"61665965\",\"colis\":[1]}]}"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        jdbc.update("update mea_documents set reservation_to = current_date - 1 where id = ?::uuid", document);
+        mvc.perform(get(base + "/athos-queue/" + late + "/file").cookie(owner)).andExpect(status().isConflict());
     }
 
     private String createStore(Cookie owner, String number) throws Exception {

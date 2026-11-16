@@ -113,6 +113,19 @@ public class BaseDeliveryController {
                 .body(file.content());
     }
 
+    /** Plik dostawy dla programu sklepu (jak plik bazy LIVRJPOL…TXT) dla jednego dostawcy bonu (538, 88110). */
+    @GetMapping("/base-deliveries/{id}/note-file")
+    @PreAuthorize(ACCESS)
+    public ResponseEntity<byte[]> noteFile(@PathVariable UUID storeId, @PathVariable UUID id,
+            @RequestParam String supplier) {
+        DocumentService.ExportFile file = deliveries.noteFile(storeId, id, supplier);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(file.content());
+    }
+
     @GetMapping("/mea-codes")
     @PreAuthorize(ACCESS)
     public MeaOverview meaCodes(@PathVariable UUID storeId) {

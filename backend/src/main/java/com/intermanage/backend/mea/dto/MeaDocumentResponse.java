@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import com.intermanage.backend.dataentry.dto.CatalogProduct;
 
@@ -23,7 +24,12 @@ public record MeaDocumentResponse(
         List<LocalDate> dispatches,
         List<Line> lines,
         List<AthosSend> athosSends,
-        List<Order> orders) {
+        List<Order> orders,
+        Queued queued) {
+
+    /** Plik tego MEA czekający w kolejce sklepu na „Wyślij wszystkie” (null, gdy żaden nie czeka). */
+    public record Queued(UUID id, Instant queuedAt, int positions, int colis, String createdBy) {
+    }
 
     /** Zamówienie zapisane do ATHOS z aplikacji (plik R… w folderze comrnis); od najnowszego. */
     public record Order(Instant savedAt, String fileName, int positions, int colis, String createdBy) {

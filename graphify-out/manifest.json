@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794804142.491919,
-    "seen": 1794804560.104294,
-    "ast_hash": "2005b2abeb21c09dc389845408e676dd",
+    "mtime": 1794812184.0403256,
+    "seen": 1794812399.7891245,
+    "ast_hash": "23992cceab5b8e8764114f8587352081",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794804508.3705308,
-    "seen": 1794804560.1182985,
-    "ast_hash": "69acfcbe1c115aa94bb70f7c72623ba2",
+    "mtime": 1794821086.2317116,
+    "seen": 1794821140.7518828,
+    "ast_hash": "d791a42f77e1a5152f9d5e5190862b35",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -6258,9 +6258,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/controller/BaseDeliveryController.java": {
-    "mtime": 1794804127.992023,
-    "seen": 1794804559.9441051,
-    "ast_hash": "ac5b72f0d761cc9b873ea951c8efc37a",
+    "mtime": 1794820751.0405736,
+    "seen": 1794821140.4836187,
+    "ast_hash": "876bbc9d26c024b0d4b8f26dea47046c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/dto/BaseDeliveryLineResponse.java": {
@@ -6342,9 +6342,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/service/BaseDeliveryService.java": {
-    "mtime": 1794804061.3600137,
-    "seen": 1794804559.946105,
-    "ast_hash": "01fab538493908b67d9ba1a171252c4d",
+    "mtime": 1794813980.9072714,
+    "seen": 1794821140.4856184,
+    "ast_hash": "c49847a560f3bdf06ddf312823466932",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/service/MeaCodeService.java": {
@@ -6366,9 +6366,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/BaseDeliveryPage.tsx": {
-    "mtime": 1794804188.6092649,
-    "seen": 1794804560.0675871,
-    "ast_hash": "72115045195f7480f005c313a01c6a00",
+    "mtime": 1794820810.5003767,
+    "seen": 1794821140.677408,
+    "ast_hash": "c007a1d2401d2feee3c0d2ac531221a6",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/CarrierDialog.tsx": {
@@ -6408,9 +6408,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/base-rows.ts": {
-    "mtime": 1794649730.4119294,
-    "seen": 1794661561.7848308,
-    "ast_hash": "eb1440313e4edfb49a91009444b5cfd3",
+    "mtime": 1794820782.961897,
+    "seen": 1794821140.678408,
+    "ast_hash": "dd7211c0f05ec4a563485b47ae3c5e9e",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/paths.ts": {
@@ -7074,9 +7074,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/LowMarginIntegrationTests.java": {
-    "mtime": 1794774259.6933002,
-    "seen": 1794804560.0520535,
-    "ast_hash": "3df182a59d964b63317c93cd1c45b5f5",
+    "mtime": 1794821038.3611324,
+    "seen": 1794821140.6526687,
+    "ast_hash": "90b040069282d2a5ece0012eb54e60dd",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/LowMarginReport.tsx": {
@@ -7980,9 +7980,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794653698.1922088,
-    "seen": 1794661561.7908309,
-    "ast_hash": "92f2eb3a0cf22df07e324a6596b2551e",
+    "mtime": 1794820854.3838105,
+    "seen": 1794821140.685408,
+    "ast_hash": "6e442fa49fcec487431d87227568c488",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -9540,9 +9540,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/mapper/DownloadMapper.java": {
-    "mtime": 1794209666.3400638,
-    "seen": 1794209685.953699,
-    "ast_hash": "7e6c3d50aa104c651b95c589d71b9b00",
+    "mtime": 1794811796.6169577,
+    "seen": 1794812122.6639273,
+    "ast_hash": "6542b5eb6ccc65e14351e8364d1ff8c2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/repository/DownloadFileRepository.java": {
@@ -9564,9 +9564,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DownloadIntegrationTests.java": {
-    "mtime": 1794209799.3645844,
-    "seen": 1794210085.9841259,
-    "ast_hash": "c1fca6b61bcd6bf328b93658e1b70e1d",
+    "mtime": 1794811910.9834423,
+    "seen": 1794812122.7783864,
+    "ast_hash": "2db5543c0eb8ac1cfc9a4db677beef76",
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/DownloadFormDialog.tsx": {
@@ -9576,15 +9576,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/DownloadsPage.tsx": {
-    "mtime": 1794209907.1929817,
-    "seen": 1794210086.019662,
-    "ast_hash": "53dfa3b26508d413c40779435504cabb",
+    "mtime": 1794812002.0394278,
+    "seen": 1794812122.8300586,
+    "ast_hash": "430bf93eafd51c618098e1d5ae1444ea",
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/api.ts": {
-    "mtime": 1794209828.8165653,
-    "seen": 1794210086.019662,
-    "ast_hash": "7be0a26b698ea5daebd1c91c72fa8d87",
+    "mtime": 1794811963.729717,
+    "seen": 1794812122.8300586,
+    "ast_hash": "66df33ee2ffa178036684ad1f68d1285",
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/format.ts": {
@@ -10830,15 +10830,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/repository/ArticleMarginRepository.java": {
-    "mtime": 1794774259.639873,
-    "seen": 1794804559.9993083,
-    "ast_hash": "0ee1d1c1f78a0b26f7e645d40eebf3f8",
+    "mtime": 1794820901.2861092,
+    "seen": 1794821140.5812736,
+    "ast_hash": "ce4c02236203906e3bd83e7facb7e184",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/service/ArticleMarginService.java": {
-    "mtime": 1794774259.639873,
-    "seen": 1794804560.001344,
-    "ast_hash": "1c83d14319ca1b7fabb4d11e1ac5c905",
+    "mtime": 1794820902.1606693,
+    "seen": 1794821140.5822735,
+    "ast_hash": "9cab7fa8e7dc6966908d290237fadfa0",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ArticleMarginReports.tsx": {
@@ -11808,15 +11808,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/controller/MeaController.java": {
-    "mtime": 1794803464.205109,
-    "seen": 1794804559.987123,
-    "ast_hash": "ae4653e9a117d51bf72b87ce93a8e752",
+    "mtime": 1794812055.072637,
+    "seen": 1794812122.6833675,
+    "ast_hash": "0294ca46473d204373aedd5687487b3d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/MeaDocumentResponse.java": {
-    "mtime": 1794803423.8594859,
-    "seen": 1794804559.987123,
-    "ast_hash": "32a21cbc7ac398e1d14d0eceadc91119",
+    "mtime": 1794812055.0716357,
+    "seen": 1794812122.6833675,
+    "ast_hash": "6d22b8f103e18b70764d8d7801611e76",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/MeaItem.java": {
@@ -11874,15 +11874,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaDocumentPage.tsx": {
-    "mtime": 1794803667.8592312,
-    "seen": 1794804560.0871499,
-    "ast_hash": "e7822a5031dd3c682f83b327678d0cbb",
+    "mtime": 1794812290.3259068,
+    "seen": 1794812399.7699296,
+    "ast_hash": "4e4c04770af7a69da6e482fa07105feb",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaPage.tsx": {
-    "mtime": 1794803665.2711358,
-    "seen": 1794804560.0871499,
-    "ast_hash": "ff5c8b9d389220d28b4e1433efb39e4f",
+    "mtime": 1794812290.3259068,
+    "seen": 1794812399.7699296,
+    "ast_hash": "f6034ecb37d68da25b0f69d4da455f37",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaSettingsDialog.tsx": {
@@ -11892,9 +11892,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/api.ts": {
-    "mtime": 1794775154.7134333,
-    "seen": 1794804560.0871499,
-    "ast_hash": "c1546cf8fab9cfa70fa0d0a07c01bb90",
+    "mtime": 1794812204.9558208,
+    "seen": 1794812399.7699296,
+    "ast_hash": "3fa9f90515276eae8a05a76096fb9bfb",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/paths.ts": {
@@ -11994,9 +11994,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/service/MeaDocumentService.java": {
-    "mtime": 1794803423.8589659,
-    "seen": 1794804559.988639,
-    "ast_hash": "cfbf31ccf9ee771def6ae1d5594473cc",
+    "mtime": 1794812055.0716357,
+    "seen": 1794812122.6860187,
+    "ast_hash": "13ccb4193e3666e48fe3605e76b0efc0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/dto/BasePortalDocument.java": {
@@ -12042,9 +12042,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/entity/MeaOrder.java": {
-    "mtime": 1794803342.6778755,
-    "seen": 1794804559.988639,
-    "ast_hash": "a792b4a84b89b8130d5a3ec96d20d27d",
+    "mtime": 1794811935.6870656,
+    "seen": 1794812122.6854863,
+    "ast_hash": "f57ddce1270e17c13cce1bf5772c3a93",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/repository/MeaAthosImportRepository.java": {
@@ -12054,9 +12054,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/repository/MeaOrderRepository.java": {
-    "mtime": 1794803343.4655883,
-    "seen": 1794804559.988639,
-    "ast_hash": "99a5d02cab416d53b0b69e2f08d6de58",
+    "mtime": 1794812132.284096,
+    "seen": 1794812399.6351087,
+    "ast_hash": "16dda04481ef2029ed65eaf3a1ab77f2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/service/MeaAthosService.java": {
@@ -12066,9 +12066,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/service/MeaOrderService.java": {
-    "mtime": 1794803391.9147217,
-    "seen": 1794804559.988639,
-    "ast_hash": "0d62bd2a6c9ae9062d57174698f8523a",
+    "mtime": 1794812055.0706344,
+    "seen": 1794812122.6860187,
+    "ast_hash": "11e6e022e4a64770a184909c66ceb97c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/AthosHistoryParserTests.java": {
@@ -12096,9 +12096,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/MeaOrderIntegrationTests.java": {
-    "mtime": 1794803517.19598,
-    "seen": 1794804560.0520535,
-    "ast_hash": "54f3c6fa97e83af9898b3fd6b4636dc8",
+    "mtime": 1794812079.8347168,
+    "seen": 1794812122.7836528,
+    "ast_hash": "b16236c56104dde3de4513c4bb2ea235",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/PortalDeliveryDialog.tsx": {
@@ -12120,9 +12120,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/SendToAthosDialog.tsx": {
-    "mtime": 1794803667.9500308,
-    "seen": 1794804560.0871499,
-    "ast_hash": "29c5c109f07b9a6de3df48e1e520f58f",
+    "mtime": 1794812291.123494,
+    "seen": 1794812399.7699296,
+    "ast_hash": "9ae5f55526b8fb40e8eb6245a52d869a",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/athos-history.ts": {
@@ -12135,6 +12135,102 @@
     "mtime": 1794775109.7082825,
     "seen": 1794804560.0871499,
     "ast_hash": "c666c114f2c3b0f349295ca3771f77b0",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/component/WindowsShortcut.java": {
+    "mtime": 1794811871.858579,
+    "seen": 1794812122.6629257,
+    "ast_hash": "32c5c45b9cd9313686949bb7dd2576dc",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/controller/ShortcutController.java": {
+    "mtime": 1794811836.9421537,
+    "seen": 1794812122.6629257,
+    "ast_hash": "566b5ff3a1bbf8e01c1e5e2c94eed135",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/controller/ShortcutSettingsController.java": {
+    "mtime": 1794811837.7366683,
+    "seen": 1794812122.6629257,
+    "ast_hash": "e0ce4d180be7469a74d6e42ca6ec563c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/dto/ShortcutRequest.java": {
+    "mtime": 1794811786.496558,
+    "seen": 1794812122.6639273,
+    "ast_hash": "7247ae36856f40a99a00df71b116135f",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/dto/ShortcutResponse.java": {
+    "mtime": 1794811785.7067542,
+    "seen": 1794812122.6639273,
+    "ast_hash": "f730bf752e865779ba90a6ed81acda29",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/entity/DownloadShortcut.java": {
+    "mtime": 1794811784.119006,
+    "seen": 1794812122.6639273,
+    "ast_hash": "193e111c1fb02f9f606c88b7f30ed3b3",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/repository/DownloadShortcutRepository.java": {
+    "mtime": 1794811784.9147894,
+    "seen": 1794812122.6654348,
+    "ast_hash": "9b578235c1791a76961908781b4e74dc",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/download/service/DownloadShortcutService.java": {
+    "mtime": 1794811816.732954,
+    "seen": 1794812122.6654348,
+    "ast_hash": "9ae413fd131fe04100dc5ae75bef30b8",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/dto/MeaQueueItem.java": {
+    "mtime": 1794812055.0716357,
+    "seen": 1794812122.6838892,
+    "ast_hash": "147e342043b5941644fedfdec0f90bfd",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/WindowsShortcutTests.java": {
+    "mtime": 1794811846.1487076,
+    "seen": 1794812122.7943192,
+    "ast_hash": "c94c3000ea922034cab2aeadace6dd47",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/downloads/ShortcutsSection.tsx": {
+    "mtime": 1794812006.8991444,
+    "seen": 1794812122.8300586,
+    "ast_hash": "c94c724550a81bcceebcd287deec253b",
+    "semantic_hash": ""
+  },
+  "backend/{7497CBB4-3A6E-4DEB-A80F-44DA8C83EDC8}.png": {
+    "mtime": 1794811530.138546,
+    "seen": 1794812122.8914785,
+    "ast_hash": "f45bb92992337d32b660d480fad035d6",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/mea/AthosQueueDialog.tsx": {
+    "mtime": 1794812266.6427393,
+    "seen": 1794812399.7699296,
+    "ast_hash": "d61c2be0ce8c218a42515178458d5e21",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/basedelivery/component/BaseNoteFile.java": {
+    "mtime": 1794813966.5725458,
+    "seen": 1794821140.4826224,
+    "ast_hash": "49ce287fffe0e592b1392364addc2600",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/BaseNoteFileTests.java": {
+    "mtime": 1794820751.874898,
+    "seen": 1794821140.6486552,
+    "ast_hash": "784fae85bcb2fc14ac1358a14461423c",
+    "semantic_hash": ""
+  },
+  "backend/LIVRJPOL-095_09516018207_00538-10023-26043004.TXT": {
+    "mtime": 1777515026.0,
+    "seen": 1794821140.7518828,
+    "ast_hash": "62e73b3d46997a0ae5311132339dc188",
     "semantic_hash": ""
   }
 }

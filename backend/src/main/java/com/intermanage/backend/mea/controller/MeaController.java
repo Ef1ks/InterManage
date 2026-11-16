@@ -2,6 +2,7 @@ package com.intermanage.backend.mea.controller;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
@@ -11,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,8 +31,10 @@ import com.intermanage.backend.mea.dto.MeaAthosStatus;
 import com.intermanage.backend.mea.dto.MeaDocumentResponse;
 import com.intermanage.backend.mea.dto.MeaListResponse;
 import com.intermanage.backend.mea.dto.MeaOrderRequest;
+import com.intermanage.backend.mea.dto.MeaQueueItem;
 import com.intermanage.backend.mea.dto.MeaSettingsRequest;
 import com.intermanage.backend.mea.dto.MeaSettingsResponse;
+import com.intermanage.backend.mea.entity.MeaOrder;
 import com.intermanage.backend.mea.service.MeaAthosService;
 import com.intermanage.backend.mea.service.MeaDocumentService;
 import com.intermanage.backend.mea.service.MeaOrderService;
@@ -121,6 +125,69 @@ public class MeaController {
                         ContentDisposition.attachment().filename(prepared.fileName()).build().toString())
                 .header("X-Mea-Order-Id", prepared.id().toString())
                 .body(prepared.zip());
+    }
+
+    /**
+     * Zamówienie do kolejki sklepu (plik zostaje w bazie): w folderze comrnis zapisze go „Wyślij wszystkie” na komputerze
+     * z dostępem do ATHOS. Plik tego MEA, który jeszcze czekał, zastępuje nowy.
+     */
+    @PostMapping("/documents/{number}/athos-queue")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public MeaQueueItem queueAthosOrder(@PathVariable UUID storeId, @PathVariable String number,
+            @RequestBody MeaOrderRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        try {
+            MeaOrder order = orders.queue(storeId, number, request, principal.getId());
+            return orders.queue(storeId).stream()
+                    .filter(item -> item.order().getId().equals(order.getId()))
+                    .findFirst().map(MeaController::queueItem)
+                    .orElseThrow(() -> ApiException.notFound("Nie znaleziono zamówienia MEA"));
+        } catch (MurphysoftClient.Unavailable exception) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+        }
+    }
+
+    /** Pliki czekające w kolejce sklepu, od najstarszego. */
+    @GetMapping("/athos-queue")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public List<MeaQueueItem> athosQueue(@PathVariable UUID storeId) {
+        return orders.queue(storeId).stream().map(MeaController::queueItem).toList();
+    }
+
+    /** ZIP R… z kolejki do zapisu w folderze comrnis; po zapisie potwierdza go {@code .../athos-orders/{id}/saved}. */
+    @GetMapping("/athos-queue/{orderId}/file")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public ResponseEntity<byte[]> athosQueueFile(@PathVariable UUID storeId, @PathVariable UUID orderId) {
+        MeaOrderService.Prepared prepared = orders.queuedFile(storeId, orderId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(prepared.fileName()).build().toString())
+                .header("X-Mea-Order-Id", prepared.id().toString())
+                .body(prepared.zip());
+    }
+
+    /** Zdejmuje plik z kolejki (znacznik, toast „Przywróć”). */
+    @DeleteMapping("/athos-queue/{orderId}")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeFromAthosQueue(@PathVariable UUID storeId, @PathVariable UUID orderId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        orders.removeFromQueue(storeId, orderId, principal.getId());
+    }
+
+    @PostMapping("/athos-queue/{orderId}/restore")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void restoreToAthosQueue(@PathVariable UUID storeId, @PathVariable UUID orderId) {
+        orders.restoreToQueue(storeId, orderId);
+    }
+
+    private static MeaQueueItem queueItem(MeaOrderService.Queued queued) {
+        MeaOrder order = queued.order();
+        return new MeaQueueItem(order.getId(), order.getNumber(), queued.title(), order.getFileName(),
+                order.getPositions(), order.getColis(),
+                order.getCreatedBy() == null ? null : order.getCreatedBy().getDisplayName(), order.getQueuedAt(),
+                queued.reservationTo());
     }
 
     /** Plik zamówienia leży już w folderze comrnis: MEA jest wysłane. */

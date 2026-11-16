@@ -17,6 +17,7 @@ import {
 import { ChangeList, DownloadButton, VersionHistoryDialog } from '@/features/downloads/changes'
 import { DownloadFormDialog } from '@/features/downloads/DownloadFormDialog'
 import { formatSize } from '@/features/downloads/format'
+import { ShortcutsSection } from '@/features/downloads/ShortcutsSection'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -43,7 +44,7 @@ export function DownloadsPage() {
     <>
       <PageHeader
         title="Do pobrania"
-        description="Programy i pliki do zainstalowania na komputerze w sklepie."
+        description="Programy do zainstalowania na komputerze w sklepie i skróty do folderów."
         actions={
           me.owner && (
             <Button size="lg" onClick={() => setEditor({ open: true })}>
@@ -88,6 +89,8 @@ export function DownloadsPage() {
           ))}
         </div>
       )}
+
+      <ShortcutsSection owner={me.owner} />
 
       {me.owner && (
         <DownloadFormDialog

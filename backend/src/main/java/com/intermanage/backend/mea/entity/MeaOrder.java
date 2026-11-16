@@ -18,7 +18,8 @@ import jakarta.persistence.Table;
 
 /**
  * Zamówienie MEA zapisane do ATHOS: treść pliku V… (rekordy po 45 znaków), liczba pozycji z kartonami i kartonów.
- * Wysłane jest dopiero z {@code savedAt}, czyli po udanym zapisie pliku R… w folderze comrnis.
+ * Wysłane jest dopiero z {@code savedAt}, czyli po udanym zapisie pliku R… w folderze comrnis. Z {@code queuedAt} plik
+ * czekał w kolejce sklepu na „Wyślij wszystkie” z komputera z dostępem do ATHOS.
  */
 @Entity
 @Table(name = "mea_orders")
@@ -57,6 +58,22 @@ public class MeaOrder {
     @Column(name = "saved_at")
     private Instant savedAt;
 
+    /** Plik czeka w kolejce do wysłania z komputera z dostępem do ATHOS. */
+    @Column(name = "queued_at", updatable = false)
+    private Instant queuedAt;
+
+    @Column(name = "removed_at")
+    private Instant removedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "removed_by")
+    private AppUser removedBy;
+
+    /** Nowszy plik tego samego MEA w kolejce, który zastąpił ten. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "replaced_by_id")
+    private MeaOrder replacedBy;
+
     protected MeaOrder() {
     }
 
@@ -70,6 +87,41 @@ public class MeaOrder {
         this.colis = colis;
         this.createdBy = createdBy;
         this.createdAt = Instant.now();
+    }
+
+    /** Zamówienie do kolejki: zapisze je w folderze dopiero „Wyślij wszystkie”. */
+    public static MeaOrder queued(Store store, String number, String fileName, String content, int positions,
+            int colis, AppUser createdBy) {
+        MeaOrder order = new MeaOrder(store, number, fileName, content, positions, colis, createdBy);
+        order.queuedAt = order.createdAt;
+        return order;
+    }
+
+    /** Czeka w kolejce: dodane do niej, niezapisane, nieusunięte i niezastąpione. */
+    public boolean isPending() {
+        return queuedAt != null && savedAt == null && removedAt == null && replacedBy == null;
+    }
+
+    public void remove(AppUser user) {
+        removedAt = Instant.now();
+        removedBy = user;
+    }
+
+    public void restore() {
+        removedAt = null;
+        removedBy = null;
+    }
+
+    public void replaceWith(MeaOrder newer) {
+        replacedBy = newer;
+    }
+
+    public boolean isRemoved() {
+        return removedAt != null;
+    }
+
+    public boolean isReplaced() {
+        return replacedBy != null;
     }
 
     public void saved() {
@@ -104,5 +156,21 @@ public class MeaOrder {
 
     public Instant getSavedAt() {
         return savedAt;
+    }
+
+    public Instant getQueuedAt() {
+        return queuedAt;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public Store getStore() {
+        return store;
     }
 }

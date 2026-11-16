@@ -3619,6 +3619,24 @@ export type MeaDocument = {
   athosSends: MeaAthosSend[]
   /** Zamówienia zapisane do ATHOS z aplikacji, od najnowszego. */
   orders: MeaOrder[]
+  /** Plik tego MEA czekający w kolejce sklepu na „Wyślij wszystkie” (null, gdy żaden nie czeka). */
+  queued: { id: string; queuedAt: string; positions: number; colis: number; createdBy: string | null } | null
+}
+
+/**
+ * Plik zamówienia MEA w kolejce sklepu: zrobiony na dowolnym komputerze, zapisze go w folderze ATHOS dopiero
+ * „Wyślij wszystkie” na komputerze z dostępem do ATHOS. Po końcu rezerwacji (`reservationTo`) ATHOS go nie przyjmie.
+ */
+export type MeaQueueItem = {
+  id: string
+  number: string
+  title: string | null
+  fileName: string
+  positions: number
+  colis: number
+  createdBy: string | null
+  queuedAt: string
+  reservationTo: string | null
 }
 
 /** Stan kluczy API sklepu (bez samych kluczy). */

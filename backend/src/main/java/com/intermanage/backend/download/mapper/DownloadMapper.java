@@ -8,7 +8,9 @@ import org.mapstruct.Mapping;
 import com.intermanage.backend.download.dto.DownloadResponse;
 import com.intermanage.backend.download.entity.Download;
 import com.intermanage.backend.download.entity.DownloadFileChange;
+import com.intermanage.backend.download.dto.ShortcutResponse;
 import com.intermanage.backend.download.repository.DownloadFileRepository;
+import com.intermanage.backend.download.repository.DownloadShortcutRepository;
 
 @Mapper
 public interface DownloadMapper {
@@ -24,4 +26,7 @@ public interface DownloadMapper {
     DownloadResponse.FileInfo toFileInfo(DownloadFileRepository.Summary file, List<DownloadFileChange> changes);
 
     DownloadResponse.Change toChange(DownloadFileChange change);
+
+    @Mapping(target = "fileName", expression = "java(shortcut.getName() + \".lnk\")")
+    ShortcutResponse toShortcut(DownloadShortcutRepository.Summary shortcut);
 }

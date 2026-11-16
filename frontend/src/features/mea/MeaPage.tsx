@@ -1,4 +1,4 @@
-import { LockIcon, RefreshCwIcon, SendIcon, SettingsIcon } from 'lucide-react'
+import { ListChecksIcon, LockIcon, RefreshCwIcon, SendIcon, SettingsIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 
@@ -16,9 +16,10 @@ import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
 
-import { useMeaList, useMeaSettings } from './api'
+import { useAthosQueue, useMeaList, useMeaSettings } from './api'
 import { useAthosHistorySync, useAthosStatus } from './athos-history'
 import { AthosDialog } from './AthosDialog'
+import { AthosQueueDialog } from './AthosQueueDialog'
 import { MeaSettingsDialog } from './MeaSettingsDialog'
 import { meaDocumentPath } from './paths'
 import { reservationClosed } from './reservation'
@@ -53,11 +54,14 @@ function StoreMea({ store }: { store: StoreSummary }) {
   const list = useMeaList(store.id, settings.data?.configured === true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [athosOpen, setAthosOpen] = useState(false)
+  const [queueOpen, setQueueOpen] = useState(false)
+  const athosQueue = useAthosQueue(store.id)
   const athos = useAthosHistorySync(store.id)
   const athosStatus = useAthosStatus(store.id)
 
   const configured = settings.data?.configured === true
   // Kropka na przycisku: dziennik czeka na zgodę albo jest błąd odczytu (folder niewybrany to świadomy brak).
+  const queued = athosQueue.data?.length ?? 0
   const athosAttention = athos.watch.access === 'prompt' || athos.watch.error !== null
 
   return (
@@ -67,6 +71,15 @@ function StoreMea({ store }: { store: StoreSummary }) {
         description={storeLabel(store)}
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant={queued > 0 ? 'default' : 'outline'}
+              onClick={() => setQueueOpen(true)}
+              title="Zamówienia MEA czekające na wysłanie do ATHOS z komputera z dostępem do ATHOS"
+            >
+              <ListChecksIcon />
+              Kolejka ATHOS
+              {queued > 0 && <span className="tabular-nums">({queued})</span>}
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -132,6 +145,7 @@ function StoreMea({ store }: { store: StoreSummary }) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />
+      <AthosQueueDialog storeId={store.id} open={queueOpen} onOpenChange={setQueueOpen} />
       <AthosDialog
         storeId={store.id}
         open={athosOpen}

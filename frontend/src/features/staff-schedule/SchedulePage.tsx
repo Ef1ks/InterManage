@@ -258,6 +258,16 @@ function Loaded({
   const records = useStaffRecords(store.id, useCan('STAFF_RECORDS', 'VIEW'))
   const leaveLeft = new Map(records.data?.map((record) => [record.employeeId, record.remainingLeave]))
   const [brush, setBrush] = useState<Brush>(null)
+  // Pasek przycisków klei się pod nagłówkiem aplikacji, a nagłówek dni tabeli pod nim, więc liczymy jego wysokość.
+  const toolbar = useRef<HTMLDivElement>(null)
+  const [toolbarHeight, setToolbarHeight] = useState(0)
+  useEffect(() => {
+    const element = toolbar.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setToolbarHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   /** Stanowisko do szybkiego wpisywania godzin; puste = stałe stanowisko każdego pracownika. */
   const [brushPosition, setBrushPosition] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'publish' | 'versions' | 'settings' | 'layout' | null>(null)
@@ -559,7 +569,7 @@ function Loaded({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div ref={toolbar} className="sticky top-14 z-30 -mx-1 flex flex-wrap items-center gap-2 bg-background px-1 py-2">
         {viewedVersion !== null ? (
           <>
             <Badge variant="secondary">Wersja {viewedVersion}, tylko do odczytu</Badge>
@@ -770,6 +780,7 @@ function Loaded({
         />
       ) : (
         <ScheduleGrid
+          stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
           schedule={onlyBalancing ? { ...schedule, rows: balancing } : schedule}
           onRate={canEdit ? setRateRow : undefined}
           onCell={canEdit ? onCell : undefined}

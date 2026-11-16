@@ -169,6 +169,17 @@ export function newArticlesBySupplier(delivery: BaseDelivery, tableRows: DataEnt
 /** Rejony nomenklatury, których EAN-y idą do pliku „Sprawdź PLU”. */
 export const PLU_REGIONS = ['32', '33']
 
+/** Folder pliku dostawy dla programu sklepu (jak plik bazy), wybrany raz w przeglądarce (Ustawienia zapisu). */
+export const NOTE_FILE_FOLDER: SavedFolderSpec = {
+  key: 'base-delivery-note-file',
+  label: 'Plik dostawy dla programu sklepu',
+}
+
+/** Dostawcy linii dokumentu (538 baza, 88110 alkohol), bez zer wiodących, każdy raz. */
+export function deliverySuppliers(delivery: BaseDelivery) {
+  return [...new Set(delivery.lines.map((line) => line.supplierCode.replace(/^0+(?=.)/, '')))]
+}
+
 /** Folder pliku .lst „Sprawdź PLU”, wybrany raz w przeglądarce (Ustawienia zapisu). */
 export const PLU_FOLDER: SavedFolderSpec = { key: 'base-delivery-plu', label: 'Sprawdź PLU (lista EAN-ów)' }
 

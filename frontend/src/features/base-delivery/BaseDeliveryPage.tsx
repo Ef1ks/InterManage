@@ -8,6 +8,7 @@ import {
   FileInputIcon,
   FileSearchIcon,
   FileOutputIcon,
+  FileDownIcon,
   FilePlusIcon,
   FilterXIcon,
   LayersIcon,
@@ -78,7 +79,7 @@ import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules } from '@/features/store-settings/api'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
-import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
+import { ApiError, fetchNamedFile, fetchPostedFile, saveBlob } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
@@ -97,12 +98,14 @@ import { useUndoHistory, useUndoShortcuts } from '@/features/data-entry/undo-his
 import { useBaseDelivery, useMeaOverview, useUploadBaseDelivery } from './api'
 import {
   type ColumnFilters,
+  deliverySuppliers,
   documentPrice,
   EMPTY_VALUE,
   isNewArticle,
   negativeMargin,
   newArticlesBySupplier,
   notDelivered,
+  NOTE_FILE_FOLDER,
   withDeliveryProduct,
   PLU_FOLDER,
   PLU_REGIONS,
@@ -633,6 +636,34 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     }
   }
 
+  // Plik dostawy dla programu sklepu (układ pliku bazy) z całego dokumentu, osobno dla dostawcy (538, 88110),
+  // zapisywany od razu w folderze z ustawień zapisu; bez folderu pobranie.
+  const [savingNote, setSavingNote] = useState(false)
+  const saveNoteFiles = async () => {
+    if (!delivery) return
+    setSavingNote(true)
+    try {
+      const folderReady = await ensureFolderAccess(NOTE_FILE_FOLDER.key)
+      const saved: string[] = []
+      for (const supplier of deliverySuppliers(delivery)) {
+        const { fileName, blob } = await fetchNamedFile(
+          `/stores/${store.id}/base-deliveries/${delivery.id}/note-file?supplier=${encodeURIComponent(supplier)}`,
+          `dostawa-${delivery.number}-${supplier}.TXT`,
+        )
+        if (folderReady) await saveToFolder(NOTE_FILE_FOLDER.key, fileName, blob)
+        else saveBlob(blob, fileName)
+        saved.push(`dostawca ${supplier}`)
+      }
+      toast.success(`Zapisano plik dostawy ${delivery.number}`, {
+        description: `${saved.join(', ')}${folderReady ? '' : ' (pobrany: folder nie jest wybrany w ustawieniach zapisu)'}`,
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać pliku dostawy')
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   const incompleteEanCount = tableStats.incompleteEans
   const blocked = depositErrorCount > 0 || incompleteEanCount > 0
   const blockedTitle =
@@ -932,6 +963,17 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                 >
                   <PackageCheckIcon />
                   Zmień artykuły
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={savingNote}
+                  disabled={!delivery}
+                  onClick={saveNoteFiles}
+                  title="Plik dostawy dla programu sklepu z całego dokumentu (osobno dla każdego dostawcy), zapisany w folderze z ustawień zapisu"
+                >
+                  <FileDownIcon />
+                  Plik dostawy
                 </Button>
                 {plu.length > 0 && (
                   <Button
@@ -1262,7 +1304,10 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         withXml={false}
-        extraFolders={[{ folder: PLU_FOLDER, note: 'Lista EAN-ów artykułów z nomenklatury 32 i 33 („Sprawdź PLU”).' }]}
+        extraFolders={[
+          { folder: NOTE_FILE_FOLDER, note: 'Plik dostawy z bazy dla programu sklepu („Plik dostawy”).' },
+          { folder: PLU_FOLDER, note: 'Lista EAN-ów artykułów z nomenklatury 32 i 33 („Sprawdź PLU”).' },
+        ]}
       />
     </>
   )

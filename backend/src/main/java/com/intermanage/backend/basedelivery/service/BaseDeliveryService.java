@@ -28,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.basedelivery.component.BaseDeliveryParser;
+import com.intermanage.backend.basedelivery.component.BaseNoteFile;
 import com.intermanage.backend.basedelivery.component.ShortDatesPdf;
 import com.intermanage.backend.basedelivery.component.TemporaryNoteParser;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryLineResponse;
@@ -191,6 +192,35 @@ public class BaseDeliveryService {
                 delivery.getNumber(), delivery.getDeliveryDate(), lines));
         return new DocumentService.ExportFile("krotkie-terminy-" + delivery.getNumber() + ".pdf", "application/pdf",
                 content);
+    }
+
+    /**
+     * Plik dostawy dla programu sklepu (jak plik bazy LIVRJPOL…TXT) z całego bonu, bez względu na wybrane nośniki,
+     * osobno dla dostawcy linii (538 baza, 88110 alkohol: {@code supplierCode} odpowiedzi, jak w tabeli).
+     */
+    @Transactional(readOnly = true)
+    public DocumentService.ExportFile noteFile(UUID storeId, UUID id, String supplierCode) {
+        BaseDelivery delivery = delivery(storeId, id);
+        String supplier = supplierCode == null ? "" : supplierCode.trim().replaceFirst("^0+(?=.)", "");
+        List<BaseNoteFile.Line> lines = response(storeId, delivery).lines().stream()
+                .filter(line -> line.supplierCode().replaceFirst("^0+(?=.)", "").equals(supplier))
+                .map(line -> new BaseNoteFile.Line(line.itm8(), region(line), line.quantity(),
+                        line.purchasePrice(), line.retailPrice(), line.ean(), line.vatRate()))
+                .toList();
+        if (lines.isEmpty()) {
+            throw ApiException.notFound("Dokument nie ma linii dostawcy " + supplier);
+        }
+        BaseNoteFile.File file = BaseNoteFile.create(delivery.getStore().getNumber(), delivery.getNumber(),
+                delivery.getDeliveryDate(), supplier, lines);
+        return new DocumentService.ExportFile(file.fileName(), "text/plain", file.content());
+    }
+
+    private static String region(BaseDeliveryLineResponse line) {
+        if (line.regionCode() != null && !line.regionCode().isBlank()) {
+            return line.regionCode();
+        }
+        String subfamily = line.product() == null ? null : line.product().subfamilyCode();
+        return subfamily != null && subfamily.length() >= 2 ? subfamily.substring(0, 2) : null;
     }
 
     private BaseDelivery delivery(UUID storeId, UUID id) {

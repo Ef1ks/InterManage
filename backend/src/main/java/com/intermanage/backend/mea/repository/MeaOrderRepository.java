@@ -26,4 +26,23 @@ public interface MeaOrderRepository extends JpaRepository<MeaOrder, UUID> {
                                where x.store.id = :storeId and x.number = o.number and x.savedAt is not null)
             """)
     List<MeaOrder> findLatestSaved(UUID storeId);
+
+    /** Pliki czekające w kolejce sklepu do wysłania do ATHOS, od najstarszego. */
+    @EntityGraph(attributePaths = "createdBy")
+    @Query("""
+            select o from MeaOrder o
+            where o.store.id = :storeId and o.queuedAt is not null and o.savedAt is null
+              and o.removedAt is null and o.replacedBy is null
+            order by o.queuedAt
+            """)
+    List<MeaOrder> findQueue(UUID storeId);
+
+    /** Plik tego MEA czekający w kolejce sklepu (najwyżej jeden). */
+    @EntityGraph(attributePaths = "createdBy")
+    @Query("""
+            select o from MeaOrder o
+            where o.store.id = :storeId and o.number = :number and o.queuedAt is not null and o.savedAt is null
+              and o.removedAt is null and o.replacedBy is null
+            """)
+    List<MeaOrder> findQueued(UUID storeId, String number);
 }

@@ -165,6 +165,54 @@ class DownloadIntegrationTests {
         assertThat(JsonPath.<List<String>>read(versions, "$[1].changes[*].text")).containsExactly("Szybsze makra");
     }
 
+    @Test
+    void ownerAddsFolderShortcutsAndEveryoneDownloadsThem() throws Exception {
+        jdbc.update("update download_shortcuts set removed_at = now() where removed_at is null");
+        Cookie employee = employee();
+        byte[] lnk = WindowsShortcutTests.read("missing-drive.lnk");
+        String shortcuts = SETTINGS + "/shortcuts";
+
+        mvc.perform(multipart(shortcuts).file(new MockMultipartFile("file", "a.lnk", null, lnk)).param("name", "X")
+                .cookie(employee).with(csrf())).andExpect(status().isForbidden());
+        // Tylko skrót Windows i nazwa, która może być nazwą pliku.
+        mvc.perform(multipart(shortcuts).file(new MockMultipartFile("file", "a.exe", null, new byte[] {1, 2}))
+                .param("name", "Program").cookie(owner).with(csrf())).andExpect(status().isBadRequest());
+        mvc.perform(multipart(shortcuts).file(new MockMultipartFile("file", "a.lnk", null, lnk))
+                .param("name", "Kopie: N").cookie(owner).with(csrf())).andExpect(status().isBadRequest());
+
+        String created = mvc.perform(multipart(shortcuts).file(new MockMultipartFile("file", "x.lnk", null, lnk))
+                        .param("name", "Kopie Mercalys.lnk").cookie(owner).with(csrf()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(created, "$[0].id");
+        assertThat(JsonPath.<String>read(created, "$[0].fileName")).isEqualTo("Kopie Mercalys.lnk");
+        assertThat(JsonPath.<String>read(created, "$[0].target")).isEqualTo("N:\\AVISOCONFIG\\BACKUP");
+        mvc.perform(multipart(shortcuts).file(new MockMultipartFile("file", "x.lnk", null, lnk))
+                .param("name", "kopie mercalys").cookie(owner).with(csrf())).andExpect(status().isConflict());
+
+        byte[] body = mvc.perform(get("/api/downloads/shortcuts/" + id + "/file").cookie(employee))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        startsWith("attachment; filename=\"Kopie Mercalys.lnk\"")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(body).isEqualTo(lnk);
+
+        mvc.perform(put(shortcuts + "/" + id).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Kopie zapasowe\"}")).andExpect(status().isOk());
+        byte[] zip = mvc.perform(get("/api/downloads/shortcuts/zip").cookie(employee))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        try (var entries = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zip))) {
+            assertThat(entries.getNextEntry().getName()).isEqualTo("Kopie zapasowe.lnk");
+            assertThat(entries.readAllBytes()).isEqualTo(lnk);
+        }
+
+        mvc.perform(delete(shortcuts + "/" + id).cookie(owner).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/downloads/shortcuts/" + id + "/file").cookie(employee))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(shortcuts + "/" + id + "/restore").cookie(owner).with(csrf())).andExpect(status().isOk());
+        assertThat(JsonPath.<List<Object>>read(mvc.perform(get("/api/downloads/shortcuts").cookie(employee))
+                .andReturn().getResponse().getContentAsString(), "$")).hasSize(1);
+    }
+
     private void upload(String id, String name, byte[] content, String version) throws Exception {
         mvc.perform(multipart(HttpMethod.PUT, SETTINGS + "/" + id + "/file")
                         .file(new MockMultipartFile("file", name, "application/octet-stream", content))

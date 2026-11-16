@@ -151,3 +151,72 @@ export function useRestoreDownload() {
     onSuccess: setDownloads,
   })
 }
+
+/** Skrót Windows do folderu (np. raporty na dysku sieciowym); pobiera się jako `fileName`. */
+export type FolderShortcut = {
+  id: string
+  name: string
+  fileName: string
+  /** Folder odczytany ze skrótu; brak = nie udało się odczytać. */
+  target: string | null
+  sizeBytes: number
+  uploadedAt: string
+  uploadedBy: string | null
+}
+
+const shortcutsKey = ['downloads', 'shortcuts'] as const
+
+export const shortcutFileUrl = (id: string) => `/api/downloads/shortcuts/${id}/file`
+export const shortcutsZipUrl = '/api/downloads/shortcuts/zip'
+
+export function useShortcuts() {
+  return useQuery({ queryKey: shortcutsKey, queryFn: () => api<FolderShortcut[]>('/downloads/shortcuts') })
+}
+
+function useSetShortcuts() {
+  const queryClient = useQueryClient()
+  return (list: FolderShortcut[]) => queryClient.setQueryData(shortcutsKey, list)
+}
+
+export function useCreateShortcut() {
+  const setShortcuts = useSetShortcuts()
+  return useMutation({
+    mutationFn: ({ name, file }: { name: string; file: File }) => {
+      const data = new FormData()
+      data.append('name', name.trim())
+      data.append('file', file)
+      return api<FolderShortcut[]>('/settings/downloads/shortcuts', { method: 'POST', formData: data })
+    },
+    onSuccess: setShortcuts,
+    meta: { invalidates: false },
+  })
+}
+
+export function useRenameShortcut() {
+  const setShortcuts = useSetShortcuts()
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      api<FolderShortcut[]>(`/settings/downloads/shortcuts/${id}`, { method: 'PUT', json: { name: name.trim() } }),
+    onSuccess: setShortcuts,
+    meta: { invalidates: false },
+  })
+}
+
+export function useRemoveShortcut() {
+  const setShortcuts = useSetShortcuts()
+  return useMutation({
+    mutationFn: (id: string) => api<FolderShortcut[]>(`/settings/downloads/shortcuts/${id}`, { method: 'DELETE' }),
+    onSuccess: setShortcuts,
+    meta: { invalidates: false },
+  })
+}
+
+export function useRestoreShortcut() {
+  const setShortcuts = useSetShortcuts()
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<FolderShortcut[]>(`/settings/downloads/shortcuts/${id}/restore`, { method: 'POST' }),
+    onSuccess: setShortcuts,
+    meta: { invalidates: false },
+  })
+}

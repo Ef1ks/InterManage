@@ -168,7 +168,12 @@ public class MeaDocumentService {
                         .map(order -> new MeaDocumentResponse.Order(order.getSavedAt(), order.getFileName(),
                                 order.getPositions(), order.getColis(),
                                 order.getCreatedBy() == null ? null : order.getCreatedBy().getDisplayName()))
-                        .toList());
+                        .toList(),
+                orders.findQueued(storeId, number).stream().findFirst()
+                        .map(order -> new MeaDocumentResponse.Queued(order.getId(), order.getQueuedAt(),
+                                order.getPositions(), order.getColis(),
+                                order.getCreatedBy() == null ? null : order.getCreatedBy().getDisplayName()))
+                        .orElse(null));
     }
 
     /** Formularz MEA z pozycjami z bazy; bez niego pobiera go od razu z portalu sesją sklepu. */
