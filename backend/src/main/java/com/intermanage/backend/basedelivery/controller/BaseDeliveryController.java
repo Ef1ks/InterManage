@@ -25,9 +25,11 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliverySummary;
+import com.intermanage.backend.basedelivery.dto.BasePortalDocument;
 import com.intermanage.backend.basedelivery.dto.MeaConfirmRequest;
 import com.intermanage.backend.basedelivery.dto.MeaOverview;
 import com.intermanage.backend.basedelivery.dto.TemporaryNoteResponse;
+import com.intermanage.backend.basedelivery.service.BaseDeliveryPortalService;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
 import com.intermanage.backend.basedelivery.service.MeaCodeService;
 import com.intermanage.backend.document.service.DocumentService;
@@ -46,10 +48,13 @@ public class BaseDeliveryController {
 
     private final BaseDeliveryService deliveries;
     private final MeaCodeService meaCodes;
+    private final BaseDeliveryPortalService portal;
 
-    public BaseDeliveryController(BaseDeliveryService deliveries, MeaCodeService meaCodes) {
+    public BaseDeliveryController(BaseDeliveryService deliveries, MeaCodeService meaCodes,
+            BaseDeliveryPortalService portal) {
         this.deliveries = deliveries;
         this.meaCodes = meaCodes;
+        this.portal = portal;
     }
 
     @GetMapping("/base-deliveries")
@@ -64,6 +69,23 @@ public class BaseDeliveryController {
     public BaseDeliveryResponse upload(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return deliveries.upload(storeId, file, principal.getId());
+    }
+
+    /** Bony z portalu Grupy Muszkieterów z ostatnich {@code days} dni (0 = dziś), z oznaczeniem już wgranych. */
+    @GetMapping("/base-deliveries/portal")
+    @PreAuthorize(ACCESS)
+    public List<BasePortalDocument> portalList(@PathVariable UUID storeId,
+            @RequestParam(defaultValue = "7") int days) {
+        return portal.list(storeId, days);
+    }
+
+    /** Pobranie bonu z portalu i zapis jak wgranego pliku. */
+    @PostMapping("/base-deliveries/portal/{number}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(ACCESS)
+    public BaseDeliveryResponse portalDownload(@PathVariable UUID storeId, @PathVariable String number,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return portal.download(storeId, number, principal.getId());
     }
 
     /** „Tymczasowy bon dostawy” z Mercalys do „Znajdź różnice”: tylko odczyt pliku, nic nie zapisuje. */

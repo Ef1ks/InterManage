@@ -21,6 +21,12 @@ public interface BaseDeliveryRepository extends JpaRepository<BaseDelivery, UUID
     @EntityGraph(attributePaths = { "uploadedBy", "lines" })
     Optional<BaseDelivery> findByIdAndStoreIdAndReplacedAtIsNull(UUID id, UUID storeId);
 
+    @Query("""
+            select d.number from BaseDelivery d
+            where d.store.id = :storeId and d.replacedAt is null and d.number in :numbers
+            """)
+    List<String> findLoadedNumbers(UUID storeId, java.util.Collection<String> numbers);
+
     interface MeaOccurrence {
         String getCode();
 

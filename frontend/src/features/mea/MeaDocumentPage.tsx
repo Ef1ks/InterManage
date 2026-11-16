@@ -1,4 +1,4 @@
-import { EraserIcon, MinusIcon, PlusIcon } from 'lucide-react'
+import { EraserIcon, LockIcon, MinusIcon, PlusIcon, SendIcon } from 'lucide-react'
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -28,6 +28,8 @@ import {
 } from '@/store/meaOrderDraftSlice'
 
 import { useMeaDocument } from './api'
+import { reservationClosed } from './reservation'
+import { SendToAthosDialog } from './SendToAthosDialog'
 import { meaOnlinePath } from './paths'
 
 const EMPTY_DRAFT: MeaOrderDraft = {}
@@ -94,7 +96,8 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
   const draft = useAppSelector((state) => state.meaOrderDraft.drafts[key] ?? EMPTY_DRAFT)
   const [selected, setSelected] = useState<string | null>(document.lines[0]?.meaItm8 ?? null)
   const inputs = useRef(new Map<string, HTMLInputElement>())
-  // Zawsze 4 kolumny R jak w eMEA (rekord zamówienia do ATHOS ma 4 rozrzuty); pola tylko dla rozrzutów z datą.
+  // Po terminie „rezerwacja do” portal nie przyjmie już ilości, więc dokument jest tylko do podglądu.
+  const readOnly = reservationClosed(document.reservationTo)
   // Kolumny tylko dla rozrzutów z datą (co najmniej jedna), żeby tabela zmieściła się na 2/3 ekranu.
   const dispatchColumns = Array.from({ length: Math.max(1, document.dispatches.length) }, (_, index) => index)
 
@@ -144,10 +147,34 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
   }
 
   const selectedLine = document.lines.find((line) => line.meaItm8 === selected) ?? null
+  const [sendOpen, setSendOpen] = useState(false)
 
   return (
     <>
-      <DocumentHeader document={document} totals={totals} onClear={totals.coli > 0 ? clear : undefined} />
+      <DocumentHeader
+        document={document}
+        totals={totals}
+        onClear={totals.coli > 0 && !readOnly ? clear : undefined}
+        onSend={readOnly ? undefined : () => setSendOpen(true)}
+      />
+      <SendToAthosDialog
+        storeId={store.id}
+        document={document}
+        draft={draft}
+        totals={totals}
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+      />
+      {readOnly && (
+        <p
+          role="status"
+          className="mb-4 flex items-center gap-2 rounded-lg bg-amber-200 px-4 py-2.5 text-sm text-amber-950 dark:bg-amber-900/70 dark:text-amber-50"
+        >
+          <LockIcon className="size-4 shrink-0" />
+          Rezerwacja zakończyła się {shortDate(document.reservationTo)}. Dokument jest tylko do podglądu, ilości nie
+          można już zmieniać.
+        </p>
+      )}
 
       {/* Od xl tabela na 2/3 szerokości, a statystyki zaznaczonego artykułu obok na 1/3, każde z własnym przewijaniem,
           żeby pracownik wpisując ilości widział od razu stan i sprzedaż. */}
@@ -226,6 +253,7 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
                     line={line}
                     draft={lineDraft(line.meaItm8)}
                     dispatchColumns={dispatchColumns}
+                    readOnly={readOnly}
                     selected={line.meaItm8 === selected}
                     onSelect={() => setSelected(line.meaItm8)}
                     registerInput={(column, element) => {
@@ -266,10 +294,13 @@ function DocumentHeader({
   document,
   totals,
   onClear,
+  onSend,
 }: {
   document: MeaDocument
   totals: { coli: number; value: number; cadValue: number; difference: number; ordered: number }
   onClear?: () => void
+  /** „Wyślij do ATHOS”; bez niego (rezerwacja zamknięta) przycisku nie ma. */
+  onSend?: () => void
 }) {
   return (
     <Card className="mb-4 grid gap-4 px-5 py-4 lg:grid-cols-[auto_1fr_auto]">
@@ -316,6 +347,7 @@ function DocumentHeader({
             Rezerwacja do: <strong className="tabular-nums">{shortDate(document.reservationTo)}</strong>
           </span>
         </p>
+        <AthosSendNote document={document} totals={totals} />
       </div>
 
       <div className="flex items-start gap-4">
@@ -337,14 +369,72 @@ function DocumentHeader({
             </span>
           </dd>
         </dl>
-        {onClear && (
-          <Button variant="outline" size="sm" onClick={onClear}>
-            <EraserIcon />
-            Wyczyść ilości
-          </Button>
-        )}
+        <div className="grid gap-2">
+          {onSend && (
+            <Button
+              onClick={onSend}
+              className="bg-orange-500 text-white hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500"
+            >
+              <SendIcon />
+              Wyślij do ATHOS
+            </Button>
+          )}
+          {onClear && (
+            <Button variant="outline" size="sm" onClick={onClear}>
+              <EraserIcon />
+              Wyczyść ilości
+            </Button>
+          )}
+        </div>
       </div>
     </Card>
+  )
+}
+
+/**
+ * Wysyłka z ATHOS (najnowsza z dziennika Histo.Log): kiedy, ile pozycji i COLI. Gdy w aplikacji są wpisane ilości,
+ * różne liczby są na czerwono, jak w eMEA (zamówienie wysłane z ATHOS nie zgadza się z formularzem).
+ */
+function AthosSendNote({ document, totals }: { document: MeaDocument; totals: { coli: number; ordered: number } }) {
+  const [latest, ...older] = document.athosSends
+  const [order] = document.orders
+  // Zapisane z aplikacji, a dziennik ATHOS jeszcze nie pokazał wysyłki (albo nie jest czytany).
+  const orderNote = order && (!latest || new Date(latest.sentAt) < new Date(order.savedAt)) && (
+    <span className="mr-2 rounded bg-sky-200 px-1.5 py-0.5 font-medium text-sky-950 dark:bg-sky-900 dark:text-sky-50">
+      Zapisano do ATHOS{' '}
+      {new Date(order.savedAt).toLocaleString('pl-PL', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}{' '}
+      · {order.colis} COLI
+      {order.createdBy && ` · ${order.createdBy}`}
+    </span>
+  )
+  if (!latest) {
+    return <p className="mt-1 text-sm text-muted-foreground">{orderNote || 'Nie wysłano jeszcze do ATHOS.'}</p>
+  }
+  const compare = totals.coli > 0
+  const mismatch = (sent: number, entered: number) =>
+    compare && sent !== entered ? 'font-semibold text-red-700 dark:text-red-300' : 'font-semibold'
+  const sentAt = new Date(latest.sentAt).toLocaleString('pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return (
+    <p className="mt-1 text-sm">
+      {orderNote}
+      <span className="rounded bg-emerald-200 px-1.5 py-0.5 font-medium text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50">
+        Wysłano z ATHOS {sentAt}
+      </span>{' '}
+      <span className={mismatch(latest.positions, totals.ordered)}>{latest.positions} poz.</span> ·{' '}
+      <span className={mismatch(latest.colis, totals.coli)}>{latest.colis} COLI</span>
+      {older.length > 0 && <span className="text-muted-foreground"> · wcześniej wysyłane {older.length}×</span>}
+    </p>
   )
 }
 
@@ -352,6 +442,7 @@ function MeaLineRow({
   line,
   draft,
   dispatchColumns,
+  readOnly,
   selected,
   onSelect,
   registerInput,
@@ -362,6 +453,8 @@ function MeaLineRow({
   line: MeaDocumentLine
   draft: MeaLineDraft
   dispatchColumns: number[]
+  /** Rezerwacja zamknięta: ilości i mnożnik tylko jako tekst. */
+  readOnly: boolean
   selected: boolean
   onSelect: () => void
   registerInput: (column: number, element: HTMLInputElement | null) => void
@@ -429,14 +522,18 @@ function MeaLineRow({
       </td>
       {dispatchColumns.map((column) => (
         <td key={column} className="text-center">
-          <QuantityStepper
-            label={`R${column + 1} ${line.name ?? line.meaItm8}`}
-            value={draft.quantities[column] ?? 0}
-            inputRef={(element) => registerInput(column, element)}
-            onKeyDown={(event) => onCellKey(event, column)}
-            onChange={(next) => onQuantity(column, next)}
-            onFocus={onSelect}
-          />
+          {readOnly ? (
+            <span className="font-semibold tabular-nums">{draft.quantities[column] || '—'}</span>
+          ) : (
+            <QuantityStepper
+              label={`R${column + 1} ${line.name ?? line.meaItm8}`}
+              value={draft.quantities[column] ?? 0}
+              inputRef={(element) => registerInput(column, element)}
+              onKeyDown={(event) => onCellKey(event, column)}
+              onChange={(next) => onQuantity(column, next)}
+              onFocus={onSelect}
+            />
+          )}
         </td>
       ))}
       <td className="text-right tabular-nums">
@@ -453,21 +550,25 @@ function MeaLineRow({
       </td>
       <td className="text-right font-medium tabular-nums">{money(value)}</td>
       <td className="text-center">
-        <input
-          aria-label={`Mnożnik ${line.name ?? line.meaItm8}`}
-          inputMode="decimal"
-          defaultValue={draft.multiplier === 1 ? '1' : String(draft.multiplier).replace('.', ',')}
-          key={draft.multiplier}
-          onFocus={(event) => {
-            onSelect()
-            event.target.select()
-          }}
-          onBlur={(event) => {
-            const parsed = Number(event.target.value.replace(',', '.'))
-            onMultiplier(Number.isFinite(parsed) && parsed > 0 ? parsed : 1)
-          }}
-          className="h-8 w-14 rounded-md border border-input bg-background px-2 text-right tabular-nums dark:bg-input/30"
-        />
+        {readOnly ? (
+          <span className="tabular-nums">{String(draft.multiplier).replace('.', ',')}</span>
+        ) : (
+          <input
+            aria-label={`Mnożnik ${line.name ?? line.meaItm8}`}
+            inputMode="decimal"
+            defaultValue={draft.multiplier === 1 ? '1' : String(draft.multiplier).replace('.', ',')}
+            key={draft.multiplier}
+            onFocus={(event) => {
+              onSelect()
+              event.target.select()
+            }}
+            onBlur={(event) => {
+              const parsed = Number(event.target.value.replace(',', '.'))
+              onMultiplier(Number.isFinite(parsed) && parsed > 0 ? parsed : 1)
+            }}
+            className="h-8 w-14 rounded-md border border-input bg-background px-2 text-right tabular-nums dark:bg-input/30"
+          />
+        )}
       </td>
     </tr>
   )

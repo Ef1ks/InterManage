@@ -1088,15 +1088,18 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray()).isEqualTo(file);
 
-        // Dostawca bez hasła i dostawca spoza listy: brak pliku.
+        // Dostawca nie jest wymagany: bez hasła i spoza listy w nazwie pliku stoi login (jak w etykietach).
         jdbc.update("update suppliers set keyword = null where id = ?::uuid", supplierId);
         mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(".*filename=\"CTRLPRIX_\\d{8}_\\d{6}_wlasciciel_wlasciciel\\.traite0\".*")));
         mvc.perform(post(url("/export/price-control")).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"sellerNip\":\"5260250995\",\"rows\":[{\"ean\":\"5904634010327\",\"salePrice\":4.99}]}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Supplier-Code", ""));
     }
 
     @Test

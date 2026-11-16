@@ -12,6 +12,9 @@ export function useMeaList(storeId: string, enabled = true) {
     queryKey: listKey(storeId),
     queryFn: () => api<MeaList>(`/stores/${storeId}/mea`),
     enabled,
+    // Lista z portalu to ponad tysiąc MEA i kilka sekund czekania, więc powrót z dokumentu jej nie pobiera od nowa
+    // (świeżą daje „Odśwież”).
+    staleTime: 5 * 60 * 1000,
     retry: false,
   })
 }

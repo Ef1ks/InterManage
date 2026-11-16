@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -123,7 +124,36 @@ public class BaseDeliveryService {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
         String fileName = file.getOriginalFilename() == null ? "dostawa.xls" : file.getOriginalFilename();
         check(file);
-        BaseDeliveryParser.Parsed parsed = parse(file, fileName);
+        return save(store, parse(file, fileName), fileName, userId);
+    }
+
+    /**
+     * Bon pobrany z portalu Grupy Muszkieterów ({@code /documentbl/document/}): linie mają te same kolumny co plik
+     * z bazy, więc idą przez ten sam parser i zapis co wgrany plik.
+     */
+    @Transactional
+    public BaseDeliveryResponse importSheet(UUID storeId, List<List<String>> sheet, String fileName, UUID userId) {
+        Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
+        BaseDeliveryParser.Parsed parsed;
+        try {
+            parsed = parser.parse(sheet);
+        } catch (InvalidReportException e) {
+            throw invalid(fileName, e);
+        }
+        return save(store, parsed, fileName, userId);
+    }
+
+    /** Numery bonów, które sklep ma już wgrane (aktywne), do oznaczenia na liście z portalu. */
+    @Transactional(readOnly = true)
+    public Set<String> loadedNumbers(UUID storeId, Collection<String> numbers) {
+        if (numbers.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(deliveries.findLoadedNumbers(storeId, numbers));
+    }
+
+    private BaseDeliveryResponse save(Store store, BaseDeliveryParser.Parsed parsed, String fileName, UUID userId) {
+        UUID storeId = store.getId();
         if (!sameStore(parsed.storeNumber(), store.getNumber())) {
             throw ApiException.conflict("Plik jest dla sklepu " + parsed.storeNumber() + ", a wybrany sklep to "
                     + store.getNumber());

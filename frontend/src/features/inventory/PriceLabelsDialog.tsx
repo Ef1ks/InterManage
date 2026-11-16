@@ -23,7 +23,7 @@ import type { PriceLabelKind, PriceMarkdown } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const ROW_GRID =
-  'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]'
+  'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'
 
 const KINDS: PriceLabelKind[] = ['PRICE_CHANGE', 'MARKDOWN']
 const KIND_LABELS: Record<PriceLabelKind, string> = { PRICE_CHANGE: 'zmiany cen', MARKDOWN: 'przeceny' }
@@ -80,7 +80,6 @@ function PriceLabelsDialog({
   const generated = items.filter((item) => item.labelsGeneratedAt !== null)
   const pickedPending = pending.filter((item) => !unchecked.has(item.id))
   const pickedGenerated = generated.filter((item) => !unchecked.has(item.id))
-  const picked = [...pickedPending, ...pickedGenerated]
 
   const toggle = (id: string) =>
     setUnchecked((current) => {
@@ -119,22 +118,28 @@ function PriceLabelsDialog({
     }
   }
 
-  const remove = () => {
-    const ids = picked.map((item) => item.id)
+  const remove = (chosen: PriceMarkdown[]) => {
+    const ids = chosen.map((item) => item.id)
+    if (ids.length === 0) return
     change.mutate(
       { action: 'delete', ids },
       {
         onSuccess: () =>
-          toast(`Usunięto z listy: ${ids.length}`, {
-            action: {
-              label: 'Przywróć',
-              onClick: () =>
-                change.mutate(
-                  { action: 'restore', ids },
-                  { onError: () => toast.error('Nie udało się przywrócić cenówek') },
-                ),
+          toast(
+            ids.length === 1
+              ? `Usunięto z listy: ${chosen[0].name ?? chosen[0].ean}`
+              : `Usunięto z listy: ${ids.length}`,
+            {
+              action: {
+                label: 'Przywróć',
+                onClick: () =>
+                  change.mutate(
+                    { action: 'restore', ids },
+                    { onError: () => toast.error('Nie udało się przywrócić cenówek') },
+                  ),
+              },
             },
-          }),
+          ),
         onError: (error) => toast.error(errorMessage(error, 'Nie udało się usunąć cenówek')),
       },
     )
@@ -181,6 +186,21 @@ function PriceLabelsDialog({
           )}
           <span className="font-medium">{formatMoney(item.newPrice)} zł</span>
         </span>
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Usuń z listy: ${item.name ?? item.ean}`}
+            title="Usuń z listy"
+            disabled={change.isPending}
+            onClick={(event) => {
+              event.preventDefault()
+              remove([item])
+            }}
+          >
+            <Trash2Icon />
+          </Button>
+        )}
       </label>
     </li>
   )
@@ -209,7 +229,15 @@ function PriceLabelsDialog({
             )}
           </div>
           {canEdit && (
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={pickedPending.length === 0 || saving || change.isPending}
+                onClick={() => remove(pickedPending)}
+              >
+                <Trash2Icon />
+                Usuń zaznaczone ({pickedPending.length})
+              </Button>
               <Button
                 loading={saving}
                 disabled={pickedPending.length === 0 || change.isPending}
@@ -249,10 +277,16 @@ function PriceLabelsDialog({
                   Utwórz ponownie ({pickedGenerated.length})
                 </Button>
               )}
-              <Button variant="outline" disabled={picked.length === 0 || change.isPending} onClick={remove}>
-                <Trash2Icon />
-                Usuń z listy ({picked.length})
-              </Button>
+              {generated.length > 0 && (
+                <Button
+                  variant="outline"
+                  disabled={pickedGenerated.length === 0 || saving || change.isPending}
+                  onClick={() => remove(pickedGenerated)}
+                >
+                  <Trash2Icon />
+                  Usuń z pliku ({pickedGenerated.length})
+                </Button>
+              )}
             </div>
           )}
         </DialogFooter>

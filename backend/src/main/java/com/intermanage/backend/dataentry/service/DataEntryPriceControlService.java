@@ -60,11 +60,12 @@ public class DataEntryPriceControlService {
     @Transactional
     public DataEntryPriceControlFile generate(UUID storeId, PriceControlRequest request, UUID userId,
             String username) {
+        // Dostawca nie jest wymagany: bez niego (albo bez hasła na liście dostawców) w nazwie pliku stoi login, jak
+        // w plikach etykiet i zamówień (ETIQUETTE_…_<login>_<login>).
         Supplier supplier = supplier(storeId, request);
-        String keyword = supplier.getKeyword() == null ? "" : supplier.getKeyword().trim();
+        String keyword = supplier == null || supplier.getKeyword() == null ? "" : supplier.getKeyword().trim();
         if (ProtoFile.namePart(keyword).isEmpty()) {
-            throw ApiException.badRequest("Dostawca " + supplier.getName()
-                    + " nie ma hasła na liście dostawców, a zmiana cen go wymaga");
+            keyword = ProtoFile.loginPart(username);
         }
         List<String> lines = PriceControlFile.lines(request.rows().stream()
                 .map(row -> new PriceControlFile.Line(row.ean(), row.salePrice()))
@@ -72,8 +73,9 @@ public class DataEntryPriceControlService {
         if (lines.isEmpty()) {
             throw ApiException.badRequest("Żaden artykuł ze zmienioną ceną nie ma EAN-u i ceny sprzedaży");
         }
-        DataEntryPriceControlFile file = files.save(new DataEntryPriceControlFile(storeId, supplier.getId(),
-                supplier.getCode(), keyword, supplier.getName(), request.invoiceNumber(),
+        DataEntryPriceControlFile file = files.save(new DataEntryPriceControlFile(storeId,
+                supplier == null ? null : supplier.getId(), supplier == null ? null : supplier.getCode(), keyword,
+                supplier == null ? null : supplier.getName(), request.invoiceNumber(),
                 PriceControlFile.fileName(keyword, username), lines.size(), PriceControlFile.content(lines),
                 userId != null ? users.getReferenceById(userId) : null));
         markdowns.addPriceChanges(storeId, changedProducts(storeId, request.rows()), file.getId(), userId);
@@ -121,7 +123,7 @@ public class DataEntryPriceControlService {
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono zmiany cen"));
     }
 
-    /** Dostawca wybrany w tabeli, a bez niego dostawca z listy sklepu o NIP-ie sprzedawcy. */
+    /** Dostawca wybrany w tabeli, a bez niego dostawca z listy sklepu o NIP-ie sprzedawcy; brak = {@code null}. */
     private Supplier supplier(UUID storeId, PriceControlRequest request) {
         if (request.supplierId() != null) {
             return suppliers.findById(request.supplierId())
@@ -132,7 +134,6 @@ public class DataEntryPriceControlService {
         return suppliers.findByStore(storeId).stream()
                 .filter(supplier -> !nip.isEmpty() && nip.equals(DataEntryLinkService.digits(supplier.getNip())))
                 .findFirst()
-                .orElseThrow(() -> ApiException.badRequest(
-                        "Dostawcy nie ma na liście dostawców sklepu: wybierz go w „Zmień dostawcę”"));
+                .orElse(null);
     }
 }

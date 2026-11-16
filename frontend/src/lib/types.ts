@@ -3418,6 +3418,13 @@ export type BaseDeliverySummary = {
   uploadedBy: string | null
 }
 
+/** Bon dostawy z bazy na liście z portalu Grupy Muszkieterów; `loaded` = sklep ma go już wgranego. */
+export type BasePortalDocument = {
+  number: string
+  date: string | null
+  loaded: boolean
+}
+
 /**
  * „Tymczasowy bon dostawy” z Mercalys: dostawa z bazy wprowadzona do programu sklepu (osobno 538 i 88110), do
  * „Znajdź różnice” z tabelą dostawy z bazy. Nie jest zapisywany.
@@ -3531,6 +3538,38 @@ export type MeaListItem = {
   ordered: boolean
   tab: MeaTab
   files: string[]
+  /** Najnowsza wysyłka zamówienia z ATHOS (dziennik Histo.Log); `null` bez wysyłki albo bez odczytanego dziennika. */
+  athosSentAt: string | null
+  athosPositions: number | null
+  athosColis: number | null
+  /** Najnowsze zamówienie zapisane do ATHOS z aplikacji (plik R… w folderze comrnis). */
+  orderSavedAt: string | null
+  orderColis: number | null
+}
+
+/** Zamówienie MEA zapisane do ATHOS z aplikacji. */
+export type MeaOrder = {
+  savedAt: string
+  fileName: string
+  positions: number
+  colis: number
+  createdBy: string | null
+}
+
+/** Wysyłka zamówienia MEA z ATHOS: kiedy, ile pozycji i kartonów (COLI). */
+export type MeaAthosSend = { sentAt: string; positions: number; colis: number }
+
+/** Stan odczytów dziennika ATHOS w sklepie; `read`: odczytany choć raz (zakładki liczą się wtedy z wysyłek). */
+export type MeaAthosStatus = {
+  read: boolean
+  importedAt: string | null
+  importedBy: string | null
+  fileName: string | null
+  fileModified: string | null
+  foundCount: number
+  addedCount: number
+  sendCount: number
+  lastSentAt: string | null
 }
 
 /** Lista MEA sklepu z portalu. {@code configured}: sklep ma zapisany klucz API. */
@@ -3576,6 +3615,10 @@ export type MeaDocument = {
   reservationTo: string | null
   dispatches: string[]
   lines: MeaDocumentLine[]
+  /** Wysyłki tego MEA z ATHOS, od najnowszej. */
+  athosSends: MeaAthosSend[]
+  /** Zamówienia zapisane do ATHOS z aplikacji, od najnowszego. */
+  orders: MeaOrder[]
 }
 
 /** Stan kluczy API sklepu (bez samych kluczy). */

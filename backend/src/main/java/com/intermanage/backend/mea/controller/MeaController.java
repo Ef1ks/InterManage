@@ -1,25 +1,39 @@
 package com.intermanage.backend.mea.controller;
 
+import java.io.IOException;
+import java.time.Instant;
 import java.util.UUID;
 
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.mea.component.MurphysoftClient;
+import com.intermanage.backend.mea.dto.MeaAthosStatus;
 import com.intermanage.backend.mea.dto.MeaDocumentResponse;
 import com.intermanage.backend.mea.dto.MeaListResponse;
+import com.intermanage.backend.mea.dto.MeaOrderRequest;
 import com.intermanage.backend.mea.dto.MeaSettingsRequest;
 import com.intermanage.backend.mea.dto.MeaSettingsResponse;
+import com.intermanage.backend.mea.service.MeaAthosService;
 import com.intermanage.backend.mea.service.MeaDocumentService;
+import com.intermanage.backend.mea.service.MeaOrderService;
 import com.intermanage.backend.mea.service.MeaService;
 
 /**
@@ -32,10 +46,15 @@ public class MeaController {
 
     private final MeaService service;
     private final MeaDocumentService documents;
+    private final MeaAthosService athos;
+    private final MeaOrderService orders;
 
-    public MeaController(MeaService service, MeaDocumentService documents) {
+    public MeaController(MeaService service, MeaDocumentService documents, MeaAthosService athos,
+            MeaOrderService orders) {
         this.service = service;
         this.documents = documents;
+        this.athos = athos;
+        this.orders = orders;
     }
 
     @GetMapping
@@ -59,6 +78,57 @@ public class MeaController {
         } catch (MurphysoftClient.Unavailable exception) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
         }
+    }
+
+    /** Stan odczytów dziennika ATHOS (Histo.Log) w sklepie. */
+    @GetMapping("/athos")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public MeaAthosStatus athosStatus(@PathVariable UUID storeId) {
+        return athos.status(storeId);
+    }
+
+    /**
+     * Dziennik ATHOS z folderu wybranego w przeglądarce (czyta go każdy, kto pracuje na MEA; przeglądarka wysyła plik
+     * tylko po jego zmianie). {@code modified}: data zmiany pliku w milisekundach.
+     */
+    @PostMapping(value = "/athos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public MeaAthosStatus athosHistory(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "modified", required = false) Long modified,
+            @AuthenticationPrincipal AppUserPrincipal principal) throws IOException {
+        return athos.importHistory(storeId,
+                file.getOriginalFilename() == null ? "Histo.Log" : file.getOriginalFilename(),
+                modified == null ? null : Instant.ofEpochMilli(modified), file.getBytes(), principal.getId());
+    }
+
+    /**
+     * Zamówienie do ATHOS (jak „Wyślij do ATHOS” w eMEA): ZIP R… z plikiem V… do zapisania przez przeglądarkę w folderze
+     * comrnis serwera sklepu; {@code X-Mea-Order-Id} to wpis, który po zapisie potwierdza {@code .../saved}.
+     */
+    @PostMapping("/documents/{number}/athos-order")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public ResponseEntity<byte[]> athosOrder(@PathVariable UUID storeId, @PathVariable String number,
+            @RequestBody MeaOrderRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        MeaOrderService.Prepared prepared;
+        try {
+            prepared = orders.prepare(storeId, number, request, principal.getId());
+        } catch (MurphysoftClient.Unavailable exception) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(prepared.fileName()).build().toString())
+                .header("X-Mea-Order-Id", prepared.id().toString())
+                .body(prepared.zip());
+    }
+
+    /** Plik zamówienia leży już w folderze comrnis: MEA jest wysłane. */
+    @PostMapping("/athos-orders/{orderId}/saved")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void athosOrderSaved(@PathVariable UUID storeId, @PathVariable UUID orderId) {
+        orders.saved(storeId, orderId);
     }
 
     @GetMapping("/settings")

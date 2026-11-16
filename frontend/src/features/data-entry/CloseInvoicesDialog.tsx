@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { useInvoiceClosingChange, useInvoiceClosings } from './api'
 import { buildDeliveryMacro } from './mercalys-macro'
 
-const ROW_GRID = 'grid grid-cols-[auto_minmax(0,1.2fr)_minmax(0,1.5fr)_5rem_6rem] items-center gap-3'
+const ROW_GRID = 'grid grid-cols-[auto_minmax(0,1.2fr)_minmax(0,1.5fr)_5rem_6rem_1.75rem] items-center gap-3'
 
 const toMacroDocument = (item: InvoiceClosing) => ({ number: item.documentNumber, supplierCode: item.supplierCode })
 
@@ -35,7 +35,7 @@ type Props = {
 /**
  * Faktury z plików XML zapisanych na dysku. Skrypt idzie do schowka i dopiero wtedy faktury stają się wygenerowane.
  * Schowek łatwo nadpisać, więc wygenerowane zostają na liście: można je skopiować ponownie, a usuwa je osoba, która
- * sprawdziła zamknięcie.
+ * sprawdziła zamknięcie. Fakturę, której nie trzeba zamykać, usuwa się też z „Do zamknięcia” (znacznik, „Przywróć”).
  */
 export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
   const closings = useInvoiceClosings(storeId, open)
@@ -91,13 +91,14 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
     onOpenChange(false)
   }
 
-  const removeGenerated = () => {
-    const ids = pickedGenerated.map((item) => item.id)
+  const remove = (picked: InvoiceClosing[]) => {
+    const ids = picked.map((item) => item.id)
+    if (ids.length === 0) return
     change.mutate(
       { action: 'delete', ids },
       {
         onSuccess: () =>
-          toast(`Usunięto wygenerowane: ${ids.length}`, {
+          toast(ids.length === 1 ? `Usunięto fakturę ${picked[0].documentNumber}` : `Usunięto faktury: ${ids.length}`, {
             action: {
               label: 'Przywróć',
               onClick: () =>
@@ -138,6 +139,19 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">{formatDate(item.documentDate)}</span>
         <span className="text-right tabular-nums">{formatMoney(item.netValue)}</span>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Usuń fakturę ${item.documentNumber}`}
+          title="Usuń z listy"
+          disabled={change.isPending}
+          onClick={(event) => {
+            event.preventDefault()
+            remove([item])
+          }}
+        >
+          <Trash2Icon />
+        </Button>
       </label>
     </li>
   )
@@ -163,7 +177,15 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
               </p>
             )}
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={pickedPending.length === 0 || change.isPending}
+              onClick={() => remove(pickedPending)}
+            >
+              <Trash2Icon />
+              Usuń zaznaczone ({pickedPending.length})
+            </Button>
             <Button disabled={pickedPending.length === 0 || change.isPending} onClick={() => void generate()}>
               <ClipboardCopyIcon />
               Generuj skrypt ({pickedPending.length})
@@ -196,7 +218,7 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
               <Button
                 variant="outline"
                 disabled={pickedGenerated.length === 0 || change.isPending}
-                onClick={removeGenerated}
+                onClick={() => remove(pickedGenerated)}
               >
                 <Trash2Icon />
                 Usuń wygenerowane ({pickedGenerated.length})

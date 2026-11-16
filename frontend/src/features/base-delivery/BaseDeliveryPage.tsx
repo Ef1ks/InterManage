@@ -4,6 +4,7 @@ import {
   CalendarClockIcon,
   CarrotIcon,
   CheckCheckIcon,
+  CloudDownloadIcon,
   FileInputIcon,
   FileSearchIcon,
   FileOutputIcon,
@@ -115,6 +116,7 @@ import {
 import { CarrierDialog } from './CarrierDialog'
 import { ColumnFilter, type FilterValue } from './ColumnFilter'
 import { DeliveryPickerDialog } from './DeliveryPickerDialog'
+import { PortalDeliveryDialog } from './PortalDeliveryDialog'
 import { DifferencesDialog } from './DifferencesDialog'
 import { meaPath } from './paths'
 import { Itm8MacroDialog } from './Itm8MacroDialog'
@@ -395,9 +397,12 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 
   // ---------- dokument i nośniki
 
+  const [portalOpen, setPortalOpen] = useState(false)
+
   const openDelivery = (loaded: BaseDelivery) => {
     queryClient.setQueryData(['stores', store.id, 'base-deliveries', loaded.id], loaded)
     setPickerOpen(false)
+    setPortalOpen(false)
     loadCarriers(
       loaded,
       loaded.carriers.map((carrier) => carrier.number),
@@ -810,6 +815,15 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
               Wczytaj dokument z bazy
             </Button>
             <Button
+              variant={draft.delivery ? 'outline' : 'default'}
+              size="sm"
+              onClick={() => setPortalOpen(true)}
+              title="Pobierz bon prosto z portalu Grupy Muszkieterów"
+            >
+              <CloudDownloadIcon />
+              Pobierz dokument
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               onClick={() => setPickerOpen(true)}
@@ -1093,6 +1107,10 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
               <FileInputIcon />
               Wczytaj dokument z bazy
             </Button>
+            <Button onClick={() => setPortalOpen(true)}>
+              <CloudDownloadIcon />
+              Pobierz dokument
+            </Button>
             <Button variant="outline" onClick={() => setPickerOpen(true)}>
               <HistoryIcon />
               Wgrane wcześniej
@@ -1205,6 +1223,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         }}
       />
       <DeliveryPickerDialog storeId={store.id} open={pickerOpen} onOpenChange={setPickerOpen} onOpen={openDelivery} />
+      <PortalDeliveryDialog storeId={store.id} open={portalOpen} onOpenChange={setPortalOpen} onOpen={openDelivery} />
       <CarrierDialog
         delivery={carrierFor}
         initial={

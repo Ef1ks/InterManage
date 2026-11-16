@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,9 @@ import com.intermanage.backend.mea.dto.MeaSettingsResponse;
 import com.intermanage.backend.mea.dto.MeaTab;
 import com.intermanage.backend.mea.entity.MeaApiCredentials;
 import com.intermanage.backend.mea.repository.MeaApiCredentialsRepository;
+import com.intermanage.backend.mea.entity.MeaOrder;
+import com.intermanage.backend.mea.repository.MeaAthosImportRepository;
+import com.intermanage.backend.mea.repository.MeaOrderRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 
@@ -52,6 +57,8 @@ public class MeaService {
     private final AppUserRepository users;
     private final SecretCipher cipher;
     private final MurphysoftClient client;
+    private final MeaAthosService athos;
+    private final MeaOrderRepository orders;
     /**
      * Ile dni wstecz obejmuje lista MEA (okno {@code day} w API, filtruje po dacie dokumentu). Promocja trwająca dziś
      * bywa z dokumentem sprzed roku, a eMEA trzyma MEA lokalnie i akumuluje je, więc żeby „Trwa promocja" zgadzało się
@@ -67,13 +74,16 @@ public class MeaService {
     private final Map<UUID, MurphysoftClient.Token> tokens = new ConcurrentHashMap<>();
 
     public MeaService(MeaApiCredentialsRepository credentials, StoreRepository stores, AppUserRepository users,
-            SecretCipher cipher, MurphysoftClient client, @Value("${app.mea.list-days}") int listDays,
+            SecretCipher cipher, MurphysoftClient client, MeaAthosService athos, MeaOrderRepository orders,
+            @Value("${app.mea.list-days}") int listDays,
             @Value("${app.mea.list-limit}") int listLimit) {
         this.credentials = credentials;
         this.stores = stores;
         this.users = users;
         this.cipher = cipher;
         this.client = client;
+        this.athos = athos;
+        this.orders = orders;
         this.listDays = listDays;
         this.listLimit = listLimit;
     }
@@ -109,7 +119,42 @@ public class MeaService {
     /** Lista MEA sklepu do pokazania (obcięta do {@code listLimit}). */
     @Transactional(readOnly = true)
     public MeaListResponse list(UUID storeId) {
-        return limited(fullList(storeId), listLimit);
+        MeaListResponse list = fullList(storeId);
+        Map<String, MeaAthosImportRepository.LatestSend> sends = athos.latestSends(storeId);
+        Map<String, MeaOrder> saved = orders.findLatestSaved(storeId).stream()
+                .collect(Collectors.toMap(MeaOrder::getNumber, Function.identity(), (a, b) -> a));
+        // Sklep bez odczytu dziennika ATHOS i bez zamówień z aplikacji liczy zakładki po staremu (flaga z portalu).
+        if ((sends != null || !saved.isEmpty()) && list.configured()) {
+            LocalDate today = LocalDate.now(StoreTime.ZONE);
+            Map<String, MeaAthosImportRepository.LatestSend> athosSends = sends == null ? Map.of() : sends;
+            list = new MeaListResponse(true, list.dateFrom(), list.items().stream()
+                    .map(item -> withSends(item, athosSends.get(item.number()), saved.get(item.number()), today))
+                    .toList());
+        }
+        return limited(list, listLimit);
+    }
+
+    /**
+     * Zakładka z wysyłek, jak w eMEA: MEA wysłane (plik zapisany do ATHOS z aplikacji albo wysyłka w dzienniku
+     * Histo.Log), a promocja jeszcze nie ruszyła = „Wysłane”; niewysłane z otwartą rezerwacją = „Do wysłania”;
+     * niewysłane po rezerwacji = „Inne”. Trwające i zakończone promocje zostają w swoich zakładkach.
+     */
+    private static MeaItem withSends(MeaItem item, MeaAthosImportRepository.LatestSend send, MeaOrder order,
+            LocalDate today) {
+        MeaTab tab = item.tab();
+        if (tab == MeaTab.TO_SEND || tab == MeaTab.SENT_NOT_STARTED) {
+            if (send != null || order != null) {
+                tab = MeaTab.SENT_NOT_STARTED;
+            } else {
+                tab = item.reservationTo() == null || !item.reservationTo().isBefore(today) ? MeaTab.TO_SEND
+                        : MeaTab.OTHER;
+            }
+        }
+        return new MeaItem(item.number(), item.name(), item.promoFrom(), item.promoTo(), item.reservationFrom(),
+                item.reservationTo(), item.ordered(), tab, item.files(),
+                send == null ? null : send.getSentAt(), send == null ? null : send.getPositions(),
+                send == null ? null : send.getColis(),
+                order == null ? null : order.getSavedAt(), order == null ? null : order.getColis());
     }
 
     /** Cała lista MEA sklepu z {@code listDays} dni (do pobierania formularzy w tle); bez klucza pusta. */
@@ -183,7 +228,12 @@ public class MeaService {
                     date(node.path("rezerwacja_do").asString(null)),
                     ordered,
                     tab(promoFrom, promoTo, ordered, today),
-                    files));
+                    files,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null));
         }
         return new MeaListResponse(true, dateFrom, items);
     }

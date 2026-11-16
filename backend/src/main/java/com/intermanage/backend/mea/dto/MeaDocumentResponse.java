@@ -1,7 +1,9 @@
 package com.intermanage.backend.mea.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.intermanage.backend.dataentry.dto.CatalogProduct;
@@ -19,7 +21,17 @@ public record MeaDocumentResponse(
         LocalDate reservationFrom,
         LocalDate reservationTo,
         List<LocalDate> dispatches,
-        List<Line> lines) {
+        List<Line> lines,
+        List<AthosSend> athosSends,
+        List<Order> orders) {
+
+    /** Zamówienie zapisane do ATHOS z aplikacji (plik R… w folderze comrnis); od najnowszego. */
+    public record Order(Instant savedAt, String fileName, int positions, int colis, String createdBy) {
+    }
+
+    /** Wysyłka zamówienia tego MEA z ATHOS (dziennik Histo.Log): kiedy, ile pozycji i kartonów; od najnowszej. */
+    public record AthosSend(LocalDateTime sentAt, int positions, int colis) {
+    }
 
     public record Line(
             int lp,

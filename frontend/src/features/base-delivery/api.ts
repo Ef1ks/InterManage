@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { BaseDelivery, BaseDeliverySummary, MeaOverview, TemporaryNote } from '@/lib/types'
+import type { BaseDelivery, BaseDeliverySummary, BasePortalDocument, MeaOverview, TemporaryNote } from '@/lib/types'
 
 const path = (storeId: string) => `/stores/${storeId}/base-deliveries`
 const listKey = (storeId: string) => ['stores', storeId, 'base-deliveries'] as const
@@ -35,6 +35,25 @@ export function useUploadBaseDelivery(storeId: string) {
       formData.append('file', file)
       return api<BaseDelivery>(path(storeId), { method: 'POST', formData })
     },
+  })
+}
+
+/** Bony z portalu Grupy Muszkieterów z ostatnich `days` dni (0 = dziś), od najnowszego. */
+export function usePortalDeliveries(storeId: string, days: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'base-deliveries-portal', days],
+    queryFn: () => api<BasePortalDocument[]>(`${path(storeId)}/portal?days=${days}`),
+    enabled,
+    retry: false,
+    staleTime: 60_000,
+  })
+}
+
+/** Pobranie bonu z portalu i zapis jak wgranego pliku (ten sam bon ponownie zastępuje poprzedni). */
+export function useDownloadPortalDelivery(storeId: string) {
+  return useMutation({
+    mutationFn: (number: string) =>
+      api<BaseDelivery>(`${path(storeId)}/portal/${encodeURIComponent(number)}`, { method: 'POST' }),
   })
 }
 

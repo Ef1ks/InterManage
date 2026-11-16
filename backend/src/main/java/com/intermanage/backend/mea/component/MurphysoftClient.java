@@ -95,6 +95,42 @@ public class MurphysoftClient {
     }
 
     /**
+     * Lista dokumentów dostaw z bazy (BL) sklepu z ostatnich {@code day} dni (0 = dziś):
+     * {@code {"date_document_from":…, "documents":{"<id>":{"name":"09516052152","date":"2026-11-14"}}, "info":"ok"}};
+     * bez dokumentów pole {@code documents} nie istnieje.
+     */
+    public JsonNode blList(int shopId, String token, int day) {
+        JsonNode body = post("documentbl/", Map.of(
+                "appKEY", appKey,
+                "shopID", Integer.toString(shopId),
+                "token", token,
+                "day", Integer.toString(day)));
+        requireOk(body, "Portal nie oddał listy dokumentów z bazy");
+        return body;
+    }
+
+    /**
+     * Dokument BL jako JSON: {@code products} to obiekt id → linia z tymi samymi kluczami co kolumny pliku dostawy
+     * z bazy (Sklep, Data_Bl, Nr_Bl, NrNosnika, ITM8, …).
+     */
+    public JsonNode blDocument(int shopId, String token, String document) {
+        JsonNode body = post("documentbl/document/", Map.of(
+                "appKEY", appKey,
+                "shopID", Integer.toString(shopId),
+                "token", token,
+                "document", document));
+        requireOk(body, "Portal nie oddał dokumentu " + document);
+        return body;
+    }
+
+    private static void requireOk(JsonNode body, String message) {
+        String info = body.path("info").asString("");
+        if (!"ok".equalsIgnoreCase(info)) {
+            throw new Unavailable(message + (info.isBlank() ? "" : " (" + info + ")"));
+        }
+    }
+
+    /**
      * Plik MEA z portalu ({@code /mea/download/}); {@code file} to ścieżka z listy MEA (np.
      * {@code ../../data/mea/xls/815/81534.xls}), wysyłana w Base64 jak w eMEA. Pusta odpowiedź = pliku jeszcze nie ma
      * (portal wgrywa gazetki).

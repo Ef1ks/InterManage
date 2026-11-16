@@ -30,6 +30,7 @@ import com.intermanage.backend.mea.dto.MeaItem;
 import com.intermanage.backend.mea.entity.MeaDocument;
 import com.intermanage.backend.mea.entity.MeaDocumentLine;
 import com.intermanage.backend.mea.repository.MeaDocumentRepository;
+import com.intermanage.backend.mea.repository.MeaOrderRepository;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.repository.ProductRepository;
 
@@ -58,11 +59,13 @@ public class MeaDocumentService {
     private final XlsReader xlsReader;
     private final ProductRepository products;
     private final DataEntryService dataEntry;
+    private final MeaAthosService athos;
+    private final MeaOrderRepository orders;
     private final TransactionTemplate transaction;
 
     public MeaDocumentService(MeaDocumentRepository documents, MeaService mea, MurphysoftClient client,
             MeaFormParser parser, XlsReader xlsReader, ProductRepository products, DataEntryService dataEntry,
-            PlatformTransactionManager transactionManager) {
+            MeaAthosService athos, MeaOrderRepository orders, PlatformTransactionManager transactionManager) {
         this.documents = documents;
         this.mea = mea;
         this.client = client;
@@ -70,6 +73,8 @@ public class MeaDocumentService {
         this.xlsReader = xlsReader;
         this.products = products;
         this.dataEntry = dataEntry;
+        this.athos = athos;
+        this.orders = orders;
         this.transaction = new TransactionTemplate(transactionManager);
     }
 
@@ -145,15 +150,7 @@ public class MeaDocumentService {
      * (61462142).
      */
     public MeaDocumentResponse document(UUID storeId, String number) {
-        if (number == null || !number.matches("\\d{4,6}")) {
-            throw ApiException.badRequest("Nieprawidłowy numer MEA");
-        }
-        MeaDocument document = documents.findWithLinesByNumber(number).orElse(null);
-        if (document == null || !document.isFetched()) {
-            fetch(storeId, number);
-            document = documents.findWithLinesByNumber(number)
-                    .orElseThrow(() -> ApiException.notFound("Nie znaleziono MEA " + number));
-        }
+        MeaDocument document = load(storeId, number);
         List<MeaDocumentLine> lines = document.getLines();
         Map<String, CatalogProduct> catalog = catalog(storeId, lines);
         return new MeaDocumentResponse(document.getNumber(), document.getTitle(), document.getPromoFrom(),
@@ -164,7 +161,28 @@ public class MeaDocumentService {
                         line.getPacksPerPallet(), line.getUnitsPerPack(), line.getVatPercent(),
                         line.getPurchasePrice(), line.getParallelPurchasePrice(), line.getShelfPrice(),
                         line.getParallelShelfPrice(), line.getMargin(), line.getParallelMargin(),
-                        line.getGuaranteedDays(), line.getNote(), catalog.get(line.getMeaItm8()))).toList());
+                        line.getGuaranteedDays(), line.getNote(), catalog.get(line.getMeaItm8()))).toList(),
+                athos.sends(storeId, number).stream().map(send -> new MeaDocumentResponse.AthosSend(
+                        send.getSentAt(), send.getPositions(), send.getColis())).toList(),
+                orders.findByStoreIdAndNumberAndSavedAtIsNotNullOrderBySavedAtDesc(storeId, number).stream()
+                        .map(order -> new MeaDocumentResponse.Order(order.getSavedAt(), order.getFileName(),
+                                order.getPositions(), order.getColis(),
+                                order.getCreatedBy() == null ? null : order.getCreatedBy().getDisplayName()))
+                        .toList());
+    }
+
+    /** Formularz MEA z pozycjami z bazy; bez niego pobiera go od razu z portalu sesją sklepu. */
+    public MeaDocument load(UUID storeId, String number) {
+        if (number == null || !number.matches("\\d{4,6}")) {
+            throw ApiException.badRequest("Nieprawidłowy numer MEA");
+        }
+        MeaDocument document = documents.findWithLinesByNumber(number).orElse(null);
+        if (document == null || !document.isFetched()) {
+            fetch(storeId, number);
+            document = documents.findWithLinesByNumber(number)
+                    .orElseThrow(() -> ApiException.notFound("Nie znaleziono MEA " + number));
+        }
+        return document;
     }
 
     private MeaDocument document(String number, String path) {
