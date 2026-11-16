@@ -3603,6 +3603,43 @@ export type MeaDocumentLine = {
   guaranteedDays: number | null
   note: string | null
   product: DataEntryCatalogProduct | null
+  /** Pozycja z opisu gazetki z centrali (po ITM 8 PROMO), `null`, gdy opisu tej gazetki nie wgrano. */
+  leaflet: MeaLeafletInfo | null
+}
+
+/**
+ * Pozycja opisu gazetki z centrali: forma promocji (oznaczenia z komórki, każde osobno), megapromocja („X szt. za Y
+ * zł”, „X + Y (szt.)” z wariantem „2 + 1”, „X + Y (%)” z „1 + 50,00%”, „Rabat naliczany przy kasie”), cena dla
+ * klienta brutto (przy megapromocji jednej sztuki), cena cesji netto z bazy i limit sztuk na klienta.
+ */
+export type MeaLeafletInfo = {
+  year: number
+  week: number
+  section: string | null
+  dateFrom: string
+  dateTo: string
+  meaNumber: string | null
+  promoForm: string[]
+  megaKind: string | null
+  megaVariant: string | null
+  megaQuantity: number | null
+  megaPrice: number | null
+  purchasePrice: number | null
+  clientPrice: number | null
+  clientLimit: number | null
+  deliveryForm: string | null
+}
+
+/** Opis gazetki (wspólny dla sklepów): pobrany w tle z portalu (`fromPortal`) albo wgrany ręcznie. */
+export type MeaLeafletSummary = {
+  id: string
+  year: number
+  week: number
+  fileName: string
+  lineCount: number
+  uploadedAt: string
+  uploadedBy: string | null
+  fromPortal: boolean
 }
 
 /** Dokument MEA: nagłówek z okresami i datami rozrzutów (R1-R4) oraz pozycje. */
@@ -3615,6 +3652,8 @@ export type MeaDocument = {
   reservationTo: string | null
   dispatches: string[]
   lines: MeaDocumentLine[]
+  /** Gazetki z wgranym opisem, z których są pozycje („50/2026”); pusta, gdy opisu nie wgrano. */
+  leaflets: string[]
   /** Wysyłki tego MEA z ATHOS, od najnowszej. */
   athosSends: MeaAthosSend[]
   /** Zamówienia zapisane do ATHOS z aplikacji, od najnowszego. */

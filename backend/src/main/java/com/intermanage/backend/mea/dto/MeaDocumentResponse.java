@@ -23,6 +23,8 @@ public record MeaDocumentResponse(
         LocalDate reservationTo,
         List<LocalDate> dispatches,
         List<Line> lines,
+        /** Gazetki z wgranym opisem, z których są pozycje ({@code "50/2026"}); pusta, gdy opisu nie wgrano. */
+        List<String> leaflets,
         List<AthosSend> athosSends,
         List<Order> orders,
         Queued queued) {
@@ -57,6 +59,30 @@ public record MeaDocumentResponse(
             BigDecimal parallelMargin,
             Integer guaranteedDays,
             String note,
-            CatalogProduct product) {
+            CatalogProduct product,
+            Leaflet leaflet) {
+    }
+
+    /**
+     * Pozycja z opisu gazetki (po ITM 8 PROMO = {@code meaItm8}); {@code null}, gdy opisu tej gazetki nie wgrano.
+     * {@code promoForm}: oznaczenia z FORMA PROMOCJI (karta MOJE IM, MEA 2 tygodnie, „trzeci tańszy…”), ceny brutto
+     * dla klienta, {@code purchasePrice} to cena cesji netto z bazy, {@code clientLimit} limit sztuk na klienta.
+     */
+    public record Leaflet(
+            int year,
+            int week,
+            String section,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String meaNumber,
+            List<String> promoForm,
+            String megaKind,
+            String megaVariant,
+            Integer megaQuantity,
+            BigDecimal megaPrice,
+            BigDecimal purchasePrice,
+            BigDecimal clientPrice,
+            Integer clientLimit,
+            String deliveryForm) {
     }
 }

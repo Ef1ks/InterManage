@@ -747,9 +747,11 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
           Brak przyjęć tego artykułu we wgranych raportach dokumentów.
         </p>
       ) : (
-        <div className="max-h-72 min-w-0 overflow-y-auto rounded-lg border">
-          {/* Stały układ: długa nazwa dostawcy skraca się wielokropkiem zamiast poszerzać okno. */}
-          <table className="w-full table-fixed text-sm tabular-nums">
+        <div className="max-h-72 min-w-0 overflow-auto rounded-lg border">
+          {/* Stały układ: długa nazwa dostawcy skraca się wielokropkiem zamiast poszerzać okno. Najmniejsza szerokość
+              zostawia dostawcy co najmniej 10rem: bez niej kolumna gazetki zjadała mu całe miejsce w wąskim panelu,
+              a tabela przewija się wtedy w bok. */}
+          <table className={cn('w-full table-fixed text-sm tabular-nums', withMea ? 'min-w-[56rem]' : 'min-w-[47rem]')}>
             <colgroup>
               <col className="w-28" />
               <col className="w-20" />

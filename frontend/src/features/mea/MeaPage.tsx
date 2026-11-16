@@ -1,4 +1,4 @@
-import { ListChecksIcon, LockIcon, RefreshCwIcon, SendIcon, SettingsIcon } from 'lucide-react'
+import { ListChecksIcon, LockIcon, NewspaperIcon, RefreshCwIcon, SendIcon, SettingsIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 
@@ -20,6 +20,7 @@ import { useAthosQueue, useMeaList, useMeaSettings } from './api'
 import { useAthosHistorySync, useAthosStatus } from './athos-history'
 import { AthosDialog } from './AthosDialog'
 import { AthosQueueDialog } from './AthosQueueDialog'
+import { MeaLeafletsDialog } from './MeaLeafletsDialog'
 import { MeaSettingsDialog } from './MeaSettingsDialog'
 import { meaDocumentPath } from './paths'
 import { reservationClosed } from './reservation'
@@ -55,6 +56,7 @@ function StoreMea({ store }: { store: StoreSummary }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [athosOpen, setAthosOpen] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
+  const [leafletsOpen, setLeafletsOpen] = useState(false)
   const athosQueue = useAthosQueue(store.id)
   const athos = useAthosHistorySync(store.id)
   const athosStatus = useAthosStatus(store.id)
@@ -103,6 +105,10 @@ function StoreMea({ store }: { store: StoreSummary }) {
                 />
               )}
             </Button>
+            <Button variant="outline" onClick={() => setLeafletsOpen(true)}>
+              <NewspaperIcon />
+              Opisy gazetek
+            </Button>
             {configured && (
               <Button variant="outline" onClick={() => list.refetch()} loading={list.isFetching}>
                 <RefreshCwIcon />
@@ -146,6 +152,7 @@ function StoreMea({ store }: { store: StoreSummary }) {
         onOpenChange={setSettingsOpen}
       />
       <AthosQueueDialog storeId={store.id} open={queueOpen} onOpenChange={setQueueOpen} />
+      <MeaLeafletsDialog storeId={store.id} open={leafletsOpen} onOpenChange={setLeafletsOpen} />
       <AthosDialog
         storeId={store.id}
         open={athosOpen}

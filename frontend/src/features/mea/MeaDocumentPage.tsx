@@ -28,6 +28,8 @@ import {
 } from '@/store/meaOrderDraftSlice'
 
 import { useMeaDocument } from './api'
+import { MeaLeafletsDialog } from './MeaLeafletsDialog'
+import { isCardOnly, promoPricing } from './promo-pricing'
 import { reservationClosed } from './reservation'
 import { SendToAthosDialog } from './SendToAthosDialog'
 import { meaOnlinePath } from './paths'
@@ -148,6 +150,7 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
 
   const selectedLine = document.lines.find((line) => line.meaItm8 === selected) ?? null
   const [sendOpen, setSendOpen] = useState(false)
+  const [leafletsOpen, setLeafletsOpen] = useState(false)
 
   return (
     <>
@@ -156,7 +159,9 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
         totals={totals}
         onClear={totals.coli > 0 && !readOnly ? clear : undefined}
         onSend={readOnly ? undefined : () => setSendOpen(true)}
+        onLeaflets={() => setLeafletsOpen(true)}
       />
+      <MeaLeafletsDialog storeId={store.id} open={leafletsOpen} onOpenChange={setLeafletsOpen} />
       <SendToAthosDialog
         storeId={store.id}
         document={document}
@@ -210,10 +215,13 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
                     <br />
                     MEA / CAD
                   </th>
-                  <th className="text-right!">
-                    Półka brutto
+                  <th
+                    className="text-right!"
+                    title="Cena dla klienta z opisu gazetki (bez opisu półka MEA), pod nią cena zwykła i rabat"
+                  >
+                    Cena promo
                     <br />
-                    MEA / CAD
+                    zwykła · rabat
                   </th>
                   <th className="text-right!">
                     Marża %
@@ -295,9 +303,12 @@ function DocumentHeader({
   totals,
   onClear,
   onSend,
+  onLeaflets,
 }: {
   document: MeaDocument
   totals: { coli: number; value: number; cadValue: number; difference: number; ordered: number }
+  /** Okno opisów gazetek (wgranie pliku z centrali). */
+  onLeaflets: () => void
   onClear?: () => void
   /** „Wyślij do ATHOS”; bez niego (rezerwacja zamknięta) przycisku nie ma. */
   onSend?: () => void
@@ -346,6 +357,24 @@ function DocumentHeader({
           <span>
             Rezerwacja do: <strong className="tabular-nums">{shortDate(document.reservationTo)}</strong>
           </span>
+          {document.leaflets.length > 0 ? (
+            <button
+              type="button"
+              onClick={onLeaflets}
+              className="underline-offset-2 hover:underline"
+              title="Opisy gazetek z centrali"
+            >
+              Opis gazetki: <strong className="tabular-nums">{document.leaflets.join(', ')}</strong>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onLeaflets}
+              className="rounded bg-amber-200 px-1.5 font-medium text-amber-950 hover:bg-amber-300 dark:bg-amber-900/70 dark:text-amber-50"
+            >
+              Brak opisu gazetki · centrala jeszcze go nie dała
+            </button>
+          )}
         </p>
         <AthosSendNote document={document} totals={totals} />
       </div>
@@ -508,6 +537,7 @@ function MeaLineRow({
             <span className="block font-medium">{line.name}</span>
             <span className="block text-xs text-muted-foreground">{line.brand}</span>
             {line.note && <span className="mt-0.5 block text-xs text-amber-800 dark:text-amber-200">{line.note}</span>}
+            <PromoBadges line={line} />
           </span>
           {product?.itm8 && (
             <ArticleStatsButton
@@ -531,12 +561,7 @@ function MeaLineRow({
           {line.parallelPurchasePrice ? money(line.parallelPurchasePrice) : ''}
         </span>
       </td>
-      <td className="text-right tabular-nums">
-        {money(line.shelfPrice)}
-        <span className="block text-muted-foreground">
-          {line.parallelShelfPrice ? money(line.parallelShelfPrice) : ''}
-        </span>
-      </td>
+      <PromoPriceCell line={line} />
       <td className="text-right tabular-nums">
         {money(line.margin)}
         <span className="block text-muted-foreground">{line.parallelMargin ? money(line.parallelMargin) : ''}</span>
@@ -592,6 +617,173 @@ function MeaLineRow({
         )}
       </td>
     </tr>
+  )
+}
+
+/** Ile oznaczeń z FORMA PROMOCJI pokazujemy w wierszu; resztę w podpowiedzi i w panelu artykułu. */
+const VISIBLE_MARKS = 2
+
+/**
+ * Plakietki z opisu gazetki pod nazwą: mechanizm megapromocji, limit na klienta, rabat tylko z kartą i pierwsze
+ * oznaczenia z FORMA PROMOCJI (całość w podpowiedzi i w panelu artykułu).
+ */
+function PromoBadges({ line }: { line: MeaDocumentLine }) {
+  const leaflet = line.leaflet
+  if (!leaflet) return null
+  const { mechanism } = promoPricing(line)
+  const card = leaflet.promoForm.some(isCardOnly)
+  const marks = leaflet.promoForm.filter((mark) => !isCardOnly(mark))
+  const hidden = marks.length - VISIBLE_MARKS
+  return (
+    <span className="mt-1 flex flex-wrap gap-1 text-[0.6875rem] leading-4" title={leaflet.promoForm.join('\n')}>
+      {mechanism && (
+        <span className="rounded bg-violet-200 px-1.5 font-semibold text-violet-950 dark:bg-violet-900 dark:text-violet-50">
+          {mechanism}
+        </span>
+      )}
+      {leaflet.clientLimit != null && (
+        <span className="rounded bg-red-200 px-1.5 font-semibold text-red-950 dark:bg-red-900 dark:text-red-50">
+          limit {leaflet.clientLimit} szt.
+        </span>
+      )}
+      {card && (
+        <span className="rounded bg-sky-200 px-1.5 font-medium text-sky-950 dark:bg-sky-900 dark:text-sky-50">
+          z kartą / aplikacją
+        </span>
+      )}
+      {marks.slice(0, VISIBLE_MARKS).map((mark) => (
+        <span key={mark} className="max-w-56 truncate rounded bg-muted px-1.5 text-muted-foreground">
+          {mark}
+        </span>
+      ))}
+      {hidden > 0 && <span className="px-0.5 text-muted-foreground">+{hidden}</span>}
+    </span>
+  )
+}
+
+/** Cena promocyjna (dla klienta) nad ceną zwykłą i rabat w %; przy megapromocji cena sztuki przy pełnej promocji. */
+function PromoPriceCell({ line }: { line: MeaDocumentLine }) {
+  const pricing = promoPricing(line)
+  const showPerUnit = pricing.perUnit != null && pricing.perUnit.toFixed(2) !== pricing.promo?.toFixed(2)
+  return (
+    <td
+      className="text-right tabular-nums"
+      title={[
+        line.leaflet ? 'Cena dla klienta z opisu gazetki' : 'Półka MEA z formularza (brak opisu gazetki)',
+        pricing.standardSource && `Cena zwykła: ${pricing.standardSource}`,
+        showPerUnit && `Sztuka przy pełnej promocji: ${money(pricing.perUnit)} zł`,
+      ]
+        .filter(Boolean)
+        .join('\n')}
+    >
+      <span className="font-semibold text-orange-700 dark:text-orange-300">
+        {pricing.promo != null ? money(pricing.promo) : showPerUnit ? '' : '—'}
+      </span>
+      {showPerUnit && (
+        <span className="block text-xs text-orange-700 dark:text-orange-300">{money(pricing.perUnit)}/szt.</span>
+      )}
+      <span className="block whitespace-nowrap text-muted-foreground">
+        {pricing.standard != null && <span className="line-through">{money(pricing.standard)}</span>}
+        {pricing.percent != null && (
+          <span
+            className={cn(
+              'ml-1.5 rounded px-1 text-xs font-semibold no-underline',
+              pricing.percent > 0
+                ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50'
+                : 'bg-red-200 text-red-950 dark:bg-red-900 dark:text-red-50',
+            )}
+          >
+            {pricing.percent > 0 ? '−' : '+'}
+            {Math.abs(pricing.percent).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}%
+          </span>
+        )}
+      </span>
+    </td>
+  )
+}
+
+/** Opis pozycji z gazetki w panelu artykułu: wszystkie oznaczenia, mechanizm, ceny, limit, dostawa, okres. */
+function LeafletDetails({ line }: { line: MeaDocumentLine }) {
+  const leaflet = line.leaflet
+  const pricing = promoPricing(line)
+  if (!leaflet) {
+    return (
+      <Card className="px-5 py-4 text-sm text-muted-foreground">
+        Tej pozycji nie ma w żadnym wgranym opisie gazetki, więc nie znamy formy promocji ani ceny dla klienta.
+      </Card>
+    )
+  }
+  return (
+    <Card className="gap-3 px-5 py-4 text-sm">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-semibold">Promocja w gazetce {`${leaflet.week}/${leaflet.year}`}</h2>
+        {leaflet.section && <span className="text-xs text-muted-foreground">{leaflet.section}</span>}
+      </div>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-2xl font-semibold text-orange-700 tabular-nums dark:text-orange-300">
+          {pricing.promo != null ? `${money(pricing.promo)} zł` : '—'}
+        </span>
+        {pricing.standard != null && (
+          <span className="text-muted-foreground tabular-nums">
+            zwykła <span className="line-through">{money(pricing.standard)} zł</span>
+          </span>
+        )}
+        {pricing.percent != null && (
+          <span className="rounded bg-emerald-200 px-1.5 font-semibold text-emerald-950 tabular-nums dark:bg-emerald-900 dark:text-emerald-50">
+            {pricing.percent > 0 ? '−' : '+'}
+            {Math.abs(pricing.percent).toLocaleString('pl-PL', { maximumFractionDigits: 1 })}%
+          </span>
+        )}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 tabular-nums">
+        {(leaflet.megaKind || pricing.mechanism) && (
+          <>
+            <dt className="text-muted-foreground">Mechanizm</dt>
+            <dd>
+              {pricing.mechanism ?? leaflet.megaKind}
+              {pricing.perUnit != null && pricing.perUnit.toFixed(2) !== pricing.promo?.toFixed(2) && (
+                <span className="text-muted-foreground"> · sztuka {money(pricing.perUnit)} zł</span>
+              )}
+            </dd>
+          </>
+        )}
+        <dt className="text-muted-foreground">Limit</dt>
+        <dd>{leaflet.clientLimit != null ? `${leaflet.clientLimit} szt. na klienta` : 'bez limitu'}</dd>
+        <dt className="text-muted-foreground">Cena cesji</dt>
+        <dd>{leaflet.purchasePrice != null ? `${money(leaflet.purchasePrice)} zł netto` : '—'}</dd>
+        <dt className="text-muted-foreground">Okres</dt>
+        <dd>
+          {shortDate(leaflet.dateFrom)} – {shortDate(leaflet.dateTo)}
+        </dd>
+        <dt className="text-muted-foreground">Dostawa</dt>
+        <dd>{leaflet.deliveryForm ?? '—'}</dd>
+        {pricing.standardSource && (
+          <>
+            <dt className="text-muted-foreground">Cena zwykła z</dt>
+            <dd className="text-muted-foreground">{pricing.standardSource}</dd>
+          </>
+        )}
+      </dl>
+      {leaflet.promoForm.length > 0 && (
+        <ul className="grid gap-1">
+          {leaflet.promoForm.map((mark) => (
+            <li
+              key={mark}
+              className={cn(
+                'rounded px-2 py-1',
+                isCardOnly(mark)
+                  ? 'bg-sky-200 text-sky-950 dark:bg-sky-900 dark:text-sky-50'
+                  : /uwaga|błęd/i.test(mark)
+                    ? 'bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-50'
+                    : 'bg-muted',
+              )}
+            >
+              {mark}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }
 
@@ -676,6 +868,7 @@ function ArticleDetails({ store, line, draft }: { store: StoreSummary; line: Mea
 
   return (
     <div className="grid gap-4">
+      <LeafletDetails line={line} />
       <Card className="gap-3 px-5 py-4 text-sm">
         {product ? (
           <>

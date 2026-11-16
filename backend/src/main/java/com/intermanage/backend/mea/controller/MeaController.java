@@ -29,6 +29,7 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.mea.component.MurphysoftClient;
 import com.intermanage.backend.mea.dto.MeaAthosStatus;
 import com.intermanage.backend.mea.dto.MeaDocumentResponse;
+import com.intermanage.backend.mea.dto.MeaLeafletSummary;
 import com.intermanage.backend.mea.dto.MeaListResponse;
 import com.intermanage.backend.mea.dto.MeaOrderRequest;
 import com.intermanage.backend.mea.dto.MeaQueueItem;
@@ -37,6 +38,7 @@ import com.intermanage.backend.mea.dto.MeaSettingsResponse;
 import com.intermanage.backend.mea.entity.MeaOrder;
 import com.intermanage.backend.mea.service.MeaAthosService;
 import com.intermanage.backend.mea.service.MeaDocumentService;
+import com.intermanage.backend.mea.service.MeaLeafletService;
 import com.intermanage.backend.mea.service.MeaOrderService;
 import com.intermanage.backend.mea.service.MeaService;
 
@@ -52,9 +54,11 @@ public class MeaController {
     private final MeaDocumentService documents;
     private final MeaAthosService athos;
     private final MeaOrderService orders;
+    private final MeaLeafletService leaflets;
 
     public MeaController(MeaService service, MeaDocumentService documents, MeaAthosService athos,
-            MeaOrderService orders) {
+            MeaOrderService orders, MeaLeafletService leaflets) {
+        this.leaflets = leaflets;
         this.service = service;
         this.documents = documents;
         this.athos = athos;
@@ -82,6 +86,38 @@ public class MeaController {
         } catch (MurphysoftClient.Unavailable exception) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
         }
+    }
+
+    /** Wgrane opisy gazetek z centrali (wspólne dla sklepów), od najnowszej gazetki. */
+    @GetMapping("/leaflets")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public List<MeaLeafletSummary> leaflets(@PathVariable UUID storeId) {
+        return leaflets.list();
+    }
+
+    /**
+     * Sprawdza portal od razu (w tle robi to zadanie MEA co kwadrans) sesją tego sklepu i pobiera nowe opisy gazetek.
+     */
+    @PostMapping("/leaflets/sync")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public MeaLeafletSummary.Sync syncLeaflets(@PathVariable UUID storeId) {
+        try {
+            int downloaded = leaflets.syncFromPortal(storeId);
+            return new MeaLeafletSummary.Sync(downloaded, leaflets.list());
+        } catch (MurphysoftClient.Unavailable exception) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+        }
+    }
+
+    /**
+     * Opis gazetki wgrany ręcznie (zapas, gdy portal nie działa); ponowne wgranie tej samej gazetki zastępuje
+     * poprzednie.
+     */
+    @PostMapping(value = "/leaflets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public MeaLeafletSummary uploadLeaflet(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return leaflets.upload(file, principal.getId());
     }
 
     /** Stan odczytów dziennika ATHOS (Histo.Log) w sklepie. */

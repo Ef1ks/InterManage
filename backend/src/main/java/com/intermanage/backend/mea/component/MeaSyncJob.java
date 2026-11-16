@@ -13,11 +13,12 @@ import org.springframework.stereotype.Component;
 
 import com.intermanage.backend.mea.dto.MeaListResponse;
 import com.intermanage.backend.mea.service.MeaDocumentService;
+import com.intermanage.backend.mea.service.MeaLeafletService;
 import com.intermanage.backend.mea.service.MeaService;
 
 /**
  * Formularze MEA w tle: co {@code app.mea.sync-interval} lista MEA każdego sklepu z kluczem API (rok wstecz) zakłada
- * wpisy nowych MEA, a potem pobiera najwyżej {@code app.mea.sync-batch} formularzy z przerwą
+ * wpisy nowych MEA, potem nowe opisy gazetek z portalu ({@link MeaLeafletService#syncFromPortal}), a na końcu pobiera najwyżej {@code app.mea.sync-batch} formularzy z przerwą
  * {@code app.mea.download-delay}, najnowsze promocje najpierw. Pierwsze uzupełnienie roku (ok. 1,5 tys. formularzy)
  * idzie więc kilkoma przebiegami, bez obciążania portalu. Tylko na produkcji ({@code app.mea.sync-enabled},
  * w deploy/docker-compose.yml), bo lokalny backend z bazą produkcyjną w .env pisałby do niej. Przebieg na wirtualnym
@@ -30,13 +31,16 @@ public class MeaSyncJob {
 
     private final MeaService mea;
     private final MeaDocumentService documents;
+    private final MeaLeafletService leaflets;
     private final boolean enabled;
     private final int batch;
     private final Duration delay;
     private final AtomicBoolean running = new AtomicBoolean();
 
-    public MeaSyncJob(MeaService mea, MeaDocumentService documents, @Value("${app.mea.sync-enabled}") boolean enabled,
-            @Value("${app.mea.sync-batch}") int batch, @Value("${app.mea.download-delay}") Duration delay) {
+    public MeaSyncJob(MeaService mea, MeaDocumentService documents, MeaLeafletService leaflets,
+            @Value("${app.mea.sync-enabled}") boolean enabled, @Value("${app.mea.sync-batch}") int batch,
+            @Value("${app.mea.download-delay}") Duration delay) {
+        this.leaflets = leaflets;
         this.mea = mea;
         this.documents = documents;
         this.enabled = enabled;
@@ -71,8 +75,16 @@ public class MeaSyncJob {
                 log.warn("MEA: lista sklepu {} niedostępna: {}", storeId, exception.getMessage());
             }
         }
-        // Formularz jest jeden w sieci, więc pobieramy sesją pierwszego sklepu z kluczem.
+        // Formularz i opis gazetki są jedne w sieci, więc pobieramy sesją pierwszego sklepu z kluczem.
         UUID storeId = stores.get(0);
+        try {
+            int leaflets = this.leaflets.syncFromPortal(storeId);
+            if (leaflets > 0) {
+                log.info("MEA: pobrano {} opisów gazetek", leaflets);
+            }
+        } catch (RuntimeException exception) {
+            log.warn("MEA: opisy gazetek niedostępne: {}", exception.getMessage());
+        }
         int fetched = 0;
         for (String number : documents.pending(batch)) {
             try {

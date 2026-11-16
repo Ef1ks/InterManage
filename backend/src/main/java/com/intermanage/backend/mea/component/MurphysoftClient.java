@@ -147,6 +147,30 @@ public class MurphysoftClient {
         return body;
     }
 
+    /**
+     * Pliki cadencier z portalu ({@code /cad/}), jak w eMEA: {@code top}, {@code cadencier}, {@code lst} i
+     * {@code gazetki} = lista opisów gazetek {@code [{id, name, position, file:[{id, name, update_date, path}]}]}.
+     */
+    public JsonNode cadList(int shopId, String token) {
+        return post("cad/", Map.of(
+                "appKEY", appKey,
+                "shopID", Integer.toString(shopId),
+                "token", token));
+    }
+
+    /** Plik z listy {@code /cad/} ({@code /cad/download/}, ścieżka w Base64 jak w eMEA); pusty = brak uprawnień. */
+    public byte[] cadFile(int shopId, String token, String path) {
+        byte[] body = send("cad/download/", Map.of(
+                "appKEY", appKey,
+                "shopID", Integer.toString(shopId),
+                "token", token,
+                "file", Base64.getEncoder().encodeToString(path.getBytes(StandardCharsets.UTF_8))));
+        if (body.length == 0) {
+            throw new Unavailable("Portal nie oddał pliku " + path + " (brak uprawnień do pobrania)");
+        }
+        return body;
+    }
+
     private JsonNode post(String path, Map<String, String> fields) {
         byte[] body = send(path, fields);
         try {

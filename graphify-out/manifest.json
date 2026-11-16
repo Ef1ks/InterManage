@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794812184.0403256,
-    "seen": 1794812399.7891245,
-    "ast_hash": "23992cceab5b8e8764114f8587352081",
+    "mtime": 1794823575.0204203,
+    "seen": 1794823611.8408635,
+    "ast_hash": "625872b1cab21a414ba40e4e283d5bf6",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794821086.2317116,
-    "seen": 1794821140.7518828,
-    "ast_hash": "d791a42f77e1a5152f9d5e5190862b35",
+    "mtime": 1794823619.541388,
+    "seen": 1794823672.6268835,
+    "ast_hash": "dd9c55ba6c73432ddebeb1151ca3a4d7",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -3570,9 +3570,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesChartDialog.tsx": {
-    "mtime": 1794774259.7403975,
-    "seen": 1794804560.0926626,
-    "ast_hash": "d1bc87df0c50c39a7bd5b6b7ee2da342",
+    "mtime": 1794822700.105915,
+    "seen": 1794822826.870019,
+    "ast_hash": "cef86621e05c681b78dd77cd36b12055",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/controller/DocumentTransferController.java": {
@@ -4464,9 +4464,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1794804450.7344103,
-    "seen": 1794804560.0503263,
-    "ast_hash": "68d9b6a5e43b3fa34e665fc8818a1636",
+    "mtime": 1794823392.224274,
+    "seen": 1794823611.7682278,
+    "ast_hash": "2b8643a98eb64d181ffafcd906a9dc8b",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -5217,12 +5217,6 @@
     "mtime": 1794774259.716967,
     "seen": 1794804560.0731277,
     "ast_hash": "f6d801de5aa2b57e51a3ed6801e2e6be",
-    "semantic_hash": ""
-  },
-  "backend/kod.txt": {
-    "mtime": 1794774259.4832883,
-    "seen": 1794804560.1182985,
-    "ast_hash": "c2601332beafe5ddc2c7c52c74e07134",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/PdfCells.java": {
@@ -8034,9 +8028,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/controller/PriceMarkdownController.java": {
-    "mtime": 1794240434.078724,
-    "seen": 1794240588.248397,
-    "ast_hash": "d3040dbbb6ec482215b719b50096c5c9",
+    "mtime": 1794823378.6945283,
+    "seen": 1794823611.6980035,
+    "ast_hash": "2052312b20c47b3fe78348442a7b7290",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/dto/PriceMarkdownIdsRequest.java": {
@@ -8070,15 +8064,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/repository/PriceMarkdownRepository.java": {
-    "mtime": 1794302415.103499,
-    "seen": 1794302716.5971212,
-    "ast_hash": "a9bc97586d9d5564a3d6006d93d9afe1",
+    "mtime": 1794823378.6935215,
+    "seen": 1794823611.7055063,
+    "ast_hash": "76259948b32915ca822d49e65ec0258e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/service/PriceMarkdownService.java": {
-    "mtime": 1794302413.39726,
-    "seen": 1794302716.5986748,
-    "ast_hash": "f48f30943e5c89ef61ef331fc6506a39",
+    "mtime": 1794823378.6945283,
+    "seen": 1794823611.708035,
+    "ast_hash": "1107f710e057fa1b290eaa01b0bf116a",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceLabelsDialog.tsx": {
@@ -8856,9 +8850,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffScheduleService.java": {
-    "mtime": 1794774259.6762512,
-    "seen": 1794804560.0398233,
-    "ast_hash": "2d7fbc7031e9e8e1f0c9123896f4259f",
+    "mtime": 1794823436.9211867,
+    "seen": 1794823611.7509832,
+    "ast_hash": "3bbbbc41b2aaab54b5d05730ccaeaacd",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ScheduleLawTests.java": {
@@ -8886,15 +8880,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/ScheduleGrid.tsx": {
-    "mtime": 1794774259.7484162,
-    "seen": 1794804560.0966587,
-    "ast_hash": "6e3589b511682b97a727e60ac7cc49e4",
+    "mtime": 1794821387.479531,
+    "seen": 1794822826.8765337,
+    "ast_hash": "1a956fe01e066dd4749bfef151225c2c",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/SchedulePage.tsx": {
-    "mtime": 1794774259.7484162,
-    "seen": 1794804560.0966587,
-    "ast_hash": "27551bd2599aef159f1606748e625773",
+    "mtime": 1794821407.5393507,
+    "seen": 1794822826.8765337,
+    "ast_hash": "a120974c73d58b9537fc072fdabfc1f6",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/api.ts": {
@@ -11298,9 +11292,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/SchedulePrintService.java": {
-    "mtime": 1794497864.2792401,
-    "seen": 1794497889.2127507,
-    "ast_hash": "288144db8bb41d32bd043183a204e2cc",
+    "mtime": 1794823429.5434465,
+    "seen": 1794823611.7499797,
+    "ast_hash": "af2ef80093917628c63207b276bb5c7a",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/SchedulePdfTests.java": {
@@ -11802,21 +11796,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/component/MurphysoftClient.java": {
-    "mtime": 1794804070.7415879,
-    "seen": 1794804559.987123,
-    "ast_hash": "5b596c9f0374680ff266241ab7685871",
+    "mtime": 1794823218.1724017,
+    "seen": 1794823611.6757975,
+    "ast_hash": "72f3f7c983dfe1698438f043b954f2ab",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/controller/MeaController.java": {
-    "mtime": 1794812055.072637,
-    "seen": 1794812122.6833675,
-    "ast_hash": "0294ca46473d204373aedd5687487b3d",
+    "mtime": 1794823295.0394516,
+    "seen": 1794823611.6757975,
+    "ast_hash": "87f18f4252d823e8fa8b86a666a9346b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/MeaDocumentResponse.java": {
-    "mtime": 1794812055.0716357,
-    "seen": 1794812122.6833675,
-    "ast_hash": "6d22b8f103e18b70764d8d7801611e76",
+    "mtime": 1794822298.1324563,
+    "seen": 1794822826.6905978,
+    "ast_hash": "858fac6645ee59140c5ebb49c2cd2a36",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/MeaItem.java": {
@@ -11874,15 +11868,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaDocumentPage.tsx": {
-    "mtime": 1794812290.3259068,
-    "seen": 1794812399.7699296,
-    "ast_hash": "4e4c04770af7a69da6e482fa07105feb",
+    "mtime": 1794823585.8721151,
+    "seen": 1794823611.820198,
+    "ast_hash": "a41822a4d4625d9a7650ea67990282c7",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaPage.tsx": {
-    "mtime": 1794812290.3259068,
-    "seen": 1794812399.7699296,
-    "ast_hash": "f6034ecb37d68da25b0f69d4da455f37",
+    "mtime": 1794822567.7382278,
+    "seen": 1794822826.8622348,
+    "ast_hash": "8c68ce298f3657c64c049c2b87b9b928",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaSettingsDialog.tsx": {
@@ -11892,9 +11886,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/api.ts": {
-    "mtime": 1794812204.9558208,
-    "seen": 1794812399.7699296,
-    "ast_hash": "3fa9f90515276eae8a05a76096fb9bfb",
+    "mtime": 1794823575.8062618,
+    "seen": 1794823611.820198,
+    "ast_hash": "38e2313b24586511a63b8a4c59e33c25",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/paths.ts": {
@@ -11970,9 +11964,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/component/MeaSyncJob.java": {
-    "mtime": 1794773016.6088476,
-    "seen": 1794773401.1642668,
-    "ast_hash": "8cfdcf1f5878b8607f9fa2df0ae10a85",
+    "mtime": 1794823294.2068284,
+    "seen": 1794823611.6757975,
+    "ast_hash": "d6f827c9cd203f0da5021ceaa2d72fdd",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/entity/MeaDocument.java": {
@@ -11994,9 +11988,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/service/MeaDocumentService.java": {
-    "mtime": 1794812055.0716357,
-    "seen": 1794812122.6860187,
-    "ast_hash": "13ccb4193e3666e48fe3605e76b0efc0",
+    "mtime": 1794822345.9731796,
+    "seen": 1794822826.6933568,
+    "ast_hash": "b2b077ae539de6717717eba351b1bbc8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/dto/BasePortalDocument.java": {
@@ -12120,9 +12114,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/SendToAthosDialog.tsx": {
-    "mtime": 1794812291.123494,
-    "seen": 1794812399.7699296,
-    "ast_hash": "9ae5f55526b8fb40e8eb6245a52d869a",
+    "mtime": 1794822238.671296,
+    "seen": 1794822826.8622348,
+    "ast_hash": "db72da789a22afa1a37b23ce6343c016",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/athos-history.ts": {
@@ -12203,12 +12197,6 @@
     "ast_hash": "c94c724550a81bcceebcd287deec253b",
     "semantic_hash": ""
   },
-  "backend/{7497CBB4-3A6E-4DEB-A80F-44DA8C83EDC8}.png": {
-    "mtime": 1794811530.138546,
-    "seen": 1794812122.8914785,
-    "ast_hash": "f45bb92992337d32b660d480fad035d6",
-    "semantic_hash": ""
-  },
   "frontend/src/features/mea/AthosQueueDialog.tsx": {
     "mtime": 1794812266.6427393,
     "seen": 1794812399.7699296,
@@ -12227,10 +12215,76 @@
     "ast_hash": "784fae85bcb2fc14ac1358a14461423c",
     "semantic_hash": ""
   },
-  "backend/LIVRJPOL-095_09516018207_00538-10023-26043004.TXT": {
-    "mtime": 1777515026.0,
-    "seen": 1794821140.7518828,
-    "ast_hash": "62e73b3d46997a0ae5311132339dc188",
+  "backend/src/main/java/com/intermanage/backend/mea/component/MeaLeafletParser.java": {
+    "mtime": 1794822280.0614743,
+    "seen": 1794822826.6905978,
+    "ast_hash": "cd97cc4d87da60825861a9a3e5e1136c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/dto/MeaLeafletSummary.java": {
+    "mtime": 1794823217.3616076,
+    "seen": 1794823611.6773005,
+    "ast_hash": "e3911dd0e6758170306da6f60cee5c0c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/entity/MeaLeafletImport.java": {
+    "mtime": 1794823215.7044759,
+    "seen": 1794823611.6788034,
+    "ast_hash": "b4f43c3e47b2e2b15990eb8dc504ca37",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/entity/MeaLeafletLine.java": {
+    "mtime": 1794822242.6899536,
+    "seen": 1794822826.6933568,
+    "ast_hash": "501b674452d21d480e55dc7bb5f02519",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/repository/MeaLeafletImportRepository.java": {
+    "mtime": 1794823216.5058625,
+    "seen": 1794823611.6788034,
+    "ast_hash": "2599cda32c162ea0a88df15060299d5c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/service/MeaLeafletService.java": {
+    "mtime": 1794823417.4367206,
+    "seen": 1794823611.6788034,
+    "ast_hash": "956f72bb0b96b022a4eb2850569794c7",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/MeaLeafletIntegrationTests.java": {
+    "mtime": 1794823418.8652308,
+    "seen": 1794823611.770731,
+    "ast_hash": "4372fa2aebe3f5cc36ab4ed013710b30",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/MeaLeafletParserTests.java": {
+    "mtime": 1794822369.0219944,
+    "seen": 1794822826.794991,
+    "ast_hash": "a416fed56f6ecd0a6b03d2b44451b686",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/MeaLeafletRealFileTests.java": {
+    "mtime": 1794822421.635604,
+    "seen": 1794822826.794991,
+    "ast_hash": "1f267c1a588e9be19c63ea051de8d407",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/mea/MeaLeafletsDialog.tsx": {
+    "mtime": 1794823587.8467112,
+    "seen": 1794823611.820198,
+    "ast_hash": "d0d7fa1c4029b40f98c2246c2d8bb52d",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/mea/promo-pricing.ts": {
+    "mtime": 1794822490.919275,
+    "seen": 1794822826.8627708,
+    "ast_hash": "d9804631186246f66feaaee8cebb055e",
+    "semantic_hash": ""
+  },
+  "backend/{236D729E-8677-48BC-B34E-E6A0D4648CFA}.png": {
+    "mtime": 1794822540.935691,
+    "seen": 1794822826.9264398,
+    "ast_hash": "14ef5b33cbc557e02aca92c1c364b96a",
     "semantic_hash": ""
   }
 }

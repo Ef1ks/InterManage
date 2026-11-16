@@ -1,4 +1,4 @@
-import { ChevronDownIcon, ListPlusIcon, SendIcon } from 'lucide-react'
+import { ListPlusIcon, SendIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { api, ApiError, fetchPostedFile } from '@/lib/api'
 import { ensureFolderAccess, folderSavingSupported, saveToFolder } from '@/lib/saved-folders'
 import type { MeaDocument } from '@/lib/types'
-import { cn } from '@/lib/utils'
 import type { MeaOrderDraft } from '@/store/meaOrderDraftSlice'
 
 import { useQueueAthosOrder } from './api'
@@ -25,9 +24,9 @@ const NOTE = 'rounded-lg bg-amber-200 px-3 py-2 text-sm text-amber-950 dark:bg-a
 /**
  * „Wyślij do ATHOS” jak w eMEA: serwer składa plik V… ze wszystkimi pozycjami MEA (kartony R1-R4, bez kartonów
  * zera) i oddaje go jako ZIP R…, który trafia do folderu appres\comrnis serwera sklepu; ATHOS sam go stamtąd bierze.
- * Zwykle plik idzie do kolejki sklepu (zamówienia robi się na swoim komputerze, a „Wyślij wszystkie” klika się na
- * komputerze z dostępem do ATHOS); zapis od razu zostaje dla komputera, który ma folder comrnis. Zgoda na zapis
- * w folderze tylko zaraz po kliknięciu, więc pytamy o nią, zanim cokolwiek pójdzie do serwera.
+ * Dwie równorzędne drogi obok siebie, wybiera użytkownik: kolejka sklepu (plik czeka na „Wyślij wszystkie” na
+ * komputerze z dostępem do ATHOS) albo zapis od razu w folderze comrnis z tego komputera. Zgoda na zapis w folderze
+ * tylko zaraz po kliknięciu, więc pytamy o nią, zanim cokolwiek pójdzie do serwera.
  */
 export function SendToAthosDialog({
   storeId,
@@ -47,7 +46,6 @@ export function SendToAthosDialog({
   const queryClient = useQueryClient()
   const queue = useQueueAthosOrder(storeId, document.number)
   const [sending, setSending] = useState(false)
-  const [directOpen, setDirectOpen] = useState(false)
   const spec = comrnisFolderSpec(storeId)
   const [previous] = document.orders
   const queued = document.queued
@@ -104,12 +102,12 @@ export function SendToAthosDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Wyślij MEA {document.number} do ATHOS</DialogTitle>
           <DialogDescription>
-            Zamówienie trafi do kolejki sklepu. Na komputerze z dostępem do ATHOS „Kolejka ATHOS” na liście MEA zapisze
-            wszystkie pliki naraz. Plik ma wszystkie pozycje MEA, pozycje bez kartonów idą z zerami, jak w eMEA.
+            Wybierz, jak zamówienie ma trafić do ATHOS. Plik ma wszystkie pozycje MEA, pozycje bez kartonów idą z
+            zerami, jak w eMEA.
           </DialogDescription>
         </DialogHeader>
 
@@ -140,53 +138,63 @@ export function SendToAthosDialog({
           </p>
         )}
 
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Anuluj
-          </Button>
-          <Button size="xl" onClick={addToQueue} loading={queue.isPending} disabled={sending}>
-            <ListPlusIcon />
-            Dodaj do kolejki
-          </Button>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <section className="flex flex-col gap-3 rounded-xl border p-4">
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold">
+                <ListPlusIcon className="size-4" />
+                Dodaj do kolejki
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Plik poczeka w kolejce sklepu. Wyślesz go razem z innymi przyciskiem „Kolejka ATHOS” na liście MEA, na
+                komputerze z dostępem do ATHOS.
+              </p>
+            </div>
+            <Button className="mt-auto" size="lg" onClick={addToQueue} loading={queue.isPending} disabled={sending}>
+              <ListPlusIcon />
+              Dodaj do kolejki
+            </Button>
+          </section>
+
+          <section className="flex flex-col gap-3 rounded-xl border p-4">
+            <div>
+              <h3 className="flex items-center gap-2 font-semibold">
+                <SendIcon className="size-4" />
+                Zapisz teraz do ATHOS
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Plik od razu trafi do folderu comrnis z tego komputera, a ATHOS sam go pobierze.
+              </p>
+            </div>
+            {folderSavingSupported ? (
+              <FolderRow
+                storeId={storeId}
+                spec={spec}
+                mode="readwrite"
+                pathLabel="Ścieżka folderu comrnis w sklepie"
+                pathHint="Np. \\SR10023\appres\comrnis"
+                doneText="Zapis do folderu"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Zapis do folderu ATHOS działa w Chrome i Edge.</p>
+            )}
+            <Button
+              className="mt-auto"
+              size="lg"
+              onClick={sendNow}
+              loading={sending}
+              disabled={!folderSavingSupported || queue.isPending}
+            >
+              <SendIcon />
+              Zapisz teraz do ATHOS
+            </Button>
+          </section>
         </div>
 
-        <div className="border-t pt-3">
-          <button
-            type="button"
-            onClick={() => setDirectOpen((value) => !value)}
-            aria-expanded={directOpen}
-            className="flex w-full items-center gap-2 text-left text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ChevronDownIcon className={cn('size-4 transition-transform', directOpen && 'rotate-180')} />
-            Ten komputer ma dostęp do ATHOS? Zapisz tylko ten plik od razu
-          </button>
-          {directOpen && (
-            <div className="mt-3 grid gap-3">
-              {folderSavingSupported ? (
-                <FolderRow
-                  storeId={storeId}
-                  spec={spec}
-                  mode="readwrite"
-                  pathLabel="Ścieżka folderu comrnis w sklepie"
-                  pathHint="Np. \\SR10023\appres\comrnis"
-                  doneText="Zamówienie zapisze się w folderze"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">Zapis do folderu ATHOS działa w Chrome i Edge.</p>
-              )}
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={sendNow}
-                  loading={sending}
-                  disabled={!folderSavingSupported || queue.isPending}
-                >
-                  <SendIcon />
-                  Zapisz od razu do ATHOS
-                </Button>
-              </div>
-            </div>
-          )}
+        <div className="flex justify-end">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Anuluj
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

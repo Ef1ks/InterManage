@@ -1570,6 +1570,20 @@ class DataEntryIntegrationTests {
         List<String> ids = JsonPath.read(created, "$[*].id");
         String body = "{\"ids\":[\"" + String.join("\",\"", ids) + "\"]}";
 
+        // Lista należy do osoby w sklepie: ktoś inny w tym samym sklepie jej nie widzi ani nie usuwa.
+        Cookie colleague = employee("{\"DATA_ENTRY\":\"VIEW\"}", storeId);
+        mvc.perform(get(markdowns).cookie(colleague))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post(markdowns + "/delete").cookie(colleague).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+        mvc.perform(post(markdowns + "/labels-file").cookie(colleague).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(markdowns).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(2));
+
         mvc.perform(post(markdowns + "/labels-file").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())

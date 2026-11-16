@@ -1029,7 +1029,9 @@ public class StaffScheduleService {
         List<PeriodBalance.Day> result = new ArrayList<>();
         for (LocalDate day : days) {
             Planned shift = byDay.get(day);
-            boolean leave = onLeave(absent, day);
+            // Płatna przerwa B2B to godziny z umowy opłacone jak praca, więc zostają w godzinach miesiąca i okresu.
+            StaffLeave dayLeave = leaveOn(absent, day);
+            boolean leave = dayLeave != null && dayLeave.getKind() != LeaveKind.B2B_PAID;
             Integer plannedMinutes = shift != null && !leave ? shift.shift().minutes() : null;
             double norm = 0;
             StaffContract contract = employment(file, day);
@@ -1041,7 +1043,7 @@ public class StaffScheduleService {
                 // (8 h razy etat, art. 130 § 3 i art. 154²), bez względu na długość zmiany. Dzień bez godzin nic.
                 // L4 obniża wymiar o godziny z rozkładu, których nie przepracowano (art. 130 § 3 KP).
                 if (leave && shift != null) {
-                    norm -= leaveOn(absent, day).getKind() == LeaveKind.SICK ? shift.shift().minutes()
+                    norm -= dayLeave.getKind() == LeaveKind.SICK ? shift.shift().minutes()
                             : 8 * 60 * share;
                 }
             }

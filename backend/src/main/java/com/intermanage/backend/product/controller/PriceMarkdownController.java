@@ -60,8 +60,9 @@ public class PriceMarkdownController {
 
     @GetMapping
     @PreAuthorize(LIST)
-    public List<PriceMarkdownItem> list(@PathVariable UUID storeId) {
-        return markdowns.list(storeId);
+    public List<PriceMarkdownItem> list(@PathVariable UUID storeId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return markdowns.list(storeId, principal.getId());
     }
 
     /** Cena bez promocji i ostatnia dostawa artykułu do okna przeceny (jak w ustawianiu promocji); 404 spoza kartoteki. */
@@ -94,7 +95,7 @@ public class PriceMarkdownController {
     public ResponseEntity<byte[]> labelsFile(@PathVariable UUID storeId,
             @Valid @RequestBody PriceMarkdownIdsRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        ProtocolFile file = markdowns.labels(storeId, request.ids(), principal.getUsername());
+        ProtocolFile file = markdowns.labels(storeId, request.ids(), principal.getId(), principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
@@ -121,7 +122,8 @@ public class PriceMarkdownController {
     @PostMapping("/restore")
     @PreAuthorize(LABELS)
     public List<PriceMarkdownItem> restore(@PathVariable UUID storeId,
-            @Valid @RequestBody PriceMarkdownIdsRequest request) {
-        return markdowns.restore(storeId, request.ids());
+            @Valid @RequestBody PriceMarkdownIdsRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return markdowns.restore(storeId, request.ids(), principal.getId());
     }
 }

@@ -28,7 +28,7 @@ import com.intermanage.backend.product.repository.PriceMarkdownRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 
 /**
- * Lista cenówek po przecenach z karty artykułu. Cenę w programie sklepu zmienia makro (składa je przeglądarka), a tu
+ * Lista cenówek po przecenach z karty artykułu, osobna dla każdej osoby w sklepie (widzi i drukuje tylko swoje wpisy). Cenę w programie sklepu zmienia makro (składa je przeglądarka), a tu
  * zostaje wpis, z którego powstaje plik ETIQUETTE. Znacznik "w pliku" stawia dopiero zapis pliku na dysku, więc nieudany
  * zapis niczego nie gubi; usunięcie z listy to znacznik.
  */
@@ -49,15 +49,15 @@ public class PriceMarkdownService {
     }
 
     @Transactional(readOnly = true)
-    public List<PriceMarkdownItem> list(UUID storeId) {
-        return markdowns.findByStoreIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(storeId).stream().map(mapper::toItem)
-                .toList();
+    public List<PriceMarkdownItem> list(UUID storeId, UUID userId) {
+        return markdowns.findByStoreIdAndCreatedByIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(storeId, userId).stream()
+                .map(mapper::toItem).toList();
     }
 
     @Transactional
     public List<PriceMarkdownItem> create(UUID storeId, PriceMarkdownRequest request, UUID userId) {
         markdowns.saveAndFlush(markdown(storeId, request, user(userId)));
-        return list(storeId);
+        return list(storeId, userId);
     }
 
     /** Wszystkie albo żadna: błąd jednego artykułu wycofuje całość. */
@@ -65,7 +65,7 @@ public class PriceMarkdownService {
     public List<PriceMarkdownItem> createAll(UUID storeId, List<PriceMarkdownRequest> requests, UUID userId) {
         AppUser user = user(userId);
         markdowns.saveAllAndFlush(requests.stream().map(request -> markdown(storeId, request, user)).toList());
-        return list(storeId);
+        return list(storeId, userId);
     }
 
     private PriceMarkdown markdown(UUID storeId, PriceMarkdownRequest request, AppUser user) {
@@ -86,12 +86,12 @@ public class PriceMarkdownService {
      */
     @Transactional
     public void addPriceChanges(UUID storeId, Map<Product, BigDecimal> prices, UUID priceControlFileId, UUID userId) {
-        if (prices.isEmpty()) {
+        if (prices.isEmpty() || userId == null) {
             return;
         }
         AppUser user = user(userId);
         Set<String> itm8s = prices.keySet().stream().map(Product::getItm8).collect(Collectors.toSet());
-        markdowns.findPendingPriceChanges(storeId, itm8s).forEach(previous -> previous.delete(user));
+        markdowns.findPendingPriceChanges(storeId, userId, itm8s).forEach(previous -> previous.delete(user));
         LocalDate today = LocalDate.now(StoreTime.ZONE);
         markdowns.saveAllAndFlush(prices.entrySet().stream()
                 .filter(entry -> entry.getKey().getEan() != null && !entry.getKey().getEan().isBlank())
@@ -105,8 +105,8 @@ public class PriceMarkdownService {
      * mają różne cenówki, więc jeden plik to jeden rodzaj), bez znacznika (stawia go zapis na dysku).
      */
     @Transactional(readOnly = true)
-    public ProtocolFile labels(UUID storeId, List<UUID> ids, String username) {
-        List<PriceMarkdown> chosen = markdowns.findByStoreIdAndIdIn(storeId, ids).stream()
+    public ProtocolFile labels(UUID storeId, List<UUID> ids, UUID userId, String username) {
+        List<PriceMarkdown> chosen = markdowns.findByStoreIdAndCreatedByIdAndIdIn(storeId, userId, ids).stream()
                 .filter(markdown -> markdown.getDeletedAt() == null).toList();
         Set<PriceLabelKind> kinds = chosen.stream().map(PriceMarkdown::getKind).collect(Collectors.toSet());
         if (kinds.size() > 1) {
@@ -123,23 +123,23 @@ public class PriceMarkdownService {
 
     @Transactional
     public List<PriceMarkdownItem> markLabelsGenerated(UUID storeId, List<UUID> ids, UUID userId) {
-        return change(storeId, ids, markdown -> markdown.markLabelsGenerated(user(userId)));
+        return change(storeId, userId, ids, markdown -> markdown.markLabelsGenerated(user(userId)));
     }
 
     @Transactional
     public List<PriceMarkdownItem> delete(UUID storeId, List<UUID> ids, UUID userId) {
-        return change(storeId, ids, markdown -> markdown.delete(user(userId)));
+        return change(storeId, userId, ids, markdown -> markdown.delete(user(userId)));
     }
 
     @Transactional
-    public List<PriceMarkdownItem> restore(UUID storeId, List<UUID> ids) {
-        return change(storeId, ids, PriceMarkdown::restore);
+    public List<PriceMarkdownItem> restore(UUID storeId, List<UUID> ids, UUID userId) {
+        return change(storeId, userId, ids, PriceMarkdown::restore);
     }
 
-    private List<PriceMarkdownItem> change(UUID storeId, List<UUID> ids, Consumer<PriceMarkdown> action) {
-        markdowns.findByStoreIdAndIdIn(storeId, ids).forEach(action);
+    private List<PriceMarkdownItem> change(UUID storeId, UUID userId, List<UUID> ids, Consumer<PriceMarkdown> action) {
+        markdowns.findByStoreIdAndCreatedByIdAndIdIn(storeId, userId, ids).forEach(action);
         markdowns.flush();
-        return list(storeId);
+        return list(storeId, userId);
     }
 
     private AppUser user(UUID userId) {

@@ -116,7 +116,14 @@ public class SchedulePrintService {
                                 dayPositions.put(printed.note(), positionNames.get(cell.positionId()));
                             }
                         }
-                        case OFF, ABSENCE -> symbols.add(printed.top());
+                        case OFF -> symbols.add(printed.top());
+                        case ABSENCE -> {
+                            symbols.add(printed.top());
+                            // Płatna przerwa B2B to opłacone godziny z grafiku, więc liczą się do sumy jak praca.
+                            if ("B2B_PAID".equals(cell.absence()) && cell.start() != null && cell.end() != null) {
+                                minutes += minutes(cell.start(), cell.end());
+                            }
+                        }
                         default -> {
                         }
                     }

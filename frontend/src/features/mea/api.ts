@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { MeaDocument, MeaList, MeaQueueItem, MeaSettings } from '@/lib/types'
+import type { MeaDocument, MeaLeafletSummary, MeaList, MeaQueueItem, MeaSettings } from '@/lib/types'
 
 const listKey = (storeId: string) => ['stores', storeId, 'mea'] as const
 const settingsKey = (storeId: string) => ['stores', storeId, 'mea', 'settings'] as const
@@ -81,6 +81,53 @@ export function useAthosQueueRemoval(storeId: string) {
     meta: { invalidates: false },
   })
   return { remove, restore }
+}
+
+/** Wgrane opisy gazetek z centrali (wspólne dla sklepów). */
+export function useMeaLeaflets(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...listKey(storeId), 'leaflets'],
+    queryFn: () => api<MeaLeafletSummary[]>(`/stores/${storeId}/mea/leaflets`),
+    enabled,
+  })
+}
+
+/** Po nowym opisie odświeżamy opisy i dokumenty MEA, bez listy z portalu (to kilka sekund czekania). */
+function useRefreshLeaflets(storeId: string) {
+  const queryClient = useQueryClient()
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: [...listKey(storeId), 'leaflets'] })
+    void queryClient.invalidateQueries({ queryKey: [...listKey(storeId), 'documents'] })
+  }
+}
+
+/**
+ * Sprawdzenie portalu od razu (w tle robi to zadanie MEA co kwadrans): pobiera opisy gazetek, których jeszcze nie ma.
+ */
+export function useSyncMeaLeaflets(storeId: string) {
+  const refresh = useRefreshLeaflets(storeId)
+  return useMutation({
+    mutationFn: () =>
+      api<{ downloaded: number; leaflets: MeaLeafletSummary[] }>(`/stores/${storeId}/mea/leaflets/sync`, {
+        method: 'POST',
+      }),
+    onSuccess: refresh,
+    meta: { invalidates: false },
+  })
+}
+
+/** Ręczne wgranie opisu (gdy portal nie działa); ta sama gazetka wgrana ponownie zastępuje poprzednią. */
+export function useUploadMeaLeaflet(storeId: string) {
+  const refresh = useRefreshLeaflets(storeId)
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<MeaLeafletSummary>(`/stores/${storeId}/mea/leaflets`, { method: 'POST', formData })
+    },
+    onSuccess: refresh,
+    meta: { invalidates: false },
+  })
 }
 
 /** Stan kluczy API sklepu (czy zapisane), bez samych kluczy. */

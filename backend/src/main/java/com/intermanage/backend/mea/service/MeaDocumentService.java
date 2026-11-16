@@ -61,11 +61,14 @@ public class MeaDocumentService {
     private final DataEntryService dataEntry;
     private final MeaAthosService athos;
     private final MeaOrderRepository orders;
+    private final MeaLeafletService leaflets;
     private final TransactionTemplate transaction;
 
     public MeaDocumentService(MeaDocumentRepository documents, MeaService mea, MurphysoftClient client,
             MeaFormParser parser, XlsReader xlsReader, ProductRepository products, DataEntryService dataEntry,
-            MeaAthosService athos, MeaOrderRepository orders, PlatformTransactionManager transactionManager) {
+            MeaAthosService athos, MeaOrderRepository orders, MeaLeafletService leaflets,
+            PlatformTransactionManager transactionManager) {
+        this.leaflets = leaflets;
         this.documents = documents;
         this.mea = mea;
         this.client = client;
@@ -153,6 +156,8 @@ public class MeaDocumentService {
         MeaDocument document = load(storeId, number);
         List<MeaDocumentLine> lines = document.getLines();
         Map<String, CatalogProduct> catalog = catalog(storeId, lines);
+        Map<String, MeaDocumentResponse.Leaflet> descriptions = leaflets.forDocument(number,
+                lines.stream().map(MeaDocumentLine::getMeaItm8).toList());
         return new MeaDocumentResponse(document.getNumber(), document.getTitle(), document.getPromoFrom(),
                 document.getPromoTo(), document.getReservationFrom(), document.getReservationTo(),
                 document.getDispatches(),
@@ -161,7 +166,12 @@ public class MeaDocumentService {
                         line.getPacksPerPallet(), line.getUnitsPerPack(), line.getVatPercent(),
                         line.getPurchasePrice(), line.getParallelPurchasePrice(), line.getShelfPrice(),
                         line.getParallelShelfPrice(), line.getMargin(), line.getParallelMargin(),
-                        line.getGuaranteedDays(), line.getNote(), catalog.get(line.getMeaItm8()))).toList(),
+                        line.getGuaranteedDays(), line.getNote(), catalog.get(line.getMeaItm8()),
+                        descriptions.get(line.getMeaItm8()))).toList(),
+                descriptions.values().stream()
+                        .sorted(java.util.Comparator.comparingInt(MeaDocumentResponse.Leaflet::year)
+                                .thenComparingInt(MeaDocumentResponse.Leaflet::week))
+                        .map(leaflet -> leaflet.week() + "/" + leaflet.year()).distinct().toList(),
                 athos.sends(storeId, number).stream().map(send -> new MeaDocumentResponse.AthosSend(
                         send.getSentAt(), send.getPositions(), send.getColis())).toList(),
                 orders.findByStoreIdAndNumberAndSavedAtIsNotNullOrderBySavedAtDesc(storeId, number).stream()
