@@ -5,6 +5,7 @@ import { api, ApiError, downloadFile, downloadPostedFile, printFile, printPosted
 import type {
   ArticleCodes,
   ArticleDelivery,
+  ArticleMea,
   ArticleProtocol,
   CadencierImport,
   CadencierOverview,
@@ -197,6 +198,14 @@ export function useArticleDeliveries(storeId: string, itm8: string | null) {
     queryKey: [...reportsKey(storeId), 'article', itm8, 'deliveries'],
     queryFn: () => api<ArticleDelivery[]>(`${reportsPath(storeId)}/articles/${itm8}/deliveries`),
     enabled: itm8 != null,
+  })
+}
+
+/** Gazetki MEA artykułu, które trwają albo dopiero będą: rozrzuty i zamówione kartony. */
+export function useArticleMea(storeId: string, itm8: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article', itm8, 'mea'],
+    queryFn: () => api<ArticleMea[]>(`${reportsPath(storeId)}/articles/${itm8}/mea`),
   })
 }
 

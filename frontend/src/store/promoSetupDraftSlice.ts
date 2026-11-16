@@ -15,7 +15,15 @@ export type PromoRow = {
   price: number | null
   discount: number | null
   dateTo?: string
+  /**
+   * Tryb makra: artykuł, cena i koniec, z którymi wiersz trafił już na listę cenówek ({@link promoLabelKey}). Kolejne
+   * „Stwórz automatycznie” dodaje cenówkę tylko, gdy coś się zmieniło.
+   */
+  labeled?: string
 }
+
+/** Klucz cenówki wiersza: ten sam artykuł, cena i koniec to ta sama cenówka. */
+export const promoLabelKey = (itm8: string, price: number, dateTo: string) => `${itm8}|${price}|${dateTo}`
 
 /** {@code macro}: jeden kafelek, każdy artykuł z własnym końcem, promocje ustawia makro; {@code pro}: pliki .PRO. */
 export type PromoMode = 'macro' | 'pro'
@@ -39,7 +47,7 @@ export const DEFAULT_LEVELS = [30, 50, 70]
 
 const STORAGE_KEY = 'intermanage.promoSetup'
 
-const randomOperation = () => String(1000 + Math.floor(Math.random() * 9000))
+export const randomOperation = () => String(1000 + Math.floor(Math.random() * 9000))
 
 export const newTile = (number: number): PromoTile => ({
   id: crypto.randomUUID(),

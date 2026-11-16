@@ -15,7 +15,7 @@ import { paddedScaleCode } from '@/features/data-entry/rows'
 import { useAddPriceMarkdowns } from '@/features/inventory/api'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
 import { PriceLabelsButton } from '@/features/inventory/PriceLabelsDialog'
-import { buildPromoEntryMacro } from '@/features/data-entry/mercalys-macro'
+import { buildPromoEntryMacro, mercalysVatCode } from '@/features/data-entry/mercalys-macro'
 import { type ProFile, proFileName } from '@/features/leaflet/leaflet-rows'
 import { ProFilesDialog } from '@/features/leaflet/ProFilesDialog'
 import { useSalesReportsOverview } from '@/features/sales/api'
@@ -31,6 +31,8 @@ import {
   addPromoTile,
   DEFAULT_LEVELS,
   newPromoDraft,
+  promoLabelKey,
+  randomOperation,
   type PromoMode,
   type PromoRow,
   type PromoSetupDraft,
@@ -236,17 +238,26 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
   }
 
   /**
-   * Tryb makra: makro wprowadzania promocji do schowka (odtwarzacz, Alt+E). Kod operacji jak kod taryfy w .PRO,
-   * nazwa jak nazwa pliku .PRO: dzień początku (dziś) i najpóźniejszego końca.
+   * Tryb makra: makro wprowadzania promocji do schowka (odtwarzacz, Alt+E). Kod operacji jak kod taryfy w .PRO, ale
+   * przy każdym kopiowaniu z nowymi cyframi, żeby makro nie trafiło w operację z poprzedniego razu. Nazwa jak nazwa
+   * pliku .PRO: dzień początku (dziś) i najpóźniejszego końca.
    */
   const copyMacro = async (tile: PromoTile) => {
     const items = tile.rows.flatMap((row) =>
       row.article?.ean && row.price !== null && row.dateTo
-        ? [{ ean: row.article.ean.replace(/^0+(?=\d{13})/, ''), price: row.price, dateTo: row.dateTo }]
+        ? [
+            {
+              ean: row.article.ean.replace(/^0+(?=\d{13})/, ''),
+              price: row.price,
+              dateTo: row.dateTo,
+              vatCode: mercalysVatCode(row.article.vatPercent),
+            },
+          ]
         : [],
     )
     const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
-    const code = tileTariff(draft, tile)
+    const operation = randomOperation()
+    const code = tileTariff({ ...draft, operation }, tile)
     const name = proFileName(todayIso(), end).replace(/\.PRO$/, '')
     try {
       await navigator.clipboard.writeText(buildPromoEntryMacro({ code, name, items }))
@@ -257,15 +268,38 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
     toast.success(`Skopiowano makro: ${items.length} art., operacja ${code}`, {
       description: 'Przejdź do Mercalys i naciśnij Alt+E.',
     })
-    // Każdy artykuł z makra na listę cenówek; szkic artykułu (bez ITM8) czeka na raport kartoteki.
-    const markdowns = tile.rows.flatMap((row) =>
+    // Każdy artykuł z makra na listę cenówek, ale raz: wiersz pamięta, z czym już na nią trafił. Szkic artykułu (bez
+    // ITM8) czeka na raport kartoteki.
+    const labelKey = (row: PromoRow) =>
       row.article?.itm8 && row.article.ean && row.price !== null && row.dateTo
-        ? [{ itm8: row.article.itm8, newPrice: row.price, validFrom: todayIso(), validTo: row.dateTo }]
-        : [],
-    )
+        ? promoLabelKey(row.article.itm8, row.price, row.dateTo)
+        : null
+    const toLabel = tile.rows.filter((row) => {
+      const key = labelKey(row)
+      return key !== null && row.labeled !== key
+    })
+    const markdowns = toLabel.map((row) => ({
+      itm8: row.article!.itm8!,
+      newPrice: row.price!,
+      validFrom: todayIso(),
+      validTo: row.dateTo!,
+    }))
+    const latest = draftsOf(mode)[store.id] ?? draft
+    setDraft({ ...latest, operation })
     if (markdowns.length === 0) return
+    const labeled = new Map(toLabel.map((row) => [row.id, labelKey(row) ?? undefined]))
     addMarkdowns.mutate(markdowns, {
-      onSuccess: () => toast.success(`Dodano do cenówek: ${markdowns.length} art.`),
+      onSuccess: () => {
+        const current = draftsOf(mode)[store.id]
+        if (current) {
+          const tiles = current.tiles.map((item) => ({
+            ...item,
+            rows: item.rows.map((row) => (labeled.has(row.id) ? { ...row, labeled: labeled.get(row.id) } : row)),
+          }))
+          setDraft({ ...current, tiles })
+        }
+        toast.success(`Dodano do cenówek: ${markdowns.length} art.`)
+      },
       onError: (error) =>
         toast.error('Nie udało się dodać artykułów do cenówek', {
           description: error instanceof ApiError ? error.message : undefined,

@@ -84,6 +84,31 @@ public final class AthosOrderFile {
         return text.toString();
     }
 
+    /** Pozycja odczytana z treści pliku V…: ITM8 bez zer wiodących i kartony R1-R4. */
+    public record Record(String itm8, int[] colis) {
+    }
+
+    /** Odczyt treści pliku V… zapisanej w bazie; rekordy ucięte albo z niecyframi są pomijane. */
+    public static List<Record> parse(String content) {
+        List<Record> records = new java.util.ArrayList<>();
+        if (content == null) {
+            return records;
+        }
+        for (int start = 0; start + RECORD_LENGTH <= content.length(); start += RECORD_LENGTH) {
+            String record = content.substring(start, start + RECORD_LENGTH);
+            if (!record.matches("\\d{" + RECORD_LENGTH + "}")) {
+                continue;
+            }
+            int[] colis = new int[DISPATCHES];
+            for (int dispatch = 0; dispatch < DISPATCHES; dispatch++) {
+                int from = 13 + dispatch * 4;
+                colis[dispatch] = Integer.parseInt(record.substring(from, from + 4));
+            }
+            records.add(new Record(Long.toString(Long.parseLong(record.substring(5, 13))), colis));
+        }
+        return records;
+    }
+
     /** ZIP z jednym plikiem (nazwa bez folderu, jak {@code ZipFile.AddFile(plik, "")} w eMEA). */
     public static byte[] zip(String textName, String content) {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();

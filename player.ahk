@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 49.0.0.0
+;@Ahk2Exe-SetVersion 50.0.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := 49 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := 50 ; podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -1922,10 +1922,13 @@ OptionalDialog(title, expected, button, timeoutMs) {
                 element := ""
                 text := ""
                 try {
+                    ; Przycisk po id, a bez niego po name, value albo tekście (np. „Fermer” w oknie komunikatu bez id).
                     if (doc.readyState = "complete") {
-                        element := doc.getElementById(button)
-                        if (WebProp(element, "tagName") != "")
+                        found := FindElements([doc], button)
+                        if (found.Length > 0) {
+                            element := found[1].element
                             text := Trim(doc.body.innerText)
+                        }
                     }
                 }
                 if (text = "")

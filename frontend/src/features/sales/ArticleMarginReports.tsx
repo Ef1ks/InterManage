@@ -5,7 +5,8 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
-import { SegmentedField, SelectField, TextField } from '@/components/form'
+import { SegmentedField, SearchableSelectField, TextField } from '@/components/form'
+import { compareSupplierCodes } from '@/lib/supplier-order'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
 import { Button } from '@/components/ui/button'
@@ -224,11 +225,11 @@ function ArticleMarginPage({
         ...new Map(
           all
             .filter((item) => item.supplierCode)
-            .map((item) => [item.supplierCode!, [item.supplierName, item.supplierCode].filter(Boolean).join(' · ')]),
+            .map((item) => [item.supplierCode!, [item.supplierCode, item.supplierName].filter(Boolean).join(' ')]),
         ),
       ]
         .map(([value, label]) => ({ value, label }))
-        .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
+        .sort((a, b) => compareSupplierCodes(a.value, b.value)),
     [all],
   )
 
@@ -322,7 +323,7 @@ function ArticleMarginPage({
               onChange={setSearch}
               placeholder="Szukaj: artykuł, marka, EAN, ITM8, dostawca"
             />
-            <SelectField
+            <SearchableSelectField
               label="Dostawca ostatniej dostawy"
               options={[{ value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' }, ...suppliers]}
               value={supplier}

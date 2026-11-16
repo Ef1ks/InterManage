@@ -1450,6 +1450,30 @@ export type ArticleDelivery = {
   mea: { number: string; title: string | null; promoFrom: string | null; promoTo: string | null }[]
 }
 
+/**
+ * Stan zamówienia gazetki MEA artykułu: z aplikacji z kartonami (ORDERED) albo bez tego artykułu (NOT_ORDERED), plik
+ * w kolejce do ATHOS (QUEUED), wysłane z ATHOS bez znanych ilości (SENT), rezerwacja otwarta (OPEN), zamknięta i nic
+ * nie wysłano (CLOSED), zamknięta bez wczytanego dziennika ATHOS (UNKNOWN).
+ */
+export type ArticleMeaStatus = 'ORDERED' | 'NOT_ORDERED' | 'QUEUED' | 'SENT' | 'OPEN' | 'CLOSED' | 'UNKNOWN'
+
+/** Gazetka MEA artykułu, która trwa albo dopiero będzie; `colis` rozrzutu `null` = ilości nie znamy. */
+export type ArticleMea = {
+  number: string
+  title: string | null
+  promoFrom: string | null
+  promoTo: string | null
+  reservationTo: string | null
+  meaItm8: string
+  unitsPerPack: number | null
+  status: ArticleMeaStatus
+  orderedAt: string | null
+  orderedBy: string | null
+  athosSentAt: string | null
+  athosColis: number | null
+  dispatches: { index: number; date: string; colis: number | null }[]
+}
+
 /** Protokół artykułu: dokument inny niż przyjęcie i korekta; {@code label} to rodzaj do pokazania. */
 export type ArticleProtocol = {
   documentId: string

@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.mea.dto.ArticleMeaResponse;
+import com.intermanage.backend.mea.service.MeaArticleService;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.dto.ArticleCodesResponse;
 import com.intermanage.backend.product.service.ArticleCodesService;
@@ -46,12 +48,15 @@ public class SalesReportController {
     private final SalesReportService salesReportService;
     private final DeliCostReportService deliCostReportService;
     private final ArticleCodesService articleCodesService;
+    private final MeaArticleService meaArticleService;
 
     public SalesReportController(SalesReportService salesReportService,
-            DeliCostReportService deliCostReportService, ArticleCodesService articleCodesService) {
+            DeliCostReportService deliCostReportService, ArticleCodesService articleCodesService,
+            MeaArticleService meaArticleService) {
         this.salesReportService = salesReportService;
         this.deliCostReportService = deliCostReportService;
         this.articleCodesService = articleCodesService;
+        this.meaArticleService = meaArticleService;
     }
 
     /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport (też wyniki sklepu na pulpicie). */
@@ -127,6 +132,13 @@ public class SalesReportController {
     @PreAuthorize(ARTICLE_VIEW)
     public List<ArticleDeliveryResponse> articleDeliveries(@PathVariable UUID storeId, @PathVariable String itm8) {
         return salesReportService.deliveries(storeId, itm8);
+    }
+
+    /** Gazetki MEA artykułu, które trwają albo dopiero będą: okres, rozrzuty i zamówione kartony. */
+    @GetMapping("/articles/{itm8}/mea")
+    @PreAuthorize(ARTICLE_VIEW)
+    public List<ArticleMeaResponse> articleMea(@PathVariable UUID storeId, @PathVariable String itm8) {
+        return meaArticleService.upcoming(storeId, itm8);
     }
 
     /** Ostatnie protokoły artykułu inne niż przyjęcia i korekty: rodzaj, data i ilość, od najnowszego. */

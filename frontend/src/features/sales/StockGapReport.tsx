@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { ShoppingCartIcon } from 'lucide-react'
 
 import { BackLink } from '@/components/BackLink'
-import { MultiComboboxField, SegmentedField, SelectField, TextField } from '@/components/form'
+import { MultiComboboxField, SegmentedField, SearchableSelectField, TextField } from '@/components/form'
+import { compareSupplierCodes } from '@/lib/supplier-order'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -179,7 +180,7 @@ export function StockGapReport({ storeId }: { storeId: string }) {
         found.set(item.supplierCode, { name: item.supplierName, count: (known?.count ?? 0) + 1 })
       }
     }
-    return [...found.entries()].sort(([, a], [, b]) => (a.name ?? '').localeCompare(b.name ?? '', 'pl'))
+    return [...found.entries()].sort(([a], [b]) => compareSupplierCodes(a, b))
   }, [report.data, tab.kind])
 
   return (
@@ -245,7 +246,7 @@ export function StockGapReport({ storeId }: { storeId: string }) {
               nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
             }
           />
-          <SelectField
+          <SearchableSelectField
             label="Ostatni dostawca"
             options={[
               { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },

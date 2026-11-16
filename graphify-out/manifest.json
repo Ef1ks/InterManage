@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794823575.0204203,
-    "seen": 1794823611.8408635,
-    "ast_hash": "625872b1cab21a414ba40e4e283d5bf6",
+    "mtime": 1794825240.0004394,
+    "seen": 1794825364.6051612,
+    "ast_hash": "3445e34882fb5353b3df8a1e3a179c03",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794823619.541388,
-    "seen": 1794823672.6268835,
-    "ast_hash": "dd9c55ba6c73432ddebeb1151ca3a4d7",
+    "mtime": 1794825307.011387,
+    "seen": 1794825364.6374831,
+    "ast_hash": "6d16d9f24f4182183f7ca009e630e6e6",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -402,9 +402,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/form/index.ts": {
-    "mtime": 1794067579.3028464,
-    "seen": 1794067695.8393314,
-    "ast_hash": "cb1500de45ffa38d9bb4132a3797041e",
+    "mtime": 1794825378.1109996,
+    "seen": 1794825456.0966096,
+    "ast_hash": "bf4c16736acfdaa782fec6b001aeafd2",
     "semantic_hash": ""
   },
   "frontend/src/components/form/segmented-field.tsx": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794552553.1462991,
-    "seen": 1794552638.1847079,
-    "ast_hash": "ce08553f087cb78d5b5eb7caa60c3b4f",
+    "mtime": 1794825241.6050997,
+    "seen": 1794825364.5900934,
+    "ast_hash": "9792901109e5c0bfb79de8f18995e492",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -3210,9 +3210,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/controller/SalesReportController.java": {
-    "mtime": 1794774259.6487386,
-    "seen": 1794804560.0153127,
-    "ast_hash": "f4bb88744acae2a2a688a0ae80654efe",
+    "mtime": 1794825168.7388334,
+    "seen": 1794825364.4765794,
+    "ast_hash": "e678a2450613fe9ef7eedff3357136bb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/SalesComparisonResponse.java": {
@@ -3570,9 +3570,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesChartDialog.tsx": {
-    "mtime": 1794822700.105915,
-    "seen": 1794822826.870019,
-    "ast_hash": "cef86621e05c681b78dd77cd36b12055",
+    "mtime": 1794825271.6643069,
+    "seen": 1794825364.5890937,
+    "ast_hash": "4f2c8b3162fd18e19bef19c2498b7a4d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/controller/DocumentTransferController.java": {
@@ -4026,9 +4026,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/PriceCheckReport.tsx": {
-    "mtime": 1794551611.2967396,
-    "seen": 1794551966.2915747,
-    "ast_hash": "304ebd2c01437d6a2dc83f418a2a05c7",
+    "mtime": 1794825379.048357,
+    "seen": 1794825456.1352205,
+    "ast_hash": "9f7a7c7a873cf717aacc991b1ee61198",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/PriceCheckSettingsForm.tsx": {
@@ -7080,9 +7080,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ReviewedReportPage.tsx": {
-    "mtime": 1794774259.7393956,
-    "seen": 1794804560.0926626,
-    "ast_hash": "b55d60905d28030e8dc1a9cc47723c04",
+    "mtime": 1794825378.929213,
+    "seen": 1794825456.1352205,
+    "ast_hash": "95bb4228b4b0ce3cdbc72dd73b1f6c29",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/component/ExcludedSuppliers.java": {
@@ -7434,9 +7434,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SlowMovingReport.tsx": {
-    "mtime": 1794774259.741397,
-    "seen": 1794804560.0926626,
-    "ast_hash": "bbd5363fff8269817ac0295401d8ac89",
+    "mtime": 1794825379.261376,
+    "seen": 1794825456.1362293,
+    "ast_hash": "2c289bca35b5a8f01021fd3302451acf",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/bakery/component/BakeryScanReader.java": {
@@ -8184,9 +8184,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/StockGapReport.tsx": {
-    "mtime": 1794061269.167056,
-    "seen": 1794061853.9623117,
-    "ast_hash": "1cb3192bd91683044751193d2b0d638a",
+    "mtime": 1794825379.113729,
+    "seen": 1794825456.1362293,
+    "ast_hash": "311d3f2a8b75e02a9e71d3b16dfd00ac",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ArticleStatsButton.tsx": {
@@ -9492,9 +9492,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/NegativeStockReport.tsx": {
-    "mtime": 1794207855.424021,
-    "seen": 1794207950.7146642,
-    "ast_hash": "c6571e3e0b846e6052b8493cc1bcc616",
+    "mtime": 1794825378.1130004,
+    "seen": 1794825456.1346724,
+    "ast_hash": "7ee62ddcbd8d79564ca1e0e98785973a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/controller/DownloadController.java": {
@@ -10836,9 +10836,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ArticleMarginReports.tsx": {
-    "mtime": 1794570145.7574368,
-    "seen": 1794570218.8009653,
-    "ast_hash": "c09959870f306df59864d73dc6770607",
+    "mtime": 1794825378.1139984,
+    "seen": 1794825456.1336722,
+    "ast_hash": "e565ef9fd6f404c4ff6b50377a83b0f6",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/dto/ArticleMarginVerificationIdsRequest.java": {
@@ -11982,9 +11982,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/repository/MeaDocumentRepository.java": {
-    "mtime": 1794772915.0887876,
-    "seen": 1794773401.1662867,
-    "ast_hash": "adc2b83e387900a82f5d92717f0c6854",
+    "mtime": 1794825137.6924975,
+    "seen": 1794825364.4361331,
+    "ast_hash": "590e75643d59765cc332fcb7ec848c4f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/service/MeaDocumentService.java": {
@@ -12012,9 +12012,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/component/AthosOrderFile.java": {
-    "mtime": 1794803365.834573,
-    "seen": 1794804559.987123,
-    "ast_hash": "6a3b44a8253174280afe81a55205ba16",
+    "mtime": 1794825129.7447944,
+    "seen": 1794825364.432134,
+    "ast_hash": "93e45a3fd8f5e35499a5777917cc1ea3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/MeaAthosStatus.java": {
@@ -12090,9 +12090,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/MeaOrderIntegrationTests.java": {
-    "mtime": 1794812079.8347168,
-    "seen": 1794812122.7836528,
-    "ast_hash": "b16236c56104dde3de4513c4bb2ea235",
+    "mtime": 1794825186.496742,
+    "seen": 1794825364.535968,
+    "ast_hash": "26bd5a2c963b761a57e7ceb9f1680904",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/PortalDeliveryDialog.tsx": {
@@ -12285,6 +12285,36 @@
     "mtime": 1794822540.935691,
     "seen": 1794822826.9264398,
     "ast_hash": "14ef5b33cbc557e02aca92c1c364b96a",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/dto/ArticleMeaResponse.java": {
+    "mtime": 1794825130.553332,
+    "seen": 1794825364.433133,
+    "ast_hash": "5ac84fde208974fb06cb1d68d396d1cc",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/mea/service/MeaArticleService.java": {
+    "mtime": 1794825157.6950393,
+    "seen": 1794825364.4371345,
+    "ast_hash": "4c73cbcc4db1c5f39f9f836910259b2b",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/form/searchable-select-field.tsx": {
+    "mtime": 1794825378.1099975,
+    "seen": 1794825456.0966096,
+    "ast_hash": "b546707dd220ca8980cb9756169ffd1c",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/sales/ArticleUpcomingMea.tsx": {
+    "mtime": 1794825273.62142,
+    "seen": 1794825364.5870922,
+    "ast_hash": "fc5615a4e4c45c694047ba91965d3145",
+    "semantic_hash": ""
+  },
+  "frontend/src/lib/supplier-order.ts": {
+    "mtime": 1794825378.1099975,
+    "seen": 1794825456.1492312,
+    "ast_hash": "c1c8e5a19f8da3cb0b7f8de45f6a5241",
     "semantic_hash": ""
   }
 }

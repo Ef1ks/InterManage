@@ -4,7 +4,8 @@ import { Link } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
-import { MultiComboboxField, SegmentedField, SelectField, TextField } from '@/components/form'
+import { MultiComboboxField, SegmentedField, SearchableSelectField, TextField } from '@/components/form'
+import { compareSupplierCodes } from '@/lib/supplier-order'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -224,14 +225,16 @@ export function SlowMovingReport({ storeId }: { storeId: string }) {
             }
           />
           <div className="flex flex-wrap items-start gap-3">
-            <SelectField
+            <SearchableSelectField
               label="Ostatni dostawca"
               options={[
                 { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },
-                ...(report.data?.suppliers ?? []).map((item) => ({
-                  value: item.code,
-                  label: `${item.code} ${item.name ?? ''} (${item.count})`,
-                })),
+                ...[...(report.data?.suppliers ?? [])]
+                  .sort((a, b) => compareSupplierCodes(a.code, b.code))
+                  .map((item) => ({
+                    value: item.code,
+                    label: `${item.code} ${item.name ?? ''} (${item.count})`,
+                  })),
               ]}
               value={supplier}
               onChange={(next) => update({ dostawca: next === ALL_SUPPLIERS ? null : next })}

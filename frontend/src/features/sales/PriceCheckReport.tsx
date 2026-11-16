@@ -10,7 +10,8 @@ import {
 import { Link, useSearchParams } from 'react-router'
 
 import { BackLink } from '@/components/BackLink'
-import { SegmentedField, SelectField } from '@/components/form'
+import { SegmentedField, SearchableSelectField } from '@/components/form'
+import { compareSupplierCodes } from '@/lib/supplier-order'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
@@ -109,11 +110,15 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
   const categories = usePriceCheckCategories(storeId).data ?? []
   const all = report.data?.deliveries ?? []
   const suppliers = [...new Map(all.map((delivery) => [supplierKey(delivery), delivery])).values()]
+    .sort(
+      (a, b) =>
+        compareSupplierCodes(a.supplierCode, b.supplierCode) ||
+        (a.supplierName ?? '').localeCompare(b.supplierName ?? '', 'pl'),
+    )
     .map((delivery) => ({
       value: supplierKey(delivery),
-      label: [delivery.supplierName, delivery.supplierCode].filter(Boolean).join(' · ') || 'Nieznany dostawca',
+      label: [delivery.supplierCode, delivery.supplierName].filter(Boolean).join(' ') || 'Nieznany dostawca',
     }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
   const from = report.data && period !== '30' ? periodStart(report.data.to, Number(period)) : null
   // Przyjęcie ze statusem wyjaśniania zostaje bez względu na datę, więc okres zawęża tylko te do wyjaśnienia.
   const filtered = all.filter(
@@ -241,7 +246,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
               onChange={setQuery}
               placeholder="Szukaj: dostawca, bon, faktura, artykuł, EAN, ITM8"
             />
-            <SelectField
+            <SearchableSelectField
               label="Dostawca"
               options={[{ value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' }, ...suppliers]}
               value={supplier}

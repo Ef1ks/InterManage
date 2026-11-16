@@ -14,6 +14,7 @@ import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
 import { meaDocumentPath } from '@/features/mea/paths'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
 import { ArticleCodeFields, ArticleCodesCard } from '@/features/sales/ArticleCodes'
+import { ArticleUpcomingMea } from '@/features/sales/ArticleUpcomingMea'
 import {
   type ReportKind,
   type SalesChartTarget,
@@ -409,6 +410,7 @@ function ChartContent({
 
       {target.kind === 'article' && (
         <>
+          <ArticleUpcomingMea storeId={storeId} itm8={target.itm8} />
           <ArticleDeliveries storeId={storeId} itm8={target.itm8} />
           <ArticleProtocols storeId={storeId} itm8={target.itm8} />
           {/* Na stronie (Magazyn, Ustaw promocje) historię cen pokazuje sama strona pod kartą. */}

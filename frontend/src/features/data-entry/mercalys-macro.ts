@@ -433,7 +433,23 @@ const PROMO_SCREEN = {
   /** „Sprzedaż ze stratą. Cena sprzedaży minimum jest … Potwierdzasz Sprzedaż ze stratą ?”: tylko czasem, Tak. */
   lossText: 'ze strat',
   backButton: 'btnB1_Retour_LnkBouton',
+  /**
+   * „Wprowadzona stawka podatkowa nie jest dozwolona dla wprowadzonego kodu CN.”: tylko czasem, po EAN-ie. Okno ma
+   * sam odnośnik „Fermer” (bez id), a pole VAT zostaje z 0, więc makro wpisuje kod stawki artykułu.
+   */
+  cnText: 'kodu CN',
+  cnCloseButton: 'Fermer',
+  /** Kod stawki jak w kartotece Mercalys: 1 = 23%, 2 = 8%, 6 = 5%. */
+  vatField: 'lstZ22_TVA_TxtBox',
 } as const
+
+/** Kod stawki VAT w Mercalys z procentu ({@code products.vat_code}: 1 = 23%, 2 = 8%, 6 = 5%); inny procent = brak. */
+export function mercalysVatCode(percent: number | null): string | null {
+  if (percent === 23) return '1'
+  if (percent === 8) return '2'
+  if (percent === 5) return '6'
+  return null
+}
 
 /** Czasy makra promocji w ms, poprawiamy je tylko tutaj. */
 export const PROMO_MACRO_CONFIG = {
@@ -445,16 +461,23 @@ export const PROMO_MACRO_CONFIG = {
   existingCheck: 3000,
   /** Po przeładowaniu strony artykułów, przed Powrót. */
   beforeBack: 500,
+  /** Tyle makro czeka po EAN-ie na okno o stawce VAT niezgodnej z kodem CN. */
+  cnDialog: 2000,
+  /** Tyle makro sprawdza, czy pole VAT zostało puste albo z 0 (po oknie o kodzie CN). */
+  vatCheck: 300,
 } as const
 
-export type PromoMacroItem = { ean: string; price: number; dateTo: string }
+/** {@code vatCode}: kod stawki w Mercalys ({@link mercalysVatCode}), wpisywany, gdy Mercalys wyzeruje VAT. */
+export type PromoMacroItem = { ean: string; price: number; dateTo: string; vatCode: string | null }
 
 /**
  * Wprowadzanie promocji: Taryfa → Wprowadzanie promocji, kod i nazwa operacji, typ 1, koniec operacji = najpóźniejszy
  * koniec artykułów, Zatwierdź, Tak, Wpisz; potem dla każdego artykułu EAN, koniec sprzedaży, cena promocji z Enterem,
  * Tak przy sprzedaży ze stratą (gdy Mercalys zapyta) i Tak przy „Utworzyć zapis ?”. Na końcu Powrót i Mercalys na
  * pasek zadań. Początku operacji makro nie zmienia: Mercalys podpowiada dzisiejszy. Kod istniejącej operacji wypełnia
- * panel: makro ją usuwa (Usuń, Tak) i wpisuje kod od nowa. Wymaga odtwarzacza od wersji 39 (WEBIFVALUE).
+ * panel: makro ją usuwa (Usuń, Tak) i wpisuje kod od nowa. Gdy po EAN-ie Mercalys zgłosi stawkę VAT niezgodną z kodem
+ * CN (pole VAT z 0), makro zamyka okno i wpisuje kod stawki artykułu. Wymaga odtwarzacza od wersji 50 (WEBDIALOG po
+ * tekście przycisku).
  */
 export function buildPromoEntryMacro({ code, name, items }: { code: string; name: string; items: PromoMacroItem[] }) {
   const screen = PROMO_SCREEN
@@ -490,13 +513,23 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
     `WEBWAIT|${WINDOW}|${screen.enterButton}||${PAGE_TIMEOUT_MS}`,
     `WEBCLICK|${WINDOW}|${screen.enterButton}`,
   ]
-  for (const item of items) {
+  items.forEach((item, index) => {
     const price = item.price.toFixed(2).replace('.', ',')
+    const vatLabel = `VAT_OK_${index + 1}`
     out.push(
       `# EAN ${item.ean}: ${price} do ${item.dateTo}`,
       `WEBWAIT|${WINDOW}|${screen.articleField}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.articleField}|^a${item.ean}{Enter}`,
       `SLEEP|${c.afterEan}`,
+      // Stawka VAT niedozwolona dla kodu CN: Fermer, a pole VAT zostaje z 0. Wtedy kod stawki artykułu; bez znanej
+      // stawki makro staje na sprawdzeniu pola, zamiast zapisać promocję z VAT 0.
+      `WEBDIALOG|${DIALOG}|${screen.cnText}|${screen.cnCloseButton}|${c.cnDialog}`,
+      `WEBIFVALUE|${WINDOW}|${screen.vatField}|^0?$|${vatLabel}|${c.vatCheck}`,
+      ...(item.vatCode
+        ? [`WEBKEY|${WINDOW}|${screen.vatField}|^a${item.vatCode}{Tab}`]
+        : [`# Brak stawki VAT artykułu w kartotece`]),
+      `WEBVALUE|${WINDOW}|${screen.vatField}|^[1-9]$`,
+      `LABEL|${vatLabel}`,
       `WEBKEY|${WINDOW}|${screen.saleEndField}|^a${mercalysDate(item.dateTo)}{Tab}`,
       `WEBVALUE|${WINDOW}|${screen.saleEndField}|${datePattern(item.dateTo)}`,
       `WEBKEY|${WINDOW}|${screen.priceField}|^a${price}{Enter}`,
@@ -505,7 +538,7 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
       `WEBCLICK|${DIALOG}|Oui`,
       `SLEEP|${c.afterSave}`,
     )
-  }
+  })
   out.push(
     // Po ostatnim zapisie strona artykułów się przeładowuje: klik w starą stronę by przepadł, a schowany program
     // wracał na wierzch po przeładowaniu. Powrót dopiero na nowej stronie, chowanie po wejściu na nagłówek operacji.

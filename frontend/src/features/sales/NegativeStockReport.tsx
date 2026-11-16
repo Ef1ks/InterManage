@@ -2,7 +2,15 @@ import { ChevronDownIcon } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
 
 import { BackLink } from '@/components/BackLink'
-import { DateField, MultiComboboxField, SegmentedField, SelectField, SwitchField, TextField } from '@/components/form'
+import {
+  DateField,
+  MultiComboboxField,
+  SegmentedField,
+  SearchableSelectField,
+  SwitchField,
+  TextField,
+} from '@/components/form'
+import { compareSupplierCodes } from '@/lib/supplier-order'
 import { ReportFreshness } from '@/components/ReportFreshness'
 import { SearchInput } from '@/components/SearchInput'
 import { SortableHead } from '@/components/SortableHead'
@@ -194,7 +202,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
     }
     return {
       without,
-      list: [...found.entries()].sort(([, a], [, b]) => (a.name ?? '').localeCompare(b.name ?? '', 'pl')),
+      list: [...found.entries()].sort(([a], [b]) => compareSupplierCodes(a, b)),
     }
   }, [report.data])
 
@@ -280,7 +288,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
               nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
             }
           />
-          <SelectField
+          <SearchableSelectField
             label="Ostatni dostawca"
             options={[
               { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },

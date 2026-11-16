@@ -175,6 +175,57 @@ class MeaOrderIntegrationTests {
         mvc.perform(get(base + "/athos-queue/" + late + "/file").cookie(owner)).andExpect(status().isConflict());
     }
 
+    @Test
+    void articleCardShowsUpcomingMeaWithOrderedColis() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner, String.valueOf(ThreadLocalRandom.current().nextInt(12_000, 19_999)));
+        String itm8 = String.valueOf(ThreadLocalRandom.current().nextInt(62_000_000, 62_999_999));
+        String other = String.valueOf(Integer.parseInt(itm8) + 1);
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(60_000, 69_999));
+        String document = jdbc.queryForObject("""
+                insert into mea_documents (number, title, promo_from, promo_to, reservation_from, reservation_to,
+                    dispatch_1, dispatch_2, file_path, line_count, fetched_at, attempts)
+                values (?, 'MEA KARTA', current_date + 30, current_date + 36, current_date - 2, current_date + 2,
+                    current_date + 27, current_date + 29, 'x.xls', 2, now(), 1) returning id""", String.class, number);
+        jdbc.update("""
+                insert into mea_document_lines (document_id, lp, mea_itm8, name) values
+                    (?::uuid, 1, ?, 'SER'), (?::uuid, 2, ?, 'CIASTO')""", document, itm8, document, other);
+        // Zakończona promocja nie jest już nadchodzącą gazetką.
+        String ended = jdbc.queryForObject("""
+                insert into mea_documents (number, title, promo_from, promo_to, reservation_to, dispatch_1,
+                    file_path, line_count, fetched_at, attempts)
+                values (?, 'MEA STARE', current_date - 20, current_date - 1, current_date - 30, current_date - 22,
+                    'x.xls', 1, now(), 1) returning id""", String.class, String.valueOf(Integer.parseInt(number) + 1));
+        jdbc.update("insert into mea_document_lines (document_id, lp, mea_itm8, name) values (?::uuid, 1, ?, 'SER')",
+                ended, itm8);
+        String card = "/api/stores/" + storeId + "/reports/articles/00000" + itm8 + "/mea";
+
+        mvc.perform(get(card).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].number").value(number))
+                .andExpect(jsonPath("$[0].status").value("OPEN"))
+                .andExpect(jsonPath("$[0].dispatches.length()").value(2))
+                .andExpect(jsonPath("$[0].dispatches[0].colis").doesNotExist());
+
+        String orderId = mvc.perform(post("/api/stores/" + storeId + "/mea/documents/" + number + "/athos-order")
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\":[{\"itm8\":\"" + itm8 + "\",\"colis\":[3,1]}]}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("X-Mea-Order-Id");
+        mvc.perform(post("/api/stores/" + storeId + "/mea/athos-orders/" + orderId + "/saved").cookie(owner)
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get(card).cookie(owner))
+                .andExpect(jsonPath("$[0].status").value("ORDERED"))
+                .andExpect(jsonPath("$[0].dispatches[0].colis").value(3))
+                .andExpect(jsonPath("$[0].dispatches[1].colis").value(1));
+        mvc.perform(get("/api/stores/" + storeId + "/reports/articles/" + other + "/mea").cookie(owner))
+                .andExpect(jsonPath("$[0].status").value("NOT_ORDERED"))
+                .andExpect(jsonPath("$[0].dispatches[0].colis").value(0));
+    }
+
     private String createStore(Cookie owner, String number) throws Exception {
         String json = mvc.perform(post("/api/settings/stores").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
