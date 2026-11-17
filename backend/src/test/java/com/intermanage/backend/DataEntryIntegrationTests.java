@@ -1471,6 +1471,22 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$[0].purchasePrice").value(2.0))
                 .andExpect(jsonPath("$[0].articleItm8").value("0000000000101"))
                 .andExpect(jsonPath("$[0].articleEan").value("5900000000012"));
+
+        // Bez bonu faktury korygowanej: podpowiedzi z okolic jej daty, najpierw bon z ilościami jak na fakturze przed
+        // korektą (mleko 6, masło 3), dalej bony z samymi artykułami korekty.
+        jdbc.update("update documents set supplier_document_number = null where id = ?::uuid", UUID.fromString(bon));
+        String sameQuantities = correctionDocument("PZ", "1070000", null, "30.00", documentImport);
+        correctionLine(sameQuantities, "0000099000001", "05900000000012", "6", "2.00", "12.00");
+        correctionLine(sameQuantities, "0000099000003", "5900000000043", "3", "6.00", "18.00");
+        mvc.perform(get(url("/invoices/" + correctionId + "/correction-deliveries")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(sameQuantities))
+                .andExpect(jsonPath("$[0].matched").value(false))
+                .andExpect(jsonPath("$[0].suggested").value(true))
+                .andExpect(jsonPath("$[0].commonArticles").value(2))
+                .andExpect(jsonPath("$[0].quantityMatches").value(2))
+                .andExpect(jsonPath("$[0].quantityArticles").value(2))
+                .andExpect(jsonPath("$[?(@.id == '" + bon + "')].quantityMatches").value(0));
     }
 
     private String correctionDocument(String type, String number, String invoiceNumber, String value,

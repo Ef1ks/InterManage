@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import type { DraftCorrection, DraftDelivery, DraftInvoice } from '@/store/dataEntryDraftSlice'
 
 import { useCorrectionBons, useCorrectionDeliveries } from './api'
-import { buildCorrectionMacro, isBaseSeller, planCorrectionMacro } from './correction-macro'
+import { buildCorrectionMacro, isBaseProtocol, isBaseSeller, planCorrectionMacro } from './correction-macro'
 import { type DataEntryRow, serviceKind } from './rows'
 
 type Delivery = DraftDelivery
@@ -30,6 +30,7 @@ const toDelivery = (item: CorrectionDelivery): Delivery => ({
   id: item.id,
   number: item.number,
   date: item.documentDate.slice(0, 10),
+  supplierCode: item.supplierCode,
   supplierName: item.supplierName,
 })
 
@@ -69,10 +70,21 @@ export function CorrectionBanner({
 
   // Jeden pasujący bon podpina się sam; przy kilku (faktura bazy z kilkoma WZ) wszystkie z artykułami korekty, od
   // największej liczby (tak podaje je serwer): makro wpisze przy każdym artykule jego bon.
-  const auto = useMemo(
-    () => (matched.length === 1 ? matched : matched.filter((item) => item.commonArticles > 0)),
-    [matched],
-  )
+  // Bez bonu faktury korygowanej serwer podpowiada przyjęcia z okolic jej daty; sam podpina się tylko jedyny, w którym
+  // ilości wszystkich artykułów zgadzają się z fakturą „przed korektą”.
+  const suggested = useMemo(() => (candidates.data ?? []).filter((item) => item.suggested), [candidates.data])
+  const auto = useMemo(() => {
+    if (matched.length > 0) {
+      return matched.length === 1 ? matched : matched.filter((item) => item.commonArticles > 0)
+    }
+    const [best, next] = suggested
+    const certain =
+      best &&
+      best.quantityArticles > 0 &&
+      best.quantityMatches === best.quantityArticles &&
+      (!next || next.quantityMatches < best.quantityMatches)
+    return certain ? [best] : []
+  }, [matched, suggested])
   useEffect(() => {
     if (undecided && auto.length > 0) onDelivery(toDelivery(auto[0]), true, auto.slice(1).map(toDelivery))
   }, [undecided, auto, onDelivery])
@@ -125,7 +137,11 @@ export function CorrectionBanner({
         ) : (
           <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
             <SearchIcon />
-            {matched.length > 1 ? `Wybierz bon (${matched.length})` : 'Wybierz bon'}
+            {matched.length > 1
+              ? `Wybierz bon (${matched.length})`
+              : suggested.length > 0
+                ? `Wybierz bon (podpowiedzi: ${suggested.length})`
+                : 'Wybierz bon'}
           </Button>
         )}
         {delivery && (delivery.date || delivery.supplierName) && (
@@ -169,6 +185,7 @@ export function CorrectionBanner({
           deliveries={[delivery, ...extra]}
           hasBeforeRows={correction.hasBeforeRows}
           fromBase={isBaseSeller(invoice.sellerNip)}
+          baseProtocol={isBaseProtocol(delivery.supplierCode, invoice.sellerNip)}
           rows={rows}
           open={macroOpen}
           onOpenChange={onMacroOpenChange}
@@ -208,7 +225,9 @@ function DeliveryPicker({
         <DialogHeader>
           <DialogTitle>Bon, do którego należy korekta</DialogTitle>
           <DialogDescription>
-            Na górze bony faktury korygowanej. Stara faktura? Znajdź bon po numerze albo wpisz jego numer ręcznie.
+            Na górze bony faktury korygowanej, a gdy ich nie ma, przyjęcia dostawcy z okolic daty tej faktury z
+            artykułami korekty, najpierw te z ilościami jak na fakturze. Nie ma go? Znajdź bon po numerze albo wpisz
+            jego numer ręcznie.
           </DialogDescription>
         </DialogHeader>
 
@@ -248,6 +267,21 @@ function DeliveryPicker({
                             faktura korygowana
                           </span>
                         )}
+                        {item.suggested && item.quantityArticles > 0 && (
+                          <span
+                            className={cn(
+                              'rounded-md px-1.5 py-0.5 text-xs font-semibold',
+                              item.quantityMatches === item.quantityArticles
+                                ? 'bg-emerald-300 text-emerald-950 dark:bg-emerald-800 dark:text-emerald-50'
+                                : item.quantityMatches > 0
+                                  ? 'bg-amber-200 text-amber-950 dark:bg-amber-900 dark:text-amber-50'
+                                  : 'bg-muted text-muted-foreground',
+                            )}
+                            title="Przy tylu artykułach ilość na bonie jest taka jak na fakturze przed korektą"
+                          >
+                            ilości zgodne: {item.quantityMatches} z {item.quantityArticles}
+                          </span>
+                        )}
                         {item.commonArticles > 0 && (
                           <span
                             className="rounded-md bg-sky-200 px-1.5 py-0.5 text-xs font-medium text-sky-950 dark:bg-sky-900 dark:text-sky-50"
@@ -280,7 +314,9 @@ function DeliveryPicker({
             Anuluj
           </Button>
           {typed !== '' && !exact && (
-            <Button onClick={() => onPick({ id: null, number: typed, date: null, supplierName: null })}>
+            <Button
+              onClick={() => onPick({ id: null, number: typed, date: null, supplierCode: null, supplierName: null })}
+            >
               Użyj numeru {typed}
             </Button>
           )}
@@ -300,6 +336,7 @@ function MacroDialog({
   deliveries,
   hasBeforeRows,
   fromBase,
+  baseProtocol,
   rows,
   open,
   onOpenChange,
@@ -309,8 +346,10 @@ function MacroDialog({
   invoiceId: string | null
   deliveries: Delivery[]
   hasBeforeRows: boolean
-  /** Korekta bazy SCA PR: protokół typu 9 zamiast 8. */
+  /** Korekta od SCA PR: makro wpisuje ITM8 z bonu zamiast EAN-u. */
   fromBase: boolean
+  /** Bon dostawcy bazy (538, 88110): protokół typu 9 zamiast 8. */
+  baseProtocol: boolean
   rows: DataEntryRow[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -331,7 +370,7 @@ function MacroDialog({
   const copy = async () => {
     if (!plan) return
     try {
-      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso(), fromBase))
+      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso(), fromBase, baseProtocol))
     } catch {
       toast.error('Nie udało się skopiować makra do schowka')
       return
@@ -355,8 +394,8 @@ function MacroDialog({
             {hasBeforeRows
               ? 'Korekta podaje stan po zmianie: ilości i ceny są z faktury.'
               : 'Korekta podaje różnice: ilość to stan bonu po doliczeniu różnicy, cena jest z bonu.'}{' '}
-            Makro samo założy protokół w Mercalys, wpisze pozycje i zapyta przed zakończeniem. Każde uruchomienie to
-            nowy protokół.
+            Makro samo założy protokół w Mercalys (typ {baseProtocol ? '9, korekta dostawy z bazy' : '8, błąd dostawcy'}
+            ), wpisze pozycje i zapyta przed zakończeniem. Każde uruchomienie to nowy protokół.
           </DialogDescription>
         </DialogHeader>
 

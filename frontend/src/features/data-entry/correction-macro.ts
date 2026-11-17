@@ -320,17 +320,35 @@ export const formatMacroQuantity = (value: number) => String(round(value, 3)).re
 
 export const formatMacroPrice = (value: number) => value.toFixed(CORRECTION_MACRO_CONFIG.priceDigits).replace('.', ',')
 
-/** NIP bazy SCA PR (dostawca 538): jej korekty idą protokołem typu 9, a nie 8. */
+/**
+ * NIP bazy SCA PR: od niej przychodzą korekty bonów 538, 88110 i refaktur 16538. Przy jej korektach makro wpisuje ITM8
+ * z bonu zamiast EAN-u.
+ */
 const BASE_SELLER_NIP = '7821977018'
 
 export const isBaseSeller = (nip: string | null | undefined) => nip?.replace(/\D/g, '') === BASE_SELLER_NIP
 
+/** Dostawcy bazy w Mercalys: korekty ich bonów idą protokołem typu 9, reszta (także refaktura 16538) typu 8. */
+const BASE_SUPPLIER_CODES = new Set(['538', '88110'])
+
+/**
+ * Protokół typu 9 (korekta dostawy z bazy) zależy od dostawcy bonu, nie od sprzedawcy korekty: SCA PR koryguje też
+ * refaktury 16538, a te w Mercalys idą typem 8. Bez znanego dostawcy (bon wpisany ręcznie, starszy szkic) po sprzedawcy.
+ */
+export const isBaseProtocol = (supplierCode: string | null | undefined, sellerNip: string | null | undefined) =>
+  supplierCode ? BASE_SUPPLIER_CODES.has(supplierCode.replace(/^0+/, '')) : isBaseSeller(sellerNip)
+
 /**
  * Skrypt makra: nowy protokół, numer bonu pozycji i kroki osobno dla każdej pozycji (pozycje różnych bonów w jednym
  * protokole), po potwierdzeniu pracownika zakończenie; linie z `#` odtwarzacz pomija. `today`: termin płatności,
- * RRRR-MM-DD. CRLF jak w Windows.
+ * RRRR-MM-DD. `fromBase`: korekta od SCA PR (ITM8 zamiast EAN-u), `baseProtocol`: protokół typu 9. CRLF jak w Windows.
  */
-export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string, fromBase = false) {
+export function buildCorrectionMacro(
+  items: CorrectionMacroItem[],
+  today: string,
+  fromBase = false,
+  baseProtocol = fromBase,
+) {
   const bonNumbers = [...new Set(items.map((item) => item.bonNumber))].join(', ')
   const c = CORRECTION_MACRO_CONFIG
   const out: string[] = []
@@ -340,7 +358,7 @@ export function buildCorrectionMacro(items: CorrectionMacroItem[], today: string
     if (sleep > 0) out.push(`SLEEP|${sleep}`)
   }
 
-  out.push(`# Korekta bonu ${bonNumbers}: ${items.length} poz.`, ...correctionStartLines(today, fromBase))
+  out.push(`# Korekta bonu ${bonNumbers}: ${items.length} poz.`, ...correctionStartLines(today, baseProtocol))
   for (const item of items) {
     const code = correctionArticleCode(item, fromBase)
     out.push(

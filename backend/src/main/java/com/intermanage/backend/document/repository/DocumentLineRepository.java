@@ -387,8 +387,10 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * korektą (błąd sklepu: zamiana artykułu), też jest dostawą, gdy po korekcie ilość jest dodatnia. Kody MEA
      * z aktywnego dokumentu dostawy z bazy o numerze (Nr_Bl) równym nr dok. dostawcy przyjęcia, z linii tego samego
      * ITM8 (w pliku 8 cyfr, więc bez zer wiodących), a do tego z formularzy MEA: towar na gazetkę przychodzi pod ITM8
-     * promocyjnym z formularza, więc linia z tym ITM8 przyjęta między początkiem rezerwacji a końcem promocji to
-     * dostawa na to MEA (przy kilku MEA z tym ITM8 to z rozrzutem najbliższym dacie przyjęcia).
+     * promocyjnym z formularza, więc linia z tym ITM8 przyjęta między początkiem rezerwacji a 2 dni po końcu promocji
+     * to dostawa na to MEA (przy kilku MEA z tym ITM8 to z rozrzutem najbliższym dacie przyjęcia). Bywa też pod ITM8
+     * artykułu, więc przyjęcie od bazy (538, 88110) do 2 dni od daty rozrzutu MEA z tym artykułem (ITM8 równoległy
+     * albo EAN) też jest dostawą na to MEA: przyjęcie bywa zamykane dzień, dwa po rozrzucie.
      */
     @Query(value = ARTICLE_EANS + """
             , lines as (
@@ -426,6 +428,14 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select document_id as id from received
                 union
                 select delivery_id from fixed where quantity > 0
+            ), article_mea as (
+                select distinct md.number, x.day
+                from mea_document_lines ml
+                join mea_documents md on md.id = ml.document_id
+                cross join lateral unnest(array[md.dispatch_1, md.dispatch_2, md.dispatch_3, md.dispatch_4]) x(day)
+                where x.day is not null
+                  and (ltrim(ml.parallel_itm8, '0') = ltrim(:itm8, '0')
+                       or ltrim(btrim(ml.ean), '0') in (select ean from article_eans where ean <> ''))
             )
             select d.id as document_id, d.number as document_number, d.document_date,
                    (select string_agg(distinct code, ',' order by code)
@@ -451,10 +461,16 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                               join mea_documents md on md.id = ml.document_id
                               where ml.mea_itm8 = a.itm8
                                 and cast(d.document_date as date)
-                                    between coalesce(md.reservation_from, md.promo_from - 45) and md.promo_to
+                                    between coalesce(md.reservation_from, md.promo_from - 45) and md.promo_to + 2
                               order by abs(cast(d.document_date as date)
                                            - coalesce(md.dispatch_1, md.promo_from)) nulls last
-                              limit 1) m) codes) as mea_codes,
+                              limit 1) m
+                          union
+                          select (select am.number from article_mea am
+                                  where abs(cast(d.document_date as date) - am.day) <= 2
+                                    and ltrim(coalesce(r.supplier_code, f.supplier_code), '0') in ('538', '88110')
+                                  order by abs(cast(d.document_date as date) - am.day), am.number desc
+                                  limit 1)) codes) as mea_codes,
                    coalesce(r.supplier_code, f.supplier_code) as supplier_code,
                    coalesce(r.supplier_name, f.supplier_name) as supplier_name,
                    coalesce(r.quantity, 0) as quantity, coalesce(r.purchase_value, 0) as purchase_value,

@@ -1,6 +1,7 @@
 import {
   ArrowRightLeftIcon,
   CheckCheckIcon,
+  CombineIcon,
   DiffIcon,
   FileOutputIcon,
   PackageSearchIcon,
@@ -21,7 +22,7 @@ import { lookupProducts, useDataEntryNomenclature } from '@/features/data-entry/
 import { type CatalogAddition, CatalogListDialog } from '@/features/data-entry/CatalogListDialog'
 import { CommandBar, Stat } from '@/features/data-entry/DataEntryPage'
 import { DataEntryGrid, type GridHandle } from '@/features/data-entry/DataEntryGrid'
-import { withSyncedDuplicates } from '@/features/data-entry/duplicates'
+import { duplicateGroups, withMergedDuplicates, withSyncedDuplicates } from '@/features/data-entry/duplicates'
 import { nomenclatureNames, PROTOCOL_COLUMNS, pricingOf } from '@/features/data-entry/grid-values'
 import { ProtocolDialog, type ProtocolLine } from '@/features/data-entry/ProtocolDialog'
 import {
@@ -258,6 +259,19 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
     gridRef.current?.focus()
   }
 
+  // Ten sam EAN w kilku wierszach: jeden wiersz z ilością zsumowaną (ze znakiem).
+  const duplicates = useMemo(() => duplicateGroups(rows), [rows])
+  const duplicateRows = duplicates.reduce((sum, group) => sum + group.length, 0)
+  const mergeDuplicates = () => {
+    const before = currentDraft()
+    setRows(withMergedDuplicates)
+    toast.success(
+      `Połączono ${duplicateRows} ${pieces(duplicateRows)} w ${duplicates.length} ${duplicates.length === 1 ? 'wiersz' : 'wiersze'}`,
+      { action: { label: 'Przywróć', onClick: () => setDraft(before) } },
+    )
+    gridRef.current?.focus()
+  }
+
   const clearAll = () => {
     const before = currentDraft()
     setDraft(EMPTY_PROTOCOL_ENTRY)
@@ -381,6 +395,18 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
           {unknownCount > 0 && <Stat label="Spoza kartoteki" value={unknownCount} highlight />}
           {badEanCount > 0 && <Stat label="Błędne EAN-y" value={badEanCount} highlight />}
         </dl>
+
+        {duplicates.length > 0 && (
+          <Button
+            variant="outline"
+            className={cn(ACTION_TONES.warn, 'shrink-0 self-center')}
+            onClick={mergeDuplicates}
+            title="Ten sam EAN jest w kilku wierszach: połącz je w jeden, ilości się zsumują"
+          >
+            <CombineIcon />
+            Połącz te same ({duplicates.length})
+          </Button>
+        )}
 
         {rows.length > 0 && (
           <div

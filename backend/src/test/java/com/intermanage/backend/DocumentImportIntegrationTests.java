@@ -242,6 +242,16 @@ class DocumentImportIntegrationTests {
         List<String[]> rows = reportRows(STORE_NUMBER, 5, List.<String[]>of(line("PZ", docNumber(), "", 1, "1", "1", "1")));
         upload(owner, workbook(rows)).andExpect(status().isBadRequest());
 
+        // Okres bez dokumentów: raport ma sam nagłówek (z tabelą albo bez), a import zapisuje jego okres.
+        upload(owner, workbook(reportRows(STORE_NUMBER, 1, List.of())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalLines").value(0));
+        List<String[]> withoutTable = new ArrayList<>(reportRows(STORE_NUMBER, 0, List.of()).subList(0, 5));
+        upload(owner, workbook(withoutTable)).andExpect(status().isCreated());
+        // Bez okresu nie wiadomo, co sprawdzono, więc pusty plik dalej jest błędem.
+        upload(owner, workbook(List.<String[]>of(new String[] {"TRYTOMA  Sp. z o.o. - " + STORE_NUMBER}, HEADER)))
+                .andExpect(status().isBadRequest());
+
         mvc.perform(multipart(importsUrl())
                         .file(new MockMultipartFile("file", "dokumenty.xlsx", "application/octet-stream", "nie excel".getBytes()))
                         .cookie(owner).with(csrf()))

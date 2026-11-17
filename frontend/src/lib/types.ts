@@ -2844,11 +2844,17 @@ export type CorrectionDelivery = {
   id: string
   number: string
   documentDate: string
+  supplierCode: string | null
   supplierName: string | null
   supplierDocumentNumber: string | null
   purchaseValue: number
   matched: boolean
   commonArticles: number
+  /** Bez bonu faktury korygowanej: przyjęcie dostawcy z okolic jej daty z artykułami korekty. */
+  suggested: boolean
+  /** Przy ilu artykułach z wierszem „przed korektą” (`quantityArticles`) ilość na bonie jest taka jak na fakturze. */
+  quantityMatches: number
+  quantityArticles: number
 }
 
 /** Linia przyjęcia po wcześniejszych korektach, z artykułem z kartoteki (`null`: nie ma go w kartotece). */

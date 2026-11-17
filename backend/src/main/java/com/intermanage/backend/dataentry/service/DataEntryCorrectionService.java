@@ -1,8 +1,13 @@
 package com.intermanage.backend.dataentry.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +42,7 @@ import com.intermanage.backend.ksef.dto.KsefInvoiceSummary;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 import com.intermanage.backend.ksef.repository.KsefInvoiceRepository;
 import com.intermanage.backend.ksef.repository.KsefInvoiceXmlRepository;
+import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
 import com.intermanage.backend.supplier.entity.Supplier;
 import com.intermanage.backend.supplier.repository.SupplierRepository;
@@ -52,6 +58,18 @@ public class DataEntryCorrectionService {
     /** Wyszukiwanie przegląda tyle najnowszych trafień, żeby przyjęcia dostawcy korekty znalazły się na górze. */
     private static final int SCANNED = 200;
     private static final int LOOKUP_BATCH = 500;
+    /**
+     * Podpowiedzi bez przyjęcia faktury korygowanej: przyjęcia od tylu dni przed datą faktury korygowanej do tylu po niej
+     * (towar z faktury z 12.06 bywa przyjęty 14.06, a bon wpisany jeszcze później).
+     */
+    private static final int SUGGEST_DAYS_BEFORE = 7;
+    private static final int SUGGEST_DAYS_AFTER = 30;
+    /** Korekta bez daty faktury korygowanej: przyjęcia z tylu dni przed korektą. */
+    private static final int SUGGEST_DAYS_WITHOUT_DATE = 90;
+    private static final int SUGGESTIONS = 10;
+    private static final BigDecimal QUANTITY_TOLERANCE = new BigDecimal("0.0005");
+    /** Korekty SCA PR dotyczą bonów bazy (538, 88110) i refaktur (16538), choć na liście dostawców NIP ma tylko 16538. */
+    private static final Set<String> BASE_SUPPLIER_CODES = Set.of("538", "88110", "16538");
 
     private final KsefInvoiceService ksefInvoices;
     private final KsefInvoiceReader reader;
@@ -102,6 +120,10 @@ public class DataEntryCorrectionService {
                 .forEach(delivery -> result.put(delivery.id(), delivery));
 
         List<String> words = DocumentSearch.words(query);
+        if (matched.isEmpty() && words.isEmpty()) {
+            suggestions(storeId, invoiceId, invoice, sellerCodes)
+                    .forEach(delivery -> result.putIfAbsent(delivery.id(), delivery));
+        }
         if (!words.isEmpty() || !sellerCodes.isEmpty()) {
             Specification<Document> matching = DocumentSearch.inStoreMatching(storeId, DocumentType.PZ, words)
                     .and(DocumentSearch.withoutZeroDeliveries());
@@ -244,9 +266,137 @@ public class DataEntryCorrectionService {
                 .orElse(0);
     }
 
+    /** Artykuł korekty: jego kody bez zer wiodących i ilość z wierszy „przed korektą” ({@code null} bez nich). */
+    private record CorrectionArticle(Set<String> codes, BigDecimal before) {
+    }
+
+    private record Scored(Document document, int common, int quantities, long days) {
+    }
+
+    /**
+     * Przyjęcia dostawcy korekty z okolic daty faktury korygowanej, w których są artykuły korekty. Najpierw te, w których
+     * ilości zgadzają się z fakturą „przed korektą”, potem z największą liczbą artykułów, potem najbliższe datą: tak
+     * pracownik szukał bonu w statystykach artykułu (faktura z 12.06, artykuł w dostawie z 14.06 w tej samej ilości).
+     */
+    private List<CorrectionDelivery> suggestions(UUID storeId, UUID invoiceId, KsefInvoiceSummary invoice,
+            Set<String> sellerCodes) {
+        List<CorrectionArticle> articles = articleQuantities(storeId, invoiceId);
+        if (articles.isEmpty()) {
+            return List.of();
+        }
+        LocalDate correctedDate = correctedDate(storeId, invoiceId);
+        LocalDate correctionDate = invoice.issueDate() != null ? invoice.issueDate() : LocalDate.now();
+        LocalDate from = correctedDate != null ? correctedDate.minusDays(SUGGEST_DAYS_BEFORE)
+                : correctionDate.minusDays(SUGGEST_DAYS_WITHOUT_DATE);
+        LocalDate to = correctedDate != null ? correctedDate.plusDays(SUGGEST_DAYS_AFTER) : correctionDate;
+        LocalDate anchor = correctedDate != null ? correctedDate : correctionDate;
+
+        Set<String> codes = new HashSet<>(sellerCodes);
+        if (KsefCorrectedInvoiceService.IGNORED_SELLER_NIPS.contains(invoice.sellerNip())) {
+            codes.addAll(BASE_SUPPLIER_CODES);
+        }
+        Specification<Document> spec = DocumentSearch.inStoreMatching(storeId, DocumentType.PZ, List.of())
+                .and(DocumentSearch.withoutZeroDeliveries())
+                .and(DocumentSearch.dated(from.atStartOfDay(), to.plusDays(1).atStartOfDay()));
+        if (!codes.isEmpty()) {
+            spec = spec.and((root, criteria, cb) -> root.get("supplierCode").in(codes));
+        }
+        List<UUID> ids = documents.findAll(spec, PageRequest.of(0, SCANNED, Sort.by(Sort.Order.desc("documentDate"))))
+                .getContent().stream().map(Document::getId).toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        int quantityArticles = (int) articles.stream().filter(article -> article.before() != null).count();
+        List<Scored> scored = new ArrayList<>();
+        for (Document document : documents.findWithLines(storeId, ids)) {
+            int common = 0;
+            int quantities = 0;
+            for (CorrectionArticle article : articles) {
+                BigDecimal quantity = null;
+                for (var line : document.getLines()) {
+                    if (article.codes().contains(DataEntryService.key(line.getItm8()))
+                            || article.codes().contains(DataEntryService.key(line.getEan()))) {
+                        BigDecimal lineQuantity = line.getQuantity() != null ? line.getQuantity() : BigDecimal.ZERO;
+                        quantity = quantity == null ? lineQuantity : quantity.add(lineQuantity);
+                    }
+                }
+                if (quantity == null) {
+                    continue;
+                }
+                common++;
+                if (article.before() != null
+                        && quantity.subtract(article.before()).abs().compareTo(QUANTITY_TOLERANCE) < 0) {
+                    quantities++;
+                }
+            }
+            if (common > 0) {
+                long days = Math.abs(ChronoUnit.DAYS.between(anchor, document.getDocumentDate().toLocalDate()));
+                scored.add(new Scored(document, common, quantities, days));
+            }
+        }
+        return scored.stream()
+                .sorted(Comparator.comparingInt(Scored::quantities).reversed()
+                        .thenComparing(Comparator.comparingInt(Scored::common).reversed())
+                        .thenComparingLong(Scored::days))
+                .limit(SUGGESTIONS)
+                .map(item -> new CorrectionDelivery(item.document().getId(), item.document().getNumber(),
+                        item.document().getDocumentDate(), item.document().getSupplierCode(),
+                        item.document().getSupplierName(), item.document().getSupplierDocumentNumber(),
+                        item.document().getPurchaseValue(), false, item.common(), true, item.quantities(),
+                        quantityArticles))
+                .toList();
+    }
+
+    /**
+     * Artykuły korekty bez kaucji, z kodami (ITM8 i EAN artykułu z kartoteki, EAN i GTIN pozycji) i ilością z wierszy
+     * „przed korektą”. Pozycje jednego artykułu (wspólny kod) łączą się w jeden.
+     */
+    private List<CorrectionArticle> articleQuantities(UUID storeId, UUID invoiceId) {
+        Map<String, Set<String>> codes = new LinkedHashMap<>();
+        Map<String, BigDecimal> before = new HashMap<>();
+        for (DataEntryService.InvoiceLine line : dataEntry.invoiceLines(storeId, invoiceId)) {
+            if (line.source().deposit()) {
+                continue;
+            }
+            Set<String> lineCodes = new LinkedHashSet<>();
+            CatalogProduct product = line.row().product();
+            if (product != null) {
+                lineCodes.add(DataEntryService.key(product.itm8()));
+                lineCodes.add(DataEntryService.key(product.catalogEan()));
+                lineCodes.add(DataEntryService.key(product.ean()));
+            }
+            lineCodes.add(DataEntryService.key(line.row().ean()));
+            lineCodes.add(DataEntryService.key(line.source().gtin()));
+            lineCodes.removeIf(code -> code == null || code.isBlank());
+            if (lineCodes.isEmpty()) {
+                continue;
+            }
+            String id = codes.entrySet().stream()
+                    .filter(entry -> entry.getValue().stream().anyMatch(lineCodes::contains))
+                    .map(Map.Entry::getKey).findFirst().orElse(lineCodes.iterator().next());
+            codes.computeIfAbsent(id, key -> new LinkedHashSet<>()).addAll(lineCodes);
+            if (line.source().beforeCorrection() && line.source().quantity() != null) {
+                before.merge(id, line.source().quantity(), BigDecimal::add);
+            }
+        }
+        return codes.entrySet().stream()
+                .map(entry -> new CorrectionArticle(entry.getValue(), before.get(entry.getKey()))).toList();
+    }
+
+    /** Najwcześniejsza data wystawienia faktury korygowanej z XML korekty ({@code null} bez niej). */
+    private LocalDate correctedDate(UUID storeId, UUID invoiceId) {
+        try {
+            return reader.correctedInvoices(ksefInvoices.xml(storeId, invoiceId).content()).stream()
+                    .map(KsefInvoiceReader.CorrectedInvoice::issueDate).filter(Objects::nonNull)
+                    .min(Comparator.naturalOrder()).orElse(null);
+        } catch (KsefInvoiceReader.InvalidInvoiceException e) {
+            return null;
+        }
+    }
+
     private static CorrectionDelivery delivery(Document document, boolean matched, int commonArticles) {
         return new CorrectionDelivery(document.getId(), document.getNumber(), document.getDocumentDate(),
-                document.getSupplierName(), document.getSupplierDocumentNumber(), document.getPurchaseValue(), matched,
-                commonArticles);
+                document.getSupplierCode(), document.getSupplierName(), document.getSupplierDocumentNumber(),
+                document.getPurchaseValue(), matched, commonArticles, false, 0, 0);
     }
 }

@@ -200,6 +200,10 @@ public class DocumentReportParser {
         }
 
         private ParsedDocumentReport finish() throws InvalidReportException {
+            if (columns == null && isEmptyReport()) {
+                // Okres bez żadnego dokumentu: system sklepu drukuje sam nagłówek raportu, bez tabeli.
+                return emptyReport();
+            }
             if (columns == null) {
                 throw new InvalidReportException("W pliku nie ma wiersza z nagłówkami kolumn (Type Document, ITM8...). "
                         + "Czy to raport Wejścia/Wyjścia?");
@@ -214,7 +218,13 @@ public class DocumentReportParser {
                         "Plik zawiera błędne wiersze (" + errorCount + "). Nic nie zostało zaimportowane.", errors, errorCount);
             }
             if (totalLines == 0) {
-                throw new InvalidReportException("Plik nie zawiera żadnych linii dokumentów");
+                if (isEmptyReport()) {
+                    // Raport okresu bez dokumentów też się zapisuje: jego okres jest już sprawdzony i makro
+                    // nie generuje go od nowa przy każdym odświeżeniu.
+                    return emptyReport();
+                }
+                throw new InvalidReportException("Plik nie zawiera żadnych linii dokumentów"
+                        + (periodFrom == null ? " ani okresu „Wybór danych : OD … do …”" : ""));
             }
             // System sklepu wlicza do "6745 linie" wiersz z nazwami kolumn (w pliku jest 6744 linii dokumentów).
             if (declaredLines != null && declaredLines != totalLines && declaredLines != totalLines + 1) {
@@ -223,6 +233,19 @@ public class DocumentReportParser {
             }
             return new ParsedDocumentReport(storeNumber, generatedAt, periodFrom, periodTo, totalLines,
                     List.copyOf(lines), Map.copyOf(skipped));
+        }
+
+        /**
+         * Pusty raport poznajemy po okresie i numerze sklepu z nagłówka; deklarowana liczba linii (gdy jest) liczy
+         * najwyżej wiersz z nazwami kolumn.
+         */
+        private boolean isEmptyReport() {
+            return totalLines == 0 && periodFrom != null && storeNumber != null
+                    && (declaredLines == null || declaredLines <= 1);
+        }
+
+        private ParsedDocumentReport emptyReport() {
+            return new ParsedDocumentReport(storeNumber, generatedAt, periodFrom, periodTo, 0, List.of(), Map.of());
         }
 
         private DocumentLineRow toLine(DocumentType type, List<String> cells) {

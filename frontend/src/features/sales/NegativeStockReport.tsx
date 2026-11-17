@@ -19,6 +19,8 @@ import { Card } from '@/components/ui/card'
 import { TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDocumentDate, formatMoney, formatQuantity } from '@/features/documents/format'
 import { type NegativeStockQuery, useNegativeStock, useSalesNomenclatures } from '@/features/sales/api'
+import { InsertIntoDataEntry } from '@/features/data-entry/InsertIntoDataEntry'
+import { emptyRow, withScannedProduct } from '@/features/data-entry/rows'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
@@ -26,7 +28,12 @@ import { nomenclatureName, StatTile } from '@/features/sales/report-parts'
 import { rangeError, useReportParams } from '@/features/sales/report-period'
 import { addDays, todayIso } from '@/lib/dates'
 import { nextSort, type SortAccessors, sortRows, type SortState } from '@/lib/table-sort'
-import type { NegativeStockCounterpart, NegativeStockDelivery, NegativeStockItem } from '@/lib/types'
+import type {
+  DataEntryCatalogProduct,
+  NegativeStockCounterpart,
+  NegativeStockDelivery,
+  NegativeStockItem,
+} from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
@@ -354,6 +361,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
         <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
           <Results
             key={JSON.stringify(query)}
+            storeId={storeId}
             items={items}
             inPeriod={inPeriod}
             sort={sort}
@@ -368,6 +376,7 @@ export function NegativeStockReport({ storeId }: { storeId: string }) {
 }
 
 function Results({
+  storeId,
   items,
   inPeriod,
   sort,
@@ -375,6 +384,7 @@ function Results({
   salesFrom,
   salesTo,
 }: {
+  storeId: string
   items: NegativeStockItem[]
   inPeriod: boolean
   sort: SortState<SortKey>
@@ -519,7 +529,19 @@ function Results({
                         {formatQuantity(item.stock)}
                       </TableCell>
                       <TableCell>
-                        <PairButton item={item} open={open.has(item.itm8)} onToggle={() => toggle(item.itm8)} />
+                        <div className="flex items-center gap-1">
+                          <PairButton item={item} open={open.has(item.itm8)} onToggle={() => toggle(item.itm8)} />
+                          {item.counterparts[0] && (
+                            <ArticleStatsButton
+                              article={{
+                                itm8: item.counterparts[0].itm8,
+                                name: item.counterparts[0].name,
+                                ean: item.counterparts[0].ean,
+                                brand: item.counterparts[0].brand,
+                              }}
+                            />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{money(item.stockValue)}</TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -535,7 +557,7 @@ function Results({
                     {open.has(item.itm8) && (
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableCell colSpan={12} className="px-4 pt-0 pb-3 whitespace-normal">
-                          <PairComparison item={item} />
+                          <PairComparison storeId={storeId} item={item} />
                         </TableCell>
                       </TableRow>
                     )}
@@ -579,7 +601,7 @@ function PairButton({ item, open, onToggle }: { item: NegativeStockItem; open: b
 }
 
 /** Artykuł z minusem nad podobnymi z plusem: suma stanów bliska zera to ten sam towar pod dwoma kodami. */
-function PairComparison({ item }: { item: NegativeStockItem }) {
+function PairComparison({ storeId, item }: { storeId: string; item: NegativeStockItem }) {
   return (
     <div className="rounded-lg border bg-card p-3">
       <p className="mb-2 text-xs text-muted-foreground">
@@ -596,7 +618,8 @@ function PairComparison({ item }: { item: NegativeStockItem }) {
               <th className="py-1 pr-3 text-right font-medium">Stan</th>
               <th className="py-1 pr-3 text-right font-medium whitespace-nowrap">Suma stanów</th>
               <th className="py-1 pr-3 text-right font-medium whitespace-nowrap">Sprzedaż 28 dni</th>
-              <th className="py-1 text-right font-medium whitespace-nowrap">Wartość stanu</th>
+              <th className="py-1 pr-3 text-right font-medium whitespace-nowrap">Wartość stanu</th>
+              <th className="py-1" />
             </tr>
           </thead>
           <tbody>
@@ -614,10 +637,11 @@ function PairComparison({ item }: { item: NegativeStockItem }) {
               <td className="py-1.5 pr-3 text-right tabular-nums">
                 {item.soldQuantity > 0 ? formatQuantity(item.soldQuantity) : '–'}
               </td>
-              <td className="py-1.5 text-right tabular-nums">{money(item.stockValue)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums">{money(item.stockValue)}</td>
+              <td />
             </tr>
             {item.counterparts.map((counterpart) => (
-              <CounterpartRow key={counterpart.itm8} counterpart={counterpart} missing={item.stock} />
+              <CounterpartRow key={counterpart.itm8} storeId={storeId} item={item} counterpart={counterpart} />
             ))}
           </tbody>
         </table>
@@ -626,8 +650,16 @@ function PairComparison({ item }: { item: NegativeStockItem }) {
   )
 }
 
-function CounterpartRow({ counterpart, missing }: { counterpart: NegativeStockCounterpart; missing: number }) {
-  const sum = Math.round((missing + counterpart.stock) * 1000) / 1000
+function CounterpartRow({
+  storeId,
+  item,
+  counterpart,
+}: {
+  storeId: string
+  item: NegativeStockItem
+  counterpart: NegativeStockCounterpart
+}) {
+  const sum = Math.round((item.stock + counterpart.stock) * 1000) / 1000
   return (
     <tr className="border-t">
       <td className="py-1.5 pr-3">
@@ -674,7 +706,50 @@ function CounterpartRow({ counterpart, missing }: { counterpart: NegativeStockCo
       <td className="py-1.5 pr-3 text-right tabular-nums">
         {counterpart.soldQuantity !== 0 ? formatQuantity(counterpart.soldQuantity) : '–'}
       </td>
-      <td className="py-1.5 text-right tabular-nums">{money(counterpart.stockValue)}</td>
+      <td className="py-1.5 pr-3 text-right tabular-nums">{money(counterpart.stockValue)}</td>
+      <td className="py-1.5 text-right">
+        <TransferButton storeId={storeId} item={item} counterpart={counterpart} />
+      </td>
     </tr>
+  )
+}
+
+const round3 = (value: number) => Math.round(value * 1000) / 1000
+
+/**
+ * Przeniesienie 1:1 do tabeli wprowadzania danych: artykuł z plusem oddaje tyle, ile brakuje na minusie (najwyżej swój
+ * stan), a artykuł z minusem dostaje tyle samo. W tabeli zostaje makro „Przeniesienie”.
+ */
+function TransferButton({
+  storeId,
+  item,
+  counterpart,
+}: {
+  storeId: string
+  item: NegativeStockItem
+  counterpart: NegativeStockCounterpart
+}) {
+  const quantity = round3(Math.min(counterpart.stock, -item.stock))
+  if (!item.ean || !counterpart.ean || quantity <= 0) return null
+  const minusEan = item.ean
+  const plusEan = counterpart.ean
+  const row = (ean: string, amount: number, byEan: Map<string, DataEntryCatalogProduct>) => ({
+    ...withScannedProduct({ ...emptyRow(), ean }, byEan.get(ean.replace(/^0+/, '')) ?? null),
+    quantity: amount,
+  })
+  return (
+    <InsertIntoDataEntry
+      storeId={storeId}
+      eans={[plusEan, minusEan]}
+      buildRows={(byEan) => [row(plusEan, -quantity, byEan), row(minusEan, quantity, byEan)]}
+      label={`Przenieś ${formatQuantity(quantity)}`}
+      title={`Do wprowadzania danych: ${counterpart.name ?? counterpart.itm8} −${formatQuantity(quantity)}, ${item.name ?? item.itm8} +${formatQuantity(quantity)}`}
+      successTitle="Przeniesienie w tabeli"
+      successDescription={() =>
+        `Plus −${formatQuantity(quantity)}, minus +${formatQuantity(quantity)}. Sprawdź i użyj „Wytwórz” → „Przeniesienie”.`
+      }
+      askDescription="Zastąpić je tym przeniesieniem czy dopisać je na końcu?"
+      size="xs"
+    />
   )
 }

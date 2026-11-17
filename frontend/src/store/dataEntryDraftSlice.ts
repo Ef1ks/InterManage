@@ -4,7 +4,14 @@ import type { DataEntryRow } from '@/features/data-entry/rows'
 import type { DataEntryCorrection } from '@/lib/types'
 import { isUuid } from '@/lib/uuid'
 
-export type DraftDelivery = { id: string | null; number: string; date: string | null; supplierName: string | null }
+/** `supplierCode`: dostawca bonu (typ protokołu korekty); brak w starszych szkicach i przy numerze wpisanym ręcznie. */
+export type DraftDelivery = {
+  id: string | null
+  number: string
+  date: string | null
+  supplierCode?: string | null
+  supplierName: string | null
+}
 
 /**
  * Korekta wczytana do tabeli: co koryguje i bon, do którego należy. `delivery`: `undefined` = jeszcze nie wybrany

@@ -109,11 +109,9 @@ export function buildDeliveryMacro(documents: MacroDocument[], print = false) {
 /** Obsługa BL bazy (ac-e034): lista plików bonów, a po Wybór linie bonu (ac-e080) z błędami. */
 const BASE_BL_SCREEN = {
   menuItem: 'mnTv_ACHAT_ac-e034_BlEuropa',
-  /** Adres listy plików: po Powrót z linii bonu czekamy na nią, a nie na sam przycisk Wybór. */
+  /** Adres listy plików: po kliknięciu menu czekamy na nią, a nie na sam przycisk Wybór. */
   filesPage: 'ac-e034',
   selectionButton: 'btnSelection_LnkBouton',
-  /** Powrót z linii bonu (ac-e080) na listę plików. */
-  backButton: 'btnB1_Retour_LnkBouton',
   /** Przycisk ekranu linii bonu: mówi, że Wybór otworzył bon. */
   detailScreen: 'btnB3_Integration_LnkBouton',
   /** Lista plików: nazwa `095_<nr bonu>_<dostawca>` (00538, 88110) w kolumnie 0, data w 1. */
@@ -140,7 +138,8 @@ const BASE_FILE_SUPPLIERS = ['538', '88110']
  * „Zbierz brakujące ITM8”: dla każdego dostawcy bonu Zakup → Obsługa BL bazy, wiersz z plikiem tego bonu i tego dostawcy
  * (nazwa `…_<nr bonu>_<dostawca>`, zera wiodące dowolne; brak pliku od dostawcy to nie błąd), Wybór, sprawdzenie, że linie
  * są z tego bonu, i kody ITM8 z błędem „ITM nie istnieje” ze wszystkich stron. Kody z wszystkich plików trafiają razem do
- * Schowka. Obsługę BL bazy otwiera menu raz, z linii bonu na listę plików wraca Powrót. Bez żadnego pliku makro staje.
+ * Schowka. Każdy plik zaczyna się od pozycji menu Obsługa BL bazy (Powrót z linii bonu zostawia stronę pod innym
+ * adresem, więc nie dało się poznać, że lista jest wczytana). Bez żadnego pliku makro staje.
  * Na końcu powrót na Zakup i Mercalys na pasek zadań. Wymaga odtwarzacza od
  * wersji 45 (etykieta w WEBPICKRE, także przy pustej liście plików, numer bonu w WEBCOLLECT, WEBCOLLECTED).
  */
@@ -156,16 +155,18 @@ export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[]
   ]
   const fileSteps = suppliers.flatMap((supplier) => {
     const label = `bon-${digits}-${supplier}`
-    // Każdy plik zaczyna się na liście plików (ac-e034): po liniach bonu makro wraca Powrót, a nie przez menu, i czeka na
-    // wczytaną listę. Bez tego kolejny plik zaczynał się jeszcze na liniach poprzedniego bonu.
+    // Każdy plik zaczyna się od pozycji menu, która wczytuje listę plików pod adresem ac-e034, i od czekania na nią.
+    // Powrót z linii bonu też pokazuje listę, ale adres strony zostaje po postbacku inny, więc WEBPAGE jej nie rozpoznawał,
+    // a bez sprawdzenia adresu kolejny plik zaczynał się jeszcze na liniach poprzedniego bonu.
     return [
       `# Plik bonu ${bonNumber} od dostawcy ${supplier}`,
+      `WEBENSURE|${WINDOW}|${MENU.deliveries}|${MENU.purchasesTab}`,
+      `WEBOPEN|${WINDOW}|${MENU.deliveries}|${screen.menuItem}`,
       `WEBPAGE|${WINDOW}|${screen.filesPage}|${screen.selectionButton}|${PAGE_TIMEOUT_MS}`,
       `WEBPICKRE|${WINDOW}|${screen.filesGrid}|(?<!\\d)0*${digits}\\D+0*${supplier}(?!\\d)|${PAGE_TIMEOUT_MS}|${label}`,
       `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
       `WEBWAIT|${WINDOW}|${screen.detailScreen}||${BASE_BL_TIMEOUT_MS}`,
       `WEBCOLLECT|${WINDOW}|${screen.linesGrid}|${screen.missingItm8Text}|${screen.itm8Column}|${screen.nextPageButton}|${screen.pageList}|${screen.stopOnEmptyPage}|${screen.bonColumn}|${bonNumber}`,
-      `WEBCLICK|${WINDOW}|${screen.backButton}`,
       `LABEL|${label}`,
     ]
   })
@@ -173,10 +174,7 @@ export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[]
     [
       `# Zbierz brakujące ITM8: bon ${bonNumber}, dostawcy ${suppliers.join(', ')}`,
       `WINOPEN|${PROGRAM_WINDOW}`,
-      `WEBENSURE|${WINDOW}|${MENU.deliveries}|${MENU.purchasesTab}`,
-      `WEBOPEN|${WINDOW}|${MENU.deliveries}|${screen.menuItem}|${screen.selectionButton}`,
       ...fileSteps,
-      `WEBPAGE|${WINDOW}|${screen.filesPage}|${screen.selectionButton}|${PAGE_TIMEOUT_MS}`,
       `WEBCOLLECTED|W Obsłudze BL bazy nie ma pliku bonu ${bonNumber} od dostawców ${suppliers.join(', ')}.`,
       `WEBCLICK|${WINDOW}|${MENU.purchasesTab}`,
       `WINMIN|${PROGRAM_WINDOW}`,
@@ -694,7 +692,7 @@ const CORRECTION_SCREEN = {
   typeField: 'lstZ2_TypeProtocole_TxtBox',
   /** 8 = korekta dostawy, błąd dostawcy. */
   supplierErrorType: '8',
-  /** 9 = korekta dostawy z bazy (SCA PR, dostawca 538). */
+  /** 9 = korekta dostawy z bazy (bon dostawcy 538 albo 88110; refaktura 16538 to typ 8). */
   baseErrorType: '9',
   dueDateField: 'txdZ6_DateEcheance_TxtBox',
   approveButton: 'btnB4_Valider_LnkBouton',
@@ -715,9 +713,9 @@ const CORRECTION_SCREEN = {
 const BETWEEN_CLOSE_DIALOGS_MS = 2000
 
 /** Nowy protokół z dzisiejszym terminem płatności; po zapisie szczegół otwiera się sam albo przyciskiem. */
-export function correctionStartLines(today: string, fromBase = false) {
+export function correctionStartLines(today: string, baseProtocol = false) {
   const screen = CORRECTION_SCREEN
-  const type = fromBase ? screen.baseErrorType : screen.supplierErrorType
+  const type = baseProtocol ? screen.baseErrorType : screen.supplierErrorType
   return [
     `WINOPEN|${PROGRAM_WINDOW}`,
     `WEBENSURE|${WINDOW}|${screen.protocolMenuItem}|${screen.stockTab}`,
