@@ -3,6 +3,7 @@ import {
   ChevronRightIcon,
   ClipboardListIcon,
   HandshakeIcon,
+  InboxIcon,
   TimerIcon,
   TruckIcon,
 } from 'lucide-react'
@@ -15,6 +16,7 @@ import { useDeliOverview } from '@/features/deli-order/api'
 import { useIncomingTransfersCount } from '@/features/documents/api'
 import { useStorePartners } from '@/features/store-settings/api'
 import { useTimeAttention } from '@/features/staff-time/api'
+import { useTimeRequestCount } from '@/features/staff-time/requests-api'
 
 type Item = {
   key: string
@@ -34,11 +36,15 @@ export function AttentionCard({ storeId }: { storeId: string }) {
   const canDeli = useCan('DELI_ORDERS')
   const canDocuments = useCan('DOCUMENTS')
   const canPartners = useCan('DOCUMENTS', 'EDIT')
+  const canRequestsAsManager = useCan('STAFF_TIME', 'EDIT')
+  const canRequestsAsHr = useCan('STAFF_RECORDS', 'EDIT')
+  const canRequests = canRequestsAsManager || canRequestsAsHr
 
   const time = useTimeAttention(storeId, canTime)
   const deli = useDeliOverview(storeId, canDeli)
   const transfers = useIncomingTransfersCount(storeId, canDocuments)
   const partners = useStorePartners(storeId, canPartners)
+  const requests = useTimeRequestCount(storeId, canRequests)
 
   const items: Item[] = []
   if (canTime) {
@@ -49,6 +55,16 @@ export function AttentionCard({ storeId }: { storeId: string }) {
       icon: TimerIcon,
       count: time.data?.total ?? 0,
       pending: time.isPending,
+    })
+  }
+  if (canRequests) {
+    items.push({
+      key: 'time-requests',
+      label: 'Wnioski pracowników do decyzji',
+      to: canTime ? '/czas-pracy?wnioski=tak' : '/kadry?wnioski=tak',
+      icon: InboxIcon,
+      count: requests.data?.total ?? 0,
+      pending: requests.isPending,
     })
   }
   if (canDeli) {

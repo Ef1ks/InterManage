@@ -1092,6 +1092,19 @@ class DataEntryIntegrationTests {
         mvc.perform(get(url("/price-control-files/pending-count")).cookie(owner))
                 .andExpect(jsonPath("$.count").value(1));
 
+        // Ponowny zapis: ta sama treść pod nazwą z nową godziną (program sklepu nie wczytuje znanej nazwy), lista ją zapamiętuje.
+        String oldName = jdbc.queryForObject("select file_name from data_entry_price_control_files where id = ?::uuid",
+                String.class, id);
+        jdbc.update("update data_entry_price_control_files set file_name = ? where id = ?::uuid",
+                oldName.replaceFirst("_\\d{8}_\\d{6}_", "_20260101_000000_"), id);
+        assertThat(mvc.perform(post(url("/price-control-files/" + id + "/resave")).cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        matchesPattern(".*filename=\"CTRLPRIX_(?!20260101_000000)\\d{8}_\\d{6}_GOBARTO_wlasciciel\\.traite0\".*")))
+                .andReturn().getResponse().getContentAsByteArray()).isEqualTo(file);
+        assertThat(jdbc.queryForObject("select file_name from data_entry_price_control_files where id = ?::uuid",
+                String.class, id)).doesNotContain("20260101_000000");
+
         // Program sklepu wczytał plik (.Traite1 w folderze): plik przechodzi do wgranych, ponowne wczytanie podnosi liczbę.
         mvc.perform(post(url("/price-control-files/seen")).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

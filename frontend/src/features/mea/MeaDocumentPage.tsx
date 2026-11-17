@@ -188,7 +188,7 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
           <div className="max-h-[calc(100dvh-18rem)] min-h-64 overflow-auto">
             <table className="w-full border-separate border-spacing-0 text-sm">
               <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground">
-                <tr className="[&>th]:border-b [&>th]:px-2 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
+                <tr className="[&>th]:border-b [&>th]:px-2 [&>th]:py-2 [&>th]:text-left [&>th]:align-bottom [&>th]:leading-tight [&>th]:font-medium [&>th]:whitespace-nowrap">
                   <th className="w-10">Lp.</th>
                   <th>
                     Kod MEA
@@ -200,10 +200,10 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
                     <br />
                     Marka
                   </th>
-                  <th className="text-right!">
-                    Szt. w COLI
+                  <th className="text-right!" title="Sztuk w kartonie (COLI), pod spodem kartonów na palecie">
+                    Szt./COLI
                     <br />
-                    COLI / paleta
+                    COLI/paleta
                   </th>
                   <th className="text-right!">
                     VAT
@@ -247,10 +247,10 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
                     <br />
                     R1–R4
                   </th>
-                  <th className="text-center!">
+                  <th className="text-center!" title="Mnożnik sztuk w kartonie (COLI) do wartości zamówienia">
                     Mnożnik
                     <br />
-                    ile w COLI
+                    COLI
                   </th>
                 </tr>
               </thead>

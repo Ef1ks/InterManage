@@ -54,6 +54,7 @@ import {
   shiftMinutes,
 } from '@/features/staff-schedule/schedule-utils'
 import { distinctHours, sameHours, shiftLabel, type ShiftHours } from '@/features/staff/shifts'
+import { TimeRequestsButton } from '@/features/staff-time/TimeRequestsDialog'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { addMonths, currentMonth, formatMonth } from '@/lib/dates'
@@ -133,7 +134,7 @@ function StoreSchedule({ store }: { store: StoreSummary }) {
   return (
     <>
       <span data-wide-page hidden />
-      <PageHeader title="Grafik" description={description} />
+      <PageHeader title="Grafik" description={description} actions={<TimeRequestsButton storeId={store.id} />} />
       {departments.isError ? (
         <FullPageMessage
           title="Nie udało się wczytać działów"

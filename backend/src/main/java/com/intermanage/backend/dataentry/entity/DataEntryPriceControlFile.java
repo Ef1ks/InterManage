@@ -46,7 +46,7 @@ public class DataEntryPriceControlFile {
     @Column(name = "invoice_number", updatable = false)
     private String invoiceNumber;
 
-    @Column(name = "file_name", nullable = false, updatable = false)
+    @Column(name = "file_name", nullable = false)
     private String fileName;
 
     @Column(name = "line_count", nullable = false, updatable = false)
@@ -124,6 +124,11 @@ public class DataEntryPriceControlFile {
             return true;
         }
         return false;
+    }
+
+    /** Ponowny zapis pod nową nazwą (z bieżącą godziną): folder sprawdza już tę nazwę. */
+    public void rename(String newName) {
+        fileName = newName;
     }
 
     public void markLoaded(AppUser by) {

@@ -35,3 +35,22 @@ nie trzymamy ich w repozytorium.
 `POST /api/auth/mobile/login` zwraca token (ważny jak „Nie wylogowuj mnie”, 30 dni), który aplikacja trzyma
 w SecureStore i wysyła w `Authorization: Bearer`. Odnowiony token backend oddaje w nagłówku `X-Auth-Token`.
 Konto, które musi ustawić hasło, robi to najpierw w przeglądarce.
+
+## Powiadomienia push (wnioski, różnice w czasie pracy)
+
+Kod jest gotowy (`src/lib/push.ts`, `expo-notifications`), ale powiadomienia ruszą dopiero po konfiguracji. Do tego
+czasu aplikacja działa bez nich: różnice i wnioski widać na ekranie Wnioski, a backend wypisuje wiadomości w logach
+(`[PUSH] …`).
+
+1. Projekt EAS: `npx eas init` w `mobile/` dopisze `extra.eas.projectId` w `app.json`. Bez niego aplikacja w ogóle
+   nie prosi o token.
+2. Android: projekt Firebase z aplikacją `pl.intermanage.mobile`, plik `google-services.json` w `mobile/` i
+   `"googleServicesFile": "./google-services.json"` w `android` w `app.json`; w EAS (credentials, Android) klucz
+   konta usługi FCM V1 z Firebase.
+3. iOS: klucz APNs w EAS (`npx eas credentials`, zrobi go sam przy pierwszym buildzie).
+4. Nowy build aplikacji (`npx eas build`), bo moduł powiadomień jest natywny. W Expo Go na Androidzie powiadomienia
+   push nie działają.
+5. Na serwerze `PUSH_ENABLED=true` w `/opt/intermanage/.env` (wzór `deploy/.env.example`) i restart.
+
+Instalacja zależności: `npm install --legacy-peer-deps` (konflikt peer dependencies `@radix-ui` z React 19.3 w
+expo-router był wcześniej, nie dotyczy powiadomień).

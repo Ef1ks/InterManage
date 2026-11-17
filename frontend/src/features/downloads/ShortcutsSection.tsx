@@ -58,7 +58,8 @@ export function ShortcutsSection({ owner }: { owner: boolean }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold">Skróty do folderów</h2>
           <p className="text-sm text-muted-foreground">
-            Pobierz je na pulpit, a w oknie wyboru folderu wejdź w skrót zamiast szukać folderu na dysku.
+            Pobierz, otwórz pobrany plik ZIP i przeciągnij skrót na pulpit. W oknie wyboru folderu wejdź w skrót zamiast
+            szukać folderu na dysku.
           </p>
         </div>
         {shortcuts.length > 1 && (
@@ -150,7 +151,7 @@ function ShortcutRow({
         variant="outline"
         className="shrink-0"
         nativeButton={false}
-        render={<a href={shortcutFileUrl(shortcut.id)} download={shortcut.fileName} />}
+        render={<a href={shortcutFileUrl(shortcut.id)} download />}
       >
         <DownloadIcon />
         Pobierz

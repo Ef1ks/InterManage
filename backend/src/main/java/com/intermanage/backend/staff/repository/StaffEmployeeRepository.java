@@ -47,6 +47,12 @@ public interface StaffEmployeeRepository extends JpaRepository<StaffEmployee, UU
     @Query("select e.id from StaffEmployee e where e.user.id = :userId")
     List<UUID> findIdsOfUser(UUID userId);
 
+    /** Pracownicy (bieżące stanowiska) kont, np. tych z aplikacją mobilną; bez zakończonych i usuniętych. */
+    @Query("""
+            select e from StaffEmployee e join fetch e.position p join fetch p.department join fetch e.store
+            where e.user.id in :userIds and e.endedAt is null and e.deletedAt is null""")
+    List<StaffEmployee> findActiveOfUsers(Collection<UUID> userIds);
+
     @Query("select count(e) > 0 from StaffEmployee e where e.user.id = :userId and e.endedAt is null")
     boolean existsActiveForUser(UUID userId);
 

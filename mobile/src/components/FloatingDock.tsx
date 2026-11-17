@@ -6,11 +6,12 @@ import { useEffect, useMemo, useState, type ComponentRef, type ReactNode, type R
 import { Animated, Easing, Keyboard, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { CalendarIcon, HomeIcon, ScanIcon } from '@/components/icons'
+import { CalendarIcon, HomeIcon, InboxIcon, ScanIcon } from '@/components/icons'
 import { addDays } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useReduceMotion } from '@/lib/motion'
 import { useMySchedule } from '@/lib/queries'
+import { useMyAnomalies } from '@/lib/requests'
 import { useTheme } from '@/lib/theme'
 import { todayIso } from '@/lib/week'
 
@@ -25,7 +26,7 @@ const LIQUID_GLASS = Platform.OS === 'ios' && isLiquidGlassAvailable()
 
 /** Ekrany, nad którymi unosi się pasek; skaner, panel konta i logowanie mają cały ekran dla siebie. */
 function showsDock(pathname: string) {
-  return pathname === '/' || pathname === '/schedule' || pathname.startsWith('/article')
+  return pathname === '/' || pathname === '/schedule' || pathname === '/requests' || pathname.startsWith('/article')
 }
 
 /** Ile miejsca zostawić pod treścią przewijaną, żeby ostatnia karta nie chowała się pod paskiem. */
@@ -40,6 +41,8 @@ type Item = {
   icon: (color: string) => ReactNode
   active: boolean
   onPress: () => void
+  /** Liczba na ikonie (np. różnice do wyjaśnienia); 0 = bez znaczka. */
+  badge?: number
 }
 
 /**
@@ -62,6 +65,8 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
     return { from: today, to: addDays(today, 13) }
   }, [])
   const schedule = useMySchedule(range)
+  const employee = schedule.data?.employee !== false
+  const anomalies = useMyAnomalies(!!me && employee)
 
   const visible = !!me && showsDock(pathname) && !keyboardOpen
 
@@ -92,6 +97,16 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
       active: pathname === '/schedule',
       onPress: () => {
         if (pathname !== '/schedule') router.navigate('/schedule')
+      },
+    })
+    items.push({
+      key: 'requests',
+      label: 'Wnioski',
+      icon: (color) => <InboxIcon color={color} size={22} />,
+      active: pathname === '/requests',
+      badge: anomalies.data?.open ?? 0,
+      onPress: () => {
+        if (pathname !== '/requests') router.navigate('/requests')
       },
     })
   }
@@ -186,11 +201,18 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
                 item.onPress()
               }}
               accessibilityRole="tab"
-              accessibilityLabel={item.label}
+              accessibilityLabel={item.badge ? `${item.label}, do wyjaśnienia: ${item.badge}` : item.label}
               accessibilityState={{ selected: item.active }}
               style={({ pressed }) => [styles.item, pressed && { transform: [{ scale: 0.9 }] }]}
             >
-              {item.icon(color)}
+              <View>
+                {item.icon(color)}
+                {item.badge ? (
+                  <View style={[styles.badge, { backgroundColor: t.warnBg, borderColor: t.card }]}>
+                    <Text style={[styles.badgeText, { color: t.warnText }]}>{item.badge > 9 ? '9+' : item.badge}</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={[styles.label, { color }]}>{item.label}</Text>
             </Pressable>
           )
@@ -259,6 +281,19 @@ function useKeyboardOpen() {
 
 const styles = StyleSheet.create({
   layer: { justifyContent: 'flex-end', alignItems: 'center' },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] },
   dock: {
     flexDirection: 'row',
     padding: PADDING,

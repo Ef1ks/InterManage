@@ -28,6 +28,7 @@ import { DayView, WithoutCard } from '@/features/staff-time/DayView'
 import { PeriodGrid } from '@/features/staff-time/PeriodGrid'
 import { SegmentDialog, SimulatorDialog, TimeSettingsDialog } from '@/features/staff-time/TimeDialogs'
 import { SymfoniaExportDialog } from '@/features/staff-time/SymfoniaExportDialog'
+import { TimeRequestsButton } from '@/features/staff-time/TimeRequestsDialog'
 import { LEGEND, STATUS_STYLES, hm, range, shift, type TimeView } from '@/features/staff-time/time-utils'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { useCan } from '@/features/auth/api'
@@ -142,6 +143,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
         description={`${storeLabel(store)} · karty czasu pracy z odbić kart NFC`}
         actions={
           <>
+            <TimeRequestsButton storeId={store.id} />
             {department && (
               <Button
                 type="button"

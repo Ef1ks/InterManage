@@ -2,12 +2,17 @@ package com.intermanage.backend.staff.dto;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import com.intermanage.backend.staff.entity.TimeDecisionKind;
+import com.intermanage.backend.staff.entity.TimeRequestApprover;
 import com.intermanage.backend.staff.entity.TimeSegmentKind;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -33,6 +38,17 @@ public final class TimeRequests {
     }
 
     public record Reader(@NotBlank(message = "Podaj nazwę czytnika") @Size(max = 100) String name) {
+    }
+
+    /** Zasady odbić sklepu: zaokrąglanie w minutach (0 = bez), blokada ponownego odbicia, kto zatwierdza wnioski. */
+    public record Rules(@NotNull Integer roundingMinutes,
+            @NotNull @Min(value = 10, message = "Blokada ponownego odbicia to co najmniej 10 s")
+            @Max(value = 600, message = "Blokada ponownego odbicia to najwyżej 600 s") Integer punchCooldownSeconds,
+            @NotNull TimeRequestApprover finalApprover) {
+    }
+
+    /** Propozycja bieżących zasad dla sklepów zaprzyjaźnionych. */
+    public record RuleOffer(@NotEmpty(message = "Wybierz sklep") List<UUID> storeIds) {
     }
 
     public record Card(@NotBlank(message = "Podaj numer karty") @Size(max = 64, message = "Numer karty do 64 znaków")

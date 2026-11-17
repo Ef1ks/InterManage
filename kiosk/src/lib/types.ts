@@ -16,6 +16,8 @@ export type PunchResult = {
   breakAvailable: boolean
   /** Wejście po przerwie. */
   breakEnded: boolean
+  /** Karta przyłożona ponownie w czasie blokady sklepu: nic nie zapisano, wynik opisuje wcześniejsze odbicie. */
+  repeated: boolean
 }
 
 export type PermissionLevel = 'VIEW' | 'EDIT'

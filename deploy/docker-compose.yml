@@ -43,6 +43,10 @@ services:
       CASH_CLOSING_ENABLED: "true"
       # Formularze MEA z portalu pobiera w tle tylko ten backend.
       MEA_SYNC_ENABLED: "true"
+      # Powiadomienia push aplikacji mobilnej (i zadanie o różnicach w czasie pracy) tylko w tym backendzie.
+      # Włączać dopiero po konfiguracji EAS (projekt, klucz FCM dla Androida, APNs dla iOS), patrz mobile/README.md.
+      PUSH_ENABLED: ${PUSH_ENABLED:-false}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
       FRONTEND_URL: https://intermanage.pl
       AUTH_COOKIE_SECURE: "true"
       # nginx podaje X-Forwarded-Proto, więc Spring wie, że żądanie przyszło po HTTPS.

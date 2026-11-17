@@ -14,6 +14,7 @@ import { SplashAnimation } from '@/components/SplashAnimation'
 import { StoreSwitcher } from '@/components/StoreSwitcher'
 import { Loading } from '@/components/ui'
 import { AuthProvider, useAuth } from '@/lib/auth'
+import { usePushNotifications } from '@/lib/push'
 import { useTheme } from '@/lib/theme'
 
 // Systemowy ekran startowy zostaje, dopóki nie stanie animacja logo (SplashAnimation go chowa).
@@ -43,6 +44,7 @@ function Navigator() {
   const t = useTheme()
   // Android rozmywa pod paskiem tylko ten widok, więc ekrany stoją w nim.
   const screens = useRef<ComponentRef<typeof View>>(null)
+  usePushNotifications(!!me)
 
   if (me === undefined) {
     return (
@@ -101,6 +103,19 @@ function Navigator() {
             />
             <Stack.Screen name="article/[itm8]" options={{ title: 'Artykuł' }} />
             <Stack.Screen name="schedule" options={{ title: 'Mój grafik' }} />
+            <Stack.Screen name="requests" options={{ title: 'Wnioski' }} />
+            <Stack.Screen
+              name="request-new"
+              options={{
+                title: 'Nowy wniosek',
+                headerShown: false,
+                presentation: 'formSheet',
+                sheetGrabberVisible: true,
+                sheetAllowedDetents: [0.85, 1],
+                sheetCornerRadius: 20,
+                contentStyle: { backgroundColor: t.background },
+              }}
+            />
             <Stack.Screen
               name="account"
               options={{

@@ -195,6 +195,16 @@ class DownloadIntegrationTests {
                         startsWith("attachment; filename=\"Kopie Mercalys.lnk\"")))
                 .andReturn().getResponse().getContentAsByteArray();
         assertThat(body).isEqualTo(lnk);
+        // Pobranie z przeglądarki: jeden skrót w ZIP-ie (samego .lnk przeglądarki nie zapisują).
+        byte[] one = mvc.perform(get("/api/downloads/shortcuts/" + id + "/zip").cookie(employee))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", startsWith("attachment; filename=\"Kopie Mercalys.zip\"")))
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var entries = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(one))) {
+            assertThat(entries.getNextEntry().getName()).isEqualTo("Kopie Mercalys.lnk");
+            assertThat(entries.readAllBytes()).isEqualTo(lnk);
+            assertThat(entries.getNextEntry()).isNull();
+        }
 
         mvc.perform(put(shortcuts + "/" + id).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Kopie zapasowe\"}")).andExpect(status().isOk());

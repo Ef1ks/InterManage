@@ -39,6 +39,17 @@ public final class PriceControlFile {
     }
 
     /**
+     * Ta sama nazwa z bieżącą godziną (ponowny zapis): program sklepu nie wczytuje drugi raz nazwy, którą już widział.
+     * Nazwa bez godziny na początku dostaje ją przed resztą.
+     */
+    public static String renewed(String fileName) {
+        String time = ZonedDateTime.now(STORE_ZONE).format(TIME);
+        return fileName.matches("(?i)CTRLPRIX_\\d{8}_\\d{6}_.+")
+                ? "CTRLPRIX_" + time + fileName.substring("CTRLPRIX_".length() + 15)
+                : "CTRLPRIX_" + time + "_" + fileName.replaceFirst("(?i)^CTRLPRIX_", "");
+    }
+
+    /**
      * EAN w pliku: 8-13 cyfr i krótki kod wewnętrzny do 6 cyfr dopełnione do 13, GTIN-14 z zerem na początku jako
      * EAN-13; inne kody = {@code null}.
      */

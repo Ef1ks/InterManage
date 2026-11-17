@@ -31,8 +31,10 @@ import com.intermanage.backend.staff.dto.ScheduleDepartment;
 import com.intermanage.backend.staff.dto.TimeBalanceResponse;
 import com.intermanage.backend.staff.dto.TimeCardResponse;
 import com.intermanage.backend.staff.dto.TimeRequests;
+import com.intermanage.backend.staff.dto.TimeRulesResponse;
 import com.intermanage.backend.staff.dto.TimeSettingsResponse;
 import com.intermanage.backend.staff.service.StaffScheduleService;
+import com.intermanage.backend.staff.service.StaffTimeRulesService;
 import com.intermanage.backend.staff.service.StaffTimeService;
 import com.intermanage.backend.staff.service.StaffTimeSheetService;
 
@@ -56,8 +58,11 @@ public class StaffTimeController {
     private final StaffTimeService time;
     private final StaffScheduleService schedules;
     private final StaffTimeSheetService sheets;
+    private final StaffTimeRulesService rules;
 
-    public StaffTimeController(StaffTimeService time, StaffScheduleService schedules, StaffTimeSheetService sheets) {
+    public StaffTimeController(StaffTimeService time, StaffScheduleService schedules, StaffTimeSheetService sheets,
+            StaffTimeRulesService rules) {
+        this.rules = rules;
         this.time = time;
         this.schedules = schedules;
         this.sheets = sheets;
@@ -234,6 +239,47 @@ public class StaffTimeController {
     @PreAuthorize(CONFIGURE)
     public TimeSettingsResponse settings(@PathVariable UUID storeId) {
         return time.settings(storeId);
+    }
+
+    @GetMapping("/settings/rules")
+    @PreAuthorize(CONFIGURE)
+    public TimeRulesResponse rules(@PathVariable UUID storeId) {
+        return rules.get(storeId);
+    }
+
+    @PutMapping("/settings/rules")
+    @PreAuthorize(CONFIGURE)
+    public TimeRulesResponse saveRules(@PathVariable UUID storeId, @Valid @RequestBody TimeRequests.Rules request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return rules.save(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/settings/rules/offers")
+    @PreAuthorize(CONFIGURE)
+    public TimeRulesResponse offerRules(@PathVariable UUID storeId,
+            @Valid @RequestBody TimeRequests.RuleOffer request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return rules.offer(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/settings/rules/offers/{offerId}/accept")
+    @PreAuthorize(CONFIGURE)
+    public TimeRulesResponse acceptRules(@PathVariable UUID storeId, @PathVariable UUID offerId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return rules.accept(storeId, offerId, principal.getId());
+    }
+
+    @PostMapping("/settings/rules/offers/{offerId}/reject")
+    @PreAuthorize(CONFIGURE)
+    public TimeRulesResponse rejectRules(@PathVariable UUID storeId, @PathVariable UUID offerId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return rules.reject(storeId, offerId, principal.getId());
+    }
+
+    @DeleteMapping("/settings/rules/offers/{offerId}")
+    @PreAuthorize(CONFIGURE)
+    public TimeRulesResponse cancelRules(@PathVariable UUID storeId, @PathVariable UUID offerId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return rules.cancel(storeId, offerId, principal.getId());
     }
 
     @PutMapping("/settings/employer")

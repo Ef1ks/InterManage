@@ -71,6 +71,13 @@ export const STATUS_STYLES: Record<TimeSegmentStatus, { label: string; bar: stri
     label: 'Dłuższa praca równoważąca brak (nie nadgodziny)',
     bar: 'bg-teal-500 dark:bg-teal-500',
   },
+  WORKED_OFF: { label: 'Odpracowanie wyjścia prywatnego (praca, nie nadgodziny)', bar: 'bg-cyan-400 dark:bg-cyan-600' },
+  PRIVATE_EXIT: {
+    label: 'Wyjście prywatne do odpracowania (bez wynagrodzenia)',
+    bar: 'bg-orange-300 dark:bg-orange-700',
+  },
+  JUSTIFIED_HALF: { label: 'Usprawiedliwione, płatne 50% (siła wyższa)', bar: 'bg-fuchsia-300 dark:bg-fuchsia-700' },
+  JUSTIFIED_UNPAID: { label: 'Usprawiedliwione bez wynagrodzenia', bar: 'bg-purple-200 dark:bg-purple-800' },
 }
 
 export const LEGEND: TimeSegmentStatus[] = [
@@ -83,6 +90,10 @@ export const LEGEND: TimeSegmentStatus[] = [
   'JUSTIFIED',
   'OFFSET_SHORTFALL',
   'OFFSET_OVERTIME',
+  'WORKED_OFF',
+  'PRIVATE_EXIT',
+  'JUSTIFIED_HALF',
+  'JUSTIFIED_UNPAID',
   'PAID_BREAK',
   'BREAK',
 ]

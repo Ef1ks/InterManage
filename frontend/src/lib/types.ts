@@ -4260,8 +4260,74 @@ export type TimeSegmentStatus =
   | 'JUSTIFIED'
   | 'OFFSET_SHORTFALL'
   | 'OFFSET_OVERTIME'
+  | 'WORKED_OFF'
+  | 'PRIVATE_EXIT'
+  | 'JUSTIFIED_HALF'
+  | 'JUSTIFIED_UNPAID'
 
-export type TimeDecisionKind = 'EMPLOYER_ORDER' | 'EMPLOYEE_REQUEST' | 'REJECTED' | 'JUSTIFIED' | 'OFFSET'
+export type TimeDecisionKind =
+  | 'EMPLOYER_ORDER'
+  | 'EMPLOYEE_REQUEST'
+  | 'REJECTED'
+  | 'JUSTIFIED'
+  | 'OFFSET'
+  | 'WORKED_OFF'
+  | 'PRIVATE_EXIT'
+  | 'JUSTIFIED_HALF'
+  | 'JUSTIFIED_UNPAID'
+
+/** Rodzaj wniosku pracownika: o odcinek karty albo zgłoszenie L4. */
+export type TimeRequestKind =
+  | 'OVERTIME'
+  | 'WORK_OFF'
+  | 'PRIVATE_EXIT'
+  | 'LATE_OR_EARLY'
+  | 'FORCE_MAJEURE'
+  | 'CHILD_CARE'
+  | 'OTHER_PAID'
+  | 'SICK_LEAVE'
+
+export type TimeRequestStatus = 'PENDING' | 'MANAGER_APPROVED' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+
+export type TimeRequestStep = { by: string | null; at: string; note: string | null }
+
+/** Wniosek pracownika; `start`/`end` przy odcinku karty, `workDate`..`dateTo` przy L4. */
+export type TimeRequest = {
+  id: string
+  employeeId: string
+  employeeName: string
+  rcpNumber: number | null
+  departmentId: string
+  departmentName: string
+  positionName: string
+  kind: TimeRequestKind
+  workDate: string
+  dateTo: string | null
+  start: string | null
+  end: string | null
+  minutes: number | null
+  reason: string | null
+  status: TimeRequestStatus
+  /** Po kierowniku zatwierdzają kadry. */
+  needsHr: boolean
+  createdAt: string
+  createdBy: string | null
+  /** Złożony przez pracownika w aplikacji. */
+  byEmployee: boolean
+  manager: TimeRequestStep | null
+  hr: TimeRequestStep | null
+  canApprove: boolean
+  canReject: boolean
+  canUndo: boolean
+  canCancel: boolean
+  history: {
+    action:
+      'SUBMITTED' | 'MANAGER_APPROVED' | 'MANAGER_REJECTED' | 'HR_APPROVED' | 'HR_REJECTED' | 'CANCELLED' | 'UNDONE'
+    at: string
+    by: string | null
+    note: string | null
+  }[]
+}
 
 /** Dni do reakcji kierownika (czeka na decyzję, brak, brak wyjścia) z ostatnich 31 dni, po działach. */
 export type TimeAttention = { total: number; departments: { departmentId: string; count: number }[] }
@@ -4352,6 +4418,35 @@ export type TimeCards = {
   rows: TimeCardRow[]
   /** Osoby z działu bez karty i bez ewidencji zlecenia w okresie (B2B, bez umowy) z powodem. */
   withoutCard: { name: string; positionName: string; reason: string }[]
+}
+
+/** Kto ostatecznie zatwierdza wnioski pracowników: kierownik działu albo kadry. */
+export type TimeRequestApprover = 'MANAGER' | 'HR'
+
+export type TimeRuleOffer = {
+  id: string
+  /** Druga strona: nadawca przy przychodzących, odbiorca przy wysłanych. */
+  storeId: string
+  storeNumber: string
+  storeName: string
+  roundingMinutes: number
+  punchCooldownSeconds: number
+  finalApprover: TimeRequestApprover
+  createdAt: string
+  createdBy: string | null
+}
+
+/** Zasady odbić sklepu; `saved: false` = domyślne (bez zaokrąglania, 10 s, kierownik). */
+export type TimeRules = {
+  roundingMinutes: number
+  punchCooldownSeconds: number
+  finalApprover: TimeRequestApprover
+  saved: boolean
+  savedAt: string | null
+  savedBy: string | null
+  partners: { storeId: string; number: string; name: string }[]
+  incoming: TimeRuleOffer[]
+  outgoing: TimeRuleOffer[]
 }
 
 export type TimeSettings = {
@@ -4490,4 +4585,16 @@ export type CashReport = {
   /** Dokumenty z okresu w kolejności raportu; anulowane z `balance: null`. */
   rows: { document: CashDocument; balance: number | null }[]
   settings: CashSettings
+}
+
+/** Plik w kolejce sklepu do zapisu w folderze (praca dla innego sklepu bez połączenia z jego komputerem). */
+export type FileQueueItem = {
+  id: string
+  /** Klucz folderu w przeglądarce, np. `deli-order-proto`. */
+  folderKey: string
+  folderLabel: string
+  fileName: string
+  sizeBytes: number
+  createdAt: string
+  createdBy: string | null
 }

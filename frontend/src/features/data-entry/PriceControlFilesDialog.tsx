@@ -6,9 +6,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDateTime } from '@/features/ksef/format'
-import { ApiError, downloadFile } from '@/lib/api'
+import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
-import { ensureFolderAccess, folderSavingSupported, saveApiFileToFolder } from '@/lib/saved-folders'
+import { ensureFolderAccess, folderSavingSupported, saveToFolder } from '@/lib/saved-folders'
 import type { PriceControlFileItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -64,17 +64,26 @@ export function PriceControlFilesDialog({
     await checkPriceControlFiles(storeId, queryClient)
   }
 
+  /**
+   * Ta sama treść pod nazwą z bieżącą godziną (serwer zapamiętuje nową nazwę): program sklepu nie wczytuje drugi raz
+   * nazwy, którą już kiedyś widział. Zgodę na folder bierzemy od razu po kliknięciu, dopiero potem żądanie.
+   */
   const saveAgain = async (file: PriceControlFileItem) => {
-    const path = `/stores/${storeId}/data-entry/price-control-files/${file.id}/file`
     setSaving(file.id)
     try {
-      if (await ensureFolderAccess(protoFolder.key)) {
-        await saveApiFileToFolder(protoFolder.key, path, file.fileName)
+      const folderReady = await ensureFolderAccess(protoFolder.key)
+      const { fileName, blob } = await fetchPostedFile(
+        `/stores/${storeId}/data-entry/price-control-files/${file.id}/resave`,
+        {},
+        file.fileName,
+      )
+      if (folderReady) {
+        await saveToFolder(protoFolder.key, fileName, blob)
         toast.success('Zapisano zmianę cen w folderze')
-        void checkPriceControlFiles(storeId, queryClient)
       } else {
-        await downloadFile(path, file.fileName)
+        saveBlob(blob, fileName)
       }
+      void checkPriceControlFiles(storeId, queryClient)
     } catch (error) {
       toast.error(errorMessage(error, 'Nie udało się zapisać zmiany cen'))
     } finally {

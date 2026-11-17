@@ -12,6 +12,7 @@ import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,6 +42,9 @@ import com.intermanage.backend.staff.dto.ScheduleDepartment;
 import com.intermanage.backend.staff.dto.TimeCardResponse;
 import com.intermanage.backend.staff.dto.TimeRequests;
 import com.intermanage.backend.staff.dto.TimeSettingsResponse;
+import com.intermanage.backend.staff.component.TimeRounding;
+import com.intermanage.backend.staff.entity.StaffTimeStoreRules;
+import com.intermanage.backend.staff.repository.StaffTimeStoreRulesRepository;
 import com.intermanage.backend.staff.entity.ContractKind;
 import com.intermanage.backend.staff.entity.LeaveKind;
 import com.intermanage.backend.staff.entity.StaffContract;
@@ -106,6 +110,7 @@ public class StaffTimeService {
     private final StaffTimeReaderRepository readers;
     private final StaffNfcCardRepository cards;
     private final StaffEmployerDetailsRepository employers;
+    private final StaffTimeStoreRulesRepository storeRules;
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final OvertimePdf overtimePdf;
@@ -117,8 +122,8 @@ public class StaffTimeService {
             StaffContractRepository contracts, StaffLeaveRepository leaves, StaffTimePunchRepository punches,
             StaffTimeDecisionRepository decisions, StaffTimeDecisionFileRepository decisionFiles,
             StaffTimeReaderRepository readers, StaffNfcCardRepository cards,
-            StaffEmployerDetailsRepository employers, StoreRepository stores, AppUserRepository users,
-            OvertimePdf overtimePdf, GusService gus) {
+            StaffEmployerDetailsRepository employers, StaffTimeStoreRulesRepository storeRules,
+            StoreRepository stores, AppUserRepository users, OvertimePdf overtimePdf, GusService gus) {
         this.employees = employees;
         this.departments = departments;
         this.managers = managers;
@@ -133,6 +138,7 @@ public class StaffTimeService {
         this.readers = readers;
         this.cards = cards;
         this.employers = employers;
+        this.storeRules = storeRules;
         this.stores = stores;
         this.users = users;
         this.overtimePdf = overtimePdf;
@@ -227,14 +233,16 @@ public class StaffTimeService {
             }
         }
 
-        boolean records = has(principal, AppUserPrincipal.OWNER_AUTHORITY) || has(principal, "STAFF_RECORDS:VIEW")
-                || has(principal, "STAFF_RECORDS:EDIT");
+        TimeRounding rounding = rounding(punched.values());
+        // Bez osoby (karta liczona dla wniosku) rodzaj nieobecności nie wychodzi poza serwer.
+        boolean records = principal == null || has(principal, AppUserPrincipal.OWNER_AUTHORITY)
+                || has(principal, "STAFF_RECORDS:VIEW") || has(principal, "STAFF_RECORDS:EDIT");
         LocalDateTime now = LocalDateTime.now(StoreTime.ZONE);
         List<LocalDate> days = from.datesUntil(to.plusDays(1)).toList();
         List<TimeCardResponse.Row> rows = new ArrayList<>();
         for (StaffEmployee employee : team) {
             UUID id = employee.getId();
-            List<Pair> allPairs = pairs(punched.getOrDefault(id, List.of()));
+            List<Pair> allPairs = pairs(punched.getOrDefault(id, List.of()), rounding);
             Map<LocalDate, List<Pair>> pairs = allPairs.stream()
                     .collect(Collectors.groupingBy(pair -> pair.in().toLocalDate()));
             Map<LocalDate, List<TimeCard.Interval>> takenBreaks = takenBreaks(allPairs);
@@ -269,8 +277,9 @@ public class StaffTimeService {
                         cardsOfDays, totals(cardsOfDays)));
             }
         }
-        return new TimeCardResponse(departmentId, from, to, canDecide(department, principal), canConfigure(principal),
-                has(principal, AppUserPrincipal.OWNER_AUTHORITY), tolerance,
+        return new TimeCardResponse(departmentId, from, to, principal != null && canDecide(department, principal),
+                principal != null && canConfigure(principal),
+                principal != null && has(principal, AppUserPrincipal.OWNER_AUTHORITY), tolerance,
                 days.stream().map(day -> new TimeCardResponse.Day(day, ScheduleCalendar.holiday(day))).toList(), rows,
                 withoutCard);
     }
@@ -584,9 +593,10 @@ public class StaffTimeService {
         if (balance != (request.decision() == TimeDecisionKind.OFFSET)) {
             throw ApiException.badRequest("Zrównoważyć można tylko cały dzień");
         }
-        if (!balance && overtime == (request.decision() == TimeDecisionKind.JUSTIFIED)) {
-            throw ApiException.badRequest(overtime ? "Czas poza grafikiem: polecenie, wniosek albo odrzucenie"
-                    : "Brak czasu można tylko usprawiedliwić");
+        if (!balance && (overtime ? !request.decision().aboutOvertime() : !request.decision().aboutShortfall())) {
+            throw ApiException.badRequest(overtime
+                    ? "Czas poza grafikiem: polecenie, wniosek, odpracowanie albo odrzucenie"
+                    : "Brak czasu można usprawiedliwić albo uznać za wyjście prywatne");
         }
         if (!request.end().isAfter(request.start())) {
             throw ApiException.badRequest("Koniec odcinka musi być po początku");
@@ -614,15 +624,37 @@ public class StaffTimeService {
                 throw ApiException.conflict("Tego odcinka nie ma już w karcie. Odśwież stronę.");
             }
         }
-        AppUser actor = users.getReferenceById(principal.getId());
-        decisions.findActive(List.of(employee.getId()), day, day).stream()
-                .filter(decision -> decision.getKind() == request.kind() && decision.getStartAt().equals(request.start())
-                        && decision.getEndAt().equals(request.end()))
-                .forEach(decision -> decision.markDeleted(actor));
-        decisions.flush();
         String note = request.note() == null || request.note().isBlank() ? null : request.note().strip();
-        return decisions.saveAndFlush(new StaffTimeDecision(employee, day, request.kind(), request.start(),
-                request.end(), request.decision(), note, actor)).getId();
+        return record(employee, request.kind(), request.start(), request.end(), request.decision(), note,
+                users.getReferenceById(principal.getId())).getId();
+    }
+
+    /** Zapisuje decyzję o odcinku; wcześniejsza decyzja o tym samym odcinku dostaje znacznik. */
+    StaffTimeDecision record(StaffEmployee employee, TimeSegmentKind kind, LocalDateTime start, LocalDateTime end,
+            TimeDecisionKind decision, String note, AppUser actor) {
+        LocalDate day = start.toLocalDate();
+        decisions.findActive(List.of(employee.getId()), day, day).stream()
+                .filter(previous -> previous.getKind() == kind && previous.getStartAt().equals(start)
+                        && previous.getEndAt().equals(end))
+                .forEach(previous -> previous.markDeleted(actor));
+        decisions.flush();
+        return decisions.saveAndFlush(new StaffTimeDecision(employee, day, kind, start, end, decision, note, actor));
+    }
+
+    /**
+     * Karta dnia pracownika w jego dziale i sklepie, bez sprawdzania uprawnień (wnioski: składa pracownik, decyduje
+     * kierownik albo kadry). Bez karty (np. bez umowy o pracę w tym dniu) pusto.
+     */
+    @Transactional(readOnly = true)
+    public Optional<TimeCardResponse.DayCard> dayCard(StaffEmployee employee, LocalDate day) {
+        return view(employee.getStore().getId(), employee.getPosition().getDepartment().getId(), day, day, null)
+                .rows().stream().filter(row -> !row.civil() && row.employeeId().equals(employee.getId())).findFirst()
+                .map(row -> row.days().getFirst());
+    }
+
+    /** Czy osoba decyduje o czasie pracy działu (kierownik działu z {@code STAFF_TIME:EDIT}, właściciel, kadry). */
+    public boolean decides(StaffDepartment department, AppUserPrincipal principal) {
+        return canDecide(department, principal);
     }
 
     @Transactional
@@ -827,6 +859,7 @@ public class StaffTimeService {
                 .stream().collect(Collectors.groupingBy(punch -> punch.getEmployee().getId()));
         Map<UUID, List<StaffTimeDecision>> decided = decisions.findActive(ids, from, until).stream()
                 .collect(Collectors.groupingBy(decision -> decision.getEmployee().getId()));
+        TimeRounding rounding = rounding(punched.values());
 
         record Place(UUID storeId, UUID departmentId) {
         }
@@ -836,7 +869,7 @@ public class StaffTimeService {
         Map<UUID, Map<LocalDate, Integer>> result = new HashMap<>();
         for (StaffEmployee employee : tracked) {
             UUID id = employee.getId();
-            List<Pair> allPairs = pairs(punched.getOrDefault(id, List.of()));
+            List<Pair> allPairs = pairs(punched.getOrDefault(id, List.of()), rounding);
             Map<LocalDate, List<Pair>> pairs = allPairs.stream()
                     .collect(Collectors.groupingBy(pair -> pair.in().toLocalDate()));
             Map<LocalDate, List<TimeCard.Interval>> takenBreaks = takenBreaks(allPairs);
@@ -862,8 +895,10 @@ public class StaffTimeService {
                         .map(decision -> new TimeCard.Decision(decision.getKind(), decision.getStartAt(),
                                 decision.getEndAt(), decision.getDecision()))
                         .toList();
-                days.put(day, TimeCard.day(day, shift, worked, takenBreaks.getOrDefault(day, List.of()),
-                        rules.unpaid(), rules.tolerance(), ofDay).worked());
+                // Do salda idzie praca i usprawiedliwione braki bez pełnego wynagrodzenia (obniżają wymiar).
+                TimeCard.Day card = TimeCard.day(day, shift, worked, takenBreaks.getOrDefault(day, List.of()),
+                        rules.unpaid(), rules.tolerance(), ofDay);
+                days.put(day, card.worked() + card.excused());
             }
             result.put(id, days);
         }
@@ -881,6 +916,10 @@ public class StaffTimeService {
                 .orElseThrow(() -> ApiException.notFound("Nieznana karta"));
         StaffEmployee employee = card.getEmployee();
         Instant at = request.punchedAt() == null ? Instant.now() : request.punchedAt();
+        ReaderResult repeated = repeatedPunch(store, employee, at);
+        if (repeated != null) {
+            return repeated;
+        }
         List<Pair> recent = pairs(punches.findOfEmployees(List.of(employee.getId()), at.minus(MAX_SHIFT), at));
         Pair open = recent.stream().filter(pair -> pair.out() == null
                 && Duration.between(pair.in(), local(at)).compareTo(MAX_SHIFT) <= 0).findFirst().orElse(null);
@@ -891,7 +930,28 @@ public class StaffTimeService {
         StaffTimePunch saved = punches.save(new StaffTimePunch(employee, store, at, TimePunchSource.READER, reader,
                 null));
         return new ReaderResult(saved.getId(), employee.getDisplayName(), exit ? "OUT" : "IN", at,
-                exit && !hadBreak(recent, open), breakEnded);
+                exit && !hadBreak(recent, open), breakEnded, false);
+    }
+
+    /**
+     * Ta sama karta przyłożona drugi raz w czasie blokady sklepu (co najmniej 10 s) nie jest nowym odbiciem: odpowiedź
+     * opisuje wcześniejsze, z {@code repeated}. Obejmuje też odbicie z kolejki kiosku tuż po zapisanym.
+     */
+    private ReaderResult repeatedPunch(Store store, StaffEmployee employee, Instant at) {
+        int cooldown = storeRules.findActive(store.getId()).map(StaffTimeStoreRules::getPunchCooldownSeconds)
+                .orElse(StaffTimeStoreRules.Values.DEFAULT.punchCooldownSeconds());
+        List<StaffTimePunch> around = punches.findOfEmployees(List.of(employee.getId()), at.minus(MAX_SHIFT),
+                at.plusSeconds(cooldown));
+        StaffTimePunch previous = around.stream()
+                .filter(punch -> Duration.between(punch.getPunchedAt(), at).abs().getSeconds() < cooldown)
+                .reduce((first, second) -> second).orElse(null);
+        if (previous == null) {
+            return null;
+        }
+        boolean exit = pairs(around).stream().anyMatch(pair -> pair.outPunch() != null
+                && pair.outPunch().getId().equals(previous.getId()));
+        return new ReaderResult(previous.getId(), employee.getDisplayName(), exit ? "OUT" : "IN",
+                previous.getPunchedAt(), false, false, true);
     }
 
     /** Czy w dniu pracy, który kończy wyjście ({@code open}), była już przerwa: wtedy kiosk o nią nie pyta. */
@@ -903,10 +963,11 @@ public class StaffTimeService {
 
     /**
      * {@code breakAvailable}: wyjście, które kiosk może jeszcze zamienić na przerwę ({@link #markBreak}); bez wyboru
-     * zostaje końcem pracy. {@code breakEnded}: wejście po przerwie.
+     * zostaje końcem pracy. {@code breakEnded}: wejście po przerwie. {@code repeated}: karta przyłożona ponownie w
+     * czasie blokady, nic nie zapisano, a odpowiedź opisuje wcześniejsze odbicie.
      */
     public record ReaderResult(UUID punchId, String employeeName, String direction, Instant punchedAt,
-            boolean breakAvailable, boolean breakEnded) {
+            boolean breakAvailable, boolean breakEnded, boolean repeated) {
     }
 
     /** Ile po odbiciu wyjścia kiosk może je zamienić na przerwę. */
@@ -938,7 +999,8 @@ public class StaffTimeService {
             }
             punch.markBreakStart();
         }
-        return new ReaderResult(punch.getId(), employee.getDisplayName(), "OUT", punch.getPunchedAt(), false, false);
+        return new ReaderResult(punch.getId(), employee.getDisplayName(), "OUT", punch.getPunchedAt(), false, false,
+                false);
     }
 
     /** Czytnik (np. kiosk) sprawdza swój klucz i dowiaduje się, w którym sklepie stoi. */
@@ -960,14 +1022,17 @@ public class StaffTimeService {
     }
 
     /** Wejście i wyjście; wyjście {@code null}, gdy go nie ma (jeszcze w pracy albo zapomniane). */
-    record Pair(StaffTimePunch inPunch, StaffTimePunch outPunch) {
+    record Pair(StaffTimePunch inPunch, StaffTimePunch outPunch, TimeRounding rounding) {
 
+        /** Wejście po zaokrągleniu według zasad sklepu, w którym odbito kartę (bez zasad obcięte do minut). */
         LocalDateTime in() {
-            return local(inPunch.getPunchedAt());
+            return rounding.entry(inPunch.getStore().getId(), local(inPunch.getPunchedAt()));
         }
 
+        /** Wyjście po zaokrągleniu (w dół). */
         LocalDateTime out() {
-            return outPunch == null ? null : local(outPunch.getPunchedAt());
+            return outPunch == null ? null
+                    : rounding.exit(outPunch.getStore().getId(), local(outPunch.getPunchedAt()));
         }
 
         /**
@@ -980,6 +1045,23 @@ public class StaffTimeService {
     }
 
     static List<Pair> pairs(List<StaffTimePunch> punchesOfEmployee) {
+        return pairs(punchesOfEmployee, TimeRounding.NONE);
+    }
+
+    /** Zaokrąglanie według zasad sklepów, w których odbito karty (odbicie w innym sklepie idzie za jego zasadami). */
+    private TimeRounding rounding(Collection<List<StaffTimePunch>> punchesByEmployee) {
+        Set<UUID> storeIds = punchesByEmployee.stream().flatMap(List::stream)
+                .map(punch -> punch.getStore().getId()).collect(Collectors.toSet());
+        if (storeIds.isEmpty()) {
+            return TimeRounding.NONE;
+        }
+        return new TimeRounding(storeRules.findActive(storeIds).stream()
+                .filter(rules -> rules.getRoundingMinutes() > 1)
+                .collect(Collectors.toMap(rules -> rules.getStore().getId(), StaffTimeStoreRules::getRoundingMinutes)));
+    }
+
+    /** Pary wejście-wyjście z godzinami zaokrąglonymi według {@code rounding} (kierunek liczy się z kolejności). */
+    static List<Pair> pairs(List<StaffTimePunch> punchesOfEmployee, TimeRounding rounding) {
         List<StaffTimePunch> sorted = punchesOfEmployee.stream()
                 .sorted(Comparator.comparing(StaffTimePunch::getPunchedAt)).toList();
         List<Pair> result = new ArrayList<>();
@@ -989,16 +1071,16 @@ public class StaffTimeService {
                 open = punch;
             } else if (Duration.between(open.getPunchedAt(), punch.getPunchedAt()).compareTo(MAX_SHIFT) <= 0) {
                 if (punch.getPunchedAt().isAfter(open.getPunchedAt())) {
-                    result.add(new Pair(open, punch));
+                    result.add(new Pair(open, punch, rounding));
                 }
                 open = null;
             } else {
-                result.add(new Pair(open, null));
+                result.add(new Pair(open, null, rounding));
                 open = punch;
             }
         }
         if (open != null) {
-            result.add(new Pair(open, null));
+            result.add(new Pair(open, null, rounding));
         }
         return result;
     }
@@ -1111,6 +1193,12 @@ public class StaffTimeService {
      */
     TimeSettingsResponse.Employer employerOf(UUID storeId) {
         return employer(store(storeId));
+    }
+
+    /** Dane pracodawcy na wydruki (zapisane dla firmy albo podpowiedź z GUS). */
+    @Transactional(readOnly = true)
+    public TimeSettingsResponse.Employer employerFor(Store store) {
+        return employer(store);
     }
 
     private TimeSettingsResponse.Employer employer(Store store) {

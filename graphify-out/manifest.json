@@ -90,9 +90,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/layout/AppLayout.tsx": {
-    "mtime": 1794851628.2164774,
-    "seen": 1794851753.700213,
-    "ast_hash": "0498ad639f39f2748cb5da0a39c26119",
+    "mtime": 1794891346.9533403,
+    "seen": 1794891448.9254546,
+    "ast_hash": "2a5e78386cbd84fce7f06acf67b68d1d",
     "semantic_hash": ""
   },
   "frontend/src/components/ui/alert-dialog.tsx": {
@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1794851545.8717246,
-    "seen": 1794851753.7529979,
-    "ast_hash": "babeaaf8290f2f675f30291d317569ab",
+    "mtime": 1794891280.825953,
+    "seen": 1794891448.9780433,
+    "ast_hash": "e9a2863224c763d8c1ff2b27b6f9049c",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794851700.6287596,
-    "seen": 1794851753.781664,
-    "ast_hash": "5f7c0b5095ec541b41a5476eb28e46b8",
+    "mtime": 1794891395.260168,
+    "seen": 1794891449.0071793,
+    "ast_hash": "302c9d1e5e555006c876c0062a0a465e",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1548,9 +1548,9 @@
     "semantic_hash": ""
   },
   "deploy/docker-compose.yml": {
-    "mtime": 1794774259.7018244,
-    "seen": 1794804560.0580597,
-    "ast_hash": "b994a3d062468f731328b5c2430fc8d1",
+    "mtime": 1794890695.1768513,
+    "seen": 1794890749.0528073,
+    "ast_hash": "c580a80af0702b6a8be6a09f22ca99b6",
     "semantic_hash": ""
   },
   "deploy/README.md": {
@@ -3336,9 +3336,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/store/mapper/StoreMapper.java": {
-    "mtime": 1794774259.6807697,
-    "seen": 1794804560.0458243,
-    "ast_hash": "479d90f50af0c69c920cdede3d945bbb",
+    "mtime": 1794891138.1176682,
+    "seen": 1794891448.8991082,
+    "ast_hash": "100b719b9759a66feba40e6275039aee",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/store/repository/StoreRepository.java": {
@@ -3822,9 +3822,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/saved-folders.ts": {
-    "mtime": 1794774259.759027,
-    "seen": 1794804560.1036956,
-    "ast_hash": "e97bb9deeb4e5850dd7477c778a7e13b",
+    "mtime": 1794891357.8907545,
+    "seen": 1794891448.977039,
+    "ast_hash": "2ef3a24c0778f7c6e5ed42abeff4e59c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/dto/ChangeDeliveryDateRequest.java": {
@@ -4380,9 +4380,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryController.java": {
-    "mtime": 1794851488.723735,
-    "seen": 1794851753.5199933,
-    "ast_hash": "332f0e39a93f6647c044584cb37c4644",
+    "mtime": 1794853592.2063859,
+    "seen": 1794853752.911319,
+    "ast_hash": "963d3ebfcd079bfe20b82ede9596c1b9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/CatalogProduct.java": {
@@ -4464,9 +4464,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DataEntryIntegrationTests.java": {
-    "mtime": 1794851502.692,
-    "seen": 1794851753.6819391,
-    "ast_hash": "680ee4d14065b8e24e74341085b5c944",
+    "mtime": 1794853623.6853456,
+    "seen": 1794853753.068801,
+    "ast_hash": "5816923311313a8a6bc100ca5b6792bf",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/GeminiSuggestionModelTests.java": {
@@ -5682,9 +5682,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/PriceControlFile.java": {
-    "mtime": 1794571118.2304058,
-    "seen": 1794571230.048098,
-    "ast_hash": "7802188f7bc0d19589cfce46ec3614fa",
+    "mtime": 1794853603.9000974,
+    "seen": 1794853752.9103189,
+    "ast_hash": "6e43d122b665fb3f1f08a3d76bc5eb1c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/dto/PriceControlFileItem.java": {
@@ -5700,9 +5700,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/entity/DataEntryPriceControlFile.java": {
-    "mtime": 1794851437.9104364,
-    "seen": 1794851753.5269327,
-    "ast_hash": "c41f990f8327f70b5b2c4db2164efda2",
+    "mtime": 1794853592.2053862,
+    "seen": 1794853752.9193609,
+    "ast_hash": "2e4ad6e2ec6ef482628d0a4377455744",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/mapper/PriceControlFileMapper.java": {
@@ -5718,9 +5718,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/service/DataEntryPriceControlService.java": {
-    "mtime": 1794851485.2197158,
-    "seen": 1794851753.5315492,
-    "ast_hash": "6299f72fa0e8118a6b4be4c2c0d240dd",
+    "mtime": 1794853592.2063859,
+    "seen": 1794853752.923869,
+    "ast_hash": "cd719107160f167ccedbb061f2182272",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/PdfBarcodes.java": {
@@ -5982,9 +5982,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/SaveSettingsDialog.tsx": {
-    "mtime": 1794851665.420306,
-    "seen": 1794851753.7120879,
-    "ast_hash": "17676e3630678c1c563dc47886170677",
+    "mtime": 1794891346.9533403,
+    "seen": 1794891448.9379525,
+    "ast_hash": "0a16e38efd3a91c2871cf51f34b03b00",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/xml-save.tsx": {
@@ -8322,9 +8322,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/repository/StaffEmployeeRepository.java": {
-    "mtime": 1794774259.669441,
-    "seen": 1794804560.0370593,
-    "ast_hash": "3a0344c39081e34cbf39ff2186d6c79d",
+    "mtime": 1794890103.5410726,
+    "seen": 1794890749.0188825,
+    "ast_hash": "50bb16e52ab78e30f89c570a1589bfa9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/repository/StaffPositionRepository.java": {
@@ -8694,9 +8694,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/RecordsList.tsx": {
-    "mtime": 1794774259.745416,
-    "seen": 1794804560.0956588,
-    "ast_hash": "6ec4f1bbffa7f4ac1d743c5c476cc92e",
+    "mtime": 1794857047.0732458,
+    "seen": 1794889007.2764823,
+    "ast_hash": "4c714bfed86c14fdbf6daaa5982a0541",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-records/StaffRecordsPage.tsx": {
@@ -8880,9 +8880,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/SchedulePage.tsx": {
-    "mtime": 1794821407.5393507,
-    "seen": 1794822826.8765337,
-    "ast_hash": "a120974c73d58b9537fc072fdabfc1f6",
+    "mtime": 1794857047.0732458,
+    "seen": 1794889007.2781446,
+    "ast_hash": "a191869e3c64b6c2c6b6be900c758bae",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-schedule/api.ts": {
@@ -9090,15 +9090,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/component/TimeCard.java": {
-    "mtime": 1794774259.6558802,
-    "seen": 1794804560.0255556,
-    "ast_hash": "00da0d1687a6786ec99d803444dcd09f",
+    "mtime": 1794856417.940067,
+    "seen": 1794889007.1741092,
+    "ast_hash": "78d049c10f4795bf2a41569867c589fc",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/controller/StaffTimeController.java": {
-    "mtime": 1794774259.657884,
-    "seen": 1794804560.0255556,
-    "ast_hash": "ec62af06d7792716008c5f57c80b2bdb",
+    "mtime": 1794855334.8357954,
+    "seen": 1794855670.8178842,
+    "ast_hash": "459152c7f8abe3a4b4c775d05af3591a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/controller/TimeClockController.java": {
@@ -9114,9 +9114,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/TimeRequests.java": {
-    "mtime": 1794134095.90135,
-    "seen": 1794134967.273282,
-    "ast_hash": "12e24b41757b11b52faad17141bef477",
+    "mtime": 1794855319.6174147,
+    "seen": 1794855670.8233893,
+    "ast_hash": "e979f4df86226d666007643b437d2d47",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/dto/TimeSettingsResponse.java": {
@@ -9162,9 +9162,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/TimeDecisionKind.java": {
-    "mtime": 1794774259.6679358,
-    "seen": 1794804560.0355554,
-    "ast_hash": "223bf1434e88b3d2ef41a15efc8691ac",
+    "mtime": 1794856416.4909587,
+    "seen": 1794889007.1894028,
+    "ast_hash": "b9c23da2ee78b1dc832d5a4051001751",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/entity/TimePunchSource.java": {
@@ -9216,21 +9216,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeService.java": {
-    "mtime": 1794774259.6772568,
-    "seen": 1794804560.0398233,
-    "ast_hash": "2c48b92b02b573cd6762db0c9350b0d8",
+    "mtime": 1794856689.8554623,
+    "seen": 1794889007.1989527,
+    "ast_hash": "f2f056329c7d58f13f5f73bc8c289a74",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StaffTimeIntegrationTests.java": {
-    "mtime": 1794774259.6978242,
-    "seen": 1794804560.056058,
-    "ast_hash": "6c2988a1da786ea58334164fe17511a7",
+    "mtime": 1794890303.086114,
+    "seen": 1794890749.0498073,
+    "ast_hash": "11bc1bb95138345c8c90d3a0d1e0bbc0",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/TimeCardTests.java": {
-    "mtime": 1794774259.6988256,
-    "seen": 1794804560.0580597,
-    "ast_hash": "86889b3063aed21abb9a841c4705c66e",
+    "mtime": 1794856855.6980782,
+    "seen": 1794889007.2262623,
+    "ast_hash": "2d377963569652e04d418f0b0dade249",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/DayView.tsx": {
@@ -9246,27 +9246,27 @@
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/TimeDialogs.tsx": {
-    "mtime": 1794774259.7519274,
-    "seen": 1794804560.0966587,
-    "ast_hash": "a62f16cf85ed2868c16c5523d7f81d1f",
+    "mtime": 1794856922.3018272,
+    "seen": 1794889007.2791514,
+    "ast_hash": "98ca98015311485067a1c1f7a0b85076",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/TimePage.tsx": {
-    "mtime": 1794774259.7519274,
-    "seen": 1794804560.0966587,
-    "ast_hash": "c5d41ba02214ecc70343d8078e90d9bd",
+    "mtime": 1794857034.7317567,
+    "seen": 1794889007.2791514,
+    "ast_hash": "2a15546a855f7e88edd150c60aa95bd2",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/api.ts": {
-    "mtime": 1794774259.7535076,
-    "seen": 1794804560.0966587,
-    "ast_hash": "2f32f47f6f74ed1f45f7c0439172a7ab",
+    "mtime": 1794855505.123111,
+    "seen": 1794855670.9169717,
+    "ast_hash": "6a47665d8495e1fc17eac0ee3b9ac6e5",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/time-utils.ts": {
-    "mtime": 1794545134.7063172,
-    "seen": 1794545441.1522954,
-    "ast_hash": "52f6335ee1997884c575cab82166aade",
+    "mtime": 1794856895.4306135,
+    "seen": 1794889007.2791514,
+    "ast_hash": "00dc466e7cbec485a74afaeae44b7509",
     "semantic_hash": ""
   },
   "frontend/src/features/staff-time/TimeAttentionBadge.tsx": {
@@ -9552,9 +9552,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DownloadIntegrationTests.java": {
-    "mtime": 1794811910.9834423,
-    "seen": 1794812122.7783864,
-    "ast_hash": "2db5543c0eb8ac1cfc9a4db677beef76",
+    "mtime": 1794853846.6137981,
+    "seen": 1794853977.6285186,
+    "ast_hash": "53efc1415d6024c192fd29a76ecc2513",
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/DownloadFormDialog.tsx": {
@@ -9570,9 +9570,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/api.ts": {
-    "mtime": 1794811963.729717,
-    "seen": 1794812122.8300586,
-    "ast_hash": "66df33ee2ffa178036684ad1f68d1285",
+    "mtime": 1794853846.6148062,
+    "seen": 1794853977.6779194,
+    "ast_hash": "963da624bf5df0caca297a5229958fb7",
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/format.ts": {
@@ -10026,21 +10026,21 @@
     "semantic_hash": ""
   },
   "mobile/app.json": {
-    "mtime": 1794339896.570324,
-    "seen": 1794340023.2024574,
-    "ast_hash": "9cf71ae4e672d7a8410ca89c700ae73b",
+    "mtime": 1794890528.0213976,
+    "seen": 1794890749.1197217,
+    "ast_hash": "307dfbd39341fe8e8bb80ee41eaed129",
     "semantic_hash": ""
   },
   "mobile/package.json": {
-    "mtime": 1794393363.4312246,
-    "seen": 1794393530.438578,
-    "ast_hash": "df6d9f8835a26ba1a35583e83bf7ffd3",
+    "mtime": 1794890322.4945261,
+    "seen": 1794890749.1197217,
+    "ast_hash": "bcc23b61c4a963d23225ecb780efd399",
     "semantic_hash": ""
   },
   "mobile/src/app/_layout.tsx": {
-    "mtime": 1794393463.9454134,
-    "seen": 1794393530.438578,
-    "ast_hash": "4b6cad6f4e673ce1c890cbaea8129941",
+    "mtime": 1794890528.0183964,
+    "seen": 1794890749.1197217,
+    "ast_hash": "9ef4fb91abe1f55f937f0fd482877941",
     "semantic_hash": ""
   },
   "mobile/src/app/article/[itm8].tsx": {
@@ -10050,9 +10050,9 @@
     "semantic_hash": ""
   },
   "mobile/src/app/index.tsx": {
-    "mtime": 1794585302.2019706,
-    "seen": 1794585442.275079,
-    "ast_hash": "340fe3786e6b02bd26a188e32117f46b",
+    "mtime": 1794890528.0193954,
+    "seen": 1794890749.1197217,
+    "ast_hash": "4aecb13d810b20be801c4f2b9f63e59e",
     "semantic_hash": ""
   },
   "mobile/src/app/login.tsx": {
@@ -10092,9 +10092,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/auth.tsx": {
-    "mtime": 1794774259.8069067,
-    "seen": 1794804560.1112988,
-    "ast_hash": "782777512c2b9863e3477d7f2a9ecb35",
+    "mtime": 1794890528.020399,
+    "seen": 1794890749.121721,
+    "ast_hash": "e3659b535f72f9d103e1a74173010ee2",
     "semantic_hash": ""
   },
   "mobile/src/lib/format.ts": {
@@ -10116,9 +10116,9 @@
     "semantic_hash": ""
   },
   "mobile/src/lib/types.ts": {
-    "mtime": 1794774259.8079073,
-    "seen": 1794804560.1122987,
-    "ast_hash": "3e38d0826de99514bdbf003895e8d77d",
+    "mtime": 1794890410.457695,
+    "seen": 1794890749.1227212,
+    "ast_hash": "b7c2224f37c41483050a1d6cc92f5e3a",
     "semantic_hash": ""
   },
   "mobile/tsconfig.json": {
@@ -10134,9 +10134,9 @@
     "semantic_hash": ""
   },
   "mobile/README.md": {
-    "mtime": 1794337512.229944,
-    "seen": 1794340023.2173748,
-    "ast_hash": "f7b6f3f8ae2256af2519e86406e12596",
+    "mtime": 1794890695.1768513,
+    "seen": 1794890749.141263,
+    "ast_hash": "6573f7c0ce5da2d9d407d03050e167d1",
     "semantic_hash": ""
   },
   "mobile/assets/android-icon-background.png": {
@@ -10404,9 +10404,9 @@
     "semantic_hash": ""
   },
   "mobile/src/components/icons.tsx": {
-    "mtime": 1794393026.1132019,
-    "seen": 1794393136.765102,
-    "ast_hash": "6b33d6e950fb95e6ff2f53e96211150a",
+    "mtime": 1794890468.278964,
+    "seen": 1794890749.121721,
+    "ast_hash": "3de2ff0fcdb7352c375be4a695511961",
     "semantic_hash": ""
   },
   "mobile/src/lib/week.ts": {
@@ -10668,9 +10668,9 @@
     "semantic_hash": ""
   },
   "mobile/src/components/FloatingDock.tsx": {
-    "mtime": 1794725843.6821868,
-    "seen": 1794771609.1105814,
-    "ast_hash": "7f77e635029bac7324defaa863d2c289",
+    "mtime": 1794890528.0193954,
+    "seen": 1794890749.1207213,
+    "ast_hash": "88c804f0cf3cedec1542c3dd352dedb9",
     "semantic_hash": ""
   },
   "mobile/src/lib/motion.ts": {
@@ -10866,9 +10866,9 @@
     "semantic_hash": ""
   },
   "kiosk/src/app/index.tsx": {
-    "mtime": 1794774259.8027382,
-    "seen": 1794804560.106299,
-    "ast_hash": "6a7d8afe55c36cbff1e32cb14e38363c",
+    "mtime": 1794855601.595083,
+    "seen": 1794855670.9284022,
+    "ast_hash": "af07f63cd718cc58d0025f5fc17af128",
     "semantic_hash": ""
   },
   "kiosk/src/app/login.tsx": {
@@ -10962,9 +10962,9 @@
     "semantic_hash": ""
   },
   "kiosk/src/lib/types.ts": {
-    "mtime": 1794545158.7869167,
-    "seen": 1794545441.1655266,
-    "ast_hash": "02d6ba340f9925519677340c2e882e5e",
+    "mtime": 1794855601.595083,
+    "seen": 1794855670.9308734,
+    "ast_hash": "acb8a9ae368c1e6112acbb866598966c",
     "semantic_hash": ""
   },
   "kiosk/src/lib/uid.ts": {
@@ -11364,9 +11364,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/dashboard/AttentionCard.tsx": {
-    "mtime": 1794516001.2827744,
-    "seen": 1794544922.7625415,
-    "ast_hash": "4541b499faadc9e167ce2a252450918c",
+    "mtime": 1794888908.318043,
+    "seen": 1794889007.241784,
+    "ast_hash": "e014f8e3dc0999b9d15ede9971b447c7",
     "semantic_hash": ""
   },
   "frontend/src/features/dashboard/PresenceCard.tsx": {
@@ -11826,9 +11826,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaDocumentPage.tsx": {
-    "mtime": 1794823585.8721151,
-    "seen": 1794823611.820198,
-    "ast_hash": "a41822a4d4625d9a7650ea67990282c7",
+    "mtime": 1794854208.6498919,
+    "seen": 1794855670.9050353,
+    "ast_hash": "bb513bff6fe9a55a1d17647381579c42",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/MeaPage.tsx": {
@@ -12096,9 +12096,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/controller/ShortcutController.java": {
-    "mtime": 1794811836.9421537,
-    "seen": 1794812122.6629257,
-    "ast_hash": "566b5ff3a1bbf8e01c1e5e2c94eed135",
+    "mtime": 1794853846.6137981,
+    "seen": 1794853977.5150647,
+    "ast_hash": "4e2a15e5ce9910d1c2294f9fde9aa552",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/controller/ShortcutSettingsController.java": {
@@ -12132,9 +12132,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/service/DownloadShortcutService.java": {
-    "mtime": 1794811816.732954,
-    "seen": 1794812122.6654348,
-    "ast_hash": "9ae413fd131fe04100dc5ae75bef30b8",
+    "mtime": 1794853846.6137981,
+    "seen": 1794853977.5185761,
+    "ast_hash": "c1f3e323371d74fd90383cfd2f84ca45",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/MeaQueueItem.java": {
@@ -12150,9 +12150,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/ShortcutsSection.tsx": {
-    "mtime": 1794812006.8991444,
-    "seen": 1794812122.8300586,
-    "ast_hash": "c94c724550a81bcceebcd287deec253b",
+    "mtime": 1794853846.6148062,
+    "seen": 1794853977.6779194,
+    "ast_hash": "f853284c135624a545a3508a0bbfac31",
     "semantic_hash": ""
   },
   "frontend/src/features/mea/AthosQueueDialog.tsx": {
@@ -12354,9 +12354,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PriceControlFilesDialog.tsx": {
-    "mtime": 1794851665.4897504,
-    "seen": 1794851753.711568,
-    "ast_hash": "beeead96f9437828ab8f4c1c6ea2e06f",
+    "mtime": 1794853613.5352788,
+    "seen": 1794853753.098422,
+    "ast_hash": "ab6ef2623999c2993adcb7dca323600e",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PriceControlPendingBadge.tsx": {
@@ -12366,9 +12366,303 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/price-control-watch.ts": {
-    "mtime": 1794851665.5457168,
-    "seen": 1794851753.7141266,
+    "mtime": 1794852651.5911882,
+    "seen": 1794853753.1014256,
     "ast_hash": "657d403f89735c450ebde863ce024346",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/component/TimeRounding.java": {
+    "mtime": 1794855221.6552243,
+    "seen": 1794855670.8168821,
+    "ast_hash": "d948c7ccba611788b83a50d98be30c33",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/dto/TimeRulesResponse.java": {
+    "mtime": 1794855317.8721015,
+    "seen": 1794855670.8233893,
+    "ast_hash": "6b40c3da6a03c37eae4df5c81c298af8",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/StaffTimeRuleOffer.java": {
+    "mtime": 1794855199.513768,
+    "seen": 1794855670.8309407,
+    "ast_hash": "cdc16b14b7b01acf6187fe5508b53606",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/StaffTimeStoreRules.java": {
+    "mtime": 1794855219.2149644,
+    "seen": 1794855670.8309407,
+    "ast_hash": "debf3d279506d683c2bb424e3c53648e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/TimeRequestApprover.java": {
+    "mtime": 1794855197.9314148,
+    "seen": 1794855670.8309407,
+    "ast_hash": "226710d2cf57048df6e45002020f568d",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/repository/StaffTimeRuleOfferRepository.java": {
+    "mtime": 1794855433.159101,
+    "seen": 1794855670.8379607,
+    "ast_hash": "9fac60a86cf28db0a6de57717963fdd2",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/repository/StaffTimeStoreRulesRepository.java": {
+    "mtime": 1794855220.07101,
+    "seen": 1794855670.8379607,
+    "ast_hash": "1ebccde3a7d69423608cb8886fc17143",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeRulesService.java": {
+    "mtime": 1794855320.5162475,
+    "seen": 1794855670.8399603,
+    "ast_hash": "1db87f05dc2209963dbf7e8feebcb28a",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/TimeRoundingTests.java": {
+    "mtime": 1794855379.874853,
+    "seen": 1794855670.8651626,
+    "ast_hash": "088f94778799707bfac5faa3a1868206",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/staff-time/TimeRulesSection.tsx": {
+    "mtime": 1794855549.1094632,
+    "seen": 1794855670.9169717,
+    "ast_hash": "557200cd28b8337bbbb2d5ef6dabaf3a",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/component/TimeRequestPdf.java": {
+    "mtime": 1794856790.859333,
+    "seen": 1794889007.1741092,
+    "ast_hash": "2286343fab3fbc9adf48611fdfc3d68d",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/controller/MyTimeRequestController.java": {
+    "mtime": 1794890207.0921502,
+    "seen": 1794890749.0013654,
+    "ast_hash": "50c1d28002377efd4bff9de9cc65dc25",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/controller/TimeRequestController.java": {
+    "mtime": 1794856730.4675286,
+    "seen": 1794889007.1761074,
+    "ast_hash": "24d89046b46139aca1a63c42f66356bc",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/dto/TimeRequestInput.java": {
+    "mtime": 1794856554.870021,
+    "seen": 1794889007.1807163,
+    "ast_hash": "7f5452a8cae0063fb2d7491af46690d4",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/dto/TimeRequestResponse.java": {
+    "mtime": 1794856554.0656967,
+    "seen": 1794889007.1807163,
+    "ast_hash": "6034535c9fbdf287dbfc6892f5e61cee",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/StaffTimeRequest.java": {
+    "mtime": 1794856518.8080244,
+    "seen": 1794889007.1894028,
+    "ast_hash": "a51018565432c2b57c6ca7df306659b9",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/StaffTimeRequestEvent.java": {
+    "mtime": 1794856508.26504,
+    "seen": 1794889007.1894028,
+    "ast_hash": "5152f51c8b6ebc803fbf384487bcf23e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/TimeRequestKind.java": {
+    "mtime": 1794856467.6660478,
+    "seen": 1794889007.1904027,
+    "ast_hash": "a6f74f545175bc75ba1c0c7614e43f7c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/TimeRequestStatus.java": {
+    "mtime": 1794856468.463046,
+    "seen": 1794889007.1904027,
+    "ast_hash": "5d3592a2ca56b9f693ce20ea4cb369a1",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/repository/StaffTimeRequestEventRepository.java": {
+    "mtime": 1794856509.8373382,
+    "seen": 1794889007.1969526,
+    "ast_hash": "62a820aaa815d7a9b4eae7e48d23e432",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/repository/StaffTimeRequestRepository.java": {
+    "mtime": 1794856509.0563178,
+    "seen": 1794889007.1969526,
+    "ast_hash": "f7c724d292ba56e8c3857ade09cd1301",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeRequestService.java": {
+    "mtime": 1794890207.0921502,
+    "seen": 1794890749.0250807,
+    "ast_hash": "28ec894c5896c2e9fb7dab9b23360d82",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/staff-time/TimeRequestsDialog.tsx": {
+    "mtime": 1794888908.318566,
+    "seen": 1794889007.2791514,
+    "ast_hash": "86c6fda257edcb07f41a494284128481",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/staff-time/requests-api.ts": {
+    "mtime": 1794857048.1207168,
+    "seen": 1794889007.2791514,
+    "ast_hash": "cfcd79fedb8d1287fd8213228b097f29",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/push/component/ExpoPushClient.java": {
+    "mtime": 1794890084.1166227,
+    "seen": 1794890748.9843564,
+    "ast_hash": "1f4c4d2b4f2ae4c36d51f4668204db07",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/push/controller/PushTokenController.java": {
+    "mtime": 1794890085.7083564,
+    "seen": 1794890748.9843564,
+    "ast_hash": "ad6ff7e1f83d609857efefeed2fd4bb4",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/push/entity/UserPushToken.java": {
+    "mtime": 1794890082.525187,
+    "seen": 1794890748.9843564,
+    "ast_hash": "e50753834252d87dd84e8bdd218a3c8c",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/push/repository/UserPushTokenRepository.java": {
+    "mtime": 1794890083.318244,
+    "seen": 1794890748.9843564,
+    "ast_hash": "305f0f3ad861c981611e7f1dbae0e832",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/push/service/PushService.java": {
+    "mtime": 1794890084.9131892,
+    "seen": 1794890748.9843564,
+    "ast_hash": "e316e12ee8c8af41d5ddb8a331d9b55d",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/component/TimeAnomalyJob.java": {
+    "mtime": 1794890180.637244,
+    "seen": 1794890749.0003653,
+    "ast_hash": "941c1438c9e288a989c90d1c693f43e4",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/dto/MyTimeAnomaliesResponse.java": {
+    "mtime": 1794890147.3340783,
+    "seen": 1794890749.004366,
+    "ast_hash": "3d5275f8877a41fbe6328b7837d2fb3a",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/entity/StaffTimeAnomalyNotice.java": {
+    "mtime": 1794890104.3988528,
+    "seen": 1794890749.014882,
+    "ast_hash": "1f6fec6cc2219790cf92b7e0283ccd63",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/repository/StaffTimeAnomalyNoticeRepository.java": {
+    "mtime": 1794890105.1863637,
+    "seen": 1794890749.02207,
+    "ast_hash": "d0e488fc45fc734e43182c7f801438b0",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/staff/service/StaffTimeAnomalyService.java": {
+    "mtime": 1794890303.0540142,
+    "seen": 1794890749.0250807,
+    "ast_hash": "cd1e3ab5ce055ce029ec14981dade57a",
+    "semantic_hash": ""
+  },
+  "mobile/src/app/request-new.tsx": {
+    "mtime": 1794890529.2786846,
+    "seen": 1794890749.1197217,
+    "ast_hash": "1d349d67a64efbf8a6835868bbd0e41f",
+    "semantic_hash": ""
+  },
+  "mobile/src/app/requests.tsx": {
+    "mtime": 1794890529.23008,
+    "seen": 1794890749.1197217,
+    "ast_hash": "75eb967ecb7592760b2a992585231ad1",
+    "semantic_hash": ""
+  },
+  "mobile/src/components/TimeAnomaliesCard.tsx": {
+    "mtime": 1794890525.9672315,
+    "seen": 1794890749.121721,
+    "ast_hash": "e81088ae336cd3efbbd79e12eb2252e2",
+    "semantic_hash": ""
+  },
+  "mobile/src/lib/push.ts": {
+    "mtime": 1794890658.0554948,
+    "seen": 1794890749.121721,
+    "ast_hash": "5ae3edecb8c5e26b74ef74dc98726e6b",
+    "semantic_hash": ""
+  },
+  "mobile/src/lib/requests.ts": {
+    "mtime": 1794890440.0883727,
+    "seen": 1794890749.1227212,
+    "ast_hash": "673db15247a10a87d44cb5569be87bdd",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/store/controller/StoreFileQueueController.java": {
+    "mtime": 1794891167.9871802,
+    "seen": 1794891448.8954458,
+    "ast_hash": "7fc1f235bb8f21ebecba40f1e9e2f093",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/store/dto/FileQueueItemResponse.java": {
+    "mtime": 1794891129.7277288,
+    "seen": 1794891448.8954458,
+    "ast_hash": "f83213eee941aa5566a5134a8c75ae08",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/store/entity/StoreFileQueueItem.java": {
+    "mtime": 1794891128.1495895,
+    "seen": 1794891448.8991082,
+    "ast_hash": "14ec4c42b7516fc6f9cb758cc576990a",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/store/repository/StoreFileQueueRepository.java": {
+    "mtime": 1794891128.9356763,
+    "seen": 1794891448.8991082,
+    "ast_hash": "a3a889b583512005e4ba40d4fe2460da",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/store/service/StoreFileQueueService.java": {
+    "mtime": 1794891167.1937385,
+    "seen": 1794891448.900108,
+    "ast_hash": "6abb700ba133cc8ced693525fbcf3e13",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/StoreFileQueueIntegrationTests.java": {
+    "mtime": 1794891192.3769512,
+    "seen": 1794891448.9172945,
+    "ast_hash": "e16842b883d7b25dfbb24075335b4217",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/file-queue/FileQueueBanner.tsx": {
+    "mtime": 1794891357.9199877,
+    "seen": 1794891448.9522033,
+    "ast_hash": "c15631ae90024dc916afd906bc10b554",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/file-queue/FileQueueDialog.tsx": {
+    "mtime": 1794891357.9626606,
+    "seen": 1794891448.9522033,
+    "ast_hash": "bac6aef7bdd8513f6816639da6e72242",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/file-queue/api.ts": {
+    "mtime": 1794891287.133631,
+    "seen": 1794891448.9522033,
+    "ast_hash": "6fa9ddeafdc599f60e2d76d6f429e897",
+    "semantic_hash": ""
+  },
+  "frontend/src/lib/file-queue.ts": {
+    "mtime": 1794891357.8388002,
+    "seen": 1794891448.9760392,
+    "ast_hash": "970bb29f3f7d38aaedf6e758034672e8",
     "semantic_hash": ""
   }
 }

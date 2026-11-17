@@ -175,3 +175,53 @@ export type MySchedule = {
     leave: LeaveKind | null
   }[]
 }
+
+/** Rodzaj wniosku pracownika: o odcinek karty czasu pracy albo zgłoszenie L4. */
+export type TimeRequestKind =
+  | 'OVERTIME'
+  | 'WORK_OFF'
+  | 'PRIVATE_EXIT'
+  | 'LATE_OR_EARLY'
+  | 'FORCE_MAJEURE'
+  | 'CHILD_CARE'
+  | 'OTHER_PAID'
+  | 'SICK_LEAVE'
+
+export type TimeRequestStatus = 'PENDING' | 'MANAGER_APPROVED' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+
+/** Własny wniosek (`GET /me/time-requests`); `start`/`end` przy odcinku karty, `workDate`..`dateTo` przy L4. */
+export type TimeRequest = {
+  id: string
+  kind: TimeRequestKind
+  workDate: string
+  dateTo: string | null
+  start: string | null
+  end: string | null
+  minutes: number | null
+  reason: string | null
+  status: TimeRequestStatus
+  needsHr: boolean
+  createdAt: string
+  manager: { by: string | null; at: string; note: string | null } | null
+  hr: { by: string | null; at: string; note: string | null } | null
+  canCancel: boolean
+}
+
+/** Różnice między odbiciami a grafikiem z ostatnich 14 dni (`GET /me/time-anomalies`). */
+export type MyTimeAnomalies = {
+  employee: boolean
+  /** Ile różnic czeka na wniosek. */
+  open: number
+  items: {
+    date: string
+    /** OVERTIME: czas poza grafikiem, SHORTFALL: brak z grafiku, MISSING_EXIT: wejście bez wyjścia. */
+    part: 'OVERTIME' | 'SHORTFALL' | 'MISSING_EXIT'
+    start: string
+    end: string | null
+    minutes: number
+    plannedStart: string | null
+    plannedEnd: string | null
+    kinds: TimeRequestKind[]
+    request: { id: string; kind: TimeRequestKind; status: TimeRequestStatus } | null
+  }[]
+}

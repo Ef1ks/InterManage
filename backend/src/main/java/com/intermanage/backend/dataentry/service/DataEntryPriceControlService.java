@@ -176,6 +176,17 @@ public class DataEntryPriceControlService {
         return history(storeId);
     }
 
+    /**
+     * Ponowny zapis: ta sama treść pod nazwą z bieżącą godziną, bo program sklepu pomija nazwę, którą już kiedyś widział.
+     * Lista pilnuje od teraz nowej nazwy.
+     */
+    @Transactional
+    public DataEntryPriceControlFile resave(UUID storeId, UUID id) {
+        DataEntryPriceControlFile file = active(storeId, id);
+        file.rename(PriceControlFile.renewed(file.getFileName()));
+        return file;
+    }
+
     @Transactional(readOnly = true)
     public DataEntryPriceControlFile file(UUID storeId, UUID id) {
         return files.findByIdAndStoreId(id, storeId)

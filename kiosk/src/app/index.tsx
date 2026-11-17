@@ -223,6 +223,19 @@ function Result({ outcome, t, breakChoice, onBreak, onFinish }: ResultProps) {
     const entry = result.direction === 'IN'
     const firstName = result.employeeName.split(' ')[0]
     const time = timeFormat.format(new Date(result.punchedAt))
+    if (result.repeated) {
+      return (
+        <View style={[styles.panel, { backgroundColor: t.infoBg, borderColor: 'transparent' }]}>
+          <Text style={{ color: t.infoText, fontSize: 18, fontWeight: '600' }}>
+            {entry ? 'WEJŚCIE' : 'WYJŚCIE'} · {time}
+          </Text>
+          <Text style={[styles.panelTitle, { color: t.infoText }]}>Już odbito, {firstName}</Text>
+          <Text style={{ color: t.infoText, fontSize: 17, textAlign: 'center' }}>
+            Karta była przyłożona przed chwilą, drugie odbicie nie zostało zapisane.
+          </Text>
+        </View>
+      )
+    }
     if (breakChoice === 'done') {
       return (
         <View style={[styles.panel, { backgroundColor: t.warnBg, borderColor: 'transparent' }]}>

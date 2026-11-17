@@ -34,6 +34,7 @@ import { SwitchAccountDialog } from '@/features/auth/AccountSwitcher'
 import { useCurrentUser, useLogout } from '@/features/auth/api'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceControlWatcher } from '@/features/data-entry/price-control-watch'
+import { FileQueueBanner } from '@/features/file-queue/FileQueueBanner'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore } from '@/features/stores/current-store'
@@ -165,6 +166,7 @@ export function AppLayout() {
           </div>
         </header>
         <DownloadUpdatesBanner />
+        <FileQueueBanner />
         {/* Szerokie strony (data-wide-page) zajmują całą szerokość, a menu jest zwinięte do ikon. */}
         {/* Strony z data-fit-page (od lg) mają wysokość okna pod nagłówkiem i przewijają się w środku, nie całe. */}
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none lg:has-[[data-fit-page]]:flex lg:has-[[data-fit-page]]:h-[calc(100svh-3.5rem)] lg:has-[[data-fit-page]]:flex-col lg:has-[[data-fit-page]]:overflow-y-auto">

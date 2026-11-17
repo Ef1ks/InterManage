@@ -17,6 +17,7 @@ import {
   useTimeSettings,
   useTimeSettingsActions,
 } from '@/features/staff-time/api'
+import { TimeRulesSection } from '@/features/staff-time/TimeRulesSection'
 import { STATUS_STYLES, clockOf, hm } from '@/features/staff-time/time-utils'
 import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
@@ -27,11 +28,9 @@ const failed = (cause: unknown, fallback: string) => (cause instanceof ApiError 
 
 const PRINTED: TimeDecisionKind[] = ['EMPLOYER_ORDER', 'EMPLOYEE_REQUEST']
 
-const OVERTIME_CHOICES: {
-  decision: 'EMPLOYER_ORDER' | 'EMPLOYEE_REQUEST' | 'REJECTED'
-  label: string
-  description: string
-}[] = [
+type Choice = { decision: Exclude<TimeDecisionKind, 'OFFSET'>; label: string; description: string }
+
+const OVERTIME_CHOICES: Choice[] = [
   {
     decision: 'EMPLOYER_ORDER',
     label: 'Na polecenie pracodawcy',
@@ -44,9 +43,39 @@ const OVERTIME_CHOICES: {
       'Pracownik chciał popracować dłużej, a Ty się zgadzasz. Liczy się do czasu pracy, drukuje się wniosek ze zgodą.',
   },
   {
+    decision: 'WORKED_OFF',
+    label: 'Odpracowanie wyjścia prywatnego',
+    description:
+      'Pracownik odrabia wcześniejsze wyjście na sprawy osobiste. Liczy się do pracy, ale to nie nadgodziny.',
+  },
+  {
     decision: 'REJECTED',
     label: 'Odrzuć: własna inicjatywa',
     description: 'Nikt nie polecił tej pracy. Czas się nie liczy, w karcie zostaje czas według grafiku.',
+  },
+]
+
+/** Brak czasu: usprawiedliwienie z różnym wynagrodzeniem albo wyjście prywatne do odpracowania. */
+const SHORTFALL_CHOICES: Choice[] = [
+  {
+    decision: 'JUSTIFIED',
+    label: 'Usprawiedliw, płatne',
+    description: 'Badania, krwiodawstwo, opieka nad dzieckiem (art. 188). Liczy się jak w grafiku.',
+  },
+  {
+    decision: 'JUSTIFIED_HALF',
+    label: 'Siła wyższa, płatne 50%',
+    description: 'Pilna sprawa rodzinna, choroba lub wypadek (art. 148¹, 16 h w roku). Nie jest pracą.',
+  },
+  {
+    decision: 'JUSTIFIED_UNPAID',
+    label: 'Usprawiedliw bez wynagrodzenia',
+    description: 'Ważna przyczyna albo wezwanie z urzędu. Nie jest pracą ani brakiem, saldo okresu się nie zmienia.',
+  },
+  {
+    decision: 'PRIVATE_EXIT',
+    label: 'Wyjście prywatne do odpracowania',
+    description: 'Na pisemny wniosek (art. 151²¹). Bez wynagrodzenia, zostaje w saldzie do odrobienia.',
   },
 ]
 
@@ -125,7 +154,15 @@ function SegmentBody({
             toast.success('Nadgodziny przyjęte')
           } else {
             onClose()
-            toast.success(decision === 'REJECTED' ? 'Odrzucone: czas liczy się według grafiku' : 'Usprawiedliwione')
+            toast.success(
+              decision === 'REJECTED'
+                ? 'Odrzucone: czas liczy się według grafiku'
+                : decision === 'WORKED_OFF'
+                  ? 'Przyjęte jako odpracowanie'
+                  : decision === 'PRIVATE_EXIT'
+                    ? 'Wyjście prywatne do odpracowania'
+                    : 'Usprawiedliwione',
+            )
           }
         },
         onError: (cause) => toast.error(failed(cause, 'Nie udało się zapisać decyzji')),
@@ -187,30 +224,24 @@ function SegmentBody({
           {overtime && <OvertimeBalance storeId={storeId} row={row} segment={segment} />}
           <TextField label="Uwaga (opcjonalnie)" value={note} onChange={(event) => setNote(event.target.value)} />
           <div className="grid gap-2">
-            {overtime ? (
-              OVERTIME_CHOICES.map((choice) => (
-                <button
-                  key={choice.decision}
-                  type="button"
-                  disabled={decide.isPending}
-                  onClick={() => choose(choice.decision)}
-                  className="flex items-start gap-3 rounded-xl border bg-background p-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-input/30"
-                >
-                  <span
-                    aria-hidden
-                    className={cn('mt-1 size-3 shrink-0 rounded-sm', STATUS_STYLES[choice.decision].bar)}
-                  />
-                  <span className="grid gap-0.5">
-                    <span className="text-sm font-medium">{choice.label}</span>
-                    <span className="text-xs text-muted-foreground">{choice.description}</span>
-                  </span>
-                </button>
-              ))
-            ) : (
-              <Button type="button" loading={decide.isPending} onClick={() => choose('JUSTIFIED')}>
-                Usprawiedliw: liczy się jak w grafiku
-              </Button>
-            )}
+            {(overtime ? OVERTIME_CHOICES : SHORTFALL_CHOICES).map((choice) => (
+              <button
+                key={choice.decision}
+                type="button"
+                disabled={decide.isPending}
+                onClick={() => choose(choice.decision)}
+                className="flex items-start gap-3 rounded-xl border bg-background p-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-input/30"
+              >
+                <span
+                  aria-hidden
+                  className={cn('mt-1 size-3 shrink-0 rounded-sm', STATUS_STYLES[choice.decision].bar)}
+                />
+                <span className="grid gap-0.5">
+                  <span className="text-sm font-medium">{choice.label}</span>
+                  <span className="text-xs text-muted-foreground">{choice.description}</span>
+                </span>
+              </button>
+            ))}
           </div>
           {!overtime && (
             <p className="text-xs text-muted-foreground">
@@ -504,8 +535,9 @@ export function TimeSettingsDialog({
         <DialogHeader>
           <DialogTitle>Ustawienia czasu pracy</DialogTitle>
           <DialogDescription>
-            Dane pracodawcy trafiają na polecenia i wnioski o nadgodziny. Czytnik przedstawia się kluczem, a karta
-            wskazuje pracownika. Tolerancję i przerwy ustawia się w ustawieniach działu w Grafiku.
+            Zasady odbić obowiązują cały sklep. Dane pracodawcy trafiają na polecenia i wnioski o nadgodziny. Czytnik
+            przedstawia się kluczem, a karta wskazuje pracownika. Tolerancję i przerwy ustawia się w ustawieniach działu
+            w Grafiku.
           </DialogDescription>
         </DialogHeader>
         {data ? (
@@ -534,6 +566,8 @@ function SettingsBody({ storeId, settings }: { storeId: string; settings: TimeSe
 
   return (
     <div className="grid gap-6">
+      <TimeRulesSection storeId={storeId} />
+
       <Form
         onSubmit={(event) => {
           event.preventDefault()

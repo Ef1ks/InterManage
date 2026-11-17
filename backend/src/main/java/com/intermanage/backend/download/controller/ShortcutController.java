@@ -39,6 +39,13 @@ public class ShortcutController {
         return attachment(shortcut.getFileName(), shortcut.getContent());
     }
 
+    /** Jeden skrót w ZIP-ie o jego nazwie: sam plik .lnk przeglądarka blokuje. */
+    @GetMapping("/{id}/zip")
+    public ResponseEntity<byte[]> zipOne(@PathVariable UUID id) {
+        DownloadShortcut shortcut = shortcuts.file(id);
+        return attachment(shortcut.getName() + ".zip", shortcuts.zip(id));
+    }
+
     /** Wszystkie skróty w jednym ZIP-ie. */
     @GetMapping("/zip")
     public ResponseEntity<byte[]> zip() {

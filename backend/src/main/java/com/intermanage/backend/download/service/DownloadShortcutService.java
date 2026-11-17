@@ -108,6 +108,19 @@ public class DownloadShortcutService {
         if (list.isEmpty()) {
             throw ApiException.notFound("Nie ma jeszcze skrótów");
         }
+        return zipOf(list);
+    }
+
+    /**
+     * Jeden skrót w ZIP-ie: przeglądarki nie zapisują samego pliku .lnk (typ niebezpieczny, pobieranie zostaje
+     * niedokończone), a ZIP przechodzi.
+     */
+    @Transactional(readOnly = true)
+    public byte[] zip(UUID id) {
+        return zipOf(List.of(active(id)));
+    }
+
+    private static byte[] zipOf(List<DownloadShortcut> list) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
             for (DownloadShortcut shortcut : list) {

@@ -8,6 +8,7 @@ import type {
   TimeBalance,
   TimeCards,
   TimeDecisionKind,
+  TimeRules,
   TimeSegmentPart,
   TimeSettings,
 } from '@/lib/types'
@@ -165,6 +166,39 @@ export function useTimeSettings(storeId: string, enabled: boolean) {
     queryFn: () => api<TimeSettings>(path(storeId, '/settings')),
     enabled,
   })
+}
+
+export function useTimeRules(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['staff-time', storeId, 'rules'],
+    queryFn: () => api<TimeRules>(path(storeId, '/settings/rules')),
+    enabled,
+  })
+}
+
+export type TimeRulesInput = Pick<TimeRules, 'roundingMinutes' | 'punchCooldownSeconds' | 'finalApprover'>
+
+export function useTimeRulesActions(storeId: string) {
+  const save = useMutation({
+    mutationFn: (json: TimeRulesInput) => api<TimeRules>(path(storeId, '/settings/rules'), { method: 'PUT', json }),
+  })
+  const offer = useMutation({
+    mutationFn: (storeIds: string[]) =>
+      api<TimeRules>(path(storeId, '/settings/rules/offers'), { method: 'POST', json: { storeIds } }),
+  })
+  const accept = useMutation({
+    mutationFn: (offerId: string) =>
+      api<TimeRules>(path(storeId, `/settings/rules/offers/${offerId}/accept`), { method: 'POST' }),
+  })
+  const reject = useMutation({
+    mutationFn: (offerId: string) =>
+      api<TimeRules>(path(storeId, `/settings/rules/offers/${offerId}/reject`), { method: 'POST' }),
+  })
+  const cancel = useMutation({
+    mutationFn: (offerId: string) =>
+      api<TimeRules>(path(storeId, `/settings/rules/offers/${offerId}`), { method: 'DELETE' }),
+  })
+  return { save, offer, accept, reject, cancel }
 }
 
 export function useTimeSettingsActions(storeId: string) {

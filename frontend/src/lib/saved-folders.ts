@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError, fetchNamedFile } from '@/lib/api'
+import { enqueueFile, queueStoreFor } from '@/lib/file-queue'
 
 /*
  * Foldery na komputerze wybrane raz przez użytkownika (File System Access API, Chrome i Edge). Uchwyt folderu
@@ -105,6 +106,13 @@ export async function pickFolder(
  * działa tylko bezpośrednio po geście użytkownika.
  */
 export async function ensureFolderAccess(key: string, folderMode: FolderMode = 'readwrite'): Promise<boolean> {
+  // Kolejka plików sklepu (`lib/file-queue`): zapis idzie na serwer, folder nie jest potrzebny.
+  if (folderMode === 'readwrite' && queueStoreFor(key)) return true
+  return requestFolderAccess(key, folderMode)
+}
+
+/** {@link ensureFolderAccess} bez kolejki plików: zgoda na prawdziwy folder (zapis plików z kolejki). */
+export async function requestFolderAccess(key: string, folderMode: FolderMode = 'readwrite'): Promise<boolean> {
   const handle = await readFolder(key)
   if (!handle) return false
   const mode: PermissionMode = { mode: folderMode }
@@ -121,6 +129,7 @@ export async function ensureFolderAccess(key: string, folderMode: FolderMode = '
  * kolejnym kliknięciu ({@link ensureFolderAccess}).
  */
 export async function folderAccess(key: string, folderMode: FolderMode): Promise<PermissionState | 'missing'> {
+  if (folderMode === 'readwrite' && queueStoreFor(key)) return 'granted'
   const handle = await readFolder(key)
   if (!handle) return 'missing'
   try {
@@ -143,7 +152,8 @@ export async function requestStoredFolderAccess(prefix: string, folderMode: Fold
   }
   let granted = false
   for (const key of keys) {
-    if (typeof key === 'string' && key.startsWith(prefix) && (await ensureFolderAccess(key, folderMode))) granted = true
+    if (typeof key === 'string' && key.startsWith(prefix) && (await requestFolderAccess(key, folderMode)))
+      granted = true
   }
   return granted
 }
@@ -201,11 +211,24 @@ async function collectFiles(
   }
 }
 
-/** Zapisuje plik w folderze klucza, nadpisując plik o tej samej nazwie. */
+/**
+ * Zapisuje plik w folderze klucza, nadpisując plik o tej samej nazwie. Przy włączonej kolejce plików sklepu
+ * (`lib/file-queue`) plik trafia do kolejki na serwerze i zapisze się w folderze sklepu później.
+ */
 export async function saveToFolder(key: string, fileName: string, data: Blob): Promise<void> {
+  const queueStore = queueStoreFor(key)
+  if (queueStore) {
+    await enqueueFile(queueStore, key, fileName, data)
+    return
+  }
+  await writeToFolder(key, fileName, data)
+}
+
+/** Zapis w prawdziwym folderze, z pominięciem kolejki plików. */
+export async function writeToFolder(key: string, fileName: string, data: Blob): Promise<void> {
   const handle = await readFolder(key)
   if (!handle) throw new ApiError(0, 'Nie wybrano folderu do zapisu.')
-  if (!(await ensureFolderAccess(key))) {
+  if (!(await requestFolderAccess(key))) {
     throw new ApiError(0, `Brak zgody na zapis w folderze ${handle.name}.`)
   }
   try {

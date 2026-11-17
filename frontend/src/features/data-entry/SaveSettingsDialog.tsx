@@ -1,10 +1,12 @@
-import { ListIcon } from 'lucide-react'
+import { InboxIcon, ListIcon } from 'lucide-react'
 import { useState } from 'react'
 
 import { SwitchField } from '@/components/form'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { FileQueueDialog } from '@/features/file-queue/FileQueueDialog'
+import { setFileQueueEnabled, useFileQueueEnabled } from '@/lib/file-queue'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import type { SavedFolderSpec } from '@/lib/saved-folders'
 import { useHiddenHint } from '@/lib/use-hidden-hint'
@@ -47,6 +49,8 @@ export function SaveSettingsDialog({
   const protoFolder = useProtoFolder(storeId)
   const { data: pendingCount = 0 } = usePriceControlPendingCount(storeId, open)
   const [priceControlOpen, setPriceControlOpen] = useState(false)
+  const [queueOpen, setQueueOpen] = useState(false)
+  const queueEnabled = useFileQueueEnabled(storeId)
   const [draftPromptOff, setDraftPromptOff] = useHiddenHint(PRODUCT_DRAFT_PROMPT)
   // Wybrany w tym oknie folder przestaje być brakujący od razu, bez zamykania okna.
   const [picked, setPicked] = useState<string[]>([])
@@ -110,6 +114,21 @@ export function SaveSettingsDialog({
             />
           </div>
 
+          <div className="grid gap-2 rounded-lg border px-3 py-2.5">
+            <SwitchField
+              label="Praca dla innego sklepu: pliki do kolejki"
+              description="W tej przeglądarce wszystkie pliki dla programu tego sklepu (XML, nowe artykuły, protokoły, zmiany cen, etykiety, zamówienia) czekają w kolejce zamiast iść do folderów. Na koniec, na komputerze sklepu albo po połączeniu z nim, „Zapisz wszystkie” zapisze je w folderach."
+              checked={queueEnabled}
+              onCheckedChange={(checked) => setFileQueueEnabled(storeId, checked)}
+            />
+            <div>
+              <Button variant="outline" size="sm" onClick={() => setQueueOpen(true)}>
+                <InboxIcon />
+                Pokaż kolejkę plików
+              </Button>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm">
             <div>
               <p className="font-medium">Zmiany cen</p>
@@ -127,6 +146,7 @@ export function SaveSettingsDialog({
         </DialogContent>
       </Dialog>
       <PriceControlFilesDialog storeId={storeId} open={priceControlOpen} onOpenChange={setPriceControlOpen} />
+      <FileQueueDialog storeId={storeId} open={queueOpen} onOpenChange={setQueueOpen} />
     </>
   )
 }

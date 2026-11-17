@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { api, ApiError, readStored, restoreSession, setToken, setUnauthorizedHandler, writeStored } from './api'
+import { unregisterPush } from './push'
 import type { Me, MobileLogin, StoreSummary } from './types'
 
 const STORE_KEY = 'intermanage.store'
@@ -69,6 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
+    // Najpierw token push, póki konto jest jeszcze zalogowane.
+    await unregisterPush()
     try {
       await api('/auth/logout', { method: 'POST' })
     } catch {

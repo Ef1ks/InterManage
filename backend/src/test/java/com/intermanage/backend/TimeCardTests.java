@@ -50,6 +50,31 @@ class TimeCardTests {
         assertThat(day.pending()).isZero();
     }
 
+    /**
+     * Wyjście prywatne zostaje niedoborem do odpracowania, a odpracowanie jest pracą bez nadgodzin. Usprawiedliwienie
+     * bez wynagrodzenia nie jest pracą, ale liczy się do salda i nie jest brakiem.
+     */
+    @Test
+    void privateExitIsWorkedOffWithoutOvertimeAndUnpaidJustificationIsExcused() {
+        List<TimeCard.Decision> decisions = List.of(
+                new TimeCard.Decision(TimeSegmentKind.SHORTFALL, at("13:00"), at("14:00"),
+                        TimeDecisionKind.PRIVATE_EXIT),
+                new TimeCard.Decision(TimeSegmentKind.OVERTIME, at("14:00"), at("15:00"), TimeDecisionKind.WORKED_OFF));
+        TimeCard.Day day = TimeCard.day(DAY, SHIFT, List.of(interval("06:00", "13:00"), interval("14:00", "15:00")),
+                List.of(), 0, decisions);
+        assertThat(day.worked()).isEqualTo(480);
+        assertThat(day.overtime()).isZero();
+        assertThat(day.shortfall()).isZero();
+        assertThat(day.excused()).isZero();
+
+        TimeCard.Day unpaid = TimeCard.day(DAY, SHIFT, List.of(interval("06:30", "14:00")), List.of(), 0,
+                List.of(new TimeCard.Decision(TimeSegmentKind.SHORTFALL, at("06:00"), at("06:30"),
+                        TimeDecisionKind.JUSTIFIED_UNPAID)));
+        assertThat(unpaid.worked()).isEqualTo(450);
+        assertThat(unpaid.excused()).isEqualTo(30);
+        assertThat(unpaid.shortfall()).isZero();
+    }
+
     @Test
     void lateArrivalIsShortfallUntilJustified() {
         TimeCard.Day day = TimeCard.day(DAY, SHIFT, List.of(interval("06:10", "13:50")), List.of(), 0, List.of());

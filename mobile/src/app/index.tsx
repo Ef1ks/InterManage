@@ -17,6 +17,7 @@ import { useDockInset } from '@/components/FloatingDock'
 import { MyScheduleCard } from '@/components/MyScheduleCard'
 import { ProductChoices } from '@/components/ProductChoices'
 import { StoreResultsCard } from '@/components/StoreResultsCard'
+import { TimeAnomaliesCard } from '@/components/TimeAnomaliesCard'
 import { Card, ErrorText, Muted } from '@/components/ui'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -66,6 +67,7 @@ export default function HomeScreen() {
   if (!canSeeArticles) {
     return (
       <ScrollView contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: dockInset }}>
+        <TimeAnomaliesCard />
         <MyScheduleCard storeNumber={store?.number} />
         <Card>
           <Text style={{ color: t.text, fontSize: 17, fontWeight: '700' }}>Brak dostępu do artykułów</Text>
@@ -139,6 +141,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        <TimeAnomaliesCard />
         <MyScheduleCard storeNumber={store?.number} />
         {/* Na razie tylko właściciel; dostęp dla innych ról ustalimy później. */}
         {store && (me.owner || me.permissions.DASHBOARD) ? (

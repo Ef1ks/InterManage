@@ -40,7 +40,11 @@ public final class TimeCard {
         SHORTFALL
     }
 
-    /** Stan odcinka; {@code counted} mówi, czy wchodzi do czasu pracy. */
+    /**
+     * Stan odcinka; {@code counted} mówi, czy wchodzi do czasu pracy, a {@code excused}, czy to usprawiedliwiony brak
+     * bez pełnego wynagrodzenia: nie jest pracą (nie idzie do pliku R2Płatnika), ale obniża wymiar, więc liczy się do
+     * salda okresu (art. 130 § 3 KP).
+     */
     public enum Status {
         OK(true),
         BREAK(false),
@@ -54,16 +58,32 @@ public final class TimeCard {
         UNEXCUSED(false),
         JUSTIFIED(true),
         OFFSET_SHORTFALL(true),
-        OFFSET_OVERTIME(false);
+        OFFSET_OVERTIME(false),
+        /** Odpracowanie wyjścia prywatnego: praca, ale nie nadgodziny (art. 151²¹ § 2 KP). */
+        WORKED_OFF(true),
+        /** Wyjście prywatne: brak bez wynagrodzenia, do odpracowania, więc zostaje w saldzie jako niedobór. */
+        PRIVATE_EXIT(false),
+        JUSTIFIED_HALF(false, true),
+        JUSTIFIED_UNPAID(false, true);
 
         private final boolean counted;
+        private final boolean excused;
 
         Status(boolean counted) {
+            this(counted, false);
+        }
+
+        Status(boolean counted, boolean excused) {
             this.counted = counted;
+            this.excused = excused;
         }
 
         public boolean counted() {
             return counted;
+        }
+
+        public boolean excused() {
+            return excused;
         }
     }
 
@@ -125,9 +145,11 @@ public final class TimeCard {
     /**
      * {@code planned}: minuty z grafiku bez przerw niepłatnych; {@code worked}: czas pracy do rozliczenia;
      * {@code overtime}: zaakceptowane minuty poza grafikiem; {@code pending}: czekające na decyzję; {@code shortfall}:
-     * nieusprawiedliwione braki.
+     * nieusprawiedliwione braki; {@code excused}: usprawiedliwione braki bez pełnego wynagrodzenia (do salda, nie do
+     * pracy).
      */
-    public record Day(List<Segment> segments, int planned, int worked, int overtime, int pending, int shortfall) {
+    public record Day(List<Segment> segments, int planned, int worked, int overtime, int pending, int shortfall,
+            int excused) {
     }
 
     public static Day day(LocalDate date, Interval planned, List<Interval> worked, List<Break> departmentBreaks,
@@ -216,11 +238,16 @@ public final class TimeCard {
         int overtime = 0;
         int pending = 0;
         int shortfall = 0;
+        int excused = 0;
         for (Segment segment : segments) {
             if (segment.status().counted()) {
                 counted += segment.minutes();
             }
-            if (segment.part() == Part.OVERTIME && segment.status().counted()) {
+            if (segment.status().excused()) {
+                excused += segment.minutes();
+            }
+            if (segment.part() == Part.OVERTIME && segment.status().counted()
+                    && segment.status() != Status.WORKED_OFF) {
                 overtime += segment.minutes();
             }
             if (segment.status() == Status.PENDING) {
@@ -230,7 +257,7 @@ public final class TimeCard {
                 shortfall += segment.minutes();
             }
         }
-        return new Day(List.copyOf(segments), plannedMinutes, counted, overtime, pending, shortfall);
+        return new Day(List.copyOf(segments), plannedMinutes, counted, overtime, pending, shortfall, excused);
     }
 
     /**

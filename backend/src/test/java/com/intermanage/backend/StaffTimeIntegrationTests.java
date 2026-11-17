@@ -61,6 +61,9 @@ class StaffTimeIntegrationTests {
     @Autowired
     PasswordEncoder passwordEncoder;
 
+    @Autowired
+    com.intermanage.backend.staff.service.StaffTimeAnomalyService anomalies;
+
     private Cookie owner;
     private String store;
     private String department;
@@ -242,6 +245,236 @@ class StaffTimeIntegrationTests {
         day().andExpect(jsonPath("$.toleranceMinutes").value(5))
                 .andExpect(jsonPath("$.rows[0].days[0].worked").value(480))
                 .andExpect(jsonPath("$.rows[0].days[0].shortfall").value(0));
+    }
+
+    /** Zaokrąglanie sklepu: wejście w górę, wyjście w dół; surowe odbicia zostają takie, jak były. */
+    @Test
+    void storeRulesRoundPunchesInEmployersDirection() throws Exception {
+        simulate("06:10");
+        simulate("13:57");
+        send(owner, get(staff("/time/settings/rules")), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.saved").value(false))
+                .andExpect(jsonPath("$.roundingMinutes").value(0))
+                .andExpect(jsonPath("$.punchCooldownSeconds").value(10))
+                .andExpect(jsonPath("$.finalApprover").value("MANAGER"));
+        rules(7, 10, "MANAGER").andExpect(status().isBadRequest());
+        rules(15, 5, "MANAGER").andExpect(status().isBadRequest());
+        rules(15, 10, "HR").andExpect(status().isOk()).andExpect(jsonPath("$.saved").value(true))
+                .andExpect(jsonPath("$.finalApprover").value("HR"));
+
+        day().andExpect(jsonPath("$.rows[0].days[0].worked").value(450))
+                .andExpect(jsonPath("$.rows[0].days[0].shortfall").value(30))
+                .andExpect(jsonPath("$.rows[0].days[0].punches[0].at").value(DAY + "T06:10:00"))
+                .andExpect(jsonPath("$.rows[0].days[0].punches[1].at").value(DAY + "T13:57:00"));
+        Integer active = jdbc.queryForObject("select count(*) from staff_time_store_rules where store_id = ?::uuid "
+                + "and deleted_at is null", Integer.class, store);
+        assertThat(active).isOne();
+    }
+
+    /** Ta sama karta w czasie blokady sklepu nie daje nowego odbicia: odpowiedź opisuje wcześniejsze. */
+    @Test
+    void cardTouchedAgainWithinCooldownIsNotSecondPunch() throws Exception {
+        String settings = send(owner, post(staff("/time/settings/readers")), "{\"name\":\"Wejście\"}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String token = JsonPath.read(settings, "$.readers[0].token");
+        send(owner, put(staff("/time/settings/cards/" + employee)), "{\"cardUid\":\"0CD1\"}")
+                .andExpect(status().isOk());
+        rules(0, 30, "MANAGER").andExpect(status().isOk());
+
+        String entry = reader(token, "0CD1", "2026-12-01T04:58:00Z").andExpect(status().isOk())
+                .andExpect(jsonPath("$.repeated").value(false)).andReturn().getResponse().getContentAsString();
+        reader(token, "0CD1", "2026-12-01T04:58:20Z").andExpect(status().isOk())
+                .andExpect(jsonPath("$.repeated").value(true))
+                .andExpect(jsonPath("$.direction").value("IN"))
+                .andExpect(jsonPath("$.punchId").value((String) JsonPath.read(entry, "$.punchId")));
+        reader(token, "0CD1", "2026-12-01T04:58:40Z").andExpect(status().isOk())
+                .andExpect(jsonPath("$.repeated").value(false))
+                .andExpect(jsonPath("$.direction").value("OUT"));
+        reader(token, "0CD1", "2026-12-01T04:58:50Z").andExpect(jsonPath("$.repeated").value(true))
+                .andExpect(jsonPath("$.direction").value("OUT"));
+        Integer saved = jdbc.queryForObject("select count(*) from staff_time_punches where employee_id = ?::uuid",
+                Integer.class, employee);
+        assertThat(saved).isEqualTo(2);
+    }
+
+    /** Sklep proponuje swoje zasady sklepowi zaprzyjaźnionemu, a ten je przyjmuje albo odrzuca. */
+    @Test
+    void rulesAreOfferedToPartnerStoreAndAccepted() throws Exception {
+        String other = createStore(randomNip());
+        rules(10, 20, "HR").andExpect(status().isOk());
+        send(owner, post(staff("/time/settings/rules/offers")), "{\"storeIds\":[\"" + other + "\"]}")
+                .andExpect(status().isBadRequest());
+
+        String invitation = send(owner, post("/api/stores/" + store + "/partners"), "{\"storeId\":\"" + other + "\"}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String partnerId = JsonPath.read(invitation, "$.partners[0].id");
+        send(owner, post("/api/stores/" + other + "/partners/" + partnerId + "/accept"), null)
+                .andExpect(status().isOk());
+
+        send(owner, post(staff("/time/settings/rules/offers")), "{\"storeIds\":[\"" + other + "\"]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.outgoing[0].storeId").value(other));
+        String incoming = send(owner, get("/api/stores/" + other + "/staff/time/settings/rules"), null)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.incoming[0].roundingMinutes").value(10))
+                .andExpect(jsonPath("$.roundingMinutes").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String offerId = JsonPath.read(incoming, "$.incoming[0].id");
+        send(owner, post(staff("/time/settings/rules/offers/" + offerId + "/accept")), null)
+                .andExpect(status().isForbidden());
+        send(owner, post("/api/stores/" + other + "/staff/time/settings/rules/offers/" + offerId + "/accept"), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roundingMinutes").value(10))
+                .andExpect(jsonPath("$.punchCooldownSeconds").value(20))
+                .andExpect(jsonPath("$.finalApprover").value("HR"))
+                .andExpect(jsonPath("$.incoming").isEmpty());
+        send(owner, post("/api/stores/" + other + "/staff/time/settings/rules/offers/" + offerId + "/reject"), null)
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Wniosek pracownika: składa go na odcinek ze swojej karty, kierownik działu akceptuje, a przy zatwierdzaniu przez
+     * kadry dopiero kadry wpisują go do czasu pracy. Cofnięcie zdejmuje decyzję z karty.
+     */
+    @Test
+    void employeeRequestGoesThroughManagerAndHr() throws Exception {
+        simulate("06:10");
+        simulate("13:57");
+        Cookie worker = loginEmployee();
+        String segment = ",\"start\":\"" + DAY + "T06:00:00\",\"end\":\"" + DAY + "T06:10:00\"";
+        send(worker, post("/api/me/time-requests"), "{\"kind\":\"LATE_OR_EARLY\"" + segment + "}")
+                .andExpect(status().isBadRequest());
+        send(worker, post("/api/me/time-requests"), "{\"kind\":\"OVERTIME\"" + segment + ",\"reason\":\"x\"}")
+                .andExpect(status().isConflict());
+        String created = send(worker, post("/api/me/time-requests"),
+                "{\"kind\":\"LATE_OR_EARLY\"" + segment + ",\"reason\":\"Korek po wypadku\"}")
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.byEmployee").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(created, "$.id");
+        send(worker, post("/api/me/time-requests"), "{\"kind\":\"LATE_OR_EARLY\"" + segment + ",\"reason\":\"x\"}")
+                .andExpect(status().isConflict());
+        send(worker, post(staff("/time/requests/" + id + "/approve")), null).andExpect(status().isForbidden());
+
+        rules(0, 10, "HR").andExpect(status().isOk());
+        String managerRole = createRole("{\"STAFF_TIME\":\"EDIT\"}");
+        String managerId = user(managerRole);
+        jdbc.update("insert into staff_department_managers (id, department_id, user_id, created_at)"
+                + " values (gen_random_uuid(), ?::uuid, ?::uuid, now())", department, managerId);
+        Cookie manager = loginUser(managerId);
+        send(manager, get(staff("/time/requests/count")), null).andExpect(jsonPath("$.manager").value(1))
+                .andExpect(jsonPath("$.hr").value(0));
+        send(manager, post(staff("/time/requests/" + id + "/approve")), "{\"note\":\"OK\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("MANAGER_APPROVED"))
+                .andExpect(jsonPath("$.canApprove").value(false));
+        day().andExpect(jsonPath("$.rows[0].days[0].shortfall").value(13));
+
+        String hrRole = createRole("{\"STAFF_RECORDS\":\"EDIT\"}");
+        Cookie hr = loginUser(user(hrRole));
+        send(hr, get(staff("/time/requests/count")), null).andExpect(jsonPath("$.hr").value(1));
+        send(hr, post(staff("/time/requests/" + id + "/approve")), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"))
+                .andExpect(jsonPath("$.hr.by").exists());
+        day().andExpect(jsonPath("$.rows[0].days[0].shortfall").value(3))
+                .andExpect(jsonPath("$.rows[0].days[0].segments[?(@.status=='JUSTIFIED_UNPAID')]").exists());
+        mvc.perform(get(staff("/time/requests/pdf?ids=" + id)).cookie(owner)).andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF));
+
+        send(hr, post(staff("/time/requests/" + id + "/undo")), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("MANAGER_APPROVED"));
+        day().andExpect(jsonPath("$.rows[0].days[0].shortfall").value(13));
+        send(hr, post(staff("/time/requests/" + id + "/reject")), "{\"note\":\"Bez dokumentu\"}")
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+        send(worker, get("/api/me/time-requests"), null).andExpect(jsonPath("$[0].status").value("REJECTED"))
+                .andExpect(jsonPath("$[0].hr.note").value("Bez dokumentu"))
+                .andExpect(jsonPath("$[0].history", hasSize(5)));
+    }
+
+    /** Zgłoszenie L4 zatwierdzają kadry i trafia do Kadr jako zwolnienie; pracownik może wycofać otwarte. */
+    @Test
+    void sickLeaveReportBecomesLeaveInRecords() throws Exception {
+        Cookie worker = loginEmployee();
+        String first = send(worker, post("/api/me/time-requests"),
+                "{\"kind\":\"SICK_LEAVE\",\"from\":\"" + DAY + "\",\"to\":\"2026-12-03\"}")
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.needsHr").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(first, "$.id");
+        send(worker, post("/api/me/time-requests"), "{\"kind\":\"SICK_LEAVE\",\"from\":\"2026-12-02\",\"to\":\""
+                + "2026-12-04\"}").andExpect(status().isConflict());
+
+        send(owner, post(staff("/time/requests/" + id + "/approve")), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+        assertThat(jdbc.queryForObject("select count(*) from staff_leaves where employee_id = ?::uuid and kind = "
+                + "'SICK' and deleted_at is null", Integer.class, employee)).isOne();
+        send(owner, post(staff("/time/requests/" + id + "/undo")), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+        assertThat(jdbc.queryForObject("select count(*) from staff_leaves where employee_id = ?::uuid and kind = "
+                + "'SICK' and deleted_at is null", Integer.class, employee)).isZero();
+
+        send(worker, post("/api/me/time-requests/" + id + "/cancel"), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        send(owner, post(staff("/time/requests/" + id + "/approve")), null).andExpect(status().isConflict());
+    }
+
+    /**
+     * Aplikacja pracownika: różnice z ostatnich dni (spóźnienie i dłuższe zostanie wczoraj), wniosek na jedną z nich
+     * zdejmuje ją z liczby do wyjaśnienia, a powiadomienie o nowych różnicach przychodzi raz.
+     */
+    @Test
+    void employeeSeesAnomaliesAndIsNotifiedOnce() throws Exception {
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Europe/Warsaw"));
+        java.time.LocalDate open = today.minusDays(1);
+        while (ScheduleCalendar.holiday(open) != null) {
+            open = open.minusDays(1);
+        }
+        String day = open.toString();
+        send(owner, put(staff("/schedule/entries")), "{\"departmentId\":\"" + department + "\",\"month\":\""
+                + day.substring(0, 7) + "\",\"changes\":[{\"employeeId\":\"" + employee + "\",\"date\":\"" + day
+                + "\",\"start\":\"06:00\",\"end\":\"14:00\",\"storeId\":null}]}").andExpect(status().isOk());
+        for (String time : List.of("07:00", "15:00")) {
+            send(owner, post(staff("/time/punches")), "{\"employeeId\":\"" + employee + "\",\"at\":\"" + day + "T"
+                    + time + ":00\"}").andExpect(status().isNoContent());
+        }
+        Cookie worker = loginEmployee();
+        send(worker, get("/api/me/time-anomalies"), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.employee").value(true))
+                .andExpect(jsonPath("$.open").value(2))
+                .andExpect(jsonPath("$.items[?(@.part=='SHORTFALL')].kinds[0]").value("LATE_OR_EARLY"))
+                .andExpect(jsonPath("$.items[?(@.part=='OVERTIME')].minutes").value(60));
+        send(worker, post("/api/me/time-requests"), "{\"kind\":\"LATE_OR_EARLY\",\"start\":\"" + day
+                + "T06:00:00\",\"end\":\"" + day + "T07:00:00\",\"reason\":\"Lekarz\"}")
+                .andExpect(status().isCreated());
+        send(worker, get("/api/me/time-anomalies"), null).andExpect(jsonPath("$.open").value(1))
+                .andExpect(jsonPath("$.items[?(@.part=='SHORTFALL')].request.status").value("PENDING"));
+
+        send(worker, put("/api/me/push-token"), "{\"token\":\"ExponentPushToken[test-" + employee
+                + "]\",\"platform\":\"android\"}").andExpect(status().isNoContent());
+        send(worker, put("/api/me/push-token"), "{\"token\":\"x\",\"platform\":\"web\"}")
+                .andExpect(status().isBadRequest());
+        if (open.equals(today.minusDays(1))) {
+            assertThat(anomalies.notifyNew()).isPositive();
+            assertThat(jdbc.queryForObject("select count(*) from staff_time_anomaly_notices where employee_id = "
+                    + "?::uuid", Integer.class, employee)).isEqualTo(1);
+        }
+        anomalies.notifyNew();
+        assertThat(jdbc.queryForObject("select count(*) from staff_time_anomaly_notices where employee_id = ?::uuid",
+                Integer.class, employee)).isLessThanOrEqualTo(1);
+        send(worker, post("/api/me/push-token/remove"), "{\"token\":\"ExponentPushToken[test-" + employee + "]\"}")
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select count(*) from user_push_tokens where token = ? and deleted_at is null",
+                Integer.class, "ExponentPushToken[test-" + employee + "]")).isZero();
+    }
+
+    /** Konto zaproszonego pracownika z hasłem, żeby zalogować się jako on. */
+    private Cookie loginEmployee() throws Exception {
+        String userId = jdbc.queryForObject("select user_id from staff_employees where id = ?::uuid", String.class,
+                employee);
+        jdbc.update("update users set password_hash = ?, password_change_required = false where id = ?::uuid",
+                passwordEncoder.encode("haslo-pracownika"), userId);
+        return loginUser(userId);
+    }
+
+    private ResultActions rules(int rounding, int cooldown, String approver) throws Exception {
+        return send(owner, put(staff("/time/settings/rules")), "{\"roundingMinutes\":" + rounding
+                + ",\"punchCooldownSeconds\":" + cooldown + ",\"finalApprover\":\"" + approver + "\"}");
     }
 
     @Test

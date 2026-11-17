@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { recordPaths, useStaffRecords } from '@/features/staff-records/api'
+import { TimeRequestsButton } from '@/features/staff-time/TimeRequestsDialog'
 import { contractSummary, daysWord, formatDate } from '@/features/staff-records/labels'
 import { Chip, Initials } from '@/features/staff/list-parts'
 import { people } from '@/features/staff/people'
@@ -100,6 +101,7 @@ export function RecordsList({ storeId }: { storeId: string }) {
       <PageHeader
         title="Kadry"
         description="Umowy, staż, urlopy i terminy pracowników. Dane tylko dla osób upoważnionych."
+        actions={<TimeRequestsButton storeId={storeId} />}
       />
       {isError ? (
         <FullPageMessage

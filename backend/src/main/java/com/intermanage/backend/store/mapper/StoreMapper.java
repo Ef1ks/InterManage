@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.store.dto.FileQueueItemResponse;
 import com.intermanage.backend.store.dto.ProtoSettingsResponse;
 import com.intermanage.backend.store.dto.StorePartnerResponse;
 import com.intermanage.backend.store.dto.StoreResponse;
@@ -12,6 +13,7 @@ import com.intermanage.backend.store.dto.StoreSummary;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.entity.StorePartner;
 import com.intermanage.backend.store.entity.StoreProtoSettings;
+import com.intermanage.backend.store.repository.StoreFileQueueRepository;
 
 @Mapper
 public interface StoreMapper {
@@ -37,4 +39,6 @@ public interface StoreMapper {
     @Mapping(target = "updatedAt", source = "settings.updatedAt")
     ProtoSettingsResponse toProtoSettingsResponse(StoreProtoSettings settings, String effectivePath,
             boolean defaultFolder);
+
+    FileQueueItemResponse toQueueItem(StoreFileQueueRepository.Summary item);
 }

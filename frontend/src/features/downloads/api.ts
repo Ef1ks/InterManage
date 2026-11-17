@@ -166,7 +166,8 @@ export type FolderShortcut = {
 
 const shortcutsKey = ['downloads', 'shortcuts'] as const
 
-export const shortcutFileUrl = (id: string) => `/api/downloads/shortcuts/${id}/file`
+/** Skrót w ZIP-ie: sam plik .lnk przeglądarki blokują jako niebezpieczny. */
+export const shortcutFileUrl = (id: string) => `/api/downloads/shortcuts/${id}/zip`
 export const shortcutsZipUrl = '/api/downloads/shortcuts/zip'
 
 export function useShortcuts() {

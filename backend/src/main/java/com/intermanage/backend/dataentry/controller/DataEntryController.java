@@ -487,6 +487,13 @@ public class DataEntryController {
         return priceControlFile(priceControlService.file(storeId, id));
     }
 
+    /** Ponowny zapis zmiany cen: ta sama treść pod nazwą z bieżącą godziną (program sklepu pomija znane nazwy). */
+    @PostMapping("/price-control-files/{id}/resave")
+    @PreAuthorize(VIEW)
+    public ResponseEntity<byte[]> priceControlResave(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return priceControlFile(priceControlService.resave(storeId, id));
+    }
+
     private static ResponseEntity<byte[]> priceControlFile(DataEntryPriceControlFile file) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
