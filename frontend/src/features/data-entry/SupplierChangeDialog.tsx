@@ -17,16 +17,18 @@ type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onChange: (supplier: Supplier, number: string | null) => void
+  /** Gdzie trafia fokus po zamknięciu okna (jak {@code finalFocus} okna Base UI). */
+  finalFocus?: React.ComponentProps<typeof DialogContent>['finalFocus']
 }
 
 /**
  * Dostawca i numer dokumentu: wybór z listy dostawców sklepu zamiast sprzedawcy z faktury. Numer faktury znika z nagłówka
  * pliku XML, a numer wpisuje się tutaj; pusty nadaje serwer z czasu zapisu.
  */
-export function SupplierChangeDialog({ open, onOpenChange, ...props }: Props) {
+export function SupplierChangeDialog({ open, onOpenChange, finalFocus, ...props }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 p-6 sm:max-w-xl">
+      <DialogContent className="gap-5 p-6 sm:max-w-xl" finalFocus={finalFocus}>
         {open && <SupplierChangeBody {...props} onCancel={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>

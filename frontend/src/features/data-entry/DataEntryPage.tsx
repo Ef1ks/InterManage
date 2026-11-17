@@ -74,6 +74,7 @@ import { useCan } from '@/features/auth/api'
 import { useSuppliers } from '@/features/documents/api'
 import { documentPaths, formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales/api'
+import { promoSetupPath, type PromoSetupHandoff } from '@/features/promo-setup/paths'
 import { documentPrice } from '@/features/base-delivery/base-rows'
 import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
@@ -125,7 +126,14 @@ import {
   withMergedDuplicates,
   withSyncedDuplicates,
 } from './duplicates'
-import { nomenclatureNames, pricingOf } from './grid-values'
+import {
+  COLUMN_FILL_LABELS,
+  COLUMN_FILL_PROMPT,
+  ColumnFillDialog,
+  type ColumnFillRequest,
+  ColumnFillInput,
+} from './column-fill'
+import { applyText, type Column, type ColumnKey, nomenclatureNames, pricingOf } from './grid-values'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
 import { CorrectionBanner } from './CorrectionBanner'
@@ -901,6 +909,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       lstSource.filter((row) => !row.eanFallback && /^(\d{1,6}|\d{8,14})$/.test(row.ean)).map((row) => row.ean),
     ),
   ]
+  // Do „Ustaw promocje”: zaznaczone artykuły (od dwóch, bo sam kursor też zaznacza wiersz), bez zaznaczenia widoczne.
+  const navigate = useNavigate()
+  const promoSource = chosenArticles.length > 1 ? chosenArticles : viewRows.filter(isArticle)
+  const promoCodes = [
+    ...new Set(
+      promoSource.filter((row) => !row.eanFallback && /^(\d{1,6}|\d{8,14})$/.test(row.ean)).map((row) => row.ean),
+    ),
+  ]
+  const sendToPromoSetup = () => navigate(promoSetupPath, { state: { promoCodes } satisfies PromoSetupHandoff })
   const [savingLst, setSavingLst] = useState(false)
   const saveLst = async () => {
     setSavingLst(true)
@@ -939,6 +956,56 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     })
     gridRef.current?.focus()
   }
+
+  // ---------- wartość dla całej kolumny (pola nad marką, nomenklaturą, rodzajem i wagą)
+
+  const [fillRequest, setFillRequest] = useState<ColumnFillRequest | null>(null)
+  const [fillPromptOff] = useHiddenHint(COLUMN_FILL_PROMPT)
+
+  const fillColumn = (key: ColumnKey, text: string, onlyNew: boolean) => {
+    const before = currentDraft()
+    let changed = 0
+    const errors: string[] = []
+    setViewRows((current) =>
+      current.map((row) => {
+        if (!isArticle(row) || (onlyNew && row.known)) return row
+        const result = applyText(row, key, text, names)
+        if ('error' in result) {
+          errors.push(result.error)
+          return row
+        }
+        changed++
+        // Nomenklatura nowego artykułu wpisuje cenę sugerowaną jak wybór z listy w komórce.
+        return key === 'region' || key === 'family' || key === 'subfamily'
+          ? withAutoSalePrice(row, result.row, pricing)
+          : result.row
+      }),
+    )
+    const label = COLUMN_FILL_LABELS[key] ?? ''
+    const scope = onlyNew ? 'nowych artykułach' : 'artykułach'
+    if (changed === 0) {
+      toast.warning(`${label} „${text}”: nic nie zmieniono`, { description: errors[0] })
+      return
+    }
+    toast.success(`${label} „${text}” w ${changed} ${scope}`, {
+      description: errors.length > 0 ? `Pominięto ${errors.length}: ${errors[0]}.` : undefined,
+      action: { label: 'Przywróć', onClick: () => setDraft(before) },
+    })
+  }
+
+  const requestFill = (key: ColumnKey, text: string) => {
+    const articles = viewRows.filter(isArticle)
+    const newCount = articles.filter((row) => !row.known).length
+    if (fillPromptOff) {
+      fillColumn(key, text, true)
+      return
+    }
+    setFillRequest({ key, text, newCount, allCount: articles.length })
+  }
+
+  const columnFill = (column: Column) => (
+    <ColumnFillInput column={column} onFill={(text) => requestFill(column.key, text)} />
+  )
 
   const setAllQuantities = (quantity: number) =>
     changeAll(
@@ -1008,7 +1075,23 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // Dokument dla innego dostawcy niż sprzedawca z faktury: numer faktury zastępuje numer wpisany w oknie, a pusty
   // numer nadaje serwer z czasu zapisu. Sama zmiana numeru zostawia ceny w tabeli.
+  // Po wyborze dostawcy fokus wraca do tabeli (EAN pustego wiersza pod artykułami), a nie do przycisku, więc skan
+  // od razu trafia do tabeli. Anulowanie okna zostawia zwykły powrót fokusu.
+  const supplierChosen = useRef(false)
+  const supplierFinalFocus = () => {
+    if (!supplierChosen.current) return true
+    supplierChosen.current = false
+    requestAnimationFrame(() => {
+      const draftRows = withServicesLast(currentDraft().rows)
+      const target = draftRows.find((row) => row.ean === '' && row.name === '') ?? draftRows[0]
+      if (target) gridRef.current?.focusCell(target.id, 'ean')
+      else gridRef.current?.focus()
+    })
+    return false
+  }
+
   const changeSupplier = (supplier: Supplier, number: string | null) => {
+    supplierChosen.current = true
     setSupplierOpen(false)
     const before = currentDraft()
     const supplierChanged = supplier.id !== documentSupplier(suppliers, before.invoice)?.id
@@ -1562,6 +1645,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 hint={badEanTitle ? undefined : 'EAN i cena z kolumny „Cena sprz.”, do folderu cen promocji'}
                 onClick={() => setProFileOpen(true)}
               />
+              <ActionItem
+                icon={<BadgePercentIcon />}
+                label="Przenieś do Ustaw promocje"
+                count={promoCodes.length}
+                disabled={promoCodes.length === 0}
+                hint={
+                  promoCodes.length === 0
+                    ? 'Żaden artykuł nie ma EAN-u'
+                    : chosenArticles.length > 1
+                      ? 'Zaznaczone artykuły trafią do promocji, ceny promocji uzupełnisz tam'
+                      : 'Artykuły widoczne w tabeli (zaznacz wiersze, żeby wybrać tylko część), ceny promocji uzupełnisz tam'
+                }
+                onClick={sendToPromoSetup}
+              />
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -1958,6 +2055,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             onLinkArticle={openLink}
             onSplitQuantity={(row) => setSplitTargets([row])}
             stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
+            columnFill={columnFill}
           />
         )}
 
@@ -2116,6 +2214,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         missing={saveSettings.missing}
         extraFolders={[{ folder: LST_FOLDER, note: 'Lista EAN-ów artykułów z tabeli („Plik .lst”).' }]}
         withPriceFiles
+        withColumnFill
+      />
+
+      <ColumnFillDialog
+        request={fillRequest}
+        onClose={() => setFillRequest(null)}
+        onApply={(onlyNew) => {
+          if (fillRequest) fillColumn(fillRequest.key, fillRequest.text, onlyNew)
+          setFillRequest(null)
+        }}
       />
 
       {xmlSave.draftDialog}
@@ -2154,6 +2262,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         open={supplierOpen}
         onOpenChange={setSupplierOpen}
         onChange={changeSupplier}
+        finalFocus={supplierFinalFocus}
       />
 
       {sellerToCreate && (

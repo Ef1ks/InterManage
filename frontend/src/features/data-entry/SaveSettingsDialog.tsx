@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { usePriceControlPendingCount } from './api'
 import { PriceControlFilesDialog } from './PriceControlFilesDialog'
 import { PriceFileStatus } from './PriceFileStatus'
+import { COLUMN_FILL_PROMPT } from './column-fill'
 import { PRODUCT_DRAFT_PROMPT } from './product-drafts'
 import { XML_FOLDER } from './xml-save'
 
@@ -32,6 +33,7 @@ export function SaveSettingsDialog({
   withXml = true,
   extraFolders = [],
   withPriceFiles = false,
+  withColumnFill = false,
 }: {
   storeId: string
   open: boolean
@@ -44,6 +46,8 @@ export function SaveSettingsDialog({
   extraFolders?: { folder: SavedFolderSpec; note: string }[]
   /** Folder cen z kasy (pliki TRACEART), który przeglądarka czyta w tle. */
   withPriceFiles?: boolean
+  /** Przełącznik pytania przed ustawieniem wartości w całej kolumnie (pola nad kolumnami tabeli). */
+  withColumnFill?: boolean
 }) {
   const productFolder = useProductFileFolder(storeId)
   const protoFolder = useProtoFolder(storeId)
@@ -52,6 +56,7 @@ export function SaveSettingsDialog({
   const [queueOpen, setQueueOpen] = useState(false)
   const queueEnabled = useFileQueueEnabled(storeId)
   const [draftPromptOff, setDraftPromptOff] = useHiddenHint(PRODUCT_DRAFT_PROMPT)
+  const [fillPromptOff, setFillPromptOff] = useHiddenHint(COLUMN_FILL_PROMPT)
   // Wybrany w tym oknie folder przestaje być brakujący od razu, bez zamykania okna.
   const [picked, setPicked] = useState<string[]>([])
   const stillMissing = missing.filter((folder) => !picked.includes(folder.key))
@@ -112,6 +117,14 @@ export function SaveSettingsDialog({
               checked={!draftPromptOff}
               onCheckedChange={(checked) => setDraftPromptOff(!checked)}
             />
+            {withColumnFill && (
+              <SwitchField
+                label="Pytaj przed ustawieniem całej kolumny"
+                description="Pola nad marką, nomenklaturą, rodzajem i wagą: pytanie, czy zmienić tylko nowe artykuły, czy wszystkie. Wyłączone zmienia tylko nowe artykuły."
+                checked={!fillPromptOff}
+                onCheckedChange={(checked) => setFillPromptOff(!checked)}
+              />
+            )}
           </div>
 
           <div className="grid gap-2 rounded-lg border px-3 py-2.5">

@@ -1,6 +1,6 @@
 import { BadgePercentIcon, EraserIcon, FileOutputIcon, PackageSearchIcon, PlusIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -45,6 +45,7 @@ import {
 
 import { fetchPromoArticles, savePromoLabels } from './api'
 import { DiscountLevelsDialog } from './DiscountLevelsDialog'
+import type { PromoSetupHandoff } from './paths'
 import { codeKey, discountedPrice, hasPeriod, macroBlocked, macroRows, promoFiles, tileTariff } from './promo-rows'
 
 const macroItems = (tile: PromoTile) =>
@@ -138,6 +139,8 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
         const latest = draftsOf(mode)[store.id]
         if (!latest) return
         const refreshed = (row: PromoRow): PromoRow => {
+          // Wiersz dopisany w trakcie (np. z wprowadzania danych) nie był w tym zapytaniu.
+          if (!codes.includes(codeKey(row.code))) return row
           const article = articles.get(codeKey(row.code)) ?? null
           if (!article) return { ...row, article: null }
           const price = row.discount === null ? row.price : discountedPrice(article.regularPrice, row.discount)
@@ -233,7 +236,25 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
     if (repeated > 0) toast.info(`Już w tej promocji: ${repeated}`)
     const last = rows.at(-1)
     if (last) select(last)
+    return rows.length
   }
+
+  // Artykuły przeniesione z wprowadzania danych: do kafelka makra, ceny promocji uzupełnia się tutaj.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const handedOff = useRef(false)
+  useEffect(() => {
+    const codes = (location.state as PromoSetupHandoff | null)?.promoCodes
+    if (!macro || handedOff.current || !codes?.length) return
+    handedOff.current = true
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
+    const tileId = draftsOf(mode)[store.id]?.tiles[0]?.id
+    if (!tileId) return
+    void addCodes(tileId, codes).then((added) => {
+      if (added) toast.success(`Dodano z wprowadzania danych: ${added}`, { description: 'Uzupełnij ceny promocji.' })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- raz po wejściu z wprowadzania danych
+  }, [location.state])
 
   const setPrice = (tile: PromoTile, row: PromoRow, price: number | null) =>
     dispatch(
@@ -504,12 +525,12 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
           onOpenChange={(open) => !open && setListFor(null)}
           inTable={tableEans}
           quickAdd
-          onAdd={(additions) =>
-            addCodes(
+          onAdd={async (additions) => {
+            await addCodes(
               listFor.tileId,
               additions.map(({ item }) => item.ean),
             )
-          }
+          }}
           initialQuery={listFor.query}
           title={macro ? 'Lista towarów · promocje' : `Lista towarów · promocja ${listTile?.number ?? ''}`}
           lastSaleDate={canSeeSales ? lastSaleDate : null}

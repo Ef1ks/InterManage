@@ -106,6 +106,8 @@ type Props = {
   columns?: Column[]
   /** Dodatek w nagłówku kolumny, np. filtr jak w Excelu. */
   headerExtra?: (column: Column) => React.ReactNode
+  /** Pole pod nagłówkiem kolumny (np. wartość dla całej kolumny); bez niego tabela nie ma tego wiersza. */
+  columnFill?: (column: Column) => React.ReactNode
   /** Klik w nagłówek kolumny sortuje tabelę (sortuje strona); {@code sort} to strzałka przy sortowanej kolumnie. */
   onSort?: (key: ColumnKey) => void
   sort?: { key: ColumnKey; direction: 'asc' | 'desc' } | null
@@ -204,6 +206,7 @@ export function DataEntryGrid({
   stickyTop = '3.5rem',
   columns = COLUMNS,
   headerExtra,
+  columnFill,
   onSort,
   sort,
   ref,
@@ -945,7 +948,9 @@ export function DataEntryGrid({
         onDoubleClick={onDoubleClick}
         className={cn(
           'relative rounded-xl border bg-card outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/30',
-          scrollsX ? 'overflow-x-auto' : 'overflow-x-clip',
+          // Przycięcie w obu osiach, żeby tło ostatniego wiersza nie wystawało poza zaokrąglone rogi; clip (nie hidden)
+          // nie tworzy obszaru przewijania, więc nagłówek kolumn dalej klei się do strony.
+          scrollsX ? 'overflow-x-auto' : 'overflow-clip',
         )}
       >
         {/* Stały układ: długa treść nie rozpycha kolumn. Gdy po dojściu do pełnej czcionki zostaje miejsce, tabela
@@ -1072,6 +1077,35 @@ export function DataEntryGrid({
                 </th>
               ))}
             </tr>
+            {columnFill && (
+              // Pola przewijają się ze stroną (przykleja się sam nagłówek). Zdarzenia nie idą do tabeli, żeby
+              // pisanie, wklejanie i klik w polu nie zmieniały zaznaczenia komórek.
+              <tr
+                data-keep-grid-selection
+                onMouseDown={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+                onCopy={(event) => event.stopPropagation()}
+                onPaste={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => event.stopPropagation()}
+                className="select-text"
+              >
+                <th aria-hidden className={cn('sticky left-0 z-10 h-8 bg-muted/60', CELL_RULES, HEADER_RULE)} />
+                {columns.map((column, index) => (
+                  <th
+                    key={column.key}
+                    scope="col"
+                    className={cn(
+                      'h-8 bg-muted/60 p-0.5 font-normal',
+                      CELL_RULES,
+                      HEADER_RULE,
+                      index === 0 && cn('sticky left-(--sticky-left) z-10', FROZEN_RULE),
+                    )}
+                  >
+                    {columnFill(column)}
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody>
             {rows.map((row, index) => {
