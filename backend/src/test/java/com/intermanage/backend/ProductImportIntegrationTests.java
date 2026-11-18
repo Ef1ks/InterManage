@@ -72,17 +72,17 @@ class ProductImportIntegrationTests {
         String c = itm8();
 
         upload(owner, report(nextReportDate(), product(a, "8.99", "12.5", "SER GOUDA 150G"), product(b, "3.49", "0", "MLEKO 2% 1L")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.totalRows").value(2))
-                .andExpect(jsonPath("$.createdCount").value(2))
-                .andExpect(jsonPath("$.importedBy").isNotEmpty());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalRows").value(2))
+                .andExpect(jsonPath("$.result.createdCount").value(2))
+                .andExpect(jsonPath("$.result.importedBy").isNotEmpty());
 
         // Zmiana ceny A, B bez zmian w nowym pliku nie występuje, C to nowy kod.
         upload(owner, report(nextReportDate(), product(a, "9.49", "11", "SER GOUDA 150G"), product(c, "1.99", "4", "BULKA")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.createdCount").value(1))
-                .andExpect(jsonPath("$.updatedCount").value(1))
-                .andExpect(jsonPath("$.unchangedCount").value(0));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.createdCount").value(1))
+                .andExpect(jsonPath("$.result.updatedCount").value(1))
+                .andExpect(jsonPath("$.result.unchangedCount").value(0));
 
         Map<String, Object> productA = jdbc.queryForMap("select * from products where itm8 = ?", a);
         assertThat(productA.get("sale_price")).isEqualTo(new BigDecimal("9.49"));
@@ -98,8 +98,8 @@ class ProductImportIntegrationTests {
 
         // Ten sam plik drugi raz niczego nie zmienia.
         upload(owner, report(nextReportDate(), product(a, "9.49", "11", "SER GOUDA 150G"), product(c, "1.99", "4", "BULKA")))
-                .andExpect(jsonPath("$.updatedCount").value(0))
-                .andExpect(jsonPath("$.unchangedCount").value(2));
+                .andExpect(jsonPath("$.result.updatedCount").value(0))
+                .andExpect(jsonPath("$.result.unchangedCount").value(2));
 
         mvc.perform(get(importsUrl()).cookie(owner))
                 .andExpect(status().isOk())
@@ -107,12 +107,61 @@ class ProductImportIntegrationTests {
                 .andExpect(jsonPath("$.imports[0].unchangedCount").value(2));
     }
 
+    /** Scalanie idzie paczkami: zmiana EAN-u między artykułami z różnych paczek i artykuł spoza pliku. */
+    @Test
+    void largeReportIsMergedInChunks() throws Exception {
+        Cookie owner = login();
+        int size = 4500;
+        List<String> codes = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            codes.add(itm8());
+        }
+        String[][] first = codes.stream().map(code -> product(code, "1.99", "3", "TOWAR " + code)).toArray(String[][]::new);
+        upload(owner, report(nextReportDate(), first))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DONE"))
+                .andExpect(jsonPath("$.percent").value(100))
+                .andExpect(jsonPath("$.processedRows").value(size))
+                .andExpect(jsonPath("$.totalRows").value(size))
+                .andExpect(jsonPath("$.result.totalRows").value(size))
+                .andExpect(jsonPath("$.result.createdCount").value(size));
+
+        // Pierwszy artykuł (paczka 1) dostaje nowy EAN, jego dawny EAN bierze ostatni (paczka 3), drugiego brak w pliku.
+        String moved = "59" + codes.getFirst().substring(2);
+        String newEan = ean();
+        List<String[]> second = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            if (i == 1) {
+                continue;
+            }
+            String[] row = product(codes.get(i), "1.99", "3", "TOWAR " + codes.get(i));
+            second.add(i == 0 ? withEan(row, newEan) : i == size - 1 ? withEan(row, moved) : row);
+        }
+        upload(owner, report(nextReportDate(), second.toArray(String[][]::new)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.createdCount").value(0))
+                .andExpect(jsonPath("$.result.unchangedCount").value(size - 3))
+                .andExpect(jsonPath("$.result.updatedCount").value(2))
+                .andExpect(jsonPath("$.result.eanChangedCount").value(2))
+                .andExpect(jsonPath("$.result.eanMovedCount").value(1));
+
+        Map<String, Object> missing = jdbc.queryForMap("select * from products where itm8 = ?", codes.get(1));
+        assertThat(missing.get("stock")).isNull();
+        assertThat(missing.get("active")).isEqualTo(false);
+        assertThat(jdbc.queryForObject("select stock from products where itm8 = ?", BigDecimal.class, codes.get(2)))
+                .isEqualTo(new BigDecimal("3.000"));
+        assertThat(jdbc.queryForList("""
+                select p.itm8 from product_eans pe join products p on p.id = pe.product_id
+                where pe.ean = ? order by pe.id""", String.class, moved))
+                .containsExactly(codes.getFirst(), codes.getLast());
+    }
+
     @Test
     void confirmedProductFileDraftsAreResolvedByTheNextReport() throws Exception {
         Cookie owner = login();
         String known = itm8();
         String created = itm8();
-        upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"))).andExpect(status().isCreated());
+        upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"))).andExpect(status().isOk());
         String knownEan = "59" + known.substring(2);
         String createdEan = "59" + created.substring(2);
         String missingEan = ean();
@@ -178,9 +227,9 @@ class ProductImportIntegrationTests {
         // Kolejny raport: nowy artykuł jest w kartotece, drugiego program sklepu nie założył.
         upload(owner, report(nextReportDate(), product(known, "2.99", "1", "ZNANY"),
                 product(created, "2.99", "0", "NOWY 1")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.draftsMatchedCount").value(1))
-                .andExpect(jsonPath("$.draftsRemovedCount").value(1));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.draftsMatchedCount").value(1))
+                .andExpect(jsonPath("$.result.draftsRemovedCount").value(1));
         mvc.perform(get(catalogUrl).param("name", "nowy 1").param("ean", createdEan.replaceFirst("^0+", "")).cookie(owner))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].draft").value(false))
@@ -204,12 +253,12 @@ class ProductImportIntegrationTests {
 
         upload(owner, report(nextReportDate(), withCadencierPrice(product(a, "8.99", "1", "A"), "8.49"),
                 withCadencierPrice(product(b, "3.49", "1", "B"), "3.29"), withCadencierPrice(product(c, "1.99", "1", "C"), "1.89")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
         // A z nową ceną, B bez CENA_CAD w pliku, C nie ma w pliku: z cadencier zostaje tylko A.
         upload(owner, report(nextReportDate(), withCadencierPrice(product(a, "8.99", "1", "A"), "8.79"),
                 product(b, "3.49", "1", "B")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
         assertThat(jdbc.queryForObject("select cadencier_price from products where itm8 = ?", BigDecimal.class, a))
                 .isEqualTo(new BigDecimal("8.79"));
@@ -226,7 +275,7 @@ class ProductImportIntegrationTests {
 
         // Gdy wróci do raportu, dostaje dane z pliku.
         upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"), product(c, "1.99", "4", "C")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
         Map<String, Object> returned = jdbc.queryForMap("select * from products where itm8 = ?", c);
         assertThat(returned.get("stock")).isEqualTo(new BigDecimal("4.000"));
         assertThat(returned.get("active")).isEqualTo(true);
@@ -241,17 +290,17 @@ class ProductImportIntegrationTests {
         String eanSecond = ean();
 
         upload(owner, report(nextReportDate(), withEan(product(a, "5.00", "1", "JOGURT"), eanFirst)))
-                .andExpect(jsonPath("$.eanChangedCount").value(0))
-                .andExpect(jsonPath("$.eanMovedCount").value(0));
+                .andExpect(jsonPath("$.result.eanChangedCount").value(0))
+                .andExpect(jsonPath("$.result.eanMovedCount").value(0));
 
         // A dostaje nowy EAN, a jego dotychczasowy EAN przechodzi do nowego ITM8 B.
         String result = upload(owner, report(nextReportDate(),
                 withEan(product(a, "5.00", "1", "JOGURT"), eanSecond),
                 withEan(product(b, "5.00", "1", "JOGURT NOWY"), eanFirst)))
-                .andExpect(jsonPath("$.eanChangedCount").value(1))
-                .andExpect(jsonPath("$.eanMovedCount").value(1))
+                .andExpect(jsonPath("$.result.eanChangedCount").value(1))
+                .andExpect(jsonPath("$.result.eanMovedCount").value(1))
                 .andReturn().getResponse().getContentAsString();
-        String importId = ((String) com.jayway.jsonpath.JsonPath.read(result, "$.id"));
+        String importId = ((String) com.jayway.jsonpath.JsonPath.read(result, "$.result.id"));
 
         assertThat(jdbc.queryForList("""
                 select pe.ean from product_eans pe join products p on p.id = pe.product_id
@@ -270,15 +319,15 @@ class ProductImportIntegrationTests {
         upload(owner, report(nextReportDate(),
                 withEan(product(a, "5.00", "1", "JOGURT"), eanSecond),
                 withEan(product(b, "5.00", "1", "JOGURT NOWY"), eanFirst)))
-                .andExpect(jsonPath("$.eanChangedCount").value(0))
-                .andExpect(jsonPath("$.eanMovedCount").value(0));
+                .andExpect(jsonPath("$.result.eanChangedCount").value(0))
+                .andExpect(jsonPath("$.result.eanMovedCount").value(0));
 
         // Korekta pomyłki: A wraca do pierwszego EAN-u, który nadal ma też B - to zmiana EAN, nie nowe przeniesienie.
         upload(owner, report(nextReportDate(),
                 withEan(product(a, "5.00", "1", "JOGURT"), eanFirst),
                 withEan(product(b, "5.00", "1", "JOGURT NOWY"), eanFirst)))
-                .andExpect(jsonPath("$.eanChangedCount").value(1))
-                .andExpect(jsonPath("$.eanMovedCount").value(0));
+                .andExpect(jsonPath("$.result.eanChangedCount").value(1))
+                .andExpect(jsonPath("$.result.eanMovedCount").value(0));
     }
 
     @Test
@@ -322,7 +371,7 @@ class ProductImportIntegrationTests {
         String[] plainRow = product(plain, "1.00", "1", "VAT KOD");
         plainRow[13] = "2";
 
-        upload(owner, report(nextReportDate(), reducedRow, standardRow, plainRow)).andExpect(status().isCreated());
+        upload(owner, report(nextReportDate(), reducedRow, standardRow, plainRow)).andExpect(status().isOk());
 
         assertThat(jdbc.queryForList("select vat_code from products where itm8 in (?, ?, ?) order by itm8",
                 Short.class, reduced, standard, plain)).containsExactlyInAnyOrder((short) 6, (short) 1, (short) 2);
@@ -347,7 +396,7 @@ class ProductImportIntegrationTests {
     @Test
     void olderReportThanTheLastImportedIsRejected() throws Exception {
         Cookie owner = login();
-        upload(owner, report(nextReportDate(), product(itm8(), "1.00", "1", "NOWY"))).andExpect(status().isCreated());
+        upload(owner, report(nextReportDate(), product(itm8(), "1.00", "1", "NOWY"))).andExpect(status().isOk());
 
         upload(owner, report(LocalDateTime.of(2020, 1, 1, 8, 0), product(itm8(), "1.00", "1", "STARY")))
                 .andExpect(status().isConflict());
@@ -372,10 +421,7 @@ class ProductImportIntegrationTests {
     @Test
     void notAnExcelFileIsRejected() throws Exception {
         Cookie owner = login();
-        mvc.perform(multipart(importsUrl())
-                        .file(new MockMultipartFile("file", "baza.xlsx", "application/octet-stream", "nie excel".getBytes()))
-                        .cookie(owner).with(csrf()))
-                .andExpect(status().isBadRequest());
+        upload(owner, "baza.xlsx", "nie excel".getBytes()).andExpect(status().isBadRequest());
         mvc.perform(multipart(importsUrl())
                         .file(new MockMultipartFile("file", "baza.csv", "text/csv", "EAN;NAZWA".getBytes()))
                         .cookie(owner).with(csrf()))
@@ -397,7 +443,7 @@ class ProductImportIntegrationTests {
         String b = itm8();
         LocalDateTime reportDate = nextReportDate();
         upload(owner, report(reportDate, product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
         // A w promocji (na kasie 7.99, regularna 9.49), B z nową ceną; kod A z etykiety obniżki jest tańszy.
         uploadPriceFiles(owner, priceFile(reportDate.plusMinutes(10),
@@ -447,11 +493,11 @@ class ProductImportIntegrationTests {
 
         // Raport wygenerowany przed plikiem (wgrany później) nie cofa ceny z pliku, nowszy już tak.
         upload(owner, report(reportDate.plusMinutes(1), product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, b))
                 .isEqualTo(new BigDecimal("3.79"));
         upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"), product(b, "3.49", "1", "B")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
         Map<String, Object> productB = jdbc.queryForMap("select * from products where itm8 = ?", b);
         assertThat(productB.get("sale_price")).isEqualTo(new BigDecimal("3.49"));
         assertThat(productB.get("sale_price_at")).isNull();
@@ -461,7 +507,7 @@ class ProductImportIntegrationTests {
     void priceFileIsImportedOnce() throws Exception {
         Cookie owner = login();
         String a = itm8();
-        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"))).andExpect(status().isOk());
         MockMultipartFile file = priceFile(LocalDateTime.of(2099, 1, 1, 7, 43, 34),
                 priceLine(a, "59" + a.substring(2), "9.99", null, null, null));
         String pending = "{\"fileNames\":[\"" + file.getOriginalFilename() + "\",\"PROTO6_x.Traite0\"]}";
@@ -494,7 +540,7 @@ class ProductImportIntegrationTests {
         String b = itm8();
         LocalDateTime reportDate = nextReportDate();
         upload(owner, report(reportDate, product(a, "8.99", "1", "A"), product(b, "5.99", "1", "B")))
-                .andExpect(status().isCreated());
+                .andExpect(status().isOk());
 
         // Plik starszy niż kartoteka nie zmienia ceny, ale promocja zostaje.
         uploadPriceFiles(owner, priceFile(reportDate.minusDays(3),
@@ -538,7 +584,7 @@ class ProductImportIntegrationTests {
     void searchFindsEan8WithAndWithoutLeadingZeros() throws Exception {
         Cookie owner = login();
         String a = itm8();
-        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        upload(owner, report(nextReportDate(), product(a, "8.99", "1", "A"))).andExpect(status().isOk());
         String ean = "5" + a.substring(6);
         jdbc.update("update products set ean = ? where store_id = ?::uuid and itm8 = ?", "00000" + ean,
                 storeId, a);
@@ -555,11 +601,11 @@ class ProductImportIntegrationTests {
         Cookie owner = login();
         String a = itm8();
         LocalDateTime reportDate = nextReportDate();
-        upload(owner, report(reportDate, product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        upload(owner, report(reportDate, product(a, "8.99", "1", "A"))).andExpect(status().isOk());
         uploadPriceFiles(owner, priceFile(reportDate.plusMinutes(10),
                 priceLine(a, "59" + a.substring(2), "7.99", "9.49", "10126", "311230")))
                 .andExpect(jsonPath("$.imported[0].updatedCount").value(1));
-        upload(owner, report(nextReportDate(), product(a, "8.79", "1", "A"))).andExpect(status().isCreated());
+        upload(owner, report(nextReportDate(), product(a, "8.79", "1", "A"))).andExpect(status().isOk());
 
         mvc.perform(get("/api/stores/" + storeId + "/products").param("query", a).cookie(owner))
                 .andExpect(status().isOk())
@@ -603,7 +649,7 @@ class ProductImportIntegrationTests {
         String main = "59" + a.substring(2);
         String label = "13" + a.substring(2);
         LocalDateTime reportDate = nextReportDate();
-        upload(owner, report(reportDate, product(a, "8.99", "1", "A"))).andExpect(status().isCreated());
+        upload(owner, report(reportDate, product(a, "8.99", "1", "A"))).andExpect(status().isOk());
 
         // Wszystkie pliki są starsze niż kartoteka, a drugi przyszedł później niż trzeci: liczy się czas z nazwy pliku.
         uploadPriceFiles(owner, priceFile(reportDate.minusDays(5), priceLine(a, main, "7.00", null, null, null),
@@ -696,9 +742,27 @@ class ProductImportIntegrationTests {
     }
 
     private ResultActions upload(Cookie owner, byte[] file) throws Exception {
-        return mvc.perform(multipart(importsUrl())
-                .file(new MockMultipartFile("file", "BAZA DO STRONY.xlsx", "application/octet-stream", file))
-                .cookie(owner).with(csrf()));
+        return upload(owner, "BAZA DO STRONY.xlsx", file);
+    }
+
+    /** Wgranie idzie w tle: czeka na koniec zadania i zwraca jego stan (wynik albo błąd importu). */
+    private ResultActions upload(Cookie owner, String fileName, byte[] file) throws Exception {
+        String started = mvc.perform(multipart(importsUrl())
+                        .file(new MockMultipartFile("file", fileName, "application/octet-stream", file))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("RUNNING"))
+                .andReturn().getResponse().getContentAsString();
+        String jobUrl = importsUrl() + "/jobs/" + com.jayway.jsonpath.JsonPath.read(started, "$.id");
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (true) {
+            ResultActions job = mvc.perform(get(jobUrl).cookie(owner));
+            if (job.andReturn().getResponse().getStatus() != 202) {
+                return job;
+            }
+            assertThat(System.currentTimeMillis()).as("import trwa za długo").isLessThan(deadline);
+            Thread.sleep(50);
+        }
     }
 
     private String importsUrl() {

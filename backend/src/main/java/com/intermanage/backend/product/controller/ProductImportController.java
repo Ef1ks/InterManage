@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +20,8 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.product.dto.EanChangeResponse;
 import com.intermanage.backend.product.dto.ProductImportOverview;
-import com.intermanage.backend.product.dto.ProductImportResponse;
+import com.intermanage.backend.product.dto.ProductImportJobResponse;
+import com.intermanage.backend.product.dto.ProductImportJobResponse.Status;
 import com.intermanage.backend.product.service.ProductImportService;
 
 @RestController
@@ -45,11 +47,20 @@ public class ProductImportController {
         return importService.eanChanges(storeId, id);
     }
 
+    /** Import idzie w tle (duży raport scala się kilka minut); wynik daje {@link #job}. */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @ResponseStatus(HttpStatus.CREATED)
+    @ResponseStatus(HttpStatus.ACCEPTED)
     @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
-    public ProductImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
+    public ProductImportJobResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return importService.importReport(storeId, file, principal.getId());
+        return importService.startImport(storeId, file, principal.getId());
+    }
+
+    /** Stan importu: 202 w trakcie, 200 z wynikiem, a nieudany import zwraca swój błąd (400, 409…). */
+    @GetMapping("/jobs/{jobId}")
+    @PreAuthorize("hasAuthority('IMPORTS:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public ResponseEntity<ProductImportJobResponse> job(@PathVariable UUID storeId, @PathVariable UUID jobId) {
+        ProductImportJobResponse job = importService.job(storeId, jobId);
+        return ResponseEntity.status(job.status() == Status.RUNNING ? HttpStatus.ACCEPTED : HttpStatus.OK).body(job);
     }
 }

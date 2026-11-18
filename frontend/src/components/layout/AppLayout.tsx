@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SwitchAccountDialog } from '@/features/auth/AccountSwitcher'
 import { useCurrentUser, useLogout } from '@/features/auth/api'
+import { useIdleLock } from '@/features/auth/use-idle-lock'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceControlWatcher } from '@/features/data-entry/price-control-watch'
 import { FileQueueBanner } from '@/features/file-queue/FileQueueBanner'
@@ -54,6 +55,7 @@ export function AppLayout() {
   usePriceFileWatcher()
   usePriceControlWatcher()
   useWorkdayLock()
+  useIdleLock()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)
   const dispatch = useAppDispatch()
   const location = useLocation()

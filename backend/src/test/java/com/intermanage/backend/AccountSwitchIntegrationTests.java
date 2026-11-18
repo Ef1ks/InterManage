@@ -232,6 +232,53 @@ class AccountSwitchIntegrationTests {
                 .andExpect(jsonPath("$.username").value(anna));
     }
 
+    @Test
+    void idleAccountGoesToBackgroundAndReturnsWithPin() throws Exception {
+        String anna = createAccount("Anna Bezczynna");
+        Cookie annaToken = login(anna);
+        mvc.perform(put("/api/auth/pin").cookie(annaToken).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"pin\":\"1357\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").cookie(annaToken))
+                .andExpect(jsonPath("$.idleLockMinutes").value(10));
+
+        // Strona zgłasza 10 minut bez ruchu: konto idzie do tła, a powrót wymaga PIN-u.
+        MvcResult locked = mvc.perform(post("/api/auth/lock").cookie(annaToken).with(csrf()))
+                .andExpect(status().isNoContent())
+                .andReturn();
+        assertThat(locked.getResponse().getCookie(JwtService.COOKIE_NAME).getMaxAge()).isZero();
+        Cookie background = cookie(locked, JwtService.ACCOUNTS_COOKIE_NAME);
+        mvc.perform(get("/api/auth/accounts").cookie(background))
+                .andExpect(jsonPath("$[0].username").value(anna))
+                .andExpect(jsonPath("$[0].unlock").value("PIN"));
+        mvc.perform(switchRequest(id(anna), "{\"pin\":\"0000\"}").cookie(background))
+                .andExpect(status().isBadRequest());
+        mvc.perform(switchRequest(id(anna), "{\"pin\":\"1357\"}").cookie(background))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value(anna));
+
+        // Bez żadnych żądań dłużej niż blokada (zamknięta karta): backend sam odkłada konto do tła.
+        Cookie silent = new Cookie(JwtService.COOKIE_NAME, jwtService.issue(principal(anna), false,
+                Instant.now(), Instant.now().minus(Duration.ofMinutes(12)))
+                .getTokenValue());
+        mvc.perform(get("/api/auth/me").cookie(silent))
+                .andExpect(status().isUnauthorized());
+        Cookie recent = new Cookie(JwtService.COOKIE_NAME, jwtService.issue(principal(anna), false,
+                Instant.now(), Instant.now().minus(Duration.ofMinutes(5)))
+                .getTokenValue());
+        mvc.perform(get("/api/auth/me").cookie(recent))
+                .andExpect(status().isOk());
+
+        // Konto bez wymogu PIN-u nie ma blokady.
+        mvc.perform(put("/api/auth/pin/required").cookie(recent).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"required\":false}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").cookie(recent))
+                .andExpect(jsonPath("$.idleLockMinutes").isEmpty());
+        mvc.perform(get("/api/auth/me").cookie(silent))
+                .andExpect(status().isOk());
+    }
+
     private AppUserPrincipal principal(String username) {
         return AppUserPrincipal.from(users.findWithRoleById(UUID.fromString(id(username))).orElseThrow());
     }

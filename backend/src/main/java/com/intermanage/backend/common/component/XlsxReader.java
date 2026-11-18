@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.DoubleConsumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -44,11 +45,20 @@ public class XlsxReader {
     private static final String REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
     public void readFirstSheet(Path file, RowHandler handler) throws IOException, InvalidWorkbookException {
+        readFirstSheet(file, handler, null);
+    }
+
+    /**
+     * Jak {@link #readFirstSheet(Path, RowHandler)}, a {@code progress} dostaje przeczytaną część arkusza (0-1, z
+     * rozmiaru XML po rozpakowaniu zapisanego w archiwum), co najmniej co 1%.
+     */
+    public void readFirstSheet(Path file, RowHandler handler, DoubleConsumer progress) throws IOException,
+            InvalidWorkbookException {
         try (ZipFile zip = new ZipFile(file.toFile())) {
             Map<String, String> relationships = readRelationships(zip);
             String sheetPath = firstSheetPath(zip, relationships);
             List<String> sharedStrings = readSharedStrings(zip, relationships);
-            readSheet(zip, sheetPath, sharedStrings, handler);
+            readSheet(zip, sheetPath, sharedStrings, handler, progress);
         } catch (ZipException e) {
             throw new InvalidWorkbookException("Plik nie jest skoroszytem .xlsx", e);
         } catch (XMLStreamException e) {
@@ -138,9 +148,9 @@ public class XlsxReader {
         return strings;
     }
 
-    private static void readSheet(ZipFile zip, String path, List<String> sharedStrings, RowHandler handler)
-            throws IOException, XMLStreamException, InvalidWorkbookException {
-        XMLStreamReader xml = open(zip, path);
+    private static void readSheet(ZipFile zip, String path, List<String> sharedStrings, RowHandler handler,
+            DoubleConsumer progress) throws IOException, XMLStreamException, InvalidWorkbookException {
+        XMLStreamReader xml = open(zip, path, progress);
         try {
             List<String> cells = new ArrayList<>();
             int rowNumber = 0;
@@ -210,6 +220,11 @@ public class XlsxReader {
 
     private static XMLStreamReader open(ZipFile zip, String path) throws IOException, XMLStreamException,
             InvalidWorkbookException {
+        return open(zip, path, null);
+    }
+
+    private static XMLStreamReader open(ZipFile zip, String path, DoubleConsumer progress) throws IOException,
+            XMLStreamException, InvalidWorkbookException {
         ZipEntry entry = zip.getEntry(path);
         if (entry == null) {
             throw new InvalidWorkbookException("Brak części skoroszytu: " + path, null);
@@ -218,15 +233,22 @@ public class XlsxReader {
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         factory.setProperty(XMLInputFactory.IS_NAMESPACE_AWARE, true);
-        return factory.createXMLStreamReader(new LimitedInputStream(zip.getInputStream(entry)), "UTF-8");
+        return factory.createXMLStreamReader(
+                new LimitedInputStream(zip.getInputStream(entry), entry.getSize(), progress), "UTF-8");
     }
 
     private static final class LimitedInputStream extends FilterInputStream {
 
         private long remaining = MAX_ENTRY_BYTES;
+        private final long size;
+        private final DoubleConsumer progress;
+        private long read;
+        private long nextReport;
 
-        LimitedInputStream(InputStream in) {
+        LimitedInputStream(InputStream in, long size, DoubleConsumer progress) {
             super(in);
+            this.size = size;
+            this.progress = size > 0 ? progress : null;
         }
 
         @Override
@@ -251,6 +273,11 @@ public class XlsxReader {
             remaining -= bytes;
             if (remaining < 0) {
                 throw new IOException("Część skoroszytu przekracza dopuszczalny rozmiar");
+            }
+            read += bytes;
+            if (progress != null && read >= nextReport) {
+                progress.accept(Math.min(1, (double) read / size));
+                nextReport = read + size / 100;
             }
         }
     }

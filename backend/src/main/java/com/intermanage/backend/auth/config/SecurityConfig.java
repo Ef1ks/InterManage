@@ -21,11 +21,15 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
+import org.springframework.security.web.csrf.CsrfFilter;
 
 import com.intermanage.backend.auth.security.AppUserDetailsService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.security.BackgroundAccounts;
+import com.intermanage.backend.auth.security.IdleLock;
 import com.intermanage.backend.auth.security.JwtAuthenticationFilter;
+import com.intermanage.backend.auth.security.RateLimitFilter;
+import com.intermanage.backend.auth.security.RequestLimits;
 import com.intermanage.backend.auth.security.WorkdayLock;
 import com.intermanage.backend.auth.security.JwtService;
 
@@ -41,7 +45,8 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
-            BackgroundAccounts backgroundAccounts, WorkdayLock workdayLock) throws Exception {
+            BackgroundAccounts backgroundAccounts, WorkdayLock workdayLock, IdleLock idleLock,
+            RequestLimits requestLimits) throws Exception {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
@@ -75,7 +80,9 @@ public class SecurityConfig {
                         .addLogoutHandler((request, response, authentication) -> jwtService.clearTokenCookie(response))
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts, workdayLock),
+                // Limity zapytań przed CSRF i JWT, żeby żądania ponad limit nie sięgały do bazy.
+                .addFilterBefore(new RateLimitFilter(requestLimits), CsrfFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts, workdayLock, idleLock),
                         AnonymousAuthenticationFilter.class);
 
         return http.build();

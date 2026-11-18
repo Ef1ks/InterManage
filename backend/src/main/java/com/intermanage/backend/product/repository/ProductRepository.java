@@ -8,10 +8,10 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.product.entity.Product;
-import com.intermanage.backend.product.entity.ProductImport;
 import com.intermanage.backend.store.entity.Store;
 
 /** Wyszukiwanie produktów po słowach: {@link ProductSearch}. */
@@ -47,7 +47,23 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     List<CadencierPrice> findCadencierPrices(UUID storeId, String[] itm8s);
 
     /** Produkty sklepu, których nie było w danym imporcie (zostają w bazie z danymi z wcześniejszego). */
-    long countByStoreAndLastSeenImportNot(Store store, ProductImport productImport);
+    long countByStoreIdAndLastSeenImportIdNot(UUID storeId, UUID importId);
+
+    /**
+     * Artykułów nie ma w raporcie: zostają w kartotece, ale tracą to, co obowiązuje tylko z ostatniego raportu:
+     * CENA_CAD, stan i rotację, i nie są już aktywne. Zwykle system sklepu przeniósł EAN na nowy ITM8 razem ze stanem,
+     * więc stary stan na starej karcie liczyłby się drugi raz (ujemne stany, zerówki, magazyn). Gdy karta wróci do
+     * raportu, {@link Product#seenIn} wpisze jej dane z pliku. Jedno zapytanie zamiast encji, bo kartoteka dużego
+     * sklepu ma ok. 200 tys. artykułów.
+     */
+    @Modifying
+    @Query(value = """
+            update products set cadencier_price = null, stock = null, rotation = null, active = false, updated_at = now()
+            where store_id = :storeId and last_seen_import_id <> :importId
+              and (cadencier_price is not null or stock is not null or rotation is not null
+                   or active is distinct from false)
+            """, nativeQuery = true)
+    int clearMissingFromImport(UUID storeId, UUID importId);
 
     /**
      * Blokada doradcza Postgresa na czas transakcji: dwa importy do tego samego sklepu wykonają się po kolei.

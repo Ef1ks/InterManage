@@ -19,8 +19,10 @@ import com.intermanage.backend.auth.dto.MobileLoginRequest;
 import com.intermanage.backend.auth.dto.MobileLoginResponse;
 import com.intermanage.backend.auth.dto.SetUpPasswordRequest;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.BackgroundAccounts;
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.auth.security.PasswordLogin;
+import com.intermanage.backend.auth.security.WorkdayLock;
 import com.intermanage.backend.auth.service.AccountSwitchService;
 import com.intermanage.backend.auth.service.AuthService;
 
@@ -40,13 +42,17 @@ public class AuthController {
     private final PasswordLogin passwordLogin;
     private final JwtService jwtService;
     private final AccountSwitchService accountSwitch;
+    private final BackgroundAccounts backgroundAccounts;
+    private final WorkdayLock workdayLock;
 
     public AuthController(AuthService authService, PasswordLogin passwordLogin, JwtService jwtService,
-            AccountSwitchService accountSwitch) {
+            AccountSwitchService accountSwitch, BackgroundAccounts backgroundAccounts, WorkdayLock workdayLock) {
         this.authService = authService;
         this.passwordLogin = passwordLogin;
         this.jwtService = jwtService;
         this.accountSwitch = accountSwitch;
+        this.backgroundAccounts = backgroundAccounts;
+        this.workdayLock = workdayLock;
     }
 
     /** Ustawia ciasteczko XSRF-TOKEN; frontend woła to przed pierwszym żądaniem modyfikującym. */
@@ -91,6 +97,20 @@ public class AuthController {
         AppUserPrincipal updated = authService.setUpPassword(principal.getId(), request.newPassword());
         jwtService.writeTokenCookie(response, updated, jwtService.rememberMe(httpRequest));
         return authService.me(updated.getId());
+    }
+
+    /**
+     * Blokada po bezczynności z przeglądarki: konto chronione PIN-em (albo hasłem) idzie do tła, a strona pokazuje
+     * logowanie z listą kont. Konto bez wymogu PIN-u zostaje bez zmian (przejście na nie i tak nie pyta o PIN).
+     */
+    @PostMapping("/lock")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void lock(@AuthenticationPrincipal AppUserPrincipal principal, HttpServletRequest httpRequest,
+            HttpServletResponse response) {
+        if (JwtService.bearerToken(httpRequest) != null || !workdayLock.protects(principal.getId())) {
+            return;
+        }
+        backgroundAccounts.moveToBackground(httpRequest, response, principal, jwtService.rememberMe(httpRequest));
     }
 
     @GetMapping("/me")

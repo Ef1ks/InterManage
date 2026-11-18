@@ -14,6 +14,7 @@ import type {
   ProductCodeImport,
   ProductCodeImportOverview,
   ProductImport,
+  ProductImportJob,
   ProductImportOverview,
   PromotionImport,
   PromotionImportOverview,
@@ -26,6 +27,7 @@ import type {
 /** Każdy sklep ma własną kartotekę i historię importów, więc sklep jest częścią klucza. */
 const productImportsKey = (storeId: string) => ['stores', storeId, 'imports', 'products'] as const
 const productImportsPath = (storeId: string) => `/stores/${storeId}/imports/products`
+const IMPORT_POLL_MS = 2000
 
 export function useProductImports(storeId: string) {
   return useQuery({
@@ -43,13 +45,39 @@ export function useEanChanges(storeId: string, importId: string) {
   })
 }
 
+const productImportJobKey = (storeId: string) => [...productImportsKey(storeId), 'job'] as const
+
+/** Stan trwającego importu (postęp), wpisywany przez {@link useImportProducts} przy każdym pytaniu o zadanie. */
+export function useProductImportProgress(storeId: string) {
+  return useQuery<ProductImportJob | null>({
+    queryKey: productImportJobKey(storeId),
+    queryFn: () => null,
+    enabled: false,
+    staleTime: Infinity,
+  }).data
+}
+
 export function useImportProducts(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
+    // Duży raport scala się kilka minut, a Cloudflare zrywa żądanie po 100 s: import idzie w tle i pytamy o stan.
+    mutationFn: async (file: File): Promise<ProductImport> => {
       const formData = new FormData()
       formData.append('file', file)
-      return api<ProductImport>(productImportsPath(storeId), { method: 'POST', formData })
+      const setProgress = (job: ProductImportJob | null) => queryClient.setQueryData(productImportJobKey(storeId), job)
+      try {
+        let job = await api<ProductImportJob>(productImportsPath(storeId), { method: 'POST', formData })
+        setProgress(job)
+        while (job.status === 'RUNNING') {
+          await new Promise((resolve) => setTimeout(resolve, IMPORT_POLL_MS))
+          job = await api<ProductImportJob>(`${productImportsPath(storeId)}/jobs/${job.id}`)
+          setProgress(job)
+        }
+        if (!job.result) throw new Error('Import nie zwrócił wyniku. Odśwież stronę i sprawdź historię importów.')
+        return job.result
+      } finally {
+        setProgress(null)
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: productImportsKey(storeId) }),
   })

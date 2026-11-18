@@ -24,7 +24,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * wersja sesji niż w tokenie zostawiają żądanie nieuwierzytelnione (chronione endpointy zwrócą 401).
  * Ważny, ale starszy token jest wymieniany na nowy ({@link JwtService#refreshIfDue}), więc aktywny użytkownik
  * nie zostaje wylogowany w trakcie pracy; razem z nim odnawiają się konta zalogowane w tle ({@link BackgroundAccounts}).
- * Konto otwarte przed godziną blokady po pracy ({@link WorkdayLock}) trafia do tła i wraca dopiero po PIN-ie.
+ * Konto otwarte przed godziną blokady po pracy ({@link WorkdayLock}) albo bez żądań dłużej niż blokada po bezczynności
+ * ({@link IdleLock}) trafia do tła i wraca dopiero po PIN-ie.
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -33,13 +34,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final BackgroundAccounts backgroundAccounts;
     private final WorkdayLock workdayLock;
+    private final IdleLock idleLock;
     private final SecurityContextHolderStrategy contextHolder = SecurityContextHolder.getContextHolderStrategy();
 
     public JwtAuthenticationFilter(JwtService jwtService, BackgroundAccounts backgroundAccounts,
-            WorkdayLock workdayLock) {
+            WorkdayLock workdayLock, IdleLock idleLock) {
         this.jwtService = jwtService;
         this.backgroundAccounts = backgroundAccounts;
         this.workdayLock = workdayLock;
+        this.idleLock = idleLock;
     }
 
     @Override
@@ -51,9 +54,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = bearer != null ? bearer : cookie != null ? cookie.getValue() : null;
         boolean logout = LOGOUT_PATH.equals(request.getRequestURI());
         jwtService.decode(token).ifPresent(jwt -> backgroundAccounts.principalOf(jwt).ifPresent(principal -> {
-            if (bearer == null && !logout && workdayLock.due(jwt, Instant.now())) {
+            Instant now = Instant.now();
+            if (bearer == null && !logout && (workdayLock.due(jwt, now) || idleLock.due(jwt, now))) {
                 if (workdayLock.protects(principal.getId())) {
-                    // Po pracy: konto idzie do tła, żądanie zostaje bez logowania (401, strona logowania z PIN-em).
+                    // Po pracy albo po bezczynności: konto idzie do tła, żądanie zostaje bez logowania (401, strona logowania z PIN-em).
                     backgroundAccounts.moveToBackground(request, response, principal, JwtService.rememberMe(jwt));
                     return;
                 }

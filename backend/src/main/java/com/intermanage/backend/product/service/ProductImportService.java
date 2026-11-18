@@ -9,9 +9,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -29,6 +31,7 @@ import com.intermanage.backend.common.exception.InvalidReportException;
 import com.intermanage.backend.product.component.ProductReportParser;
 import com.intermanage.backend.product.dto.EanChangeResponse;
 import com.intermanage.backend.product.dto.ParsedProductReport;
+import com.intermanage.backend.product.dto.ProductImportJobResponse;
 import com.intermanage.backend.product.dto.ProductImportOverview;
 import com.intermanage.backend.product.dto.ProductImportResponse;
 import com.intermanage.backend.product.dto.ProductReportRow;
@@ -38,25 +41,28 @@ import com.intermanage.backend.product.entity.ProductEanChange;
 import com.intermanage.backend.product.entity.ProductImport;
 import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.ProductImportMapper;
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.product.repository.ProductEanChangeRepository;
 import com.intermanage.backend.product.repository.ProductEanRepository;
-import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.product.repository.ProductImportRepository;
 import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
 
+import jakarta.persistence.EntityManager;
+
 /**
  * Import codziennego raportu kartoteki produktów do wybranego sklepu (numer sklepu z nagłówka raportu musi się
- * zgadzać). Każdy sklep ma własną kartotekę, pary EAN i historię importów. Plik jest najpierw w całości czytany i sprawdzany, potem w jednej
- * transakcji scalany z kartoteką po ITM8: nowe kody są dodawane, zmienione ceny / stany / rotacja / nazwy
- * nadpisywane, a produkty, których w pliku zabrakło, zostają w bazie bez zmian. Każda para ITM8 + EAN trafia na stałe
- * do {@link ProductEan} (pod nią będzie zapisywana sprzedaż), a zmiany przypisań EAN - także korekty błędnych EAN-ów
- * z systemu sklepu - do dziennika {@link ProductEanChange}.
+ * zgadzać). Każdy sklep ma własną kartotekę, pary EAN i historię importów. Plik jest najpierw w całości czytany i
+ * sprawdzany, potem w jednej transakcji scalany z kartoteką po ITM8: nowe kody są dodawane, zmienione ceny / stany /
+ * rotacja / nazwy nadpisywane, a produkty, których w pliku zabrakło, zostają w bazie bez zmian. Każda para ITM8 + EAN
+ * trafia na stałe do {@link ProductEan} (pod nią będzie zapisywana sprzedaż), a zmiany przypisań EAN - także korekty
+ * błędnych EAN-ów z systemu sklepu - do dziennika {@link ProductEanChange}.
  * <p>
- * Cała kartoteka (ok. 72 tys. produktów i ich par EAN) jest wczytywana do kontekstu JPA i porównywana w pamięci;
- * Hibernate zapisuje zmiany paczkami ({@code hibernate.jdbc.batch_size}).
+ * Import idzie w tle ({@link ProductImportJobs}). Scalanie idzie paczkami po {@value #CHUNK_SIZE} wierszy: paczka
+ * wczytuje tylko swoje produkty i pary EAN, zapisuje zmiany i czyści kontekst JPA, więc raport 200 tys. artykułów
+ * (pierwszy import zakłada wszystkie) nie trzyma w pamięci całej kartoteki jako encji.
  */
 @Service
 public class ProductImportService {
@@ -64,11 +70,14 @@ public class ProductImportService {
     private static final Logger log = LoggerFactory.getLogger(ProductImportService.class);
 
     private static final int HISTORY_SIZE = 30;
+    static final int CHUNK_SIZE = 2000;
     /** Klucz blokady to ten przedrostek + id sklepu: importy do różnych sklepów nie czekają na siebie. */
     static final String IMPORT_LOCK_PREFIX = "product-import:";
     private static final DateTimeFormatter REPORT_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     private final TransactionTemplate transaction;
+    private final EntityManager entityManager;
+    private final ProductImportJobs jobs;
     private final ProductReportParser reportParser;
     private final ProductImportMapper productImportMapper;
     private final ProductImportRepository imports;
@@ -81,15 +90,17 @@ public class ProductImportService {
     private final ProductDraftService drafts;
     private final ArticleMergeRepository merges;
 
-    public ProductImportService(TransactionTemplate transaction, ProductReportParser reportParser,
-            ProductImportMapper productImportMapper, ProductImportRepository imports, ProductRepository products,
-            ProductEanRepository productEans, ProductEanChangeRepository eanChanges, AppUserRepository users,
-            StoreRepository stores, ProductPriceChangeRepository priceChanges, ProductDraftService drafts,
-            ArticleMergeRepository merges) {
+    public ProductImportService(TransactionTemplate transaction, EntityManager entityManager, ProductImportJobs jobs,
+            ProductReportParser reportParser, ProductImportMapper productImportMapper, ProductImportRepository imports,
+            ProductRepository products, ProductEanRepository productEans, ProductEanChangeRepository eanChanges,
+            AppUserRepository users, StoreRepository stores, ProductPriceChangeRepository priceChanges,
+            ProductDraftService drafts, ArticleMergeRepository merges) {
+        this.transaction = transaction;
+        this.entityManager = entityManager;
+        this.jobs = jobs;
         this.merges = merges;
         this.priceChanges = priceChanges;
         this.drafts = drafts;
-        this.transaction = transaction;
         this.reportParser = reportParser;
         this.productImportMapper = productImportMapper;
         this.imports = imports;
@@ -120,7 +131,11 @@ public class ProductImportService {
         return new ProductImportOverview(products.countByStoreId(storeId), latest);
     }
 
-    public ProductImportResponse importReport(UUID storeId, MultipartFile file, UUID userId) {
+    /**
+     * Sprawdza plik, kopiuje go na dysk (plik z żądania znika po odpowiedzi) i uruchamia import w tle. Błędy pliku
+     * i scalania zwraca {@link #job}.
+     */
+    public ProductImportJobResponse startImport(UUID storeId, MultipartFile file, UUID userId) {
         String fileName = file.getOriginalFilename() != null ? Path.of(file.getOriginalFilename()).getFileName().toString() : "raport.xlsx";
         if (file.isEmpty()) {
             throw ApiException.badRequest("Wybierz plik do importu");
@@ -129,23 +144,45 @@ public class ProductImportService {
         if (!lowerName.endsWith(".xlsx") && !lowerName.endsWith(".xlsm")) {
             throw ApiException.badRequest("Obsługujemy pliki .xlsx i .xlsm. Plik .xls zapisz w Excelu jako .xlsx.");
         }
+        if (!stores.existsById(storeId)) {
+            throw ApiException.notFound("Nie znaleziono sklepu");
+        }
 
-        ParsedProductReport report = parse(file);
-        ProductImportResponse result = transaction.execute(status -> merge(storeId, report, fileName, userId));
-        log.info("Import produktów do sklepu {} z {}: {} wierszy, nowe {}, zmienione {}, bez zmian {}, brak w pliku {}, "
-                + "zmiana EAN {}, EAN z innego ITM8 {}, szkice dopasowane {}, usunięte {}", storeId, fileName, result.totalRows(), result.createdCount(),
-                result.updatedCount(), result.unchangedCount(), result.missingCount(), result.eanChangedCount(),
-                result.eanMovedCount(), result.draftsMatchedCount(), result.draftsRemovedCount());
-        return result;
-    }
-
-    private ParsedProductReport parse(MultipartFile file) {
-        Path temp = null;
+        Path temp;
         try {
             // Skoroszyt to archiwum zip, które trzeba czytać w dowolnej kolejności, więc potrzebny jest plik na dysku.
             temp = Files.createTempFile("product-import-", ".xlsx");
             file.transferTo(temp);
-            return reportParser.parse(temp);
+        } catch (IOException e) {
+            log.warn("Nie udało się zapisać pliku importu", e);
+            throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
+        }
+        return jobs.start(storeId, fileName, () -> delete(temp),
+                progress -> importReport(storeId, temp, fileName, userId, progress));
+    }
+
+    public ProductImportJobResponse job(UUID storeId, UUID jobId) {
+        return jobs.get(storeId, jobId);
+    }
+
+    private ProductImportResponse importReport(UUID storeId, Path file, String fileName, UUID userId,
+            ProductImportJobs.Progress progress) {
+        long start = System.nanoTime();
+        ParsedProductReport report = parse(file, progress);
+        long parsed = System.nanoTime();
+        ProductImportResponse result = transaction.execute(status -> merge(storeId, report, fileName, userId, progress));
+        log.info("Import produktów do sklepu {} z {}: {} wierszy, nowe {}, zmienione {}, bez zmian {}, brak w pliku {}, "
+                + "zmiana EAN {}, EAN z innego ITM8 {}, szkice dopasowane {}, usunięte {}; odczyt {} s, zapis {} s",
+                storeId, fileName, result.totalRows(), result.createdCount(), result.updatedCount(),
+                result.unchangedCount(), result.missingCount(), result.eanChangedCount(), result.eanMovedCount(),
+                result.draftsMatchedCount(), result.draftsRemovedCount(), (parsed - start) / 1_000_000_000,
+                (System.nanoTime() - parsed) / 1_000_000_000);
+        return result;
+    }
+
+    private ParsedProductReport parse(Path file, ProductImportJobs.Progress progress) {
+        try {
+            return reportParser.parse(file, progress::reading);
         } catch (InvalidReportException e) {
             throw ApiException.badRequest(e.getMessage())
                     .withProperty("rowErrors", e.errors())
@@ -153,18 +190,19 @@ public class ProductImportService {
         } catch (IOException e) {
             log.warn("Nie udało się odczytać pliku importu", e);
             throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
-        } finally {
-            if (temp != null) {
-                try {
-                    Files.deleteIfExists(temp);
-                } catch (IOException e) {
-                    log.warn("Nie udało się usunąć pliku tymczasowego {}", temp, e);
-                }
-            }
         }
     }
 
-    private ProductImportResponse merge(UUID storeId, ParsedProductReport report, String fileName, UUID userId) {
+    private static void delete(Path temp) {
+        try {
+            Files.deleteIfExists(temp);
+        } catch (IOException e) {
+            log.warn("Nie udało się usunąć pliku tymczasowego {}", temp, e);
+        }
+    }
+
+    private ProductImportResponse merge(UUID storeId, ParsedProductReport report, String fileName, UUID userId,
+            ProductImportJobs.Progress progress) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
         if (report.storeNumber() != null && !report.storeNumber().equals(store.getNumber())) {
             throw ApiException.conflict("To raport sklepu " + report.storeNumber() + ", a wybrany jest sklep "
@@ -180,40 +218,95 @@ public class ProductImportService {
         }
 
         AppUser user = userId != null ? users.getReferenceById(userId) : null;
-        ProductImport productImport = imports.save(
-                new ProductImport(store, fileName, report.generatedAt(), user, report.rows().size()));
+        UUID importId = imports.save(new ProductImport(store, fileName, report.generatedAt(), user, report.rows().size()))
+                .getId();
+        entityManager.flush();
 
-        Catalog catalog = Catalog.load(store, products, productEans);
+        Counts counts = new Counts();
+        Map<String, UUID> reportByEan = new HashMap<>();
+        List<ProductReportRow> rows = report.rows();
+        progress.saving(0, rows.size());
+        Stages stages = new Stages();
+        int analyzedAt = 0;
+        for (int from = 0; from < rows.size(); from += CHUNK_SIZE) {
+            // Statystyki sprzed importu nie znają wierszy z tej transakcji: przy nowym sklepie planista uważa kartotekę
+            // za pustą i szuka paczki skanem całej, rosnącej tabeli (200 tys. wierszy: minuty zamiast sekund).
+            // Odświeżamy je, ilekroć zapisanych wierszy jest dwa razy więcej niż przy ostatnim odświeżeniu.
+            if (from > 0 && from >= 2 * analyzedAt) {
+                merges.analyze();
+                analyzedAt = from;
+            }
+            // Po wyczyszczeniu kontekstu import jest tylko odwołaniem: paczka wczytuje go od nowa.
+            ProductImport productImport = imports.getReferenceById(importId);
+            mergeChunk(storeId, productImport, rows.subList(from, Math.min(rows.size(), from + CHUNK_SIZE)), counts,
+                    reportByEan);
+            entityManager.flush();
+            entityManager.clear();
+            progress.saving(Math.min(rows.size(), from + CHUNK_SIZE), rows.size());
+        }
+        stages.mark("paczki");
+        progress.finishing();
+
+        // CENA_CAD, stan i rotacja obowiązują tylko z bieżącego raportu: artykuły spoza pliku je tracą.
+        products.clearMissingFromImport(storeId, importId);
+        stages.mark("brak w pliku");
+        int missing = Math.toIntExact(products.countByStoreIdAndLastSeenImportIdNot(storeId, importId));
+        stages.mark("liczenie");
+
+        ProductImport productImport = imports.findById(importId).orElseThrow();
+        productImport.recordResult(counts.created, counts.updated, counts.unchanged, missing, counts.eanChanged,
+                counts.eanMoved);
+        ProductDraftService.Result draftResult = drafts.resolve(productImport, reportByEan);
+        productImport.recordDrafts(draftResult.matched(), draftResult.removed());
+        stages.mark("szkice");
+        // Artykuł, którego zabrakło w raporcie, a jego EAN ma teraz inny artykuł, staje się jego częścią.
+        merges.analyze();
+        stages.mark("statystyki");
+        merges.endStale(storeId);
+        stages.mark("koniec połączeń");
+        merges.insertNew(storeId);
+        stages.mark("nowe połączenia");
+        log.info("Import produktów do sklepu {}, {} wierszy, etapy: {}", storeId, rows.size(), stages);
+        return productImportMapper.toResponse(productImport);
+    }
+
+    /** Jedna paczka wierszy raportu: tylko jej produkty i pary EAN (także pary jej EAN-ów u innych produktów). */
+    private void mergeChunk(UUID storeId, ProductImport productImport, List<ProductReportRow> rows, Counts counts,
+            Map<String, UUID> reportByEan) {
+        List<String> itm8s = rows.stream().map(ProductReportRow::itm8).toList();
+        Map<String, Product> productsByItm8 = new HashMap<>();
+        for (Product product : products.findByStoreIdAndItm8In(storeId, itm8s)) {
+            productsByItm8.put(product.getItm8(), product);
+        }
+        Set<String> eans = new LinkedHashSet<>();
+        rows.forEach(row -> eans.add(row.ean()));
+        Catalog catalog = Catalog.load(storeId, productImport.getId(), productsByItm8, eans, productEans);
+
         List<Product> newProducts = new ArrayList<>();
         List<ProductEan> newPairs = new ArrayList<>();
         List<ProductEanChange> changes = new ArrayList<>();
         List<ProductPriceChange> priceChangeList = new ArrayList<>();
-        Map<String, Product> reportByEan = new HashMap<>();
-        int updated = 0;
-        int unchanged = 0;
-        int eanChanged = 0;
-        int eanMoved = 0;
+        List<Product> rowProducts = new ArrayList<>(rows.size());
 
-        for (ProductReportRow row : report.rows()) {
-            Product product = catalog.productsByItm8.get(row.itm8());
+        for (ProductReportRow row : rows) {
+            Product product = productsByItm8.get(row.itm8());
             if (product == null) {
                 product = new Product(row, productImport);
                 newProducts.add(product);
             } else {
                 BigDecimal previousSalePrice = product.getSalePrice();
                 if (product.seenIn(row, productImport)) {
-                    updated++;
+                    counts.updated++;
                     if (!sameNumber(previousSalePrice, product.getSalePrice())) {
                         priceChangeList.add(ProductPriceChange.fromReport(product, productImport, previousSalePrice));
                     }
                 } else {
-                    unchanged++;
+                    counts.unchanged++;
                 }
             }
+            rowProducts.add(product);
 
-            reportByEan.put(row.ean().replaceFirst("^0+", ""), product);
-
-            // Porównanie ze stanem sprzed importu: nowe pary trafiają do katalogu dopiero po pętli.
+            // Porównanie ze stanem sprzed importu: pary dodane w tym imporcie katalog pomija.
             ProductEan latestOwn = catalog.latestPairOf(product);
             ProductEan ownPair = catalog.pair(product, row.ean());
             String previousEan = latestOwn != null && !latestOwn.getEan().equals(row.ean()) ? latestOwn.getEan() : null;
@@ -228,53 +321,69 @@ public class ProductImportService {
 
             if (previousEan != null || previousProduct != null) {
                 changes.add(new ProductEanChange(productImport, product, row.ean(), previousEan, previousProduct));
-                eanChanged += previousEan != null ? 1 : 0;
-                eanMoved += previousProduct != null ? 1 : 0;
+                counts.eanChanged += previousEan != null ? 1 : 0;
+                counts.eanMoved += previousProduct != null ? 1 : 0;
             }
-        }
-
-        // CENA_CAD, stan i rotacja obowiązują tylko z bieżącego raportu: artykuły spoza pliku je tracą.
-        for (Product product : catalog.productsByItm8.values()) {
-            product.missingFrom(productImport);
         }
 
         products.saveAll(newProducts);
         productEans.saveAll(newPairs);
         eanChanges.saveAll(changes);
         priceChanges.saveAll(priceChangeList);
-        // Zapytanie wymusza zapis zmian z pętli, więc liczy już po aktualizacji last_seen_import_id.
-        int missing = Math.toIntExact(products.countByStoreAndLastSeenImportNot(store, productImport));
+        counts.created += newProducts.size();
+        // Id nowych produktów są już nadane, a kontekst zaraz zostanie wyczyszczony: szkicom wystarczą id.
+        for (int i = 0; i < rows.size(); i++) {
+            reportByEan.put(rows.get(i).ean().replaceFirst("^0+", ""), rowProducts.get(i).getId());
+        }
+    }
 
-        productImport.recordResult(newProducts.size(), updated, unchanged, missing, eanChanged, eanMoved);
-        ProductDraftService.Result draftResult = drafts.resolve(productImport, reportByEan);
-        productImport.recordDrafts(draftResult.matched(), draftResult.removed());
-        // Artykuł, którego zabrakło w raporcie, a jego EAN ma teraz inny artykuł, staje się jego częścią.
-        merges.refresh(storeId);
-        return productImportMapper.toResponse(productImport);
+    /** Czas etapów scalania do logu, żeby było widać, co rośnie z wielkością raportu. */
+    private static final class Stages {
+        private final StringBuilder text = new StringBuilder();
+        private long last = System.nanoTime();
+
+        void mark(String stage) {
+            long now = System.nanoTime();
+            text.append(text.isEmpty() ? "" : ", ").append(stage).append(' ').append((now - last) / 1_000_000).append(" ms");
+            last = now;
+        }
+
+        @Override
+        public String toString() {
+            return text.toString();
+        }
+    }
+
+    private static final class Counts {
+        int created;
+        int updated;
+        int unchanged;
+        int eanChanged;
+        int eanMoved;
     }
 
     /**
-     * Kartoteka sprzed importu: produkty po ITM8 i istniejące pary EAN. Pary są porządkowane według ostatniego
-     * wystąpienia, przy remisie wygrywa nowsza para.
+     * Kartoteka paczki sprzed importu: jej produkty po ITM8 i istniejące pary EAN (pary jej produktów i pary jej
+     * EAN-ów u innych produktów). Pary są porządkowane według ostatniego wystąpienia, przy remisie wygrywa nowsza.
      */
-    private record Catalog(
-            Map<String, Product> productsByItm8,
-            Map<Product, List<ProductEan>> pairsByProduct,
-            Map<String, List<ProductEan>> pairsByEan) {
+    private record Catalog(Map<Product, List<ProductEan>> pairsByProduct, Map<String, List<ProductEan>> pairsByEan) {
 
-        static Catalog load(Store store, ProductRepository products, ProductEanRepository productEans) {
-            Map<String, Product> byItm8 = new HashMap<>();
-            for (Product product : products.findByStore(store)) {
-                byItm8.put(product.getItm8(), product);
+        static Catalog load(UUID storeId, UUID importId, Map<String, Product> productsByItm8, Set<String> eans,
+                ProductEanRepository productEans) {
+            Map<UUID, ProductEan> pairs = new HashMap<>();
+            if (!productsByItm8.isEmpty()) {
+                productEans.findByProductIn(productsByItm8.values()).forEach(pair -> pairs.put(pair.getId(), pair));
             }
+            productEans.findOfEansBefore(storeId, eans, importId).forEach(pair -> pairs.put(pair.getId(), pair));
+
             Map<Product, List<ProductEan>> byProduct = new HashMap<>();
             Map<String, List<ProductEan>> byEan = new HashMap<>();
-            for (ProductEan pair : productEans.findByStore(store)) {
-                // Produkty są już w kontekście JPA, więc getProduct() zwraca tę samą instancję co byItm8.
+            for (ProductEan pair : pairs.values()) {
+                // Produkty są już w kontekście JPA, więc getProduct() zwraca tę samą instancję co productsByItm8.
                 byProduct.computeIfAbsent(pair.getProduct(), p -> new ArrayList<>()).add(pair);
                 byEan.computeIfAbsent(pair.getEan(), e -> new ArrayList<>()).add(pair);
             }
-            return new Catalog(byItm8, byProduct, byEan);
+            return new Catalog(byProduct, byEan);
         }
 
         ProductEan pair(Product product, String ean) {

@@ -115,7 +115,11 @@ public class JwtService {
     }
 
     public Jwt issue(AppUserPrincipal principal, boolean rememberMe, Instant unlockedAt) {
-        Instant now = Instant.now();
+        return issue(principal, rememberMe, unlockedAt, Instant.now());
+    }
+
+    /** Token wystawiony w podanej chwili (testy blokady po bezczynności). */
+    public Jwt issue(AppUserPrincipal principal, boolean rememberMe, Instant unlockedAt, Instant now) {
         Duration ttl = rememberMe ? rememberMeTtl : tokenTtl;
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(principal.getId().toString())

@@ -3,13 +3,14 @@ package com.intermanage.backend.product.service;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
-import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.entity.ProductDraft;
 import com.intermanage.backend.product.entity.ProductImport;
 import com.intermanage.backend.product.repository.ProductDraftRepository;
+import com.intermanage.backend.product.repository.ProductRepository;
 
 /**
  * Szkice artykułów z potwierdzonych plików CADBEZP przy imporcie kartoteki. Rozstrzyga je tylko raport wygenerowany
@@ -23,9 +24,11 @@ public class ProductDraftService {
     private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
 
     private final ProductDraftRepository drafts;
+    private final ProductRepository products;
 
-    public ProductDraftService(ProductDraftRepository drafts) {
+    public ProductDraftService(ProductDraftRepository drafts, ProductRepository products) {
         this.drafts = drafts;
+        this.products = products;
     }
 
     /** Wynik dla podsumowania importu. */
@@ -33,10 +36,10 @@ public class ProductDraftService {
     }
 
     /**
-     * W transakcji importu, po zapisie nowych produktów. {@code reportByEan}: artykuły z raportu po EAN-ie bez zer
-     * wiodących.
+     * W transakcji importu, po zapisie nowych produktów. {@code reportByEan}: id artykułów z raportu po EAN-ie bez
+     * zer wiodących.
      */
-    public Result resolve(ProductImport productImport, Map<String, Product> reportByEan) {
+    public Result resolve(ProductImport productImport, Map<String, UUID> reportByEan) {
         Instant reportTime = productImport.getReportGeneratedAt() != null
                 ? productImport.getReportGeneratedAt().atZone(STORE_ZONE).toInstant()
                 : productImport.getImportedAt();
@@ -46,9 +49,9 @@ public class ProductDraftService {
             if (!draft.getCreatedAt().isBefore(reportTime)) {
                 continue;
             }
-            Product product = reportByEan.get(draft.getEan());
-            if (product != null) {
-                draft.matched(product, productImport);
+            UUID productId = reportByEan.get(draft.getEan());
+            if (productId != null) {
+                draft.matched(products.getReferenceById(productId), productImport);
                 matched++;
             } else {
                 draft.removed(ProductDraft.RemovedReason.MISSING, productImport, null);

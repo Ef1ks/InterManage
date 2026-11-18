@@ -63,6 +63,15 @@ public interface ArticleMergeRepository extends JpaRepository<ArticleMerge, UUID
             )
             """;
 
+    /**
+     * Statystyki tabel kartoteki przed {@link #refresh} w transakcji importu. Bez nich planista nie zna wierszy dopisanych
+     * w tej transakcji (nowy sklep: kartoteka „pusta”) i łączy {@code gone} z {@code owners} pętlą zagnieżdżoną: przy
+     * 20 tys. artykułów ok. 80 s zamiast ułamka sekundy. ANALYZE liczy też wiersze własnej, niezatwierdzonej transakcji.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "analyze products, product_eans, product_codes", nativeQuery = true)
+    void analyze();
+
     /** Kończy połączenia sklepu, które przestały wynikać z kartoteki i multikodów. */
     @Modifying(flushAutomatically = true)
     @Query(value = PAIRS + """

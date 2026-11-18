@@ -25,5 +25,10 @@ public record MeResponse(
         /** Własne zdjęcie w tle aplikacji tego konta, {@code null} = bez zdjęcia. */
         BackgroundResponse background,
         /** Zdjęcie profilowe tego konta, {@code null} = inicjały. */
-        AvatarResponse avatar) {
+        AvatarResponse avatar,
+        /**
+         * Po tylu minutach bez ruchu myszy i klawiatury przeglądarka blokuje konto ({@code POST /api/auth/lock}),
+         * {@code null} = konto bez blokady (PIN wyłączony przez właściciela konta albo blokada wyłączona).
+         */
+        Integer idleLockMinutes) {
 }

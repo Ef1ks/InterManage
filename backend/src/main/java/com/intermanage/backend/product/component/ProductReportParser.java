@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.DoubleConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,9 +43,14 @@ public class ProductReportParser {
     }
 
     public ParsedProductReport parse(Path file) throws IOException, InvalidReportException {
+        return parse(file, null);
+    }
+
+    /** {@code progress}: przeczytana część arkusza (0-1). */
+    public ParsedProductReport parse(Path file, DoubleConsumer progress) throws IOException, InvalidReportException {
         ReportReader reader = new ReportReader();
         try {
-            xlsxReader.readFirstSheet(file, reader::onRow);
+            xlsxReader.readFirstSheet(file, reader::onRow, progress);
         } catch (InvalidWorkbookException e) {
             throw new InvalidReportException("Nie udało się odczytać pliku. Wgraj raport zapisany jako .xlsx lub .xlsm.");
         }

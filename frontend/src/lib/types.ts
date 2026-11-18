@@ -45,6 +45,8 @@ export type Me = {
   background: UserBackground | null
   /** Zdjęcie profilowe tego konta (Moje konto), `null` = inicjały. */
   avatar: UserAvatar | null
+  /** Po tylu minutach bez ruchu myszy i klawiatury konto się blokuje (wraca po PIN-ie), `null` = bez blokady. */
+  idleLockMinutes: number | null
 }
 
 export type UserBackground = {
@@ -389,6 +391,22 @@ export type UpdateUserRequest = {
   enabled: boolean
   newPassword?: string
   storeIds: string[]
+}
+
+/**
+ * Import kartoteki w tle: `result` jest dopiero po zakończeniu. Nieudany import API zwraca jako błąd. `percent` liczy
+ * cały import (odczyt do 30%, zapis do 95%), wiersze są znane od zapisu.
+ */
+export type ProductImportJob = {
+  id: string
+  fileName: string
+  status: 'RUNNING' | 'DONE' | 'FAILED'
+  phase: 'READING' | 'SAVING' | 'FINISHING'
+  percent: number
+  processedRows: number
+  totalRows: number
+  startedAt: string
+  result: ProductImport | null
 }
 
 export type ProductImport = {

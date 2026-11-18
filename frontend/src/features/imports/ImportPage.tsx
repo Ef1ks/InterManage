@@ -33,6 +33,7 @@ import {
   useImportNomenclatures,
   useImportProductCodes,
   useImportProducts,
+  useProductImportProgress,
   useImportPromotions,
   useImportSales,
   useImportSuppliers,
@@ -83,6 +84,7 @@ import type {
   NomenclatureImport,
   ProductCodeImport,
   ProductImport,
+  ProductImportJob,
   PromotionImport,
   SalesImport,
   StoreSummary,
@@ -439,6 +441,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
             <ReportUpload
               upload={uploads.PRODUCTS}
               accept={XLSX_EXTENSIONS}
+              progress={<ProductImportProgress storeId={store.id} />}
               result={(result) => <ProductImportResult result={result} onShowEanChanges={setEanChangesOf} />}
             />
           ) : (
@@ -751,11 +754,14 @@ function ReportUpload<T>({
   upload,
   accept,
   pdf,
+  progress,
   result,
 }: {
   upload: UseMutationResult<T, Error, File>
   accept: string[]
   pdf?: boolean
+  /** Pokazywany w trakcie wgrania (import w tle z postępem). */
+  progress?: ReactNode
   result: (data: T) => ReactNode
 }) {
   const [rejectedFile, setRejectedFile] = useState<string | null>(null)
@@ -778,9 +784,51 @@ function ReportUpload<T>({
       />
 
       <div aria-live="polite">
+        {upload.isPending && progress}
         {rejectedFile && <RejectedFile fileName={rejectedFile} pdf={pdf} />}
         {upload.isError && <ImportError error={upload.error} />}
         {upload.isSuccess && result(upload.data)}
+      </div>
+    </div>
+  )
+}
+
+const IMPORT_PHASES: Record<ProductImportJob['phase'], string> = {
+  READING: 'Odczyt pliku',
+  SAVING: 'Zapis do kartoteki',
+  FINISHING: 'Kończenie importu',
+}
+
+/** Postęp importu kartoteki w tle: etap, procent i zapisane wiersze. */
+function ProductImportProgress({ storeId }: { storeId: string }) {
+  const job = useProductImportProgress(storeId)
+  if (!job) return null
+  return (
+    <div className="grid gap-1.5 text-sm">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-muted-foreground">
+          {IMPORT_PHASES[job.phase]}
+          {job.phase === 'SAVING' && (
+            <>
+              {' '}
+              · {numberFormat.format(job.processedRows)} z {numberFormat.format(job.totalRows)} wierszy
+            </>
+          )}
+        </span>
+        <span className="font-medium tabular-nums">{job.percent}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Postęp importu"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={job.percent}
+        className="h-2 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className="h-full origin-left rounded-full bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none"
+          style={{ transform: `scaleX(${job.percent / 100})` }}
+        />
       </div>
     </div>
   )
