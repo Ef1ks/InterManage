@@ -13,6 +13,7 @@ import com.intermanage.backend.deliprice.entity.PriceSource;
  * z kartoteki ({@code priceSource}). W wynikach wyszukiwania to cena aktualna, a {@code quantity}, {@code cost}
  * i {@code pricedAt} są puste; w kalkulacji to cena zapamiętana {@code pricedAt}. {@code pieceWeight} to zapamiętana
  * średnia waga 1 sztuki w kg (tylko składniki liczone na sztuki) - z nią sztuki wliczają się do wagi surowców.
+ * {@code nomenclature} to kod podrodziny artykułu bez spacji ("366002"), pusty bez nomenklatury w kartotece.
  */
 public record PriceProductResponse(
         UUID productId,
@@ -20,6 +21,7 @@ public record PriceProductResponse(
         String ean,
         String name,
         String brand,
+        String nomenclature,
         String unit,
         BigDecimal pieceWeight,
         BigDecimal unitCost,

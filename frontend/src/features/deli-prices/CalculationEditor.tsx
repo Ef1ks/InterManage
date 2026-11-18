@@ -4,7 +4,7 @@ import { useBlocker, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
-import { FormAlert, SegmentedField } from '@/components/form'
+import { FormAlert, MultiComboboxField, SegmentedField } from '@/components/form'
 import { HowTo } from '@/components/HowTo'
 import { SearchInput } from '@/components/SearchInput'
 import {
@@ -46,9 +46,11 @@ import {
   toInputValue,
   VAT_RATES,
 } from '@/features/deli-prices/format'
+import { useSalesNomenclatures } from '@/features/sales/api'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
+import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { ApiError } from '@/lib/api'
-import type { CalculationMode, FinishedProduct, PriceCalculation, PriceProduct } from '@/lib/types'
+import type { CalculationMode, FinishedProduct, NomenclatureOption, PriceCalculation, PriceProduct } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** {@code pieceWeight}: średnia waga 1 sztuki w kg, tylko dla składników na sztuki (pusty tekst = nieznana). */
@@ -75,6 +77,11 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
   const canEdit = useCan('DELI_PRICES', 'EDIT')
   const navigate = useNavigate()
   const save = useSaveCalculation(storeId)
+  const nomenclatures = useSalesNomenclatures(storeId)
+  const nomenclatureNames = useMemo(
+    () => new Map((nomenclatures.data ?? []).map((item) => [item.code, cleanName(item.name)])),
+    [nomenclatures.data],
+  )
   const { remove, restore } = useDeleteCalculation(storeId)
 
   const [product, setProduct] = useState<FinishedProduct | null>(calculation?.product ?? null)
@@ -534,6 +541,7 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
                   <IngredientRow
                     key={row.product.productId}
                     row={row}
+                    nomenclatureNames={nomenclatureNames}
                     showError={submitted}
                     disabled={!canEdit}
                     inputRef={(element) => {
@@ -556,7 +564,13 @@ export function CalculationEditor({ storeId, calculation }: { storeId: string; c
 
         {canEdit && (
           <div className="grid gap-4 lg:sticky lg:top-4">
-            <ProductPanel storeId={storeId} addedIds={addedIds} onAdd={add} />
+            <ProductPanel
+              storeId={storeId}
+              nomenclatures={nomenclatures.data}
+              nomenclatureNames={nomenclatureNames}
+              addedIds={addedIds}
+              onAdd={add}
+            />
             {summary}
           </div>
         )}
@@ -618,8 +632,30 @@ function PriceLabel({ product }: { product: PriceProduct }) {
   )
 }
 
+/** Nazwa z nomenklatury sklepu bywa z przedrostkiem kodu ("36_GARMAZ"). */
+const cleanName = (name: string) => name.replace(/^\d+_/, '')
+
+/** Kod podrodziny artykułu ze spacjami i nazwą, np. "36 60 02 SALATKI"; bez nomenklatury w kartotece - opis. */
+function NomenclatureLabel({ code, names }: { code: string | null; names: Map<string, string> }) {
+  if (!code) {
+    return <span className="text-amber-700 dark:text-amber-400">bez nomenklatury</span>
+  }
+  const name = names.get(code)
+  const path = [code.slice(0, 2), code.slice(0, 4), code]
+    .filter((part, index, all) => all.indexOf(part) === index)
+    .map((part) => `${displayCode(part)} ${names.get(part) ?? ''}`.trim())
+    .join(' › ')
+  return (
+    <span title={path}>
+      NOM {displayCode(code)}
+      {name && <span className="text-muted-foreground/80"> {name}</span>}
+    </span>
+  )
+}
+
 function IngredientRow({
   row,
+  nomenclatureNames,
   showError,
   disabled,
   inputRef,
@@ -628,6 +664,7 @@ function IngredientRow({
   onRemove,
 }: {
   row: Row
+  nomenclatureNames: Map<string, string>
   showError: boolean
   disabled: boolean
   inputRef: (element: HTMLInputElement | null) => void
@@ -665,6 +702,9 @@ function IngredientRow({
           title={product.priceDocumentNumber ? `Przyjęcie towaru ${product.priceDocumentNumber}` : undefined}
         >
           <PriceLabel product={product} />
+        </div>
+        <div className="truncate text-xs text-muted-foreground tabular-nums">
+          <NomenclatureLabel code={product.nomenclature} names={nomenclatureNames} />
         </div>
         {pieces && (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -783,16 +823,21 @@ function NumberInput({
 /** Kartoteka sklepu po prawej: wyszukiwanie składników z ceną (ostatnia dostawa albo kartoteka) i dodawanie ich. */
 function ProductPanel({
   storeId,
+  nomenclatures,
+  nomenclatureNames,
   addedIds,
   onAdd,
 }: {
   storeId: string
+  nomenclatures: NomenclatureOption[] | undefined
+  nomenclatureNames: Map<string, string>
   addedIds: Set<string>
   onAdd: (product: PriceProduct) => void
 }) {
   const [query, setQuery] = useState('')
-  const { data: results = [], isFetching, isError, longEnough } = usePriceProductSearch(storeId, query)
-  const typedEnough = query.trim().replace(/\s+/g, '').length >= MIN_SEARCH_LENGTH
+  const [codes, setCodes] = useSearchNomenclatures(storeId)
+  const { data: results = [], isFetching, isError, longEnough } = usePriceProductSearch(storeId, query, codes)
+  const typedEnough = longEnough
 
   return (
     <Card className="gap-3 p-4">
@@ -800,6 +845,18 @@ function ProductPanel({
         <h2 className="text-base font-semibold">Składniki z kartoteki</h2>
         <p className="text-sm text-muted-foreground">Cena z ostatniej dostawy, a bez dostawy - z kartoteki.</p>
       </div>
+      <MultiComboboxField
+        label="Szukaj w nomenklaturze"
+        description="Rejony, rodziny albo podrodziny. Puste = cała kartoteka."
+        options={(nomenclatures ?? []).map((item) => ({
+          value: item.code,
+          label: `${displayCode(item.code)} ${cleanName(item.name)}`,
+          hint: LEVEL_STYLES[item.level].label,
+        }))}
+        value={codes}
+        onChange={setCodes}
+        placeholder={nomenclatures?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'}
+      />
       <div className="relative">
         <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: nazwa, marka, EAN, ITM8" />
         {isFetching && typedEnough && (
@@ -813,12 +870,17 @@ function ProductPanel({
         {!typedEnough || !longEnough ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Wpisz co najmniej {MIN_SEARCH_LENGTH} znaki. Słowa w dowolnej kolejności, np. „smiet 30”.
+            {codes.length > 0 && ' Z wybraną nomenklaturą pusty tekst pokazuje jej artykuły.'}
           </p>
         ) : isError ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Nie udało się wyszukać produktów.</p>
         ) : results.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            {isFetching ? 'Szukam…' : 'Nie ma takiego produktu w kartotece sklepu.'}
+            {isFetching
+              ? 'Szukam…'
+              : codes.length > 0
+                ? 'Nie ma takiego produktu w wybranej nomenklaturze.'
+                : 'Nie ma takiego produktu w kartotece sklepu.'}
           </p>
         ) : (
           <ul className="grid gap-0.5">
@@ -847,6 +909,9 @@ function ProductPanel({
                       <span className="block truncate text-xs text-muted-foreground tabular-nums">
                         <PriceLabel product={product} />
                       </span>
+                      <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                        <NomenclatureLabel code={product.nomenclature} names={nomenclatureNames} />
+                      </span>
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {added ? 'dodany' : <PlusIcon aria-label="Dodaj do przepisu" className="size-4" />}
@@ -860,4 +925,29 @@ function ProductPanel({
       </div>
     </Card>
   )
+}
+
+const NOMENCLATURES_KEY = 'intermanage.deliPriceNomenclatures'
+
+/** Nomenklatura wyszukiwania składników: zapamiętana w przeglądarce osobno dla każdego sklepu. */
+function useSearchNomenclatures(storeId: string) {
+  const key = `${NOMENCLATURES_KEY}.${storeId}`
+  const [codes, setCodes] = useState<string[]>(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(key) ?? '[]')
+      return Array.isArray(stored) ? stored.filter((code): code is string => typeof code === 'string') : []
+    } catch {
+      return []
+    }
+  })
+  const update = (next: string[]) => {
+    setCodes(next)
+    try {
+      if (next.length > 0) localStorage.setItem(key, JSON.stringify(next))
+      else localStorage.removeItem(key)
+    } catch {
+      // Bez localStorage wybór działa do odświeżenia strony.
+    }
+  }
+  return [codes, update] as const
 }

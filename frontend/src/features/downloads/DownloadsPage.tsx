@@ -17,6 +17,7 @@ import {
 import { ChangeList, DownloadButton, VersionHistoryDialog } from '@/features/downloads/changes'
 import { DownloadFormDialog } from '@/features/downloads/DownloadFormDialog'
 import { formatSize } from '@/features/downloads/format'
+import { MercalysLoginSection } from '@/features/downloads/MercalysLoginSection'
 import { ShortcutsSection } from '@/features/downloads/ShortcutsSection'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -91,6 +92,8 @@ export function DownloadsPage() {
       )}
 
       <ShortcutsSection owner={me.owner} />
+
+      <MercalysLoginSection />
 
       {me.owner && (
         <DownloadFormDialog

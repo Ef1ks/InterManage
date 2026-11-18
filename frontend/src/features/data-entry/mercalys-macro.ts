@@ -1,3 +1,5 @@
+import { mercalysOpenLine } from '@/lib/mercalys-login'
+
 /** Okna i ekrany Mercalys: identyfikatory z kodu stron, poprawiamy je tylko tutaj. */
 const WINDOW = 'Mercalys'
 /** Adobe Acrobat Reader z wydrukami bonów; po zamknięciach dostaw makro zamyka wszystkie jego okna. */
@@ -85,7 +87,7 @@ export function buildDeliveryMacro(documents: MacroDocument[], print = false) {
     [
       `# Zamknięcie faktur: ${documents.length}`,
       ...documents.map((document) => `WEBLIST|${document.supplierCode}|${document.number}`),
-      `WINOPEN|${PROGRAM_WINDOW}`,
+      mercalysOpenLine(PROGRAM_WINDOW),
       `WEBENSURE|${WINDOW}|${MENU.directDeliveries}|${MENU.purchasesTab}`,
       `WEBOPEN|${WINDOW}|${MENU.directDeliveries}|${MENU.integration}`,
       `WEBWAIT|${DIALOG}|Oui|${INTEGRATION_SCREEN.confirmText}|${PAGE_TIMEOUT_MS}`,
@@ -180,7 +182,7 @@ export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[]
   return (
     [
       `# Zbierz brakujące ITM8: bon ${bonNumber}, dostawcy ${suppliers.join(', ')}`,
-      `WINOPEN|${PROGRAM_WINDOW}`,
+      mercalysOpenLine(PROGRAM_WINDOW),
       ...fileSteps,
       `WEBCOLLECTED|W Obsłudze BL bazy nie ma pliku bonu ${bonNumber} od dostawców ${suppliers.join(', ')}.`,
       `WEBCLICK|${WINDOW}|${MENU.purchasesTab}`,
@@ -248,7 +250,7 @@ export function buildItm8Macro(items: Itm8MacroItem[]) {
   const c = ITM8_MACRO_CONFIG
   const out = [
     `# Uzupełnij ITM8: ${items.length} poz.`,
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     `WEBENSURE|${WINDOW}|${screen.articleMenuItem}|${screen.articleTab}`,
     `WEBCLICK|${WINDOW}|${screen.articleMenuItem}`,
   ]
@@ -382,7 +384,7 @@ export function buildMarkdownMacro({ ean, itm8, price, from, to }: MarkdownMacro
   return (
     [
       `# Przecena ${ean}`,
-      `WINOPEN|${PROGRAM_WINDOW}`,
+      mercalysOpenLine(PROGRAM_WINDOW),
       `WEBENSURE|${WINDOW}|${screen.articleMenuItem}|${screen.articleTab}`,
       `WEBCLICK|${WINDOW}|${screen.articleMenuItem}`,
       `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
@@ -491,7 +493,7 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
   const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
   const out = [
     `# Wprowadzanie promocji ${code}: ${items.length} art.`,
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     ...promoHeaderLines({ code, name, end, label: screen.freeCodeLabel }),
     ...promoArticleLines(items, 0),
     ...promoEndLines(),
@@ -607,7 +609,7 @@ export function buildProImportMacro(files: ProImportFile[], today: string) {
   const screen = PROMO_SCREEN
   const pro = PRO_IMPORT_SCREEN
   const c = PRO_IMPORT_MACRO_CONFIG
-  const out = [`# Ceny promocji z plików: ${files.length}`, `WINOPEN|${PROGRAM_WINDOW}`]
+  const out = [`# Ceny promocji z plików: ${files.length}`, mercalysOpenLine(PROGRAM_WINDOW)]
   files.forEach((file, index) => {
     const n = index + 1
     const fixedLabel = `PRO_FIXED_${n}`
@@ -670,7 +672,7 @@ export function buildProImportMacro(files: ProImportFile[], today: string) {
 export function buildPromoResumeMacro({ code, items, from }: { code: string; items: PromoMacroItem[]; from: number }) {
   const out = [
     `# Wznowienie promocji ${code}: od artykułu ${from + 1} z ${items.length}`,
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     ...promoArticleLines(items, from),
     ...promoEndLines(),
   ]
@@ -793,7 +795,7 @@ export function buildSupplierMacro(supplier: SupplierMacro) {
   return (
     [
       `# Nowy dostawca ${supplier.code} (albo kolejny wolny): ${keysText(supplier.name1)}`,
-      `WINOPEN|${PROGRAM_WINDOW}`,
+      mercalysOpenLine(PROGRAM_WINDOW),
       `WEBENSURE|${WINDOW}|${s.menuItem}|${s.maintenanceTab}`,
       // Kod zajęty (lista dostawców w aplikacji jest nieaktualna): Mercalys wczytuje kartę istniejącego dostawcy, więc
       // odtwarzacz bierze kolejny kod, każdy na świeżej karcie. Wszystkie zajęte zatrzymują makro, nic nie jest nadpisane.
@@ -863,7 +865,7 @@ export function correctionStartLines(today: string, baseProtocol = false) {
   const screen = CORRECTION_SCREEN
   const type = baseProtocol ? screen.baseErrorType : screen.supplierErrorType
   return [
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     `WEBENSURE|${WINDOW}|${screen.protocolMenuItem}|${screen.stockTab}`,
     `WEBCLICK|${WINDOW}|${screen.protocolMenuItem}`,
     `WEBWAIT|${WINDOW}|${screen.typeField}||${PAGE_TIMEOUT_MS}`,
@@ -975,7 +977,7 @@ const TRANSFER_SCREEN = {
 export function transferStartLines() {
   const screen = TRANSFER_SCREEN
   return [
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     `WEBENSURE|${WINDOW}|${screen.menuItem}|${screen.stockTab}`,
     `WEBCLICK|${WINDOW}|${screen.menuItem}`,
     `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
@@ -1071,7 +1073,7 @@ export function buildPluMacro({
   const plu = `%${PLU_VARIABLE}%`
   const out = [
     `# Kody PLU: ${eans.length}, sekcja wagi ${section}, format ${labelFormat}`,
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     `WEBENSURE|${WINDOW}|${screen.articleMenuItem}|${screen.articleTab}`,
     `WEBCLICK|${WINDOW}|${screen.articleMenuItem}`,
   ]
@@ -1175,7 +1177,7 @@ export function buildMeaMacro(codes: string[]) {
   const screen = MEA_SCREEN
   const out = [
     `# Kody MEA: ${codes.length}`,
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
     `WEBENSURE|${WINDOW}|${screen.listMenuItem}|${screen.cadencierTab}`,
     `WEBCLICK|${WINDOW}|${screen.listMenuItem}`,
     `WEBWAIT|${WINDOW}|${screen.nameFilter}||${PAGE_TIMEOUT_MS}`,

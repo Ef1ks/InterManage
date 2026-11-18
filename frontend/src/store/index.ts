@@ -7,6 +7,7 @@ import deliOrderDraftReducer, { persistDrafts } from './deliOrderDraftSlice'
 import meaOrderDraftReducer, { persistMeaOrderDrafts } from './meaOrderDraftSlice'
 import protocolEntryDraftReducer, { persistProtocolEntryDrafts } from './protocolEntryDraftSlice'
 import promoSetupDraftReducer, { persistPromoSetup } from './promoSetupDraftSlice'
+import salesBasketReducer, { persistSalesBasket } from './salesBasketSlice'
 import uiReducer from './uiSlice'
 
 export const store = configureStore({
@@ -18,7 +19,18 @@ export const store = configureStore({
     promoSetupDraft: promoSetupDraftReducer,
     protocolEntryDraft: protocolEntryDraftReducer,
     meaOrderDraft: meaOrderDraftReducer,
+    salesBasket: salesBasketReducer,
   },
+})
+
+// Koszyk zakupowy porównania sprzedaży i ustawienia raportu też przetrwają odświeżenie strony.
+let savedSalesBasket = store.getState().salesBasket
+store.subscribe(() => {
+  const state = store.getState().salesBasket
+  if (state !== savedSalesBasket) {
+    savedSalesBasket = state
+    persistSalesBasket(state)
+  }
 })
 
 // Niewysłane zamówienie garmażu ma przetrwać odświeżenie strony: zapisujemy je przy każdej zmianie.

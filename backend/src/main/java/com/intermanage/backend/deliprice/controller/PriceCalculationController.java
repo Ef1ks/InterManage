@@ -143,12 +143,15 @@ public class PriceCalculationController {
 
     /**
      * Składniki z kartoteki: od 3 znaków, słowa w dowolnej kolejności, jak w zamówieniu garmażu; z ceną z ostatniej
-     * dostawy albo z kartoteki.
+     * dostawy albo z kartoteki. {@code nomenclatures} (rejony, rodziny, podrodziny) zawęża wyszukiwanie, a z nim
+     * zapytanie może być puste.
      */
     @GetMapping("/products")
     @PreAuthorize(VIEW)
-    public List<PriceProductResponse> searchProducts(@PathVariable UUID storeId, @RequestParam String query) {
-        return service.searchProducts(storeId, query);
+    public List<PriceProductResponse> searchProducts(@PathVariable UUID storeId,
+            @RequestParam(defaultValue = "") String query,
+            @RequestParam(required = false) List<String> nomenclatures) {
+        return service.searchProducts(storeId, query, nomenclatures == null ? List.of() : nomenclatures);
     }
 
     @GetMapping("/{id}")

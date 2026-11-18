@@ -10,7 +10,8 @@ import {
   useState,
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronRightIcon, ChevronsDownUpIcon } from 'lucide-react'
+import { ChevronRightIcon, ChevronsDownUpIcon, ShoppingBasketIcon } from 'lucide-react'
+import { Link } from 'react-router'
 
 import { BackLink } from '@/components/BackLink'
 import { DateField, MultiComboboxField, SegmentedField, SelectField } from '@/components/form'
@@ -18,6 +19,7 @@ import { ReportFreshness } from '@/components/ReportFreshness'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useCan } from '@/features/auth/api'
 import { formatMoney, formatQuantity } from '@/features/documents/format'
 import {
   type ReportKind,
@@ -25,12 +27,21 @@ import {
   salesComparisonKey,
   useCounterStores,
   useDeliCostsOverview,
+  useRegionBudgets,
   useSalesComparison,
   useSalesNomenclatures,
   useSalesReportsOverview,
 } from '@/features/sales/api'
 import { barClass, displayCode, LEVEL_STYLES, type NomenclatureLevel } from '@/features/sales/nomenclature-levels'
+import {
+  AddToBasketDialog,
+  type BasketArticle,
+  BasketButton,
+  ComparisonSettingsButton,
+  useComparisonSettings,
+} from '@/features/sales/SalesBasket'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { NomenclatureNav, type NomenclatureNavItem } from '@/features/sales/NomenclatureNav'
 import { salesPaths } from '@/features/sales/paths'
 import { ChartButton, nomenclatureName } from '@/features/sales/report-parts'
@@ -65,6 +76,7 @@ import type {
 } from '@/lib/types'
 import { specialDayLabel, specialDaysIn } from '@/lib/holidays'
 import { cn } from '@/lib/utils'
+import type { ComparisonSort } from '@/store/salesBasketSlice'
 
 /** Okres w adresie strony po polsku, żeby link do raportu otwierał ten sam widok. */
 const COMPARE_PARAMS: Record<CompareMode, string> = {
@@ -75,6 +87,10 @@ const COMPARE_PARAMS: Record<CompareMode, string> = {
 }
 
 type SaleBasis = 'gross' | 'net'
+
+/** Filtr wierszy po zmianie sprzedaży: wszystkie, tylko spadki albo tylko wzrosty (w adresie po polsku). */
+type ChangeFilter = 'all' | 'decline' | 'growth'
+const CHANGE_PARAMS: Record<ChangeFilter, string | null> = { all: null, decline: 'spadki', growth: 'wzrosty' }
 
 /** Rejon nomenklatury garmażu: koszty garmażu liczą tylko jego sprzedaż. */
 const DELI_REGION = '36'
@@ -124,6 +140,8 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
   const otherStore = deli ? null : (storeOptions.data?.find((option) => option.id === params.get('sklep')) ?? null)
   const amounts = params.get('kwoty') === 'tak'
   const view = useMemo<View>(() => ({ other: otherStore, amounts }), [otherStore, amounts])
+  const changeFilter =
+    (Object.keys(CHANGE_PARAMS) as ChangeFilter[]).find((key) => CHANGE_PARAMS[key] === params.get('zmiana')) ?? 'all'
 
   return (
     <>
@@ -134,6 +152,11 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">{deli ? 'Koszty garmażu' : 'Porównanie sprzedaży'}</h2>
         {overview.data && <ReportFreshness generatedAt={overview.data.lastReportGeneratedAt} />}
+        {!deli && (
+          <div className="ml-auto">
+            <ComparisonSettingsButton />
+          </div>
+        )}
       </div>
       {deli && (
         <div className="mb-4 max-w-3xl space-y-1 text-sm text-muted-foreground">
@@ -185,6 +208,18 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
             value={basis}
             onChange={setBasis}
           />
+          {!deli && (
+            <SegmentedField
+              label="Pokaż"
+              options={[
+                { value: 'all', label: 'Wszystko' },
+                { value: 'decline', label: 'Spadki' },
+                { value: 'growth', label: 'Wzrosty' },
+              ]}
+              value={changeFilter}
+              onChange={(next) => update({ zmiana: CHANGE_PARAMS[next] })}
+            />
+          )}
         </div>
 
         {!deli && (storeOptions.data?.length ?? 0) > 0 && (
@@ -279,9 +314,11 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           compare={compare}
           basis={basis}
           view={view}
+          changeFilter={changeFilter}
           lastSaleDate={lastSaleDate}
         />
       )}
+      {!deli && <BasketButton storeId={storeId} />}
     </>
   )
 }
@@ -424,6 +461,11 @@ type Tree = {
   basis: SaleBasis
   view: View
   groups: Group[]
+  /** Filtr i kolejność wierszy po zmianie sprzedaży (na każdym poziomie). */
+  changeFilter: ChangeFilter
+  sort: ComparisonSort
+  /** Koszyk zakupowy: przy artykułach przycisk „Dodaj do koszyka”; w kosztach garmażu go nie ma. */
+  addToBasket: ((article: BasketArticle) => void) | null
   expanded: ReadonlySet<string>
   toggle: (key: string) => void
   /** Po wczytaniu poziomu przeliczamy przypięte wiersze i ściągę (zmieniła się tabela). */
@@ -454,6 +496,7 @@ function Comparison({
   compare,
   basis,
   view,
+  changeFilter,
   lastSaleDate,
 }: {
   storeId: string
@@ -463,6 +506,7 @@ function Comparison({
   compare: CompareMode
   basis: SaleBasis
   view: View
+  changeFilter: ChangeFilter
   lastSaleDate: string
 }) {
   const deli = kind === 'deli'
@@ -478,6 +522,8 @@ function Comparison({
     compareStore,
   )
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
+  const [basketArticle, setBasketArticle] = useState<BasketArticle | null>(null)
+  const { sort } = useComparisonSettings()
   const queryClient = useQueryClient()
   // W kosztach garmażu jest jeden rejon, więc od razu widać jego rodziny.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(deli ? [DELI_REGION] : []))
@@ -607,12 +653,15 @@ function Comparison({
       basis,
       view,
       groups,
+      changeFilter,
+      sort,
+      addToBasket: deli ? null : setBasketArticle,
       expanded,
       toggle,
       onLevelLoaded,
       openChart: setChart,
     }),
-    [storeId, kind, periods, filter, basis, view, groups, expanded, toggle, onLevelLoaded],
+    [storeId, kind, periods, filter, basis, view, groups, changeFilter, sort, deli, expanded, toggle, onLevelLoaded],
   )
 
   if (isError && !data) {
@@ -658,37 +707,34 @@ function Comparison({
       {view.other ? (
         <StoreTiles data={data} view={view} basis={basis} compare={compare} />
       ) : (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <TotalTile
-            label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
-            previous={data && saleValue(data.previousTotal, basis)}
-            current={data && saleValue(data.currentTotal, basis)}
-            format={formatZloty}
-            compare={compare}
-          />
-          <TotalTile
-            label="Marża"
-            previous={data?.previousTotal.marginValue ?? undefined}
-            current={data?.currentTotal.marginValue ?? undefined}
-            format={formatZloty}
-            compare={compare}
-            note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
-          />
-          <TotalTile
-            label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
-            previous={data?.previousTotal.costValue ?? undefined}
-            current={data?.currentTotal.costValue ?? undefined}
-            format={formatZloty}
-            compare={compare}
-            neutral
-          />
-          <TotalTile
-            label="Ilość"
-            previous={data?.previousTotal.quantity}
-            current={data?.currentTotal.quantity}
-            format={formatQuantity}
-            compare={compare}
-          />
+        <div className={cn('mb-4 grid gap-3', !deli && 'xl:grid-cols-2')}>
+          <div className={cn('grid content-start gap-3 sm:grid-cols-2', deli && 'xl:grid-cols-4')}>
+            <TotalTile
+              label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
+              previous={data && saleValue(data.previousTotal, basis)}
+              current={data && saleValue(data.currentTotal, basis)}
+              format={formatZloty}
+              compare={compare}
+            />
+            <TotalTile
+              label="Marża"
+              previous={data?.previousTotal.marginValue ?? undefined}
+              current={data?.currentTotal.marginValue ?? undefined}
+              format={formatZloty}
+              compare={compare}
+              note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
+            />
+            <TotalTile
+              label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
+              previous={data?.previousTotal.costValue ?? undefined}
+              current={data?.currentTotal.costValue ?? undefined}
+              format={formatZloty}
+              compare={compare}
+              neutral
+            />
+            <MarginPercentTile previous={data?.previousTotal} current={data?.currentTotal} compare={compare} />
+          </div>
+          {!deli && <RegionTargets storeId={storeId} data={data} />}
         </div>
       )}
 
@@ -860,6 +906,7 @@ function Comparison({
         lastSaleDate={lastSaleDate}
         onClose={() => setChart(null)}
       />
+      <AddToBasketDialog storeId={storeId} article={basketArticle} onClose={() => setBasketArticle(null)} />
     </div>
   )
 }
@@ -930,7 +977,22 @@ type LevelProps = {
 
 /** Wiersze jednego poziomu drzewa; rozwinięty wiersz wstawia pod sobą wiersze następnego poziomu. */
 function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
-  const { storeId, kind, periods, filter, basis, view, groups, expanded, toggle, onLevelLoaded, openChart } = useTree()
+  const {
+    storeId,
+    kind,
+    periods,
+    filter,
+    basis,
+    view,
+    groups,
+    changeFilter,
+    sort,
+    addToBasket,
+    expanded,
+    toggle,
+    onLevelLoaded,
+    openChart,
+  } = useTree()
   const { data, isPending, isError, refetch } = useSalesComparison(
     storeId,
     kind,
@@ -983,7 +1045,21 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
   }
 
   const level = data.level
-  return data.rows.map((row) => {
+  const rows = arrangeRows(data.rows, basis, changeFilter, sort)
+  if (rows.length === 0) {
+    return (
+      <TableRow className="hover:bg-transparent">
+        <TableCell
+          colSpan={columnCount}
+          className="py-3 text-sm text-muted-foreground"
+          style={{ paddingLeft: indent(depth) }}
+        >
+          {changeFilter === 'decline' ? 'Brak spadków sprzedaży.' : 'Brak wzrostów sprzedaży.'}
+        </TableCell>
+      </TableRow>
+    )
+  }
+  return rows.map((row) => {
     const key = rowKey(row, level)
     const expandable = level !== 'PRODUCT'
     const open = expandable && expanded.has(key)
@@ -1040,6 +1116,22 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
                   <RowLabel row={row} level={level} />
                 </div>
               )}
+              {level === 'PRODUCT' && addToBasket && (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  type="button"
+                  aria-label="Dodaj do koszyka"
+                  title="Dodaj do koszyka"
+                  className="-my-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    addToBasket({ itm8: row.code, name: row.name, ean: row.ean, brand: row.brand })
+                  }}
+                >
+                  <ShoppingBasketIcon />
+                </Button>
+              )}
               <ChartButton onClick={() => openChart(chartTarget(row, level, key))} />
             </div>
           </TableCell>
@@ -1061,6 +1153,27 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
         )}
       </Fragment>
     )
+  })
+}
+
+/** Zmiana sprzedaży wiersza w zł wobec okresu porównania (wg wybranej podstawy). */
+const saleChange = (row: SalesComparisonRow, basis: SaleBasis) =>
+  saleValue(row.current, basis) - saleValue(row.previous, basis)
+
+/**
+ * Wiersze poziomu po filtrze zmiany sprzedaży i w kolejności z ustawień raportu: najpierw największe spadki albo
+ * wzrosty w zł; „Bez nomenklatury” zostaje na końcu jak w raporcie z serwera.
+ */
+function arrangeRows(rows: SalesComparisonRow[], basis: SaleBasis, changeFilter: ChangeFilter, sort: ComparisonSort) {
+  const filtered =
+    changeFilter === 'all'
+      ? rows
+      : rows.filter((row) => (changeFilter === 'decline' ? saleChange(row, basis) < 0 : saleChange(row, basis) > 0))
+  if (sort === 'default') return filtered
+  const direction = sort === 'decline' ? 1 : -1
+  return [...filtered].sort((a, b) => {
+    if ((a.code === '') !== (b.code === '')) return a.code === '' ? 1 : -1
+    return direction * (saleChange(a, basis) - saleChange(b, basis))
   })
 }
 
@@ -1348,6 +1461,149 @@ function TotalTile({
 }
 
 const formatZloty = (value: number) => `${formatMoney(value)} zł`
+
+/** Zmiana w punktach procentowych ze znakiem (−1,2 p.p.). */
+const pointsText = (points: number) =>
+  `${points >= 0.05 ? '+' : points <= -0.05 ? '−' : ''}${percentFormat.format(Math.abs(points))} p.p.`
+
+/** Zrealizowany % marży (od sprzedaży brutto, bez strat), jego zmiana w p.p. i wartość z okresu porównania. */
+function MarginPercentTile({
+  previous,
+  current,
+  compare,
+}: {
+  previous: SalesFigures | undefined
+  current: SalesFigures | undefined
+  compare: CompareMode
+}) {
+  const before = previous ? marginPercent(previous) : null
+  const after = current ? marginPercent(current) : null
+  const loaded = previous != null && current != null
+  const points = before != null && after != null ? after - before : null
+  return (
+    <Card className="gap-1 p-4">
+      <p className="text-sm text-muted-foreground">Marża % zrealizowana</p>
+      {loaded ? (
+        <>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <p className="text-2xl font-semibold tracking-tight tabular-nums">{percentLabel(after)}</p>
+            {points != null && (
+              <p
+                className={cn(
+                  'text-sm font-medium tabular-nums',
+                  directionClass(Math.abs(points) < 0.05 ? 'flat' : points > 0 ? 'up' : 'down'),
+                )}
+              >
+                {pointsText(points)}
+              </p>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {COMPARE_LABELS[compare].inline} {percentLabel(before)}
+          </p>
+        </>
+      ) : (
+        <div aria-hidden className="mt-1 space-y-2">
+          <div className="h-7 w-32 loading-shimmer rounded-md" />
+          <div className="h-4 w-24 loading-shimmer rounded-md" />
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * Czy rejony zrealizowały założoną marżę (budżet rejonów z Ustawień sklepu, osobny od marży wymaganej na
+ * nomenklaturze): zrealizowana marża % aktualnego okresu wobec założonej, nadwyżka na zielono, brak na czerwono.
+ */
+function RegionTargets({ storeId, data }: { storeId: string; data: SalesComparison | undefined }) {
+  const budgets = useRegionBudgets(storeId)
+  const canEdit = useCan('SALES', 'EDIT')
+  const targets = new Map(
+    (budgets.data ?? []).flatMap((budget) =>
+      budget.marginPercent == null ? [] : [[budget.regionCode, budget.marginPercent] as const],
+    ),
+  )
+  const regions =
+    data?.level === 'REGION'
+      ? data.rows.flatMap((row) => {
+          const target = targets.get(row.code)
+          const realized = marginPercent(row.current)
+          return target == null || realized == null ? [] : [{ row, target, realized, diff: realized - target }]
+        })
+      : []
+  const reached = regions.filter((region) => region.diff >= 0).length
+
+  return (
+    <Card className="gap-2 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="text-sm text-muted-foreground">Marża rejonów wobec założonej</p>
+        {regions.length > 0 && (
+          <p className="text-sm font-medium tabular-nums">
+            zrealizowało {reached} z {regions.length}
+          </p>
+        )}
+      </div>
+      {!data || budgets.isPending ? (
+        <div aria-hidden className="h-24 loading-shimmer rounded-md" />
+      ) : regions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {targets.size === 0 ? 'Rejony nie mają założonej marży. ' : 'Brak sprzedaży rejonów z założoną marżą.'}
+          {targets.size === 0 &&
+            (canEdit ? (
+              <Link
+                to={storeSettingsPaths.budgets}
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                Ustaw ją w budżecie rejonów
+              </Link>
+            ) : (
+              'Ustawia ją osoba z prawem zmiany raportów sprzedaży.'
+            ))}
+        </p>
+      ) : (
+        <div className="max-h-56 overflow-y-auto">
+          <table className="w-full text-sm tabular-nums">
+            <thead className="sticky top-0 bg-card text-xs text-muted-foreground">
+              <tr>
+                <th className="py-1 text-left font-normal">Rejon</th>
+                <th className="py-1 text-right font-normal">Zrealizowana</th>
+                <th className="py-1 text-right font-normal">Założona</th>
+                <th className="py-1 pl-2 text-right font-normal">Różnica</th>
+              </tr>
+            </thead>
+            <tbody>
+              {regions.map(({ row, target, realized, diff }) => (
+                <tr key={row.code} className="border-t">
+                  <td className="py-1 pr-2">
+                    <span className="mr-1.5 text-xs text-muted-foreground">{displayCode(row.code)}</span>
+                    {displayName(row) ?? 'Brak nazwy'}
+                  </td>
+                  <td className="py-1 text-right font-medium">{percentLabel(realized)}</td>
+                  <td className="py-1 text-right text-muted-foreground">{percentLabel(target)}</td>
+                  <td className="py-1 pl-2 text-right">
+                    <span
+                      className={cn(
+                        'inline-block rounded px-1.5 py-0.5 text-xs font-semibold',
+                        diff >= 0
+                          ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-900/60 dark:text-emerald-100'
+                          : 'bg-red-200 text-red-950 dark:bg-red-950/70 dark:text-red-100',
+                      )}
+                      title={diff >= 0 ? 'Założona marża zrealizowana' : 'Zabrakło do założonej marży'}
+                    >
+                      {diff >= 0 ? '+' : '−'}
+                      {percentFormat.format(Math.abs(diff))} p.p.
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
 
 function LoadingRow({ depth, rows = 2, groups }: { depth: number; rows?: number; groups: Group[] }) {
   const starts = groupStarts(groups)

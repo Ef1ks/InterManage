@@ -21,7 +21,7 @@ import com.intermanage.backend.leaflet.dto.LeafletRow;
  * MEGAPROMOCJI, …, CENA DLA KLIENTA, Limit dla klienta, CENY DO SPRAWDZENIA W SYSTEMIE … (cena gazetkowa), OZNACZENIE
  * PRZY PÓŁCE; niżej pozycje (jeden EAN w wierszu, ten sam produkt bywa w kilku wierszach z różnymi EAN-ami)
  * przedzielone wierszami działów („PRODUKTY KLUCZOWE”: sama nazwa, bez dat i EAN-u). Kolumny szukamy po początku
- * nazwy bez znaków diakrytycznych. Błędny wiersz odrzuca plik.
+ * nazwy bez znaków diakrytycznych. Pozycja bez EAN-u jest pomijana, inny błędny wiersz odrzuca plik.
  */
 @Component
 public class LeafletParser {
@@ -91,18 +91,15 @@ public class LeafletParser {
             List<String> cells = sheet.get(r);
             String ean = text(cells, columns.ean());
             String from = text(cells, columns.from());
-            if (ean == null && from == null) {
-                // Wiersz działu („PRODUKTY KLUCZOWE”) albo pusty.
+            if (ean == null) {
+                // Wiersz działu („PRODUKTY KLUCZOWE”), pusty albo pozycja bez EAN-u: tę pomijamy.
                 String name = text(cells, columns.name());
-                if (name != null) {
+                if (from == null && name != null) {
                     section = shorten(oneLine(name), 200);
                 }
                 continue;
             }
             try {
-                if (ean == null) {
-                    throw new IllegalArgumentException("brak EAN-u");
-                }
                 LeafletRow row = row(cells, columns, rows.size() + 1, section);
                 if (year == null) {
                     year = integer(required(cells, columns.year(), "ROK"), "ROK");

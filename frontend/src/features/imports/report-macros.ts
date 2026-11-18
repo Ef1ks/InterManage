@@ -1,5 +1,6 @@
 import { PERIOD_REPORT_MONTHS, REPORT_TITLES, partPath, type MacroReport } from '@/features/imports/import-sources'
 import { addDays, toIsoDate, todayIso } from '@/lib/dates'
+import { mercalysOpenLine } from '@/lib/mercalys-login'
 
 /*
  * Makra dla odtwarzacza (Alt+E, od wersji 46): raport z Mercalys otwarty w Excelu i zapisany poleceniem EXCELSAVE
@@ -359,7 +360,7 @@ export function buildReportSaveMacro(
 ): string {
   const lines = [
     `# Intermanage: zapis raportów z Mercalys do folderów importu (odtwarzacz od wersji ${macroPlayerVersion(reports.map(({ kind }) => kind))})`,
-    `WINOPEN|${PROGRAM_WINDOW}`,
+    mercalysOpenLine(PROGRAM_WINDOW),
   ]
   reports.forEach(({ kind, settings }, index) => {
     const title = REPORT_TITLES[kind]

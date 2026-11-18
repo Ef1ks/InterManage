@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.53.0.0
+;@Ahk2Exe-SetVersion 0.54.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.53" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.54" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -304,8 +304,11 @@ PlayMacro(rawClip) {
                     return
                 }
             case "WINOPEN":
-                ; WINOPEN|okno: program już uruchomiony wraca z paska zadań na wierzch; bez niego makro staje
-                problem := parts.Length < 2 ? "Linia WINOPEN wymaga okna." : WinOpen(Trim(parts[2]))
+                ; WINOPEN|okno|hasło: program już uruchomiony wraca z paska zadań na wierzch. Wyłączony Mercalys odtwarzacz
+                ; uruchamia sam (od 0.54) i loguje hasłem z linii; bez hasła czeka, aż pracownik zaloguje się ręcznie.
+                ; Starsze odtwarzacze pomijają hasło i bez programu stają jak dawniej.
+                problem := parts.Length < 2 ? "Linia WINOPEN wymaga okna."
+                    : WinOpen(Trim(parts[2]), parts.Length >= 3 ? parts[3] : "")
                 if (problem != "") {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -1188,14 +1191,103 @@ PdfSaveAs(hwnd, path) {
     return "Acrobat nie zapisał pliku w ciągu 60 s."
 }
 
-WinOpen(title) {
+WinOpen(title, password := "") {
     hwnd := WinExist(title)
-    if !hwnd
-        return "Nie znaleziono okna `"" title "`". Uruchom program i spróbuj ponownie."
+    started := false
+    if !hwnd {
+        if !InStr(title, "Mercalys.exe")
+            return "Nie znaleziono okna `"" title "`". Uruchom program i spróbuj ponownie."
+        problem := StartMercalys(title)
+        if (problem != "")
+            return problem
+        started := true
+        hwnd := WinExist(title)
+    }
     if (WinGetMinMax(hwnd) = -1)
         WinRestore hwnd
     WinActivate hwnd
-    return WinWaitActive("ahk_id " hwnd, , 5) ? "" : "Okno `"" title "`" nie stało się aktywne."
+    if !WinWaitActive("ahk_id " hwnd, , 5)
+        return "Okno `"" title "`" nie stało się aktywne."
+    if InStr(title, "Mercalys.exe") {
+        RememberMercalysPath(hwnd)
+        return MercalysLogin(title, password, started)
+    }
+    return ""
+}
+
+; --- Mercalys wyłączony: uruchomienie i logowanie ---
+
+MercalysPasswordField() => "txtZ2_MotDePasse_TxtBox"
+MercalysMenu() => "mnTp_ACHAT" ; menu główne po zalogowaniu (Zakup)
+
+; Ścieżka do Mercalys.exe zapamiętywana, gdy program działa, więc zwykle nie trzeba jej podawać.
+RememberMercalysPath(hwnd) {
+    try {
+        path := WinGetProcessPath(hwnd)
+        if (path != "" && path != RegRead(SettingsKey, "MercalysPath", ""))
+            RegWrite path, "REG_SZ", SettingsKey, "MercalysPath"
+    }
+}
+
+StartMercalys(title) {
+    path := RegRead(SettingsKey, "MercalysPath", "")
+    if (path = "" || !FileExist(path)) {
+        MsgBox "Mercalys jest wyłączony, a odtwarzacz nie zna jeszcze jego położenia.`n`n"
+            . "W następnym oknie wskaż Mercalys.exe albo skrót, którym go uruchamiasz. Wystarczy raz.", "Intermanage Makra", "Iconi" AlwaysOnTop
+        path := FileSelect(3, , "Wskaż Mercalys.exe albo jego skrót", "Program albo skrót (*.exe; *.lnk)")
+        if (path = "")
+            return "Mercalys jest wyłączony. Uruchom go i spróbuj ponownie."
+        RegWrite path, "REG_SZ", SettingsKey, "MercalysPath"
+    }
+    TrayTip "Uruchamiam Mercalys…", "Intermanage Makra", 1
+    try Run path
+    catch as error
+        return "Nie udało się uruchomić Mercalys (" path "): " error.Message
+    if !WinWait(title, , 120)
+        return "Mercalys nie otworzył się w ciągu 2 minut."
+    return ""
+}
+
+; Ekran logowania (login wpisany przez Mercalys) albo już menu główne. Po Enterze program startuje 10-15 s,
+; więc czekamy na menu i chwilę dłużej, żeby kolejne kliknięcia trafiały w gotowy program. Działający Mercalys bez
+; ekranu logowania idzie dalej od razu, jak dawniej (np. otwarte okno komunikatu, w którym menu nie widać).
+MercalysLogin(title, password, started) {
+    if !started {
+        if (WebWait(title, MercalysPasswordField(), "", 0) != "")
+            return ""
+    } else {
+        deadline := A_TickCount + 120000
+        Loop {
+            if (WebWait(title, MercalysMenu(), "", 0) = "") {
+                Sleep 5000
+                return ""
+            }
+            if (WebWait(title, MercalysPasswordField(), "", 0) = "")
+                break
+            if (A_TickCount >= deadline)
+                return "Mercalys nie pokazał ani logowania, ani menu głównego w ciągu 2 minut."
+            Sleep 300
+        }
+    }
+    if (password = "") {
+        TrayTip "Zaloguj się w Mercalys, makro ruszy samo po zalogowaniu.", "Intermanage Makra", 1
+        problem := WebWait(title, MercalysMenu(), "", 300000)
+        if (problem != "")
+            return "Nie zalogowano się w Mercalys w ciągu 5 minut."
+    } else {
+        problem := WebKey(title, MercalysPasswordField(), "^a{Del}", 10000)
+        if (problem = "") {
+            SendText password
+            Send "{Enter}"
+        } else
+            return problem
+        if (WebWait(title, MercalysMenu(), "", 90000) != "")
+            return WebWait(title, MercalysPasswordField(), "", 0) = ""
+                ? "Mercalys nie przyjął hasła. Popraw je w aplikacji (Do pobrania → Logowanie do Mercalys)."
+                : "Mercalys nie pokazał menu głównego w ciągu 90 s od logowania."
+    }
+    Sleep 5000
+    return ""
 }
 
 WebEnsure(title, element, button) {

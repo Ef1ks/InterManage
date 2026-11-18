@@ -73,17 +73,24 @@ export function useDeleteCalculation(storeId: string) {
 
 export const MIN_SEARCH_LENGTH = 3
 
-/** Produkty kartoteki z ceną zakupu jednostki; szukamy na serwerze od 3 znaków (bez spacji). */
-export function usePriceProductSearch(storeId: string, query: string) {
+/**
+ * Produkty kartoteki z ceną zakupu jednostki; szukamy na serwerze od 3 znaków (bez spacji). Z wybraną nomenklaturą
+ * (rejony, rodziny, podrodziny) wyszukiwanie jest do niej zawężone i działa także bez wpisanego tekstu.
+ */
+export function usePriceProductSearch(storeId: string, query: string, nomenclatures: string[] = []) {
   const debounced = useDebouncedValue(query.trim(), 250)
   const longEnough = debounced.replace(/\s+/g, '').length >= MIN_SEARCH_LENGTH
+  const filtered = nomenclatures.length > 0
+  const enabled = longEnough || (filtered && debounced === '')
+  const params = new URLSearchParams()
+  if (debounced) params.set('query', debounced)
+  for (const code of nomenclatures) params.append('nomenclatures', code)
   return {
-    longEnough,
+    longEnough: enabled,
     ...useQuery({
-      queryKey: [...calculationsKey(storeId), 'products', debounced],
-      queryFn: () =>
-        api<PriceProduct[]>(`${calculationsPath(storeId)}/products?query=${encodeURIComponent(debounced)}`),
-      enabled: longEnough,
+      queryKey: [...calculationsKey(storeId), 'products', debounced, nomenclatures],
+      queryFn: () => api<PriceProduct[]>(`${calculationsPath(storeId)}/products?${params}`),
+      enabled,
       staleTime: 60_000,
       placeholderData: (previous) => previous,
     }),

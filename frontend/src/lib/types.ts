@@ -1669,6 +1669,8 @@ export type PriceProduct = {
   ean: string
   name: string | null
   brand: string | null
+  /** Kod podrodziny bez spacji ("366002"), pusty bez nomenklatury w kartotece. */
+  nomenclature: string | null
   unit: string
   /** Średnia waga 1 sztuki w kg (składniki liczone na sztuki), zapamiętana dla produktu w sklepie. */
   pieceWeight: number | null

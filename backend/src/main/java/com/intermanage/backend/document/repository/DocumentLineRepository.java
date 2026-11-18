@@ -19,16 +19,49 @@ import com.intermanage.backend.promotion.repository.PromotionReportRepository;
 
 public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID> {
 
+    /** Ostatnia linia przyjęcia artykułu z ceną zakupu: ITM8 artykułu z kartoteki i id linii. */
+    interface PricedLine {
+        String getItm8();
+
+        UUID getLineId();
+    }
+
     /**
-     * Linie dokumentów danego typu z ceną zakupu dla podanych ITM8, od najnowszego dokumentu. Pierwsza linia danego
-     * ITM8 to jego ostatnia dostawa (kalkulator cen garmażu bierze z niej cenę składnika).
+     * Ostatnia linia przyjęcia PZ z ceną zakupu dla każdego z podanych artykułów (kalkulator cen garmażu bierze z niej
+     * cenę składnika). Linia należy do artykułu po ITM8, a linia z lokalnym ITM8 dostawcy spoza kartoteki
+     * ({@code 99…}) po EAN-ie artykułu (główny, multikody, dawne pary; bez zer wiodących), jak w {@link #ARTICLE_LINE}:
+     * kapusta kiszona luz przyjeżdża pod 99014275 z EAN-em 219621 artykułu 5442835.
      */
-    @Query("""
-            select l from DocumentLine l join fetch l.document d
-            where d.store.id = :storeId and d.type = :type and l.itm8 in :itm8s and d.errorMarkedAt is null
-              and l.purchasePrice > 0 and l.quantity > 0
-            order by d.documentDate desc, d.number desc, l.lineNumber desc""")
-    List<DocumentLine> findPricedLines(UUID storeId, DocumentType type, Collection<String> itm8s);
+    @Query(value = """
+            with codes as (
+                select ltrim(btrim(p.ean), '0') as ean, p.itm8 from products p
+                where p.store_id = :storeId and p.itm8 in (:itm8s)
+                union
+                select ltrim(btrim(pc.ean), '0'), pc.itm8 from product_codes pc
+                where pc.store_id = :storeId and pc.itm8 in (:itm8s) and pc.current
+                union
+                select ltrim(btrim(pe.ean), '0'), p.itm8 from product_eans pe join products p on p.id = pe.product_id
+                where p.store_id = :storeId and p.itm8 in (:itm8s)
+            ), lines as (
+                select l.itm8, l.id as line_id from document_lines l where l.itm8 in (:itm8s)
+                union
+                select c.itm8, l.id from codes c
+                join document_lines l on ltrim(btrim(l.ean), '0') = c.ean
+                where c.ean <> ''
+                  and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8)
+            )
+            select distinct on (x.itm8) x.itm8 as itm8, x.line_id as line_id
+            from lines x
+            join document_lines l on l.id = x.line_id
+            join documents d on d.id = l.document_id
+            where d.store_id = :storeId and d.type = 'PZ' and d.error_marked_at is null
+              and l.purchase_price > 0 and l.quantity > 0
+            order by x.itm8, d.document_date desc, length(d.number) desc, d.number desc, l.line_number desc
+            """, nativeQuery = true)
+    List<PricedLine> findLastPricedLines(UUID storeId, Collection<String> itm8s);
+
+    @Query("select l from DocumentLine l join fetch l.document where l.id in :ids")
+    List<DocumentLine> findWithDocument(Collection<UUID> ids);
 
     /** Cena zakupu artykułu w linii przyjęcia od dostawcy. */
     interface SupplierPrice {

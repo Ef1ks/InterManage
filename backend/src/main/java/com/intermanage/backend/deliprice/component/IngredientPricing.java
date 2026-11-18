@@ -12,12 +12,12 @@ import org.springframework.stereotype.Component;
 import com.intermanage.backend.deliprice.entity.IngredientPrice;
 import com.intermanage.backend.deliprice.entity.PriceSource;
 import com.intermanage.backend.document.entity.DocumentLine;
-import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.product.entity.Product;
 
 /**
- * Aktualna cena składnika kalkulacji: z ostatniej dostawy (najnowsze przyjęcie towaru PZ z tym ITM8 w sklepie),
+ * Aktualna cena składnika kalkulacji: z ostatniej dostawy (najnowsze przyjęcie towaru PZ z tym ITM8 w sklepie albo
+ * z lokalnym ITM8 dostawcy i EAN-em artykułu),
  * a gdy produktu nie było w dostawach - z kartoteki. Cena zakupu w obu źródłach dotyczy sprzedawanej sztuki,
  * więc na kg / L przelicza ją {@link Product#unitCostOf}.
  */
@@ -36,11 +36,21 @@ public class IngredientPricing {
         if (products.isEmpty()) {
             return prices;
         }
-        Map<String, DocumentLine> lastDelivery = new HashMap<>();
         List<String> itm8s = products.stream().map(Product::getItm8).distinct().toList();
-        // Linie są od najnowszej, więc pierwsza dla ITM8 to ostatnia dostawa.
-        documentLines.findPricedLines(storeId, DocumentType.PZ, itm8s)
-                .forEach(line -> lastDelivery.putIfAbsent(line.getItm8(), line));
+        Map<String, UUID> lastLineIds = new HashMap<>();
+        documentLines.findLastPricedLines(storeId, itm8s)
+                .forEach(line -> lastLineIds.put(line.getItm8(), line.getLineId()));
+        Map<UUID, DocumentLine> lines = new HashMap<>();
+        if (!lastLineIds.isEmpty()) {
+            documentLines.findWithDocument(lastLineIds.values()).forEach(line -> lines.put(line.getId(), line));
+        }
+        Map<String, DocumentLine> lastDelivery = new HashMap<>();
+        lastLineIds.forEach((itm8, lineId) -> {
+            DocumentLine line = lines.get(lineId);
+            if (line != null) {
+                lastDelivery.put(itm8, line);
+            }
+        });
         for (Product product : products) {
             DocumentLine delivery = lastDelivery.get(product.getItm8());
             BigDecimal fromDelivery = delivery != null ? product.unitCostOf(delivery.getPurchasePrice()) : null;

@@ -15,8 +15,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +65,9 @@ public class PriceCalculationService {
     public static final String IMPORT_NOMENCLATURE = "36";
     private static final Set<Short> VAT_RATES = Set.of((short) 0, (short) 5, (short) 8, (short) 23);
     private static final int SEARCH_LIMIT = 30;
+    /** Z wybraną nomenklaturą lista bywa przeglądana bez zapytania, więc pokazujemy więcej pozycji. */
+    private static final int NOMENCLATURE_SEARCH_LIMIT = 200;
+    private static final Pattern NOMENCLATURE_CODE = Pattern.compile("\\d{2}|\\d{4}|\\d{6}");
     private static final Collator POLISH = Collator.getInstance(Locale.of("pl", "PL"));
     private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     /** Zmiana wyliczonej ceny, od której "Odśwież ceny" pyta, choć nikt nie ustawiał własnej ceny. */
@@ -271,13 +276,23 @@ public class PriceCalculationService {
 
     /** Składniki z kartoteki sklepu z aktualną ceną (ostatnia dostawa albo kartoteka). */
     @Transactional(readOnly = true)
-    public List<PriceProductResponse> searchProducts(UUID storeId, String query) {
+    public List<PriceProductResponse> searchProducts(UUID storeId, String query, List<String> nomenclatures) {
         List<String> words = ProductSearch.words(query);
-        if (String.join("", words).length() < DeliOrderFormService.MIN_SEARCH_LENGTH) {
+        List<String> codes = nomenclatures.stream().map(String::trim).filter(code -> !code.isEmpty()).distinct()
+                .toList();
+        if (codes.stream().anyMatch(code -> !NOMENCLATURE_CODE.matcher(code).matches())) {
+            throw ApiException.badRequest("Nieprawidłowy kod nomenklatury");
+        }
+        if (codes.isEmpty() && String.join("", words).length() < DeliOrderFormService.MIN_SEARCH_LENGTH) {
             throw ApiException.badRequest("Wpisz co najmniej " + DeliOrderFormService.MIN_SEARCH_LENGTH + " znaki");
         }
-        List<Product> found = products.findBy(ProductSearch.inStoreMatching(storeId, words),
-                q -> q.sortBy(ProductSearch.ORDER).limit(SEARCH_LIMIT).all());
+        Specification<Product> spec = ProductSearch.inStoreMatching(storeId, words);
+        if (!codes.isEmpty()) {
+            spec = spec.and(ProductSearch.inNomenclatures(codes));
+        }
+        List<Product> found = products.findBy(spec,
+                q -> q.sortBy(ProductSearch.ORDER).limit(codes.isEmpty() ? SEARCH_LIMIT : NOMENCLATURE_SEARCH_LIMIT)
+                        .all());
         Map<UUID, IngredientPrice> prices = pricing.current(storeId, found);
         return found.stream().map(product -> mapper.toSearchResult(product, prices.get(product.getId()))).toList();
     }
