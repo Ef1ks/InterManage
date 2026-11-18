@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,8 @@ import com.intermanage.backend.common.exception.ApiException;
 public class ActivationService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
+
+    static final String USED_MESSAGE = "Ten link aktywacyjny został już wykorzystany. Zaloguj się swoim loginem i hasłem.";
 
     private final ActivationTokenRepository tokens;
     private final AccountMailer mailer;
@@ -58,7 +61,12 @@ public class ActivationService {
     @Transactional
     public AppUser activate(String token) {
         Instant now = Instant.now();
-        ActivationToken activation = tokens.findByTokenHash(hash(token))
+        ActivationToken found = tokens.findByTokenHash(hash(token)).orElse(null);
+        // Ponowne wejście w wykorzystany link: konto już jest aktywne, front prowadzi na stronę główną.
+        if (found != null && (found.isUsed() || !found.getUser().isPendingActivation())) {
+            throw ApiException.conflict(USED_MESSAGE);
+        }
+        ActivationToken activation = Optional.ofNullable(found)
                 .filter(t -> t.isUsable(now))
                 .filter(t -> t.getUser().isEnabled() && t.getUser().isPendingActivation())
                 .orElseThrow(() -> ApiException.badRequest(

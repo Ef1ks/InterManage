@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Loader2Icon } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { toast } from 'sonner'
 
 import { FormAlert } from '@/components/form'
 import { AuthLayout } from '@/components/layout/AuthLayout'
@@ -20,10 +21,21 @@ export function ActivationPage() {
   useEffect(() => {
     if (!token || sent.current) return
     sent.current = true
-    activate.mutate(token, { onSuccess: () => navigate('/ustaw-haslo', { replace: true }) })
+    activate.mutate(token, {
+      onSuccess: () => navigate('/ustaw-haslo', { replace: true }),
+      onError: (error) => {
+        // Link już wykorzystany: konto jest aktywne, więc zamiast blokować stronę wracamy na główną.
+        if (error instanceof ApiError && error.status === 409) {
+          toast.info(error.message)
+          navigate('/', { replace: true })
+        }
+      },
+    })
   }, [token, activate, navigate])
 
-  if (!token || activate.isError) {
+  const alreadyUsed = activate.error instanceof ApiError && activate.error.status === 409
+
+  if (!token || (activate.isError && !alreadyUsed)) {
     const message = !token
       ? 'Ten link jest niekompletny. Otwórz go jeszcze raz z wiadomości e-mail.'
       : activate.error instanceof ApiError

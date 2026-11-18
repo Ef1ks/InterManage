@@ -57,6 +57,10 @@ public class ActivationToken {
         return usedAt == null && now.isBefore(expiresAt);
     }
 
+    public boolean isUsed() {
+        return usedAt != null;
+    }
+
     public void markUsed(Instant now) {
         usedAt = now;
     }

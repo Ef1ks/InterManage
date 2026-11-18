@@ -66,8 +66,8 @@ class AuthAndRolesIntegrationTests {
                 .andReturn();
         Cookie invited = tokenCookie(activated);
 
-        // Link jest jednorazowy.
-        mvc.perform(activateRequest(token)).andExpect(status().isBadRequest());
+        // Link jest jednorazowy: ponowne wejście to 409, front prowadzi wtedy na stronę główną.
+        mvc.perform(activateRequest(token)).andExpect(status().isConflict());
 
         // Dopóki hasło nie jest ustawione, reszta API jest zablokowana.
         mvc.perform(get("/api/auth/me").cookie(invited)).andExpect(status().isOk());
