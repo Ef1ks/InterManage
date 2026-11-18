@@ -56,6 +56,9 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
         BigDecimal getStock();
 
         BigDecimal getRotation();
+
+        /** Artykuł był w najnowszym raporcie kartoteki (sklep bez raportu: każdy). */
+        boolean getInLastReport();
     }
 
     /**
@@ -147,7 +150,8 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 coalesce(case when p.promo_price is not null and p.promo_to >= cast(:today as date)
                     and (p.promo_from is null or p.promo_from <= cast(:today as date)) then p.promo_to end,
                     lp.end_date) as promoTo,
-                p.subfamily_code as subfamilyCode, p.stock as stock, p.rotation as rotation
+                p.subfamily_code as subfamilyCode, p.stock as stock, p.rotation as rotation,
+                (not exists (select 1 from latest) or p.last_seen_import_id = (select id from latest)) as inLastReport
             from hits h join products p on p.id = h.id
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
             cross join lateral (select coalesce(

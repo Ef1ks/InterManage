@@ -79,7 +79,6 @@ public class DataEntryService {
     private static final BigDecimal VALUE_TOLERANCE = new BigDecimal("0.01");
     private static final Pattern RATE = Pattern.compile("^(\\d+(?:[.,]\\d+)?)\\s*%");
     private static final Pattern XML_EAN = Pattern.compile("\\d{1,6}|\\d{8,14}");
-    private static final Pattern FULL_EAN = Pattern.compile("\\d{8}|\\d{12,14}");
     static final int CATALOG_PAGE_SIZE = 100;
     /** {@code eanSource} pozycji wczytanej z przypięcia kodu dostawcy do artykułu. */
     static final String LINK_SOURCE = "LINK";
@@ -234,10 +233,10 @@ public class DataEntryService {
             fallbacks.add(fallback);
             String code = ean != null ? ean : fallback != null ? fallback.code() : null;
             List<String> codesOfLine = new ArrayList<>();
-            // Przypięcie szukamy też przy artykule trafionym spoza GTIN-u (indeks, kod w nazwie): ręczne przypięcie ma
-            // pierwszeństwo, bo kod z nazwy mięsa bazy zwykle nie jest kodem sklepu i trafia w przypadkowy artykuł.
-            if (code != null && (ean == null || !known.containsKey(key(ean)) || incompleteEan(ean)
-                    || !ProductCodeSources.GTIN.equals(pick.source()))) {
+            // Ręczne przypięcie u dostawcy ma pierwszeństwo przed każdym trafieniem w kartotece, także po GTIN-ie:
+            // dostawca bywa z EAN-em, pod którym w sklepie jest inny artykuł, a kod z nazwy mięsa bazy zwykle nie jest
+            // kodem sklepu.
+            if (code != null) {
                 codesOfLine.add(DataEntryLinkService.code(code));
                 ProductCodeSources.rawCodes(lineCodes.get(i), keys).stream().map(DataEntryLinkService::code)
                         .filter(other -> !codesOfLine.contains(other)).forEach(codesOfLine::add);
@@ -268,18 +267,16 @@ public class DataEntryService {
                 // Kod z indeksu to ITM8, a nie EAN: w kolumnie i w pliku XML ma być EAN artykułu.
                 ean = product.catalogEan();
             }
-            DataEntryProductLinkRepository.ActiveLink link = null;
-            if (product == null || incompleteEan(ean) || !ProductCodeSources.GTIN.equals(eanSource)) {
-                link = linkCodes.get(i).stream().map(linked::get).filter(Objects::nonNull).findFirst().orElse(null);
-                CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
-                if (linkedProduct != null) {
-                    product = linkedProduct;
-                    ean = linkedProduct.catalogEan();
-                    eanSource = LINK_SOURCE;
-                    fallback = null;
-                } else {
-                    link = null;
-                }
+            DataEntryProductLinkRepository.ActiveLink link = linkCodes.get(i).stream().map(linked::get)
+                    .filter(Objects::nonNull).findFirst().orElse(null);
+            CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
+            if (linkedProduct != null) {
+                product = linkedProduct;
+                ean = linkedProduct.catalogEan();
+                eanSource = LINK_SOURCE;
+                fallback = null;
+            } else {
+                link = null;
             }
             Measure measure = product != null ? Measure.of(product.unit(), product.netContent())
                     : Measure.fromInvoice(line.name(), line.unit());
@@ -589,7 +586,6 @@ public class DataEntryService {
         String sellerNip = DataEntryLinkService.digits(invoice != null ? invoice.sellerNip()
                 : document.header().supplierNip());
         List<String> linkCodes = lines.stream()
-                .filter(line -> !known.containsKey(key(ean(line.ean()))))
                 .map(line -> ean(line.ean()) != null ? ean(line.ean()) : line.name())
                 .filter(Objects::nonNull).map(DataEntryLinkService::code).distinct().toList();
         Map<String, DataEntryProductLinkRepository.ActiveLink> linked = linkCodes.isEmpty() || sellerNip.isEmpty()
@@ -607,18 +603,17 @@ public class DataEntryService {
             String name = line.name() != null ? line.name().strip() : null;
             CatalogProduct product = ean != null ? known.get(key(ean)) : null;
             String eanSource = XML_SOURCE;
-            DataEntryProductLinkRepository.ActiveLink link = null;
-            if (product == null) {
-                String code = ean != null ? ean : name;
-                link = code != null ? linked.get(DataEntryLinkService.code(code)) : null;
-                CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
-                if (linkedProduct != null) {
-                    product = linkedProduct;
-                    ean = linkedProduct.catalogEan();
-                    eanSource = LINK_SOURCE;
-                } else {
-                    link = null;
-                }
+            // Przypięcie u dostawcy ma pierwszeństwo także przed artykułem trafionym po EAN-ie.
+            String code = ean != null ? ean : name;
+            DataEntryProductLinkRepository.ActiveLink link = code != null
+                    ? linked.get(DataEntryLinkService.code(code)) : null;
+            CatalogProduct linkedProduct = link != null ? linkedProducts.get(key(link.getEan())) : null;
+            if (linkedProduct != null) {
+                product = linkedProduct;
+                ean = linkedProduct.catalogEan();
+                eanSource = LINK_SOURCE;
+            } else {
+                link = null;
             }
             Measure measure = product != null ? Measure.of(product.unit(), product.netContent())
                     : Measure.fromInvoice(name, null);
@@ -649,14 +644,6 @@ public class DataEntryService {
     private static String xmlEan(String ean) {
         String code = ean == null ? "" : ean.strip();
         return XML_EAN.matcher(code).matches() ? code : null;
-    }
-
-    /**
-     * Kod z faktury o 9-11 cyfrach trafia w artykuł z kartoteki po zerach wiodących, ale jako EAN blokuje plik, więc
-     * pozycję przypina się do artykułu, a przypięcie ma pierwszeństwo przed takim trafieniem.
-     */
-    private static boolean incompleteEan(String ean) {
-        return ean != null && !FULL_EAN.matcher(ean).matches();
     }
 
     private static String digits(String value) {
@@ -745,7 +732,7 @@ public class DataEntryService {
                         product.purchasePrice(), product.vatPercent(), product.catalogVat(), product.salePrice(),
                         product.cadencier(), product.cadencierPrice(), product.promoPrice(), product.promoTo(),
                         product.unit(), product.netContent(), product.subfamilyCode(), product.stock(),
-                        product.rotation(), true, false));
+                        product.rotation(), true, false, product.inLastReport()));
             }
         });
         return found;
@@ -768,7 +755,7 @@ public class DataEntryService {
                     row.getBrand(), row.getPurchasePrice(), row.getVatPercent(), row.getCatalogVat(), row.getSalePrice(), row.getCadencier(), row.getCadencierPrice(),
                     row.getPromoPrice(), row.getPromoTo(), measure != null ? measure.unit() : Measure.PIECE,
                     measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), row.getSubfamilyCode(),
-                    row.getStock(), row.getRotation(), row.getByItm8(), false));
+                    row.getStock(), row.getRotation(), row.getByItm8(), false, row.getInLastReport()));
         }
         List<String> missing = keys.stream().filter(key -> !found.containsKey(key)).distinct().toList();
         if (!missing.isEmpty()) {
@@ -788,7 +775,7 @@ public class DataEntryService {
                 null, null, null,
                 measure != null ? measure.unit() : Measure.PIECE,
                 measure != null ? measure.netContent() : BigDecimal.ONE.setScale(3), draft.getSubfamilyCode(), null,
-                null, false, true);
+                null, false, true, true);
     }
 
     /** EAN z GTIN-u faktury: same cyfry, GTIN-14 z zerem na początku jako EAN-13; {@code null} bez kodu. */

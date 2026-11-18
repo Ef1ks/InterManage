@@ -728,9 +728,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     [currentDraft],
   )
 
-  // Ten sam kod (np. ta sama nazwa bez EAN-u) w kilku wierszach to ta sama pozycja: przypinamy wszystkie.
+  // Ten sam kod (ta sama nazwa bez EAN-u, ten sam EAN z faktury, także trafiony w kartotece) w kilku wierszach to ta
+  // sama pozycja: przypinamy wszystkie. Wiersz już przypięty ma w kolumnie EAN artykułu, więc liczy się kod przypięcia.
+  const linkCodeOf = (row: DataEntryRow) => row.link?.code ?? row.ean
   const sameCode = (row: DataEntryRow, target: DataEntryRow) =>
-    row.id === target.id || (!row.known && row.ean !== '' && row.ean === target.ean && serviceKind(row) === null)
+    row.id === target.id ||
+    (linkCodeOf(row) !== '' && linkCodeOf(row) === linkCodeOf(target) && serviceKind(row) === null)
 
   const onLinked = (target: DataEntryRow, product: DataEntryCatalogProduct, link: RowLink | null) => {
     const before = currentDraft()
@@ -752,6 +755,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     const link = target.link
     if (!link) return
     const before = currentDraft()
+    // Przypięty EAN (np. trafiony w kartotece, a przypięty do innego artykułu) po odpięciu wraca do artykułu ze swojego
+    // EAN-u; kod, który nie jest EAN-em (nazwa, indeks), zostaje kodem zastępczym.
+    const isEan = /^\d{8,14}$/.test(link.code)
+    const unlinkedIds = currentDraft()
+      .rows.filter((row) => row.link?.id === link.id)
+      .map((row) => row.id)
     setRows((current) =>
       current.map((row) =>
         row.link?.id === link.id
@@ -760,7 +769,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 {
                   ...row,
                   ean: link.code,
-                  eanFallback: 'Przypięty kod',
+                  eanFallback: isEan ? null : 'Przypięty kod',
                   eanChecked: link.code,
                   link: null,
                 },
@@ -772,6 +781,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           : row,
       ),
     )
+    if (isEan)
+      lookupProducts(store.id, [link.code])
+        .then((products) => {
+          const product = products.find((found) => found.ean === link.code.replace(/^0+/, ''))
+          if (!product) return
+          setRows(
+            (current) =>
+              current.map((row) =>
+                unlinkedIds.includes(row.id) && row.ean === link.code && !row.link
+                  ? withCatalogProduct(row, product)
+                  : row,
+              ),
+            { record: false },
+          )
+        })
+        .catch(() => toast.error('Nie udało się sprawdzić EAN-u w kartotece'))
     setLinkTarget(null)
     const sellerNip = currentDraft().invoice?.sellerNip
     toast(`Odpięto „${link.code}”`, {

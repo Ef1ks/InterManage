@@ -2845,6 +2845,8 @@ export type DataEntryCatalogProduct = {
    * jest już w programie sklepu, więc nie jest nowym artykułem.
    */
   draft: boolean
+  /** Artykuł był w najnowszym raporcie kartoteki; bez niego to zwykle ITM8 usunięty albo połączony z innym. */
+  inLastReport: boolean
 }
 
 /** Artykuł w ustawianiu promocji. */

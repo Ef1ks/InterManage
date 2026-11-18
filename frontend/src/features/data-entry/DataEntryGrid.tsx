@@ -1469,14 +1469,16 @@ function CellContent({
           {service && (
             <Tag className="bg-background text-muted-foreground ring-1 ring-border">{SERVICE_LABELS[service]}</Tag>
           )}
-          {onLinkArticle && !service && row.ean && (row.link || !row.known || error) && (
+          {onLinkArticle && !service && row.ean && (
             <button
               type="button"
               onClick={() => onLinkArticle(row)}
               title={
                 row.link
                   ? `Przypięte u tego dostawcy: „${row.link.code}”. Kliknij, żeby zmienić albo odpiąć.`
-                  : 'Przypisz do artykułu z kartoteki'
+                  : row.known
+                    ? 'Przypisz do innego artykułu u tego dostawcy'
+                    : 'Przypisz do artykułu z kartoteki'
               }
               aria-label={row.link ? `Przypięte: ${row.link.code}` : `Przypisz do artykułu: ${row.ean}`}
               className={cn(
@@ -1527,6 +1529,14 @@ function CellContent({
           {tooLong && (
             <Tag className="shrink-0 bg-destructive text-white">
               {row.name.length}/{NAME_LIMIT}
+            </Tag>
+          )}
+          {row.known && row.notInLastReport && (
+            <Tag
+              className="shrink-0 bg-rose-300 text-rose-950 dark:bg-rose-800 dark:text-rose-50"
+              title={`Artykuł ${row.itm8 ?? ''} jest w kartotece, ale nie było go w ostatnim raporcie bazy danych: zwykle usunięty albo połączony z innym w systemie sklepu. Sprawdź EAN albo przypisz pozycję do właściwego artykułu.`}
+            >
+              poza raportem
             </Tag>
           )}
           {missingDeposit(row) && (

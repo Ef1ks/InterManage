@@ -612,6 +612,37 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void linkReplacesArticleFoundByGtinAndMarksArticleMissingFromLastReport() throws Exception {
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        insertProduct(productImport, "0000000000902", "5900000000999", "MLEKO 2% 1L", "LAKA", "L", "1", "3.29",
+                "25 42 01");
+        // Najnowszy raport kartoteki ma tylko nowy artykuł, więc artykułu z EAN-u faktury w nim nie było.
+        jdbc.update("update product_imports set report_generated_at = case when id = ?::uuid"
+                + " then timestamp '2026-11-01 06:00' else timestamp '2026-01-01 06:00' end where store_id = ?::uuid",
+                productImport, storeId);
+
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000101"))
+                .andExpect(jsonPath("$.lines[0].product.inLastReport").value(false))
+                .andExpect(jsonPath("$.lines[0].eanSource").value("GTIN"));
+
+        // EAN z faktury trafia w kartotekę, a mimo to u tego dostawcy przypinamy go do innego artykułu.
+        mvc.perform(post(url("/links")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sellerNip":"%s","code":"5900000000012","itm8":"0000000000902"}""".formatted(SELLER_NIP)))
+                .andExpect(status().isOk());
+
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[0].ean").value("5900000000999"))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000902"))
+                .andExpect(jsonPath("$.lines[0].eanSource").value("LINK"))
+                .andExpect(jsonPath("$.lines[0].linkedCode").value("5900000000012"));
+    }
+
+    @Test
     void looksUpScaleLabelCodesWithPurchasePriceAndVat() throws Exception {
         String productImport = jdbc.queryForObject("""
                 insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,

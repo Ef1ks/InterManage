@@ -15,9 +15,11 @@ import java.time.LocalDate;
  * {@code promoTo}, {@code stock} i {@code rotation} to stan magazynowy i rotacja z ostatniego raportu kartoteki.
  * {@code byItm8}: szukany kod to nie EAN, tylko ITM8 artykułu (albo ITM8 z multikodów). {@code draft}: artykułu nie
  * ma jeszcze w kartotece, dane są ze szkicu z pliku CADBEZP (jest już w programie sklepu, czeka na raport); bez ITM8.
+ * {@code inLastReport}: artykuł był w najnowszym raporcie kartoteki ({@code last_seen_import_id}); bez niego to zwykle
+ * ITM8 usunięty albo połączony z innym w systemie sklepu, więc tabela go oznacza (szkic też ma {@code true}).
  */
 public record CatalogProduct(String ean, String itm8, String catalogEan, String name, String brand,
         BigDecimal purchasePrice, BigDecimal vatPercent, BigDecimal catalogVat, BigDecimal salePrice, boolean cadencier,
         BigDecimal cadencierPrice, BigDecimal promoPrice, LocalDate promoTo, String unit, BigDecimal netContent, String subfamilyCode, BigDecimal stock,
-        BigDecimal rotation, boolean byItm8, boolean draft) {
+        BigDecimal rotation, boolean byItm8, boolean draft, boolean inLastReport) {
 }

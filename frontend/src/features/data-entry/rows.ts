@@ -66,6 +66,11 @@ export type DataEntryRow = {
   promoPrice?: number | null
   promoTo?: string | null
   itm8: string | null
+  /**
+   * Artykuł z kartoteki, którego nie było w najnowszym raporcie kartoteki (zwykle ITM8 usunięty albo połączony
+   * z innym w systemie sklepu): w tabeli oznaczony. Brak w starszych szkicach.
+   */
+  notInLastReport?: boolean
   /** Stan i rotacja z kartoteki w chwili wczytania. Brak w starszych szkicach. */
   stock?: number | null
   rotation?: number | null
@@ -266,6 +271,7 @@ export function rowFromLine(line: DataEntryLine): DataEntryRow {
     promoPrice: product?.promoPrice ?? null,
     promoTo: product?.promoTo ?? null,
     itm8: product?.itm8 ?? null,
+    notInLastReport: product ? !product.inLastReport : false,
     stock: product?.stock ?? null,
     rotation: product?.rotation ?? null,
     nameFromInvoice: product === null && Boolean(line.invoiceName),
@@ -287,6 +293,7 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
       promoPrice: null,
       promoTo: null,
       itm8: null,
+      notInLastReport: false,
       stock: null,
       rotation: null,
       catalog: null,
@@ -301,6 +308,7 @@ export function withCatalogProduct(row: DataEntryRow, product: DataEntryCatalogP
     promoPrice: product.promoPrice,
     promoTo: product.promoTo,
     itm8: product.itm8,
+    notInLastReport: !product.inLastReport,
     stock: product.stock,
     rotation: product.rotation,
     name: product.name ?? row.name,
@@ -779,6 +787,7 @@ export function withRefreshedCatalog(
     {
       ...row,
       itm8: product.itm8,
+      notInLastReport: !product.inLastReport,
       stock: product.stock,
       rotation: product.rotation,
       catalogVat: product.catalogVat,
