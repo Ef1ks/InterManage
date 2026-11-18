@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ClipboardCopyIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { DateField, SelectField } from '@/components/form'
+import { SelectField, TextField } from '@/components/form'
 import { StoreLocationField } from '@/components/StoreLocationField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -305,10 +305,32 @@ function MacroFields({
 function OpenedOnField({ storeId }: { storeId: string }) {
   const locations = useStoreLocations(storeId)
   const save = useSaveStoreLocations(storeId)
-  const value = locations.data?.[OPENED_ON_KEY] ?? ''
+  const saved = locations.data?.[OPENED_ON_KEY] ?? ''
+  const [text, setText] = useState(displayDate(saved))
+  const [error, setError] = useState<string | null>(null)
 
-  const change = (next: string) => {
-    if (next === value) return
+  // Zapis z innego komputera (po odświeżeniu) wraca do pola.
+  const [shown, setShown] = useState(saved)
+  if (shown !== saved) {
+    setShown(saved)
+    setText(displayDate(saved))
+    setError(null)
+  }
+
+  const commit = (raw: string) => {
+    const typed = raw.trim()
+    const next = typed ? parseTypedDate(typed) : ''
+    if (next === null) {
+      setError('Wpisz datę jako DD.MM.RRRR, np. 15.03.2025')
+      return
+    }
+    if (next && (next < HISTORY_START || next > todayIso())) {
+      setError(`Data od ${displayDate(HISTORY_START)} do dziś`)
+      return
+    }
+    setError(null)
+    setText(displayDate(next))
+    if (next === saved) return
     save.mutate(
       { [OPENED_ON_KEY]: next },
       {
@@ -323,22 +345,58 @@ function OpenedOnField({ storeId }: { storeId: string }) {
 
   return (
     <li className="grid gap-3 rounded-xl border bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-      <DateField
-        label="Sklep otwarty od"
-        value={value}
-        onChange={change}
-        min={HISTORY_START}
-        max={todayIso()}
-        shortcuts={[]}
-        hint="Makro sprzedaży i dokumentów nie będzie drukować dni sprzed tej daty"
+      <TextField
+        label="Sklep otwarty od (DD.MM.RRRR)"
+        autoComplete="off"
+        inputMode="numeric"
+        maxLength={10}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => commit(text)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit(text)
+          }
+        }}
+        error={error ?? undefined}
+        hint="Makro sprzedaży i dokumentów nie będzie drukować dni sprzed tej daty. Puste = bez ograniczenia."
       />
-      {value && (
-        <Button variant="outline" size="lg" disabled={save.isPending} onClick={() => change('')}>
+      {saved && (
+        <Button
+          variant="outline"
+          size="lg"
+          disabled={save.isPending}
+          onClick={() => {
+            setText('')
+            commit('')
+          }}
+        >
           Wyczyść
         </Button>
       )}
     </li>
   )
+}
+
+/** RRRR-MM-DD jako DD.MM.RRRR (puste zostaje puste). */
+function displayDate(iso: string) {
+  return iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : ''
+}
+
+/** Wpisana data (DD.MM.RRRR, DD-MM-RRRR, DD/MM/RRRR, DDMMRRRR albo RRRR-MM-DD) jako RRRR-MM-DD; zła = null. */
+function parseTypedDate(typed: string): string | null {
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(typed)
+  const local = /^(\d{1,2})[.\-/ ](\d{1,2})[.\-/ ](\d{4})$/.exec(typed) ?? /^(\d{2})(\d{2})(\d{4})$/.exec(typed)
+  const [year, month, day] = iso
+    ? [Number(iso[1]), Number(iso[2]), Number(iso[3])]
+    : local
+      ? [Number(local[3]), Number(local[2]), Number(local[1])]
+      : [0, 0, 0]
+  if (!year) return null
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 /**

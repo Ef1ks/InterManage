@@ -124,24 +124,26 @@ export function lastDocumentDate(imports: { periodTo: string | null }[] | undefi
   )
 }
 
+/** O tyle dni wcześniej zaczyna się każda dziura w raportach dokumentów (bezpieczny zakład z poprzednim okresem). */
+const DOCUMENTS_OVERLAP_DAYS = 2
+
 /**
- * Okres raportu dokumentów: od dnia przed ostatnim dniem z raportów (najpóźniej od przedwczoraj) do jutra. Daty
- * w tym raporcie bywają przesunięte, więc zakres jest celowo szerszy; ponowne wgranie dokumentów tylko je uzupełnia.
+ * Bieżący okres raportu dokumentów: od przedwczoraj do jutra. Daty w tym raporcie bywają przesunięte, więc zakres
+ * jest celowo szerszy; ponowne wgranie dokumentów tylko je uzupełnia. Starsze dni bierze makro tylko z dziur
+ * w okresach wgranych raportów (`periodParts`), więc wgrany wcześniej okres nie jest drukowany drugi raz
+ * (dawniej bieżący okres zaczynał się od ostatniego dnia z raportów i przy zaległości obejmował wszystko do dziś).
  */
-export function documentsPeriod(context: ReportMacroContext, today = todayIso()) {
-  const yesterday = addDays(today, -1)
-  const last = context.lastDocumentDate && context.lastDocumentDate < yesterday ? context.lastDocumentDate : yesterday
-  return { from: addDays(last, -1), to: addDays(today, 1) }
+export function documentsPeriod(_context: ReportMacroContext, today = todayIso()) {
+  return { from: addDays(today, -2), to: addDays(today, 1) }
 }
 
 /**
- * Okres raportu sprzedaży: od pierwszego dnia, którego nie ma w bazie, najpóźniej od wczoraj, do dziś. Dzień
- * wygenerowania raportu nie jest zapisywany (sklep jeszcze sprzedaje), więc jutro raport weźmie go jeszcze raz.
+ * Bieżący okres raportu sprzedaży: wczoraj i dziś. Dzień wygenerowania raportu nie jest zapisywany (sklep jeszcze
+ * sprzedaje), więc jutro raport weźmie go jeszcze raz. Starsze dni, jak w dokumentach, tylko z dziur w okresach
+ * wgranych raportów.
  */
-export function salesPeriod(context: ReportMacroContext, today = todayIso()) {
-  const yesterday = addDays(today, -1)
-  const firstMissing = context.lastSaleDate ? addDays(context.lastSaleDate, 1) : yesterday
-  return { from: firstMissing < yesterday ? firstMissing : yesterday, to: today }
+export function salesPeriod(_context: ReportMacroContext, today = todayIso()) {
+  return { from: addDays(today, -1), to: today }
 }
 
 type Period = { from: string; to: string }
@@ -199,7 +201,14 @@ export function periodParts(kind: MacroReport, context: ReportMacroContext, part
   const covered = (kind === 'SALES' ? context.salesCovered : context.documentsCovered) ?? []
   // Przed otwarciem sklepu nie było sprzedaży ani dokumentów: te dni dawałyby puste raporty.
   const start = context.openedOn && context.openedOn > HISTORY_START ? context.openedOn : HISTORY_START
-  const gaps = missingPeriods(covered, start, addDays(current.from, -1))
+  // Dokumenty: dziura zaczyna się dwa dni wcześniej (po 31.01 od 30.01), jak bieżący okres, bo daty w tym raporcie
+  // bywają przesunięte; ponowne wgranie tych dni tylko je uzupełnia. Nie przed początkiem i nie przed poprzednią dziurą.
+  const overlap = kind === 'DOCUMENTS' ? DOCUMENTS_OVERLAP_DAYS : 0
+  const gaps = missingPeriods(covered, start, addDays(current.from, -1)).map((gap, index, all) => {
+    const earliest = index > 0 ? addDays(all[index - 1].to, 1) : start
+    const from = addDays(gap.from, -overlap)
+    return { from: from < earliest ? earliest : from, to: gap.to }
+  })
   const periods = [...gaps, { from: current.from < start ? start : current.from, to: current.to }]
   return periods.filter((period) => period.from <= period.to).flatMap((period) => splitPeriod(period, length))
 }
