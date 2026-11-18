@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import { addDays } from '@/lib/dates'
+import { addDays, parseIsoDate } from '@/lib/dates'
 import type { DashboardChartMetric, DashboardSettings, SalesFigures, SalesHistory } from '@/lib/types'
 import { YEAR_AGO_DAYS } from '@/features/sales/periods'
 
@@ -39,12 +39,18 @@ export type DateRange = { from: string; to: string }
 /** Ile tygodni wstecz pokazuje pasek trendu pod wykresem. */
 export const TREND_WEEKS = 12
 
+/** Niedziela tygodnia pon.-niedz., w którym jest dzień. */
+export function weekEnd(iso: string) {
+  return addDays(iso, 6 - ((parseIsoDate(iso).getDay() + 6) % 7))
+}
+
 /**
- * Okno wyników: {@link TREND_WEEKS} tygodni po 7 dni kończących się na ostatnim dniu ze sprzedażą (ostatni z nich to
- * tydzień na wykresie) i te same dni tygodnia rok wcześniej (52 tygodnie wstecz).
+ * Okno wyników: {@link TREND_WEEKS} pełnych tygodni pon.-niedz., ostatni to tydzień z ostatnim dniem ze sprzedażą
+ * (na wykresie; dni po nim są puste), i te same dni tygodnia rok wcześniej (52 tygodnie wstecz).
  */
 export function storeWindow(lastSaleDate: string): { current: DateRange; yearAgo: DateRange } {
-  const current = { from: addDays(lastSaleDate, -(TREND_WEEKS * 7 - 1)), to: lastSaleDate }
+  const to = weekEnd(lastSaleDate)
+  const current = { from: addDays(to, -(TREND_WEEKS * 7 - 1)), to }
   return {
     current,
     yearAgo: { from: addDays(current.from, -YEAR_AGO_DAYS), to: addDays(current.to, -YEAR_AGO_DAYS) },
@@ -76,12 +82,13 @@ export const changePercent = (now: number, before: number) =>
   before !== 0 ? ((now - before) / Math.abs(before)) * 100 : null
 
 /**
- * {@code skipped}: dni tego tygodnia pominięte w zmianie %, bo one albo ich odpowiednik rok temu nie mają sprzedaży
+ * {@code through}: ostatni policzony dzień (w tygodniu w toku ostatni dzień ze sprzedażą). {@code skipped}: dni tego tygodnia pominięte w zmianie %, bo one albo ich odpowiednik rok temu nie mają sprzedaży
  * (święto, zamknięty sklep, niewgrany raport).
  */
 export type WeekChange = {
   from: string
   to: string
+  through: string
   now: number
   before: number
   change: number | null
@@ -91,17 +98,22 @@ export type WeekChange = {
 /**
  * Tygodnie okna od najstarszego: suma miary i zmiana wobec tych samych dni rok temu. Zmiana liczy się tylko z par dni,
  * w których obie strony mają sprzedaż, więc jedno zamknięte święto (np. 1.11) nie zaniża tygodnia o 1/7 ani nie
- * zabiera mu porównania. Sumy {@code now} i {@code before} są pełne, jak sprzedaż tygodnia.
+ * zabiera mu porównania. Sumy {@code now} i {@code before} są pełne, jak sprzedaż tygodnia. Dni po ostatnim dniu ze
+ * sprzedażą ({@code lastSaleDate}, tydzień w toku) nie liczą się wcale, także rok temu: {@code through} to ostatni
+ * policzony dzień tygodnia.
  */
 export function weeklyChanges(
   metric: DashboardChartMetric,
   current: SalesHistory,
   yearAgo: SalesHistory,
+  lastSaleDate: string,
 ): WeekChange[] {
   const weeks: WeekChange[] = []
   for (let start = 0; start + 7 <= current.days.length; start += 7) {
-    const days = current.days.slice(start, start + 7)
-    const before = yearAgo.days.slice(start, start + 7)
+    const all = current.days.slice(start, start + 7)
+    const days = all.filter((day) => day.date <= lastSaleDate)
+    const before = yearAgo.days.slice(start, start + days.length)
+    if (days.length === 0) continue
     const now = days.reduce((sum, day) => sum + metricValue(metric, day.figures), 0)
     const then = before.reduce((sum, day) => sum + metricValue(metric, day.figures), 0)
     let pairedNow = 0
@@ -117,8 +129,9 @@ export function weeklyChanges(
       pairedBefore += metricValue(metric, previous.figures)
     })
     weeks.push({
-      from: days[0].date,
-      to: days[6].date,
+      from: all[0].date,
+      to: all[6].date,
+      through: days[days.length - 1].date,
       now,
       before: then,
       change: skipped.length < days.length ? changePercent(pairedNow, pairedBefore) : null,

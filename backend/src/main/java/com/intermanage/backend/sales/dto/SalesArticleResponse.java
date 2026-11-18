@@ -13,6 +13,8 @@ import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
  * {@code vatPercent}: z kodu stawki z kartoteki, bez niego z ostatniego dokumentu artykułu; pusty, gdy nieznany.
  * {@code cadencierPrice}: CENA_CAD z ostatniego raportu kartoteki. {@code promoPrice}, {@code promoFrom}, {@code promoTo}:
  * trwająca dziś promocja z kasy (pliki TRACEART), {@code salePrice} jest wtedy ceną regularną; poza promocją puste.
+ * {@code mergedArticles}: artykuły usunięte z kartoteki, których EAN przeszedł na ten artykuł, więc ich sprzedaż
+ * i dokumenty liczą się na tej karcie; {@code mergedInto}: artykuł, z którym połączono ten (gdy sam jest usunięty).
  */
 public record SalesArticleResponse(
         String itm8,
@@ -34,5 +36,11 @@ public record SalesArticleResponse(
         BigDecimal cadencierPrice,
         BigDecimal promoPrice,
         LocalDate promoFrom,
-        LocalDate promoTo) {
+        LocalDate promoTo,
+        List<Merged> mergedArticles,
+        Merged mergedInto) {
+
+    /** Połączony artykuł: ITM8, nazwa z kartoteki i EAN, przez który się połączył. */
+    public record Merged(String itm8, String name, String ean) {
+    }
 }

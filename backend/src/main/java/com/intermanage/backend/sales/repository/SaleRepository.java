@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.sales.entity.Sale;
 
 public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
@@ -337,10 +338,14 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                    sum(s.margin_value) as margin_value
             """;
 
-    /** Sprzedaż artykułu (ITM8, ze wszystkich EAN-ów) dzień po dniu; z indeksu (sklep, ITM8, dzień). */
+    /**
+     * Sprzedaż artykułu (ITM8, ze wszystkich EAN-ów, razem z połączonymi z nim artykułami usuniętymi z kartoteki)
+     * dzień po dniu; z indeksu (sklep, ITM8, dzień).
+     */
     @Query(value = DAY_SUMS + """
             from sales s
-            where s.store_id = :storeId and s.itm8 = :itm8 and s.sale_date between :from and :to
+            where s.store_id = :storeId and s.itm8 in """ + ArticleMergeRepository.ARTICLE_ITM8S + """
+              and s.sale_date between :from and :to
             group by s.sale_date
             order by s.sale_date
             """, nativeQuery = true)

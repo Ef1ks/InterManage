@@ -30,6 +30,9 @@ public class ProfitTargetController {
 
     private static final String VIEW =
             "hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
+    /** Postęp celu to wynik całego sklepu, więc widzi go też pulpit z wynikami sklepu ({@code DASHBOARD}). */
+    private static final String PROGRESS = "(hasAuthority('SALES:VIEW') or hasAuthority('DASHBOARD:VIEW'))"
+            + " and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT =
             "hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
 
@@ -53,7 +56,7 @@ public class ProfitTargetController {
     }
 
     @GetMapping("/progress")
-    @PreAuthorize(VIEW)
+    @PreAuthorize(PROGRESS)
     public ProfitTargetProgressResponse progress(@PathVariable UUID storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return service.progress(storeId, to);

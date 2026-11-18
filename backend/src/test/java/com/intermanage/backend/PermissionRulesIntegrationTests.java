@@ -102,8 +102,11 @@ class PermissionRulesIntegrationTests {
         mvc.perform(get(store("/reports")).cookie(dashboard)).andExpect(status().isOk());
         mvc.perform(get(store("/reports/sales-history?from=2026-10-01&to=2026-10-31")).cookie(dashboard))
                 .andExpect(status().isOk());
+        // Postęp rocznego celu zysku (marża po likwidacjach) to wynik całego sklepu; same cele dalej wymagają SALES.
+        mvc.perform(get(store("/reports/profit-targets/progress?to=2026-10-31")).cookie(dashboard))
+                .andExpect(status().isOk());
         // Bez raportów sprzedaży: artykuł, nomenklatura i porównanie dalej wymagają SALES.
-        for (String path : new String[] {"/reports/sales-history?from=2026-10-01&to=2026-10-31&itm8=0000001234567",
+        for (String path : new String[] {"/reports/profit-targets","/reports/sales-history?from=2026-10-01&to=2026-10-31&itm8=0000001234567",
                 "/reports/sales-history?from=2026-10-01&to=2026-10-31&parent=01",
                 "/reports/sales-history?from=2026-10-01&to=2026-10-31&unassigned=true",
                 "/reports/sales-history?from=2026-10-01&to=2026-10-31&nomenclatures=01",

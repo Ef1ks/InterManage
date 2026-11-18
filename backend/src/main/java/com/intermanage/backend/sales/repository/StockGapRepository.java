@@ -110,10 +110,11 @@ public interface StockGapRepository extends Repository<Sale, Sale.Key> {
      */
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
             , received as (
-                select coalesce(p.itm8, e.itm8) as itm8, d.type, d.document_date, l.supplier_code, l.supplier_name
+                select coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8, d.type, d.document_date, l.supplier_code, l.supplier_name
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+                left join merged mm on mm.alias_itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId
                   and ((d.type = 'PZ' and l.quantity > 0) or (d.type = 'MM' and l.quantity < 0))

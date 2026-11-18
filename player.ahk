@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.52.0.0
+;@Ahk2Exe-SetVersion 0.53.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.52" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.53" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -453,8 +453,20 @@ PlayMacro(rawClip) {
             case "WEBPAGE":
                 ; WEBPAGE|okno|fragment adresu strony|element|limit w ms: czeka na tę stronę (np. na-e015, wynik integracji) z widocznym
                 ; elementem. Sam WEBWAIT na Powrót przechodził od razu, bo Powrót ma też strona sprzed integracji.
+                ; Opcjonalnie |okno komunikatu|tekst (kilka po średniku)|przycisk|etykieta: gdy zamiast strony pojawi się taki
+                ; komunikat (np. „brak PZ bezpośrednich do integracji”), zamyka go przyciskiem i przeskakuje do LABEL|etykieta.
+                dialog := parts.Length >= 9 ? {title: Trim(parts[6]), expected: Trim(parts[7]), button: Trim(parts[8])} : ""
                 problem := parts.Length < 4 ? "Linia WEBPAGE wymaga okna, adresu i elementu."
-                    : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000)
+                    : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000, dialog)
+                if (problem = "DIALOG") {
+                    target := LabelLine(lines, Trim(parts[9]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[9]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
                 if (problem != "") {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -773,6 +785,12 @@ PdfPrintAll(title, timeoutMs) {
                 break
             name := ""
             try name := WinGetTitle(hwnd)
+            ; Po zamknięciu ostatniej karty Acrobat zostaje pustym oknem („Adobe Acrobat Reader”): to nie bon, tylko je zamykamy.
+            if !PdfHasDocument(name) {
+                try WinClose hwnd
+                WinWaitClose("ahk_id " hwnd, , 5)
+                break
+            }
             problem := PrintActivePdf(hwnd)
             if (problem != "") {
                 failed .= name ": " problem "`n"
@@ -805,6 +823,9 @@ PdfPrintAll(title, timeoutMs) {
         text .= "`nNIE WYDRUKOWANE (PDF zostaje otwarty):`n" failed
     return text
 }
+
+; Okno z dokumentem ma w tytule nazwę pliku przed „Adobe Acrobat…”; puste okno ma sam tytuł programu.
+PdfHasDocument(name) => Trim(name) != "" && !RegExMatch(name, "i)^\s*Adobe Acrobat")
 
 PrintActivePdf(hwnd) {
     try {
@@ -1606,7 +1627,7 @@ WebWait(title, element, text, timeoutMs) {
 }
 
 ; Czeka na wczytaną stronę, której adres zawiera fragment, z widocznym elementem.
-WebPage(title, address, element, timeoutMs) {
+WebPage(title, address, element, timeoutMs, dialog := "") {
     deadline := A_TickCount + timeoutMs
     Loop {
         for hwnd in WinGetList(title) {
@@ -1615,10 +1636,39 @@ WebPage(title, address, element, timeoutMs) {
                     return ""
             }
         }
+        if IsObject(dialog) {
+            problem := CloseAlert(dialog.title, dialog.expected, dialog.button)
+            if (problem != "")
+                return problem
+        }
         if (A_TickCount >= deadline)
             return "Nie pojawiła się strona `"" address "`" z elementem `"" element "`"."
         Sleep 100
     }
+}
+
+; Komunikat zamiast oczekiwanej strony: okno z przyciskiem i tekstem (w treści albo w adresie, np. BoiteAlerte.aspx?Msg=brak+PZ…).
+; Zamyka je i zwraca "DIALOG"; bez takiego okna "".
+CloseAlert(title, expected, button) {
+    for hwnd in WinGetList(title) {
+        for item in FindElements(HtmlDocuments(hwnd), button) {
+            if !PageLoaded(item.doc)
+                continue
+            text := ""
+            try text := item.doc.body.innerText
+            url := StrReplace(WebProp(item.doc, "URL"), "+", " ")
+            matched := false
+            for piece in StrSplit(expected, ";")
+                if (Trim(piece) != "" && (InStr(text, Trim(piece)) || InStr(url, Trim(piece))))
+                    matched := true
+            if !matched
+                continue
+            try WinActivate hwnd
+            ClickWithoutWaiting(item.doc, item.element)
+            return WinWaitClose("ahk_id " hwnd, , 10) ? "DIALOG" : "Okno komunikatu `"" expected "`" się nie zamknęło."
+        }
+    }
+    return ""
 }
 
 ; Numer linii LABEL|nazwa za linią start; 0, gdy jej nie ma.
@@ -2154,6 +2204,8 @@ WebEachRow(title, grid, column, button, nextPage, maxCount, wanted, confirm := "
 }
 
 ; Okno z wynikiem blokuje główną stronę. Zamyka je tylko oczekiwany komunikat, każdy inny zatrzymuje pętlę, żeby było widać, co się stało.
+; Liczą się tylko strony z przyciskiem okna (np. „Fermer”): główne okno Mercalys też ma w tytule „Les Mousquetaires”
+; i trzyma schowane pytanie „Drukowanie przebiegło prawidłowo ?”, które brane za komunikat zatrzymywało makro.
 ConfirmDialog(title, expected, button, timeoutMs) {
     deadline := A_TickCount + timeoutMs
     Loop {
@@ -2161,7 +2213,7 @@ ConfirmDialog(title, expected, button, timeoutMs) {
             for doc in HtmlDocuments(hwnd) {
                 text := ""
                 try {
-                    if (doc.readyState = "complete")
+                    if (doc.readyState = "complete" && FindElements([doc], button).Length > 0)
                         text := Trim(doc.body.innerText)
                 }
                 if (text = "")

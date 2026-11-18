@@ -40,6 +40,7 @@ import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.ProductImportMapper;
 import com.intermanage.backend.product.repository.ProductEanChangeRepository;
 import com.intermanage.backend.product.repository.ProductEanRepository;
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.product.repository.ProductImportRepository;
 import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
@@ -78,11 +79,14 @@ public class ProductImportService {
     private final StoreRepository stores;
     private final ProductPriceChangeRepository priceChanges;
     private final ProductDraftService drafts;
+    private final ArticleMergeRepository merges;
 
     public ProductImportService(TransactionTemplate transaction, ProductReportParser reportParser,
             ProductImportMapper productImportMapper, ProductImportRepository imports, ProductRepository products,
             ProductEanRepository productEans, ProductEanChangeRepository eanChanges, AppUserRepository users,
-            StoreRepository stores, ProductPriceChangeRepository priceChanges, ProductDraftService drafts) {
+            StoreRepository stores, ProductPriceChangeRepository priceChanges, ProductDraftService drafts,
+            ArticleMergeRepository merges) {
+        this.merges = merges;
         this.priceChanges = priceChanges;
         this.drafts = drafts;
         this.transaction = transaction;
@@ -244,6 +248,8 @@ public class ProductImportService {
         productImport.recordResult(newProducts.size(), updated, unchanged, missing, eanChanged, eanMoved);
         ProductDraftService.Result draftResult = drafts.resolve(productImport, reportByEan);
         productImport.recordDrafts(draftResult.matched(), draftResult.removed());
+        // Artykuł, którego zabrakło w raporcie, a jego EAN ma teraz inny artykuł, staje się jego częścią.
+        merges.refresh(storeId);
         return productImportMapper.toResponse(productImport);
     }
 

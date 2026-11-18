@@ -27,6 +27,7 @@ import com.intermanage.backend.nomenclature.mapper.NomenclatureMapper;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
 import com.intermanage.backend.product.entity.Product;
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.mea.entity.MeaDocument;
 import com.intermanage.backend.mea.repository.MeaDocumentRepository;
@@ -76,12 +77,14 @@ public class SalesReportService {
     private final CadencierImportRepository cadencier;
     private final CounterReportService counterReports;
     private final MeaDocumentRepository meaDocuments;
+    private final ArticleMergeRepository merges;
 
     public SalesReportService(SaleRepository sales, SalesImportRepository imports, ProductRepository products,
             NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper,
             DocumentLineRepository documentLines, CadencierImportRepository cadencier,
-            CounterReportService counterReports, MeaDocumentRepository meaDocuments) {
+            CounterReportService counterReports, MeaDocumentRepository meaDocuments, ArticleMergeRepository merges) {
         this.meaDocuments = meaDocuments;
+        this.merges = merges;
         this.cadencier = cadencier;
         this.counterReports = counterReports;
         this.sales = sales;
@@ -259,8 +262,19 @@ public class SalesReportService {
             Short rate = documentLines.findLatestVatRate(storeId, product.getItm8());
             vatPercent = rate == null ? null : BigDecimal.valueOf(rate);
         }
+        List<SalesArticleResponse.Merged> merged = merges.findAliases(storeId, product.getItm8()).stream()
+                .map(merge -> merged(storeId, merge.getAliasItm8(), merge.getEan()))
+                .toList();
+        SalesArticleResponse.Merged mergedInto = merges.findMain(storeId, product.getItm8())
+                .map(merge -> merged(storeId, merge.getMainItm8(), merge.getEan()))
+                .orElse(null);
         return salesMapper.toArticle(product, path, vatPercent,
-                cadencier.isInCadencier(storeId, product.getItm8()));
+                cadencier.isInCadencier(storeId, product.getItm8()), merged, mergedInto);
+    }
+
+    private SalesArticleResponse.Merged merged(UUID storeId, String itm8, String ean) {
+        return new SalesArticleResponse.Merged(itm8,
+                products.findByStoreIdAndItm8(storeId, itm8).map(Product::getName).orElse(null), ean);
     }
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej, najwyżej {@link #DELIVERY_LIMIT}. */

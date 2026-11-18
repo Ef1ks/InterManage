@@ -1353,6 +1353,13 @@ export type SalesHistory = {
   lossValue: number
 }
 
+/** Połączony artykuł: ITM8, nazwa z kartoteki i EAN (bez zer wiodących), przez który się połączył. */
+export type MergedArticle = {
+  itm8: string
+  name: string | null
+  ean: string
+}
+
 /** Artykuł z kartoteki: ceny, stan i rotacja z ostatniego raportu kartoteki, w którym był. */
 export type SalesArticle = {
   itm8: string
@@ -1381,6 +1388,13 @@ export type SalesArticle = {
   promoPrice: number | null
   promoFrom: string | null
   promoTo: string | null
+  /**
+   * Artykuły usunięte z kartoteki, których EAN przeszedł na ten artykuł (multikod): ich sprzedaż i dokumenty liczą
+   * się na tej karcie.
+   */
+  mergedArticles: MergedArticle[]
+  /** Artykuł, z którym połączono ten, gdy sam został usunięty z kartoteki. */
+  mergedInto: MergedArticle | null
 }
 
 /**

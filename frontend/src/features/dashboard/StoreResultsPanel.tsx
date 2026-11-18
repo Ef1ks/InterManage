@@ -22,6 +22,7 @@ import {
   type WeekChange,
 } from './api'
 import { LoadingPanel } from '@/components/LoadingPanel'
+import { ProfitGoalBar } from './ProfitGoalBar'
 
 const METRICS: { value: DashboardChartMetric; label: string }[] = [
   { value: 'SALES', label: 'Sprzedaż' },
@@ -64,8 +65,8 @@ function noteLines(note: DayNote, beforeDate: string | undefined) {
 }
 
 /**
- * Wyniki sklepu na pulpicie (uprawnienie Pełny pulpit): ostatnie 7 dni ze sprzedażą wobec tych samych dni tygodnia
- * rok temu, dwa wykresy nałożone na siebie, a pod nimi pasek zmiany rok do roku z 12 tygodni. Wybór miary jest
+ * Wyniki sklepu na pulpicie (uprawnienie Pełny pulpit): tydzień pon.-niedz. z ostatnim dniem ze sprzedażą wobec tych
+ * samych dni tygodnia rok temu (dni po ostatniej sprzedaży są puste), dwa wykresy nałożone na siebie, a pod nimi pasek zmiany rok do roku z 12 tygodni. Wybór miary jest
  * ustawieniem konta, wspólnym z aplikacją mobilną. Z dostępem do raportów sprzedaży klik w dzień albo tydzień
  * otwiera porównanie sprzedaży za ten okres.
  */
@@ -87,7 +88,7 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
   } else if (!range || !current.data || !yearAgo.data) {
     body = <p className="text-sm text-muted-foreground">Sklep nie ma jeszcze wgranej sprzedaży.</p>
   } else {
-    body = <Results metric={metric} current={current.data} yearAgo={yearAgo.data} />
+    body = <Results metric={metric} current={current.data} yearAgo={yearAgo.data} lastSaleDate={lastSaleDate!} />
   }
 
   return (
@@ -95,7 +96,9 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
       <CardHeader className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <CardTitle>Wyniki sklepu {storeNumber}</CardTitle>
-          <CardDescription>Ostatnie 7 dni ze sprzedażą wobec tych samych dni tygodnia rok temu</CardDescription>
+          <CardDescription>
+            Tydzień od poniedziałku do niedzieli wobec tych samych dni tygodnia rok temu
+          </CardDescription>
         </div>
         <div role="radiogroup" aria-label="Co pokazuje wykres" className="flex rounded-lg bg-muted p-0.5 text-sm">
           {METRICS.map((item) => (
@@ -117,7 +120,14 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
           ))}
         </div>
       </CardHeader>
-      <CardContent>{body}</CardContent>
+      <CardContent className="space-y-6">
+        {lastSaleDate ? (
+          <div className="border-b pb-5">
+            <ProfitGoalBar storeId={storeId} lastSaleDate={lastSaleDate} />
+          </div>
+        ) : null}
+        {body}
+      </CardContent>
     </Card>
   )
 }
@@ -126,14 +136,16 @@ function Results({
   metric,
   current,
   yearAgo,
+  lastSaleDate,
 }: {
   metric: DashboardChartMetric
   current: SalesHistory
   yearAgo: SalesHistory
+  lastSaleDate: string
 }) {
   const navigate = useNavigate()
   const canCompare = useCan('SALES')
-  const weeks = weeklyChanges(metric, current, yearAgo)
+  const weeks = weeklyChanges(metric, current, yearAgo, lastSaleDate)
   const week = weeks[weeks.length - 1]
   const days = current.days.slice(-7)
   const daysBefore = yearAgo.days.slice(-7)
@@ -148,6 +160,7 @@ function Results({
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             {formatShortDate(week.from)} – {formatShortDate(week.to)}
+            {week.through < week.to ? ` · dane do ${formatShortDate(week.through)}` : ''}
           </p>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <p className="text-5xl font-semibold tracking-tight">{formatValue(metric, week.now)}</p>
@@ -155,6 +168,7 @@ function Results({
           </div>
           <p className="text-sm text-muted-foreground">
             rok temu <span className="font-medium text-foreground/80">{formatValue(metric, week.before)}</span>
+            {week.through < week.to ? ' (te same dni)' : ''}
           </p>
           {week.change != null && week.skipped.length > 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -165,14 +179,14 @@ function Results({
         <TrendStrip
           weeks={weeks}
           metric={metric}
-          onPick={canCompare ? (week) => navigate(rangeComparison(week.from, week.to)) : undefined}
+          onPick={canCompare ? (week) => navigate(rangeComparison(week.from, week.through)) : undefined}
         />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1 text-sm">
         <div className="flex gap-5 text-muted-foreground" aria-hidden>
           <span className="flex items-center gap-2">
-            <span className="h-3 w-2 rounded-t-[3px] bg-blue-600 dark:bg-blue-500" /> Ostatnie 7 dni
+            <span className="h-3 w-2 rounded-t-[3px] bg-blue-600 dark:bg-blue-500" /> Ten tydzień
           </span>
           <span className="flex items-center gap-2">
             <span className="h-3 w-3.5 rounded-t-[3px] border-[1.5px] border-b-0 border-amber-600 bg-amber-600/15 dark:border-amber-700 dark:bg-amber-700/20" />
@@ -191,6 +205,7 @@ function Results({
         days={days}
         daysBefore={daysBefore}
         notes={notes}
+        lastSaleDate={lastSaleDate}
         onPick={canCompare ? (date) => navigate(dayComparison(date)) : undefined}
       />
 
@@ -199,7 +214,7 @@ function Results({
         <thead>
           <tr>
             <th>Dzień</th>
-            <th>Ostatnie 7 dni</th>
+            <th>Ten tydzień</th>
             <th>Rok temu</th>
             <th>Zmiana</th>
           </tr>
@@ -219,9 +234,15 @@ function Results({
                   )}
                   {noteLines(notes[index], daysBefore[index]?.date).map((line) => `, ${line}`)}
                 </td>
-                <td>{hasNoSales(day.figures) ? 'brak danych' : formatValue(metric, now)}</td>
+                <td>
+                  {day.date > lastSaleDate
+                    ? 'jeszcze bez danych'
+                    : hasNoSales(day.figures)
+                      ? 'brak danych'
+                      : formatValue(metric, now)}
+                </td>
                 <td>{formatValue(metric, before)}</td>
-                <td>{change == null ? '–' : formatChange(change)}</td>
+                <td>{change == null || day.date > lastSaleDate ? '–' : formatChange(change)}</td>
               </tr>
             )
           })}
@@ -282,12 +303,14 @@ function DayChart({
   days,
   daysBefore,
   notes,
+  lastSaleDate,
   onPick,
 }: {
   metric: DashboardChartMetric
   days: SalesHistory['days']
   daysBefore: SalesHistory['days']
   notes: DayNote[]
+  lastSaleDate: string
   onPick?: (date: string) => void
 }) {
   const clipId = useId()
@@ -343,8 +366,10 @@ function DayChart({
 
           {days.map((day, index) => {
             const x = LEFT + index * slot
+            // Dzień po ostatniej sprzedaży (tydzień w toku): pusty, bez słupka i bez zmiany.
+            const pending = day.date > lastSaleDate
             const missing = hasNoSales(day.figures)
-            const change = missing ? null : changePercent(now[index], before[index])
+            const change = missing || pending ? null : changePercent(now[index], before[index])
             return (
               <g key={day.date}>
                 <rect
@@ -370,17 +395,19 @@ function DayChart({
                     className="fill-amber-600/15 stroke-amber-600 motion-reduce:!transition-none dark:fill-amber-700/20 dark:stroke-amber-700"
                     style={barStyle(before[index], index)}
                   />
-                  {/* Ostatnie 7 dni: wąski pełny słupek z przodu, z 2 px przerwy w kolorze karty. */}
-                  <rect
-                    x={x + (slot - front) / 2}
-                    y={TOP}
-                    width={front}
-                    height={PLOT + 8}
-                    rx={4}
-                    strokeWidth={2}
-                    className="fill-blue-600 stroke-card motion-reduce:!transition-none dark:fill-blue-500"
-                    style={barStyle(now[index], index, 60)}
-                  />
+                  {/* Ten tydzień: wąski pełny słupek z przodu, z 2 px przerwy w kolorze karty. */}
+                  {pending ? null : (
+                    <rect
+                      x={x + (slot - front) / 2}
+                      y={TOP}
+                      width={front}
+                      height={PLOT + 8}
+                      rx={4}
+                      strokeWidth={2}
+                      className="fill-blue-600 stroke-card motion-reduce:!transition-none dark:fill-blue-500"
+                      style={barStyle(now[index], index, 60)}
+                    />
+                  )}
                 </g>
                 <text
                   x={x + slot / 2}
@@ -402,7 +429,7 @@ function DayChart({
                   textAnchor="middle"
                   className="text-[12px] font-medium tabular-nums"
                 >
-                  {missing ? (
+                  {pending ? null : missing ? (
                     <tspan className="fill-muted-foreground">brak danych</tspan>
                   ) : change == null ? (
                     <tspan className="fill-muted-foreground">–</tspan>
@@ -425,9 +452,9 @@ function DayChart({
                   width={slot}
                   height={HEIGHT}
                   fill="transparent"
-                  className={onPick ? 'cursor-pointer' : undefined}
+                  className={onPick && !pending ? 'cursor-pointer' : undefined}
                   onMouseEnter={() => setActive(index)}
-                  onClick={onPick ? () => onPick(day.date) : undefined}
+                  onClick={onPick && !pending ? () => onPick(day.date) : undefined}
                 />
               </g>
             )
@@ -454,7 +481,11 @@ function DayChart({
           <p className="font-medium">{formatShortDate(days[tip.index].date)}</p>
           <p className="flex items-center gap-2 tabular-nums">
             <span className="size-2 rounded-full bg-blue-600 dark:bg-blue-500" />
-            {hasNoSales(days[tip.index].figures) ? 'brak danych' : formatValue(metric, now[tip.index])}
+            {days[tip.index].date > lastSaleDate
+              ? 'jeszcze bez danych'
+              : hasNoSales(days[tip.index].figures)
+                ? 'brak danych'
+                : formatValue(metric, now[tip.index])}
           </p>
           <p className="flex items-center gap-2 text-muted-foreground tabular-nums">
             <span className="size-2 rounded-full bg-amber-600 dark:bg-amber-700" />
@@ -463,7 +494,9 @@ function DayChart({
           </p>
           <TipNote who="Teraz" note={notes[tip.index].now} />
           <TipNote who="Rok temu" note={notes[tip.index].before} />
-          {onPick ? <p className="mt-1 text-xs text-muted-foreground">Kliknij, aby porównać sprzedaż</p> : null}
+          {onPick && days[tip.index].date <= lastSaleDate ? (
+            <p className="mt-1 text-xs text-muted-foreground">Kliknij, aby porównać sprzedaż</p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -557,7 +590,7 @@ function TrendStrip({
         })}
       </svg>
       <p className="text-xs text-muted-foreground tabular-nums">
-        {shortDay(week.from)} – {shortDay(week.to)}:{' '}
+        {shortDay(week.from)} – {shortDay(week.through)}:{' '}
         <span className="font-medium text-foreground">
           {week.change == null ? 'brak danych' : formatChange(week.change)}
         </span>

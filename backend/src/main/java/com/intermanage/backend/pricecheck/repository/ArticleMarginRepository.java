@@ -90,17 +90,18 @@ public interface ArticleMarginRepository extends Repository<CadencierImport, UUI
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
             , lines as (
                 select d.id as document_id, d.document_date, d.number as document_number, l.itm8 as line_itm8,
-                       coalesce(p.itm8, e.itm8) as itm8,
+                       coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8,
                        max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
                        max(l.vat_rate) as vat_rate, sum(l.quantity) as quantity,
                        sum(l.purchase_value) as purchase_value
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+                left join merged mm on mm.alias_itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and l.purchase_value > 0
                   and d.document_date >= :since
-                group by d.id, d.document_date, d.number, l.itm8, coalesce(p.itm8, e.itm8)
+                group by d.id, d.document_date, d.number, l.itm8, coalesce(mm.main_itm8, p.itm8, e.itm8)
             ), """ + DocumentLineRepository.DELIVERY_FIXES + """
             , delivered as (
                 select l.itm8, l.document_date, l.document_number, l.supplier_code, l.supplier_name, l.vat_rate,

@@ -28,6 +28,10 @@ const INTEGRATION_SCREEN = {
   resultPage: 'na-e015',
   /** „Powrót” na wyniku integracji; dopiero po nim idziemy do Obsługi BL. */
   result: 'btnB1_Retour_LnkBouton',
+  /** Bez plików do integracji zamiast tabeli przychodzi okienko (BoiteAlerte.aspx) bez tytułu, z przyciskiem Zamknij. */
+  emptyWindow: 'ahk_class Internet Explorer_TridentDlgFrame',
+  emptyText: 'brak PZ',
+  emptyButton: 'Fermer',
 } as const
 
 /** Po Powrót z wyniku integracji strona się przeładowuje: klik w menu w tym czasie by przepadł. */
@@ -88,8 +92,11 @@ export function buildDeliveryMacro(documents: MacroDocument[], print = false) {
       `WEBCLICK|${DIALOG}|Oui`,
       // Tabela z podsumowaniem (na-e015). Powrót ma też ekran sprzed integracji, więc czekamy na tę stronę, a nie na sam
       // przycisk: inaczej Powrót padał w trakcie integracji. Potem Powrót i Obsługa BL (klik w menu ponawiany, gdyby przepadł).
-      `WEBPAGE|${WINDOW}|${INTEGRATION_SCREEN.resultPage}|${INTEGRATION_SCREEN.result}|${INTEGRATION_TIMEOUT_MS}`,
+      // Gdy nie ma czego integrować, zamiast tabeli jest „brak PZ bezpośrednich do integracji”: Zamknij i od razu Obsługa BL
+      // (odtwarzacz od wersji 0.53).
+      `WEBPAGE|${WINDOW}|${INTEGRATION_SCREEN.resultPage}|${INTEGRATION_SCREEN.result}|${INTEGRATION_TIMEOUT_MS}|${INTEGRATION_SCREEN.emptyWindow}|${INTEGRATION_SCREEN.emptyText}|${INTEGRATION_SCREEN.emptyButton}|bez-integracji`,
       `WEBCLICK|${WINDOW}|${INTEGRATION_SCREEN.result}`,
+      `LABEL|bez-integracji`,
       `SLEEP|${AFTER_RESULT_BACK_MS}`,
       `WEBOPEN|${WINDOW}|${MENU.directDeliveries}|${MENU.blScreen}|${bl.createCodeButton}`,
       `WEBWAIT|${WINDOW}|${bl.createCodeButton}||${PAGE_TIMEOUT_MS}`,

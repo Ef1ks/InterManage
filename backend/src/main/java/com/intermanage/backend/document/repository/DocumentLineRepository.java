@@ -14,6 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.leaflet.repository.PromoLeafletRepository;
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.promotion.repository.PromotionReportRepository;
 
 public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID> {
@@ -361,13 +362,17 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * którego nie ma w kartotece, więc taka linia należy do artykułu po EAN-ie (główny, dawne pary, multikody; bez zer
      * wiodących, też krótkie kody towaru luzem, np. 219394). Linia z ITM8 z kartoteki należy tylko do swojego
      * artykułu, bo EAN-y bywają przenoszone między artykułami. Warunek {@link #ARTICLE_LINE} korzysta z {@link #ARTICLE_EANS}.
+     * Artykuł obejmuje też połączone z nim artykuły usunięte z kartoteki ({@code article_merges}): ich linie i EAN-y.
      */
     String ARTICLE_EANS = """
             with article_eans as (
-                select ltrim(btrim(p.ean), '0') as ean from products p where p.store_id = :storeId and p.itm8 = :itm8
+                select ltrim(btrim(p.ean), '0') as ean from products p
+                where p.store_id = :storeId and p.itm8 in """ + ArticleMergeRepository.ARTICLE_ITM8S + """
+
                 union
                 select ltrim(btrim(pe.ean), '0') from product_eans pe join products p on p.id = pe.product_id
-                where p.store_id = :storeId and p.itm8 = :itm8
+                where p.store_id = :storeId and p.itm8 in """ + ArticleMergeRepository.ARTICLE_ITM8S + """
+
                 union
                 select ltrim(btrim(pc.ean), '0') from product_codes pc
                 where pc.store_id = :storeId and pc.itm8 = :itm8 and pc.current
@@ -375,9 +380,29 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """;
 
     String ARTICLE_LINE = """
-            (l.itm8 = :itm8
+            (l.itm8 in """ + ArticleMergeRepository.ARTICLE_ITM8S + """
+
              or ltrim(btrim(l.ean), '0') in (select ean from article_eans where ean <> '')
                 and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8))
+            """;
+
+    /**
+     * Id linii dokumentów artykułu, ta sama reguła co {@link #ARTICLE_LINE}, ale jako dwie gałęzie po indeksach
+     * ({@code document_lines_itm8_idx} i {@code document_lines_ean_plain}, V164) zamiast warunku z OR, przy którym
+     * baza przeglądała całe {@code document_lines} (ok. 0,6 s przy każdym otwarciu karty). Liczone raz
+     * ({@code materialized}). Linie wszystkich sklepów: sklep zawęża złączenie z dokumentem.
+     */
+    String ARTICLE_LINE_IDS = """
+            , article_line_ids as materialized (
+                select l.id from document_lines l where l.itm8 in """ + ArticleMergeRepository.ARTICLE_ITM8S + """
+
+                union
+                select l.id
+                from article_eans e
+                join document_lines l on ltrim(btrim(l.ean), '0') = e.ean
+                where e.ean <> ''
+                  and not exists (select 1 from products o where o.store_id = :storeId and o.itm8 = l.itm8)
+            )
             """;
 
     /**
@@ -392,15 +417,15 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * artykułu, więc przyjęcie od bazy (538, 88110) do 2 dni od daty rozrzutu MEA z tym artykułem (ITM8 równoległy
      * albo EAN) też jest dostawą na to MEA: przyjęcie bywa zamykane dzień, dwa po rozrzucie.
      */
-    @Query(value = ARTICLE_EANS + """
-            , lines as (
+    @Query(value = ARTICLE_EANS + ARTICLE_LINE_IDS + """
+            , lines as materialized (
                 select d.id as document_id, l.itm8,
                        max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name,
                        sum(l.quantity) as quantity, coalesce(sum(l.purchase_value), 0) as purchase_value
-                from document_lines l
+                from article_line_ids a
+                join document_lines l on l.id = a.id
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
-                  and """ + ARTICLE_LINE + """
                 group by d.id, l.itm8
             ), fix_lines as (
                 select c.delivery_id, l.itm8,
@@ -428,14 +453,19 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select document_id as id from received
                 union
                 select delivery_id from fixed where quantity > 0
-            ), article_mea as (
+            ), article_mea as materialized (
+                -- Raz na zapytanie (bez materialized baza wklejała je w podzapytanie przy każdej dostawie: 50 × pełny
+                -- skan linii MEA, ok. 3,7 s), dwie gałęzie po indeksach V164 zamiast warunku z OR.
                 select distinct md.number, x.day
-                from mea_document_lines ml
-                join mea_documents md on md.id = ml.document_id
+                from (select ml.document_id from mea_document_lines ml
+                      where ltrim(ml.parallel_itm8, '0') = ltrim(:itm8, '0')
+                      union
+                      select ml.document_id from article_eans e
+                      join mea_document_lines ml on ltrim(btrim(ml.ean), '0') = e.ean
+                      where e.ean <> '') a
+                join mea_documents md on md.id = a.document_id
                 cross join lateral unnest(array[md.dispatch_1, md.dispatch_2, md.dispatch_3, md.dispatch_4]) x(day)
                 where x.day is not null
-                  and (ltrim(ml.parallel_itm8, '0') = ltrim(:itm8, '0')
-                       or ltrim(btrim(ml.ean), '0') in (select ean from article_eans where ean <> ''))
             )
             select d.id as document_id, d.number as document_number, d.document_date,
                    (select string_agg(distinct code, ',' order by code)
@@ -515,15 +545,15 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * Ostatnie dokumenty artykułu inne niż przyjęcia i ich korekty (likwidacje, ruchy międzymagazynowe, przeniesienia
      * stanów, zwroty, wydania), od najnowszego. Ilość jak w raporcie, więc w przeniesieniu stanów ze znakiem.
      */
-    @Query(value = ARTICLE_EANS + """
+    @Query(value = ARTICLE_EANS + ARTICLE_LINE_IDS + """
             select d.id as document_id, d.type as document_type, d.number as document_number,
                    d.document_date as document_date, sum(l.quantity) as quantity,
                    exists (select 1 from document_gratis g
                            where g.document_id = d.id and g.deleted_at is null) as gratis
-            from document_lines l
+            from article_line_ids a
+            join document_lines l on l.id = a.id
             join documents d on d.id = l.document_id and d.error_marked_at is null
             where d.store_id = :storeId and d.type not in ('PZ', 'PK', 'WZ')
-              and """ + ARTICLE_LINE + """
             group by d.id, d.type, d.number, d.document_date
             having sum(l.quantity) <> 0
             order by d.document_date desc, length(d.number) desc, d.number desc
@@ -539,7 +569,7 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             select cast(d.document_date as date) as day, coalesce(sum(l.purchase_value), 0) as purchase_value
             from document_lines l
             join documents d on d.id = l.document_id and d.error_marked_at is null
-            where d.store_id = :storeId and d.type = 'PL' and l.itm8 = :itm8
+            where d.store_id = :storeId and d.type = 'PL' and l.itm8 in """ + ArticleMergeRepository.ARTICLE_ITM8S + """
               and d.document_date >= cast(:from as timestamp)
               and d.document_date < cast(:to as timestamp) + interval '1 day'
             group by 1
@@ -802,8 +832,8 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
      * dostawcy spoza kartoteki ({@code 99…}) po EAN-ie, jak w {@link #ARTICLE_LINE}. Gdy EAN pasuje do kilku
      * artykułów, wybór ma być powtarzalny, więc bierze najmniejszy ITM8.
      */
-    String STORE_ARTICLE_EANS = """
-            with article_codes as (
+    String STORE_ARTICLE_EANS = "with " + ArticleMergeRepository.MERGED + """
+            , article_codes as (
                 select ltrim(btrim(p.ean), '0') as ean, p.itm8 from products p where p.store_id = :storeId
                 union
                 select ltrim(btrim(pc.ean), '0'), pc.itm8 from product_codes pc
@@ -812,17 +842,20 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 select ltrim(btrim(pe.ean), '0'), p.itm8 from product_eans pe join products p on p.id = pe.product_id
                 where p.store_id = :storeId
             ), article_eans as (
-                select ean, min(itm8) as itm8 from article_codes where ean <> '' group by ean
+                select c.ean, min(coalesce(mm.main_itm8, c.itm8)) as itm8
+                from article_codes c left join merged mm on mm.alias_itm8 = c.itm8
+                where c.ean <> '' group by c.ean
             )
             """;
 
     String DELIVERED_LINES = STORE_ARTICLE_EANS + """
             , delivered as (
                 select d.id as document_id, d.number as document_number, d.document_date, l.supplier_code,
-                       l.supplier_name, l.quantity, l.purchase_value, coalesce(p.itm8, e.itm8) as itm8
+                       l.supplier_name, l.quantity, l.purchase_value, coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+                left join merged mm on mm.alias_itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0
                   and d.document_date >= :since

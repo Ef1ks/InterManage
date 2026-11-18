@@ -55,11 +55,12 @@ public interface MissingAssortmentRepository extends Repository<Sale, Sale.Key> 
      */
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
             , bought as (
-                select coalesce(p.itm8, e.itm8) as itm8, d.id as document_id, d.document_date, l.supplier_code,
+                select coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8, d.id as document_id, d.document_date, l.supplier_code,
                        l.supplier_name, l.quantity, l.purchase_value
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+                left join merged mm on mm.alias_itm8 = l.itm8
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId and d.type = 'PZ' and l.quantity > 0 and d.document_date >= :since
                   and coalesce(ltrim(btrim(l.supplier_code), '0'), '') <> all (cast(:baseCodes as varchar[]))
@@ -96,14 +97,15 @@ public interface MissingAssortmentRepository extends Repository<Sale, Sale.Key> 
      * międzymagazynowe z ilością na minus (towar od innego sklepu), także pod lokalnym ITM8 po EAN-ie.
      */
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
-            select distinct coalesce(p.itm8, e.itm8) as itm8, cast(d.document_date as date) as day
+            select distinct coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8, cast(d.document_date as date) as day
             from document_lines l
             join documents d on d.id = l.document_id and d.error_marked_at is null
             left join products p on p.store_id = :storeId and p.itm8 = l.itm8
+            left join merged mm on mm.alias_itm8 = l.itm8
             left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
             where d.store_id = :storeId and d.document_date >= :since
               and ((d.type = 'PZ' and l.quantity > 0) or (d.type = 'MM' and l.quantity < 0))
-              and coalesce(p.itm8, e.itm8) = any (cast(:itm8s as varchar[]))
+              and coalesce(mm.main_itm8, p.itm8, e.itm8) = any (cast(:itm8s as varchar[]))
             """, nativeQuery = true)
     List<DeliveryDay> findDeliveryDays(UUID storeId, LocalDateTime since, String[] itm8s);
 

@@ -30,6 +30,7 @@ import com.intermanage.backend.product.dto.ProductCodeImportResponse;
 import com.intermanage.backend.product.dto.ProductCodeReportRow;
 import com.intermanage.backend.product.entity.ProductCodeImport;
 import com.intermanage.backend.product.mapper.ProductImportMapper;
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.product.repository.ProductCodeImportRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -56,10 +57,12 @@ public class ProductCodeImportService {
     private final ProductImportMapper mapper;
     private final StoreRepository stores;
     private final AppUserRepository users;
+    private final ArticleMergeRepository merges;
 
     public ProductCodeImportService(TransactionTemplate transaction, ProductCodeReportParser parser,
             ProductCodeImportRepository imports, ProductImportMapper mapper, StoreRepository stores,
-            AppUserRepository users) {
+            AppUserRepository users, ArticleMergeRepository merges) {
+        this.merges = merges;
         this.transaction = transaction;
         this.parser = parser;
         this.imports = imports;
@@ -154,6 +157,8 @@ public class ProductCodeImportService {
             updated += counts.getUpdated();
         }
         imports.retireMissing(storeId, saved.getId());
+        // Nowy multikod może połączyć artykuł usunięty z kartoteki z artykułem, do którego przeszedł jego EAN.
+        merges.refresh(storeId);
         long missing = imports.countMissing(storeId, saved.getId());
         saved.recordResult((int) created, (int) updated, (int) missing);
         return mapper.toResponse(saved);

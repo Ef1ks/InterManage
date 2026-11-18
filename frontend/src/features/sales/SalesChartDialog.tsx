@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
 import { bonNumber, documentPaths, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
-import { findProducts } from '@/features/inventory/api'
+import { findProducts, useProductPrices } from '@/features/inventory/api'
 import { ArticlePriceHistory } from '@/features/inventory/ArticlePriceHistory'
 import { meaDocumentPath } from '@/features/mea/paths'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
@@ -21,6 +21,7 @@ import {
   type ReportKind,
   type SalesChartTarget,
   useArticleDeliveries,
+  useArticleMea,
   useArticleProtocols,
   useSalesArticle,
   useSalesHistory,
@@ -28,7 +29,7 @@ import {
 import { type DateRange, formatRange } from '@/features/sales/periods'
 import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
 import { marginOf, marginShare } from '@/lib/margin'
-import type { ArticleDelivery, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
+import type { ArticleDelivery, MergedArticle, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LoadingPanel } from '@/components/LoadingPanel'
 
@@ -183,21 +184,56 @@ function useCatalogTarget(storeId: string, target: SalesChartTarget) {
     enabled: article.data === null && ean != null && /^\d{1,14}$/.test(ean),
     staleTime: 5 * 60_000,
   })
-  if (target.kind !== 'article' || article.data !== null || !ean) return { target, foreignItm8: null }
+  // Do czasu odpowiedzi kartoteki (i szukania po EAN-ie) nie wiadomo, który artykuł pokazać.
+  const resolving = article.isLoading || byEan.isLoading
+  if (target.kind !== 'article' || article.data !== null || !ean) return { target, foreignItm8: null, resolving }
   // Główny EAN ma pierwszeństwo; kod z multikodów albo dawnej pary daje artykuł tylko, gdy jest jeden.
   const match =
     byEan.data?.items.find((item) => item.ean && withoutZeros(item.ean) === withoutZeros(ean)) ??
     (byEan.data?.total === 1 ? byEan.data.items[0] : undefined)
-  if (!match || match.itm8 === target.itm8) return { target, foreignItm8: null }
+  if (!match || match.itm8 === target.itm8) return { target, foreignItm8: null, resolving }
   return {
     target: { ...target, itm8: match.itm8, name: match.name ?? target.name, brand: match.brand ?? target.brand },
     foreignItm8: target.itm8,
+    resolving,
   }
 }
 
 function ChartContent(props: Omit<Parameters<typeof ChartBody>[0], 'foreignItm8'>) {
-  const { target, foreignItm8 } = useCatalogTarget(props.storeId, props.target)
+  const { target, foreignItm8, resolving } = useCatalogTarget(props.storeId, props.target)
+  if (resolving) return <CardLoading target={props.target} inline={props.inline} />
   return <ChartBody key={chartKey(target)} {...props} target={target} foreignItm8={foreignItm8} />
+}
+
+/**
+ * Karta artykułu pokazuje się dopiero ze wszystkimi danymi naraz (kartoteka, wykres, gazetki MEA, dostawy, protokoły,
+ * historia cen), zamiast doskakiwać sekcjami; do tego czasu jeden blok wczytywania. Błąd zapytania też kończy
+ * czekanie, a sekcja pokazuje wtedy swój komunikat. Te same klucze zapytań co sekcje, więc nic nie idzie dwa razy.
+ */
+function useArticleCardLoading(storeId: string, itm8: string | null, historyLoading: boolean) {
+  const canSeePrices = useCan('INVENTORY')
+  const canSeeSalesPrices = useCan('SALES')
+  const article = useSalesArticle(storeId, itm8)
+  const deliveries = useArticleDeliveries(storeId, itm8)
+  const protocols = useArticleProtocols(storeId, itm8)
+  const mea = useArticleMea(storeId, itm8)
+  const prices = useProductPrices(storeId, itm8 ?? '', itm8 != null && (canSeePrices || canSeeSalesPrices))
+  if (itm8 == null) return false
+  return [article, deliveries, protocols, mea, prices].some((query) => query.isLoading) || historyLoading
+}
+
+function CardLoading({ target, inline }: { target: SalesChartTarget; inline?: boolean }) {
+  return (
+    <>
+      {!inline && (
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-lg leading-snug">{title(target, undefined)}</DialogTitle>
+          <DialogDescription>Statystyki artykułu</DialogDescription>
+        </DialogHeader>
+      )}
+      <LoadingPanel className="h-[36rem] rounded-xl" />
+    </>
+  )
 }
 
 function ChartBody({
@@ -231,6 +267,7 @@ function ChartBody({
   }
   const history = useSalesHistory(storeId, kind, target, range, filter)
   const article = useSalesArticle(storeId, target.kind === 'article' ? target.itm8 : null)
+  const cardLoading = useArticleCardLoading(storeId, target.kind === 'article' ? target.itm8 : null, history.isLoading)
   const showMargin = hasMargin(kind, target)
   // Wykres da się schować przy artykule (zostają dane z kartoteki, dostawy i protokoły); grupa ma tylko wykres.
   const [chartHiddenSetting, setChartHidden] = useChartHidden()
@@ -285,6 +322,8 @@ function ChartBody({
     const target = allBars[index]
     if (target) setZoom({ start: target.start, end: target.end })
   }
+
+  if (cardLoading) return <CardLoading target={target} inline={inline} />
 
   return (
     <>
@@ -571,6 +610,39 @@ function useStockCover(
 
 const NO_FILTER: string[] = []
 
+const shortItm8 = (itm8: string) => itm8.replace(/^0+/, '')
+
+const mergedLabel = (merged: MergedArticle) => `${shortItm8(merged.itm8)}${merged.name ? ` ${merged.name}` : ''}`
+
+/**
+ * Połączenie artykułów przez multikod: na artykule głównym, które usunięte artykuły do niego doszły (ich sprzedaż,
+ * dostawy i protokoły są na tej karcie), a na usuniętym, z którym artykułem go połączono.
+ */
+function MergedNote({ article }: { article: SalesArticle }) {
+  if (article.mergedInto) {
+    return (
+      <p className="rounded-lg bg-sky-200 px-4 py-2 text-sm text-sky-950 dark:bg-sky-900/70 dark:text-sky-50">
+        Artykuł usunięty z kartoteki. Jego EAN {article.mergedInto.ean} należy teraz do{' '}
+        <span className="font-semibold">{mergedLabel(article.mergedInto)}</span> i tam liczy się jego sprzedaż oraz
+        dostawy.
+      </p>
+    )
+  }
+  if (article.mergedArticles.length === 0) return null
+  return (
+    <div className="rounded-lg bg-sky-200 px-4 py-2 text-sm text-sky-950 dark:bg-sky-900/70 dark:text-sky-50">
+      <span className="font-semibold">Połączone artykuły:</span> sprzedaż, dostawy i protokoły tej karty obejmują też
+      <ul className="mt-1 grid gap-0.5">
+        {article.mergedArticles.map((merged) => (
+          <li key={merged.itm8} className="tabular-nums">
+            {mergedLabel(merged)} <span className="opacity-75">(przez EAN {merged.ean})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /** Duża plakietka przy artykule z bieżącej listy cadencier: na stronie i w oknie statystyk tak samo. */
 function CadencierBadge() {
   return (
@@ -658,6 +730,7 @@ function ArticleFacts({
 
   return (
     <div className="grid gap-3">
+      <MergedNote article={article} />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-5">
         <Fact label="Stan">
           <span className={cn(article.stock != null && article.stock < 0 && 'text-destructive')}>

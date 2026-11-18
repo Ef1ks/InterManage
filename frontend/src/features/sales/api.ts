@@ -210,18 +210,20 @@ export function useArticleDeliveries(storeId: string, itm8: string | null) {
 }
 
 /** Gazetki MEA artykułu, które trwają albo dopiero będą: rozrzuty i zamówione kartony. */
-export function useArticleMea(storeId: string, itm8: string) {
+export function useArticleMea(storeId: string, itm8: string | null) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'article', itm8, 'mea'],
     queryFn: () => api<ArticleMea[]>(`${reportsPath(storeId)}/articles/${itm8}/mea`),
+    enabled: itm8 != null,
   })
 }
 
 /** Ostatnie protokoły artykułu inne niż przyjęcia i korekty, od najnowszego. */
-export function useArticleProtocols(storeId: string, itm8: string) {
+export function useArticleProtocols(storeId: string, itm8: string | null) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'article', itm8, 'protocols'],
     queryFn: () => api<ArticleProtocol[]>(`${reportsPath(storeId)}/articles/${itm8}/protocols`),
+    enabled: itm8 != null,
   })
 }
 

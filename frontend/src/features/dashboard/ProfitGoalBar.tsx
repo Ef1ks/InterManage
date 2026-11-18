@@ -1,0 +1,94 @@
+import { useCan } from '@/features/auth/api'
+import { useProfitTargetProgress } from '@/features/sales/api'
+import { yearShare } from '@/features/sales/year-share'
+import { formatShortDate } from '@/lib/dates'
+import { cn } from '@/lib/utils'
+
+const whole = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 })
+const percentFormat = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const money = (value: number) => `${whole.format(value)} zł`
+
+/**
+ * Pasek na całą szerokość panelu wyników: marża po odliczeniu likwidacji od 1 stycznia do ostatniego dnia ze sprzedażą
+ * wobec rocznego celu z ustawień Podsumowania sprzedaży i strat. Kreska to plan na ten dzień (cel rozłożony równo na
+ * dni roku, jak w kafelkach podsumowania), a pod paskiem: ile zł i ile % celu, i o ile sklep jest przed albo za planem.
+ */
+export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; lastSaleDate: string }) {
+  const canSetGoal = useCan('SALES', 'EDIT')
+  const progress = useProfitTargetProgress(storeId, lastSaleDate)
+  const data = progress.data
+  if (!data) return null
+
+  const target = data.target?.marginAfterLossesValue ?? null
+  const achieved = data.marginAfterLossesValue
+  if (target == null || achieved == null) {
+    return canSetGoal ? (
+      <p className="text-xs text-muted-foreground">
+        Ustaw roczny cel marży po stratach w Podsumowaniu sprzedaży i strat (koło zębate), żeby widzieć tu postęp{' '}
+        {data.year}.
+      </p>
+    ) : null
+  }
+
+  const share = achieved / target
+  const planned = yearShare(data.to)
+  const plannedValue = target * planned
+  const difference = achieved - plannedValue
+  const ahead = difference >= 0
+
+  return (
+    <div className="space-y-1.5 tabular-nums">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-sm">
+        <span className="text-muted-foreground">
+          Marża po likwidacjach od 1 stycznia do {formatShortDate(data.to)}:{' '}
+          <span className="font-semibold text-foreground">{money(achieved)}</span>
+        </span>
+        <span>
+          <span className="font-semibold">{percentFormat.format(share * 100)}%</span>
+          <span className="text-muted-foreground">
+            {' '}
+            celu {data.year} ({money(target)})
+          </span>
+        </span>
+      </div>
+      <div
+        role="meter"
+        aria-label={`Marża po likwidacjach wobec celu ${data.year}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(share * 1000) / 10}
+        aria-valuetext={`${percentFormat.format(share * 100)}% celu, plan na ten dzień ${percentFormat.format(planned * 100)}%`}
+        className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className={cn(
+            'h-full rounded-full',
+            ahead ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-amber-500 dark:bg-amber-600',
+          )}
+          style={{ width: `${Math.min(Math.max(share, 0), 1) * 100}%` }}
+        />
+        <div
+          aria-hidden
+          title={`Plan na ${formatShortDate(data.to)}: ${money(plannedValue)}`}
+          className="absolute inset-y-0 w-0.5 bg-foreground"
+          style={{ left: `${Math.min(planned, 1) * 100}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-xs">
+        <span className="text-muted-foreground">
+          plan na ten dzień {money(plannedValue)} ({percentFormat.format(planned * 100)}%)
+        </span>
+        <span
+          className={cn(
+            'rounded-md px-1.5 py-0.5 font-semibold',
+            ahead
+              ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-950/60 dark:text-emerald-100'
+              : 'bg-amber-200 text-amber-950 dark:bg-amber-950/60 dark:text-amber-100',
+          )}
+        >
+          {ahead ? `${money(difference)} przed planem` : `${money(-difference)} za planem`}
+        </span>
+      </div>
+    </div>
+  )
+}

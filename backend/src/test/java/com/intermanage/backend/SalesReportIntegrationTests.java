@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.Test;
@@ -21,8 +22,10 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;
@@ -44,6 +47,12 @@ class SalesReportIntegrationTests {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    @Autowired
+    ArticleMergeRepository merges;
 
     @Test
     void comparesTwoPeriodsDownTheNomenclatureTree() throws Exception {
@@ -380,6 +389,84 @@ class SalesReportIntegrationTests {
                 .andExpect(jsonPath("$[0].mea[0].promoFrom").value("2026-12-17"))
                 .andExpect(jsonPath("$[1].documentId").value(outside))
                 .andExpect(jsonPath("$[1].meaCodes.length()").value(0));
+    }
+
+    @Test
+    void articleDeletedInCatalogBecomesPartOfArticleThatGotItsEanAsMultiCode() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String oldReport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, report_generated_at, total_rows, created_count,
+                    updated_count, unchanged_count, missing_count)
+                values (?::uuid, 'stary.xlsx', timestamp '2026-09-01 06:00', 1, 1, 0, 0, 0) returning id""",
+                String.class, storeId);
+        String newReport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, report_generated_at, total_rows, created_count,
+                    updated_count, unchanged_count, missing_count)
+                values (?::uuid, 'nowy.xlsx', timestamp '2026-10-03 06:00', 1, 1, 0, 0, 0) returning id""",
+                String.class, storeId);
+        // Mleko pod lokalnym ITM8 usunięte w Mercalys (nie ma go w nowym raporcie), a jego EAN przeszedł na mleko
+        // z centrali jako multikod.
+        String old = insertProduct(storeId, oldReport, "MLEKO UHT 3.2  1L", "01 01 01");
+        String main = insertProduct(storeId, newReport, "MLEKO UHT 3,2% 1L", "01 01 01");
+        String oldEan = jdbc.queryForObject("select ean from products where store_id = ?::uuid and itm8 = ?",
+                String.class, storeId, old);
+        String codes = jdbc.queryForObject("""
+                insert into product_code_imports (store_id, file_name, total_rows)
+                values (?::uuid, 'Multikody.xlsx', 2) returning id""", String.class, storeId);
+        jdbc.update("""
+                insert into product_codes (store_id, itm8, ean, prio, first_import_id, last_import_id)
+                values (?::uuid, ?, ?, false, ?::uuid, ?::uuid)""", storeId, main, oldEan, codes, codes);
+        refreshMerges(storeId);
+
+        String salesImport = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', timestamp '2026-10-03 07:15:00', date '2026-09-29',
+                    date '2026-10-02', 2, 2, 0, 0) returning id""", String.class, storeId);
+        insertSale(storeId, salesImport, "2026-09-29", old, oldEan, "4", "8", "14", "1", "5");
+        insertSale(storeId, salesImport, "2026-10-01", main, oldEan, "3", "6", "10.5", "0.5", "4");
+        String documentImport = jdbc.queryForObject("""
+                insert into document_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_lines, saved_lines, created_count, updated_count, skipped_lines)
+                values (?::uuid, 'Zeszyt2.xlsx', timestamp '2026-10-03 08:00:00', date '2026-09-01',
+                    date '2026-10-02', 2, 2, 2, 0, 0) returning id""", String.class, storeId);
+        String delivery = insertDocument(storeId, documentImport, "PZ", "1000100", "2026-09-20 10:00");
+        insertDeliveryLine(delivery, 1, old, "12", "24");
+        String liquidation = insertDocument(storeId, documentImport, "PL", "PL01", "2026-09-30 10:00");
+        insertDeliveryLine(liquidation, 1, old, "1", "-2");
+
+        mvc.perform(get(historyUrl(storeId) + "&itm8=" + main).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total.quantity").value(7.0))
+                .andExpect(jsonPath("$.lossValue").value(2.0));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + main + "/deliveries").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documentId").value(delivery));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + main + "/protocols").cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documentId").value(liquidation));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + main).cookie(owner))
+                .andExpect(jsonPath("$.mergedArticles.length()").value(1))
+                .andExpect(jsonPath("$.mergedArticles[0].itm8").value(old))
+                .andExpect(jsonPath("$.mergedArticles[0].ean").value(oldEan.replaceFirst("^0+", "")))
+                .andExpect(jsonPath("$.mergedInto").value(nullValue()));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + old).cookie(owner))
+                .andExpect(jsonPath("$.mergedArticles.length()").value(0))
+                .andExpect(jsonPath("$.mergedInto.itm8").value(main));
+
+        // Kod przestał obowiązywać w nowszych multikodach: połączenie się kończy (znacznik), karta wraca do swojego.
+        jdbc.update("update product_codes set current = false where store_id = ?::uuid", storeId);
+        refreshMerges(storeId);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from article_merges where store_id = ?::uuid and ended_at is not null""",
+                Integer.class, storeId)).isEqualTo(1);
+        mvc.perform(get(historyUrl(storeId) + "&itm8=" + main).cookie(owner))
+                .andExpect(jsonPath("$.total.quantity").value(3.0));
+    }
+
+    private void refreshMerges(String storeId) {
+        transaction.executeWithoutResult(status -> merges.refresh(UUID.fromString(storeId)));
     }
 
     @Test

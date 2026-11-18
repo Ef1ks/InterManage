@@ -26,11 +26,12 @@ export const YEAR_AGO_DAYS = 364
 export const TREND_WEEKS = 12
 
 /**
- * Okno wyników: {@link TREND_WEEKS} tygodni po 7 dni kończących się na ostatnim dniu ze sprzedażą (ostatni z nich to
- * tydzień na wykresie) i te same dni tygodnia rok wcześniej.
+ * Okno wyników: {@link TREND_WEEKS} pełnych tygodni pon.-niedz., ostatni to tydzień z ostatnim dniem ze sprzedażą
+ * (na wykresie; dni po nim są puste), i te same dni tygodnia rok wcześniej. Jak w przeglądarce.
  */
 export function storeWindow(lastSaleDate: string) {
-  const current = { from: addDays(lastSaleDate, -(TREND_WEEKS * 7 - 1)), to: lastSaleDate }
+  const to = addDays(mondayOf(lastSaleDate), 6)
+  const current = { from: addDays(to, -(TREND_WEEKS * 7 - 1)), to }
   const yearAgo = { from: addDays(current.from, -YEAR_AGO_DAYS), to: addDays(current.to, -YEAR_AGO_DAYS) }
   return { current, yearAgo }
 }

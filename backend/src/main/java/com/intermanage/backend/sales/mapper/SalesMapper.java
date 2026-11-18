@@ -32,11 +32,14 @@ public interface SalesMapper {
 
     @Mapping(target = "reportGeneratedAt", source = "product.lastSeenImport.reportGeneratedAt")
     @Mapping(target = "nomenclaturePath", source = "path")
+    @Mapping(target = "itm8", source = "product.itm8")
+    @Mapping(target = "ean", source = "product.ean")
+    @Mapping(target = "name", source = "product.name")
     @Mapping(target = "promoPrice", expression = "java(activePromo(product) ? product.getPromoPrice() : null)")
     @Mapping(target = "promoFrom", expression = "java(activePromo(product) ? product.getPromoFrom() : null)")
     @Mapping(target = "promoTo", expression = "java(activePromo(product) ? product.getPromoTo() : null)")
     SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path, BigDecimal vatPercent,
-            boolean cadencier);
+            boolean cadencier, List<SalesArticleResponse.Merged> mergedArticles, SalesArticleResponse.Merged mergedInto);
 
     /** Promocja z kasy trwa dziś (Europe/Warsaw). */
     default boolean activePromo(Product product) {

@@ -993,6 +993,14 @@ class KsefIntegrationTests {
                 .andExpect(jsonPath("$.invoices[0].baseSupplierName").value("ARTEK"))
                 .andExpect(jsonPath("$.invoices[0].baseSupplierInvoice").value("F61577/26/"));
         list(owner, makowa, "&query=F61577").andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("FV/X")));
+        // Korekta refaktury nie ma kodu dostawcy (baza podaje go tylko na fakturze): wychodzi przez fakturę korygowaną.
+        jdbc.update("update ksef_invoice_corrected set invoice_number = 'FV/X' where invoice_number = 'FV/2025/OLD'");
+        list(owner, makowa, "&query=artek")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(containsInAnyOrder("FV/X", "KOR/OLD")));
+        list(owner, makowa, "&query=artek&kind=CORRECTIONS")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(contains("KOR/OLD")));
+        list(owner, makowa, "&query=F61577")
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber").value(containsInAnyOrder("FV/X", "KOR/OLD")));
 
         // Numer WZ z karty reklamacyjnej (bez zera wiodącego): faktura z tym WZ i korekta, która ją koryguje.
         list(owner, makowa, "&query=9516050250")

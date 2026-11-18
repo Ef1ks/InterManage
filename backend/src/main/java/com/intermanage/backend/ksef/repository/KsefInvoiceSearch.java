@@ -152,13 +152,13 @@ public final class KsefInvoiceSearch {
                         cb.like(plain(cb, root.get("sellerName")), contains),
                         cb.like(root.get("sellerNip"), contains),
                         cb.like(plain(cb, root.get("ksefNumber")), contains),
-                        cb.like(plain(cb, root.get("baseSupplierInvoice")), contains),
-                        cb.like(root.get("baseSupplierCode"), contains),
-                        cb.exists(baseSupplierNamed(root, query, cb, contains)),
+                        baseSupplierMatches(root, query, cb, contains),
                         root.get("id").in(withDeliveryNote(query, cb, nip, contains)),
                         root.get("id").in(correctingNumber(query, cb, nip, contains)),
                         root.get("id").in(correctingDeliveryNote(query, cb, nip, contains, true)),
-                        root.get("id").in(correctingDeliveryNote(query, cb, nip, contains, false))));
+                        root.get("id").in(correctingDeliveryNote(query, cb, nip, contains, false)),
+                        root.get("id").in(correctingBaseSupplier(query, cb, nip, contains, true)),
+                        root.get("id").in(correctingBaseSupplier(query, cb, nip, contains, false))));
             }
             return cb.and(all.toArray(Predicate[]::new));
         };
@@ -216,10 +216,40 @@ public final class KsefInvoiceSearch {
     }
 
     /**
+     * Korekty refaktury bazy pasującej do słowa ({@link #baseSupplierMatches}). Baza podaje kod dostawcy i numer jego
+     * faktury tylko na fakturze, nie na korekcie, więc idziemy przez fakturę korygowaną: po numerze KSeF albo NIP-ie
+     * sprzedawcy i numerze, w dwóch podzapytaniach jak {@link #correctingDeliveryNote}.
+     */
+    private static Subquery<UUID> correctingBaseSupplier(CriteriaQuery<?> query, CriteriaBuilder cb, String nip,
+            String contains, boolean byKsefNumber) {
+        Subquery<UUID> subquery = query.subquery(UUID.class);
+        Root<KsefInvoice> correction = subquery.from(KsefInvoice.class);
+        Join<KsefInvoice, KsefInvoice.CorrectedRef> ref = correction.join("correctedInvoices");
+        Root<KsefInvoice> corrected = subquery.from(KsefInvoice.class);
+        Predicate same = byKsefNumber
+                ? cb.equal(corrected.get("ksefNumber"), ref.get("ksefNumber"))
+                : cb.and(cb.isNull(ref.get("ksefNumber")),
+                        cb.equal(corrected.get("sellerNip"), correction.get("sellerNip")),
+                        cb.equal(cb.upper(corrected.get("invoiceNumber")), cb.upper(ref.get("invoiceNumber"))));
+        subquery.select(correction.get("id")).where(cb.equal(correction.get("nip"), nip),
+                cb.equal(corrected.get("nip"), nip), same, cb.isNotNull(corrected.get("baseSupplierCode")),
+                baseSupplierMatches(corrected, subquery, cb, contains));
+        return subquery;
+    }
+
+    /** Refaktura bazy pasuje do słowa: numer faktury dostawcy, kod dostawcy w bazie albo przypisany mu dostawca. */
+    private static Predicate baseSupplierMatches(Root<KsefInvoice> invoice, CommonAbstractCriteria query,
+            CriteriaBuilder cb, String contains) {
+        return cb.or(cb.like(plain(cb, invoice.get("baseSupplierInvoice")), contains),
+                cb.like(invoice.get("baseSupplierCode"), contains),
+                cb.exists(baseSupplierNamed(invoice, query, cb, contains)));
+    }
+
+    /**
      * Refaktura bazy, której kod dostawcy w bazie firma przypisała dostawcy pasującemu do słowa (nazwa albo NIP):
      * po wpisaniu "artek" są też faktury Artka wystawione przez bazę.
      */
-    private static Subquery<Integer> baseSupplierNamed(Root<KsefInvoice> root, CriteriaQuery<?> query,
+    private static Subquery<Integer> baseSupplierNamed(Root<KsefInvoice> root, CommonAbstractCriteria query,
             CriteriaBuilder cb, String contains) {
         Subquery<Integer> subquery = query.subquery(Integer.class);
         Root<KsefBaseSupplierCode> code = subquery.from(KsefBaseSupplierCode.class);

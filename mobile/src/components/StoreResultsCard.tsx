@@ -36,8 +36,8 @@ const DURATION = 480
 const STAGGER = 40
 
 /**
- * Wyniki sklepu na ekranie głównym (na razie tylko właściciel), jak panel na pulpicie w przeglądarce: ostatnie 7 dni
- * ze sprzedażą wobec tych samych dni tygodnia rok temu, dwa wykresy nałożone na siebie i pasek trendu z 12 tygodni.
+ * Wyniki sklepu na ekranie głównym (na razie tylko właściciel), jak panel na pulpicie w przeglądarce: tydzień pon.-niedz.
+ * z ostatnim dniem ze sprzedażą (dni po nim są puste) wobec tych samych dni tygodnia rok temu, dwa wykresy nałożone na siebie i pasek trendu z 12 tygodni.
  * Co pokazuje wykres, wybiera się w panelu konta.
  */
 export function StoreResultsCard({ storeId, storeNumber }: { storeId: string; storeNumber: string }) {
@@ -59,32 +59,51 @@ export function StoreResultsCard({ storeId, storeNumber }: { storeId: string; st
   } else if (!range || !current.data || !yearAgo.data) {
     body = <Muted>Sklep nie ma jeszcze wgranej sprzedaży.</Muted>
   } else {
-    body = <Results metric={metric} current={current.data} yearAgo={yearAgo.data} />
+    body = <Results metric={metric} current={current.data} yearAgo={yearAgo.data} lastSaleDate={lastSaleDate!} />
   }
 
   return (
     <Card style={styles.card}>
       <View style={{ gap: 2 }}>
         <Text style={[styles.title, { color: t.text }]}>Wyniki sklepu {storeNumber}</Text>
-        <Muted>{label} · ostatnie 7 dni wobec roku temu</Muted>
+        <Muted>{label} · tydzień pon.–niedz. wobec roku temu</Muted>
       </View>
       {body}
     </Card>
   )
 }
 
-/** {@code skipped}: dni pominięte w zmianie %, bo one albo ich odpowiednik rok temu nie mają sprzedaży. */
-type Week = { from: string; to: string; now: number; before: number; change: number | null; skipped: string[] }
+/**
+ * {@code through}: ostatni policzony dzień (w tygodniu w toku ostatni dzień ze sprzedażą). {@code skipped}: dni
+ * pominięte w zmianie %, bo one albo ich odpowiednik rok temu nie mają sprzedaży.
+ */
+type Week = {
+  from: string
+  to: string
+  through: string
+  now: number
+  before: number
+  change: number | null
+  skipped: string[]
+}
 
 /**
  * Jak w przeglądarce: zmiana liczy się tylko z par dni, w których obie strony mają sprzedaż, więc zamknięte święto
- * (np. 1.11) nie zabiera tygodniowi porównania. Sumy są pełne.
+ * (np. 1.11) nie zabiera tygodniowi porównania. Sumy są pełne. Dni po ostatnim dniu ze sprzedażą (tydzień w toku)
+ * nie liczą się wcale, także rok temu.
  */
-function weeklyChanges(metric: DashboardChartMetric, current: SalesHistory, yearAgo: SalesHistory): Week[] {
+function weeklyChanges(
+  metric: DashboardChartMetric,
+  current: SalesHistory,
+  yearAgo: SalesHistory,
+  lastSaleDate: string,
+): Week[] {
   const weeks: Week[] = []
   for (let start = 0; start + 7 <= current.days.length; start += 7) {
-    const days = current.days.slice(start, start + 7)
-    const before = yearAgo.days.slice(start, start + 7)
+    const all = current.days.slice(start, start + 7)
+    const days = all.filter((day) => day.date <= lastSaleDate)
+    if (days.length === 0) continue
+    const before = yearAgo.days.slice(start, start + days.length)
     const now = days.reduce((sum, day) => sum + metricValue(metric, day.figures), 0)
     const then = before.reduce((sum, day) => sum + metricValue(metric, day.figures), 0)
     let pairedNow = 0
@@ -100,8 +119,9 @@ function weeklyChanges(metric: DashboardChartMetric, current: SalesHistory, year
       pairedBefore += metricValue(metric, previous.figures)
     })
     weeks.push({
-      from: days[0].date,
-      to: days[6].date,
+      from: all[0].date,
+      to: all[6].date,
+      through: days[days.length - 1].date,
       now,
       before: then,
       change: skipped.length < days.length ? changePercent(pairedNow, pairedBefore) : null,
@@ -115,13 +135,15 @@ function Results({
   metric,
   current,
   yearAgo,
+  lastSaleDate,
 }: {
   metric: DashboardChartMetric
   current: SalesHistory
   yearAgo: SalesHistory
+  lastSaleDate: string
 }) {
   const t = useTheme()
-  const weeks = weeklyChanges(metric, current, yearAgo)
+  const weeks = weeklyChanges(metric, current, yearAgo, lastSaleDate)
   const week = weeks[weeks.length - 1]
 
   return (
@@ -129,6 +151,7 @@ function Results({
       <View style={{ gap: 4 }}>
         <Muted>
           {shortDate(week.from)} – {shortDate(week.to)}
+          {week.through < week.to ? ` · dane do ${shortDate(week.through)}` : ''}
         </Muted>
         <View style={styles.heroRow}>
           <Text style={[styles.hero, { color: t.text }]} adjustsFontSizeToFit numberOfLines={1}>
@@ -138,6 +161,7 @@ function Results({
         </View>
         <Muted style={{ fontSize: 14 }}>
           rok temu <Text style={{ color: t.text, fontWeight: '600' }}>{formatMetric(metric, week.before)}</Text>
+          {week.through < week.to ? ' (te same dni)' : ''}
         </Muted>
         {week.change != null && week.skipped.length > 0 ? (
           <Muted style={{ fontSize: 12 }}>
@@ -151,7 +175,7 @@ function Results({
       <View style={styles.legend} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <View style={styles.legendItem}>
           <View style={[styles.legendNow, { backgroundColor: t.chartNow }]} />
-          <Text style={[styles.legendText, { color: t.mutedText }]}>Ostatnie 7 dni</Text>
+          <Text style={[styles.legendText, { color: t.mutedText }]}>Ten tydzień</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendBefore, { borderColor: t.chartYearAgo, backgroundColor: t.chartYearAgoWash }]} />
@@ -159,7 +183,12 @@ function Results({
         </View>
       </View>
 
-      <DayChart metric={metric} days={current.days.slice(-7)} daysBefore={yearAgo.days.slice(-7)} />
+      <DayChart
+        metric={metric}
+        days={current.days.slice(-7)}
+        daysBefore={yearAgo.days.slice(-7)}
+        lastSaleDate={lastSaleDate}
+      />
     </View>
   )
 }
@@ -223,10 +252,12 @@ function DayChart({
   metric,
   days,
   daysBefore,
+  lastSaleDate,
 }: {
   metric: DashboardChartMetric
   days: SalesHistory['days']
   daysBefore: SalesHistory['days']
+  lastSaleDate: string
 }) {
   const t = useTheme()
   const reduce = useReduceMotion()
@@ -265,7 +296,7 @@ function DayChart({
         onResponderMove={pick}
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`Wykres ostatnich 7 dni: ${formatMetric(
+        accessibilityLabel={`Wykres tygodnia: ${formatMetric(
           metric,
           now.reduce((a, b) => a + b, 0),
         )}, rok temu ${formatMetric(
@@ -302,18 +333,20 @@ function DayChart({
                         },
                       ]}
                     />
-                    <Animated.View
-                      style={[
-                        styles.barNow,
-                        {
-                          left: center - front / 2,
-                          width: front,
-                          backgroundColor: t.chartNow,
-                          borderColor: t.card,
-                          transform: [{ translateY: offsets[7 + index] }],
-                        },
-                      ]}
-                    />
+                    {day.date > lastSaleDate ? null : (
+                      <Animated.View
+                        style={[
+                          styles.barNow,
+                          {
+                            left: center - front / 2,
+                            width: front,
+                            backgroundColor: t.chartNow,
+                            borderColor: t.card,
+                            transform: [{ translateY: offsets[7 + index] }],
+                          },
+                        ]}
+                      />
+                    )}
                   </View>
                 )
               })
@@ -323,8 +356,10 @@ function DayChart({
 
       <View style={styles.row}>
         {days.map((day, index) => {
+          // Dzień po ostatniej sprzedaży (tydzień w toku): pusty, bez zmiany.
+          const pending = day.date > lastSaleDate
           const missing = hasNoSales(day.figures)
-          const change = missing ? null : changePercent(now[index], before[index])
+          const change = missing || pending ? null : changePercent(now[index], before[index])
           const selected = active === index
           return (
             <View key={day.date} style={styles.dayLabel}>
@@ -337,7 +372,9 @@ function DayChart({
                 {WEEKDAYS_SHORT[weekdayIndex(day.date)]}
               </Text>
               <Text style={[styles.delta, { color: t.text }]} numberOfLines={1} adjustsFontSizeToFit>
-                {missing ? (
+                {pending ? (
+                  ' '
+                ) : missing ? (
                   <Text style={{ color: t.mutedText }}>brak</Text>
                 ) : change == null ? (
                   <Text style={{ color: t.mutedText }}>–</Text>
@@ -360,6 +397,7 @@ function DayChart({
         dayBefore={active == null ? null : daysBefore[active]}
         now={active == null ? 0 : now[active]}
         before={active == null ? 0 : before[active]}
+        lastSaleDate={lastSaleDate}
       />
     </View>
   )
@@ -372,6 +410,7 @@ function DayDetail({
   dayBefore,
   now,
   before,
+  lastSaleDate,
 }: {
   metric: DashboardChartMetric
   t: Theme
@@ -379,6 +418,7 @@ function DayDetail({
   dayBefore: SalesHistory['days'][number] | null
   now: number
   before: number
+  lastSaleDate: string
 }) {
   if (!day || !dayBefore) {
     return (
@@ -396,7 +436,11 @@ function DayDetail({
         <View style={styles.detailValue}>
           <View style={[styles.dot, { backgroundColor: t.chartNow }]} />
           <Text style={{ color: t.text, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-            {hasNoSales(day.figures) ? 'brak danych' : formatMetric(metric, now)}
+            {day.date > lastSaleDate
+              ? 'jeszcze bez danych'
+              : hasNoSales(day.figures)
+                ? 'brak danych'
+                : formatMetric(metric, now)}
           </Text>
         </View>
         <View style={styles.detailValue}>
@@ -466,7 +510,7 @@ function TrendStrip({ weeks, metric }: { weeks: Week[]; metric: DashboardChartMe
         })}
       </View>
       <Text style={{ color: t.mutedText, fontSize: 12 }}>
-        Ostatni tydzień:{' '}
+        Bieżący tydzień:{' '}
         <Text style={{ color: t.text, fontWeight: '700' }}>
           {latest.change == null ? 'brak danych' : formatChange(latest.change)}
         </Text>{' '}

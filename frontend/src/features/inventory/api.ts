@@ -31,10 +31,11 @@ export function findProducts(storeId: string, code: string) {
 }
 
 /** Przeceny (lista promocji) i zmiany ceny sprzedaży artykułu. */
-export function useProductPrices(storeId: string, itm8: string) {
+export function useProductPrices(storeId: string, itm8: string, enabled = true) {
   return useQuery({
     queryKey: [...productsKey(storeId), itm8, 'prices'],
     queryFn: () => api<ProductPriceHistory>(`${path(storeId)}/${itm8}/prices`),
+    enabled,
   })
 }
 
