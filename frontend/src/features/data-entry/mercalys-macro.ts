@@ -1299,7 +1299,10 @@ export function buildMeaMacro(codes: string[]) {
  */
 const PRICE_CONTROL_SCREEN = {
   tariffTab: 'mnTp_TARIF',
+  /** „Kontrola ceny”: samo rozwija menu z Pobraniem danych i Różnymi cenami. */
   controlMenuItem: 'mnTv_TARIF_ControlePrix',
+  /** „Pobranie danych”: okno pobierania z terminala (PopUpPortable) z przyciskiem Historia. */
+  downloadMenuItem: 'mnTv_TARIF_ar-e083_Dechargement',
   historyButton: 'btnHistorique_LnkBouton',
   historyBackButton: 'btnRetourHisto_LnkBouton',
   historyGrid: 'dgHisto',
@@ -1355,7 +1358,7 @@ export function priceControlRowPattern(file: PriceControlMacroFile) {
 }
 
 /**
- * „Wprowadź zmiany cen”: dla każdego pliku Taryfa → Kontrola ceny → Historia, opracowanie wiersza tego pliku (data,
+ * „Wprowadź zmiany cen”: dla każdego pliku Taryfa → Kontrola ceny → Pobranie danych → Historia, opracowanie wiersza tego pliku (data,
  * godzina, liczba cen, „Przetw. 0 raz”), Tak, zamknięcie PDF-a, potem Różne ceny: Zaznacz wszystko, czekanie na
  * zaznaczone wiersze, Porównaj MSI, Zamknij przy komunikacie o promocjach i czekanie na pustą tabelę. Pliku, którego
  * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.56 (WEBROWBUTTON, WEBGRIDWAIT).
@@ -1375,7 +1378,8 @@ export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
     out.push(
       `# ${index + 1}/${files.length}: ${label}`,
       `WEBENSURE|${WINDOW}|${screen.controlMenuItem}|${screen.tariffTab}`,
-      `WEBCLICK|${WINDOW}|${screen.controlMenuItem}`,
+      // Kontrola ceny rozwija się tylko, gdy Pobrania danych nie widać; klik w Pobranie danych ponawiany, aż jest Historia.
+      `WEBOPEN|${WINDOW}|${screen.controlMenuItem}|${screen.downloadMenuItem}|${screen.historyButton}`,
       `WEBWAIT|${WINDOW}|${screen.historyButton}||${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.historyButton}`,
       `WEBWAIT|${WINDOW}|${screen.historyBackButton}||${PAGE_TIMEOUT_MS}`,
@@ -1383,8 +1387,8 @@ export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
       `WEBWAIT|${DIALOG}|Oui|${screen.processText}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${DIALOG}|Oui`,
       `WINCLOSEALL|${PDF_WINDOW}|${PRICE_CONTROL_TIMEOUT_MS}`,
-      `WEBENSURE|${WINDOW}|${screen.differentPricesMenuItem}|${screen.tariffTab}`,
-      `WEBCLICK|${WINDOW}|${screen.differentPricesMenuItem}`,
+      `WEBENSURE|${WINDOW}|${screen.controlMenuItem}|${screen.tariffTab}`,
+      `WEBOPEN|${WINDOW}|${screen.controlMenuItem}|${screen.differentPricesMenuItem}|${screen.selectAllButton}`,
       `WEBWAIT|${WINDOW}|${screen.selectAllButton}||${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.selectAllButton}`,
       `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|all|${screen.selectedPattern}|${empty}|Różne ceny bez artykułów: ${label}|${PAGE_TIMEOUT_MS}`,
