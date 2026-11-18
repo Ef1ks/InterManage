@@ -33,7 +33,7 @@ import {
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { type DateRange, dayCount, daysLabel, formatRange, PERIOD_MODES, yearAgoRange } from '@/features/sales/periods'
 import { ApiError } from '@/lib/api'
-import type { PeriodSummary, PeriodSummaryFigures, PeriodSummaryLine } from '@/lib/types'
+import type { PeriodSummary, PeriodSummaryFigures, PeriodSummaryLine, ProfitTargetProgress } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LoadingPanel } from '@/components/LoadingPanel'
 
@@ -54,7 +54,8 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
   const period = useReportPeriod({ params, lastDate: lastSaleDate, defaultMode: 'week', customDays: 7 })
   const { mode, customError, range } = period
 
-  const summary = usePeriodSummary(storeId, range, !customError && !overview.isPending)
+  const ready = !!overview.data || overview.isError
+  const { shown, loading, summary } = useSummaryData(storeId, range, ready && !customError)
   const pdf = usePeriodSummaryPdf(storeId)
   const onPdfError = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
@@ -73,78 +74,119 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
         </div>
       </div>
 
-      <Card className="mb-4 gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedField
-            label="Okres"
-            options={PERIOD_MODES}
-            value={mode}
-            onChange={(next) => update({ okres: MODE_PARAMS[next] })}
-          />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="lg"
-              loading={pdf.download.isPending}
-              disabled={!summary.data || !!customError}
-              onClick={() => pdf.download.mutate(range, { onError: onPdfError })}
-            >
-              <DownloadIcon />
-              Pobierz PDF
-            </Button>
-            <Button
-              size="lg"
-              loading={pdf.print.isPending}
-              disabled={!summary.data || !!customError}
-              onClick={() => pdf.print.mutate(range, { onError: onPdfError })}
-            >
-              <PrinterIcon />
-              Drukuj
-            </Button>
-          </div>
-        </div>
-
-        <PeriodPicker period={period} update={update} />
-
-        {!customError && (
-          <p className="border-t pt-4 text-sm tabular-nums">
-            <span className="font-medium">{formatRange(range)}</span>
-            <span className="text-muted-foreground"> · {daysLabel(dayCount(range))}</span>
-          </p>
-        )}
-      </Card>
-
-      {customError ? null : summary.isError && !summary.data ? (
-        <Card className="items-center px-6 py-10 text-center">
-          <p className="font-medium">Nie udało się policzyć podsumowania</p>
-          <Button variant="outline" onClick={() => summary.refetch()}>
-            Spróbuj ponownie
-          </Button>
-        </Card>
-      ) : !summary.data ? (
+      {/* Okres zależy od ostatniego dnia sprzedaży, więc wybór pokazuje się dopiero z nim (inaczej okres by przeskoczył). */}
+      {!ready ? (
         <LoadingPanel className="h-96 rounded-xl" />
       ) : (
-        <div className={cn('transition-opacity duration-150', summary.isPlaceholderData && 'opacity-60')}>
-          <Summary storeId={storeId} summary={summary.data} />
-        </div>
+        <>
+          <Card className="mb-4 gap-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <SegmentedField
+                label="Okres"
+                options={PERIOD_MODES}
+                value={mode}
+                onChange={(next) => update({ okres: MODE_PARAMS[next] })}
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  loading={pdf.download.isPending}
+                  disabled={!shown || !!customError}
+                  onClick={() => pdf.download.mutate(range, { onError: onPdfError })}
+                >
+                  <DownloadIcon />
+                  Pobierz PDF
+                </Button>
+                <Button
+                  size="lg"
+                  loading={pdf.print.isPending}
+                  disabled={!shown || !!customError}
+                  onClick={() => pdf.print.mutate(range, { onError: onPdfError })}
+                >
+                  <PrinterIcon />
+                  Drukuj
+                </Button>
+              </div>
+            </div>
+
+            <PeriodPicker period={period} update={update} />
+
+            {!customError && (
+              <p className="border-t pt-4 text-sm tabular-nums">
+                <span className="font-medium">{formatRange(range)}</span>
+                <span className="text-muted-foreground"> · {daysLabel(dayCount(range))}</span>
+              </p>
+            )}
+          </Card>
+
+          {customError ? null : summary.isError && !summary.isFetching ? (
+            <Card className="items-center px-6 py-10 text-center">
+              <p className="font-medium">Nie udało się policzyć podsumowania</p>
+              <Button variant="outline" onClick={() => summary.refetch()}>
+                Spróbuj ponownie
+              </Button>
+            </Card>
+          ) : !shown ? (
+            <LoadingPanel className="h-96 rounded-xl" />
+          ) : (
+            <Summary storeId={storeId} data={shown} loading={loading} />
+          )}
+        </>
       )}
     </>
   )
 }
 
-function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary }) {
+/** Wszystko, co pokazuje raport: okres, ten sam okres rok temu i cel roku. */
+type SummaryData = {
+  summary: PeriodSummary
+  /** Nieudane zapytanie o rok temu = null. */
+  yearAgo: PeriodSummary | null
+  /** Bez celu roku = null. */
+  progress: ProfitTargetProgress | null
+}
+
+/**
+ * Okres, rok temu i cel roku pobierają się naraz, a raport pokazuje je dopiero razem, żeby kafelki nie dochodziły
+ * po kolei. Przy zmianie okresu zostaje poprzedni komplet (przygaszony, `loading`), dopóki nie przyjdzie cały nowy.
+ */
+function useSummaryData(storeId: string, range: DateRange, enabled: boolean) {
+  const yearAgoOf = useMemo(() => yearAgoRange(range), [range])
+  const summary = usePeriodSummary(storeId, range, enabled)
+  const yearAgo = usePeriodSummary(storeId, yearAgoOf, enabled)
+  const progress = useProfitTargetProgress(storeId, range.to, enabled)
+
+  const summarySettled = !!summary.data && !summary.isPlaceholderData
+  // Rok temu i cel są dodatkiem: ich błąd nie blokuje raportu, tylko ich nie pokazuje.
+  const yearAgoSettled = (!!yearAgo.data && !yearAgo.isPlaceholderData) || yearAgo.isError
+  const progressSettled = !!progress.data || progress.isError
+  const settled = enabled && summarySettled && yearAgoSettled && progressSettled
+
+  const yearAgoData = yearAgoSettled && yearAgo.data && !yearAgo.isPlaceholderData ? yearAgo.data : null
+  const next: SummaryData | null = settled
+    ? {
+        summary: summary.data!,
+        yearAgo: yearAgoData,
+        progress: progress.data?.target ? progress.data : null,
+      }
+    : null
+
+  const [shown, setShown] = useState<SummaryData | null>(null)
+  if (next && (shown?.summary !== next.summary || shown.yearAgo !== next.yearAgo || shown.progress !== next.progress)) {
+    setShown(next)
+  }
+  return { shown: next ?? shown, loading: !settled, summary }
+}
+
+function Summary({ storeId, data, loading }: { storeId: string; data: SummaryData; loading: boolean }) {
   const canEditBudgets = useCan('SALES', 'EDIT')
+  const { summary, yearAgo: yearAgoSummary, progress } = data
   const total = summary.total
   const yearAgoRangeOf = useMemo(() => yearAgoRange({ from: summary.from, to: summary.to }), [summary.from, summary.to])
-  const yearAgoQuery = usePeriodSummary(storeId, yearAgoRangeOf, true)
-  // Poprzedni wynik z innego okresu (keepPreviousData) nie może udawać roku temu.
-  const yearAgo =
-    yearAgoQuery.data && !yearAgoQuery.isPlaceholderData && yearAgoQuery.data.total.saleValueGross > 0
-      ? yearAgoQuery.data.total
-      : null
-  // Cel roku: wynik od 1 stycznia do końca okresu; bez celu kafelki go nie pokazują.
-  const progressQuery = useProfitTargetProgress(storeId, summary.to)
-  const progress = progressQuery.data?.target && !progressQuery.isPlaceholderData ? progressQuery.data : null
+  const yearAgo = yearAgoSummary && yearAgoSummary.total.saleValueGross > 0 ? yearAgoSummary.total : null
+  // Przy zmianie okresu przygasają tylko kafelki i tabela; reszta strony stoi.
+  const dim = cn('transition-opacity duration-150', loading && 'pointer-events-none opacity-50')
   const goal = (target: number | null | undefined, achieved: number | null | undefined, strong?: boolean) =>
     progress && target != null && achieved != null ? (
       <GoalProgress year={progress.year} to={progress.to} target={target} achieved={achieved} strong={strong} />
@@ -197,7 +239,7 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
         </div>
       )}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div aria-busy={loading} className={cn('mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4', dim)}>
         <YearTile
           label="Sprzedaż brutto"
           value={`${formatMoney(total.saleValueGross)} zł`}
@@ -236,7 +278,7 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
       {yearAgoRangeOf && (
         <p className="-mt-2 mb-4 text-xs text-muted-foreground tabular-nums">
           Rok temu: {formatRange(yearAgoRangeOf)} (te same dni tygodnia)
-          {yearAgoQuery.data && !yearAgoQuery.data.lastSaleDate ? ', brak wgranej sprzedaży' : ''}
+          {yearAgoSummary && !yearAgoSummary.lastSaleDate ? ', brak wgranej sprzedaży' : ''}
         </p>
       )}
 
@@ -264,7 +306,7 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
         // Jeden pasek przewijania (strony): nagłówek kolumn klei się pod nagłówkiem aplikacji, „Razem” do dołu okna.
         // overflow-clip zamiast hidden, bo hidden robi z karty obszar przewijania i sticky przestaje działać. Na wąskim
         // ekranie tabela przewija się w bok we własnym obszarze (wtedy nagłówek klei się w nim).
-        <Card className="overflow-clip py-0">
+        <Card aria-busy={loading} className={cn('overflow-clip py-0', dim)}>
           <div className="max-lg:overflow-x-auto">
             <table className="w-full text-sm tabular-nums">
               <TableHeader className="sticky top-0 z-20 bg-card shadow-[0_1px_0_var(--border)] lg:top-14">

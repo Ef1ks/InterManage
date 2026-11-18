@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794944937.0591383,
-    "seen": 1794944992.6661866,
-    "ast_hash": "c7f313841f79359575648fdedefe8e62",
+    "mtime": 1794947093.4848032,
+    "seen": 1794982272.5507984,
+    "ast_hash": "d52882998dee1895f07b19de25dd129a",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794944755.7996664,
-    "seen": 1794944992.6234279,
-    "ast_hash": "5feb66fbc1d1dc3048b6b23845635b5e",
+    "mtime": 1794982181.621065,
+    "seen": 1794982272.5055048,
+    "ast_hash": "c61b232f055a50270f0349a17e0dea8e",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -3792,9 +3792,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/PeriodSummaryReport.tsx": {
-    "mtime": 1794946902.2836635,
-    "seen": 1794947085.2791634,
-    "ast_hash": "a1ca7dbb6abffc7a03808a26d9ae4194",
+    "mtime": 1794982170.6659422,
+    "seen": 1794982272.5019863,
+    "ast_hash": "18c1e181258f1f2ee0263ac3bb56d940",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/RegionBudgets.tsx": {
@@ -6726,9 +6726,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/ProFilesDialog.tsx": {
-    "mtime": 1794649730.4423883,
-    "seen": 1794661561.8068364,
-    "ast_hash": "8e4f6960c0d3eaac02a9dcde944d75d5",
+    "mtime": 1794982208.213373,
+    "seen": 1794982272.4944637,
+    "ast_hash": "ca9ffcbcea60eb012285480453a81583",
     "semantic_hash": ""
   },
   "frontend/src/features/leaflet/api.ts": {
@@ -7968,9 +7968,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1794904761.050747,
-    "seen": 1794904882.1043892,
-    "ast_hash": "6d26b59deae40c7ebc8323eaca8d6a8f",
+    "mtime": 1794982237.397666,
+    "seen": 1794982272.472945,
+    "ast_hash": "c576f81c16469be22a042151e6f9784e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -12903,6 +12903,12 @@
     "mtime": 1794946907.8517032,
     "seen": 1794947085.241577,
     "ast_hash": "ac5aca7fcae5e6385282e77a2c015d93",
+    "semantic_hash": ""
+  },
+  "backend/Screenshot 2026-11-18 065622.png": {
+    "mtime": 1794981386.713868,
+    "seen": 1794982272.5517983,
+    "ast_hash": "0a1a10b22923e4669c6e67ded8c05419",
     "semantic_hash": ""
   }
 }

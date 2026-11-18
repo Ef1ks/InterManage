@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.51.0.0
+;@Ahk2Exe-SetVersion 0.52.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.51" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.52" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -600,6 +600,71 @@ PlayMacro(rawClip) {
                     return
                 }
                 ; Bez wpisu do podsumowania: na końcu zwykłe „Zakończono”, jak przy innych makrach.
+            case "FILEOPEN":
+                ; FILEOPEN|ścieżka pliku|limit w ms: czeka na okno wyboru pliku Windows (np. po Import w Mercalys), wpisuje pełną
+                ; ścieżkę prawdziwymi klawiszami i zatwierdza. Brak pliku na dysku zatrzymuje makro przed kliknięciem.
+                ; Zapamiętuje otwarte okna PDF, żeby PDFCLOSE zamknął tylko nowy.
+                pdfSeen := PdfSnapshot()
+                problem := parts.Length < 2 ? "Linia FILEOPEN wymaga ścieżki pliku."
+                    : FileOpenDialog(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 30000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "PDFCLOSE":
+                ; PDFCLOSE|limit w ms: czeka na nowe okno PDF (niewidoczne przy starcie makra albo przy ostatnim FILEOPEN) i je zamyka
+                problem := PdfCloseNew(parts.Length >= 2 ? Integer(Trim(parts[2])) : 120000, pdfSeen)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "IFDIALOG":
+                ; IFDIALOG|okno|tekst (kilka po średniku)|przycisk|etykieta|limit w ms: jak WEBDIALOG, ale gdy okno z tym tekstem
+                ; się nie pojawi, przeskakuje do LABEL|etykieta. Np. „Niektóre przesłane artykuły są w stanie błędu” po imporcie.
+                if (parts.Length < 5) {
+                    MsgBox report "Linia IFDIALOG wymaga okna, tekstu, przycisku i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                clicked := false
+                problem := OptionalDialog(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 3000, &clicked)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                if !clicked {
+                    target := LabelLine(lines, Trim(parts[5]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+            case "WEBIFDBLROW":
+                ; WEBIFDBLROW|okno|siatka albo *|tekst|etykieta|limit w ms: jak WEBDBLROW, ale bez wiersza z tym tekstem
+                ; przeskakuje do LABEL|etykieta. Np. kolejny błąd „marża ujemna” na liście błędów importu.
+                if (parts.Length < 5) {
+                    MsgBox report "Linia WEBIFDBLROW wymaga okna, siatki, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                if (WebDoubleClickRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 3000) != "") {
+                    target := LabelLine(lines, Trim(parts[5]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+            case "WEBTEXTCLICK":
+                ; WEBTEXTCLICK|okno|tekst|limit w ms: klika element strony z tym tekstem, który nie ma id ani nie jest przyciskiem
+                ; (np. napis przy polu wyboru). Gdy obok napisu jest jedno pole wyboru, zaznacza je (zaznaczonego nie odznacza).
+                problem := parts.Length < 3 ? "Linia WEBTEXTCLICK wymaga okna i tekstu."
+                    : WebTextClick(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Integer(Trim(parts[4])) : 10000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
             case "WEBSHOW":
                 ; WEBSHOW|fragment tytułu okna|elementy po przecinku: tylko pokazuje ich HTML (do Schowka), niczego nie klika
                 if (parts.Length >= 3)
@@ -900,6 +965,69 @@ ExcelSaveWorkbook(item, path, format, seen) {
 ; --- PDF: raport z Mercalys otwarty w Acrobacie zapisany pod podaną ścieżką ---
 
 PdfWindows() => WinGetList("ahk_class AcrobatSDIWindow")
+
+; Nowe okno PDF (spoza seen) zamknięte, gdy się wczyta. Zwraca "" albo opis problemu.
+PdfCloseNew(timeoutMs, seen) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in PdfWindows() {
+            title := ""
+            try title := WinGetTitle(hwnd)
+            if (title = "" || seen.Has(hwnd ":" title))
+                continue
+            seen[hwnd ":" title] := true
+            Sleep 1500 ; dokument jeszcze się wczytuje, a zamknięcie w trakcie potrafi zostawić puste okno
+            try WinClose hwnd
+            return WinWaitClose("ahk_id " hwnd, , 10) ? "" : "PDF `"" title "`" się nie zamknął, zamknij go ręcznie."
+        }
+        if (A_TickCount >= deadline)
+            return "Nie otworzył się nowy PDF w ciągu " Round(timeoutMs / 1000) " s."
+        Sleep 300
+    }
+}
+
+; Okno wyboru pliku Windows (#32770 z polem nazwy) programu Mercalys albo Internet Explorera: pełna ścieżka prawdziwymi
+; klawiszami (tekst ustawiony z boku okno pokazuje, ale go nie bierze) i Enter. Zwraca "" albo opis problemu.
+FileOpenDialog(path, timeoutMs) {
+    if !FileExist(path)
+        return "Nie ma pliku `"" path "`". Zapisz go najpierw w folderze (albo popraw ścieżkę folderu w aplikacji)."
+    deadline := A_TickCount + timeoutMs
+    dialog := 0
+    Loop {
+        for hwnd in WinGetList("ahk_class #32770") {
+            exe := ""
+            try exe := StrLower(WinGetProcessName(hwnd))
+            if (exe != "mercalys.exe" && exe != "iexplore.exe")
+                continue
+            try {
+                ControlGetHwnd("Edit1", hwnd)
+                dialog := hwnd
+                break
+            }
+        }
+        if dialog
+            break
+        if (A_TickCount >= deadline)
+            return "Nie otworzyło się okno wyboru pliku w ciągu " Round(timeoutMs / 1000) " s."
+        Sleep 200
+    }
+    try {
+        WinActivate dialog
+        WinWaitActive("ahk_id " dialog, , 5)
+        Sleep 300 ; okno wczytuje folder, zanim przyjmie tekst
+        ControlFocus "Edit1", dialog
+        Sleep 200
+        Send "^a"
+        SendText path
+        Sleep 300
+        if (ControlGetText("Edit1", dialog) != path)
+            return "Nie udało się wpisać ścieżki w okno wyboru pliku."
+        Send "{Enter}"
+    } catch as err {
+        return "Nie udało się wpisać ścieżki w okno wyboru pliku: " err.Message
+    }
+    return WinWaitClose("ahk_id " dialog, , 15) ? "" : "Okno wyboru pliku się nie zamknęło (plik nie został przyjęty?)."
+}
 PdfMercalysTemp() => "N:\AVISOCONFIG\TEMP"
 
 PdfSnapshot() {
@@ -1657,6 +1785,69 @@ WebDoubleClickRow(title, grid, text, timeoutMs) {
     }
 }
 
+; Najgłębszy widoczny element z tekstem (bez wielkości liter). Jedno pole wyboru obok napisu (w nim, w jego rodzicu
+; albo dziadku) dostaje klik, gdy nie jest zaznaczone; bez pola klik idzie w sam napis.
+WebTextClick(title, text, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        for hwnd in WinGetList(title) {
+            for doc in HtmlDocuments(hwnd) {
+                if !PageLoaded(doc)
+                    continue
+                target := ""
+                try {
+                    all := doc.all
+                    Loop all.length {
+                        element := all.item(A_Index - 1)
+                        tag := StrUpper(WebProp(element, "tagName"))
+                        if (tag = "HTML" || tag = "BODY" || tag = "SCRIPT" || tag = "STYLE" || tag = "FORM")
+                            continue
+                        ; Kolejność dokumentu: potomek stoi po przodku, więc ostatni pasujący jest najgłębszy.
+                        if (InStr(WebProp(element, "innerText"), text) && IsShown(element))
+                            target := element
+                    }
+                }
+                if !IsObject(target)
+                    continue
+                box := ""
+                node := target
+                Loop 3 {
+                    boxes := []
+                    try {
+                        inputs := node.getElementsByTagName("input")
+                        Loop inputs.length {
+                            input := inputs.item(A_Index - 1)
+                            if InStr(" checkbox radio ", " " StrLower(WebProp(input, "type")) " ")
+                                boxes.Push(input)
+                        }
+                    }
+                    if (boxes.Length = 1) {
+                        box := boxes[1]
+                        break
+                    }
+                    if (boxes.Length > 1)
+                        break
+                    try node := node.parentElement
+                    catch
+                        break
+                    if !IsObject(node)
+                        break
+                }
+                try WinActivate hwnd
+                if IsObject(box) {
+                    if !WebProp(box, "checked")
+                        ClickWithoutWaiting(doc, box)
+                } else
+                    ClickWithoutWaiting(doc, target)
+                return ""
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Nie ma napisu `"" text "`" w oknie `"" title "`"."
+        Sleep 100
+    }
+}
+
 ; Tekst całego wiersza z pojedynczymi spacjami. Komórki rozdziela spacja: innerText wiersza w IE skleja je
 ; („… 52817” + „19/11/2026” = „5281719/11/2026”), a liczba musi stać osobno.
 RowText(row) {
@@ -1992,7 +2183,8 @@ ConfirmDialog(title, expected, button, timeoutMs) {
 ; Pytanie, które pojawia się tylko czasem. Liczą się tylko strony z przyciskiem o tym id (główne okno Mercalys też ma
 ; w tytule „Les Mousquetaires”). Okno z innym tekstem zostaje dla kolejnych linii makra (np. „Utworzyć zapis ?”),
 ; więc nie czekamy wtedy do końca limitu.
-OptionalDialog(title, expected, button, timeoutMs) {
+OptionalDialog(title, expected, button, timeoutMs, &clicked := false) {
+    clicked := false
     deadline := A_TickCount + timeoutMs
     Loop {
         for hwnd in WinGetList(title) {
@@ -2019,6 +2211,7 @@ OptionalDialog(title, expected, button, timeoutMs) {
                     return ""
                 try WinActivate hwnd
                 ClickWithoutWaiting(doc, element)
+                clicked := true
                 return WinWaitClose("ahk_id " hwnd, , 10) ? "" : "Okno pytania `"" expected "`" się nie zamknęło."
             }
         }

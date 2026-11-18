@@ -293,12 +293,13 @@ export function useSaveProfitTarget(storeId: string) {
 }
 
 /** Ile z celu roku osiągnięto od 1 stycznia do {@code to}. */
-export function useProfitTargetProgress(storeId: string, to: string) {
+export function useProfitTargetProgress(storeId: string, to: string, enabled = true) {
   return useQuery({
     queryKey: [...reportsKey(storeId), 'profit-targets', 'progress', to],
     staleTime: REPORT_STALE_TIME,
     queryFn: () =>
       api<ProfitTargetProgress>(`${reportsPath(storeId)}/profit-targets/progress?${new URLSearchParams({ to })}`),
+    enabled,
   })
 }
 

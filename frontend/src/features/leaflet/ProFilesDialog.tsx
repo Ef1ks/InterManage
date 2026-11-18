@@ -1,4 +1,4 @@
-import { FileOutputIcon, TriangleAlertIcon } from 'lucide-react'
+import { ClipboardCopyIcon, FileOutputIcon, TriangleAlertIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -6,9 +6,13 @@ import { CopyButton } from '@/components/CopyButton'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { buildProImportMacro } from '@/features/data-entry/mercalys-macro'
 import { formatDocumentDate } from '@/features/documents/format'
+import { useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, saveBlob } from '@/lib/api'
+import { todayIso } from '@/lib/dates'
 import { ensureFolderAccess, type SavedFolderSpec, saveToFolder } from '@/lib/saved-folders'
+import { folderLocationKey, useStoreLocations } from '@/lib/store-locations'
 
 import { PRO_FOLDER, type ProFile, proContent } from './leaflet-rows'
 
@@ -42,6 +46,34 @@ const articles = (count: number) =>
 export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY, notice, labels }: Props) {
   const [saving, setSaving] = useState(false)
   const ready = files.filter((file) => file.lines.length > 0)
+  const store = useCurrentStore()
+  const locations = useStoreLocations(store?.id)
+  // Ścieżka folderu w sklepie (ta sama, którą pokazuje pole pod przyciskiem zapisu): pod nią makro szuka plików.
+  const folderPath = (locations.data?.[folderLocationKey(PRO_FOLDER.key)] || PRO_FOLDER.suggestedPath || '')
+    .trim()
+    .replace(/\\+$/, '')
+
+  const copyMacro = async () => {
+    const macro = buildProImportMacro(
+      ready.map((file) => ({
+        code: file.tariff,
+        name: file.fileName.replace(/\.PRO$/i, ''),
+        dateFrom: file.dateFrom,
+        dateTo: file.dateTo,
+        path: `${folderPath}\\${file.fileName}`,
+      })),
+      todayIso(),
+    )
+    try {
+      await navigator.clipboard.writeText(macro)
+      toast.success('Skopiowano makro', {
+        description: `Naciśnij Alt+E (odtwarzacz od wersji 0.52). Makro założy w Mercalys ${ready.length === 1 ? 'operację' : `${ready.length} operacje`} i wczyta ceny z folderu ${folderPath}, poprawiając błędy „marża ujemna”.`,
+        duration: 10_000,
+      })
+    } catch {
+      toast.error('Nie udało się skopiować makra do schowka')
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -141,6 +173,16 @@ export function ProFilesDialog({ files, open, onOpenChange, copy = LEAFLET_COPY,
           <Button size="xl" loading={saving} disabled={ready.length === 0} onClick={save}>
             <FileOutputIcon />
             Zapisz ceny promocji{labels ? ' i etykiety' : ''} ({ready.length})
+          </Button>
+          <Button
+            size="xl"
+            variant="outline"
+            disabled={ready.length === 0 || !folderPath}
+            title="Najpierw zapisz ceny promocji: makro wczytuje je z folderu w sklepie"
+            onClick={copyMacro}
+          >
+            <ClipboardCopyIcon />
+            Ustaw w Mercalys
           </Button>
           <SavedFolder folder={PRO_FOLDER} />
           {labels && <SavedFolder folder={labels.folder} />}

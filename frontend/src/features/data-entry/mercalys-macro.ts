@@ -416,6 +416,7 @@ const PROMO_SCREEN = {
   nameField: 'txtZ2_LibelleOp_TxtBox',
   typeField: 'lstZ3_TypeOp_TxtBox',
   type: '1',
+  startField: 'txdZ6_DebutOp_TxtBox',
   endField: 'txdZ7_FinOp_TxtBox',
   approveButton: 'btnB6_Valider_LnkBouton',
   enterButton: 'btnB2_Saisir_LnkBouton',
@@ -480,17 +481,44 @@ export type PromoMacroItem = { ean: string; price: number; dateTo: string; vatCo
  */
 export function buildPromoEntryMacro({ code, name, items }: { code: string; name: string; items: PromoMacroItem[] }) {
   const screen = PROMO_SCREEN
-  const c = PROMO_MACRO_CONFIG
   const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
   const out = [
     `# Wprowadzanie promocji ${code}: ${items.length} art.`,
     `WINOPEN|${PROGRAM_WINDOW}`,
+    ...promoHeaderLines({ code, name, end, label: screen.freeCodeLabel }),
+    ...promoArticleLines(items, 0),
+    ...promoEndLines(),
+  ]
+  return out.join('\r\n') + '\r\n'
+}
+
+/**
+ * Nagłówek operacji promocji (ar-e072) aż do ekranu artykułów (ar-e074): Taryfa → Wprowadzanie promocji, kod (istniejąca
+ * operacja z tym kodem jest usuwana), nazwa, typ 1, początek (gdy podany; bez niego zostaje podpowiedziany dzisiejszy),
+ * koniec, Zatwierdź, Tak, Wpisz. {@code label}: etykieta przeskoku, inna dla każdej operacji w jednym makrze.
+ */
+function promoHeaderLines({
+  code,
+  name,
+  start,
+  end,
+  label,
+}: {
+  code: string
+  name: string
+  start?: string
+  end: string
+  label: string
+}) {
+  const screen = PROMO_SCREEN
+  const c = PROMO_MACRO_CONFIG
+  return [
     `WEBENSURE|${WINDOW}|${screen.menuItem}|${screen.tariffTab}`,
     `WEBCLICK|${WINDOW}|${screen.menuItem}`,
     `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
     `WEBKEY|${WINDOW}|${screen.codeField}|^a${code}{Tab}`,
     // Operacja z tym kodem już jest (panel wypełniony, np. PROMO GNIEZNO): Usuń, Tak, kod od nowa.
-    `WEBIFVALUE|${WINDOW}|${screen.nameField}|\\S|${screen.freeCodeLabel}|${c.existingCheck}`,
+    `WEBIFVALUE|${WINDOW}|${screen.nameField}|\\S|${label}|${c.existingCheck}`,
     `WEBCLICK|${WINDOW}|${screen.deleteButton}`,
     `WEBWAIT|${DIALOG}|Oui|${screen.deleteText}|${PAGE_TIMEOUT_MS}`,
     `WEBCLICK|${DIALOG}|Oui`,
@@ -498,12 +526,14 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
     `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
     `WEBKEY|${WINDOW}|${screen.codeField}|^a${code}{Tab}`,
     `WEBVALUE|${WINDOW}|${screen.nameField}|^$|${c.existingCheck}`,
-    `LABEL|${screen.freeCodeLabel}`,
+    `LABEL|${label}`,
     `WEBKEY|${WINDOW}|${screen.nameField}|^a${name}{Tab}`,
     `WEBKEY|${WINDOW}|${screen.typeField}|^a${screen.type}{Tab}`,
+    ...(start ? [`WEBKEY|${WINDOW}|${screen.startField}|^a${mercalysDate(start)}{Tab}`] : []),
     `WEBKEY|${WINDOW}|${screen.endField}|^a${mercalysDate(end)}{Tab}`,
     `WEBVALUE|${WINDOW}|${screen.codeField}|^${code}$`,
     `WEBVALUE|${WINDOW}|${screen.typeField}|^${screen.type}$`,
+    ...(start ? [`WEBVALUE|${WINDOW}|${screen.startField}|${datePattern(start)}`] : []),
     `WEBVALUE|${WINDOW}|${screen.endField}|${datePattern(end)}`,
     `WEBCLICK|${WINDOW}|${screen.approveButton}`,
     `WEBWAIT|${DIALOG}|Oui|${screen.createText}|${PAGE_TIMEOUT_MS}`,
@@ -511,9 +541,118 @@ export function buildPromoEntryMacro({ code, name, items }: { code: string; name
     `SLEEP|${c.afterSave}`,
     `WEBWAIT|${WINDOW}|${screen.enterButton}||${PAGE_TIMEOUT_MS}`,
     `WEBCLICK|${WINDOW}|${screen.enterButton}`,
-    ...promoArticleLines(items, 0),
-    ...promoEndLines(),
   ]
+}
+
+/** Import pliku cen promocji na ekranie artykułów operacji (ar-e074) i poprawa błędów importu (ar-e078). */
+const PRO_IMPORT_SCREEN = {
+  importButton: 'btnB5_Import_LnkBouton',
+  /** Okno komunikatu bez tytułu strony: „… — okno dialogowe strony sieci Web”. */
+  alertWindow: 'okno dialogowe strony',
+  /** „Niektóre przesłane artykuły sa w stanie błędu. Pamiętaj przeprowadzic ich kontrolę.” */
+  errorsText: 'w stanie b',
+  alertClose: 'Fermer',
+  /** „Błąd” na dolnym pasku ekranu artykułów: lista błędów importu. */
+  errorsButton: 'btnB8_Anomalie_LnkBouton',
+  /** „Popraw błąd” na liście błędów: po nim wiemy, że lista jest na ekranie. */
+  errorsScreen: 'btnB2_TraiterAnomalie_LnkBouton',
+  /** Rodzaj błędu, który makro poprawia: „Promocja z marżą ujemną”. */
+  negativeMarginText: 'ujemn',
+  /** Panel poprawy błędu (ar-e078). */
+  fixScreen: 'txnZ11_MargeAAtteindre_TxtBox',
+  /** Wiersz panelu, który poprawia od razu wszystkie ujemne marże operacji. */
+  integrateAllText: 'wszystkie ujemne',
+  fixApprove: 'btnB2_Valider_LnkBouton',
+  /** „Poprawić błąd ?” */
+  fixText: 'Poprawi',
+} as const
+
+/** Czasy makra importu cen promocji w ms, poprawiamy je tylko tutaj. */
+export const PRO_IMPORT_MACRO_CONFIG = {
+  /** Na okno wyboru pliku po Import. */
+  fileDialog: 30000,
+  /** Na raport PDF po wczytaniu pliku: duży plik wczytuje się długo. */
+  pdf: 180000,
+  /** Komunikat o artykułach z błędem pojawia się chwilę po PDF-ie. */
+  errorsAlert: 3000,
+  /** Tyle makro szuka na liście kolejnego błędu „marża ujemna”, zanim uzna, że go nie ma. */
+  errorRow: 3000,
+  /** Ile razy makro wraca do listy błędów; jedna poprawa obejmuje wszystkie ujemne marże, reszta to zapas. */
+  fixRounds: 3,
+  /** Po zaznaczeniu wiersza, zanim Zatwierdź. */
+  afterPick: 500,
+  /** Przed Powrót na świeżo przeładowanej stronie. */
+  beforeBack: 500,
+} as const
+
+/** Plik cen promocji do wczytania: kod operacji (kod taryfy), nazwa, okres i pełna ścieżka pliku na dysku sklepu. */
+export type ProImportFile = { code: string; name: string; dateFrom: string; dateTo: string; path: string }
+
+/**
+ * Ceny promocji z plików do Mercalys: dla każdego pliku nagłówek operacji jak przy wprowadzaniu promocji (kod taryfy,
+ * nazwa, typ 1, początek i koniec z okresu pliku; początek przed dziś = dziś), Wpisz, Import i wybór pliku w oknie Windows,
+ * zamknięcie raportu PDF. Gdy Mercalys zgłosi artykuły z błędem: Zamknij, Błąd, podwójny klik w błąd „marża ujemna”,
+ * na panelu poprawy wiersz „wszystkie ujemne marże”, Zatwierdź, Tak; z pustą listą Powrót do artykułów. Na końcu
+ * Powrót do nagłówka i kolejny plik, a po ostatnim Mercalys na pasek zadań. Inne rodzaje błędów zostają na liście
+ * błędów operacji. Wymaga odtwarzacza od wersji 0.52 (FILEOPEN, PDFCLOSE, IFDIALOG, WEBIFDBLROW, WEBTEXTCLICK).
+ */
+export function buildProImportMacro(files: ProImportFile[], today: string) {
+  const screen = PROMO_SCREEN
+  const pro = PRO_IMPORT_SCREEN
+  const c = PRO_IMPORT_MACRO_CONFIG
+  const out = [`# Ceny promocji z plików: ${files.length}`, `WINOPEN|${PROGRAM_WINDOW}`]
+  files.forEach((file, index) => {
+    const n = index + 1
+    const fixedLabel = `PRO_FIXED_${n}`
+    const doneLabel = `PRO_DONE_${n}`
+    out.push(
+      `# Plik ${n}/${files.length}: ${file.path}, kod ${file.code}, ${file.dateFrom} - ${file.dateTo}`,
+      ...promoHeaderLines({
+        code: file.code,
+        name: file.name.slice(0, 30),
+        start: file.dateFrom < today ? today : file.dateFrom,
+        end: file.dateTo,
+        label: `PRO_FREE_${n}`,
+      }),
+      `WEBWAIT|${WINDOW}|${pro.importButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${pro.importButton}`,
+      `FILEOPEN|${file.path}|${c.fileDialog}`,
+      `PDFCLOSE|${c.pdf}`,
+      // Bez komunikatu o błędach od razu Powrót do nagłówka.
+      `IFDIALOG|${pro.alertWindow}|${pro.errorsText}|${pro.alertClose}|${doneLabel}|${c.errorsAlert}`,
+      `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
+      `WEBWAIT|${WINDOW}|${pro.errorsButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${pro.errorsButton}`,
+      `WEBWAIT|${WINDOW}|${pro.errorsScreen}||${PAGE_TIMEOUT_MS}`,
+    )
+    for (let round = 1; round <= c.fixRounds; round += 1) {
+      out.push(
+        `# Błąd „marża ujemna”, podejście ${round}`,
+        `WEBIFDBLROW|${WINDOW}|*|${pro.negativeMarginText}|${fixedLabel}|${c.errorRow}`,
+        `WEBWAIT|${WINDOW}|${pro.fixScreen}||${PAGE_TIMEOUT_MS}`,
+        `WEBTEXTCLICK|${WINDOW}|${pro.integrateAllText}|${PAGE_TIMEOUT_MS}`,
+        `SLEEP|${c.afterPick}`,
+        `WEBCLICK|${WINDOW}|${pro.fixApprove}`,
+        `WEBWAIT|${DIALOG}|Oui|${pro.fixText}|${PAGE_TIMEOUT_MS}`,
+        `WEBCLICK|${DIALOG}|Oui`,
+        `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
+        `WEBWAIT|${WINDOW}|${pro.errorsScreen}||${PAGE_TIMEOUT_MS}`,
+      )
+    }
+    out.push(
+      `LABEL|${fixedLabel}`,
+      // Lista błędów → artykuły operacji.
+      `SLEEP|${c.beforeBack}`,
+      `WEBCLICK|${WINDOW}|${screen.backButton}`,
+      `LABEL|${doneLabel}`,
+      // Artykuły operacji → nagłówek.
+      `WEBWAIT|${WINDOW}|${pro.importButton}||${PAGE_TIMEOUT_MS}`,
+      `SLEEP|${c.beforeBack}`,
+      `WEBCLICK|${WINDOW}|${screen.backButton}`,
+      `WEBWAIT|${WINDOW}|${screen.codeField}||${PAGE_TIMEOUT_MS}`,
+    )
+  })
+  out.push(`WINMIN|${PROGRAM_WINDOW}`)
   return out.join('\r\n') + '\r\n'
 }
 
