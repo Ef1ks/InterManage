@@ -292,7 +292,7 @@ public class BaseDeliveryService {
     }
 
     private static boolean sameStore(String fileStore, String storeNumber) {
-        return storeNumber != null && fileStore.replaceFirst("^0+", "").equals(storeNumber.replaceFirst("^0+", ""));
+        return com.intermanage.backend.store.entity.Store.sameNumber(fileStore, storeNumber);
     }
 
     /**

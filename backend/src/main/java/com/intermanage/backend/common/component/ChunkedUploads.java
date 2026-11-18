@@ -1,12 +1,17 @@
 package com.intermanage.backend.common.component;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.unit.DataSize;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.common.exception.ApiException;
 
@@ -46,9 +52,23 @@ public class ChunkedUploads {
     public record Received(Path file, String fileName) {
     }
 
+    /** Tyle wysyłek naraz może mieć jedna osoba w sklepie; kolejna wypycha najstarszą. */
+    private static final int MAX_PER_OWNER = 5;
+
+    /** Właściciel wysyłki: kawałki i import muszą przyjść od tej samej osoby w tym samym sklepie. */
+    public static String owner(UUID storeId, UUID userId) {
+        return storeId + ":" + userId;
+    }
+
     /** Zakłada wysyłkę pliku o podanym rozmiarze; `owner` (np. sklep i konto) pilnuje, że kawałki są od tej samej osoby. */
     public UUID start(String owner, String fileName, long size) {
         forgetOld();
+        List<UUID> ownUploads = uploads.entrySet().stream()
+                .filter(entry -> entry.getValue().owner.equals(owner))
+                .sorted(Comparator.comparing(entry -> entry.getValue().touchedAt))
+                .map(Map.Entry::getKey)
+                .toList();
+        ownUploads.subList(0, Math.max(0, ownUploads.size() - MAX_PER_OWNER + 1)).forEach(this::drop);
         if (size <= 0) {
             throw ApiException.badRequest("Wybierz plik do importu");
         }
@@ -107,6 +127,96 @@ public class ChunkedUploads {
         }
     }
 
+    /**
+     * Kończy wysyłkę i oddaje plik jako {@link MultipartFile}, żeby import szedł tą samą drogą co zwykłe wgranie.
+     * Zamknięcie usuwa plik z dysku.
+     */
+    public UploadedFile take(String owner, UUID id) {
+        Received received = finish(owner, id);
+        return new UploadedFile(received.file(), received.fileName());
+    }
+
+    private void drop(UUID id) {
+        Upload upload = uploads.remove(id);
+        if (upload != null) {
+            delete(upload.file);
+        }
+    }
+
+    private static void delete(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            log.warn("Nie udało się usunąć pliku wysyłki {}", file, e);
+        }
+    }
+
+    /** Plik złożony z kawałków; {@link #close} usuwa go z dysku. */
+    public static final class UploadedFile implements MultipartFile, AutoCloseable {
+
+        private final Path file;
+        private final String fileName;
+
+        UploadedFile(Path file, String fileName) {
+            this.file = file;
+            this.fileName = fileName;
+        }
+
+        @Override
+        public String getName() {
+            return "file";
+        }
+
+        @Override
+        public String getOriginalFilename() {
+            return fileName;
+        }
+
+        @Override
+        public String getContentType() {
+            return "application/octet-stream";
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return getSize() == 0;
+        }
+
+        @Override
+        public long getSize() {
+            try {
+                return Files.size(file);
+            } catch (IOException e) {
+                return 0;
+            }
+        }
+
+        @Override
+        public byte[] getBytes() throws IOException {
+            return Files.readAllBytes(file);
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException {
+            return Files.newInputStream(file);
+        }
+
+        @Override
+        public void transferTo(File dest) throws IOException {
+            transferTo(dest.toPath());
+        }
+
+        @Override
+        public void transferTo(Path dest) throws IOException {
+            Files.copy(file, dest, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        @Override
+        public void close() {
+            delete(file);
+        }
+    }
+
     private Upload find(String owner, UUID id) {
         Upload upload = uploads.get(id);
         if (upload == null || !upload.owner.equals(owner)) {
@@ -121,11 +231,7 @@ public class ChunkedUploads {
             if (entry.getValue().touchedAt.isAfter(limit)) {
                 return false;
             }
-            try {
-                Files.deleteIfExists(entry.getValue().file);
-            } catch (IOException e) {
-                log.warn("Nie udało się usunąć pliku porzuconej wysyłki {}", entry.getValue().file, e);
-            }
+            delete(entry.getValue().file);
             return true;
         });
     }

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.promotion.dto.PromotionImportOverview;
 import com.intermanage.backend.promotion.dto.PromotionImportResponse;
 import com.intermanage.backend.promotion.service.PromotionImportService;
@@ -26,9 +27,11 @@ import com.intermanage.backend.promotion.service.PromotionImportService;
 public class PromotionImportController {
 
     private final PromotionImportService promotionImportService;
+    private final ChunkedUploads uploads;
 
-    public PromotionImportController(PromotionImportService promotionImportService) {
+    public PromotionImportController(PromotionImportService promotionImportService, ChunkedUploads uploads) {
         this.promotionImportService = promotionImportService;
+        this.uploads = uploads;
     }
 
     /** Liczba trwających i przyszłych promocji sklepu i ostatnie wgrania raportu. */
@@ -44,5 +47,16 @@ public class PromotionImportController {
     public PromotionImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return promotionImportService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik przysłany w kawałkach (`/imports/uploads`), dalej jak zwykłe wgranie. */
+    @PostMapping("/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public PromotionImportResponse importUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return promotionImportService.importReport(storeId, file, principal.getId());
+        }
     }
 }

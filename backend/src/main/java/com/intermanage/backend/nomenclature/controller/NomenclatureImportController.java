@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.nomenclature.dto.NomenclatureImportOverview;
 import com.intermanage.backend.nomenclature.dto.NomenclatureImportResponse;
 import com.intermanage.backend.nomenclature.service.NomenclatureService;
@@ -26,9 +27,11 @@ import com.intermanage.backend.nomenclature.service.NomenclatureService;
 public class NomenclatureImportController {
 
     private final NomenclatureService nomenclatureService;
+    private final ChunkedUploads uploads;
 
-    public NomenclatureImportController(NomenclatureService nomenclatureService) {
+    public NomenclatureImportController(NomenclatureService nomenclatureService, ChunkedUploads uploads) {
         this.nomenclatureService = nomenclatureService;
+        this.uploads = uploads;
     }
 
     /** Ile rejonów, rodzin i podrodzin ma sklep i ostatnie wgrania listy. */
@@ -44,5 +47,16 @@ public class NomenclatureImportController {
     public NomenclatureImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return nomenclatureService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik przysłany w kawałkach (`/imports/uploads`), dalej jak zwykłe wgranie. */
+    @PostMapping("/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public NomenclatureImportResponse importUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return nomenclatureService.importReport(storeId, file, principal.getId());
+        }
     }
 }

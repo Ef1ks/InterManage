@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.pricecheck.dto.CadencierImportResponse;
 import com.intermanage.backend.pricecheck.dto.CadencierOverview;
 import com.intermanage.backend.pricecheck.dto.IncidentImportResponse;
@@ -61,13 +62,15 @@ public class PriceCheckController {
     private final CadencierService cadencierService;
     private final IncidentService incidentService;
     private final PriceCheckCategoryService categoryService;
+    private final ChunkedUploads uploads;
 
     public PriceCheckController(PriceCheckService priceCheckService, CadencierService cadencierService,
-            IncidentService incidentService, PriceCheckCategoryService categoryService) {
+            IncidentService incidentService, PriceCheckCategoryService categoryService, ChunkedUploads uploads) {
         this.priceCheckService = priceCheckService;
         this.cadencierService = cadencierService;
         this.incidentService = incidentService;
         this.categoryService = categoryService;
+        this.uploads = uploads;
     }
 
     /** Przyjęcia z ostatnich {@value PriceCheckService#PERIOD_DAYS} dni. */
@@ -93,6 +96,17 @@ public class PriceCheckController {
         return cadencierService.importReport(storeId, file, principal.getId());
     }
 
+    /** Lista cadencier przysłana w kawałkach ({@code /imports/uploads}). */
+    @PostMapping("/cadencier/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(CADENCIER_EDIT)
+    public CadencierImportResponse importCadencierUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return cadencierService.importReport(storeId, file, principal.getId());
+        }
+    }
+
     /** Najnowszy dzień z incydentami i ostatnie wgrania. */
     @GetMapping("/incidents")
     @PreAuthorize(VIEW)
@@ -107,6 +121,17 @@ public class PriceCheckController {
     public IncidentImportResponse importIncidents(@PathVariable UUID storeId,
             @RequestParam("file") MultipartFile file, @AuthenticationPrincipal AppUserPrincipal principal) {
         return incidentService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik incydentów przysłany w kawałkach ({@code /imports/uploads}); dzień dalej z nazwy pliku. */
+    @PostMapping("/incidents/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize(EDIT)
+    public IncidentImportResponse importIncidentsUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return incidentService.importReport(storeId, file, principal.getId());
+        }
     }
 
     /** Własne kategorie raportu (rejony nomenklatury), w kolejności dodania. */

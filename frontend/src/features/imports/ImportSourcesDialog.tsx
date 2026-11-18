@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ClipboardCopyIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { SelectField } from '@/components/form'
+import { DateField, SelectField } from '@/components/form'
 import { StoreLocationField } from '@/components/StoreLocationField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -13,6 +13,7 @@ import {
   isPeriodReport,
   macroPathError,
   MASK_EXAMPLES,
+  OPENED_ON_KEY,
   partLengthOptions,
   REPORT_EXTENSIONS,
   REPORT_TITLES,
@@ -22,6 +23,7 @@ import {
 } from '@/features/imports/import-sources'
 import {
   buildReportSaveMacro,
+  HISTORY_START,
   lastDocumentDate,
   macroPlayerVersion,
   opensItself,
@@ -35,6 +37,7 @@ import {
 import { useDocumentImports, useImportCoverage, useSalesImports } from '@/features/imports/api'
 import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ApiError } from '@/lib/api'
+import { todayIso } from '@/lib/dates'
 import { folderSavingSupported, useSavedFolder } from '@/lib/saved-folders'
 import { parentFolder, useSaveStoreLocations, useStoreLocations } from '@/lib/store-locations'
 import type { ImportGuide } from '@/lib/types'
@@ -88,6 +91,7 @@ function SourceList({ storeId, guides }: { storeId: string; guides: ImportGuide[
   useImportSettings(storeId)
   return (
     <ul className="grid gap-3">
+      <OpenedOnField storeId={storeId} />
       {DAILY_REPORTS.map((kind) => (
         <SourceRow
           key={kind}
@@ -197,6 +201,7 @@ function MacroFields({
   const withPartLength = isPeriodReport(kind)
   const locations = useStoreLocations(storeId)
   const partLength = locations.data?.[importLocationKey(kind, 'part')] ?? ''
+  const openedOn = locations.data?.[OPENED_ON_KEY] || null
   const macroSettings = { ...settings, partLength }
   const pathError = macroPathError(kind, settings.path, mask)
   const numberError =
@@ -219,6 +224,7 @@ function MacroFields({
           lastDocumentDate: lastDocumentDate(documents.data),
           salesCovered: coverage.data?.sales,
           documentsCovered: coverage.data?.documents,
+          openedOn,
         }),
       )
       toast.success(`Skopiowano makro: ${REPORT_TITLES[kind]}`, {
@@ -289,6 +295,49 @@ function MacroFields({
         Makro
       </Button>
     </div>
+  )
+}
+
+/**
+ * Dzień otwarcia sklepu, wspólny dla sklepu: makro nie drukuje sprzedaży ani dokumentów sprzed niego (puste raporty
+ * albo dni z niepełnym startem sklepu). Puste = od HISTORY_START.
+ */
+function OpenedOnField({ storeId }: { storeId: string }) {
+  const locations = useStoreLocations(storeId)
+  const save = useSaveStoreLocations(storeId)
+  const value = locations.data?.[OPENED_ON_KEY] ?? ''
+
+  const change = (next: string) => {
+    if (next === value) return
+    save.mutate(
+      { [OPENED_ON_KEY]: next },
+      {
+        onSuccess: () =>
+          toast.success(next ? 'Zapisano dzień otwarcia sklepu' : 'Usunięto dzień otwarcia sklepu', {
+            description: 'Skopiuj makro ponownie, żeby wzięło nowy okres.',
+          }),
+        onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Nie udało się zapisać ustawienia'),
+      },
+    )
+  }
+
+  return (
+    <li className="grid gap-3 rounded-xl border bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <DateField
+        label="Sklep otwarty od"
+        value={value}
+        onChange={change}
+        min={HISTORY_START}
+        max={todayIso()}
+        shortcuts={[]}
+        hint="Makro sprzedaży i dokumentów nie będzie drukować dni sprzed tej daty"
+      />
+      {value && (
+        <Button variant="outline" size="lg" disabled={save.isPending} onClick={() => change('')}>
+          Wyczyść
+        </Button>
+      )}
+    </li>
   )
 }
 

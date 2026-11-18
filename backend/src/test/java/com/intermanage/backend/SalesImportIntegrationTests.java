@@ -240,10 +240,41 @@ class SalesImportIntegrationTests {
         return sales.findById(new Sale.Key(UUID.fromString(storeId), date, itm8, EAN)).orElseThrow();
     }
 
+    /** Wgranie jak z przeglądarki: plik w dwóch kawałkach przez {@code /imports/uploads}, potem import. */
     private ResultActions upload(Cookie owner, String storeId, byte[] content) throws Exception {
-        return mvc.perform(multipart(importsUrl(storeId))
-                .file(new MockMultipartFile("file", "sprzedaz.xlsx", MediaType.APPLICATION_OCTET_STREAM_VALUE, content))
-                .cookie(owner).with(csrf()));
+        String started = mvc.perform(post("/api/stores/" + storeId + "/imports/uploads").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fileName\":\"sprzedaz.xlsx\",\"size\":" + content.length + "}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String uploadId = com.jayway.jsonpath.JsonPath.read(started, "$.id");
+        int half = content.length / 2;
+        byte[][] chunks = {java.util.Arrays.copyOfRange(content, 0, half),
+                java.util.Arrays.copyOfRange(content, half, content.length)};
+        for (int index = 0; index < chunks.length; index++) {
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .put("/api/stores/" + storeId + "/imports/uploads/" + uploadId + "/chunks/" + index)
+                            .cookie(owner).with(csrf())
+                            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                            .content(chunks[index]))
+                    .andExpect(status().isNoContent());
+        }
+        return mvc.perform(post(importsUrl(storeId) + "/uploads/" + uploadId).cookie(owner).with(csrf()));
+    }
+
+    /** Zwykłe wgranie jednym żądaniem dalej działa (starsze karty przeglądarki). */
+    @Test
+    void singleRequestUploadStillWorks() throws Exception {
+        Cookie owner = login();
+        String storeNumber = storeNumber();
+        String storeId = createStore(owner, storeNumber);
+        mvc.perform(multipart(importsUrl(storeId))
+                        .file(new MockMultipartFile("file", "sprzedaz.xlsx", MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                                report(storeNumber, "26/10/2026   Godzina: 15:06:23", "25/10/2026", "25/10/2026",
+                                        row("0000000000453", "25/10/2026", "1", "5.2", "5.97", "0.28", "0.49", "8.14"))))
+                        .cookie(owner).with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.createdCount").value(1));
     }
 
     private static String importsUrl(String storeId) {

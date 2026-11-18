@@ -185,7 +185,7 @@ public class SalesImportService {
     }
 
     private void checkHeader(Store store, SalesReportHeader header) {
-        if (header.storeNumber() != null && !header.storeNumber().equals(store.getNumber())) {
+        if (header.storeNumber() != null && !store.hasNumber(header.storeNumber())) {
             throw ApiException.conflict("To raport sklepu " + header.storeNumber() + ", a wybrany jest sklep "
                     + store.getNumber() + " (" + store.getName() + "). Przełącz sklep albo wgraj właściwy plik.");
         }

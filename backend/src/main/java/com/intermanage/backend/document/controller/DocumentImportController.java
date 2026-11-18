@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.document.dto.DocumentImportResponse;
 import com.intermanage.backend.document.service.DocumentService;
 
@@ -26,9 +27,11 @@ import com.intermanage.backend.document.service.DocumentService;
 public class DocumentImportController {
 
     private final DocumentService documentService;
+    private final ChunkedUploads uploads;
 
-    public DocumentImportController(DocumentService documentService) {
+    public DocumentImportController(DocumentService documentService, ChunkedUploads uploads) {
         this.documentService = documentService;
+        this.uploads = uploads;
     }
 
     /** Ostatnie wgrania raportu. */
@@ -44,5 +47,16 @@ public class DocumentImportController {
     public DocumentImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return documentService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik przysłany w kawałkach (`/imports/uploads`), dalej jak zwykłe wgranie. */
+    @PostMapping("/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public DocumentImportResponse importUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return documentService.importReport(storeId, file, principal.getId());
+        }
     }
 }

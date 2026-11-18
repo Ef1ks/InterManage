@@ -117,22 +117,24 @@ class ProductImportIntegrationTests {
         byte[] first = java.util.Arrays.copyOfRange(file, 0, half);
         byte[] second = java.util.Arrays.copyOfRange(file, half, file.length);
 
-        String started = mvc.perform(post(importsUrl() + "/uploads").cookie(owner).with(csrf())
+        String started = mvc.perform(post("/api/stores/" + storeId + "/imports/uploads").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fileName\":\"BAZA DO STRONY.xlsx\",\"size\":" + file.length + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.chunkSize").isNumber())
                 .andReturn().getResponse().getContentAsString();
-        String uploadUrl = importsUrl() + "/uploads/" + com.jayway.jsonpath.JsonPath.read(started, "$.id");
+        String uploadId = com.jayway.jsonpath.JsonPath.read(started, "$.id");
+        String uploadUrl = "/api/stores/" + storeId + "/imports/uploads/" + uploadId;
+        String importUrl = importsUrl() + "/uploads/" + uploadId;
 
         // Kawałek nie po kolei, a potem plik bez drugiej połowy: oba odrzucone.
         mvc.perform(chunk(uploadUrl, 1, second, owner)).andExpect(status().isConflict());
         mvc.perform(chunk(uploadUrl, 0, first, owner)).andExpect(status().isNoContent());
         mvc.perform(chunk(uploadUrl, 0, first, owner)).andExpect(status().isNoContent());
-        mvc.perform(post(uploadUrl + "/import").cookie(owner).with(csrf())).andExpect(status().isConflict());
+        mvc.perform(post(importUrl).cookie(owner).with(csrf())).andExpect(status().isConflict());
         mvc.perform(chunk(uploadUrl, 1, second, owner)).andExpect(status().isNoContent());
 
-        String job = mvc.perform(post(uploadUrl + "/import").cookie(owner).with(csrf()))
+        String job = mvc.perform(post(importUrl).cookie(owner).with(csrf()))
                 .andExpect(status().isAccepted())
                 .andReturn().getResponse().getContentAsString();
         String jobUrl = importsUrl() + "/jobs/" + com.jayway.jsonpath.JsonPath.read(job, "$.id");
@@ -149,7 +151,7 @@ class ProductImportIntegrationTests {
                 .isEqualTo(new BigDecimal("4.99"));
 
         // Wysyłka jest zużyta: drugi import tej samej wysyłki nic nie znajduje.
-        mvc.perform(post(uploadUrl + "/import").cookie(owner).with(csrf())).andExpect(status().isNotFound());
+        mvc.perform(post(importUrl).cookie(owner).with(csrf())).andExpect(status().isNotFound());
     }
 
     private static org.springframework.test.web.servlet.RequestBuilder chunk(String uploadUrl, int index, byte[] bytes,

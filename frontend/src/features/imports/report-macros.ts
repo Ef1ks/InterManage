@@ -79,8 +79,13 @@ const SALES_SCREEN = {
   dateTo: '_ctl16_TextEditDateDattyp1Max_TxtBox',
   runButton: 'ButtonAvisoValider__LnkBouton',
   resultPage: 'AfficheResultat.aspx',
+  /** Powrót jest na wyniku zawsze, także pustym (bez sprzedaży w okresie nie ma przycisku Excel). */
+  returnButton: 'ButtonAvisoRetour__LnkBouton',
   excelButton: 'ButtonAvisoForexc__LnkBouton',
 }
+
+/** Ile po wczytaniu wyniku czeka makro na przycisk Excel, zanim uzna wynik za pusty. */
+const EMPTY_RESULT_WAIT_MS = 20_000
 
 /** Zestawienie sprzedaży za kilka dni liczy się w Mercalys długo. */
 const STATISTIC_TIMEOUT_MS = 600_000
@@ -104,6 +109,8 @@ export type ReportMacroContext = {
   /** Dni objęte wgranymi raportami (połączone okresy z serwera); z dziur makro drukuje zaległe raporty. */
   salesCovered?: Period[]
   documentsCovered?: Period[]
+  /** Dzień otwarcia sklepu (RRRR-MM-DD): wcześniejszych dni makro nie drukuje. */
+  openedOn?: string | null
 }
 
 /** Od tego dnia makro uzupełnia dziury w sprzedaży i dokumentach. */
@@ -190,8 +197,11 @@ export function periodParts(kind: MacroReport, context: ReportMacroContext, part
   const length = partLengthOf(kind, partLength)
   const current = kind === 'SALES' ? salesPeriod(context) : documentsPeriod(context)
   const covered = (kind === 'SALES' ? context.salesCovered : context.documentsCovered) ?? []
-  const gaps = missingPeriods(covered, HISTORY_START, addDays(current.from, -1))
-  return [...gaps, current].flatMap((period) => splitPeriod(period, length))
+  // Przed otwarciem sklepu nie było sprzedaży ani dokumentów: te dni dawałyby puste raporty.
+  const start = context.openedOn && context.openedOn > HISTORY_START ? context.openedOn : HISTORY_START
+  const gaps = missingPeriods(covered, start, addDays(current.from, -1))
+  const periods = [...gaps, { from: current.from < start ? start : current.from, to: current.to }]
+  return periods.filter((period) => period.from <= period.to).flatMap((period) => splitPeriod(period, length))
 }
 
 /** RRRR-MM-DD jako DDMMRRRR (pole daty w Mercalys) i wzorzec wartości po wpisaniu (DD/MM/RRRR). */
@@ -202,8 +212,12 @@ const datePattern = (iso: string) =>
 /** Raporty drukowane z Mercalys tylko do PDF (zapis PDFSAVE zamiast EXCELSAVE). */
 const PDF_REPORTS: readonly MacroReport[] = ['PROMOTIONS']
 
-/** Najstarszy odtwarzacz, który wykona makro z tymi raportami (PDFSAVE w obecnej postaci od wersji 49). */
+/**
+ * Najstarszy odtwarzacz, który wykona makro z tymi raportami: WEBIFSEEN (pusty wynik sprzedaży) od 0.55, PDFSAVE
+ * w obecnej postaci od 0.49.
+ */
 export function macroPlayerVersion(kinds: MacroReport[]) {
+  if (kinds.includes('SALES')) return '0.55'
   return kinds.some((kind) => PDF_REPORTS.includes(kind)) ? '0.49' : '0.46'
 }
 
@@ -248,7 +262,12 @@ export function listNumberError(value: string): string | null {
 }
 
 /** Kroki w Mercalys do chwili, gdy raport ładuje się do Excela; null = raport otwiera pracownik. */
-function openSteps(kind: MacroReport, settings: ReportMacroSettings, period: Period | null): string[] | null {
+function openSteps(
+  kind: MacroReport,
+  settings: ReportMacroSettings,
+  period: Period | null,
+  emptyLabel = 'pusty',
+): string[] | null {
   if (kind === 'PRODUCTS' || kind === 'CADENCIER') {
     const s = PRINT_SCREEN
     const number = settings.printNumber!.trim()
@@ -327,7 +346,9 @@ function openSteps(kind: MacroReport, settings: ReportMacroSettings, period: Per
       `WEBKEY|${WINDOW}|${s.dateTo}|^a${typedDate(period.to)}{Tab}`,
       `WEBVALUE|${WINDOW}|${s.dateTo}|${datePattern(period.to)}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${s.runButton}`,
-      `WEBPAGE|${WINDOW}|${s.resultPage}|${s.excelButton}|${STATISTIC_TIMEOUT_MS}`,
+      // Okres bez sprzedaży (np. zamknięte święto) daje pusty wynik bez przycisku Excel: ta część nie ma pliku.
+      `WEBPAGE|${WINDOW}|${s.resultPage}|${s.returnButton}|${STATISTIC_TIMEOUT_MS}`,
+      `WEBIFSEEN|${WINDOW}|${s.excelButton}|${emptyLabel}|${EMPTY_RESULT_WAIT_MS}|Sprzedaż ${period.from} - ${period.to}: pusty wynik, bez pliku`,
       `WEBCLICK|${WINDOW}|${s.excelButton}`,
     ]
   }
@@ -378,7 +399,8 @@ export function buildReportSaveMacro(
     const step = reports.length > 1 ? ` (${index + 1} z ${reports.length})` : ''
     const parts = periodParts(kind, context, settings.partLength)
     parts.forEach((period, part) => {
-      const steps = openSteps(kind, settings, period)
+      const emptyLabel = `pusty-${index + 1}-${part + 1}`
+      const steps = openSteps(kind, settings, period, emptyLabel)
       const partLabel =
         parts.length > 1 && period ? `, część ${part + 1} z ${parts.length}: ${period.from} - ${period.to}` : ''
       lines.push(`# ${title}${step}${partLabel}`)
@@ -389,6 +411,7 @@ export function buildReportSaveMacro(
         )
       const path = partPath(settings.path.trim(), part + 1, parts.length)
       lines.push(PDF_REPORTS.includes(kind) ? `PDFSAVE|${path}|${EXCEL_WAIT_MS}` : `EXCELSAVE|${path}|${EXCEL_WAIT_MS}`)
+      if (kind === 'SALES' && steps) lines.push(`LABEL|${emptyLabel}`)
     })
   })
   lines.push(`WINMIN|${PROGRAM_WINDOW}`)

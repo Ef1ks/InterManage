@@ -356,6 +356,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           lastDocumentDate: lastDocumentDate(documents.data),
           salesCovered: coverage.data?.sales,
           documentsCovered: coverage.data?.documents,
+          openedOn: importSettings.settings.openedOn,
         }),
       )
       const skipped = kinds.length - ready.length

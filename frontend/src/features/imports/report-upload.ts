@@ -40,47 +40,50 @@ export function importProgress(queryClient: QueryClient, storeId: string, kind: 
   }
   return {
     set,
-    /** Wysyła plik z postępem; po wysłaniu całego pliku etap przechodzi na przetwarzanie na serwerze. */
-    post: <T>(path: string, file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      const uploading = (percent: number) =>
+    /** Wysyła plik kawałkami z paskiem postępu; po wysłaniu całego pliku etap przechodzi na przetwarzanie. */
+    post: <T>(path: string, file: File) =>
+      sendInChunks<T>(storeId, path, file, (percent) =>
         set(
           percent < 100
             ? { phase: 'UPLOADING', percent, processedRows: 0, totalRows: 0 }
             : { phase: 'PROCESSING', percent: 100, processedRows: 0, totalRows: 0 },
-        )
-      uploading(0)
-      return api<T>(path, { method: 'POST', formData, onUploadProgress: uploading })
-    },
-    /**
-     * Wysyła plik kawałkami (`<path>/uploads`), a potem uruchamia import. Przy wolnym łączu sklepu jedno żądanie
-     * z całym plikiem trwa minuty i Cloudflare je zrywa; kawałek po 2 MB idzie kilkadziesiąt sekund.
-     */
-    postChunked: async <T>(path: string, file: File) => {
-      const uploading = (percent: number) => set({ phase: 'UPLOADING', percent, processedRows: 0, totalRows: 0 })
-      uploading(0)
-      const upload = await api<{ id: string; chunkSize: number }>(`${path}/uploads`, {
-        method: 'POST',
-        json: { fileName: file.name, size: file.size },
-      })
-      let sent = 0
-      for (let index = 0; sent < file.size; index++) {
-        const chunk = file.slice(sent, sent + upload.chunkSize)
-        await withRetry(() =>
-          api(`${path}/uploads/${upload.id}/chunks/${index}`, {
-            method: 'PUT',
-            blob: chunk,
-            onUploadProgress: (percent) =>
-              uploading(Math.min(99, Math.floor(((sent + (chunk.size * percent) / 100) / file.size) * 100))),
-          }),
-        )
-        sent += chunk.size
-      }
-      set({ phase: 'PROCESSING', percent: 100, processedRows: 0, totalRows: 0 })
-      return api<T>(`${path}/uploads/${upload.id}/import`, { method: 'POST' })
-    },
+        ),
+      ),
   }
+}
+
+/**
+ * Wysyła raport kawałkami i uruchamia jego import (`POST <path>/uploads/<id>`). Przy wolnym łączu sklepu jedno
+ * żądanie z całym plikiem trwa minuty i Cloudflare je zrywa; kawałek po 2 MB idzie najwyżej kilkadziesiąt sekund.
+ * `onProgress` dostaje procent wysłanego pliku, a 100 dopiero, gdy cały plik jest na serwerze.
+ */
+export async function sendInChunks<T>(
+  storeId: string,
+  path: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  onProgress?.(0)
+  const uploadsPath = `/stores/${storeId}/imports/uploads`
+  const upload = await api<{ id: string; chunkSize: number }>(uploadsPath, {
+    method: 'POST',
+    json: { fileName: file.name, size: file.size },
+  })
+  let sent = 0
+  for (let index = 0; sent < file.size; index++) {
+    const chunk = file.slice(sent, sent + upload.chunkSize)
+    await withRetry(() =>
+      api(`${uploadsPath}/${upload.id}/chunks/${index}`, {
+        method: 'PUT',
+        blob: chunk,
+        onUploadProgress: (percent) =>
+          onProgress?.(Math.min(99, Math.floor(((sent + (chunk.size * percent) / 100) / file.size) * 100))),
+      }),
+    )
+    sent += chunk.size
+  }
+  onProgress?.(100)
+  return api<T>(`${path}/uploads/${upload.id}`, { method: 'POST' })
 }
 
 const CHUNK_RETRIES = 3
@@ -98,7 +101,7 @@ async function withRetry(send: () => Promise<unknown>) {
   }
 }
 
-/** Wgranie raportu jednym żądaniem z paskiem postępu (wszystkie raporty poza bazą danych, która idzie w tle). */
+/** Wgranie raportu w kawałkach z paskiem postępu (wszystkie raporty poza bazą danych, która idzie w tle). */
 export async function uploadReport<T>(
   queryClient: QueryClient,
   storeId: string,

@@ -144,6 +144,12 @@ export type ImportField = 'mask' | 'path' | 'print' | 'list' | 'part'
 
 export const importLocationKey = (kind: DailyReport, field: ImportField) => `import:${kind}:${field}`
 
+/**
+ * Dzień otwarcia sklepu (RRRR-MM-DD) w ścieżkach sklepu: wcześniejszych dni makro nie drukuje (puste raporty
+ * sprzedaży i dokumentów sprzed otwarcia).
+ */
+export const OPENED_ON_KEY = 'import:openedOn'
+
 /** Ścieżka folderu raportu w ścieżkach sklepu (podpowiedź przy wyborze folderu w przeglądarce). */
 export const importFolderLocationKey = (kind: DailyReport) => folderLocationKey(`import:${kind}`)
 
@@ -155,6 +161,8 @@ export type ImportSettings = {
   /** Długość części zaległego okresu (sprzedaż, dokumenty), wartość z `partLengthOptions`. */
   partLengths: MacroPrintNumbers
   folders: Partial<Record<DailyReport, string>>
+  /** Dzień otwarcia sklepu; puste = bez ograniczenia (od HISTORY_START). */
+  openedOn?: string
 }
 
 export function importSettingsFrom(locations: StoreLocations | undefined): ImportSettings {
@@ -167,6 +175,7 @@ export function importSettingsFrom(locations: StoreLocations | undefined): Impor
     folders: {},
   }
   if (!locations) return settings
+  settings.openedOn = locations[OPENED_ON_KEY] || undefined
   for (const kind of DAILY_REPORTS) {
     settings.masks[kind] = locations[importLocationKey(kind, 'mask')]
     settings.folders[kind] = locations[importFolderLocationKey(kind)]

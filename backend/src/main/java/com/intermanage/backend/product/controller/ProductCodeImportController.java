@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.product.dto.ProductCodeImportOverview;
 import com.intermanage.backend.product.dto.ProductCodeImportResponse;
 import com.intermanage.backend.product.service.ProductCodeImportService;
@@ -26,9 +27,11 @@ import com.intermanage.backend.product.service.ProductCodeImportService;
 public class ProductCodeImportController {
 
     private final ProductCodeImportService productCodeImportService;
+    private final ChunkedUploads uploads;
 
-    public ProductCodeImportController(ProductCodeImportService productCodeImportService) {
+    public ProductCodeImportController(ProductCodeImportService productCodeImportService, ChunkedUploads uploads) {
         this.productCodeImportService = productCodeImportService;
+        this.uploads = uploads;
     }
 
     /** Ile kodów i artykułów jest w najnowszych multikodach sklepu i ostatnie wgrania. */
@@ -44,5 +47,16 @@ public class ProductCodeImportController {
     public ProductCodeImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return productCodeImportService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik przysłany w kawałkach (`/imports/uploads`), dalej jak zwykłe wgranie. */
+    @PostMapping("/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public ProductCodeImportResponse importUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return productCodeImportService.importReport(storeId, file, principal.getId());
+        }
     }
 }

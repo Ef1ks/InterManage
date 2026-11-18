@@ -1,4 +1,4 @@
-package com.intermanage.backend.product.dto;
+package com.intermanage.backend.importguide.dto;
 
 import java.util.UUID;
 

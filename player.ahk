@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.54.0.0
+;@Ahk2Exe-SetVersion 0.55.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.54" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.55" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -593,6 +593,25 @@ PlayMacro(rawClip) {
                     target := LabelLine(lines, Trim(parts[5]), index)
                     if (target = 0) {
                         MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+            case "WEBIFSEEN":
+                ; WEBIFSEEN|okno|element|etykieta|limit w ms|opis (od 0.55): element widoczny w limicie = idzie dalej; bez niego
+                ; dopisuje opis do podsumowania i przeskakuje do LABEL|etykieta. Np. pusty wynik statystyki sprzedaży
+                ; (AfficheResultat bez przycisku Excel): ta część okresu nie ma pliku, makro bierze następną.
+                if (parts.Length < 4) {
+                    MsgBox report "Linia WEBIFSEEN wymaga okna, elementu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                if (WebWait(Trim(parts[2]), Trim(parts[3]), "", parts.Length >= 5 ? Integer(Trim(parts[5])) : 3000) != "") {
+                    if (parts.Length >= 6 && Trim(parts[6]) != "")
+                        report .= Trim(parts[6]) "`n"
+                    target := LabelLine(lines, Trim(parts[4]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[4]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target

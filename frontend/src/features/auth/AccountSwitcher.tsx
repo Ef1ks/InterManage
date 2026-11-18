@@ -32,13 +32,27 @@ function errorText(error: unknown): string | null {
 
 /**
  * Konta zalogowane w tle: klik przechodzi na konto (po PIN-ie albo haśle, jeśli konto tego wymaga).
- * Wspólne dla okna „Zmień konto” i strony logowania.
+ * Wspólne dla okna „Zmień konto” i strony logowania. Strona logowania steruje wyborem sama (`selectedId`,
+ * `onSelectedIdChange`), żeby od razu otworzyć PIN ostatnio używanego konta i schować formularz hasła.
  */
-export function AccountSwitcher({ onSwitched }: { onSwitched: (me: Me) => void }) {
+export function AccountSwitcher({
+  onSwitched,
+  selectedId: controlledId,
+  onSelectedIdChange,
+}: {
+  onSwitched: (me: Me) => void
+  selectedId?: string | null
+  onSelectedIdChange?: (id: string | null) => void
+}) {
   const accounts = useSwitchAccounts()
   const switchAccount = useSwitchAccount()
   const removeAccount = useRemoveAccount()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [ownId, setOwnId] = useState<string | null>(null)
+  const selectedId = controlledId !== undefined ? controlledId : ownId
+  const setSelectedId = (id: string | null) => {
+    setOwnId(id)
+    onSelectedIdChange?.(id)
+  }
 
   const list = accounts.data ?? []
   // Z listy, a nie z chwili kliknięcia: po błędnych PIN-ach konto może wymagać już hasła.

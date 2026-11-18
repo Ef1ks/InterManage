@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.supplier.dto.SupplierImportOverview;
 import com.intermanage.backend.supplier.dto.SupplierImportResponse;
 import com.intermanage.backend.supplier.service.SupplierService;
@@ -26,9 +27,11 @@ import com.intermanage.backend.supplier.service.SupplierService;
 public class SupplierImportController {
 
     private final SupplierService supplierService;
+    private final ChunkedUploads uploads;
 
-    public SupplierImportController(SupplierService supplierService) {
+    public SupplierImportController(SupplierService supplierService, ChunkedUploads uploads) {
         this.supplierService = supplierService;
+        this.uploads = uploads;
     }
 
     /** Liczba dostawców sklepu i ostatnie wgrania listy. */
@@ -44,5 +47,16 @@ public class SupplierImportController {
     public SupplierImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return supplierService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik przysłany w kawałkach (`/imports/uploads`), dalej jak zwykłe wgranie. */
+    @PostMapping("/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public SupplierImportResponse importUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return supplierService.importReport(storeId, file, principal.getId());
+        }
     }
 }

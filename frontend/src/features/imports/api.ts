@@ -55,7 +55,7 @@ export function useImportProducts(storeId: string) {
       const progress = importProgress(queryClient, storeId, 'PRODUCTS')
       try {
         // Duży plik wysyła się dłużej niż trwa odczyt, więc pasek rusza od razu, a nie dopiero po przyjęciu pliku.
-        let job = await progress.postChunked<ProductImportJob>(productImportsPath(storeId), file)
+        let job = await progress.post<ProductImportJob>(productImportsPath(storeId), file)
         progress.set(job)
         while (job.status === 'RUNNING') {
           await new Promise((resolve) => setTimeout(resolve, IMPORT_POLL_MS))

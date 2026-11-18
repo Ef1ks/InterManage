@@ -136,7 +136,7 @@ public class StocktakeService {
             throw ApiException.badRequest("Nie widać numeru sklepu w nagłówku raportu. Wgraj raport wydrukowany "
                     + "z systemu sklepu.");
         }
-        if (!report.storeNumber().equals(store.getNumber())) {
+        if (!store.hasNumber(report.storeNumber())) {
             throw ApiException.conflict("To raport sklepu " + report.storeNumber() + ", a wybrany jest sklep "
                     + store.getNumber() + " (" + store.getName() + "). Przełącz sklep albo wgraj właściwy plik.");
         }

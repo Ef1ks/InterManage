@@ -67,6 +67,22 @@ public class Store {
         return number;
     }
 
+    /**
+     * Czy numer z raportu to ten sklep. Raporty podają numer bez zera wiodącego (9575 dla sklepu 09575), więc zera
+     * na początku się nie liczą.
+     */
+    public boolean hasNumber(String reportNumber) {
+        return sameNumber(number, reportNumber);
+    }
+
+    /** Dwa numery sklepu bez zer wiodących; pusty nie pasuje do niczego. */
+    public static boolean sameNumber(String a, String b) {
+        if (a == null || b == null || a.isBlank() || b.isBlank()) {
+            return false;
+        }
+        return a.strip().replaceFirst("^0+", "").equals(b.strip().replaceFirst("^0+", ""));
+    }
+
     public void setNumber(String number) {
         this.number = number;
     }

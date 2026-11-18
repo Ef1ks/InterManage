@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.sales.dto.SalesImportOverview;
 import com.intermanage.backend.sales.dto.SalesImportResponse;
 import com.intermanage.backend.sales.service.SalesImportService;
@@ -26,9 +27,11 @@ import com.intermanage.backend.sales.service.SalesImportService;
 public class SalesImportController {
 
     private final SalesImportService salesImportService;
+    private final ChunkedUploads uploads;
 
-    public SalesImportController(SalesImportService salesImportService) {
+    public SalesImportController(SalesImportService salesImportService, ChunkedUploads uploads) {
         this.salesImportService = salesImportService;
+        this.uploads = uploads;
     }
 
     /** Ile wierszy sprzedaży ma sklep, za jakie dni, i ostatnie wgrania. */
@@ -44,5 +47,16 @@ public class SalesImportController {
     public SalesImportResponse importReport(@PathVariable UUID storeId, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return salesImportService.importReport(storeId, file, principal.getId());
+    }
+
+    /** Plik przysłany w kawałkach (`/imports/uploads`), dalej jak zwykłe wgranie. */
+    @PostMapping("/uploads/{uploadId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('IMPORTS:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public SalesImportResponse importUpload(@PathVariable UUID storeId, @PathVariable UUID uploadId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        try (ChunkedUploads.UploadedFile file = uploads.take(ChunkedUploads.owner(storeId, principal.getId()), uploadId)) {
+            return salesImportService.importReport(storeId, file, principal.getId());
+        }
     }
 }

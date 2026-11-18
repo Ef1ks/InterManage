@@ -137,7 +137,7 @@ public class IncidentService {
             ParsedIncidentReport report, String fileName, UUID userId) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
         for (String number : Stream.concat(Stream.of(fileStore), report.storeNumbers().stream()).toList()) {
-            if (!number.equals(store.getNumber())) {
+            if (!store.hasNumber(number)) {
                 throw ApiException.conflict("To incydenty sklepu " + number + ", a wybrany jest sklep "
                         + store.getNumber() + " (" + store.getName() + "). Przełącz sklep albo wgraj właściwy plik.");
             }

@@ -208,7 +208,7 @@ public class DataEntryXmlService {
             KsefInvoiceSummary invoice, String draft) {
         String storeNumber = stores.findById(storeId).map(store -> store.getNumber()).orElse(null);
         String recipient = document.header().recipientCode();
-        boolean otherStore = recipient != null && storeNumber != null && !recipient.equals(storeNumber);
+        boolean otherStore = recipient != null && storeNumber != null && !com.intermanage.backend.store.entity.Store.sameNumber(recipient, storeNumber);
         return new XmlDocument(fileName, recipient, otherStore, dataEntry.fromXml(storeId, document, invoice), draft);
     }
 

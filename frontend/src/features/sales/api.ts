@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { uploadReport } from '@/features/imports/report-upload'
+import { sendInChunks, uploadReport } from '@/features/imports/report-upload'
 import type { DateRange, Periods } from '@/features/sales/periods'
 import { api, ApiError, downloadFile, downloadPostedFile, printFile, printPostedFile } from '@/lib/api'
 import type {
@@ -1093,11 +1093,7 @@ export function useIncidents(storeId: string, enabled = true) {
 
 export function useImportIncidents(storeId: string) {
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<IncidentImport>(`${priceCheckPath(storeId)}/incidents`, { method: 'POST', formData })
-    },
+    mutationFn: (file: File) => sendInChunks<IncidentImport>(storeId, `${priceCheckPath(storeId)}/incidents`, file),
   })
 }
 

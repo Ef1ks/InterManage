@@ -109,7 +109,7 @@ public class CadencierService {
 
     private CadencierImportResponse merge(UUID storeId, ParsedCadencierReport report, String fileName, UUID userId) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
-        if (report.storeNumber() != null && !report.storeNumber().equals(store.getNumber())) {
+        if (report.storeNumber() != null && !store.hasNumber(report.storeNumber())) {
             throw ApiException.conflict("To lista sklepu " + report.storeNumber() + ", a wybrany jest sklep "
                     + store.getNumber() + " (" + store.getName() + "). Przełącz sklep albo wgraj właściwy plik.");
         }
