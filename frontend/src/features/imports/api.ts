@@ -47,9 +47,14 @@ export function useEanChanges(storeId: string, importId: string) {
 
 const productImportJobKey = (storeId: string) => [...productImportsKey(storeId), 'job'] as const
 
+/** Postęp importu: najpierw wysyłanie pliku (`UPLOADING`, liczone w przeglądarce), potem etapy zadania na serwerze. */
+export type ProductImportProgress = Pick<ProductImportJob, 'percent' | 'processedRows' | 'totalRows'> & {
+  phase: ProductImportJob['phase'] | 'UPLOADING'
+}
+
 /** Stan trwającego importu (postęp), wpisywany przez {@link useImportProducts} przy każdym pytaniu o zadanie. */
 export function useProductImportProgress(storeId: string) {
-  return useQuery<ProductImportJob | null>({
+  return useQuery<ProductImportProgress | null>({
     queryKey: productImportJobKey(storeId),
     queryFn: () => null,
     enabled: false,
@@ -64,9 +69,18 @@ export function useImportProducts(storeId: string) {
     mutationFn: async (file: File): Promise<ProductImport> => {
       const formData = new FormData()
       formData.append('file', file)
-      const setProgress = (job: ProductImportJob | null) => queryClient.setQueryData(productImportJobKey(storeId), job)
+      const setProgress = (progress: ProductImportProgress | null) =>
+        queryClient.setQueryData(productImportJobKey(storeId), progress)
+      const uploading = (percent: number) =>
+        setProgress({ phase: 'UPLOADING', percent, processedRows: 0, totalRows: 0 })
       try {
-        let job = await api<ProductImportJob>(productImportsPath(storeId), { method: 'POST', formData })
+        // Duży plik wysyła się dłużej niż trwa odczyt, więc pasek rusza od razu, a nie dopiero po przyjęciu pliku.
+        uploading(0)
+        let job = await api<ProductImportJob>(productImportsPath(storeId), {
+          method: 'POST',
+          formData,
+          onUploadProgress: uploading,
+        })
         setProgress(job)
         while (job.status === 'RUNNING') {
           await new Promise((resolve) => setTimeout(resolve, IMPORT_POLL_MS))

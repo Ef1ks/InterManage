@@ -793,7 +793,8 @@ function ReportUpload<T>({
   )
 }
 
-const IMPORT_PHASES: Record<ProductImportJob['phase'], string> = {
+const IMPORT_PHASES: Record<ProductImportJob['phase'] | 'UPLOADING', string> = {
+  UPLOADING: 'Wysyłanie pliku',
   READING: 'Odczyt pliku',
   SAVING: 'Zapis do kartoteki',
   FINISHING: 'Kończenie importu',

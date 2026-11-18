@@ -47,9 +47,14 @@ type RequestOptions = {
   json?: unknown
   /** Wysyłane jako multipart/form-data (pliki). Nagłówek z granicą części ustawia przeglądarka. */
   formData?: FormData
+  /** Postęp wysyłania treści żądania w procentach (duże pliki); fetch go nie daje, więc żądanie idzie przez XHR. */
+  onUploadProgress?: (percent: number) => void
 }
 
-export async function api<T = void>(path: string, { method = 'GET', json, formData }: RequestOptions = {}): Promise<T> {
+export async function api<T = void>(
+  path: string,
+  { method = 'GET', json, formData, onUploadProgress }: RequestOptions = {},
+): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   let body: BodyInit | undefined
 
@@ -65,7 +70,9 @@ export async function api<T = void>(path: string, { method = 'GET', json, formDa
     if (token) headers['X-XSRF-TOKEN'] = token
   }
 
-  const response = await fetch(`/api${path}`, { method, headers, body, credentials: 'same-origin' })
+  const response = onUploadProgress
+    ? await sendWithProgress(`/api${path}`, method, headers, body, onUploadProgress)
+    : await fetch(`/api${path}`, { method, headers, body, credentials: 'same-origin' })
 
   if (!response.ok) {
     throw await toApiError(response)
@@ -74,6 +81,42 @@ export async function api<T = void>(path: string, { method = 'GET', json, formDa
     return undefined as T
   }
   return (await response.json()) as T
+}
+
+/** Żądanie przez XHR z postępem wysyłania; odpowiedź wraca jako `Response`, żeby dalej szła jak z fetch. */
+function sendWithProgress(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: BodyInit | undefined,
+  onProgress: (percent: number) => void,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, url)
+    xhr.withCredentials = true
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value)
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+    }
+    xhr.upload.onload = () => onProgress(100)
+    xhr.onload = () => {
+      const responseHeaders = new Headers()
+      for (const line of xhr
+        .getAllResponseHeaders()
+        .trim()
+        .split(/[\r\n]+/)) {
+        const index = line.indexOf(':')
+        if (index > 0) responseHeaders.append(line.slice(0, index).trim(), line.slice(index + 1).trim())
+      }
+      // Response nie przyjmuje treści przy 204 i podobnych.
+      const empty = xhr.status === 204 || xhr.status === 205 || xhr.status === 304
+      resolve(new Response(empty ? null : xhr.responseText, { status: xhr.status, headers: responseHeaders }))
+    }
+    xhr.onerror = () => reject(new ApiError(0, 'Nie udało się wysłać pliku. Sprawdź połączenie i spróbuj ponownie.'))
+    xhr.onabort = () => reject(new ApiError(0, 'Wysyłanie pliku przerwane.'))
+    xhr.send(body as XMLHttpRequestBodyInit | null)
+  })
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
