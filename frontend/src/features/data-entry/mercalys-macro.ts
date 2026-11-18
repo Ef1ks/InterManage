@@ -324,6 +324,8 @@ const MARKDOWN_SCREEN = {
   promoCheckbox: 'chkZ4_Promo_CheckBox1',
   dateToField: 'txdZ11_DateFin_TxtBox',
   priceField: 'txmZ20_PdvPrixVente_TxtBox',
+  /** Kod stawki VAT ({@link mercalysVatCode}: 1 = 23%, 2 = 8%, 6 = 5%). */
+  vatField: 'lstZ5_TVA_TxtBox',
   approveButton: 'btnB4_Valider_LnkBouton',
   /** Tak przy „Utworzyć zapis ?” i przy pytaniu o zachowanie wpisu, gdy taryfa z tą datą już jest; inne pytanie zatrzymuje makro. */
   confirmText: 'Utworzy;zachowa',
@@ -374,47 +376,104 @@ const datePattern = (iso: string) => {
 const withoutLeadingZeros = (code: string) => code.replace(/^0+/, '')
 
 /**
+ * Taryfa sprzedaży jednego artykułu, od otwartej karty artykułu (ar-e001) z powrotem na pustą kartę: EAN, sprawdzenie
+ * ITM8, Taryfy Sprzed., data początku, przy przecenie Promo i data końca, przy podanym `vatCode` stawka VAT, cena,
+ * sprawdzenie pól, Zatwierdź, Tak, Powrót, ZER. Wspólne dla przeceny i ceny zwykłej artykułu w promocji.
+ */
+function salesTariffLines({
+  ean,
+  itm8,
+  price,
+  from,
+  to,
+  vatCode,
+}: {
+  ean: string
+  itm8: string
+  price: number
+  from: string
+  /** Koniec promocji; bez niego zwykła taryfa (bez Promo). */
+  to?: string
+  vatCode?: string
+}) {
+  const screen = MARKDOWN_SCREEN
+  const priceText = price.toFixed(2).replace('.', ',')
+  return [
+    `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
+    `WEBKEY|${WINDOW}|${screen.eanField}|^a${ean}{Enter}`,
+    `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*${withoutLeadingZeros(itm8)}$|${PAGE_TIMEOUT_MS}`,
+    `WEBCLICK|${WINDOW}|${screen.salesTariffsButton}`,
+    `WEBWAIT|${WINDOW}|${screen.dateFromField}||${PAGE_TIMEOUT_MS}`,
+    `WEBKEY|${WINDOW}|${screen.dateFromField}|^a${mercalysDate(from)}{Tab}`,
+    ...(to
+      ? [
+          `WEBCHECK|${WINDOW}|${screen.promoCheckbox}`,
+          `SLEEP|${AFTER_PROMO_SLEEP_MS}`,
+          `WEBKEY|${WINDOW}|${screen.dateToField}|^a${mercalysDate(to)}{Tab}`,
+        ]
+      : []),
+    ...(vatCode ? [`WEBKEY|${WINDOW}|${screen.vatField}|^a${vatCode}{Tab}`] : []),
+    `WEBKEY|${WINDOW}|${screen.priceField}|^a${priceText}{Tab}`,
+    `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
+    `WEBVALUE|${WINDOW}|${screen.dateFromField}|${datePattern(from)}`,
+    ...(to
+      ? [
+          `WEBVALUE|${WINDOW}|${screen.promoCheckbox}|^tak$`,
+          `WEBVALUE|${WINDOW}|${screen.dateToField}|${datePattern(to)}`,
+        ]
+      : [`WEBVALUE|${WINDOW}|${screen.promoCheckbox}|^nie$`]),
+    ...(vatCode ? [`WEBVALUE|${WINDOW}|${screen.vatField}|^${vatCode}$`] : []),
+    `WEBVALUE|${WINDOW}|${screen.priceField}|^${priceText}$`,
+    `WEBCLICK|${WINDOW}|${screen.approveButton}`,
+    // Gdyby Mercalys zapytał o stratę dopiero przy zapisie; inne pytanie (Utworzyć zapis) WEBDIALOG zostawia od razu.
+    `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
+    `WEBWAIT|${DIALOG}|Oui|${screen.confirmText}|${PAGE_TIMEOUT_MS}`,
+    `WEBCLICK|${DIALOG}|Oui`,
+    `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
+    `WEBCLICK|${WINDOW}|${screen.backButton}`,
+    `WEBWAIT|${WINDOW}|${screen.resetButton}||${PAGE_TIMEOUT_MS}`,
+    `WEBCLICK|${WINDOW}|${screen.resetButton}`,
+    `WEBVALUE|${WINDOW}|${screen.eanField}|^$|${PAGE_TIMEOUT_MS}`,
+  ]
+}
+
+/** Otwarcie Mercalys na karcie artykułu. */
+const articleCardOpenLines = () => [
+  mercalysOpenLine(PROGRAM_WINDOW),
+  `WEBENSURE|${WINDOW}|${MARKDOWN_SCREEN.articleMenuItem}|${MARKDOWN_SCREEN.articleTab}`,
+  `WEBCLICK|${WINDOW}|${MARKDOWN_SCREEN.articleMenuItem}`,
+]
+
+/**
  * Makro przeceny: przywraca Mercalys z paska zadań, otwiera kartę artykułu po EAN-ie i taryfy sprzedaży, wpisuje okres
  * i cenę, zatwierdza, wraca, zeruje kartę i chowa program, więc pracownik wraca do przeglądarki. Inny artykuł na karcie
  * albo wartości, których formularz nie przyjął, zatrzymują makro przed zapisem.
  */
 export function buildMarkdownMacro({ ean, itm8, price, from, to }: MarkdownMacro) {
-  const screen = MARKDOWN_SCREEN
-  const priceText = price.toFixed(2).replace('.', ',')
   return (
     [
       `# Przecena ${ean}`,
-      mercalysOpenLine(PROGRAM_WINDOW),
-      `WEBENSURE|${WINDOW}|${screen.articleMenuItem}|${screen.articleTab}`,
-      `WEBCLICK|${WINDOW}|${screen.articleMenuItem}`,
-      `WEBWAIT|${WINDOW}|${screen.eanField}||${PAGE_TIMEOUT_MS}`,
-      `WEBKEY|${WINDOW}|${screen.eanField}|^a${ean}{Enter}`,
-      `WEBVALUE|${WINDOW}|${screen.itm8Field}|^0*${withoutLeadingZeros(itm8)}$|${PAGE_TIMEOUT_MS}`,
-      `WEBCLICK|${WINDOW}|${screen.salesTariffsButton}`,
-      `WEBWAIT|${WINDOW}|${screen.dateFromField}||${PAGE_TIMEOUT_MS}`,
-      `WEBKEY|${WINDOW}|${screen.dateFromField}|^a${mercalysDate(from)}{Tab}`,
-      `WEBCHECK|${WINDOW}|${screen.promoCheckbox}`,
-      `SLEEP|${AFTER_PROMO_SLEEP_MS}`,
-      `WEBKEY|${WINDOW}|${screen.dateToField}|^a${mercalysDate(to)}{Tab}`,
-      `WEBKEY|${WINDOW}|${screen.priceField}|^a${priceText}{Tab}`,
-      `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
-      `WEBVALUE|${WINDOW}|${screen.dateFromField}|${datePattern(from)}`,
-      `WEBVALUE|${WINDOW}|${screen.promoCheckbox}|^tak$`,
-      `WEBVALUE|${WINDOW}|${screen.dateToField}|${datePattern(to)}`,
-      `WEBVALUE|${WINDOW}|${screen.priceField}|^${priceText}$`,
-      `WEBCLICK|${WINDOW}|${screen.approveButton}`,
-      // Gdyby Mercalys zapytał o stratę dopiero przy zapisie; inne pytanie (Utworzyć zapis) WEBDIALOG zostawia od razu.
-      `WEBDIALOG|${DIALOG}|${screen.lossText}|Oui|${LOSS_DIALOG_TIMEOUT_MS}`,
-      `WEBWAIT|${DIALOG}|Oui|${screen.confirmText}|${PAGE_TIMEOUT_MS}`,
-      `WEBCLICK|${DIALOG}|Oui`,
-      `SLEEP|${AFTER_CONFIRM_SLEEP_MS}`,
-      `WEBCLICK|${WINDOW}|${screen.backButton}`,
-      `WEBWAIT|${WINDOW}|${screen.resetButton}||${PAGE_TIMEOUT_MS}`,
-      `WEBCLICK|${WINDOW}|${screen.resetButton}`,
-      `WEBVALUE|${WINDOW}|${screen.eanField}|^$|${PAGE_TIMEOUT_MS}`,
+      ...articleCardOpenLines(),
+      ...salesTariffLines({ ean, itm8, price, from, to }),
       `WINMIN|${PROGRAM_WINDOW}`,
     ].join('\r\n') + '\r\n'
   )
+}
+
+/** Artykuł w trwającej promocji, któremu ustawiamy cenę zwykłą od dziś. */
+export type PromoPriceMacroItem = { ean: string; itm8: string; price: number; vatCode: string }
+
+/**
+ * Cena zwykła artykułów w trwającej promocji (zmiana cen z pliku ich nie obejmuje): dla każdego artykułu taryfa jak przy
+ * przecenie, ale bez Promo, od dziś, ze stawką VAT i ceną sugerowaną z tabeli; po zapisie Powrót, ZER. i kolejny EAN.
+ */
+export function buildPromoPriceMacro(items: PromoPriceMacroItem[], today: string) {
+  const out = [`# Ceny zwykłe artykułów w promocji: ${items.length}`, ...articleCardOpenLines()]
+  items.forEach((item, index) => {
+    out.push(`# ${index + 1}/${items.length}: EAN ${item.ean}`, ...salesTariffLines({ ...item, from: today }))
+  })
+  out.push(`WINMIN|${PROGRAM_WINDOW}`)
+  return out.join('\r\n') + '\r\n'
 }
 
 /** Wprowadzanie promocji: nagłówek operacji (ar-e072) i artykuły operacji (ar-e074). */
@@ -1230,6 +1289,112 @@ export function buildMeaMacro(codes: string[]) {
     }
     out.push(`LABEL|${label}`)
   }
+  out.push(`WINMIN|${PROGRAM_WINDOW}`)
+  return out.join('\r\n') + '\r\n'
+}
+
+/**
+ * Taryfa → Kontrola ceny: okno pobierania danych z historią plików zmian cen (dgHisto: data, użytkownik, stacja, stan
+ * „Przetw. N raz”, przycisk opracowania w wierszu) i Różne ceny (ar-e084).
+ */
+const PRICE_CONTROL_SCREEN = {
+  tariffTab: 'mnTp_TARIF',
+  controlMenuItem: 'mnTv_TARIF_ControlePrix',
+  historyButton: 'btnHistorique_LnkBouton',
+  historyBackButton: 'btnRetourHisto_LnkBouton',
+  historyGrid: 'dgHisto',
+  /** Przycisk opracowania w wierszu historii (`dgHisto__ctl<n>_ImgButtonTraiter_ImageButton1`). */
+  processButton: 'ImgButtonTraiter_ImageButton1',
+  nextPageButton: 'pgrDetail_ibtSuivant',
+  /** Najnowsze pliki są na początku historii; dalej makro nie szuka. */
+  historyPages: 3,
+  /** „Przetworzyć plik ponownie?” */
+  processText: 'ponownie',
+  differentPricesMenuItem: 'mnTv_TARIF_ar-e084_PrixDifferents',
+  selectAllButton: 'btnB2_SelectTous_LnkBouton',
+  alignMsiButton: 'btnB6_AlignerMSI_LnkBouton',
+  /** Stan wiersza po „Zaznacz wszystko”; „Niezaznaczony” się nie liczy. */
+  selectedPattern: 'i)(?<![a-ząćęłńóśźż])zazn',
+  /** „Art.w promocji nie będą uwzględnione”: komunikat bez tytułu, przycisk Zamknij. */
+  alertWindow: 'ahk_class Internet Explorer_TridentDlgFrame',
+  alertText: 'promocji',
+  alertButton: 'Fermer',
+} as const
+
+/** Opracowanie dużego pliku i wyrównanie cen potrafią trwać. */
+const PRICE_CONTROL_TIMEOUT_MS = 120000
+const PRICE_CONTROL_ALERT_MS = 15000
+
+/** Plik zmiany cen do opracowania: czas z nazwy pliku (jak w historii Mercalys) i liczba cen. */
+export type PriceControlMacroFile = {
+  fileName: string
+  lineCount: number
+  label: string
+}
+
+/** Data i godzina z nazwy `CTRLPRIX_RRRRMMDD_HHMMSS_…`; null = nazwa w innym układzie. */
+export function priceControlFileTime(fileName: string) {
+  const match = /CTRLPRIX_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/i.exec(fileName)
+  if (!match) return null
+  const [, year, month, day, hour, minute] = match
+  return { year, month, day, hour, minute }
+}
+
+/**
+ * Wiersz historii tego pliku: data (dowolny separator, rok z 2 albo 4 cyframi), godzina i minuta, liczba cen jako osobna
+ * liczba i stan „Przetw. 0 raz”. Opracowany plik ma już 1 raz, więc ten sam plik nie przejdzie drugi raz. Bez `|`,
+ * bo dzieli linię makra.
+ */
+export function priceControlRowPattern(file: PriceControlMacroFile) {
+  const time = priceControlFileTime(file.fileName)
+  if (!time) return null
+  const date = String.raw`(?<!\d)${time.day}[./-]${time.month}[./-](?:${time.year.slice(0, 2)})?${time.year.slice(2)}(?!\d)`
+  const clock = String.raw`(?<!\d)${time.hour}:${time.minute}(?!\d)`
+  const count = String.raw`(?<![\d:/.,])${file.lineCount}(?![\d:/.,])`
+  return String.raw`i)^(?=.*${date})(?=.*${clock})(?=.*${count})(?=.*(?<!\d)0\s*raz)`
+}
+
+/**
+ * „Wprowadź zmiany cen”: dla każdego pliku Taryfa → Kontrola ceny → Historia, opracowanie wiersza tego pliku (data,
+ * godzina, liczba cen, „Przetw. 0 raz”), Tak, zamknięcie PDF-a, potem Różne ceny: Zaznacz wszystko, czekanie na
+ * zaznaczone wiersze, Porównaj MSI, Zamknij przy komunikacie o promocjach i czekanie na pustą tabelę. Pliku, którego
+ * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.56 (WEBROWBUTTON, WEBGRIDWAIT).
+ */
+export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
+  const screen = PRICE_CONTROL_SCREEN
+  const out = [
+    `# Wprowadzenie zmian cen: ${files.length} (odtwarzacz od wersji 0.56)`,
+    mercalysOpenLine(PROGRAM_WINDOW),
+  ]
+  files.forEach((file, index) => {
+    const pattern = priceControlRowPattern(file)
+    if (!pattern) return
+    const skip = `zmiana-cen-${index + 1}`
+    const empty = `${skip}-bez-roznic`
+    const label = file.label.replace(/[|\r\n]/g, ' ')
+    out.push(
+      `# ${index + 1}/${files.length}: ${label}`,
+      `WEBENSURE|${WINDOW}|${screen.controlMenuItem}|${screen.tariffTab}`,
+      `WEBCLICK|${WINDOW}|${screen.controlMenuItem}`,
+      `WEBWAIT|${WINDOW}|${screen.historyButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.historyButton}`,
+      `WEBWAIT|${WINDOW}|${screen.historyBackButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBROWBUTTON|${WINDOW}|${screen.historyGrid}|${pattern}|${screen.processButton}|${skip}|${label}|${screen.nextPageButton}|${screen.historyPages}|${PAGE_TIMEOUT_MS}`,
+      `WEBWAIT|${DIALOG}|Oui|${screen.processText}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${DIALOG}|Oui`,
+      `WINCLOSEALL|${PDF_WINDOW}|${PRICE_CONTROL_TIMEOUT_MS}`,
+      `WEBENSURE|${WINDOW}|${screen.differentPricesMenuItem}|${screen.tariffTab}`,
+      `WEBCLICK|${WINDOW}|${screen.differentPricesMenuItem}`,
+      `WEBWAIT|${WINDOW}|${screen.selectAllButton}||${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.selectAllButton}`,
+      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|all|${screen.selectedPattern}|${empty}|Różne ceny bez artykułów: ${label}|${PAGE_TIMEOUT_MS}`,
+      `WEBCLICK|${WINDOW}|${screen.alignMsiButton}`,
+      `WEBDIALOG|${screen.alertWindow}|${screen.alertText}|${screen.alertButton}|${PRICE_CONTROL_ALERT_MS}`,
+      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|none||||${PRICE_CONTROL_TIMEOUT_MS}`,
+      `LABEL|${empty}`,
+      `LABEL|${skip}`,
+    )
+  })
   out.push(`WINMIN|${PROGRAM_WINDOW}`)
   return out.join('\r\n') + '\r\n'
 }

@@ -1580,6 +1580,17 @@ function CellContent({
     case 'salePrice': {
       // Trwająca promocja z kasy (pliki TRACEART): kartoteka podaje wtedy cenę promocyjną jako cenę sprzedaży.
       const promo = activePromoPrice(row)
+      // Promocja na artykule z cadencier: cenę ma z centrali, więc jej nie zmieniamy (makro cen w promocji go pomija).
+      if (promo !== null && row.salePrice === promo && row.cadencier) {
+        return (
+          <span
+            className="font-bold text-fuchsia-700 dark:text-fuchsia-300"
+            title={`Cadencier w promocji na kasie do ${formatDocumentDate(row.promoTo ?? '')}: ceny nie zmieniamy`}
+          >
+            {formatMoney(row.salePrice)}
+          </span>
+        )
+      }
       if (promo !== null && row.salePrice === promo) {
         return (
           <span

@@ -119,6 +119,7 @@ import {
   useSuggest,
   useUnlinkProduct,
   usePriceControlPendingCount,
+  useAddPromoPrices,
 } from './api'
 import { DataEntryGrid, type GridHandle } from './DataEntryGrid'
 import {
@@ -165,6 +166,8 @@ import { type RowSplit, SplitQuantityDialog } from './SplitQuantityDialog'
 import { SupplierChangeDialog } from './SupplierChangeDialog'
 import { NOMENCLATURE_TINTS, ROW_TINTS } from './row-tints'
 import { buildTransferMacro, planTransferMacro } from './transfer-macro'
+import { planPromoPrices } from './promo-price-macro'
+import { PromoPricesDialog } from './PromoPricesDialog'
 import {
   cadencierPrice,
   catalogChanges,
@@ -355,6 +358,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [closeInvoicesOpen, setCloseInvoicesOpen] = useState(false)
   const { data: priceControlPending = 0 } = usePriceControlPendingCount(store.id, true)
   const [pluMacroOpen, setPluMacroOpen] = useState(false)
+  const [promoPricesOpen, setPromoPricesOpen] = useState(false)
   const [splitTargets, setSplitTargets] = useState<DataEntryRow[]>([])
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
   const [xmlOpenOpen, setXmlOpenOpen] = useState(false)
@@ -934,6 +938,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const chosenArticles = selectedArticles.filter(isArticle)
   // Nowe kody 24 z tabeli i każdy zaznaczony kod 24, także z kartoteki.
   const pluCodes = pluItems(filled, chosenArticles)
+  // Ceny zwykłe artykułów w promocji z całej tabeli: zapis pliku XML dopisuje je do kolejki makra.
+  const promoPrices = planPromoPrices(filled, pricing)
+  const promoDocument = [invoice?.supplier?.name ?? supplier?.name ?? invoice?.sellerName, invoice?.number]
+    .filter(Boolean)
+    .join(' · ')
 
   const toggleRowFilter = (kind: RowFilter['kind']) => {
     if (rowFilter?.kind === kind) {
@@ -1379,6 +1388,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   // „Zapisz”: bez braków zapisuje od razu do folderów z ustawień zapisu; z brakami najpierw okno sprawdzenia, a gdy
   // dokument jest już zapisany, pyta o ponowny zapis.
   // Po „Tak” artykuły z pliku przestają być nowe (po „Cofnij” znów są), więc wiersze szukają ich od nowa.
+  const addPromoPrices = useAddPromoPrices(store.id)
   const xmlSave = useXmlSave(store.id, (eans) => {
     const changed = new Set(eans.map((ean) => ean.replace(/^0+/, '')))
     onEansChanged(
@@ -1396,6 +1406,20 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     }
     const fileName = await xmlSave.save(payload, productFilePayload, priceControlPayload, newArticles)
     if (!fileName) return
+    if (promoPrices.items.length > 0) {
+      const count = promoPrices.items.length
+      addPromoPrices.mutate(
+        { document: promoDocument || null, items: promoPrices.items },
+        {
+          onSuccess: () =>
+            toast(`Artykuły w promocji do zmiany ceny w Mercalys: ${count}`, {
+              description: 'Są na liście „Ceny artykułów w promocji” (Wytwórz → Makro).',
+              action: { label: 'Pokaż', onClick: () => setPromoPricesOpen(true) },
+            }),
+          onError: () => toast.error('Nie udało się dodać artykułów w promocji do listy cen'),
+        },
+      )
+    }
     setCheckOpen(false)
     dispatch(
       setDataEntrySaved({ storeId: store.id, saved: { at: nowIso(), fileName, signature, document: documentKey } }),
@@ -1595,6 +1619,13 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                     : 'Do schowka, Alt+E: Przesunięcie stanu w Mercalys, wszystkie artykuły, przeniesienie i wydruk'
                 }
                 onClick={() => void copyTransferMacro()}
+              />
+              <ActionItem
+                icon={<BadgePercentIcon />}
+                label="Ceny artykułów w promocji"
+                count={promoPrices.items.length}
+                hint="Lista z zapisanych dokumentów, makro do schowka, Alt+E: cena zwykła od dziś w taryfie każdego artykułu w promocji"
+                onClick={() => setPromoPricesOpen(true)}
               />
               <ActionItem
                 icon={<ScaleIcon />}
@@ -2211,6 +2242,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
       <CloseInvoicesDialog storeId={store.id} open={closeInvoicesOpen} onOpenChange={setCloseInvoicesOpen} />
       <PluMacroDialog open={pluMacroOpen} onOpenChange={setPluMacroOpen} items={pluCodes} />
+      <PromoPricesDialog
+        storeId={store.id}
+        open={promoPricesOpen}
+        onOpenChange={setPromoPricesOpen}
+        fromTable={promoPrices.items.length > 0 ? { document: promoDocument || null, items: promoPrices.items } : null}
+      />
 
       <XmlOpenDialog
         storeId={store.id}

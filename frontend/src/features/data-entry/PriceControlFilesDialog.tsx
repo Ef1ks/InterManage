@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckIcon, FolderSearchIcon, SaveIcon, Trash2Icon, Undo2Icon } from 'lucide-react'
+import { CheckIcon, FolderSearchIcon, PlayIcon, SaveIcon, Trash2Icon, Undo2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 
 import { type PriceControlAction, usePriceControlChange, usePriceControlFiles } from './api'
 import { checkPriceControlFiles, type FolderStatus, usePriceControlWatch } from './price-control-watch'
+import { PriceControlMacroDialog } from './PriceControlMacroDialog'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
@@ -48,6 +49,7 @@ export function PriceControlFilesDialog({
   const watch = usePriceControlWatch()
   const protoFolder = useProtoFolder(storeId)
   const [saving, setSaving] = useState<string | null>(null)
+  const [macroOpen, setMacroOpen] = useState(false)
 
   const pending = files.data?.pending ?? []
   const loaded = files.data?.loaded ?? []
@@ -226,7 +228,19 @@ export function PriceControlFilesDialog({
         )}
 
         <section aria-label="Niewgrane" className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">Niewgrane ({pending.length})</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">Niewgrane ({pending.length})</h3>
+            {pending.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => setMacroOpen(true)}
+                title="Makro do Mercalys: opracowanie plików zmian cen i porównanie z MSI"
+              >
+                <PlayIcon />
+                Wprowadź zmiany cen
+              </Button>
+            )}
+          </div>
           <ul className="max-h-[36vh] divide-y overflow-y-auto rounded-lg border">
             {pending.map((file) => {
               const status = statuses[file.id]
@@ -277,6 +291,7 @@ export function PriceControlFilesDialog({
             </ul>
           </details>
         )}
+        <PriceControlMacroDialog open={macroOpen} onOpenChange={setMacroOpen} files={pending} />
       </DialogContent>
     </Dialog>
   )

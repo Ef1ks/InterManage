@@ -3033,6 +3033,21 @@ export type InvoiceClosing = {
   generatedAt: string | null
 }
 
+/** Cena zwykła artykułu w promocji w kolejce do makra taryf; `generatedAt`: poszła już do makra. */
+export type PromoPriceItem = {
+  id: string
+  ean: string
+  itm8: string
+  name: string
+  salePrice: number
+  vatCode: string
+  promoPrice: number | null
+  promoTo: string | null
+  document: string | null
+  createdAt: string
+  generatedAt: string | null
+}
+
 /**
  * Plik XML faktury odczytany do wczytania; `otherStore`: odbiorca w pliku to inny sklep niż wybrany. Zapis tymczasowy
  * ma też `draft`: całą tabelę z przeglądarki (JSON) z chwili zapisu.

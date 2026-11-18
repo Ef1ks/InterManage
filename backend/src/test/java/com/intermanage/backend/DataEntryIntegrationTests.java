@@ -1117,6 +1117,54 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void promoPricesQueueKeepsNewestPricePerEanUntilMacro() throws Exception {
+        String first = """
+                {"document":"GOBARTO · FV/1","items":[
+                 {"ean":"5900000000012","itm8":"1234567","name":"KAWA 250G","salePrice":19.99,"vatCode":"1",
+                  "promoPrice":14.99,"promoTo":"2026-12-01"},
+                 {"ean":"5904634010327","itm8":"7654321","name":"HERBATA","salePrice":6.49,"vatCode":"2"}]}""";
+        mvc.perform(post(url("/promo-prices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(first))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+        // Ten sam EAN z kolejnego dokumentu, zanim poszedł do makra: zostaje tylko nowsza cena.
+        String list = mvc.perform(post(url("/promo-prices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"document":"FV/2","items":[{"ean":"5900000000012","itm8":"1234567",
+                                 "name":"KAWA 250G","salePrice":20.49,"vatCode":"1"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].salePrice").value(20.49))
+                .andExpect(jsonPath("$[0].document").value("FV/2"))
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(list, "$[0].id");
+        mvc.perform(post(url("/promo-prices/generated")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + id + "\"]}"))
+                .andExpect(jsonPath("$[0].generatedAt").isNotEmpty());
+        mvc.perform(post(url("/promo-prices/delete")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + id + "\"]}"))
+                .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(post(url("/promo-prices/restore")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + id + "\"]}"))
+                .andExpect(jsonPath("$.length()").value(2));
+        // Ponowny zapis dokumentu z tą samą ceną, już wygenerowaną: bez drugiego wpisu.
+        mvc.perform(post(url("/promo-prices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"items":[{"ean":"5900000000012","itm8":"1234567","name":"KAWA 250G",
+                                 "salePrice":20.49,"vatCode":"1"}]}"""))
+                .andExpect(jsonPath("$.length()").value(2));
+        // Zła stawka VAT nie trafia do kolejki.
+        mvc.perform(post(url("/promo-prices")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"items":[{"ean":"5900000000012","itm8":"1234567","name":"KAWA",
+                                 "salePrice":20.49,"vatCode":"9"}]}"""))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void priceControlFile() throws Exception {
         String supplierId = jdbc.queryForObject("""
                 insert into suppliers (store_id, code, keyword, name, nip)

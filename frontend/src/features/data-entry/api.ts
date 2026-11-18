@@ -25,6 +25,7 @@ import type {
   DataEntryXmlDocument,
   DataEntryXmlExport,
   InvoiceClosing,
+  PromoPriceItem,
   InvoiceBulkResult,
   InvoiceMarkKind,
   KsefInvoice,
@@ -176,6 +177,44 @@ export function useInvoiceClosingChange(storeId: string) {
     mutationFn: ({ action, ids }: { action: 'generated' | 'delete' | 'restore'; ids: string[] }) =>
       api<InvoiceClosing[]>(`${path(storeId)}/invoice-closings/${action}`, { method: 'POST', json: { ids } }),
     onSuccess: (list) => queryClient.setQueryData(closingsKey(storeId), list),
+    meta: { invalidates: false },
+  })
+}
+
+const promoPricesKey = (storeId: string) => ['stores', storeId, 'data-entry', 'promo-prices'] as const
+
+/** Ceny zwykłe artykułów w promocji: do makra i już wygenerowane. */
+export function usePromoPrices(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: promoPricesKey(storeId),
+    queryFn: () => api<PromoPriceItem[]>(`${path(storeId)}/promo-prices`),
+    enabled,
+  })
+}
+
+export type PromoPriceAdd = {
+  document: string | null
+  items: Pick<PromoPriceItem, 'ean' | 'itm8' | 'name' | 'salePrice' | 'vatCode' | 'promoPrice' | 'promoTo'>[]
+}
+
+/** Dodanie artykułów z dokumentu; ten sam EAN, który jeszcze czeka, dostaje nowszą cenę. */
+export function useAddPromoPrices(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: PromoPriceAdd) =>
+      api<PromoPriceItem[]>(`${path(storeId)}/promo-prices`, { method: 'POST', json: body }),
+    onSuccess: (list) => queryClient.setQueryData(promoPricesKey(storeId), list),
+    meta: { invalidates: false },
+  })
+}
+
+/** Oznaczenie wygenerowanych, usunięcie (znacznik) i „Przywróć”; każda zmiana zwraca listę. */
+export function usePromoPriceChange(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ action, ids }: { action: 'generated' | 'delete' | 'restore'; ids: string[] }) =>
+      api<PromoPriceItem[]>(`${path(storeId)}/promo-prices/${action}`, { method: 'POST', json: { ids } }),
+    onSuccess: (list) => queryClient.setQueryData(promoPricesKey(storeId), list),
     meta: { invalidates: false },
   })
 }

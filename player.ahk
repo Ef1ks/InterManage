@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.55.0.0
+;@Ahk2Exe-SetVersion 0.56.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.55" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.56" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -695,6 +695,61 @@ PlayMacro(rawClip) {
                 ; (np. napis przy polu wyboru). Gdy obok napisu jest jedno pole wyboru, zaznacza je (zaznaczonego nie odznacza).
                 problem := parts.Length < 3 ? "Linia WEBTEXTCLICK wymaga okna i tekstu."
                     : WebTextClick(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Integer(Trim(parts[4])) : 10000)
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBROWBUTTON":
+                ; WEBROWBUTTON|okno|siatka|wyrażenie regularne wiersza|przycisk w wierszu|etykieta|opis|następna strona|ile stron|limit w ms
+                ; (od 0.56): klika przycisk (koniec id `<siatka>__ctlN_<przycisk>`) w pierwszym widocznym wierszu, którego tekst
+                ; pasuje. Bez takiego wiersza przechodzi kolejne strony (najwyżej „ile stron”), a potem dopisuje opis do
+                ; podsumowania i przeskakuje do LABEL|etykieta. Np. plik zmiany cen w historii pobierania danych.
+                if (parts.Length < 7) {
+                    MsgBox report "Linia WEBROWBUTTON wymaga okna, siatki, wyrażenia, przycisku, etykiety i opisu.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                problem := WebRowButton(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]),
+                    parts.Length >= 8 ? Trim(parts[8]) : "", parts.Length >= 9 && Trim(parts[9]) != "" ? Integer(Trim(parts[9])) : 1,
+                    parts.Length >= 10 ? Integer(Trim(parts[10])) : 30000)
+                if (problem = "SKIP") {
+                    report .= "Nie znaleziono: " Trim(parts[7]) "`n"
+                    target := LabelLine(lines, Trim(parts[6]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+                if (problem != "") {
+                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                report .= "Obsłużono: " Trim(parts[7]) "`n"
+            case "WEBGRIDWAIT":
+                ; WEBGRIDWAIT|okno|element strony|warunek|wyrażenie|etykieta|opis|limit w ms (od 0.56): czeka na stan wierszy tabeli
+                ; (wiersze z setSelectedLigne) na stronie z elementem. `all` = co najmniej jeden wiersz i każdy pasuje do wyrażenia
+                ; (np. Stan „Zaznaczony”); pusta tabela przez 3 s = opis do podsumowania i przeskok do LABEL|etykieta.
+                ; `none` = tabela bez wierszy przez 1 s (np. Różne ceny po wyrównaniu).
+                if (parts.Length < 4) {
+                    MsgBox report "Linia WEBGRIDWAIT wymaga okna, elementu i warunku.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                problem := WebGridWait(Trim(parts[2]), Trim(parts[3]), StrLower(Trim(parts[4])), parts.Length >= 5 ? Trim(parts[5]) : "",
+                    parts.Length >= 8 ? Integer(Trim(parts[8])) : 60000)
+                if (problem = "EMPTY" && parts.Length >= 6 && Trim(parts[6]) != "") {
+                    if (parts.Length >= 7 && Trim(parts[7]) != "")
+                        report .= Trim(parts[7]) "`n"
+                    target := LabelLine(lines, Trim(parts[6]), index)
+                    if (target = 0) {
+                        MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+                if (problem = "EMPTY")
+                    problem := "Tabela jest pusta."
                 if (problem != "") {
                     MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -1870,6 +1925,130 @@ WebIfRow(title, page, grid, button, number, text, timeoutMs, &buttonId := "", &s
         if (A_TickCount >= deadline)
             return "Lista nie pokazała wierszy z tekstem `"" text "`" (" seen ")."
         Sleep 100
+    }
+}
+
+; Przyciski w widocznych wierszach siatki: wiersz to TR nad przyciskiem z id `<siatka>__ctlN_<przycisk>`, więc siatka nie
+; musi mieć setSelectedLigne (historia pobierania danych). Zwraca {doc, hwnd, id, text} na każdy wiersz.
+RowButtons(title, grid, button) {
+    found := []
+    for hwnd in WinGetList(title) {
+        for doc in HtmlDocuments(hwnd) {
+            if !PageLoaded(doc)
+                continue
+            try {
+                inputs := doc.getElementsByTagName("input")
+                Loop inputs.length {
+                    element := inputs.item(A_Index - 1)
+                    id := WebProp(element, "id")
+                    if !(InStr(id, grid "__ctl") = 1 && SubStr(id, -StrLen(button) - 1) = "_" button && IsShown(element))
+                        continue
+                    node := element
+                    row := ""
+                    Loop 10 {
+                        node := node.parentNode
+                        if (WebProp(node, "tagName") = "TR") {
+                            row := node
+                            break
+                        }
+                    }
+                    if IsObject(row)
+                        found.Push({doc: doc, hwnd: hwnd, id: id, text: RowText(row)})
+                }
+            }
+        }
+    }
+    return found
+}
+
+; "" = kliknięto przycisk wiersza pasującego do wyrażenia, "SKIP" = żadna z przejrzanych stron go nie ma.
+WebRowButton(title, grid, pattern, button, nextPage, maxPages, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    page := 1
+    signature := ""
+    stableSince := 0
+    Loop {
+        rows := RowButtons(title, grid, button)
+        for row in rows {
+            if RegExMatch(row.text, pattern) {
+                try WinActivate row.hwnd
+                try {
+                    ClickWithoutWaiting(row.doc, row.doc.getElementById(row.id))
+                    return ""
+                }
+            }
+        }
+        current := rows.Length ":" (rows.Length > 0 ? rows[1].text : "")
+        if (current != signature) {
+            signature := current
+            stableSince := A_TickCount
+        } else if (rows.Length > 0 && A_TickCount - stableSince >= 1000) {
+            ; Strona ustała i nie ma wiersza: następna strona albo koniec.
+            if (page >= maxPages || nextPage = "" || !PagerAvailable(title, nextPage))
+                return "SKIP"
+            if (WebClick(title, nextPage, 5000) != "")
+                return "SKIP"
+            page += 1
+            first := rows[1].text
+            waitUntil := A_TickCount + 15000
+            Loop {
+                Sleep 200
+                fresh := RowButtons(title, grid, button)
+                if (fresh.Length > 0 && fresh[1].text != first)
+                    break
+                if (A_TickCount >= waitUntil)
+                    return "Następna strona listy `"" grid "`" się nie wczytała."
+            }
+            signature := ""
+            continue
+        }
+        if (A_TickCount >= deadline)
+            return rows.Length = 0 ? "Nie pojawiła się lista `"" grid "`" z przyciskami `"" button "`"." : "SKIP"
+        Sleep 100
+    }
+}
+
+; "" = warunek spełniony, "EMPTY" = przy `all` tabela pusta przez 3 s, inaczej opis problemu.
+WebGridWait(title, element, condition, pattern, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    since := 0
+    lastState := ""
+    seen := "nie ma strony z elementem `"" element "`""
+    Loop {
+        state := ""
+        for doc in PagesWith(title, element) {
+            total := 0
+            matching := 0
+            for item in GridRows(doc, "*") {
+                if !IsShown(item.row)
+                    continue
+                total += 1
+                if (pattern != "" && RegExMatch(RowText(item.row), pattern))
+                    matching += 1
+            }
+            state := total ":" matching
+            seen := "wiersze: " total ", pasujące: " matching
+            break
+        }
+        if (state != lastState) {
+            lastState := state
+            since := A_TickCount
+        }
+        if (state != "") {
+            parts := StrSplit(state, ":")
+            total := Integer(parts[1])
+            if (condition = "none" && total = 0 && A_TickCount - since >= 1000)
+                return ""
+            if (condition = "all") {
+                if (total > 0 && Integer(parts[2]) = total && A_TickCount - since >= 500)
+                    return ""
+                if (total = 0 && A_TickCount - since >= 3000)
+                    return "EMPTY"
+            }
+        }
+        if (A_TickCount >= deadline)
+            return "Tabela nie doszła do stanu `"" condition "`" (" seen ")."
+        Sleep 200
     }
 }
 
