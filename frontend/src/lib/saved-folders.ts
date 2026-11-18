@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError, fetchNamedFile } from '@/lib/api'
 import { enqueueFile, queueStoreFor } from '@/lib/file-queue'
@@ -47,13 +47,46 @@ export const folderSavingSupported = typeof window !== 'undefined' && 'showDirec
 const DB_NAME = 'intermanage'
 const STORE = 'folders'
 
+/*
+ * Limity czasu: operacje na folderze (dysk sieciowy, IndexedDB przeglądarki) potrafią zawisnąć bez błędu, a przycisk
+ * zapisu kręciłby się wtedy bez końca. Po limicie zapis kończy się błędem, który mówi, na czym stanął. Zapis pliku,
+ * który przekroczył limit, przeglądarka może jeszcze dokończyć, więc komunikat każe najpierw zajrzeć do folderu.
+ */
+const DB_TIMEOUT_MS = 15_000
+const PERMISSION_CHECK_TIMEOUT_MS = 15_000
+/** Okno zgody czeka na użytkownika, więc dłużej. */
+const PERMISSION_PROMPT_TIMEOUT_MS = 120_000
+const WRITE_TIMEOUT_MS = 60_000
+
+class FolderTimeout extends ApiError {
+  constructor(message: string) {
+    super(0, message)
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new FolderTimeout(message)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+const seconds = (ms: number) => `${Math.round(ms / 1000)} s`
+
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1)
     request.onupgradeneeded = () => request.result.createObjectStore(STORE)
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
+    request.onblocked = () => reject(new ApiError(0, 'Zamknij inne karty z aplikacją i spróbuj ponownie.'))
   })
+  return withTimeout(
+    opening,
+    DB_TIMEOUT_MS,
+    `Przeglądarka nie odczytała zapamiętanych folderów w ${seconds(DB_TIMEOUT_MS)}. Zamknij inne karty z aplikacją albo uruchom przeglądarkę ponownie.`,
+  )
 }
 
 async function transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
@@ -72,7 +105,9 @@ async function transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectSt
 async function readFolder(key: string): Promise<DirectoryHandle | null> {
   try {
     return ((await transaction('readonly', (store) => store.get(key))) as DirectoryHandle | undefined) ?? null
-  } catch {
+  } catch (error) {
+    // Zawieszona przeglądarka to nie „brak folderu”: inaczej zapis po cichu przeszedłby na pobieranie.
+    if (error instanceof FolderTimeout) throw error
     return null
   }
 }
@@ -116,17 +151,29 @@ export async function requestFolderAccess(key: string, folderMode: FolderMode = 
   const handle = await readFolder(key)
   if (!handle) return false
   const mode: PermissionMode = { mode: folderMode }
-  if ((await handle.queryPermission(mode)) === 'granted') return true
+  const state = await withTimeout(
+    handle.queryPermission(mode),
+    PERMISSION_CHECK_TIMEOUT_MS,
+    `Folder ${handle.name} nie odpowiada (${seconds(PERMISSION_CHECK_TIMEOUT_MS)}). Sprawdź, czy dysk sieciowy jest podłączony.`,
+  )
+  if (state === 'granted') return true
   try {
-    return (await handle.requestPermission(mode)) === 'granted'
-  } catch {
+    return (
+      (await withTimeout(
+        handle.requestPermission(mode),
+        PERMISSION_PROMPT_TIMEOUT_MS,
+        `Brak odpowiedzi na pytanie o zgodę na folder ${handle.name}. Kliknij jeszcze raz i zezwól w okienku przy pasku adresu.`,
+      )) === 'granted'
+    )
+  } catch (error) {
+    if (error instanceof FolderTimeout) throw error
     return false
   }
 }
 
 /** Czy ta przeglądarka ma już wybrany folder pod tym kluczem (bez względu na kolejkę plików i zgodę). */
 export async function hasSavedFolder(key: string): Promise<boolean> {
-  return (await readFolder(key)) !== null
+  return (await readFolder(key).catch(() => null)) !== null
 }
 
 /**
@@ -135,10 +182,10 @@ export async function hasSavedFolder(key: string): Promise<boolean> {
  */
 export async function folderAccess(key: string, folderMode: FolderMode): Promise<PermissionState | 'missing'> {
   if (folderMode === 'readwrite' && queueStoreFor(key)) return 'granted'
-  const handle = await readFolder(key)
-  if (!handle) return 'missing'
   try {
-    return await handle.queryPermission({ mode: folderMode })
+    const handle = await readFolder(key)
+    if (!handle) return 'missing'
+    return await withTimeout(handle.queryPermission({ mode: folderMode }), PERMISSION_CHECK_TIMEOUT_MS, '')
   } catch {
     return 'prompt'
   }
@@ -157,7 +204,11 @@ export async function requestStoredFolderAccess(prefix: string, folderMode: Fold
   }
   let granted = false
   for (const key of keys) {
-    if (typeof key === 'string' && key.startsWith(prefix) && (await requestFolderAccess(key, folderMode)))
+    if (
+      typeof key === 'string' &&
+      key.startsWith(prefix) &&
+      (await requestFolderAccess(key, folderMode).catch(() => false))
+    )
       granted = true
   }
   return granted
@@ -236,12 +287,20 @@ export async function writeToFolder(key: string, fileName: string, data: Blob): 
   if (!(await requestFolderAccess(key))) {
     throw new ApiError(0, `Brak zgody na zapis w folderze ${handle.name}.`)
   }
-  try {
+  const write = async () => {
     const file = await handle.getFileHandle(fileName, { create: true })
     const writable = await file.createWritable()
     await writable.write(data)
     await writable.close()
+  }
+  try {
+    await withTimeout(
+      write(),
+      WRITE_TIMEOUT_MS,
+      `Zapis pliku ${fileName} w folderze ${handle.name} nie skończył się w ${seconds(WRITE_TIMEOUT_MS)} (dysk sieciowy nie odpowiada?). Zanim spróbujesz ponownie, sprawdź, czy plik nie pojawił się w folderze.`,
+    )
   } catch (error) {
+    if (error instanceof FolderTimeout) throw error
     if (error instanceof DOMException && error.name === 'NotFoundError') {
       throw new ApiError(0, `Folderu ${handle.name} już nie ma (albo dysk jest odłączony). Wybierz go ponownie.`)
     }
@@ -260,14 +319,19 @@ export async function saveApiFileToFolder(key: string, path: string, fallbackNam
 export function useSavedFolder(key: string, mode: FolderMode = 'readwrite') {
   const [name, setName] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  // Folder wybrany, zanim skończył się odczyt zapamiętanego (bywa długi): spóźniony odczyt go nie nadpisze.
+  const picked = useRef(false)
 
   useEffect(() => {
     let active = true
-    readFolder(key).then((handle) => {
-      if (!active) return
-      setName(handle?.name ?? null)
-      setLoaded(true)
-    })
+    picked.current = false
+    readFolder(key)
+      .catch(() => null)
+      .then((handle) => {
+        if (!active || picked.current) return
+        setName(handle?.name ?? null)
+        setLoaded(true)
+      })
     return () => {
       active = false
     }
@@ -275,7 +339,11 @@ export function useSavedFolder(key: string, mode: FolderMode = 'readwrite') {
 
   const pick = useCallback(async () => {
     const handle = await pickFolder(key, mode)
-    if (handle) setName(handle.name)
+    if (handle) {
+      picked.current = true
+      setName(handle.name)
+      setLoaded(true)
+    }
     return handle
   }, [key, mode])
 

@@ -90,6 +90,43 @@ export function macroPathError(kind: MacroReport, path: string, mask: string): s
 export const PERIOD_REPORT_MONTHS: Partial<Record<MacroReport, number>> = { SALES: 6, DOCUMENTS: 3 }
 const PERIOD_REPORTS = Object.keys(PERIOD_REPORT_MONTHS) as MacroReport[]
 
+export const isPeriodReport = (kind: DailyReport): kind is MacroReport =>
+  (PERIOD_REPORTS as readonly string[]).includes(kind)
+
+/** Długość jednej części zaległego okresu: tygodnie albo miesiące. */
+export type PartLength = { unit: 'week' | 'month'; count: number }
+
+const PART_LENGTHS: { value: string; label: string; length: PartLength }[] = [
+  { value: '1w', label: '1 tydzień', length: { unit: 'week', count: 1 } },
+  { value: '2w', label: '2 tygodnie', length: { unit: 'week', count: 2 } },
+  { value: '1m', label: '1 miesiąc', length: { unit: 'month', count: 1 } },
+  { value: '2m', label: '2 miesiące', length: { unit: 'month', count: 2 } },
+  { value: '3m', label: '3 miesiące', length: { unit: 'month', count: 3 } },
+  { value: '6m', label: '6 miesięcy', length: { unit: 'month', count: 6 } },
+]
+
+const withinLimit = (kind: MacroReport, length: PartLength) =>
+  length.unit === 'week' || length.count <= (PERIOD_REPORT_MONTHS[kind] ?? 0)
+
+/** Długości części do wyboru w ustawieniach raportu (do limitu Mercalys); pierwsza to domyślna (limit). */
+export function partLengthOptions(kind: MacroReport) {
+  const options = PART_LENGTHS.filter((option) => withinLimit(kind, option.length))
+  const limit = `${PERIOD_REPORT_MONTHS[kind]}m`
+  return options.map((option) => ({
+    value: option.value,
+    label: option.value === limit ? `${option.label} (domyślnie)` : option.label,
+  }))
+}
+
+/**
+ * Długość części z ustawień sklepu; bez ustawienia (albo z wartością ponad limit) limit Mercalys. Krótsza część
+ * pomaga, gdy plik za kilka miesięcy ma milion wierszy i Mercalys albo Excel go nie wygeneruje.
+ */
+export function partLengthOf(kind: MacroReport, value: string | undefined): PartLength {
+  const chosen = PART_LENGTHS.find((option) => option.value === value?.trim())?.length
+  return chosen && withinLimit(kind, chosen) ? chosen : { unit: 'month', count: PERIOD_REPORT_MONTHS[kind] ?? 1 }
+}
+
 const partName = (base: string, part: number, parts: number) => `${base} ${part} z ${parts}`
 
 /** Ścieżka części okresu („sprzedaz 1 z 3.xlsx”); ostatnia, najnowsza część ma ścieżkę z ustawień. */
@@ -103,7 +140,7 @@ export function partPath(path: string, part: number, parts: number) {
 export type MacroPrintNumbers = Partial<Record<MacroReport, string>>
 
 /** Pole ustawień raportu w ścieżkach sklepu. */
-export type ImportField = 'mask' | 'path' | 'print' | 'list'
+export type ImportField = 'mask' | 'path' | 'print' | 'list' | 'part'
 
 export const importLocationKey = (kind: DailyReport, field: ImportField) => `import:${kind}:${field}`
 
@@ -115,11 +152,20 @@ export type ImportSettings = {
   macroPaths: MacroPaths
   printNumbers: MacroPrintNumbers
   listNumbers: MacroPrintNumbers
+  /** Długość części zaległego okresu (sprzedaż, dokumenty), wartość z `partLengthOptions`. */
+  partLengths: MacroPrintNumbers
   folders: Partial<Record<DailyReport, string>>
 }
 
 export function importSettingsFrom(locations: StoreLocations | undefined): ImportSettings {
-  const settings: ImportSettings = { masks: {}, macroPaths: {}, printNumbers: {}, listNumbers: {}, folders: {} }
+  const settings: ImportSettings = {
+    masks: {},
+    macroPaths: {},
+    printNumbers: {},
+    listNumbers: {},
+    partLengths: {},
+    folders: {},
+  }
   if (!locations) return settings
   for (const kind of DAILY_REPORTS) {
     settings.masks[kind] = locations[importLocationKey(kind, 'mask')]
@@ -128,6 +174,7 @@ export function importSettingsFrom(locations: StoreLocations | undefined): Impor
       settings.macroPaths[kind] = locations[importLocationKey(kind, 'path')]
       settings.printNumbers[kind] = locations[importLocationKey(kind, 'print')]
       settings.listNumbers[kind] = locations[importLocationKey(kind, 'list')]
+      settings.partLengths[kind] = locations[importLocationKey(kind, 'part')]
     }
   }
   return settings

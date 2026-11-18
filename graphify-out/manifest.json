@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794998475.984005,
-    "seen": 1794998537.3079715,
-    "ast_hash": "21b4241439258a77e67e0a631497c8f6",
+    "mtime": 1795004143.1684084,
+    "seen": 1795004199.480448,
+    "ast_hash": "674e45c3d28a1b002ee1eac671c6dd8d",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1794836823.8405862,
-    "seen": 1794836974.7451937,
-    "ast_hash": "44ebb2eff03d1c37d095f83eb27811ad",
+    "mtime": 1795003878.7802885,
+    "seen": 1795003994.0734208,
+    "ast_hash": "75e7d93d4de8ae23e3c0cdfb8a20255b",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
@@ -3804,9 +3804,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/SavedFolder.tsx": {
-    "mtime": 1794938399.2102473,
-    "seen": 1794941208.1668415,
-    "ast_hash": "19815c9c0b2e36f0780b4c1ceb6f997d",
+    "mtime": 1795002565.909469,
+    "seen": 1795002663.1933877,
+    "ast_hash": "00bfede6ef4228de90d98e3395cac366",
     "semantic_hash": ""
   },
   "frontend/src/features/deli-order/FulfillOrderDialog.tsx": {
@@ -3822,9 +3822,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/saved-folders.ts": {
-    "mtime": 1794938397.6363304,
-    "seen": 1794941208.2222488,
-    "ast_hash": "28ab3f1c2d279feeebf009d9a7d751c3",
+    "mtime": 1795004114.2467747,
+    "seen": 1795004199.4472945,
+    "ast_hash": "829e12fb5dd47ecdfb54955763b5eb63",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/dto/ChangeDeliveryDateRequest.java": {
@@ -6516,9 +6516,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportSourcesDialog.tsx": {
-    "mtime": 1794836823.8405862,
-    "seen": 1794836974.7451937,
-    "ast_hash": "c0cd5920c5b9fd571724bea9f7bdb820",
+    "mtime": 1795003904.480089,
+    "seen": 1795003994.0734208,
+    "ast_hash": "1a4d8392f20c4dc257e83e3670e5b839",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ReportHelp.tsx": {
@@ -6528,9 +6528,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/import-sources.ts": {
-    "mtime": 1794833859.5587711,
-    "seen": 1794833977.2691271,
-    "ast_hash": "b03045c30db589b2f868f86e6ed906b5",
+    "mtime": 1795003856.4314234,
+    "seen": 1795003994.0734208,
+    "ast_hash": "5fed67c043c1c06624866f008c08e6fe",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
@@ -11706,9 +11706,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/report-macros.ts": {
-    "mtime": 1794998197.922464,
-    "seen": 1794998315.2244918,
-    "ast_hash": "8e45fbc357be754f25b8ded9001eb5dd",
+    "mtime": 1795003905.8369384,
+    "seen": 1795003994.0734208,
+    "ast_hash": "8cec59caff0ab4010886e31e331f238f",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/use-import-settings.ts": {

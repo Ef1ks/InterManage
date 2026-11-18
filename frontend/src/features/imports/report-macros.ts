@@ -1,4 +1,11 @@
-import { PERIOD_REPORT_MONTHS, REPORT_TITLES, partPath, type MacroReport } from '@/features/imports/import-sources'
+import {
+  PERIOD_REPORT_MONTHS,
+  REPORT_TITLES,
+  partLengthOf,
+  partPath,
+  type MacroReport,
+  type PartLength,
+} from '@/features/imports/import-sources'
 import { addDays, toIsoDate, todayIso } from '@/lib/dates'
 import { mercalysOpenLine } from '@/lib/mercalys-login'
 
@@ -140,14 +147,15 @@ function addMonthsToDate(iso: string, months: number) {
 }
 
 /**
- * Okres podzielony na części najwyżej po `months` miesięcy (limit wydruku w Mercalys), od najstarszej: makro zapisuje
- * je po kolei, a ostatnia, najnowsza ma ścieżkę z ustawień.
+ * Okres podzielony na części najwyżej po `length` (tygodnie albo miesiące, do limitu wydruku w Mercalys), od
+ * najstarszej: makro zapisuje je po kolei, a ostatnia, najnowsza ma ścieżkę z ustawień.
  */
-export function splitPeriod(period: Period, months: number): Period[] {
+export function splitPeriod(period: Period, length: PartLength): Period[] {
   const parts: Period[] = []
   let from = period.from
   while (from <= period.to) {
-    const end = addDays(addMonthsToDate(from, months), -1)
+    const end =
+      length.unit === 'week' ? addDays(from, length.count * 7 - 1) : addDays(addMonthsToDate(from, length.count), -1)
     const to = end < period.to ? end : period.to
     parts.push({ from, to })
     from = addDays(to, 1)
@@ -174,15 +182,16 @@ export function missingPeriods(covered: Period[], from: string, to: string): Per
 
 /**
  * Części okresu raportu (sprzedaż, dokumenty), od najstarszej: dziury od HISTORY_START w okresach wgranych raportów,
- * potem bieżący okres, każde podzielone do limitu Mercalys. Raport bez okresu to jedna część bez dat.
+ * potem bieżący okres, każde podzielone na części długości z ustawień (domyślnie limit Mercalys). Raport bez okresu
+ * to jedna część bez dat.
  */
-export function periodParts(kind: MacroReport, context: ReportMacroContext): (Period | null)[] {
-  const months = PERIOD_REPORT_MONTHS[kind]
-  if (!months) return [null]
+export function periodParts(kind: MacroReport, context: ReportMacroContext, partLength?: string): (Period | null)[] {
+  if (!PERIOD_REPORT_MONTHS[kind]) return [null]
+  const length = partLengthOf(kind, partLength)
   const current = kind === 'SALES' ? salesPeriod(context) : documentsPeriod(context)
   const covered = (kind === 'SALES' ? context.salesCovered : context.documentsCovered) ?? []
   const gaps = missingPeriods(covered, HISTORY_START, addDays(current.from, -1))
-  return [...gaps, current].flatMap((period) => splitPeriod(period, months))
+  return [...gaps, current].flatMap((period) => splitPeriod(period, length))
 }
 
 /** RRRR-MM-DD jako DDMMRRRR (pole daty w Mercalys) i wzorzec wartości po wpisaniu (DD/MM/RRRR). */
@@ -216,6 +225,8 @@ export type ReportMacroSettings = {
   printNumber?: string
   /** Numer listy artykułów w Mercalys (Obecne w cadencier). */
   listNumber?: string
+  /** Długość części zaległego okresu (sprzedaż, dokumenty); puste = limit Mercalys. */
+  partLength?: string
 }
 
 /** Raporty, których wydruk w Mercalys ma numer ustawiany w ustawieniach importu. */
@@ -365,7 +376,7 @@ export function buildReportSaveMacro(
   reports.forEach(({ kind, settings }, index) => {
     const title = REPORT_TITLES[kind]
     const step = reports.length > 1 ? ` (${index + 1} z ${reports.length})` : ''
-    const parts = periodParts(kind, context)
+    const parts = periodParts(kind, context, settings.partLength)
     parts.forEach((period, part) => {
       const steps = openSteps(kind, settings, period)
       const partLabel =

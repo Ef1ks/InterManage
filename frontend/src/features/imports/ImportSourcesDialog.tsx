@@ -2,16 +2,18 @@ import { useState } from 'react'
 import { ClipboardCopyIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { SelectField } from '@/components/form'
 import { StoreLocationField } from '@/components/StoreLocationField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DAILY_REPORTS,
-  importFolderLocationKey,
   importLocationKey,
   isMacroReport,
+  isPeriodReport,
   macroPathError,
   MASK_EXAMPLES,
+  partLengthOptions,
   REPORT_EXTENSIONS,
   REPORT_TITLES,
   sourceFolderKey,
@@ -34,12 +36,11 @@ import { useDocumentImports, useImportCoverage, useSalesImports } from '@/featur
 import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ApiError } from '@/lib/api'
 import { folderSavingSupported, useSavedFolder } from '@/lib/saved-folders'
-import { parentFolder, useStoreLocations } from '@/lib/store-locations'
+import { parentFolder, useSaveStoreLocations, useStoreLocations } from '@/lib/store-locations'
 import type { ImportGuide } from '@/lib/types'
 
 /**
- * Ustawienia „Odśwież dane”: folder każdego codziennego raportu (ścieżka wspólna dla sklepu, uchwyt wybrany raz w tej
- * przeglądarce) i opcjonalna maska nazwy pliku, gdy w folderze leżą też inne pliki. Maski, ścieżki zapisu makr
+ * Ustawienia „Odśwież dane”: folder każdego codziennego raportu (wybrany raz w tej przeglądarce) i opcjonalna maska nazwy pliku, gdy w folderze leżą też inne pliki. Maski, ścieżki zapisu makr
  * i numery z Mercalys też są ścieżkami sklepu. Listy dostawców i nomenklatur wgrywa się tylko ręcznie.
  */
 export function ImportSourcesDialog({
@@ -60,9 +61,9 @@ export function ImportSourcesDialog({
           <DialogTitle className="text-lg">Ustawienia importu</DialogTitle>
           <DialogDescription>
             Wskaż, gdzie zapisujesz raporty z systemu sklepu. „Odśwież dane” wgra z każdego folderu najnowszy plik,
-            którego jeszcze nie było. Ścieżki, nazwy plików i numery z Mercalys są wspólne dla całego sklepu (na dysku
-            sieciowym są takie same na każdym komputerze). Sam folder przeglądarka pamięta u siebie, więc na nowym
-            komputerze wybierz go raz: ścieżkę skopiujemy do schowka.
+            którego jeszcze nie było. Nazwy plików, ścieżki zapisu makr i numery z Mercalys są wspólne dla całego
+            sklepu. Folder przeglądarka pamięta u siebie, więc na nowym komputerze wybierz go raz: folder z zapisu makra
+            skopiujemy do schowka.
           </DialogDescription>
         </DialogHeader>
         {folderSavingSupported ? (
@@ -103,12 +104,10 @@ function SourceRow({ storeId, kind, guidePath }: { storeId: string; kind: DailyR
   const { name, loaded, pick } = useSavedFolder(sourceFolderKey(storeId, kind), 'read')
   const [picking, setPicking] = useState(false)
   const title = REPORT_TITLES[kind]
-  const locations = useStoreLocations(storeId)
   const [mask, setMask] = useState('')
   const [macro, setMacro] = useState<ReportMacroSettings>({ path: '', printNumber: '', listNumber: '' })
-  // Folder raportu: wpisany dla sklepu, bez niego folder pliku z makra, na końcu podpowiedź z instrukcji raportu.
-  const fallbackPath = parentFolder(macro.path) ?? guidePath
-  const suggestedPath = locations.data?.[importFolderLocationKey(kind)] || fallbackPath
+  // Podpowiedź do schowka: folder pliku z makra, bez niego folder z instrukcji raportu.
+  const suggestedPath = parentFolder(macro.path) ?? guidePath
 
   const choose = async () => {
     // Bez await: schowek nie zużywa gestu kliknięcia, którego potrzebuje okno wyboru folderu.
@@ -152,17 +151,11 @@ function SourceRow({ storeId, kind, guidePath }: { storeId: string; kind: DailyR
             )}
           </div>
         </div>
-        <Button type="button" variant="outline" size="sm" loading={picking} disabled={!loaded} onClick={choose}>
-          {name ? 'Zmień' : 'Wybierz folder'}
+        {/* Bez czekania na odczyt zapamiętanego folderu: wybór nowego go nie potrzebuje. */}
+        <Button type="button" variant="outline" size="sm" loading={picking} onClick={choose}>
+          {loaded && !name ? 'Wybierz folder' : 'Zmień'}
         </Button>
       </div>
-      <StoreLocationField
-        storeId={storeId}
-        locationKey={importFolderLocationKey(kind)}
-        label="Folder raportu w sklepie"
-        className="font-mono"
-        hint={fallbackPath ? `Bez wpisu: ${fallbackPath}` : 'Wspólny dla wszystkich komputerów sklepu'}
-      />
       <StoreLocationField
         storeId={storeId}
         locationKey={importLocationKey(kind, 'mask')}
@@ -201,6 +194,10 @@ function MacroFields({
 }) {
   const withPrintNumber = PRINT_NUMBER_REPORTS.includes(kind)
   const withListNumber = LIST_NUMBER_REPORTS.includes(kind)
+  const withPartLength = isPeriodReport(kind)
+  const locations = useStoreLocations(storeId)
+  const partLength = locations.data?.[importLocationKey(kind, 'part')] ?? ''
+  const macroSettings = { ...settings, partLength }
   const pathError = macroPathError(kind, settings.path, mask)
   const numberError =
     (withPrintNumber ? printNumberError(settings.printNumber ?? '') : null) ??
@@ -217,7 +214,7 @@ function MacroFields({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(
-        buildReportSaveMacro([{ kind, settings }], {
+        buildReportSaveMacro([{ kind, settings: macroSettings }], {
           lastSaleDate: sales.data?.lastSaleDate,
           lastDocumentDate: lastDocumentDate(documents.data),
           salesCovered: coverage.data?.sales,
@@ -241,7 +238,9 @@ function MacroFields({
           ? 'sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]'
           : withPrintNumber
             ? 'sm:grid-cols-[minmax(0,1fr)_9rem_auto]'
-            : 'sm:grid-cols-[minmax(0,1fr)_auto]'
+            : withPartLength
+              ? 'sm:grid-cols-[minmax(0,1fr)_12rem_auto]'
+              : 'sm:grid-cols-[minmax(0,1fr)_auto]'
       }`}
     >
       <StoreLocationField
@@ -277,6 +276,7 @@ function MacroFields({
           hint="Innych list w Mercalys"
         />
       )}
+      {withPartLength && <PartLengthField storeId={storeId} kind={kind} value={partLength} />}
       <Button
         type="button"
         variant="outline"
@@ -289,5 +289,33 @@ function MacroFields({
         Makro
       </Button>
     </div>
+  )
+}
+
+/**
+ * Długość jednej części zaległego okresu (sprzedaż, dokumenty), wspólna dla sklepu. Krótsza część, gdy raport za kilka
+ * miesięcy ma milion wierszy i Mercalys albo Excel go nie wygeneruje. Domyślnie limit Mercalys.
+ */
+function PartLengthField({ storeId, kind, value }: { storeId: string; kind: MacroReport; value: string }) {
+  const save = useSaveStoreLocations(storeId)
+  const options = partLengthOptions(kind)
+  const fallback = options[options.length - 1].value
+  const current = options.some((option) => option.value === value) ? value : fallback
+
+  return (
+    <SelectField
+      label="Zaległy okres po"
+      options={options}
+      value={current}
+      disabled={save.isPending}
+      onChange={(next) => {
+        if (!next || next === current) return
+        save.mutate(
+          { [importLocationKey(kind, 'part')]: next === fallback ? '' : next },
+          { onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Nie udało się zapisać ustawienia') },
+        )
+      }}
+      hint="Długość jednej części przy uzupełnianiu starych okresów"
+    />
   )
 }

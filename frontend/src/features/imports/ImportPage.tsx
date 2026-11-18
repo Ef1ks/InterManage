@@ -316,11 +316,16 @@ function StoreImports({ store }: { store: StoreSummary }) {
       toast.info('Wczytuję ustawienia importu, spróbuj za chwilę')
       return
     }
-    const { macroPaths: paths, printNumbers, listNumbers, masks } = importSettings.settings
+    const { macroPaths: paths, printNumbers, listNumbers, partLengths, masks } = importSettings.settings
     const ready = kinds
       .map((kind) => ({
         kind,
-        settings: { path: paths[kind] ?? '', printNumber: printNumbers[kind], listNumber: listNumbers[kind] },
+        settings: {
+          path: paths[kind] ?? '',
+          printNumber: printNumbers[kind],
+          listNumber: listNumbers[kind],
+          partLength: partLengths[kind],
+        },
       }))
       .filter(
         ({ kind, settings }) =>

@@ -87,8 +87,9 @@ export function SavedFolder({
             </>
           )}
         </div>
-        <Button type="button" variant="outline" size="sm" loading={picking} disabled={!loaded} onClick={choose}>
-          {name ? 'Zmień' : 'Wybierz folder'}
+        {/* Bez czekania na odczyt zapamiętanego folderu: wybór nowego go nie potrzebuje. */}
+        <Button type="button" variant="outline" size="sm" loading={picking} onClick={choose}>
+          {loaded && !name ? 'Wybierz folder' : 'Zmień'}
         </Button>
       </div>
       {!folder.pathInSettings && store && !(pathFieldWhenMissing && path) && (
