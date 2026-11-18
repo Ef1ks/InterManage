@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/api.ts": {
-    "mtime": 1794774259.7580273,
-    "seen": 1794804560.1016955,
-    "ast_hash": "9a9f07456bf7ec03809bb38b9a62a70b",
+    "mtime": 1795022503.9224775,
+    "seen": 1795022716.7308738,
+    "ast_hash": "fecf09af5b65c30898e04999bf0e715d",
     "semantic_hash": ""
   },
   "frontend/src/lib/form-errors.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795009990.8586648,
-    "seen": 1795010050.6552699,
-    "ast_hash": "f359e9a826f5bce5873000ca3523c33d",
+    "mtime": 1795022654.2166138,
+    "seen": 1795022716.7659051,
+    "ast_hash": "4742bb1af78d7722e1804abbb8d0fc24",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1128,21 +1128,21 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductImportIntegrationTests.java": {
-    "mtime": 1795009932.7679734,
-    "seen": 1795010050.5556562,
-    "ast_hash": "1ebff5868fdd1dff004694813b989b12",
+    "mtime": 1795022548.7607644,
+    "seen": 1795022716.6547844,
+    "ast_hash": "2670140524ea8e792a5c56f81ecdd16b",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1795007165.7368522,
-    "seen": 1795009696.6915152,
-    "ast_hash": "e996aa0f3900f0389725dd0f4d63a1a2",
+    "mtime": 1795022058.5486462,
+    "seen": 1795022142.5048275,
+    "ast_hash": "7cefae177cd86595faa1762f1130462e",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
-    "mtime": 1795007160.2271223,
-    "seen": 1795009696.6915152,
-    "ast_hash": "65b484f429b015e10a5eef57e8196c16",
+    "mtime": 1795022521.5213785,
+    "seen": 1795022716.7033522,
+    "ast_hash": "0426e5106c9e297fc913bc3ab568d8ad",
     "semantic_hash": ""
   },
   "frontend/src/features/settings/StoreFormDialog.tsx": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1794992407.6489546,
-    "seen": 1794992529.1597736,
-    "ast_hash": "0088786da0b4edd6131f66121cfe4b7b",
+    "mtime": 1795021962.5268767,
+    "seen": 1795022142.5189874,
+    "ast_hash": "0d1867c38b7061c988a5e674c885b6fe",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -3090,9 +3090,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/controller/ProductImportController.java": {
-    "mtime": 1795006815.5964181,
-    "seen": 1795009696.5570977,
-    "ast_hash": "7b4d0a9c3dfc5d632932038da7982f43",
+    "mtime": 1795022495.9994004,
+    "seen": 1795022716.5598602,
+    "ast_hash": "d590105b8a89199c9f3f0dde4dab4aad",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/dto/EanChangeResponse.java": {
@@ -3192,9 +3192,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/service/ProductImportService.java": {
-    "mtime": 1795009332.3878338,
-    "seen": 1795009696.5678086,
-    "ast_hash": "6a900b22ae0af643ac3d332d191ddcab",
+    "mtime": 1795022475.1688378,
+    "seen": 1795022716.5712361,
+    "ast_hash": "f7ab6a7dcf07e59b1709fe1a69a68b79",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/component/SalesReportParser.java": {
@@ -13035,6 +13035,30 @@
     "mtime": 1795009488.6419363,
     "seen": 1795009696.663861,
     "ast_hash": "b8bc3fdaac4a72605f773e6816ca7678",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/imports/report-upload.ts": {
+    "mtime": 1795022521.4360776,
+    "seen": 1795022716.7033522,
+    "ast_hash": "9b799b80286fc6124ff6fa91543d470f",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/common/component/ChunkedUploads.java": {
+    "mtime": 1795022458.5669496,
+    "seen": 1795022716.453504,
+    "ast_hash": "caf7fea8c8627860bea8f4956ebcb807",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/product/dto/ImportUploadRequest.java": {
+    "mtime": 1795022495.781002,
+    "seen": 1795022716.5603924,
+    "ast_hash": "4bf3a8844106bb5ce8fc6f3dca093ecf",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/product/dto/ImportUploadResponse.java": {
+    "mtime": 1795022495.8357055,
+    "seen": 1795022716.5603924,
+    "ast_hash": "f6f196411324c47f422b40cceb0fe656",
     "semantic_hash": ""
   }
 }

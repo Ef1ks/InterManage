@@ -26,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.ChunkedUploads;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.common.exception.InvalidReportException;
 import com.intermanage.backend.product.component.ProductReportParser;
@@ -140,13 +141,7 @@ public class ProductImportService {
         if (file.isEmpty()) {
             throw ApiException.badRequest("Wybierz plik do importu");
         }
-        String lowerName = fileName.toLowerCase(Locale.ROOT);
-        if (!lowerName.endsWith(".xlsx") && !lowerName.endsWith(".xlsm")) {
-            throw ApiException.badRequest("Obsługujemy pliki .xlsx i .xlsm. Plik .xls zapisz w Excelu jako .xlsx.");
-        }
-        if (!stores.existsById(storeId)) {
-            throw ApiException.notFound("Nie znaleziono sklepu");
-        }
+        checkFile(storeId, fileName);
 
         Path temp;
         try {
@@ -156,6 +151,31 @@ public class ProductImportService {
         } catch (IOException e) {
             log.warn("Nie udało się zapisać pliku importu", e);
             throw ApiException.badRequest("Nie udało się odczytać pliku. Sprawdź, czy nie jest uszkodzony.");
+        }
+        return jobs.start(storeId, fileName, () -> delete(temp),
+                progress -> importReport(storeId, temp, fileName, userId, progress));
+    }
+
+    /** Nazwa pliku i sklep sprawdzane przed przyjęciem pliku (także przed wysyłką w kawałkach). */
+    public void checkFile(UUID storeId, String fileName) {
+        String lowerName = fileName.toLowerCase(Locale.ROOT);
+        if (!lowerName.endsWith(".xlsx") && !lowerName.endsWith(".xlsm")) {
+            throw ApiException.badRequest("Obsługujemy pliki .xlsx i .xlsm. Plik .xls zapisz w Excelu jako .xlsx.");
+        }
+        if (!stores.existsById(storeId)) {
+            throw ApiException.notFound("Nie znaleziono sklepu");
+        }
+    }
+
+    /** Import pliku przysłanego w kawałkach ({@link ChunkedUploads}); plik przechodzi na własność importu. */
+    public ProductImportJobResponse startImport(UUID storeId, ChunkedUploads.Received received, UUID userId) {
+        Path temp = received.file();
+        String fileName = received.fileName();
+        try {
+            checkFile(storeId, fileName);
+        } catch (ApiException e) {
+            delete(temp);
+            throw e;
         }
         return jobs.start(storeId, fileName, () -> delete(temp),
                 progress -> importReport(storeId, temp, fileName, userId, progress));

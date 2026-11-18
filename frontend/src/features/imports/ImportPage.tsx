@@ -33,7 +33,6 @@ import {
   useImportNomenclatures,
   useImportProductCodes,
   useImportProducts,
-  useProductImportProgress,
   useImportPromotions,
   useImportSales,
   useImportSuppliers,
@@ -66,6 +65,7 @@ import {
 import { ReportHelp } from '@/features/imports/ReportHelp'
 import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
+import { useImportProgress, type ImportProgress } from '@/features/imports/report-upload'
 import { useCadencier, useImportCadencier } from '@/features/sales/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES } from '@/features/tools/categories'
@@ -84,7 +84,6 @@ import type {
   NomenclatureImport,
   ProductCodeImport,
   ProductImport,
-  ProductImportJob,
   PromotionImport,
   SalesImport,
   StoreSummary,
@@ -440,8 +439,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.PRODUCTS}
+              progress={<ImportProgressBar storeId={store.id} kind="PRODUCTS" />}
               accept={XLSX_EXTENSIONS}
-              progress={<ProductImportProgress storeId={store.id} />}
               result={(result) => <ProductImportResult result={result} onShowEanChanges={setEanChangesOf} />}
             />
           ) : (
@@ -464,6 +463,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.PRODUCT_CODES}
+              progress={<ImportProgressBar storeId={store.id} kind="PRODUCT_CODES" />}
               accept={XLSX_EXTENSIONS}
               result={(result) => <ProductCodeImportResult result={result} />}
             />
@@ -484,6 +484,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.PROMOTIONS}
+              progress={<ImportProgressBar storeId={store.id} kind="PROMOTIONS" />}
               accept={PDF_EXTENSIONS}
               pdf
               result={(result) => <PromotionImportResult result={result} />}
@@ -510,6 +511,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.SALES}
+              progress={<ImportProgressBar storeId={store.id} kind="SALES" />}
               accept={XLSX_EXTENSIONS}
               result={(result) => <SalesImportResult result={result} />}
             />
@@ -536,6 +538,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.DOCUMENTS}
+              progress={<ImportProgressBar storeId={store.id} kind="DOCUMENTS" />}
               accept={XLSX_EXTENSIONS}
               result={(result) => <DocumentImportResult result={result} />}
             />
@@ -559,6 +562,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.CADENCIER}
+              progress={<ImportProgressBar storeId={store.id} kind="CADENCIER" />}
               accept={XLSX_EXTENSIONS}
               result={(result) => <CadencierImportResult result={result} />}
             />
@@ -586,6 +590,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.SUPPLIERS}
+              progress={<ImportProgressBar storeId={store.id} kind="SUPPLIERS" />}
               accept={XLSX_EXTENSIONS}
               result={(result) => <SupplierImportResult result={result} />}
             />
@@ -612,6 +617,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
           {canImport ? (
             <ReportUpload
               upload={uploads.NOMENCLATURES}
+              progress={<ImportProgressBar storeId={store.id} kind="NOMENCLATURES" />}
               accept={PDF_EXTENSIONS}
               pdf
               result={(result) => <NomenclatureImportResult result={result} />}
@@ -793,21 +799,49 @@ function ReportUpload<T>({
   )
 }
 
-const IMPORT_PHASES: Record<ProductImportJob['phase'] | 'UPLOADING', string> = {
+const IMPORT_PHASES: Record<ImportProgress['phase'], string> = {
   UPLOADING: 'Wysyłanie pliku',
+  PROCESSING: 'Odczyt i zapis na serwerze',
   READING: 'Odczyt pliku',
   SAVING: 'Zapis do kartoteki',
   FINISHING: 'Kończenie importu',
 }
 
-/** Postęp importu kartoteki w tle: etap, procent i zapisane wiersze. */
-function ProductImportProgress({ storeId }: { storeId: string }) {
-  const job = useProductImportProgress(storeId)
+/** Kolejne etapy: baza danych idzie w tle i podaje własne etapy, pozostałe raporty to wysłanie i przetworzenie. */
+const PRODUCT_STEPS: ImportProgress['phase'][] = ['UPLOADING', 'READING', 'SAVING', 'FINISHING']
+const REPORT_STEPS: ImportProgress['phase'][] = ['UPLOADING', 'PROCESSING']
+
+/** Czas od początku etapu, odświeżany co sekundę (etap bez procentów). */
+function useElapsedSeconds(since: number | undefined) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (since === undefined) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [since])
+  return since === undefined ? 0 : Math.max(0, Math.floor((now - since) / 1000))
+}
+
+function elapsedLabel(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  return minutes > 0 ? `${minutes} min ${String(seconds % 60).padStart(2, '0')} s` : `${seconds} s`
+}
+
+/** Postęp wgrania raportu: krok, nazwa etapu, procent (albo czas przy przetwarzaniu bez procentów) i pasek. */
+function ImportProgressBar({ storeId, kind }: { storeId: string; kind: ImportReportKind }) {
+  const job = useImportProgress(storeId, kind)
+  const processing = job?.phase === 'PROCESSING'
+  const elapsed = useElapsedSeconds(processing ? job.since : undefined)
   if (!job) return null
+  const steps = kind === 'PRODUCTS' ? PRODUCT_STEPS : REPORT_STEPS
+  const step = steps.indexOf(job.phase) + 1
   return (
     <div className="grid gap-1.5 text-sm">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-muted-foreground">
+          <span className="font-medium text-foreground">
+            Krok {step} z {steps.length}:
+          </span>{' '}
           {IMPORT_PHASES[job.phase]}
           {job.phase === 'SAVING' && (
             <>
@@ -816,21 +850,29 @@ function ProductImportProgress({ storeId }: { storeId: string }) {
             </>
           )}
         </span>
-        <span className="font-medium tabular-nums">{job.percent}%</span>
+        <span className="font-medium tabular-nums">{processing ? elapsedLabel(elapsed) : `${job.percent}%`}</span>
       </div>
       <div
         role="progressbar"
-        aria-label="Postęp importu"
+        aria-label={`Postęp importu: ${IMPORT_PHASES[job.phase]}`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={job.percent}
+        aria-valuenow={processing ? undefined : job.percent}
         className="h-2 overflow-hidden rounded-full bg-muted"
       >
-        <div
-          className="h-full origin-left rounded-full bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none"
-          style={{ transform: `scaleX(${job.percent / 100})` }}
-        />
+        {processing ? (
+          // Serwer nie podaje postępu: pełny pasek z przesuwającym się refleksem mówi, że praca trwa.
+          <div className="loading-shimmer h-full rounded-full bg-primary/40!" />
+        ) : (
+          <div
+            className="h-full origin-left rounded-full bg-primary transition-transform duration-500 ease-out motion-reduce:transition-none"
+            style={{ transform: `scaleX(${job.percent / 100})` }}
+          />
+        )}
       </div>
+      {processing && (
+        <p className="text-xs text-muted-foreground">Plik dotarł na serwer. Duży raport zapisuje się do kilku minut.</p>
+      )}
     </div>
   )
 }

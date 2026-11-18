@@ -3,6 +3,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { documentsKey, suppliersKey } from '@/features/documents/api'
 import { reportsKey } from '@/features/sales/api'
 import { api } from '@/lib/api'
+
+import { importProgress, uploadReport } from './report-upload'
 import type {
   DocumentImport,
   EanChange,
@@ -45,52 +47,25 @@ export function useEanChanges(storeId: string, importId: string) {
   })
 }
 
-const productImportJobKey = (storeId: string) => [...productImportsKey(storeId), 'job'] as const
-
-/** Postęp importu: najpierw wysyłanie pliku (`UPLOADING`, liczone w przeglądarce), potem etapy zadania na serwerze. */
-export type ProductImportProgress = Pick<ProductImportJob, 'percent' | 'processedRows' | 'totalRows'> & {
-  phase: ProductImportJob['phase'] | 'UPLOADING'
-}
-
-/** Stan trwającego importu (postęp), wpisywany przez {@link useImportProducts} przy każdym pytaniu o zadanie. */
-export function useProductImportProgress(storeId: string) {
-  return useQuery<ProductImportProgress | null>({
-    queryKey: productImportJobKey(storeId),
-    queryFn: () => null,
-    enabled: false,
-    staleTime: Infinity,
-  }).data
-}
-
 export function useImportProducts(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     // Duży raport scala się kilka minut, a Cloudflare zrywa żądanie po 100 s: import idzie w tle i pytamy o stan.
     mutationFn: async (file: File): Promise<ProductImport> => {
-      const formData = new FormData()
-      formData.append('file', file)
-      const setProgress = (progress: ProductImportProgress | null) =>
-        queryClient.setQueryData(productImportJobKey(storeId), progress)
-      const uploading = (percent: number) =>
-        setProgress({ phase: 'UPLOADING', percent, processedRows: 0, totalRows: 0 })
+      const progress = importProgress(queryClient, storeId, 'PRODUCTS')
       try {
         // Duży plik wysyła się dłużej niż trwa odczyt, więc pasek rusza od razu, a nie dopiero po przyjęciu pliku.
-        uploading(0)
-        let job = await api<ProductImportJob>(productImportsPath(storeId), {
-          method: 'POST',
-          formData,
-          onUploadProgress: uploading,
-        })
-        setProgress(job)
+        let job = await progress.postChunked<ProductImportJob>(productImportsPath(storeId), file)
+        progress.set(job)
         while (job.status === 'RUNNING') {
           await new Promise((resolve) => setTimeout(resolve, IMPORT_POLL_MS))
           job = await api<ProductImportJob>(`${productImportsPath(storeId)}/jobs/${job.id}`)
-          setProgress(job)
+          progress.set(job)
         }
         if (!job.result) throw new Error('Import nie zwrócił wyniku. Odśwież stronę i sprawdź historię importów.')
         return job.result
       } finally {
-        setProgress(null)
+        progress.set(null)
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: productImportsKey(storeId) }),
@@ -112,11 +87,8 @@ export function useDocumentImports(storeId: string) {
 export function useImportDocuments(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<DocumentImport>(documentImportsPath(storeId), { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<DocumentImport>(queryClient, storeId, 'DOCUMENTS', documentImportsPath(storeId), file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: documentImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: documentsKey(storeId) })
@@ -139,11 +111,8 @@ export function useSupplierImports(storeId: string) {
 export function useImportSuppliers(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<SupplierImport>(supplierImportsPath(storeId), { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<SupplierImport>(queryClient, storeId, 'SUPPLIERS', supplierImportsPath(storeId), file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: supplierImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: suppliersKey(storeId) })
@@ -166,11 +135,8 @@ export function useSalesImports(storeId: string) {
 export function useImportSales(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<SalesImport>(salesImportsPath(storeId), { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<SalesImport>(queryClient, storeId, 'SALES', salesImportsPath(storeId), file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: salesImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: reportsKey(storeId) })
@@ -193,11 +159,8 @@ export function useNomenclatureImports(storeId: string) {
 export function useImportNomenclatures(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<NomenclatureImport>(nomenclatureImportsPath(storeId), { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<NomenclatureImport>(queryClient, storeId, 'NOMENCLATURES', nomenclatureImportsPath(storeId), file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: nomenclatureImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: reportsKey(storeId) })
@@ -220,11 +183,8 @@ export function usePromotionImports(storeId: string) {
 export function useImportPromotions(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<PromotionImport>(promotionImportsPath(storeId), { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<PromotionImport>(queryClient, storeId, 'PROMOTIONS', promotionImportsPath(storeId), file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: promotionImportsKey(storeId) }),
   })
 }
@@ -280,11 +240,8 @@ export function useSaveImportGuide() {
 export function useImportProductCodes(storeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<ProductCodeImport>(productCodeImportsPath(storeId), { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<ProductCodeImport>(queryClient, storeId, 'PRODUCT_CODES', productCodeImportsPath(storeId), file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: productCodeImportsKey(storeId) }),
   })
 }

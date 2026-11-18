@@ -107,6 +107,59 @@ class ProductImportIntegrationTests {
                 .andExpect(jsonPath("$.imports[0].unchangedCount").value(2));
     }
 
+    /** Wolne łącze sklepu: plik przychodzi kawałkami, powtórzony kawałek jest pomijany, a niepełny plik odrzucany. */
+    @Test
+    void reportSentInChunksIsImported() throws Exception {
+        Cookie owner = login();
+        String a = itm8();
+        byte[] file = report(nextReportDate(), product(a, "4.99", "3", "CHLEB WIEJSKI 500G"));
+        int half = file.length / 2;
+        byte[] first = java.util.Arrays.copyOfRange(file, 0, half);
+        byte[] second = java.util.Arrays.copyOfRange(file, half, file.length);
+
+        String started = mvc.perform(post(importsUrl() + "/uploads").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fileName\":\"BAZA DO STRONY.xlsx\",\"size\":" + file.length + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.chunkSize").isNumber())
+                .andReturn().getResponse().getContentAsString();
+        String uploadUrl = importsUrl() + "/uploads/" + com.jayway.jsonpath.JsonPath.read(started, "$.id");
+
+        // Kawałek nie po kolei, a potem plik bez drugiej połowy: oba odrzucone.
+        mvc.perform(chunk(uploadUrl, 1, second, owner)).andExpect(status().isConflict());
+        mvc.perform(chunk(uploadUrl, 0, first, owner)).andExpect(status().isNoContent());
+        mvc.perform(chunk(uploadUrl, 0, first, owner)).andExpect(status().isNoContent());
+        mvc.perform(post(uploadUrl + "/import").cookie(owner).with(csrf())).andExpect(status().isConflict());
+        mvc.perform(chunk(uploadUrl, 1, second, owner)).andExpect(status().isNoContent());
+
+        String job = mvc.perform(post(uploadUrl + "/import").cookie(owner).with(csrf()))
+                .andExpect(status().isAccepted())
+                .andReturn().getResponse().getContentAsString();
+        String jobUrl = importsUrl() + "/jobs/" + com.jayway.jsonpath.JsonPath.read(job, "$.id");
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (mvc.perform(get(jobUrl).cookie(owner)).andReturn().getResponse().getStatus() == 202) {
+            assertThat(System.currentTimeMillis()).as("import trwa za długo").isLessThan(deadline);
+            Thread.sleep(50);
+        }
+        mvc.perform(get(jobUrl).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.totalRows").value(1))
+                .andExpect(jsonPath("$.result.createdCount").value(1));
+        assertThat(jdbc.queryForObject("select sale_price from products where itm8 = ?", BigDecimal.class, a))
+                .isEqualTo(new BigDecimal("4.99"));
+
+        // Wysyłka jest zużyta: drugi import tej samej wysyłki nic nie znajduje.
+        mvc.perform(post(uploadUrl + "/import").cookie(owner).with(csrf())).andExpect(status().isNotFound());
+    }
+
+    private static org.springframework.test.web.servlet.RequestBuilder chunk(String uploadUrl, int index, byte[] bytes,
+            Cookie owner) {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(uploadUrl + "/chunks/" + index)
+                .cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .content(bytes);
+    }
+
     /** Scalanie idzie paczkami: zmiana EAN-u między artykułami z różnych paczek i artykuł spoza pliku. */
     @Test
     void largeReportIsMergedInChunks() throws Exception {

@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { uploadReport } from '@/features/imports/report-upload'
 import type { DateRange, Periods } from '@/features/sales/periods'
 import { api, ApiError, downloadFile, downloadPostedFile, printFile, printPostedFile } from '@/lib/api'
 import type {
@@ -1074,12 +1075,10 @@ export function useCadencier(storeId: string, enabled = true) {
 }
 
 export function useImportCadencier(storeId: string) {
+  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
-      return api<CadencierImport>(`${priceCheckPath(storeId)}/cadencier`, { method: 'POST', formData })
-    },
+    mutationFn: (file: File) =>
+      uploadReport<CadencierImport>(queryClient, storeId, 'CADENCIER', `${priceCheckPath(storeId)}/cadencier`, file),
   })
 }
 

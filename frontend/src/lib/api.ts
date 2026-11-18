@@ -47,13 +47,15 @@ type RequestOptions = {
   json?: unknown
   /** Wysyłane jako multipart/form-data (pliki). Nagłówek z granicą części ustawia przeglądarka. */
   formData?: FormData
+  /** Wysyłane jako surowe bajty (`application/octet-stream`), np. kawałek dużego pliku. */
+  blob?: Blob
   /** Postęp wysyłania treści żądania w procentach (duże pliki); fetch go nie daje, więc żądanie idzie przez XHR. */
   onUploadProgress?: (percent: number) => void
 }
 
 export async function api<T = void>(
   path: string,
-  { method = 'GET', json, formData, onUploadProgress }: RequestOptions = {},
+  { method = 'GET', json, formData, blob, onUploadProgress }: RequestOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   let body: BodyInit | undefined
@@ -63,6 +65,9 @@ export async function api<T = void>(
     body = JSON.stringify(json)
   } else if (formData) {
     body = formData
+  } else if (blob) {
+    headers['Content-Type'] = 'application/octet-stream'
+    body = blob
   }
 
   if (!SAFE_METHODS.has(method)) {
