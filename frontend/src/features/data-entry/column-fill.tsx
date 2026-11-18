@@ -1,30 +1,23 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { PlusIcon } from 'lucide-react'
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { Form, FormActions, TextField } from '@/components/form'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 import type { Column, ColumnKey } from './grid-values'
 
 /** Ukryte pytanie „tylko nowe czy wszystkie” (useHiddenHint): wyłączone = zawsze tylko nowe artykuły. */
 export const COLUMN_FILL_PROMPT = 'column-fill-prompt'
 
-/** Kolumny z polem nad sobą: wartość wpisana w pole trafia do całej kolumny. */
-const PLACEHOLDERS: Partial<Record<ColumnKey, string>> = {
-  brand: 'marka',
-  region: 'rejon',
-  family: 'rodzina',
-  subfamily: 'podrodz.',
-  unit: 'kg/L/szt.',
-  netContent: 'waga',
+/** Kolumny, które da się ustawić naraz w całej kolumnie, z podpowiedzią do pola. */
+const HINTS: Partial<Record<ColumnKey, string>> = {
+  brand: 'Np. MILKA',
+  region: 'Dwie cyfry rejonu, np. 66',
+  family: 'Dwie cyfry rodziny albo pełny kod',
+  subfamily: 'Dwie cyfry podrodziny albo pełny kod',
+  unit: 'kg, L albo szt.',
+  netContent: 'Np. 0,5',
 }
 
 export const COLUMN_FILL_LABELS: Partial<Record<ColumnKey, string>> = {
@@ -36,74 +29,105 @@ export const COLUMN_FILL_LABELS: Partial<Record<ColumnKey, string>> = {
   netContent: 'Waga',
 }
 
-/** Pole nad kolumną: Enter ustawia wpisaną wartość w całej kolumnie, Esc czyści pole. */
-export function ColumnFillInput({ column, onFill }: { column: Column; onFill: (text: string) => void }) {
-  const [text, setText] = useState('')
-  const placeholder = PLACEHOLDERS[column.key]
-  if (!placeholder) return null
+/**
+ * Mały plus w nagłówku kolumny (widoczny mocniej po najechaniu): otwiera okno z wartością dla całej kolumny.
+ * Okno stoi na stronie, poza tabelą, żeby pisanie w nim nie trafiało do tabeli.
+ */
+export function ColumnFillButton({ column, onOpen }: { column: Column; onOpen: (key: ColumnKey) => void }) {
+  if (!HINTS[column.key]) return null
   const label = COLUMN_FILL_LABELS[column.key] ?? column.header
   return (
-    <input
-      value={text}
-      placeholder={placeholder}
+    <button
+      type="button"
       aria-label={`${label} dla całej kolumny`}
-      title={`${label}: wpisz i naciśnij Enter, żeby ustawić w całej kolumnie`}
-      autoComplete="off"
-      onChange={(event) => setText(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          setText('')
-          return
-        }
-        if (event.key !== 'Enter' || text.trim() === '') return
-        event.preventDefault()
-        onFill(text.trim())
-        setText('')
-      }}
-      className={cn(
-        'h-7 w-full min-w-0 rounded-md border border-input bg-background px-1.5 text-[0.86em] outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30',
-        column.align === 'right' && 'text-right',
-      )}
-    />
+      title={`${label}: ustaw jedną wartość w całej kolumnie`}
+      onClick={() => onOpen(column.key)}
+      className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground opacity-50 ring-1 ring-border transition-opacity duration-150 group-hover/th:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100"
+    >
+      <PlusIcon className="size-[1.05em]" />
+    </button>
   )
 }
 
-export type ColumnFillRequest = { key: ColumnKey; text: string; newCount: number; allCount: number }
+export type ColumnFillTarget = { key: ColumnKey; newCount: number; allCount: number }
 
-/** Pytanie przed ustawieniem kolumny: domyślnie tylko nowe artykuły (przycisk z fokusem). */
+/** Okno wartości dla całej kolumny: od razu z wyborem „tylko nowe” albo „wszystkie” (bez pytania: tylko nowe). */
 export function ColumnFillDialog({
-  request,
+  target,
+  askScope,
   onClose,
   onApply,
 }: {
-  request: ColumnFillRequest | null
+  target: ColumnFillTarget | null
+  askScope: boolean
   onClose: () => void
-  onApply: (onlyNew: boolean) => void
+  onApply: (text: string, onlyNew: boolean) => void
 }) {
-  const onlyNewRef = useRef<HTMLButtonElement>(null)
-  const label = request ? (COLUMN_FILL_LABELS[request.key] ?? '') : ''
   return (
-    <AlertDialog open={request !== null} onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent initialFocus={onlyNewRef}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {label} „{request?.text}” w całej kolumnie
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            Ustawić tylko w nowych artykułach, czy też w artykułach z kartoteki? Pytanie można wyłączyć w ustawieniach
-            zapisu (koło zębate); wtedy zmiana dotyczy tylko nowych.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Anuluj</AlertDialogCancel>
-          <Button variant="outline" disabled={!request?.allCount} onClick={() => onApply(false)}>
-            Wszystkie artykuły ({request?.allCount ?? 0})
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="gap-5 p-6 sm:max-w-md">
+        {target && <FillForm target={target} askScope={askScope} onCancel={onClose} onApply={onApply} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function FillForm({
+  target,
+  askScope,
+  onCancel,
+  onApply,
+}: {
+  target: ColumnFillTarget
+  askScope: boolean
+  onCancel: () => void
+  onApply: (text: string, onlyNew: boolean) => void
+}) {
+  const [text, setText] = useState('')
+  const label = COLUMN_FILL_LABELS[target.key] ?? ''
+  const value = text.trim()
+  return (
+    <Form
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (value !== '' && target.newCount > 0) onApply(value, true)
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle className="text-lg">{label} w całej kolumnie</DialogTitle>
+        <DialogDescription>
+          {askScope
+            ? 'Enter ustawia wartość w nowych artykułach. Artykuły z kartoteki zmienia drugi przycisk.'
+            : 'Wartość trafi do nowych artykułów (pytanie o artykuły z kartoteki jest wyłączone w ustawieniach zapisu).'}
+        </DialogDescription>
+      </DialogHeader>
+      <TextField
+        label={label}
+        autoComplete="off"
+        autoFocus
+        hint={HINTS[target.key]}
+        value={text}
+        onChange={(event) => setText(event.currentTarget.value)}
+      />
+      <FormActions>
+        <Button type="button" variant="outline" size="lg" onClick={onCancel}>
+          Anuluj
+        </Button>
+        {askScope && (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            disabled={value === '' || target.allCount === 0}
+            onClick={() => onApply(value, false)}
+          >
+            Wszystkie ({target.allCount})
           </Button>
-          <Button ref={onlyNewRef} disabled={!request?.newCount} onClick={() => onApply(true)}>
-            Tylko nowe ({request?.newCount ?? 0})
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        )}
+        <Button type="submit" size="lg" disabled={value === '' || target.newCount === 0}>
+          Tylko nowe ({target.newCount})
+        </Button>
+      </FormActions>
+    </Form>
   )
 }

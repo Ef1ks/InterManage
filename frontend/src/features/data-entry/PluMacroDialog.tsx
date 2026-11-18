@@ -90,7 +90,7 @@ export function PluMacroDialog({ open, onOpenChange, items }: Props) {
       return
     }
     toast.success(`Makro w schowku: ${chosen.length} kod${chosen.length === 1 ? '' : 'ów'} PLU`, {
-      description: `Naciśnij Alt+E. Sekcja wagi ${settings.section}, format etykiety ${format}. Potrzebny odtwarzacz od wersji 41.`,
+      description: `Naciśnij Alt+E. Sekcja wagi ${settings.section}, format etykiety ${format}. Potrzebny odtwarzacz od wersji 0.41.`,
     })
     onOpenChange(false)
   }

@@ -139,7 +139,7 @@ export function VersionHistoryDialog({
         {isError ? (
           <p className="text-sm text-destructive">Nie udało się wczytać historii.</p>
         ) : isPending ? (
-          <div className="h-32 animate-pulse rounded-lg bg-muted/50" />
+          <div className="h-32 loading-shimmer rounded-lg/50" />
         ) : (
           <ol className="flex flex-col gap-5">
             {versions.map((version, index) => (

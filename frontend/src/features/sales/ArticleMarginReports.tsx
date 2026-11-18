@@ -44,6 +44,7 @@ import { addDays, todayIso } from '@/lib/dates'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Mode = 'low' | 'promo'
 
@@ -374,7 +375,7 @@ function ArticleMarginPage({
           </Button>
         </Card>
       ) : !query.data ? (
-        <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-48 rounded-xl" />
       ) : (
         <>
           <div role="tablist" aria-label="Widok" className="mb-3 flex flex-wrap gap-1.5">

@@ -47,9 +47,21 @@ class StoreFileQueueIntegrationTests {
         String first = JsonPath.read(add(owner, storeId, "deli-order-proto", "PROTO1_20261117_101500_10023_jan.Traite0",
                 "5900000000001000001000\r\n").andExpect(status().isOk())
                 .andExpect(jsonPath("$.folderLabel").value("Protokół"))
+                .andExpect(jsonPath("$.groupKey").doesNotExist())
                 .andReturn().getResponse().getContentAsString(), "$.id");
-        String second = JsonPath.read(add(owner, storeId, "data-entry-xml", "faktura.xml", "<DOKUMENT/>")
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.id");
+        // Plik faktury niesie dokument, do którego należy: okno kolejki łączy jego pliki w jeden wiersz.
+        String second = JsonPath.read(mvc.perform(multipart("/api/stores/" + storeId + "/file-queue").cookie(owner)
+                        .with(csrf())
+                        .file(new MockMultipartFile("file", "faktura.xml", MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                                "<DOKUMENT/>".getBytes(StandardCharsets.UTF_8)))
+                        .param("folderKey", "data-entry-xml")
+                        .param("groupKey", "ksef:123")
+                        .param("groupLabel", "FV 1/2026 · GOBARTO")
+                        .param("fileName", "faktura.xml"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groupKey").value("ksef:123"))
+                .andExpect(jsonPath("$.groupLabel").value("FV 1/2026 · GOBARTO"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
 
         mvc.perform(get("/api/stores/" + storeId + "/file-queue").cookie(owner))
                 .andExpect(status().isOk())

@@ -62,6 +62,7 @@ import { matchesSearch } from '@/lib/search'
 import type { PriceCheckDelivery, PriceCheckReport as Report } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useSearchParamText } from '@/lib/use-search-param-text'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type PriceFilter = 'all' | 'below-minimum' | 'above-base'
 const PRICE_FILTERS: { value: PriceFilter; label: string }[] = [
@@ -211,7 +212,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-48 rounded-xl" />
       ) : report.data.cadencierCount === 0 ? (
         <MissingCadencier />
       ) : (

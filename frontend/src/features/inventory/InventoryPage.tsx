@@ -26,7 +26,7 @@ import { addDays, todayIso } from '@/lib/dates'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
-import type { ProductListItem, StoreSummary } from '@/lib/types'
+import type { ProductListItem, ProductListPage, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /**
@@ -158,8 +158,22 @@ function StoreInventory({ store }: { store: StoreSummary }) {
 const withoutLeadingZeros = (code: string | null) => code?.replace(/^0+/, '') ?? ''
 
 /**
- * Pole na EAN nad kartą artykułu: wklejony albo zeskanowany kod (Enter) od razu otwiera artykuł. Główny EAN ma
- * pierwszeństwo, bo krótki kod bywa też początkiem dłuższych; gdy kilka artykułów pasuje, wybiera się je na liście.
+ * Artykuł dla zeskanowanego kodu: główny EAN ma pierwszeństwo, bo krótki kod bywa też początkiem dłuższych. Artykuł,
+ * którego nie było w najnowszym raporcie kartoteki, ma ten EAN tylko z dawnego raportu: gdy jest jeden artykuł
+ * z ostatniego raportu (EAN jako multikod, np. po połączeniu ITM8 w systemie sklepu), otwiera się on.
+ */
+function pickScanned(page: ProductListPage, wanted: string): ProductListItem | undefined {
+  const exact = page.items.filter((item) => withoutLeadingZeros(item.ean) === withoutLeadingZeros(wanted))
+  const current = exact.find((item) => item.inLastReport)
+  if (current) return current
+  const others = page.items.filter((item) => item.inLastReport)
+  if (exact.length > 0 && others.length === 1 && page.total === page.items.length) return others[0]
+  return exact[0] ?? (page.total === 1 ? page.items[0] : undefined)
+}
+
+/**
+ * Pole na EAN nad kartą artykułu: wklejony albo zeskanowany kod (Enter) od razu otwiera artykuł (`pickScanned`);
+ * gdy kilka artykułów pasuje, wybiera się je na liście.
  */
 function ArticleJump({
   storeId,
@@ -183,9 +197,7 @@ function ArticleJump({
     try {
       const page = await findProducts(storeId, wanted)
       if (current !== lastSearch.current) return
-      const match =
-        page.items.find((item) => withoutLeadingZeros(item.ean) === withoutLeadingZeros(wanted)) ??
-        (page.total === 1 ? page.items[0] : undefined)
+      const match = pickScanned(page, wanted)
       if (match) {
         setCode('')
         // Na telefonie klawiatura zasłoniłaby kartę; przy czytniku kodów pole zostaje gotowe na kolejny kod.
@@ -354,7 +366,7 @@ function ProductList({
         ) : list.isPending ? (
           <div aria-hidden className="grid gap-px p-2">
             {Array.from({ length: 10 }, (_, index) => (
-              <div key={index} className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+              <div key={index} className="h-14 loading-shimmer rounded-lg" />
             ))}
           </div>
         ) : items.length === 0 ? (

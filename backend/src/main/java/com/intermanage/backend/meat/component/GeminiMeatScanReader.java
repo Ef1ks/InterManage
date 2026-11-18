@@ -22,6 +22,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import com.intermanage.backend.ai.component.AiUsageMeter;
+import com.intermanage.backend.ai.entity.AiFeature;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -72,6 +75,7 @@ public class GeminiMeatScanReader implements MeatScanReader {
     private final String apiKey;
     private final String model;
     private final Duration retryBudget;
+    private AiUsageMeter usageMeter;
 
     public GeminiMeatScanReader(JsonMapper json,
             @Value("${app.ai.gemini.base-url}") String baseUrl,
@@ -87,6 +91,12 @@ public class GeminiMeatScanReader implements MeatScanReader {
         this.apiKey = apiKey == null ? "" : apiKey.strip();
         this.model = model;
         this.retryBudget = retryBudget;
+    }
+
+    /** Licznik tokenów (bez niego, np. w testach klienta, zużycie nie jest zapisywane). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setUsageMeter(AiUsageMeter usageMeter) {
+        this.usageMeter = usageMeter;
     }
 
     @Override
@@ -129,6 +139,9 @@ public class GeminiMeatScanReader implements MeatScanReader {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(payload)
                         .retrieve().body(JsonNode.class);
+                if (usageMeter != null) {
+                    usageMeter.record(AiFeature.MEAT_SCAN, model, response);
+                }
                 return answer(response);
             } catch (RestClientResponseException e) {
                 int status = e.getStatusCode().value();

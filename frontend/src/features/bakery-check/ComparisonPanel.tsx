@@ -11,6 +11,7 @@ import { formatMoney, formatPrice, formatQuantity } from '@/features/documents/f
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import type { BakeryComparison, BakeryComparisonRow, BakeryRowStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const STATUS: Record<BakeryRowStatus, { label: string; className: string }> = {
   OK: { label: 'Zgodne', className: 'bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50' },
@@ -30,8 +31,7 @@ export function ComparisonPanel({ storeId, checkId }: { storeId: string; checkId
   const [onlyDifferences, setOnlyDifferences] = useState(false)
   const [target, setTarget] = useState<LinkTarget | null>(null)
 
-  if (isPending)
-    return <div aria-hidden className="h-32 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+  if (isPending) return <LoadingPanel className="h-32 rounded-xl" />
   if (isError) {
     return (
       <p className="text-sm text-destructive">

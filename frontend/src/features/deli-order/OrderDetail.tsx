@@ -36,6 +36,7 @@ import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { formatLongDate, formatShortDate } from '@/lib/dates'
 import type { DeliOrder, DeliOrderItem } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateTime = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -49,7 +50,7 @@ export function OrderDetail({ storeId }: { storeId: string }) {
     )
   }
   if (isPending) {
-    return <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
   // Klucz: po zapisie poprawek pola startują od nowych ilości.
   return <OrderView key={order.correctedAt ?? 'original'} storeId={storeId} order={order} />

@@ -57,11 +57,7 @@ export function DocumentTypesGrid({ storeId }: { storeId: string }) {
                 {codes
                   .filter((code) => !HIDDEN_WHEN_EMPTY.includes(code))
                   .map((code) => (
-                    <div
-                      key={code}
-                      aria-hidden
-                      className="h-36 animate-pulse rounded-xl bg-muted motion-reduce:animate-none"
-                    />
+                    <div key={code} aria-hidden className="h-36 loading-shimmer rounded-xl" />
                   ))}
               </TypeSection>
             ))

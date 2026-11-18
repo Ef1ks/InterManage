@@ -194,7 +194,7 @@ const PDF_REPORTS: readonly MacroReport[] = ['PROMOTIONS']
 
 /** Najstarszy odtwarzacz, który wykona makro z tymi raportami (PDFSAVE w obecnej postaci od wersji 49). */
 export function macroPlayerVersion(kinds: MacroReport[]) {
-  return kinds.some((kind) => PDF_REPORTS.includes(kind)) ? 49 : 46
+  return kinds.some((kind) => PDF_REPORTS.includes(kind)) ? '0.49' : '0.46'
 }
 
 /** Dziś + 2 lata jako DDMMRRRR, a 29 lutego przechodzi na 28 (rok bez 29 lutego). */

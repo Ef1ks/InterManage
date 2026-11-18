@@ -16,23 +16,26 @@ import {
   usePeriodSummary,
   usePeriodSummaryChildren,
   usePeriodSummaryPdf,
+  useProfitTargetProgress,
   useSalesReportsOverview,
 } from '@/features/sales/api'
+import { GoalProgress, ProfitTargetSettings } from '@/features/sales/ProfitTargets'
 import { barClass, displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
-import { ChartButton, formatPercent, StatTile } from '@/features/sales/report-parts'
-import { lastCompleteDay, MODE_PARAMS, PeriodPicker, useReportParams, useReportPeriod } from '@/features/sales/report-period'
-import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { ChartButton, formatPercent } from '@/features/sales/report-parts'
 import {
-  type DateRange,
-  dayCount,
-  daysLabel,
-  formatRange,
-  PERIOD_MODES,
-} from '@/features/sales/periods'
+  lastCompleteDay,
+  MODE_PARAMS,
+  PeriodPicker,
+  useReportParams,
+  useReportPeriod,
+} from '@/features/sales/report-period'
+import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { type DateRange, dayCount, daysLabel, formatRange, PERIOD_MODES, yearAgoRange } from '@/features/sales/periods'
 import { ApiError } from '@/lib/api'
 import type { PeriodSummary, PeriodSummaryFigures, PeriodSummaryLine } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Okres w adresie strony po polsku, jak w porównaniu sprzedaży. */
 
@@ -60,18 +63,24 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
     <>
       {/* Tabela ma dużo kolumn, więc raport bierze całą szerokość strony (AppLayout). */}
       <span data-wide-page hidden />
-      <BackLink to={salesPaths.overview}>
-        Wszystkie raporty
-      </BackLink>
+      <BackLink to={salesPaths.overview}>Wszystkie raporty</BackLink>
 
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="text-xl font-semibold tracking-tight">Podsumowanie sprzedaży i strat</h2>
         {overview.data && <ReportFreshness generatedAt={overview.data.lastReportGeneratedAt} />}
+        <div className="ml-auto">
+          <ProfitTargetSettings storeId={storeId} year={Number((customError ? lastSaleDate : range.to).slice(0, 4))} />
+        </div>
       </div>
 
       <Card className="mb-4 gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedField label="Okres" options={PERIOD_MODES} value={mode} onChange={(next) => update({ okres: MODE_PARAMS[next] })} />
+          <SegmentedField
+            label="Okres"
+            options={PERIOD_MODES}
+            value={mode}
+            onChange={(next) => update({ okres: MODE_PARAMS[next] })}
+          />
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -113,7 +122,7 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !summary.data ? (
-        <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-96 rounded-xl" />
       ) : (
         <div className={cn('transition-opacity duration-150', summary.isPlaceholderData && 'opacity-60')}>
           <Summary storeId={storeId} summary={summary.data} />
@@ -126,6 +135,20 @@ export function PeriodSummaryReport({ storeId }: { storeId: string }) {
 function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary }) {
   const canEditBudgets = useCan('SALES', 'EDIT')
   const total = summary.total
+  const yearAgoRangeOf = useMemo(() => yearAgoRange({ from: summary.from, to: summary.to }), [summary.from, summary.to])
+  const yearAgoQuery = usePeriodSummary(storeId, yearAgoRangeOf, true)
+  // Poprzedni wynik z innego okresu (keepPreviousData) nie może udawać roku temu.
+  const yearAgo =
+    yearAgoQuery.data && !yearAgoQuery.isPlaceholderData && yearAgoQuery.data.total.saleValueGross > 0
+      ? yearAgoQuery.data.total
+      : null
+  // Cel roku: wynik od 1 stycznia do końca okresu; bez celu kafelki go nie pokazują.
+  const progressQuery = useProfitTargetProgress(storeId, summary.to)
+  const progress = progressQuery.data?.target && !progressQuery.isPlaceholderData ? progressQuery.data : null
+  const goal = (target: number | null | undefined, achieved: number | null | undefined, strong?: boolean) =>
+    progress && target != null && achieved != null ? (
+      <GoalProgress year={progress.year} to={progress.to} target={target} achieved={achieved} strong={strong} />
+    ) : null
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const toggle = useCallback(
@@ -134,7 +157,8 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
         const next = new Set(current)
         if (next.has(key)) {
           // Zwinięcie zwija też poziomy pod spodem.
-          for (const item of current) if (item === key || (key !== UNASSIGNED_KEY && item.startsWith(key))) next.delete(item)
+          for (const item of current)
+            if (item === key || (key !== UNASSIGNED_KEY && item.startsWith(key))) next.delete(item)
         } else {
           next.add(key)
         }
@@ -174,20 +198,47 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
       )}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Sprzedaż brutto" value={`${formatMoney(total.saleValueGross)} zł`} detail={`netto ${formatMoney(total.saleValueNet)} zł`} />
-        <StatTile label="Marża" value={formatPercent(total.marginPercent)} detail={`${formatMoney(total.marginValue)} zł`} />
-        <StatTile
+        <YearTile
+          label="Sprzedaż brutto"
+          value={`${formatMoney(total.saleValueGross)} zł`}
+          detail={`netto ${formatMoney(total.saleValueNet)} zł`}
+          before={yearAgo && `${formatMoney(yearAgo.saleValueGross)} zł`}
+          change={yearAgo && moneyChange(total.saleValueGross, yearAgo.saleValueGross)}
+        />
+        <YearTile
+          label="Marża"
+          value={formatPercent(total.marginPercent)}
+          detail={`${formatMoney(total.marginValue)} zł`}
+          before={yearAgo && `${formatPercent(yearAgo.marginPercent)} · ${formatMoney(yearAgo.marginValue)} zł`}
+          change={yearAgo && pointChange(total.marginPercent, yearAgo.marginPercent)}
+          goal={goal(progress?.target?.marginValue, progress?.marginValue)}
+        />
+        <YearTile
           label="Straty (likwidacje)"
           value={formatPercent(total.lossPercent)}
           detail={`${formatMoney(total.lossValue)} zł`}
+          before={yearAgo && `${formatPercent(yearAgo.lossPercent)} · ${formatMoney(yearAgo.lossValue)} zł`}
+          change={yearAgo && pointChange(total.lossPercent, yearAgo.lossPercent, true)}
         />
-        <StatTile
+        <YearTile
           label="Marża po stratach"
           value={formatPercent(total.marginAfterLossesPercent)}
           detail={`${formatMoney(total.marginAfterLossesValue)} zł`}
-          tone="strong"
+          before={
+            yearAgo &&
+            `${formatPercent(yearAgo.marginAfterLossesPercent)} · ${formatMoney(yearAgo.marginAfterLossesValue)} zł`
+          }
+          change={yearAgo && pointChange(total.marginAfterLossesPercent, yearAgo.marginAfterLossesPercent)}
+          goal={goal(progress?.target?.marginAfterLossesValue, progress?.marginAfterLossesValue, true)}
+          strong
         />
       </div>
+      {yearAgoRangeOf && (
+        <p className="-mt-2 mb-4 text-xs text-muted-foreground tabular-nums">
+          Rok temu: {formatRange(yearAgoRangeOf)} (te same dni tygodnia)
+          {yearAgoQuery.data && !yearAgoQuery.data.lastSaleDate ? ', brak wgranej sprzedaży' : ''}
+        </p>
+      )}
 
       {!summary.budgetsSet && (
         <p className="mb-3 text-sm text-muted-foreground">
@@ -205,7 +256,9 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
       {summary.lines.length === 0 ? (
         <Card className="items-center px-6 py-10 text-center">
           <p className="font-medium">Brak sprzedaży i strat w tym okresie</p>
-          <p className="max-w-sm text-sm text-muted-foreground">Wybierz inny okres albo wgraj raport sprzedaży w Imporcie danych.</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Wybierz inny okres albo wgraj raport sprzedaży w Imporcie danych.
+          </p>
         </Card>
       ) : (
         // Jeden pasek przewijania (strony): nagłówek kolumn klei się pod nagłówkiem aplikacji, „Razem” do dołu okna.
@@ -220,12 +273,10 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
                   <NumberHead>Sprzedaż netto</NumberHead>
                   <NumberHead>Sprzedaż brutto</NumberHead>
                   <NumberHead>Zakup FIFO</NumberHead>
-                  <NumberHead hint="% od sprzedaży brutto · budżet">Marża</NumberHead>
-                  <NumberHead hint="likwidacje · % od brutto · max">Straty</NumberHead>
-                  <NumberHead hint="marża − straty">Marża po stratach</NumberHead>
-                  <NumberHead hint="w sprzedaży sklepu" className="pr-4">
-                    Udział
-                  </NumberHead>
+                  <NumberHead>Marża</NumberHead>
+                  <NumberHead>Straty</NumberHead>
+                  <NumberHead>Marża po stratach</NumberHead>
+                  <NumberHead className="pr-4">Udział</NumberHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -237,7 +288,9 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
               </TableBody>
               <TableFooter className="sticky bottom-0 z-20 bg-foreground text-background shadow-[0_-1px_0_var(--border)]">
                 <TableRow className="hover:bg-foreground">
-                  <TableCell className="sticky left-0 z-10 bg-foreground py-3 pl-4 font-semibold">Razem sklep</TableCell>
+                  <TableCell className="sticky left-0 z-10 bg-foreground py-3 pl-4 font-semibold">
+                    Razem sklep
+                  </TableCell>
                   <FigureCells figures={total} variant="total" />
                 </TableRow>
               </TableFooter>
@@ -247,8 +300,8 @@ function Summary({ storeId, summary }: { storeId: string; summary: PeriodSummary
       )}
 
       <p className="mt-3 max-w-4xl text-xs leading-relaxed text-muted-foreground">
-        Marża w % od sprzedaży brutto. Straty to likwidacje w cenach zakupu, w % od sprzedaży brutto. Marża po stratach =
-        marża − straty, w % od sprzedaży brutto. Budżet marży i max strat ustawia się w Ustawieniach sklepu. Rejon
+        Marża w % od sprzedaży brutto. Straty to likwidacje w cenach zakupu, w % od sprzedaży brutto. Marża po stratach
+        = marża − straty, w % od sprzedaży brutto. Budżet marży i max strat ustawia się w Ustawieniach sklepu. Rejon
         rozwija się do rodzin, podrodzin i artykułów: sprzedaż według nomenklatury artykułu z kartoteki, straty według
         nomenklatury linii likwidacji.
       </p>
@@ -289,7 +342,10 @@ function SummaryRow({ line }: { line: PeriodSummaryLine }) {
   if (line.kind === 'REGION' && line.code != null) return <RegionRow line={line} code={line.code} />
   return (
     <TableRow className="border-t-2 border-t-foreground/15 bg-muted/50 font-semibold hover:bg-muted/50">
-      <TableCell className="sticky left-0 z-10 bg-muted py-2.5 pr-4 whitespace-normal" style={{ paddingLeft: indent(line.depth) }}>
+      <TableCell
+        className="sticky left-0 z-10 bg-muted py-2.5 pr-4 whitespace-normal"
+        style={{ paddingLeft: indent(line.depth) }}
+      >
         {line.name}
       </TableCell>
       <FigureCells figures={line.figures!} variant="subtotal" />
@@ -332,7 +388,10 @@ function RegionRow({ line, code }: { line: PeriodSummaryLine; code: string }) {
         onClick={() => toggle(key)}
       >
         <TableCell
-          className={cn('sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal', open && [barClass, LEVEL_STYLES.REGION.bar])}
+          className={cn(
+            'sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal',
+            open && [barClass, LEVEL_STYLES.REGION.bar],
+          )}
           style={{ paddingLeft: indent(line.depth) }}
         >
           <div className="flex items-start gap-1">
@@ -357,7 +416,12 @@ function RegionRow({ line, code }: { line: PeriodSummaryLine; code: string }) {
             />
           </div>
         </TableCell>
-        <FigureCells figures={line.figures!} marginBudget={line.marginBudgetPercent} maxLoss={line.maxLossPercent} variant="region" />
+        <FigureCells
+          figures={line.figures!}
+          marginBudget={line.marginBudgetPercent}
+          maxLoss={line.maxLossPercent}
+          variant="region"
+        />
       </TableRow>
       {open && <LevelRows parent={code} unassigned={code === ''} depth={line.depth + 1} ancestors={[key]} />}
     </>
@@ -385,11 +449,11 @@ function LevelRows({
     return Array.from({ length: 2 }, (_, row) => (
       <TableRow key={row} className="hover:bg-transparent" aria-hidden>
         <TableCell className="py-3.5" style={{ paddingLeft: indent(depth) }}>
-          <div className="h-3.5 w-40 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+          <div className="h-3.5 w-40 loading-shimmer rounded-full" />
         </TableCell>
         {Array.from({ length: NUMBER_COLUMNS }, (_, column) => (
           <TableCell key={column}>
-            <div className="ml-auto h-3.5 w-14 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+            <div className="ml-auto h-3.5 w-14 loading-shimmer rounded-full" />
           </TableCell>
         ))}
       </TableRow>
@@ -398,9 +462,17 @@ function LevelRows({
   if (isError && !data) {
     return (
       <TableRow className="hover:bg-transparent">
-        <TableCell colSpan={1 + NUMBER_COLUMNS} className="py-3 text-sm text-muted-foreground" style={{ paddingLeft: indent(depth) }}>
+        <TableCell
+          colSpan={1 + NUMBER_COLUMNS}
+          className="py-3 text-sm text-muted-foreground"
+          style={{ paddingLeft: indent(depth) }}
+        >
           Nie udało się wczytać.{' '}
-          <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => refetch()}>
+          <button
+            type="button"
+            className="font-medium text-foreground underline underline-offset-4"
+            onClick={() => refetch()}
+          >
             Spróbuj ponownie
           </button>
         </TableCell>
@@ -410,7 +482,11 @@ function LevelRows({
   if (data.rows.length === 0) {
     return (
       <TableRow className="hover:bg-transparent">
-        <TableCell colSpan={1 + NUMBER_COLUMNS} className="py-3 text-sm text-muted-foreground" style={{ paddingLeft: indent(depth) }}>
+        <TableCell
+          colSpan={1 + NUMBER_COLUMNS}
+          className="py-3 text-sm text-muted-foreground"
+          style={{ paddingLeft: indent(depth) }}
+        >
           Brak sprzedaży i strat w tym okresie.
         </TableCell>
       </TableRow>
@@ -449,7 +525,10 @@ function LevelRows({
           onClick={style ? () => toggle(row.code) : undefined}
         >
           <TableCell
-            className={cn('sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal', style && [barClass, style.bar])}
+            className={cn(
+              'sticky left-0 z-10 bg-inherit py-2.5 pr-4 whitespace-normal',
+              style && [barClass, style.bar],
+            )}
             style={{ paddingLeft: indent(depth) }}
           >
             {/* Linie prowadzące: każdy poziom wyżej ma swoją pionową kreskę pod strzałką rodzica. */}
@@ -488,7 +567,9 @@ function LevelRows({
           </TableCell>
           <FigureCells figures={figures} variant="region" />
         </TableRow>
-        {open && <LevelRows parent={row.code} unassigned={false} depth={depth + 1} ancestors={[...ancestors, row.code]} />}
+        {open && (
+          <LevelRows parent={row.code} unassigned={false} depth={depth + 1} ancestors={[...ancestors, row.code]} />
+        )}
       </Fragment>
     )
   })
@@ -610,5 +691,78 @@ function NumberHead({ children, hint, className }: { children: string; hint?: st
       {children}
       {hint && <span className="block text-xs font-normal text-muted-foreground">{hint}</span>}
     </TableHead>
+  )
+}
+
+type Change = { label: string; tone: 'up' | 'down' | 'flat' }
+
+const changeFormat = new Intl.NumberFormat('pl-PL', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  signDisplay: 'exceptZero',
+})
+
+/** Zmiana kwoty rok do roku w %. */
+function moneyChange(now: number, before: number): Change | null {
+  if (!before) return null
+  const percent = ((now - before) / Math.abs(before)) * 100
+  return { label: `${changeFormat.format(percent)}%`, tone: toneOf(percent) }
+}
+
+/** Zmiana wskaźnika w punktach procentowych; przy stratach wzrost jest zły. */
+function pointChange(now: number | null, before: number | null, lowerIsBetter = false): Change | null {
+  if (now == null || before == null) return null
+  const points = now - before
+  return { label: `${changeFormat.format(points)} p.p.`, tone: toneOf(lowerIsBetter ? -points : points) }
+}
+
+function toneOf(value: number): Change['tone'] {
+  return Math.abs(value) < 0.05 ? 'flat' : value > 0 ? 'up' : 'down'
+}
+
+/** Kafelek sumy okresu z tym samym okresem rok temu (364 dni, te same dni tygodnia) i zmianą. */
+function YearTile({
+  label,
+  value,
+  detail,
+  before,
+  change,
+  goal,
+  strong,
+}: {
+  label: string
+  value: string
+  detail: string
+  before: string | null
+  change: Change | null
+  /** Postęp rocznego celu zysku (tylko kafelki marży, gdy sklep ma cel). */
+  goal?: ReactNode
+  strong?: boolean
+}) {
+  const muted = strong ? 'text-background/70' : 'text-muted-foreground'
+  return (
+    <Card className={cn('gap-1 p-4', strong && 'bg-foreground text-background ring-0')}>
+      <p className={cn('text-sm', muted)}>{label}</p>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+        {change && (
+          <span
+            className={cn(
+              'rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums',
+              change.tone === 'up' && 'bg-emerald-600 text-white',
+              change.tone === 'down' && 'bg-red-600 text-white',
+              change.tone === 'flat' && 'bg-muted text-muted-foreground',
+            )}
+          >
+            {change.label}
+          </span>
+        )}
+      </div>
+      <p className={cn('text-sm tabular-nums', muted)}>{detail}</p>
+      <p className={cn('mt-1 border-t pt-2 text-sm tabular-nums', muted, strong && 'border-background/20')}>
+        rok temu {before ?? '–'}
+      </p>
+      {goal}
+    </Card>
   )
 }

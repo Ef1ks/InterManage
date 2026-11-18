@@ -266,6 +266,69 @@
 }
 
 /*
+ * Ładowanie danych: zaślepka z jasnym refleksem przesuwającym się w poprzek (sam transform, więc tanio), zamiast
+ * pulsującego szarego prostokąta. `loading-shimmer` dla zaślepek tekstu i bloków, `LoadingPanel` dokłada na środku
+ * kółko i napis, które pojawiają się dopiero po chwili, żeby szybkie wczytanie nie migało tekstem.
+ * Przy ograniczonym ruchu refleks i kółko stoją, zostaje samo delikatne przyciemnienie.
+ */
+.loading-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--muted);
+  isolation: isolate;
+}
+.loading-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in oklab, var(--background) 70%, transparent) 50%,
+    transparent 80%
+  );
+  animation: loading-sweep 1.4s linear infinite;
+}
+.dark .loading-shimmer::after {
+  background: linear-gradient(100deg, transparent 20%, color-mix(in oklab, white 7%, transparent) 50%, transparent 80%);
+}
+.loading-label {
+  opacity: 0;
+  animation: loading-label-in 240ms cubic-bezier(0.23, 1, 0.32, 1) 350ms forwards;
+}
+.loading-spinner {
+  animation: loading-spin 700ms linear infinite;
+}
+@keyframes loading-sweep {
+  to { transform: translateX(100%); }
+}
+@keyframes loading-label-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-shimmer::after,
+  .loading-spinner {
+    animation: none;
+  }
+  .loading-shimmer::after {
+    transform: none;
+    opacity: 0.5;
+  }
+  .loading-label {
+    animation: loading-fade-in 200ms ease 350ms forwards;
+  }
+}
+@keyframes loading-fade-in {
+  to { opacity: 1; }
+}
+
+/*
  * Liquid Glass: materiał warstwy nawigacji i elementów pływających (menu boczne, nagłówek, okna, listy, podpowiedzi,
  * toasty). Treść (karty, tabele) zostaje pełna, jak w systemach Apple: szkło unosi się nad treścią, a nie jest nią.
  * Materiał to rozmycie z nasyceniem tego, co pod spodem, zabarwienie kolorem warstwy, jasna krawędź u góry

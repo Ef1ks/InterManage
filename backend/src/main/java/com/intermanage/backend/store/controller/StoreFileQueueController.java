@@ -59,9 +59,12 @@ public class StoreFileQueueController {
     @PreAuthorize(Access.STORE)
     public FileQueueItemResponse add(@PathVariable UUID storeId, @RequestParam("folderKey") String folderKey,
             @RequestParam(value = "folderLabel", required = false) String folderLabel,
+            @RequestParam(value = "groupKey", required = false) String groupKey,
+            @RequestParam(value = "groupLabel", required = false) String groupLabel,
             @RequestParam("fileName") String fileName, @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return service.add(storeId, folderKey, folderLabel, fileName, file, principal.getId());
+        return service.add(storeId, folderKey, folderLabel, groupKey, groupLabel, fileName, file,
+                principal.getId());
     }
 
     @GetMapping("/{id}/file")

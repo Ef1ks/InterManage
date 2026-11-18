@@ -82,6 +82,7 @@ import { usePriceRoundingRules } from '@/features/store-settings/api'
 import { TOOL_ROUTES } from '@/features/tools/categories'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchNamedFile, fetchPostedFile, saveBlob } from '@/lib/api'
+import { setFileQueueDocument } from '@/lib/file-queue'
 import { addDays, todayIso } from '@/lib/dates'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
@@ -207,6 +208,12 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const reduxStore = useStore<RootState>()
   const draft = useAppSelector((state) => state.baseDeliveryDraft.drafts[store.id]) ?? EMPTY_BASE_DELIVERY
   const { rows, view } = draft
+  // Pliki tego bonu (nowe artykuły, zmiana cen, plik dostawy…) są w kolejce plików sklepu jednym wierszem.
+  const queueBon = draft.delivery?.number ?? null
+  useEffect(() => {
+    setFileQueueDocument(store.id, queueBon ? { key: `bon:${queueBon}`, label: `Bon z bazy ${queueBon}` } : null)
+    return () => setFileQueueDocument(store.id, null)
+  }, [store.id, queueBon])
   const currentDraft = useCallback(
     () => reduxStore.getState().baseDeliveryDraft.drafts[store.id] ?? EMPTY_BASE_DELIVERY,
     [reduxStore, store.id],

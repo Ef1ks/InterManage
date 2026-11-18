@@ -23,6 +23,7 @@ import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
 import type { TimeCardRow, TimeCards, TimeDecisionKind, TimeSegment, TimeSettings } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const failed = (cause: unknown, fallback: string) => (cause instanceof ApiError ? cause.message : fallback)
 
@@ -263,7 +264,7 @@ function OvertimeBalance({ storeId, row, segment }: { storeId: string; row: Time
   const date = segment.start.slice(0, 10)
   const balance = useTimeBalance(storeId, row.employeeId, date, true)
   if (!balance.data) {
-    return <div className="h-16 animate-pulse rounded-lg bg-muted" aria-busy />
+    return <LoadingPanel className="h-16 rounded-lg" />
   }
   const data = balance.data
   const day = row.days.find((card) => card.date === date)
@@ -540,11 +541,7 @@ export function TimeSettingsDialog({
             w Grafiku.
           </DialogDescription>
         </DialogHeader>
-        {data ? (
-          <SettingsBody storeId={storeId} settings={data} />
-        ) : (
-          <div className="h-48 animate-pulse rounded-xl bg-muted" aria-busy />
-        )}
+        {data ? <SettingsBody storeId={storeId} settings={data} /> : <LoadingPanel className="h-48 rounded-xl" />}
       </DialogContent>
     </Dialog>
   )

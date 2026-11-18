@@ -42,6 +42,7 @@ import { matchesSearch } from '@/lib/search'
 import { cn } from '@/lib/utils'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Przyjęcia rysujemy porcjami przy przewijaniu, bo w dłuższym okresie są ich setki. */
 const PAGE = 30
@@ -240,7 +241,7 @@ export function ReviewedReportPage<D extends Delivery>({
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-48 rounded-xl" />
       ) : (
         <>
           <CategoryTabs

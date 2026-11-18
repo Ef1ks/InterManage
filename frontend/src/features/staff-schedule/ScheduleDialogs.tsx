@@ -18,6 +18,7 @@ import { formatDateTime, formatPay, hoursLabel, needsBalancing } from '@/feature
 import { ApiError } from '@/lib/api'
 import { addDays, formatMonth, formatShortDate, todayIso } from '@/lib/dates'
 import type { Schedule, ScheduleBreak, ScheduleRow, ScheduleSettings } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const failed = (cause: unknown, fallback: string) => (cause instanceof ApiError ? cause.message : fallback)
 
@@ -180,7 +181,7 @@ export function SettingsDialog({
             onDone={onClose}
           />
         ) : (
-          <div className="h-32 animate-pulse rounded-xl bg-muted" aria-busy />
+          <LoadingPanel className="h-32 rounded-xl" />
         )}
       </DialogContent>
     </Dialog>

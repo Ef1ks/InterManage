@@ -16,6 +16,7 @@ import { SearchPicker } from '@/features/meat/SearchPicker'
 import { ApiError } from '@/lib/api'
 import { formatShortDate } from '@/lib/dates'
 import type { BakeryBon, Supplier } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Dostawca u góry, a pod nim jego bony: weryfikacja zaczyna się od bonu, bo z niego idzie faktura i numery WZ. */
 export function CheckStart({ storeId }: { storeId: string }) {
@@ -97,7 +98,7 @@ export function CheckStart({ storeId }: { storeId: string }) {
               </div>
             </div>
             {bons.isPending ? (
-              <div aria-hidden className="h-32 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+              <LoadingPanel className="h-32 rounded-xl" />
             ) : bons.isError ? (
               <p className="text-sm text-destructive">Nie udało się wczytać bonów.</p>
             ) : bons.data.length === 0 ? (

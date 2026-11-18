@@ -29,6 +29,7 @@ import { formatDocumentDate, formatMoney } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
 import { formatShortDate } from '@/lib/dates'
 import type { BakeryCheck } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const errorText = (failure: unknown, fallback: string) => (failure instanceof ApiError ? failure.message : fallback)
 
@@ -291,7 +292,7 @@ function BonPicker({ storeId, check, onDone, onNotices }: PickerProps) {
       </DialogHeader>
       <div className="max-h-[60svh] overflow-y-auto rounded-xl border">
         {isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać bonów.</p>
         ) : available.length === 0 ? (
@@ -358,7 +359,7 @@ function InvoicePicker({ storeId, check, onDone, onNotices }: PickerProps) {
       <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: numer faktury" />
       <div className="max-h-[55svh] overflow-y-auto rounded-xl border">
         {isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać faktur.</p>
         ) : available.length === 0 ? (

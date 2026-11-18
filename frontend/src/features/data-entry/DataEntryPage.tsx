@@ -38,6 +38,7 @@ import {
   TrendingDownIcon,
   Undo2Icon,
   WandSparklesIcon,
+  Loader2Icon,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -81,6 +82,7 @@ import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
+import { setFileQueueDocument } from '@/lib/file-queue'
 import { useHiddenHint } from '@/lib/use-hidden-hint'
 import { cn } from '@/lib/utils'
 import { useProtoFolder } from '@/lib/proto-files'
@@ -129,9 +131,9 @@ import {
 import {
   COLUMN_FILL_LABELS,
   COLUMN_FILL_PROMPT,
+  ColumnFillButton,
   ColumnFillDialog,
-  type ColumnFillRequest,
-  ColumnFillInput,
+  type ColumnFillTarget,
 } from './column-fill'
 import { applyText, type Column, type ColumnKey, nomenclatureNames, pricingOf } from './grid-values'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
@@ -140,6 +142,8 @@ import { CorrectionBanner } from './CorrectionBanner'
 import { DeliOrderBanner } from './DeliOrderBanner'
 import { PriceControlPendingBanner } from './PriceControlFilesDialog'
 import { FreeScaleCodesDialog } from './FreeScaleCodesDialog'
+import { usageLabel } from '@/features/ai-usage/format'
+
 import { documentSupplier } from './document-supplier'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { CompletedInvoiceBadge } from './CompletedInvoiceBadge'
@@ -379,6 +383,22 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [mercalysSupplierOpen, setMercalysSupplierOpen] = useState(false)
   const { data: suppliers } = useSuppliers(store.id)
   const supplier = useMemo(() => documentSupplier(suppliers, invoice), [suppliers, invoice])
+  // Pliki tej faktury (XML, nowe artykuły, zmiana cen, protokoły…) są w kolejce plików sklepu jednym wierszem.
+  const queueDocumentKey = !invoice?.number
+    ? null
+    : invoice.id && !invoice.supplier
+      ? `ksef:${invoice.id}`
+      : `doc:${invoice.supplier?.id ?? invoice.sellerNip ?? ''}:${invoice.number}`
+  const queueDocumentLabel = invoice?.number
+    ? [invoice.number, supplier?.name ?? invoice.supplier?.name ?? invoice.sellerName].filter(Boolean).join(' · ')
+    : ''
+  useEffect(() => {
+    setFileQueueDocument(
+      store.id,
+      queueDocumentKey ? { key: queueDocumentKey, label: `Faktura ${queueDocumentLabel}` } : null,
+    )
+    return () => setFileQueueDocument(store.id, null)
+  }, [store.id, queueDocumentKey, queueDocumentLabel])
   // NIP sprzedawcy z faktury, którego nie ma na liście dostawców (i nie wybrano innego): można go założyć w Mercalys.
   const sellerToCreate =
     suppliers && !supplier && !invoice?.supplier && invoice?.sellerNip?.replace(/\D/g, '').length === 10
@@ -809,11 +829,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         const toCheck = response.items.filter((item) => item.status === 'TO_CHECK').length
         const deposits = response.items.filter((item) => item.deposit).length
         const summary = `Uzupełniono ${response.items.length} ${pieces(response.items.length)}${toCheck ? `, do sprawdzenia: ${toCheck}` : ''}${deposits ? `, z kaucją: ${deposits}` : ''}.`
+        const usage = response.usage ? usageLabel(response.usage) : undefined
         if (response.modelUsed) {
-          toast.success(summary)
+          toast.success(summary, { description: usage })
         } else {
           toast.warning(response.message ?? 'Model AI nie odpowiedział', {
-            description: summary,
+            description: usage ? `${summary} ${usage}` : summary,
           })
         }
       })
@@ -959,7 +980,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   // ---------- wartość dla całej kolumny (pola nad marką, nomenklaturą, rodzajem i wagą)
 
-  const [fillRequest, setFillRequest] = useState<ColumnFillRequest | null>(null)
+  const [fillTarget, setFillTarget] = useState<ColumnFillTarget | null>(null)
   const [fillPromptOff] = useHiddenHint(COLUMN_FILL_PROMPT)
 
   const fillColumn = (key: ColumnKey, text: string, onlyNew: boolean) => {
@@ -993,19 +1014,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     })
   }
 
-  const requestFill = (key: ColumnKey, text: string) => {
+  const openFill = (key: ColumnKey) => {
     const articles = viewRows.filter(isArticle)
-    const newCount = articles.filter((row) => !row.known).length
-    if (fillPromptOff) {
-      fillColumn(key, text, true)
-      return
-    }
-    setFillRequest({ key, text, newCount, allCount: articles.length })
+    setFillTarget({ key, newCount: articles.filter((row) => !row.known).length, allCount: articles.length })
   }
 
-  const columnFill = (column: Column) => (
-    <ColumnFillInput column={column} onFill={(text) => requestFill(column.key, text)} />
-  )
+  const fillHeader = (column: Column) => <ColumnFillButton column={column} onOpen={openFill} />
 
   const setAllQuantities = (quantity: number) =>
     changeAll(
@@ -1515,10 +1529,9 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             tone="make"
             tile
             loading={savingOrder || savingLst || savingPrices || xmlSave.savingProducts}
-            disabled={filled.length === 0}
             title={
               filled.length === 0
-                ? 'Najpierw dodaj artykuły do tabeli'
+                ? 'Protokół, zamówienie, etykiety, zmiana cen i pliki artykułów (część wymaga artykułów w tabeli)'
                 : chosenArticles.length > 1
                   ? `Pliki z zaznaczonych artykułów (${chosenArticles.length}): zamówienie, etykiety, lista EAN-ów`
                   : 'Protokół, zamówienie, etykiety, zmiana cen i pliki artykułów'
@@ -1641,8 +1654,14 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <ActionItem
                 icon={<BadgePercentIcon />}
                 label="Ceny promocji"
-                disabled={badEanTitle !== null}
-                hint={badEanTitle ? undefined : 'EAN i cena z kolumny „Cena sprz.”, do folderu cen promocji'}
+                disabled={badEanTitle !== null || filled.length === 0}
+                hint={
+                  badEanTitle
+                    ? undefined
+                    : filled.length === 0
+                      ? 'Najpierw dodaj artykuły do tabeli'
+                      : 'EAN i cena z kolumny „Cena sprz.”, do folderu cen promocji'
+                }
                 onClick={() => setProFileOpen(true)}
               />
               <ActionItem
@@ -1679,7 +1698,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               <ActionItem
                 icon={<PackageCheckIcon />}
                 label="Zmień artykuły"
-                hint="Wybierz artykuły do pliku, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu"
+                disabled={filled.length === 0}
+                hint={
+                  filled.length === 0
+                    ? 'Najpierw dodaj artykuły do tabeli'
+                    : 'Wybierz artykuły do pliku, także bez zmian: wczytany plik przepisuje je na dostawcę dokumentu'
+                }
                 onClick={() => setArticleFileOpen(true)}
               />
             </DropdownMenuGroup>
@@ -1794,10 +1818,11 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 variant="outline"
                 className={ACTION_TONES.ai}
                 onClick={fillWithAi}
-                loading={suggest.isPending}
-                disabled={forAi.length === 0}
+                // Bez „loading”: spinner zastępuje samą ikonę, więc przycisk nie zmienia szerokości w trakcie czekania.
+                disabled={forAi.length === 0 || suggest.isPending}
+                aria-busy={suggest.isPending || undefined}
               >
-                <SparklesIcon />
+                {suggest.isPending ? <Loader2Icon className="animate-spin" /> : <SparklesIcon />}
                 Uzupełnij
                 {forAi.length > 0 && ` (${forAi.length} ${forAi.length === 1 ? 'nowy' : 'nowych'})`}
               </Button>
@@ -2055,7 +2080,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             onLinkArticle={openLink}
             onSplitQuantity={(row) => setSplitTargets([row])}
             stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
-            columnFill={columnFill}
+            headerExtra={fillHeader}
           />
         )}
 
@@ -2218,11 +2243,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       />
 
       <ColumnFillDialog
-        request={fillRequest}
-        onClose={() => setFillRequest(null)}
-        onApply={(onlyNew) => {
-          if (fillRequest) fillColumn(fillRequest.key, fillRequest.text, onlyNew)
-          setFillRequest(null)
+        target={fillTarget}
+        askScope={!fillPromptOff}
+        onClose={() => setFillTarget(null)}
+        onApply={(text, onlyNew) => {
+          if (fillTarget) fillColumn(fillTarget.key, text, onlyNew)
+          setFillTarget(null)
         }}
       />
 

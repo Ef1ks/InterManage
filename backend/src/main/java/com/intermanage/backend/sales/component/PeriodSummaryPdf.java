@@ -78,6 +78,14 @@ public class PeriodSummaryPdf {
     }
 
     public byte[] pdf(PeriodSummaryResponse summary, String printedBy) {
+        return pdf(summary, null, printedBy);
+    }
+
+    /**
+     * Wydruk z kafelkami porównanymi do tego samego okresu rok temu ({@code yearAgo}, 364 dni wcześniej, te same dni
+     * tygodnia); bez niego kafelki są bez porównania.
+     */
+    public byte[] pdf(PeriodSummaryResponse summary, PeriodSummaryResponse yearAgo, String printedBy) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         com.lowagie.text.Document document = new com.lowagie.text.Document(PAGE, MARGIN, MARGIN, MARGIN,
                 MARGIN_BOTTOM);
@@ -90,7 +98,7 @@ public class PeriodSummaryPdf {
             document.addTitle("Podsumowanie sprzedaży i strat " + period(summary));
             document.addCreator("Intermanage");
             document.open();
-            for (PdfPTable part : fit(summary)) {
+            for (PdfPTable part : fit(summary, yearAgo)) {
                 document.add(part);
             }
             document.close();
@@ -101,10 +109,10 @@ public class PeriodSummaryPdf {
     }
 
     /** Części wydruku w największej skali, w której mieszczą się na jednej stronie. */
-    private List<PdfPTable> fit(PeriodSummaryResponse summary) {
+    private List<PdfPTable> fit(PeriodSummaryResponse summary, PeriodSummaryResponse yearAgo) {
         List<PdfPTable> parts = List.of();
         for (float scale = 1; scale >= MIN_SCALE; scale -= 0.02f) {
-            parts = new Layout(scale).parts(summary);
+            parts = new Layout(scale).parts(summary, yearAgo);
             if (height(parts) <= HEIGHT) {
                 break;
             }
@@ -129,9 +137,9 @@ public class PeriodSummaryPdf {
             this.scale = scale;
         }
 
-        List<PdfPTable> parts(PeriodSummaryResponse summary) {
+        List<PdfPTable> parts(PeriodSummaryResponse summary, PeriodSummaryResponse yearAgo) {
             List<PdfPTable> parts = new ArrayList<>();
-            parts.add(header(summary));
+            parts.add(header(summary, yearAgo));
             String warning = warning(summary);
             if (warning != null) {
                 parts.add(note(warning));
@@ -145,7 +153,7 @@ public class PeriodSummaryPdf {
             return parts;
         }
 
-        private PdfPTable header(PeriodSummaryResponse summary) {
+        private PdfPTable header(PeriodSummaryResponse summary, PeriodSummaryResponse yearAgo) {
             PdfPTable header = new PdfPTable(4);
             header.setSpacingAfter(s(8));
 
@@ -165,14 +173,36 @@ public class PeriodSummaryPdf {
             header.addCell(titleCell);
 
             Figures total = summary.total();
+            Figures before = yearAgo != null && yearAgo.total().saleValueGross().signum() > 0 ? yearAgo.total() : null;
             header.addCell(tile("Sprzedaż brutto", money(total.saleValueGross()) + " zł",
-                    "netto " + money(total.saleValueNet()) + " zł", false));
+                    "netto " + money(total.saleValueNet()) + " zł",
+                    before == null ? null : money(before.saleValueGross()) + " zł",
+                    before == null ? null : moneyChange(total.saleValueGross(), before.saleValueGross()), false));
             header.addCell(tile("Marża", percent(total.marginPercent()), money(total.marginValue()) + " zł",
-                    false));
+                    before == null ? null : percent(before.marginPercent()) + " · " + money(before.marginValue()) + " zł",
+                    before == null ? null : pointChange(total.marginPercent(), before.marginPercent(), false), false));
             header.addCell(tile("Straty (likwidacje)", percent(total.lossPercent()),
-                    money(total.lossValue()) + " zł", false));
+                    money(total.lossValue()) + " zł",
+                    before == null ? null : percent(before.lossPercent()) + " · " + money(before.lossValue()) + " zł",
+                    before == null ? null : pointChange(total.lossPercent(), before.lossPercent(), true), false));
             header.addCell(tile("Marża po stratach", percent(total.marginAfterLossesPercent()),
-                    money(total.marginAfterLossesValue()) + " zł", true));
+                    money(total.marginAfterLossesValue()) + " zł",
+                    before == null ? null
+                            : percent(before.marginAfterLossesPercent()) + " · "
+                                    + money(before.marginAfterLossesValue()) + " zł",
+                    before == null ? null
+                            : pointChange(total.marginAfterLossesPercent(), before.marginAfterLossesPercent(), false),
+                    true));
+            if (yearAgo != null) {
+                PdfPCell note = new PdfPCell(new Phrase("Rok temu: " + period(yearAgo)
+                        + " (te same dni tygodnia)" + (before == null ? ", brak sprzedaży" : ""),
+                        font(regular, s(7), MUTED)));
+                note.setColspan(4);
+                note.setBorder(Rectangle.NO_BORDER);
+                note.setPadding(0);
+                note.setPaddingTop(s(3));
+                header.addCell(note);
+            }
             return header;
         }
 
@@ -186,12 +216,23 @@ public class PeriodSummaryPdf {
             return note;
         }
 
-        private PdfPCell tile(String label, String value, String detail, boolean strong) {
+        private PdfPCell tile(String label, String value, String detail, String before, Change change,
+                boolean strong) {
+            Color muted = strong ? new Color(212, 212, 216) : MUTED;
             Phrase phrase = new Phrase();
             phrase.add(new Phrase(label.toUpperCase(POLISH) + "\n",
                     font(bold, s(6.5f), strong ? Color.WHITE : MUTED)));
-            phrase.add(new Phrase(value + "\n", font(bold, s(12), strong ? Color.WHITE : INK)));
-            phrase.add(new Phrase(detail, font(regular, s(7), strong ? new Color(212, 212, 216) : MUTED)));
+            phrase.add(new Phrase(value, font(bold, s(12), strong ? Color.WHITE : INK)));
+            if (change != null) {
+                Color color = change.tone() == 0 ? muted
+                        : change.tone() > 0 ? (strong ? new Color(110, 231, 183) : GOOD)
+                                : (strong ? new Color(253, 164, 175) : BAD);
+                phrase.add(new Phrase("  " + change.label(), font(bold, s(8), color)));
+            }
+            phrase.add(new Phrase("\n" + detail, font(regular, s(7), muted)));
+            if (before != null) {
+                phrase.add(new Phrase("\nrok temu " + before, font(regular, s(7), muted)));
+            }
             PdfPCell cell = new PdfPCell(phrase);
             // Biała lewa krawędź rozdziela kafelki.
             cell.setBorder(Rectangle.LEFT);
@@ -369,6 +410,36 @@ public class PeriodSummaryPdf {
 
     private static Font font(BaseFont base, float size, Color color) {
         return new Font(base, size, Font.NORMAL, color);
+    }
+
+    /** Zmiana rok do roku: tekst i kierunek (1 lepiej, -1 gorzej, 0 bez zmian). */
+    private record Change(String label, int tone) {
+    }
+
+    /** Zmiana kwoty w %. */
+    private static Change moneyChange(BigDecimal now, BigDecimal before) {
+        if (now == null || before == null || before.signum() == 0) {
+            return null;
+        }
+        double percent = now.subtract(before).doubleValue() / before.abs().doubleValue() * 100;
+        return change(percent, "%", percent);
+    }
+
+    /** Zmiana wskaźnika w punktach procentowych; przy stratach wzrost jest zły. */
+    private static Change pointChange(BigDecimal now, BigDecimal before, boolean lowerIsBetter) {
+        if (now == null || before == null) {
+            return null;
+        }
+        double points = now.subtract(before).doubleValue();
+        return change(points, " p.p.", lowerIsBetter ? -points : points);
+    }
+
+    private static Change change(double value, String unit, double good) {
+        if (Math.abs(value) < 0.05) {
+            return new Change("0,0" + unit, 0);
+        }
+        String text = String.format(POLISH, "%+.1f", value);
+        return new Change(text + unit, good > 0 ? 1 : -1);
     }
 
     private static String money(BigDecimal value) {

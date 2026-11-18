@@ -36,6 +36,7 @@ import { ApiError } from '@/lib/api'
 import { addDays, formatMonth, todayIso } from '@/lib/dates'
 import type { StoreSummary, TimeCardRow, TimeCards, TimeSegment } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const VIEWS: { value: TimeView; label: string }[] = [
   { value: 'dzien', label: 'Dzień' },
@@ -205,7 +206,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
           inline
         />
       ) : !departments.data ? (
-        <div className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" aria-busy />
+        <LoadingPanel className="h-64 rounded-xl" />
       ) : !department ? (
         <FullPageMessage
           title="Nie ma jeszcze działów"
@@ -263,7 +264,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
               inline
             />
           ) : !cards.data ? (
-            <div className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" aria-busy />
+            <LoadingPanel className="h-96 rounded-xl" />
           ) : (
             <div
               aria-busy={stale || undefined}

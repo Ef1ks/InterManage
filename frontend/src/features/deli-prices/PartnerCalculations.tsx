@@ -25,6 +25,7 @@ import { PartnerLinkDialog } from '@/features/deli-prices/PartnerLinkDialog'
 import { ApiError } from '@/lib/api'
 import { matchesSearch } from '@/lib/search'
 import type { PartnerCalculation, StoreSummary } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Kalkulacje sklepu zaprzyjaźnionego: jego wyroby i ceny, przypisane do naszych artykułów, bo kody są lokalne. Jednym
@@ -33,8 +34,7 @@ import type { PartnerCalculation, StoreSummary } from '@/lib/types'
 export function PartnerCalculations({ store }: { store: StoreSummary }) {
   const { partnerStoreId } = useParams()
   const { data: partners, isPending } = usePartnerStores(store.id)
-  if (isPending)
-    return <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+  if (isPending) return <LoadingPanel className="h-64 rounded-xl" />
   const partner = partners?.find((candidate) => candidate.id === partnerStoreId)
   if (!partner) return <Navigate to={pricePaths.list} replace />
   return <PartnerView key={partner.id} store={store} partnerId={partner.id} partnerName={partner.name} />

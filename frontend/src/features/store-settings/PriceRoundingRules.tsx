@@ -9,10 +9,15 @@ import { roundPrice } from '@/features/data-entry/rows'
 import { usePriceRoundingRules, useSavePriceRounding } from '@/features/store-settings/api'
 import { ApiError } from '@/lib/api'
 import type { PriceRoundingRule } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type DraftRule = { key: number; from: string; to: string; ending: string }
 
-const moneyText = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false })
+const moneyText = new Intl.NumberFormat('pl-PL', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+})
 const toText = (value: number | null) => (value == null ? '' : moneyText.format(value))
 
 /** Kwota z pola: przecinek albo kropka, „zł” pomijane, puste = null; {@code undefined} = błędna wartość. */
@@ -24,7 +29,12 @@ function parseMoney(text: string): number | null | undefined {
 
 let nextKey = 0
 const draftOf = (rules: PriceRoundingRule[]): DraftRule[] =>
-  rules.map((rule) => ({ key: nextKey++, from: toText(rule.priceFrom), to: toText(rule.priceTo), ending: toText(rule.ending) }))
+  rules.map((rule) => ({
+    key: nextKey++,
+    from: toText(rule.priceFrom),
+    to: toText(rule.priceTo),
+    ending: toText(rule.ending),
+  }))
 
 type Parsed = { priceFrom: number; priceTo: number | null; ending: number }
 
@@ -62,7 +72,9 @@ export function PriceRoundingRules({ storeId }: { storeId: string }) {
 
   const rules = draft ?? draftOf(data ?? [])
   const checked = rules.map(check)
-  const valid = checked.filter((rule): rule is Parsed => typeof rule !== 'string').sort((a, b) => a.priceFrom - b.priceFrom)
+  const valid = checked
+    .filter((rule): rule is Parsed => typeof rule !== 'string')
+    .sort((a, b) => a.priceFrom - b.priceFrom)
   const overlap = valid.some(
     (rule, i) => i > 0 && (valid[i - 1].priceTo === null || valid[i - 1].priceTo! > rule.priceFrom),
   )
@@ -73,7 +85,10 @@ export function PriceRoundingRules({ storeId }: { storeId: string }) {
   const add = () => {
     // Nowy przedział zaczyna się tam, gdzie kończy ostatni.
     const last = valid.at(-1)
-    setDraft([...rules, { key: nextKey++, from: last?.priceTo != null ? toText(last.priceTo) : '', to: '', ending: '0,99' }])
+    setDraft([
+      ...rules,
+      { key: nextKey++, from: last?.priceTo != null ? toText(last.priceTo) : '', to: '', ending: '0,99' },
+    ])
   }
   const submit = () =>
     save.mutate(valid, {
@@ -96,7 +111,7 @@ export function PriceRoundingRules({ storeId }: { storeId: string }) {
       </div>
 
       {isPending ? (
-        <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-24 rounded-lg" />
       ) : (
         <div className="grid gap-2">
           {rules.length > 0 && (
@@ -118,9 +133,28 @@ export function PriceRoundingRules({ storeId }: { storeId: string }) {
             return (
               <div key={rule.key} className="grid grid-cols-[1fr_1fr_1fr_2fr_auto] items-center gap-2">
                 {/* Siatka do wpisywania kwot: pola bez pływającej etykiety, opisane nagłówkiem kolumny. */}
-                <Input inputMode="decimal" aria-label="Od zł" value={rule.from} onChange={(event) => update(rule.key, 'from', event.target.value)} className="text-right" />
-                <Input inputMode="decimal" aria-label="Do zł" placeholder="bez limitu" value={rule.to} onChange={(event) => update(rule.key, 'to', event.target.value)} className="text-right" />
-                <Input inputMode="decimal" aria-label="Końcówka" value={rule.ending} onChange={(event) => update(rule.key, 'ending', event.target.value)} className="text-right" />
+                <Input
+                  inputMode="decimal"
+                  aria-label="Od zł"
+                  value={rule.from}
+                  onChange={(event) => update(rule.key, 'from', event.target.value)}
+                  className="text-right"
+                />
+                <Input
+                  inputMode="decimal"
+                  aria-label="Do zł"
+                  placeholder="bez limitu"
+                  value={rule.to}
+                  onChange={(event) => update(rule.key, 'to', event.target.value)}
+                  className="text-right"
+                />
+                <Input
+                  inputMode="decimal"
+                  aria-label="Końcówka"
+                  value={rule.ending}
+                  onChange={(event) => update(rule.key, 'ending', event.target.value)}
+                  className="text-right"
+                />
                 <span className="text-sm tabular-nums">
                   {typeof result === 'string' ? (
                     <span className="text-destructive">{result}</span>

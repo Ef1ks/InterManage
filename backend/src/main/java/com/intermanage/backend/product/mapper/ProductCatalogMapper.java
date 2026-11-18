@@ -2,6 +2,7 @@ package com.intermanage.backend.product.mapper;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 
 import org.mapstruct.Context;
 import org.mapstruct.Mapper;
@@ -14,7 +15,9 @@ import com.intermanage.backend.product.entity.Product;
 public interface ProductCatalogMapper {
 
     @Mapping(target = "promoPrice", expression = "java(activePromoPrice(product, today))")
-    ProductListItem toListItem(Product product, @Context LocalDate today);
+    @Mapping(target = "inLastReport", expression = "java(newestReport != null && product.getLastSeenImport() != null"
+            + " && newestReport.equals(product.getLastSeenImport().getId()))")
+    ProductListItem toListItem(Product product, @Context LocalDate today, @Context UUID newestReport);
 
     /** Cena promocyjna z kasy tylko w trakcie promocji. */
     default BigDecimal activePromoPrice(Product product, LocalDate today) {

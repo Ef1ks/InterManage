@@ -64,7 +64,7 @@ export function DownloadsPage() {
       ) : isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((index) => (
-            <Card key={index} className="h-40 animate-pulse bg-muted/50" />
+            <Card key={index} className="h-40 loading-shimmer/50" />
           ))}
         </div>
       ) : downloads.length === 0 ? (

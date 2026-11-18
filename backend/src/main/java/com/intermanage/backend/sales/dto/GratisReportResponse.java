@@ -31,9 +31,12 @@ public record GratisReportResponse(
 
     /**
      * Gratisy za handel / ekspozycję i za pokrycie strat (sprzedaż brutto linii), sprzedaż brutto i udział gratisów
-     * w sprzedaży w % (pusty bez sprzedaży).
+     * w sprzedaży w % (pusty bez sprzedaży). {@code liquidationValue}: straty, czyli likwidacje wg daty dokumentu
+     * w cenach sprzedaży brutto (jak gratis), a {@code lossCoverPercent} to ile % z nich pokrywają gratisy za
+     * pokrycie strat (pusty bez likwidacji).
      */
     public record Figures(BigDecimal tradeValue, BigDecimal lossValue, BigDecimal gratisValue,
-            BigDecimal saleValueGross, BigDecimal gratisPercent) {
+            BigDecimal saleValueGross, BigDecimal gratisPercent, BigDecimal liquidationValue,
+            BigDecimal lossCoverPercent) {
     }
 }

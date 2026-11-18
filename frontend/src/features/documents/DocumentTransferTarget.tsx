@@ -14,6 +14,7 @@ import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import type { Document, DocumentSummary, StoreSummary, TransferTarget } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
@@ -199,13 +200,16 @@ function TargetDialogBody({ storeId, document, saving, onSubmit, onCancel }: Dia
       </DialogHeader>
 
       {isPending ? (
-        <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-24 rounded-lg" />
       ) : partners.length === 0 ? (
         <div className="rounded-lg bg-muted/70 px-4 py-3 text-sm">
           <p className="font-medium">Ten sklep nie ma jeszcze sklepów zaprzyjaźnionych</p>
           <p className="text-muted-foreground">
             Zaproś sklep w{' '}
-            <Link to="/ustawienia-sklepu/sklepy-zaprzyjaznione" className="font-medium text-foreground underline underline-offset-4">
+            <Link
+              to="/ustawienia-sklepu/sklepy-zaprzyjaznione"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
               Ustawieniach sklepu
             </Link>
             . Gdy zaakceptuje, będzie można go tu wybrać.

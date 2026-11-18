@@ -40,6 +40,7 @@ import { dayCount, daysLabel, formatRange, PERIOD_MODES } from '@/features/sales
 import { ApiError } from '@/lib/api'
 import type { CounterArticle, CounterFigures, CounterMetric, CounterReport as Report, CounterValues } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Rejony lady w kolejności raportu, z krótką nazwą do przełącznika. */
 const REGIONS = [
@@ -208,7 +209,7 @@ export function CounterReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-96 rounded-xl" />
       ) : (
         <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
           <ReportBody storeId={storeId} report={report.data} metrics={metrics} basis={basis} />

@@ -23,6 +23,7 @@ import type { DraftCorrection, DraftDelivery, DraftInvoice } from '@/store/dataE
 import { useCorrectionBons, useCorrectionDeliveries } from './api'
 import { buildCorrectionMacro, isBaseProtocol, isBaseSeller, planCorrectionMacro } from './correction-macro'
 import { type DataEntryRow, serviceKind } from './rows'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Delivery = DraftDelivery
 
@@ -242,7 +243,7 @@ function DeliveryPicker({
           {deliveries.isError ? (
             <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać bonów.</p>
           ) : deliveries.isPending ? (
-            <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+            <LoadingPanel className="m-3 h-24 rounded-lg" />
           ) : list.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               Brak bonów. Wpisz numer, żeby go wyszukać.
@@ -402,7 +403,7 @@ function MacroDialog({
         {lines.error ? (
           <p className="text-sm text-destructive">Nie udało się wczytać bonu.</p>
         ) : !plan ? (
-          <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="h-24 rounded-lg" />
         ) : (
           <div className="grid gap-3 text-sm">
             {plan.items.length > 0 && (

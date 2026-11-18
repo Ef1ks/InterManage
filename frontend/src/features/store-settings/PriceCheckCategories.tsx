@@ -13,6 +13,7 @@ import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { PriceCheckCategory } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type FormValues = { name: string; regionCodes: string[] }
 
@@ -50,12 +51,7 @@ function RegionSwitches({
           Wgraj nomenklaturę w Imporcie danych.
         </p>
       ) : (
-        <ul
-          className={cn(
-            'max-h-80 divide-y overflow-y-auto rounded-lg border',
-            error && 'border-destructive',
-          )}
-        >
+        <ul className={cn('max-h-80 divide-y overflow-y-auto rounded-lg border', error && 'border-destructive')}>
           {all.map((region) => (
             <li key={region.code}>
               <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-muted/60">
@@ -110,8 +106,8 @@ export function PriceCheckCategories({ storeId }: { storeId: string }) {
         <div>
           <h3 className="font-medium">Kategorie raportu</h3>
           <p className="max-w-xl text-sm text-muted-foreground">
-            Własne zakładki pod „Do weryfikacji” i „Po incydencie z bazy”. Przyjęcie trafia do kategorii, gdy ma
-            artykuł z wybranego rejonu nomenklatury.
+            Własne zakładki pod „Do weryfikacji” i „Po incydencie z bazy”. Przyjęcie trafia do kategorii, gdy ma artykuł
+            z wybranego rejonu nomenklatury.
           </p>
         </div>
         <Button variant="outline" onClick={() => setEditing('new')}>
@@ -123,7 +119,7 @@ export function PriceCheckCategories({ storeId }: { storeId: string }) {
       {categories.isError ? (
         <p className="text-sm text-destructive">Nie udało się wczytać kategorii.</p>
       ) : !categories.data ? (
-        <div aria-hidden className="h-16 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-16 rounded-lg" />
       ) : categories.data.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
           Nie ma jeszcze kategorii. Dodaj np. „Napoje” z rejonem napojów, żeby mieć je w osobnej zakładce.
@@ -176,9 +172,7 @@ export function PriceCheckCategories({ storeId }: { storeId: string }) {
             <CategoryForm
               category={editing === 'new' ? null : editing}
               regionOptions={regions.map((region) => ({ code: region.code, name: region.name }))}
-              onSubmit={(values) =>
-                save.mutateAsync({ id: editing === 'new' ? undefined : editing.id, ...values })
-              }
+              onSubmit={(values) => save.mutateAsync({ id: editing === 'new' ? undefined : editing.id, ...values })}
               onDone={(saved) => {
                 setEditing(null)
                 toast.success(editing === 'new' ? `Dodano kategorię „${saved.name}”` : 'Zapisano kategorię')
@@ -229,7 +223,9 @@ function CategoryForm({
     <Form onSubmit={submit} error={formError}>
       <DialogHeader>
         <DialogTitle className="text-lg">{category ? 'Zmień kategorię' : 'Nowa kategoria raportu'}</DialogTitle>
-        <DialogDescription>Nazwa zakładki i rejony nomenklatury, z których przyjęcia mają w niej być.</DialogDescription>
+        <DialogDescription>
+          Nazwa zakładki i rejony nomenklatury, z których przyjęcia mają w niej być.
+        </DialogDescription>
       </DialogHeader>
       <TextField
         label="Nazwa kategorii"

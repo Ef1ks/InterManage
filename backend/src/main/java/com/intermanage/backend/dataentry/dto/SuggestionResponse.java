@@ -4,13 +4,15 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+import com.intermanage.backend.ai.dto.AiUsageSummary;
 import com.intermanage.backend.dataentry.entity.SuggestionStatus;
 
 /**
  * Propozycje dla nowych artykułów. {@code modelUsed = false}: model nie odpowiedział (albo nie jest skonfigurowany),
- * więc propozycje są tylko z kartoteki, a {@code message} mówi dlaczego.
+ * więc propozycje są tylko z kartoteki, a {@code message} mówi dlaczego. {@code usage}: tokeny i model zapytań
+ * do modelu w tym żądaniu ({@code null}, gdy model nie odpowiedział).
  */
-public record SuggestionResponse(boolean modelUsed, String message, List<Suggestion> items) {
+public record SuggestionResponse(boolean modelUsed, String message, List<Suggestion> items, AiUsageSummary usage) {
 
     /**
      * {@code subfamilyCode} jest puste przy {@link SuggestionStatus#TO_CHECK}: wybiera człowiek z {@code proposals}

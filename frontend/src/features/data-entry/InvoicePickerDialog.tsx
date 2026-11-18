@@ -67,6 +67,7 @@ import { BaseSupplierCodesButton } from './BaseSupplierCodesDialog'
 import { CompletedInvoiceBadge } from './CompletedInvoiceBadge'
 import { InvoiceFileActions } from './InvoiceFileActions'
 import { PRINT_VARIANT_LABELS, useInvoiceFiles } from './invoice-files'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Wczytanie faktury w dwóch krokach: wybór faktury albo korekty z KSeF (najnowsze na górze, kolejne przy przewijaniu),
@@ -515,7 +516,7 @@ function ListStep({
         ) : invoices.isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać faktur.</p>
         ) : invoices.isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : list.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
             {filters.status === 'NEW' && !debounced
@@ -883,7 +884,7 @@ function SourceStep({
           {lines.error instanceof ApiError ? lines.error.message : 'Nie udało się wczytać faktury.'}
         </p>
       ) : !data ? (
-        <div aria-hidden className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-48 rounded-xl" />
       ) : (
         <>
           <div role="radiogroup" aria-label="Źródło EAN" className="grid gap-2 sm:grid-cols-2">

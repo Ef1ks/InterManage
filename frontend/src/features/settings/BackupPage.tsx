@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { BackupRun, BackupSettings, BackupStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateTime = new Intl.DateTimeFormat('pl-PL', {
   dateStyle: 'short',
@@ -92,7 +93,7 @@ export function BackupPage() {
           inline
         />
       ) : !data ? (
-        <div aria-hidden className="h-72 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-72 rounded-xl" />
       ) : (
         <div className="grid gap-6">
           <div className="grid items-start gap-6 lg:grid-cols-2">

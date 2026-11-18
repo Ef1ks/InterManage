@@ -7,6 +7,7 @@ import type { PresencePerson } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { plural } from './plural'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Ile osób z listy widać od razu; reszta jako „i N więcej”. */
 const VISIBLE = 4
@@ -23,7 +24,7 @@ export function PresenceCard({ storeId }: { storeId: string }) {
 
   let body
   if (isPending) {
-    body = <div className="h-40 animate-pulse rounded-lg bg-muted" />
+    body = <LoadingPanel className="h-40 rounded-lg" />
   } else if (isError) {
     body = <p className="text-sm text-muted-foreground">Nie udało się wczytać obecności.</p>
   } else {

@@ -78,7 +78,7 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
     }
     toast.success(`Makro w schowku: kodów ${chosen.length}`, {
       description:
-        'Naciśnij Alt+E (odtwarzacz od wersji 37): Lista Cadencier, każdy plik z kodem, integracja. Potem potwierdź wpisanie.',
+        'Naciśnij Alt+E (odtwarzacz od wersji 0.37): Lista Cadencier, każdy plik z kodem, integracja. Potem potwierdź wpisanie.',
     })
   }
 

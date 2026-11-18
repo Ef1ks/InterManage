@@ -19,6 +19,7 @@ import { ApiError } from '@/lib/api'
 import { addMonths, currentMonth, formatMonth } from '@/lib/dates'
 import type { Document, DocumentGratis, DocumentSummary, GratisKind, GratisSupplierSuggestion } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
@@ -96,7 +97,9 @@ export function DocumentGratisSection({ storeId, document }: { storeId: string; 
             <h3 id="document-gratis" className="font-semibold">
               Gratis od {document.gratis.supplierName}
               {document.gratis.supplierCode && (
-                <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">{document.gratis.supplierCode}</span>
+                <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+                  {document.gratis.supplierCode}
+                </span>
               )}
             </h3>
             <p className="text-muted-foreground tabular-nums">
@@ -221,7 +224,9 @@ function GratisDialogBody({ storeId, document, saving, onSubmit, onCancel }: Dia
       }}
     >
       <DialogHeader>
-        <DialogTitle className="text-lg">{document.gratis ? 'Zmień dostawcę gratisu' : 'Zarejestruj jako gratis'}</DialogTitle>
+        <DialogTitle className="text-lg">
+          {document.gratis ? 'Zmień dostawcę gratisu' : 'Zarejestruj jako gratis'}
+        </DialogTitle>
         <DialogDescription className="tabular-nums">
           {document.typeSingular} {document.number} · gratis o wartości {formatMoney(document.saleValueGross)} zł brutto
           (sprzedaż brutto dokumentu).
@@ -298,7 +303,7 @@ function RecentSuppliers({
         Ostatnio przywozili te artykuły
       </h3>
       {isPending ? (
-        <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-40 rounded-xl" />
       ) : isError ? (
         <p className="text-sm text-muted-foreground">Nie udało się wczytać dostawców z przyjęć.</p>
       ) : data.length === 0 ? (

@@ -11,6 +11,7 @@ import { QuantityInput, UnitToggle, parseQuantity } from '@/features/deli-order/
 import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import type { DeliOrder, OrderUnit, ProductSearchResult } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Kategoria pozycji dopisanych spoza formularza (`DeliOrderService.EXTRA_CATEGORY`). */
 const EXTRA_CATEGORY = 'Spoza formularza'
@@ -41,7 +42,13 @@ export function AddOrderItemsDialog({ open, onOpenChange, ...props }: Props) {
 
 type Extra = { product: ProductSearchResult; unit: OrderUnit; quantity: string }
 
-function AddForm({ storeId, order, section, category, onDone }: Omit<Props, 'open' | 'onOpenChange'> & { onDone: () => void }) {
+function AddForm({
+  storeId,
+  order,
+  section,
+  category,
+  onDone,
+}: Omit<Props, 'open' | 'onOpenChange'> & { onDone: () => void }) {
   const form = useSupplierForm(storeId, order.formStore.id)
   const add = useAddOrderItems(storeId, order.id)
   const [quantities, setQuantities] = useState<Record<string, string>>({})
@@ -104,7 +111,7 @@ function AddForm({ storeId, order, section, category, onDone }: Omit<Props, 'ope
 
   let body
   if (form.isPending) {
-    body = <div aria-hidden className="h-32 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    body = <LoadingPanel className="h-32 rounded-xl" />
   } else if (form.isError || !formSection || (!extrasMode && !formCategory)) {
     body = (
       <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
@@ -123,7 +130,12 @@ function AddForm({ storeId, order, section, category, onDone }: Omit<Props, 'ope
             setExtras((current) => current.map((e) => (e.product.id === extra.product.id ? { ...e, ...change } : e)))
           return (
             <div key={extra.product.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
-              <ProductName name={extra.product.name} brand={extra.product.brand} ean={extra.product.ean} error={error} />
+              <ProductName
+                name={extra.product.name}
+                brand={extra.product.brand}
+                ean={extra.product.ean}
+                error={error}
+              />
               <UnitToggle value={extra.unit} label={label} onChange={(unit) => update({ unit })} />
               <QuantityInput
                 unit={extra.unit}
@@ -222,7 +234,17 @@ function AddForm({ storeId, order, section, category, onDone }: Omit<Props, 'ope
   )
 }
 
-function ProductName({ name, brand, ean, error }: { name: string | null; brand: string | null; ean: string; error?: string }) {
+function ProductName({
+  name,
+  brand,
+  ean,
+  error,
+}: {
+  name: string | null
+  brand: string | null
+  ean: string
+  error?: string
+}) {
   return (
     <div className="min-w-0 flex-1">
       <div className="truncate text-sm font-medium">{name ?? 'Bez nazwy'}</div>

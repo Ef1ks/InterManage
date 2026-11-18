@@ -35,6 +35,8 @@ export type ProductListItem = {
   salePrice: number | null
   promoPrice: number | null
   active: boolean | null
+  /** Był w najnowszym raporcie kartoteki; bez tego ITM8 zniknął z systemu sklepu (np. połączony z innym). */
+  inLastReport: boolean
 }
 
 export type ProductListPage = {

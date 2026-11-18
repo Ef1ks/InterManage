@@ -9,6 +9,7 @@ import { useDocumentCandidates, useInvoiceDocumentLinks } from '@/features/ksef/
 import { ApiError } from '@/lib/api'
 import type { KsefInvoice } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Przypięcie przyjęcia albo korekty od dostawcy do faktury z KSeF: domyślnie dokumenty z wartością zakupu ±10% kwoty
@@ -37,13 +38,12 @@ export function DocumentPicker({
 function PickerBody({ storeId, invoice, onDone }: { storeId: string; invoice: KsefInvoice; onDone: () => void }) {
   const [query, setQuery] = useState('')
   const [amountRange, setAmountRange] = useState(true)
-  const { data: candidates = [], isPending, isError, isPlaceholderData } = useDocumentCandidates(
-    storeId,
-    invoice.id,
-    query,
-    amountRange,
-    true,
-  )
+  const {
+    data: candidates = [],
+    isPending,
+    isError,
+    isPlaceholderData,
+  } = useDocumentCandidates(storeId, invoice.id, query, amountRange, true)
   const { link, unlink } = useInvoiceDocumentLinks(storeId)
   const value = Math.abs(invoice.netAmount ?? 0)
   const attached = new Set(invoice.deliveries.map((delivery) => delivery.id))
@@ -59,8 +59,7 @@ function PickerBody({ storeId, invoice, onDone }: { storeId: string; invoice: Ks
             action: { label: 'Cofnij', onClick: () => unlink.mutate({ invoiceId: invoice.id, documentId }) },
           })
         },
-        onError: (error) =>
-          toast.error(error instanceof ApiError ? error.message : 'Nie udało się przypiąć dokumentu'),
+        onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się przypiąć dokumentu'),
       },
     )
 
@@ -96,7 +95,7 @@ function PickerBody({ storeId, invoice, onDone }: { storeId: string; invoice: Ks
         {isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać dokumentów.</p>
         ) : isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : candidates.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
             {amountRange
@@ -140,7 +139,9 @@ function PickerBody({ storeId, invoice, onDone }: { storeId: string; invoice: Ks
                     <span className="text-right text-sm">
                       <span className="block font-medium">{formatMoney(candidate.purchaseValue)} zł</span>
                       <span className="block text-xs text-muted-foreground">
-                        {candidate.difference === 0 ? 'ta sama kwota' : `różnica ${formatMoney(candidate.difference)} zł`}
+                        {candidate.difference === 0
+                          ? 'ta sama kwota'
+                          : `różnica ${formatMoney(candidate.difference)} zł`}
                       </span>
                     </span>
                   </button>

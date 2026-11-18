@@ -34,6 +34,7 @@ import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.entity.ProductPriceChange;
 import com.intermanage.backend.product.mapper.ProductCatalogMapper;
 import com.intermanage.backend.product.repository.PriceFileImportRepository;
+import com.intermanage.backend.product.repository.ProductImportRepository;
 import com.intermanage.backend.product.repository.ProductPriceChangeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.product.repository.ProductSearch;
@@ -67,12 +68,14 @@ public class ProductCatalogService {
     private final PriceFileImportRepository priceFiles;
     private final PromotionImportRepository promotions;
     private final DataEntryPriceControlFileRepository priceControlFiles;
+    private final ProductImportRepository imports;
 
     public ProductCatalogService(ProductRepository products, ProductCatalogMapper mapper,
             ProductPriceChangeRepository priceChanges, PriceFileImportRepository priceFiles,
             PromotionImportRepository promotions,
-            DataEntryPriceControlFileRepository priceControlFiles) {
+            DataEntryPriceControlFileRepository priceControlFiles, ProductImportRepository imports) {
         this.products = products;
+        this.imports = imports;
         this.mapper = mapper;
         this.priceChanges = priceChanges;
         this.priceFiles = priceFiles;
@@ -103,8 +106,9 @@ public class ProductCatalogService {
         }
         int page = Math.max(request.page() != null ? request.page() : 0, 0);
         Page<Product> found = products.findAll(spec, PageRequest.of(page, PAGE_SIZE, sort(request)));
+        UUID newestReport = imports.findNewestReportIds(storeId, Limit.of(1)).stream().findFirst().orElse(null);
         List<ProductListItem> items = found.getContent().stream()
-                .map(product -> mapper.toListItem(product, today))
+                .map(product -> mapper.toListItem(product, today, newestReport))
                 .toList();
         return new ProductListPage(items, found.getTotalElements(), found.hasNext());
     }

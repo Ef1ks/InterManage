@@ -60,9 +60,11 @@ public class GratisReportPdf {
     private static final float TILE_WIDTH = WIDTH / 2 - 2 * GAP;
     private static final float MIN_SCALE = 0.4f;
 
-    private static final String[] HEADERS = {"Rejon", "Handel /\nekspozycja", "Pokrycie\nstrat", "Obrót\nbrutto",
-            "% obrotu"};
-    private static final float[] WIDTHS = {38, 16, 16, 17, 11};
+    private static final String[] HEADERS = {"Rejon", "Handel /\nekspozycja", "Pokrycie\nstrat", "% strat\npokryte",
+            "Obrót\nbrutto", "% obrotu"};
+    private static final float[] WIDTHS = {33, 15, 15, 11, 15, 11};
+    /** Kolumna szarych liczb (obrót). */
+    private static final int SALES_COLUMN = 4;
 
     private final BaseFont regular;
     private final BaseFont bold;
@@ -169,7 +171,9 @@ public class GratisReportPdf {
         phrase.add(new Phrase(period(report) + "\n", font(bold, 9, INK)));
         phrase.add(new Phrase("Wartość gratisu to sprzedaż brutto przeniesień stanów zarejestrowanych jako gratis, "
                 + "w miesiącu gratisu. Obrót to sprzedaż brutto rejonu w tym okresie, w wierszu Razem całego sklepu; "
-                + "% obrotu = gratisy razem / obrót.", font(regular, 6.5f, MUTED)));
+                + "% obrotu = gratisy razem / obrót. % strat pokryte = gratisy za pokrycie strat / likwidacje "
+                + "w cenach sprzedaży brutto z tego okresu (w wierszu Razem likwidacje całego sklepu).",
+                font(regular, 6.5f, MUTED)));
         PdfPCell cell = new PdfPCell(phrase);
         cell.setBorder(Rectangle.NO_BORDER);
         cell.setPadding(0);
@@ -192,7 +196,7 @@ public class GratisReportPdf {
         title.add(new Phrase(tile.label(), font(bold, 9.5f * scale, INK)));
         title.add(new Phrase("   " + documents(tile.documentCount()), font(regular, 7 * scale, MUTED)));
         PdfPCell titleCell = new PdfPCell(title);
-        titleCell.setColspan(3);
+        titleCell.setColspan(4);
         band(titleCell, summary, scale);
         table.addCell(titleCell);
         PdfPCell sumCell = new PdfPCell(new Phrase(money(tile.total().gratisValue()) + " zł",
@@ -240,9 +244,9 @@ public class GratisReportPdf {
 
     private void row(PdfPTable table, String label, Figures figures, float scale, boolean total) {
         String[] values = {label, money(figures.tradeValue()), money(figures.lossValue()),
-                whole(figures.saleValueGross()), percent(figures.gratisPercent())};
+                percent(figures.lossCoverPercent()), whole(figures.saleValueGross()), percent(figures.gratisPercent())};
         for (int i = 0; i < values.length; i++) {
-            Color color = total ? Color.WHITE : i == 3 ? MUTED : INK;
+            Color color = total ? Color.WHITE : i == SALES_COLUMN ? MUTED : INK;
             PdfPCell cell = new PdfPCell(new Phrase(values[i], font(total ? bold : regular, 6.6f * scale, color)));
             cell.setBorder(total ? Rectangle.NO_BORDER : Rectangle.BOTTOM);
             cell.setBorderColor(RULE);

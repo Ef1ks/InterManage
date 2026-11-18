@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useRegionBudgets, useSaveRegionBudgets } from '@/features/sales/api'
 import { ApiError } from '@/lib/api'
 import type { RegionBudget } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Draft = Record<string, { margin: string; loss: string }>
 
@@ -99,14 +100,17 @@ export function RegionBudgets({ storeId }: { storeId: string }) {
             {isPending ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={3}>
-                  <div aria-hidden className="h-40 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+                  <LoadingPanel className="h-40 rounded-lg" />
                 </TableCell>
               </TableRow>
             ) : (
               groups.map((group) => (
                 <Fragment key={group}>
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={3} className="bg-muted/60 pt-3 pb-1.5 pl-4 text-xs font-semibold tracking-wide uppercase">
+                    <TableCell
+                      colSpan={3}
+                      className="bg-muted/60 pt-3 pb-1.5 pl-4 text-xs font-semibold tracking-wide uppercase"
+                    >
                       {group}
                     </TableCell>
                   </TableRow>
@@ -168,7 +172,12 @@ export function RegionBudgets({ storeId }: { storeId: string }) {
             Anuluj
           </Button>
         )}
-        <Button size="lg" loading={save.isPending} disabled={changed.length === 0 || invalid.length > 0} onClick={submit}>
+        <Button
+          size="lg"
+          loading={save.isPending}
+          disabled={changed.length === 0 || invalid.length > 0}
+          onClick={submit}
+        >
           Zapisz budżet
         </Button>
       </div>

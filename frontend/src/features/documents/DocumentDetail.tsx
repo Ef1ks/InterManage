@@ -39,6 +39,7 @@ import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import { useLoadMore } from '@/lib/use-load-more'
 import type { CorrectedLine, Document, DocumentLine } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Linie dokumentu rysujemy po 100; kolejne dochodzą przy przewijaniu (przyjęcie potrafi mieć 1500 linii). */
 const PAGE_SIZE = 100
@@ -88,7 +89,7 @@ export function DocumentDetail({ storeId }: { storeId: string }) {
     )
   }
   if (isPending) {
-    return <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
   return <DocumentView storeId={storeId} document={document} />
 }

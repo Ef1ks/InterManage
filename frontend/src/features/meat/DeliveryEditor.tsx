@@ -460,7 +460,7 @@ function ScanPreview({
           pdfUrl ? (
             <iframe title="Skan dokumentu WZ" src={pdfUrl} className="h-[60svh] w-full lg:h-[calc(100svh-7rem)]" />
           ) : (
-            <div className="h-[60svh] w-full animate-pulse lg:h-[calc(100svh-7rem)] motion-reduce:animate-none" />
+            <div className="h-[60svh] w-full loading-shimmer lg:h-[calc(100svh-7rem)]" />
           )
         ) : (
           <a

@@ -9,6 +9,7 @@ import { useBakerySupplierArticles, useSaveHiddenArticles } from '@/features/bak
 import { ApiError } from '@/lib/api'
 import { matchesSearch } from '@/lib/search'
 import type { BakeryArticle } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Przycisk z oknem ustawień listy WZ, osobnej dla każdego dostawcy. */
 export function WzArticlesButton({
@@ -65,7 +66,7 @@ function ArticlesContent({
         </DialogDescription>
       </DialogHeader>
       {isPending ? (
-        <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-64 rounded-xl" />
       ) : isError ? (
         <p className="py-6 text-center text-sm text-destructive">Nie udało się wczytać artykułów.</p>
       ) : data.articles.length === 0 ? (

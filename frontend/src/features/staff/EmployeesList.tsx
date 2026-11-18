@@ -30,6 +30,7 @@ import { matchesSearch } from '@/lib/search'
 import type { StaffEmployee, StoreSummary } from '@/lib/types'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const ALL = 'wszystkie'
 /** Filtr „czeka na aktywację”, w adresie jako `?status=aktywacja`. */
@@ -70,7 +71,7 @@ export function EmployeesList({ storeId, stores }: { storeId: string; stores: St
     )
   }
   if (!employees.data || !structure.data) {
-    return <div className="h-72 animate-pulse rounded-2xl bg-muted" aria-busy />
+    return <LoadingPanel className="h-72 rounded-2xl" />
   }
 
   const departments = structure.data

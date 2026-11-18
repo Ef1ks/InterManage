@@ -14,15 +14,15 @@ import { formatMoney } from '@/features/documents/format'
 import { type SalesChartTarget, usePromotionReport, useSalesReportsOverview } from '@/features/sales/api'
 import { salesPaths } from '@/features/sales/paths'
 import { StatTile } from '@/features/sales/report-parts'
-import { lastCompleteDay, MODE_PARAMS, PeriodPicker, useReportParams, useReportPeriod } from '@/features/sales/report-period'
-import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import {
-  dayCount,
-  daysLabel,
-  formatRange,
-  PERIOD_MODES,
-  type PeriodMode,
-} from '@/features/sales/periods'
+  lastCompleteDay,
+  MODE_PARAMS,
+  PeriodPicker,
+  useReportParams,
+  useReportPeriod,
+} from '@/features/sales/report-period'
+import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { dayCount, daysLabel, formatRange, PERIOD_MODES, type PeriodMode } from '@/features/sales/periods'
 import { ApiError } from '@/lib/api'
 import { parseIsoDate } from '@/lib/dates'
 import { matchesSearch } from '@/lib/search'
@@ -31,6 +31,7 @@ import type { PromotionReport as Report, PromotionReportItem, PromotionVerdict }
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
 import { useSearchParamText } from '@/lib/use-search-param-text'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Jak PromotionReportService.MAX_PERIOD_DAYS: rozpoznawanie promocji ze sprzedaży liczy się ok. 2 s na miesiąc. */
 const MAX_DAYS = 92
@@ -190,7 +191,7 @@ export function PromotionReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-96 rounded-xl" />
       ) : (
         <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
           <Promotions storeId={storeId} report={report.data} params={params} setParam={setParam} />

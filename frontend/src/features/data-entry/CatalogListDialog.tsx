@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 
 import { type CatalogListFilters, type CatalogSortKey, fetchCatalogPage, useCatalogList } from './api'
 import { parseNumber } from './grid-values'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const NO_FILTERS: CatalogListFilters = {
   query: '',
@@ -548,7 +549,7 @@ export function CatalogListDialog({
                 </MessageRow>
               ) : list.isPending ? (
                 <MessageRow span={columns.length + 1}>
-                  <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+                  <LoadingPanel className="h-24 rounded-lg" />
                 </MessageRow>
               ) : items.length === 0 ? (
                 <MessageRow span={columns.length + 1}>Nie znaleziono artykułu.</MessageRow>

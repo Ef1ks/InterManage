@@ -29,6 +29,7 @@ import type { StockGapItem, StockGapKind } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const PAGE = 100
 const DEFAULT_MIN_WEEKLY = 3
@@ -301,7 +302,7 @@ export function StockGapReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-72 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-72 rounded-xl" />
       ) : (
         <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
           <Results

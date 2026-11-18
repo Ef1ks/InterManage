@@ -20,9 +20,11 @@ import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.entity.GratisKind;
 import com.intermanage.backend.document.repository.DocumentGratisRepository;
 import com.intermanage.backend.document.repository.DocumentImportRepository;
+import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.sales.component.GratisReportPdf;
 import com.intermanage.backend.sales.dto.GratisReportResponse;
 import com.intermanage.backend.sales.dto.GratisReportResponse.Figures;
@@ -49,6 +51,7 @@ public class GratisReportService {
     private static final String UNASSIGNED_NAME = "Bez nomenklatury";
 
     private final DocumentGratisRepository gratis;
+    private final DocumentLineRepository lines;
     private final SaleRepository sales;
     private final DocumentImportRepository documentImports;
     private final StoreRepository stores;
@@ -56,10 +59,11 @@ public class GratisReportService {
     private final PeriodSummaryService periodSummary;
     private final GratisReportPdf reportPdf;
 
-    public GratisReportService(DocumentGratisRepository gratis, SaleRepository sales,
+    public GratisReportService(DocumentGratisRepository gratis, DocumentLineRepository lines, SaleRepository sales,
             DocumentImportRepository documentImports, StoreRepository stores, AppUserRepository users,
             PeriodSummaryService periodSummary, GratisReportPdf reportPdf) {
         this.gratis = gratis;
+        this.lines = lines;
         this.sales = sales;
         this.documentImports = documentImports;
         this.stores = stores;
@@ -87,14 +91,19 @@ public class GratisReportService {
         gratis.sumByMonthAndRegion(storeId, first, to.atDay(1)).forEach(row -> {
             BigDecimal value = row.getSaleValueGross();
             Sums sums = GratisKind.valueOf(row.getKind()) == GratisKind.LOSSES
-                    ? new Sums(BigDecimal.ZERO, value, BigDecimal.ZERO)
-                    : new Sums(value, BigDecimal.ZERO, BigDecimal.ZERO);
+                    ? new Sums(BigDecimal.ZERO, value, BigDecimal.ZERO, BigDecimal.ZERO)
+                    : new Sums(value, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
             byMonth.computeIfAbsent(YearMonth.from(row.getMonth()), month -> new HashMap<>())
                     .merge(row.getRegionCode(), sums, Sums::plus);
         });
         Map<YearMonth, Map<String, BigDecimal>> salesByMonth = new HashMap<>();
         sales.tuneForReport();
         sales.sumGrossByMonthAndRegion(storeId, first, last).forEach(row -> salesByMonth
+                .computeIfAbsent(YearMonth.from(row.getMonth()), month -> new HashMap<>())
+                .merge(row.getRegionCode(), row.getSaleValueGross(), BigDecimal::add));
+        // Straty do porównania z gratisami za ich pokrycie: likwidacje w cenach sprzedaży brutto, jak wartość gratisu.
+        Map<YearMonth, Map<String, BigDecimal>> liquidationsByMonth = new HashMap<>();
+        lines.sumGrossByMonthAndRegion(storeId, DocumentType.PL.name(), first, last).forEach(row -> liquidationsByMonth
                 .computeIfAbsent(YearMonth.from(row.getMonth()), month -> new HashMap<>())
                 .merge(row.getRegionCode(), row.getSaleValueGross(), BigDecimal::add));
         Map<YearMonth, Long> documentsByMonth = new HashMap<>();
@@ -105,18 +114,23 @@ public class GratisReportService {
         List<Tile> months = new ArrayList<>();
         Map<String, Sums> periodRegions = new HashMap<>();
         Map<String, BigDecimal> periodSales = new HashMap<>();
+        Map<String, BigDecimal> periodLiquidations = new HashMap<>();
         long periodDocuments = 0;
         for (YearMonth month = from; !month.isAfter(to); month = month.plusMonths(1)) {
             Map<String, Sums> regions = byMonth.getOrDefault(month, Map.of());
             Map<String, BigDecimal> regionSales = salesByMonth.getOrDefault(month, Map.of());
+            Map<String, BigDecimal> regionLiquidations = liquidationsByMonth.getOrDefault(month, Map.of());
             long documents = documentsByMonth.getOrDefault(month, 0L);
-            months.add(tile(month, month, monthLabel(month), documents, regions, regionSales, names));
+            months.add(tile(month, month, monthLabel(month), documents, regions, regionSales, regionLiquidations,
+                    names));
             regions.forEach((code, sums) -> periodRegions.merge(code, sums, Sums::plus));
             regionSales.forEach((code, value) -> periodSales.merge(code, value, BigDecimal::add));
+            regionLiquidations.forEach((code, value) -> periodLiquidations.merge(code, value, BigDecimal::add));
             periodDocuments += documents;
         }
         Tile summary = from.equals(to) ? null
-                : tile(from, to, periodLabel(from, to), periodDocuments, periodRegions, periodSales, names);
+                : tile(from, to, periodLabel(from, to), periodDocuments, periodRegions, periodSales,
+                        periodLiquidations, names);
 
         return new GratisReportResponse(store.getNumber(), store.getName(), from, to,
                 sales.findCoverage(storeId).getLastDate(), documentImports.findLastPeriodTo(storeId).orElse(null),
@@ -131,26 +145,32 @@ public class GratisReportService {
                 + ".pdf", "application/pdf", reportPdf.pdf(report, printedBy));
     }
 
-    /** Kafelek: rejony z gratisem (kodami, bez nomenklatury na końcu) i suma ze sprzedażą całego sklepu. */
+    /**
+     * Kafelek: rejony z gratisem (kodami, bez nomenklatury na końcu) i suma ze sprzedażą i likwidacjami całego
+     * sklepu.
+     */
     private static Tile tile(YearMonth from, YearMonth to, String label, long documents, Map<String, Sums> regions,
-            Map<String, BigDecimal> regionSales, Map<String, String> names) {
+            Map<String, BigDecimal> regionSales, Map<String, BigDecimal> regionLiquidations,
+            Map<String, String> names) {
         List<Region> rows = regions.entrySet().stream()
                 .filter(entry -> !entry.getValue().empty())
                 .sorted(Map.Entry.<String, Sums>comparingByKey(
                         Comparator.comparing(String::isEmpty).thenComparing(Comparator.naturalOrder())))
                 .map(entry -> new Region(entry.getKey(),
                         entry.getKey().isEmpty() ? UNASSIGNED_NAME : names.get(entry.getKey()),
-                        figures(entry.getValue().withSales(regionSales.getOrDefault(entry.getKey(), BigDecimal.ZERO)))))
+                        figures(entry.getValue().with(regionSales.getOrDefault(entry.getKey(), BigDecimal.ZERO),
+                                regionLiquidations.getOrDefault(entry.getKey(), BigDecimal.ZERO)))))
                 .toList();
         Sums total = regions.values().stream().reduce(Sums.ZERO, Sums::plus)
-                .withSales(regionSales.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+                .with(regionSales.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add),
+                        regionLiquidations.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
         return new Tile(from, to, label, documents, rows, figures(total));
     }
 
     private static Figures figures(Sums sums) {
         BigDecimal gratisValue = sums.trade().add(sums.loss());
         return new Figures(sums.trade(), sums.loss(), gratisValue, sums.sales(),
-                Percent.of(gratisValue, sums.sales()));
+                Percent.of(gratisValue, sums.sales()), sums.liquidation(), Percent.of(sums.loss(), sums.liquidation()));
     }
 
     /** "Październik 2026" */
@@ -170,16 +190,17 @@ public class GratisReportService {
         return (from.getYear() == to.getYear() ? start.substring(0, start.length() - 5) : start) + " – " + end;
     }
 
-    private record Sums(BigDecimal trade, BigDecimal loss, BigDecimal sales) {
+    private record Sums(BigDecimal trade, BigDecimal loss, BigDecimal sales, BigDecimal liquidation) {
 
-        static final Sums ZERO = new Sums(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        static final Sums ZERO = new Sums(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
 
         Sums plus(Sums other) {
-            return new Sums(trade.add(other.trade), loss.add(other.loss), sales.add(other.sales));
+            return new Sums(trade.add(other.trade), loss.add(other.loss), sales.add(other.sales),
+                    liquidation.add(other.liquidation));
         }
 
-        Sums withSales(BigDecimal value) {
-            return new Sums(trade, loss, value);
+        Sums with(BigDecimal sales, BigDecimal liquidation) {
+            return new Sums(trade, loss, sales, liquidation);
         }
 
         boolean empty() {

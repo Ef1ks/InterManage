@@ -21,6 +21,7 @@ import {
   weeklyChanges,
   type WeekChange,
 } from './api'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const METRICS: { value: DashboardChartMetric; label: string }[] = [
   { value: 'SALES', label: 'Sprzedaż' },
@@ -80,7 +81,7 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
 
   let body
   if (overview.isPending || (range && (current.isPending || yearAgo.isPending))) {
-    body = <div className="h-96 animate-pulse rounded-lg bg-muted" />
+    body = <LoadingPanel className="h-96 rounded-lg" />
   } else if (overview.isError || current.isError || yearAgo.isError) {
     body = <p className="text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
   } else if (!range || !current.data || !yearAgo.data) {

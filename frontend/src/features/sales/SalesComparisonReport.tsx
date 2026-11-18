@@ -1339,8 +1339,8 @@ function TotalTile({
         </>
       ) : (
         <div aria-hidden className="mt-1 space-y-2">
-          <div className="h-7 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
-          <div className="h-4 w-24 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+          <div className="h-7 w-32 loading-shimmer rounded-md" />
+          <div className="h-4 w-24 loading-shimmer rounded-md" />
         </div>
       )}
     </Card>
@@ -1354,11 +1354,11 @@ function LoadingRow({ depth, rows = 2, groups }: { depth: number; rows?: number;
   return Array.from({ length: rows }, (_, row) => (
     <TableRow key={row} className="hover:bg-transparent" aria-hidden>
       <TableCell className="py-3.5" style={{ paddingLeft: indent(depth) }}>
-        <div className="h-3.5 w-40 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+        <div className="h-3.5 w-40 loading-shimmer rounded-full" />
       </TableCell>
       {Array.from({ length: numberColumns(groups) }, (_, column) => (
         <TableCell key={column} className={cn(starts.has(column) && 'border-l')}>
-          <div className="ml-auto h-3.5 w-14 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+          <div className="ml-auto h-3.5 w-14 loading-shimmer rounded-full" />
         </TableCell>
       ))}
     </TableRow>
@@ -1574,8 +1574,8 @@ function PlainTile({ label, value, note }: { label: string; value: ReactNode; no
         </>
       ) : (
         <div aria-hidden className="mt-1 space-y-2">
-          <div className="h-7 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
-          <div className="h-4 w-24 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+          <div className="h-7 w-32 loading-shimmer rounded-md" />
+          <div className="h-4 w-24 loading-shimmer rounded-md" />
         </div>
       )}
     </Card>

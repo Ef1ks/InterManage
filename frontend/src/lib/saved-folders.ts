@@ -124,6 +124,11 @@ export async function requestFolderAccess(key: string, folderMode: FolderMode = 
   }
 }
 
+/** Czy ta przeglądarka ma już wybrany folder pod tym kluczem (bez względu na kolejkę plików i zgodę). */
+export async function hasSavedFolder(key: string): Promise<boolean> {
+  return (await readFolder(key)) !== null
+}
+
 /**
  * Stan folderu bez pytania o zgodę (do pracy w tle): `missing` = nie wybrano, `prompt` = przeglądarka zapyta przy
  * kolejnym kliknięciu ({@link ensureFolderAccess}).

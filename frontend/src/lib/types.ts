@@ -2038,6 +2038,10 @@ export type GratisFigures = {
   gratisValue: number
   saleValueGross: number
   gratisPercent: number | null
+  /** Straty: likwidacje wg daty dokumentu w cenach sprzedaży brutto (jak gratis); w Razem całego sklepu. */
+  liquidationValue: number
+  /** Ile % strat pokrywają gratisy za pokrycie strat (pusty bez likwidacji). */
+  lossCoverPercent: number | null
 }
 
 /** Kafelek raportu gratisów: miesiąc albo podsumowanie okresu (miesiące RRRR-MM), tylko rejony z gratisem. */
@@ -2105,6 +2109,57 @@ export type StockGapReport = {
   maxStock: number
   noDeliveryDays: number
   items: StockGapItem[]
+}
+
+export type MissingAssortmentCategory = {
+  id: string
+  name: string
+  storeId: string
+  storeNumber: string
+  storeName: string
+  /** Kategoria tego sklepu; kategorii sklepu zaprzyjaźnionego nie da się zmienić ani usunąć. */
+  own: boolean
+  /** Ile artykułów bieżącego sklepu jest w tej kategorii. */
+  articleCount: number
+}
+
+export type MissingAssortmentItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  cadencier: boolean
+  stock: number
+  salePrice: number | null
+  supplierCode: string | null
+  supplierName: string | null
+  purchases: number
+  lastPurchaseDate: string
+  lastPurchaseQuantity: number | null
+  lastPurchasePrice: number | null
+  lastSale: string | null
+  /** Dni od ostatniej sprzedaży do ostatniego dnia sprzedaży; puste = nigdy się nie sprzedał. */
+  silentDays: number | null
+  soldInStock: number | null
+  daysInStock: number | null
+  /** Sprzedaż tygodniowa liczona tylko z dni, w których towar był na stanie. */
+  weeklyInStock: number | null
+  weeklyValue: number | null
+  categoryId: string | null
+}
+
+export type MissingAssortmentReport = {
+  storeNumber: string
+  storeName: string
+  stockReportGeneratedAt: string | null
+  lastSaleDate: string | null
+  since: string
+  months: number
+  silentDays: number
+  baseSupplierCodes: string[]
+  categories: MissingAssortmentCategory[]
+  items: MissingAssortmentItem[]
 }
 
 export type NegativeStockDelivery = 'NO_DELIVERY_SINCE' | 'NEVER' | 'DELIVERED_IN' | 'ANY'
@@ -2229,6 +2284,25 @@ export type GratisReport = {
   months: GratisReportTile[]
   /** Przy kilku miesiącach: ten sam kafelek za cały okres. */
   summary: GratisReportTile | null
+}
+
+/** Roczny cel zysku sklepu (ustawienia podsumowania sprzedaży i strat); puste = bez celu. */
+export type ProfitTarget = {
+  year: number
+  marginValue: number | null
+  marginAfterLossesValue: number | null
+  createdAt: string
+  createdByName: string | null
+}
+
+/** Ile z celu roku osiągnięto od 1 stycznia do końca okresu; bez celu kwoty są puste. */
+export type ProfitTargetProgress = {
+  year: number
+  from: string
+  to: string
+  target: ProfitTarget | null
+  marginValue: number | null
+  marginAfterLossesValue: number | null
 }
 
 /** Budżet rejonu w ustawieniach sklepu; puste wartości = bez budżetu. */
@@ -3025,7 +3099,42 @@ export type Suggestion = {
   deposit: boolean
 }
 
-export type SuggestionResponse = { modelUsed: boolean; message: string | null; items: Suggestion[] }
+/** Tokeny i model zapytań do AI w jednym żądaniu (AiUsageSummary.java); kilka modeli rozdziela przecinek. */
+export type AiUsageSummary = {
+  model: string
+  requests: number
+  promptTokens: number
+  outputTokens: number
+  thoughtTokens: number
+  totalTokens: number
+}
+
+/** Do czego posłużyło zapytanie do AI (AiFeature.java). */
+export type AiFeature = 'DATA_ENTRY_SUGGESTIONS' | 'DATA_ENTRY_NAMES' | 'MEAT_SCAN'
+
+export type AiUsageFigures = {
+  requests: number
+  promptTokens: number
+  outputTokens: number
+  thoughtTokens: number
+  cachedTokens: number
+  totalTokens: number
+}
+
+/** Zużycie tokenów AI sklepu w okresie według modelu i funkcji (AiUsageReport.java). */
+export type AiUsageReport = {
+  from: string
+  to: string
+  rows: (AiUsageFigures & { model: string; feature: AiFeature })[]
+  total: AiUsageFigures
+}
+
+export type SuggestionResponse = {
+  modelUsed: boolean
+  message: string | null
+  items: Suggestion[]
+  usage: AiUsageSummary | null
+}
 
 /** Protokół z wprowadzania danych jako plik PROTO1-PROTO6 (nazwa stałej z backendu). */
 export type ProtocolKind = 'LIQUIDATION' | 'STORE_NEEDS' | 'DONATION' | 'ADVERTISING' | 'REPRESENTATION' | 'TRANSFER'
@@ -3174,6 +3283,7 @@ export type MeatScanResult = {
   deliveryDate: string
   duplicateId: string | null
   lines: MeatScanLine[]
+  usage: AiUsageSummary | null
 }
 
 export type MeatDeliveryLine = {
@@ -3405,6 +3515,8 @@ export type ProductListItem = {
   salePrice: number | null
   promoPrice: number | null
   active: boolean | null
+  /** Był w najnowszym raporcie kartoteki; bez tego ITM8 zniknął z systemu sklepu (np. połączony z innym). */
+  inLastReport: boolean
 }
 
 export type ProductListPage = {
@@ -4514,6 +4626,30 @@ export type LossControlGroup = {
   name: string
   color: string
   itm8s: string[]
+  /** Dostawca z listy dostawców sklepu, którego gratisy za pokrycie strat rozliczają grupę; puste = bez. */
+  supplierId: string | null
+  supplierCode: string | null
+  supplierName: string | null
+}
+
+/** Gratisy za pokrycie strat podpiętych dostawców po miesiącu rozliczenia (RRRR-MM) w miesiącach okresu raportu. */
+export type LossControlSettlements = {
+  fromMonth: string
+  toMonth: string
+  groups: {
+    groupId: string
+    saleValueGross: number
+    gratis: {
+      documentId: string
+      documentType: string
+      documentNumber: string
+      documentDate: string
+      month: string
+      /** Miesiąc rozliczenia wybrany ręcznie przy gratisie, inny niż miesiąc daty dokumentu. */
+      manualMonth: boolean
+      saleValueGross: number
+    }[]
+  }[]
 }
 
 /** Rodzaj dokumentu kasowego: KP = kasa przyjmie (wpływ), KW = kasa wypłaci (wypłata). */
@@ -4599,6 +4735,9 @@ export type FileQueueItem = {
   /** Klucz folderu w przeglądarce, np. `deli-order-proto`. */
   folderKey: string
   folderLabel: string
+  /** Dokument (faktura, bon), do którego należy plik; `null` = plik stoi w kolejce sam. */
+  groupKey: string | null
+  groupLabel: string | null
   fileName: string
   sizeBytes: number
   createdAt: string

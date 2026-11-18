@@ -12,6 +12,7 @@ import type { BaseSupplierCode } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { useBaseSupplierCodeChange, useBaseSupplierCodes } from './api'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Kody dostawców z refaktur bazy SCA PR (`DDDKodDostawcy` w XML faktury, np. 09295 = Artek) przypisane do dostawców
@@ -61,7 +62,7 @@ function Body({ storeId }: { storeId: string }) {
       </DialogHeader>
       <div className="max-h-[60svh] min-h-32 overflow-y-auto rounded-xl border">
         {codes.isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : codes.isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">
             {codes.error instanceof ApiError ? codes.error.message : 'Nie udało się wczytać kodów.'}

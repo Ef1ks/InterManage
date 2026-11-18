@@ -175,6 +175,65 @@ class PeriodSummaryIntegrationTests {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void showsYearProfitTargetProgressUntilEndOfPeriod() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        String bread = insertProduct(storeId, productImport, "PIECZYWO", "01 01 01");
+        String salesImport = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', timestamp '2026-09-28 07:00:00', date '2025-12-31',
+                    date '2026-09-27', 3, 3, 0, 0) returning id""", String.class, storeId);
+        // Rok wcześniej i po końcu okresu: nie liczy się. Od 1.01 do 21.09: marża 60 + 40 = 100.
+        insertSale(storeId, salesImport, "2025-12-31", bread, "100", "200", "10", "90");
+        insertSale(storeId, salesImport, "2026-01-02", bread, "100", "180", "20", "60");
+        insertSale(storeId, salesImport, "2026-09-21", bread, "100", "150", "10", "40");
+        insertSale(storeId, salesImport, "2026-09-22", bread, "100", "150", "10", "40");
+
+        String targets = reportsUrl(storeId) + "/profit-targets";
+        mvc.perform(get(targets + "/progress?to=2026-09-21").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.target").value(nullValue()))
+                .andExpect(jsonPath("$.marginValue").value(nullValue()));
+
+        mvc.perform(put(targets + "/2026").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"marginValue\": 400, \"marginAfterLossesValue\": null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].year").value(2026))
+                .andExpect(jsonPath("$[0].marginValue").value(400));
+        // Zmiana celu: poprzedni wpis dostaje znacznik, aktywny jest jeden.
+        mvc.perform(put(targets + "/2026").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"marginValue\": 500, \"marginAfterLossesValue\": 300}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].marginAfterLossesValue").value(300));
+        org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+                "select count(*) from store_profit_targets where store_id = ?::uuid and deleted_at is not null",
+                Integer.class, storeId)).isEqualTo(1);
+
+        mvc.perform(get(targets + "/progress?to=2026-09-21").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.year").value(2026))
+                .andExpect(jsonPath("$.from").value("2026-01-01"))
+                .andExpect(jsonPath("$.target.marginValue").value(500))
+                .andExpect(jsonPath("$.marginValue").value(100))
+                .andExpect(jsonPath("$.marginAfterLossesValue").value(100));
+
+        mvc.perform(put(targets + "/2026").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"marginValue\": -5}"))
+                .andExpect(status().isBadRequest());
+        // Oba pola puste usuwają cel.
+        mvc.perform(put(targets + "/2026").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
     private static String reportsUrl(String storeId) {
         return "/api/stores/" + storeId + "/reports";
     }

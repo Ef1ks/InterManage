@@ -3,7 +3,7 @@ import { CheckIcon, PencilIcon, PlusIcon, TagIcon, Trash2Icon, UsersIcon } from 
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { toast } from 'sonner'
 
-import { Form, FormActions, TextField } from '@/components/form'
+import { Form, FormActions, SearchableSelectField, TextField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useSuppliers } from '@/features/documents/api'
 import { type LossControlChange, useChangeLossControlGroups } from '@/features/sales/api'
 import { ApiError } from '@/lib/api'
 import type { LossControlGroup } from '@/lib/types'
@@ -93,6 +94,8 @@ export function ControlDots({ groups }: { groups: LossControlGroup[] | undefined
     </span>
   )
 }
+
+const NO_SUPPLIER = 'brak'
 
 const errorText = (error: unknown) =>
   error instanceof ApiError ? error.message : 'Nie udało się zmienić dostawców do kontroli'
@@ -239,6 +242,18 @@ function EditorForm({
   const [color, setColor] = useState<string>(
     hexOf(state.group?.color ?? COLOR_PRESETS.find((preset) => !used.has(preset)) ?? COLOR_PRESETS[0]),
   )
+  const [supplierId, setSupplierId] = useState(state.group?.supplierId ?? NO_SUPPLIER)
+  const suppliers = useSuppliers(storeId).data
+  const supplierOptions = useMemo(
+    () => [
+      { value: NO_SUPPLIER, label: 'Bez dostawcy z listy' },
+      ...(suppliers ?? []).map((supplier) => ({
+        value: supplier.id,
+        label: supplier.code ? `${supplier.code} · ${supplier.name}` : supplier.name,
+      })),
+    ],
+    [suppliers],
+  )
   const [error, setError] = useState<string | null>(null)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -247,10 +262,11 @@ function EditorForm({
       return
     }
     try {
+      const supplier = supplierId === NO_SUPPLIER ? null : supplierId
       if (state.group) {
-        await change.mutateAsync({ action: 'update', id: state.group.id, name, color })
+        await change.mutateAsync({ action: 'update', id: state.group.id, name, color, supplierId: supplier })
       } else {
-        const result = await change.mutateAsync({ action: 'create', name, color })
+        const result = await change.mutateAsync({ action: 'create', name, color, supplierId: supplier })
         const created = result.find(
           (group) => group.name.toLowerCase() === name.trim().replace(/\s+/g, ' ').toLowerCase(),
         )
@@ -283,6 +299,13 @@ function EditorForm({
           onChange={(event) => setName(event.target.value)}
           autoFocus
           maxLength={80}
+        />
+        <SearchableSelectField
+          label="Dostawca z listy dostawców"
+          options={supplierOptions}
+          value={supplierId}
+          onChange={(next) => setSupplierId(next || NO_SUPPLIER)}
+          hint="Gratisy za pokrycie strat od tego dostawcy pokażą się w panelu dostawcy do kontroli."
         />
         <fieldset className="grid gap-3">
           <legend className="mb-2 text-sm font-medium">Kolor</legend>

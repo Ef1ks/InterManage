@@ -85,6 +85,20 @@ export function queueStoreFor(folderKey: string): string | null {
   return currentStoreId
 }
 
+/** Dokument, nad którym się pracuje (np. faktura we wprowadzaniu danych): jego pliki są w kolejce jednym wierszem. */
+export type FileQueueDocument = { key: string; label: string }
+
+let currentDocument: { storeId: string; document: FileQueueDocument } | null = null
+
+/**
+ * Ustawia dokument, do którego należą kolejne pliki tego sklepu (faktura, bon z bazy). `null`, gdy strona nie ma
+ * dokumentu: plik (sama zmiana cen, protokół, etykiety) stoi wtedy w kolejce osobno.
+ */
+export function setFileQueueDocument(storeId: string, document: FileQueueDocument | null) {
+  if (document) currentDocument = { storeId, document }
+  else if (currentDocument?.storeId === storeId) currentDocument = null
+}
+
 /** Po dodaniu pliku do kolejki (np. odświeżenie licznika). */
 export function onFileQueued(listener: (storeId: string) => void) {
   queuedListeners.add(listener)
@@ -98,6 +112,10 @@ export async function enqueueFile(storeId: string, folderKey: string, fileName: 
   const formData = new FormData()
   formData.append('folderKey', folderKey)
   formData.append('folderLabel', QUEUE_FOLDER_LABELS[folderKey] ?? folderKey)
+  if (currentDocument?.storeId === storeId) {
+    formData.append('groupKey', currentDocument.document.key)
+    formData.append('groupLabel', currentDocument.document.label)
+  }
   formData.append('fileName', fileName)
   formData.append('file', data, fileName)
   await api(`/stores/${storeId}/file-queue`, { method: 'POST', formData })

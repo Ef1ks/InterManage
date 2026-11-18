@@ -22,4 +22,5 @@ export const salesPaths = {
   slowMoving: `${base}/niesprzedajace-sie`,
   stockGaps: `${base}/braki`,
   negativeStock: `${base}/ujemne-stany`,
+  missingAssortment: `${base}/brakujacy-asortyment`,
 }

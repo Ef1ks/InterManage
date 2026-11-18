@@ -418,7 +418,7 @@ function LinesTable({ storeId, delivery }: { storeId: string; delivery: LowMargi
                   Array.from({ length: Math.min(normalCount, 3) }, (_, index) => (
                     <TableRow key={index} aria-hidden className="hover:bg-transparent">
                       <TableCell colSpan={8} className="py-3 pl-4">
-                        <div className="h-4 w-1/3 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+                        <div className="h-4 w-1/3 loading-shimmer rounded" />
                       </TableCell>
                     </TableRow>
                   ))

@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.intermanage.backend.ai.dto.AiUsageSummary;
+
 /**
  * Odczyt skanu WZ do sprawdzenia przed zapisem (nic poza samym skanem nie jest jeszcze zapisane).
  *
@@ -13,10 +15,11 @@ import java.util.UUID;
  *                        {@code MODEL} wybór modelu (do sprawdzenia)
  * @param deliveryDate    data wysyłki z dokumentu, bez niej data wystawienia
  * @param duplicateId     ten dokument tego dostawcy jest już wprowadzony
+ * @param usage           tokeny i model odczytu ({@code null}, gdy nie wiadomo)
  */
 public record MeatScanResult(UUID scanId, String contentType, MeatSupplier supplier, String supplierMatch,
         String readSupplierName, String readNip, String readBdo, String readVetNumber, String documentNumber,
-        LocalDate deliveryDate, UUID duplicateId, List<Line> lines) {
+        LocalDate deliveryDate, UUID duplicateId, List<Line> lines, AiUsageSummary usage) {
 
     /**
      * @param article   artykuł z kartoteki albo {@code null}

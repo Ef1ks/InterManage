@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PrinterIcon, TriangleAlertIcon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  PrinterIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -15,6 +22,7 @@ import { ApiError } from '@/lib/api'
 import { addDays, addMonths, currentMonth, formatMonth, todayIso } from '@/lib/dates'
 import type { GratisFigures, GratisReport as Report, GratisReportTile } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Mode = 'month' | 'range' | 'year'
 
@@ -197,7 +205,7 @@ export function GratisReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-72 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-72 rounded-xl" />
       ) : (
         <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
           <Tiles key={`${report.data.from}-${report.data.to}`} report={report.data} />
@@ -205,9 +213,11 @@ export function GratisReport({ storeId }: { storeId: string }) {
       )}
 
       <p className="mt-4 max-w-4xl text-xs leading-relaxed text-muted-foreground">
-        Wartość gratisu to sprzedaż brutto przeniesienia stanów zarejestrowanego jako gratis (w Dokumentach), liczona
-        w miesiącu gratisu: z daty dokumentu albo wybranym przy rejestracji. Obrót to sprzedaż brutto rejonu w tym
-        okresie, a w wierszu Razem całego sklepu. % obrotu = gratisy razem / obrót.
+        Wartość gratisu to sprzedaż brutto przeniesienia stanów zarejestrowanego jako gratis (w Dokumentach), liczona w
+        miesiącu gratisu: z daty dokumentu albo wybranym przy rejestracji. Obrót to sprzedaż brutto rejonu w tym
+        okresie, a w wierszu Razem całego sklepu. % obrotu = gratisy razem / obrót. Straty to likwidacje z tego okresu
+        (wg daty dokumentu) w cenach sprzedaży brutto, tak jak wartość gratisu, a w wierszu Razem likwidacje całego
+        sklepu; % strat pokryte = gratisy za pokrycie strat / straty.
       </p>
     </>
   )
@@ -301,11 +311,7 @@ function Tile({
   const total = tile.total
   return (
     <Card
-      className={cn(
-        'gap-0 overflow-hidden py-0',
-        summary && 'ring-emerald-300/70 dark:ring-emerald-500/30',
-        className,
-      )}
+      className={cn('gap-0 overflow-hidden py-0', summary && 'ring-emerald-300/70 dark:ring-emerald-500/30', className)}
     >
       <button
         type="button"
@@ -331,6 +337,11 @@ function Tile({
         </span>
         <span className="flex gap-6 text-right tabular-nums">
           <HeaderFigure label="Gratisy razem" value={`${formatMoney(total.gratisValue)} zł`} strong />
+          <HeaderFigure
+            label="Pokrywa strat"
+            value={percent(total.lossCoverPercent)}
+            detail={`z ${formatMoney(total.liquidationValue)} zł`}
+          />
           <HeaderFigure label="% obrotu" value={percent(total.gratisPercent)} />
         </span>
       </button>
@@ -343,6 +354,8 @@ function Tile({
                 <th className="py-2 pr-3 pl-4 text-left font-medium">Rejon</th>
                 <NumberHead>Handel / ekspozycja</NumberHead>
                 <NumberHead>Pokrycie strat</NumberHead>
+                <NumberHead>Straty brutto</NumberHead>
+                <NumberHead>% strat pokryte</NumberHead>
                 <NumberHead>Obrót brutto</NumberHead>
                 <NumberHead className="pr-4">% obrotu</NumberHead>
               </tr>
@@ -350,7 +363,7 @@ function Tile({
             <tbody>
               {tile.regions.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-4 text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-4 text-muted-foreground">
                     Brak gratisów w tym okresie.
                   </td>
                 </tr>
@@ -378,7 +391,7 @@ function Tile({
               <tr className="bg-foreground font-semibold text-background">
                 <td className="py-2.5 pr-3 pl-4">
                   Razem
-                  <span className="block text-xs font-normal text-background/70">obrót całego sklepu</span>
+                  <span className="block text-xs font-normal text-background/70">obrót i straty całego sklepu</span>
                 </td>
                 <FigureCells figures={total} />
               </tr>
@@ -390,11 +403,22 @@ function Tile({
   )
 }
 
-function HeaderFigure({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function HeaderFigure({
+  label,
+  value,
+  strong,
+  detail,
+}: {
+  label: string
+  value: string
+  strong?: boolean
+  detail?: string
+}) {
   return (
     <span>
       <span className="block text-xs text-muted-foreground">{label}</span>
       <span className={cn('block', strong ? 'font-semibold' : 'text-muted-foreground')}>{value}</span>
+      {detail && <span className="block text-xs text-muted-foreground">{detail}</span>}
     </span>
   )
 }
@@ -408,6 +432,8 @@ function FigureCells({ figures }: { figures: GratisFigures }) {
     <>
       <td className="px-3 py-2 text-right">{formatMoney(figures.tradeValue)}</td>
       <td className="px-3 py-2 text-right">{formatMoney(figures.lossValue)}</td>
+      <td className="px-3 py-2 text-right opacity-70">{formatMoney(figures.liquidationValue)}</td>
+      <td className="px-3 py-2 text-right font-medium">{percent(figures.lossCoverPercent)}</td>
       <td className="px-3 py-2 text-right opacity-70">{wholeFormat.format(figures.saleValueGross)}</td>
       <td className="py-2 pr-4 pl-3 text-right">{percent(figures.gratisPercent)}</td>
     </>

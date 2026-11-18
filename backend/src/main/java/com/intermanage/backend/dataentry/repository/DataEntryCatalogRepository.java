@@ -61,7 +61,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
     /**
      * Artykuł sklepu dla każdego EAN-u (bez zer wiodących): bieżący EAN artykułu, potem każdy obowiązujący kod
      * z multikodów ({@code product_codes}), a gdy go nie ma, para z {@code product_eans} (dawny EAN); przy kilku
-     * artykułach ten z lepszego źródła, potem ostatnio zmieniany.
+     * artykułach ten z lepszego źródła, potem ostatnio zmieniany. Artykuł, którego nie było w najnowszym raporcie
+     * kartoteki, ma bieżący EAN tylko z dawnego raportu, więc liczy się jak dawna para: ITM8 usunięty w systemie sklepu
+     * i połączony z innym (LUNCHB CEZAR 5416963, EAN 5902166395578 to teraz multikod 99010078) nie przykrywa artykułu,
+     * do którego kod należy dziś.
      * {@code cadencier}: artykuł ma CENA_CAD z ostatniego raportu (0 = brak) i jest aktywny w cadencier, czyli na
      * bieżącej liście {@code cadencier_items} sklepu (po ITM8).
      * Kod z etykiety wagi sklepu (2 + cyfra 1-9, 12-13 cyfr, w cyfrach 8-12 cena albo waga) trafia w artykuł, którego
@@ -81,8 +84,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      */
     @Query(value = """
             with keys as (select distinct unnest(cast(:eans as varchar[])) as key),
+            latest as (select i.id from product_imports i where i.store_id = :storeId
+                       order by i.report_generated_at desc limit 1),
             hits as (
-                select k.key, p.id, 0 as rank
+                select k.key, p.id, case when p.last_seen_import_id = (select id from latest) then 0 else 2 end as rank
                 from keys k join products p on p.store_id = :storeId and ltrim(p.ean, '0') = k.key
                 union all
                 select k.key, p.id, 1

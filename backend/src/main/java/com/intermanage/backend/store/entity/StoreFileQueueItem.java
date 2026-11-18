@@ -37,6 +37,13 @@ public class StoreFileQueueItem {
     @Column(name = "folder_label", nullable = false, updatable = false, length = 200)
     private String folderLabel;
 
+    /** Dokument, do którego należy plik (np. faktura), albo {@code null}, gdy plik stoi sam. */
+    @Column(name = "group_key", updatable = false, length = 200)
+    private String groupKey;
+
+    @Column(name = "group_label", updatable = false, length = 300)
+    private String groupLabel;
+
     @Column(name = "file_name", nullable = false, updatable = false)
     private String fileName;
 
@@ -70,11 +77,13 @@ public class StoreFileQueueItem {
     protected StoreFileQueueItem() {
     }
 
-    public StoreFileQueueItem(UUID storeId, String folderKey, String folderLabel, String fileName, byte[] content,
-            AppUser createdBy) {
+    public StoreFileQueueItem(UUID storeId, String folderKey, String folderLabel, String groupKey, String groupLabel,
+            String fileName, byte[] content, AppUser createdBy) {
         this.storeId = storeId;
         this.folderKey = folderKey;
         this.folderLabel = folderLabel;
+        this.groupKey = groupKey;
+        this.groupLabel = groupLabel;
         this.fileName = fileName;
         this.sizeBytes = content.length;
         this.content = content;

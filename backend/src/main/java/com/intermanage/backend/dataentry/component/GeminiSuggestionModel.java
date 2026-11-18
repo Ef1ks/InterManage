@@ -20,6 +20,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import com.intermanage.backend.ai.component.AiUsageMeter;
+import com.intermanage.backend.ai.entity.AiFeature;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -41,6 +44,7 @@ public class GeminiSuggestionModel implements SuggestionModel {
     private final String model;
     private final String thinkingLevel;
     private final Duration retryBudget;
+    private AiUsageMeter usageMeter;
 
     public GeminiSuggestionModel(JsonMapper json,
             @Value("${app.ai.gemini.base-url}") String baseUrl,
@@ -60,6 +64,12 @@ public class GeminiSuggestionModel implements SuggestionModel {
         this.retryBudget = retryBudget;
     }
 
+    /** Licznik tokenów (bez niego, np. w testach klienta, zużycie nie jest zapisywane). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setUsageMeter(AiUsageMeter usageMeter) {
+        this.usageMeter = usageMeter;
+    }
+
     @Override
     public String name() {
         return model;
@@ -75,7 +85,7 @@ public class GeminiSuggestionModel implements SuggestionModel {
         if (!available()) {
             throw new Unavailable("Brak klucza Gemini (GEMINI_API_KEY)");
         }
-        return answers(generate(systemInstruction, prompt, SCHEMA));
+        return answers(generate(AiFeature.DATA_ENTRY_SUGGESTIONS, systemInstruction, prompt, SCHEMA));
     }
 
     @Override
@@ -84,7 +94,7 @@ public class GeminiSuggestionModel implements SuggestionModel {
             throw new Unavailable("Brak klucza Gemini (GEMINI_API_KEY)");
         }
         List<Shortened> names = new ArrayList<>();
-        for (JsonNode item : generate(SuggestionPrompt.SHORTEN_INSTRUCTION, prompt, SHORTEN_SCHEMA)) {
+        for (JsonNode item : generate(AiFeature.DATA_ENTRY_NAMES, SuggestionPrompt.SHORTEN_INSTRUCTION, prompt, SHORTEN_SCHEMA)) {
             String name = text(item, "name");
             if (name != null) {
                 names.add(new Shortened(item.path("id").asInt(-1), name));
@@ -94,7 +104,8 @@ public class GeminiSuggestionModel implements SuggestionModel {
     }
 
     /** Pozycje {@code items} z odpowiedzi JSON według {@code schema}. */
-    private JsonNode generate(String systemInstruction, String prompt, Map<String, Object> schema) {
+    private JsonNode generate(AiFeature feature, String systemInstruction, String prompt,
+            Map<String, Object> schema) {
         Map<String, Object> body = Map.of(
                 "systemInstruction", Map.of("parts", List.of(Map.of("text", systemInstruction))),
                 "contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", prompt)))),
@@ -111,6 +122,9 @@ public class GeminiSuggestionModel implements SuggestionModel {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(json.writeValueAsString(body))
                         .retrieve().body(JsonNode.class);
+                if (usageMeter != null) {
+                    usageMeter.record(feature, model, response);
+                }
                 return items(response);
             } catch (RestClientResponseException e) {
                 HttpStatusCode status = e.getStatusCode();

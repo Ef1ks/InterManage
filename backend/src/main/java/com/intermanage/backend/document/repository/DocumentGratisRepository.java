@@ -60,6 +60,44 @@ public interface DocumentGratisRepository extends JpaRepository<DocumentGratis, 
             """, nativeQuery = true)
     List<MonthRegionValue> sumByMonthAndRegion(UUID storeId, LocalDate from, LocalDate to);
 
+    /** Gratis jednego dostawcy z miesiącem rozliczenia i wartością (sprzedaż brutto dokumentu). */
+    interface SupplierGratis {
+        UUID getSupplierId();
+
+        UUID getDocumentId();
+
+        String getDocumentNumber();
+
+        String getDocumentType();
+
+        LocalDate getDocumentDate();
+
+        LocalDate getMonth();
+
+        boolean getManualMonth();
+
+        BigDecimal getSaleValueGross();
+    }
+
+    /**
+     * Aktywne gratisy jednego rodzaju od dostawców {@code supplierIds} w sklepie, z miesiącem rozliczenia (wybranym
+     * ręcznie albo z daty dokumentu) w [from, to] (pierwsze dni miesięcy), od najnowszego miesiąca.
+     */
+    @Query(value = """
+            select g.supplier_id as supplier_id, d.id as document_id, d.number as document_number,
+                   d.type as document_type, cast(d.document_date as date) as document_date,
+                   coalesce(g.report_month, cast(date_trunc('month', d.document_date) as date)) as month,
+                   g.report_month is not null as manual_month, d.sale_value_gross as sale_value_gross
+            from document_gratis g
+            join documents d on d.id = g.document_id
+            where d.store_id = :storeId and g.deleted_at is null and g.kind = :kind
+              and g.supplier_id in :supplierIds
+              and coalesce(g.report_month, cast(date_trunc('month', d.document_date) as date)) between :from and :to
+            order by month desc, d.document_date desc, d.number desc
+            """, nativeQuery = true)
+    List<SupplierGratis> findBySuppliers(UUID storeId, String kind, Collection<UUID> supplierIds, LocalDate from,
+            LocalDate to);
+
     /** Liczba gratisów w każdym miesiącu [from, to] (dokument liczy się raz, choć ma linie w kilku rejonach). */
     interface MonthCount {
         LocalDate getMonth();

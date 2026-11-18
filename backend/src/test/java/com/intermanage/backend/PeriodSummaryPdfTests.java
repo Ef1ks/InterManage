@@ -36,6 +36,14 @@ class PeriodSummaryPdfTests {
         assertThat(pages(summary(RegionGroups.GROUPS, 60))).isEqualTo(1);
     }
 
+    @Test
+    void fitsOnePageWithYearAgoComparison() throws IOException {
+        PeriodSummaryResponse summary = summary(RegionGroups.GROUPS, 60);
+        try (PdfReader reader = new PdfReader(pdf.pdf(summary, summary, "Jan Kowalski"))) {
+            assertThat(reader.getNumberOfPages()).isEqualTo(1);
+        }
+    }
+
     private int pages(PeriodSummaryResponse summary) throws IOException {
         try (PdfReader reader = new PdfReader(pdf.pdf(summary, "Jan Kowalski"))) {
             return reader.getNumberOfPages();

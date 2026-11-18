@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { useTimeRules, useTimeRulesActions, type TimeRulesInput } from '@/features/staff-time/api'
 import { ApiError } from '@/lib/api'
 import type { TimeRequestApprover, TimeRuleOffer, TimeRules } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const failed = (cause: unknown, fallback: string) => (cause instanceof ApiError ? cause.message : fallback)
 
@@ -47,7 +48,7 @@ const valuesOf = (rules: TimeRules): TimeRulesInput => ({
 /** Zasady odbić sklepu (zaokrąglanie, blokada ponownego odbicia, kto zatwierdza wnioski) i ich wymiana ze sklepami. */
 export function TimeRulesSection({ storeId }: { storeId: string }) {
   const { data } = useTimeRules(storeId, true)
-  if (!data) return <div className="h-40 animate-pulse rounded-xl bg-muted" aria-busy />
+  if (!data) return <LoadingPanel className="h-40 rounded-xl" />
   // Klucz: po zapisie albo przyjęciu propozycji formularz startuje od nowych wartości.
   return (
     <RulesForm

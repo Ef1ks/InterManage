@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.Test;
@@ -174,6 +175,43 @@ class ProtocolReportIntegrationTests {
                                  "controlGroups":["%s"]}""".formatted(WASA, controlId)))
                 .andExpect(status().isOk());
 
+        // Podpięty dostawca z listy dostawców: jego gratisy za straty z miesiącem rozliczenia w okresie raportu.
+        String supplierId = JsonPath.read(mvc.perform(post("/api/stores/" + storeId + "/suppliers").cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"WASA POLSKA\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        mvc.perform(put(controls + "/" + controlId).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Wasa Polska\",\"color\":\"#0ea5e9\",\"supplierId\":\"%s\"}"
+                                .formatted(supplierId)))
+                .andExpect(jsonPath("$[0].supplierId").value(supplierId))
+                .andExpect(jsonPath("$[0].supplierName").value("WASA POLSKA"));
+        mvc.perform(put(controls + "/" + controlId).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Wasa Polska\",\"color\":\"#0ea5e9\",\"supplierId\":\"%s\"}"
+                                .formatted(UUID.randomUUID())))
+                .andExpect(status().isBadRequest());
+        // Gratis z września rozliczony ręcznie w październiku, gratis z października bez zmiany miesiąca, gratis za
+        // handel się nie liczy.
+        String septemberGratis = insertDocument(storeId, importId, "PPP", "PPP01", "2026-09-20 10:00");
+        jdbc.update("update documents set sale_value_gross = 40 where id = ?::uuid", septemberGratis);
+        String octoberGratis = insertDocument(storeId, importId, "PPP", "PPP02", "2026-10-05 10:00");
+        jdbc.update("update documents set sale_value_gross = 25.5 where id = ?::uuid", octoberGratis);
+        String tradeGratis = insertDocument(storeId, importId, "PPP", "PPP03", "2026-10-06 10:00");
+        jdbc.update("update documents set sale_value_gross = 999 where id = ?::uuid", tradeGratis);
+        registerGratis(owner, storeId, septemberGratis, supplierId, "LOSSES", "\"2026-10\"");
+        registerGratis(owner, storeId, octoberGratis, supplierId, "LOSSES", "null");
+        registerGratis(owner, storeId, tradeGratis, supplierId, "TRADE", "null");
+        mvc.perform(get(controls + "/settlements?from=2026-10-01&to=2026-10-31").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].groupId").value(controlId))
+                .andExpect(jsonPath("$.groups[0].saleValueGross").value(65.5))
+                .andExpect(jsonPath("$.groups[0].gratis.length()").value(2))
+                .andExpect(jsonPath("$.groups[0].gratis[0].month").value("2026-10"))
+                .andExpect(jsonPath("$.groups[0].gratis[?(@.documentNumber == 'PPP01')].manualMonth").value(true));
+        mvc.perform(get(controls + "/settlements?from=2026-09-01&to=2026-09-30").cookie(owner))
+                .andExpect(jsonPath("$.groups[0].saleValueGross").value(0))
+                .andExpect(jsonPath("$.groups[0].gratis.length()").value(0));
+
         mvc.perform(delete(controls + "/" + controlId).cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$.length()").value(0));
         mvc.perform(post(controls + "/" + controlId + "/restore").cookie(owner).with(csrf()))
@@ -193,6 +231,15 @@ class ProtocolReportIntegrationTests {
                 .andExpect(jsonPath("$.protocols[0].kind").value("STORE_NEEDS"));
         mvc.perform(get(base + "/LIQUIDATION?grouping=ARTICLE&" + PERIODS).cookie(owner))
                 .andExpect(status().isBadRequest());
+    }
+
+    private void registerGratis(Cookie owner, String storeId, String documentId, String supplierId, String kind,
+            String reportMonth) throws Exception {
+        mvc.perform(put("/api/stores/" + storeId + "/documents/ppp/" + documentId + "/gratis").cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"supplierId\":\"%s\",\"kind\":\"%s\",\"reportMonth\":%s}"
+                                .formatted(supplierId, kind, reportMonth)))
+                .andExpect(status().isOk());
     }
 
     private String insertDocument(String storeId, String importId, String type, String number, String date) {

@@ -396,7 +396,10 @@ class SupplierGratisIntegrationTests {
                 line("PPP", transfer, 3, "214", "0000099037716", "MIODOWA MALINA 400G", "", "140101", "21/10/2026",
                         "5", "50"),
                 line("PPP", losses, 1, "538", "0000000151642", "KONCENTRAT 190G", "PUDLISZKI", "011605",
-                        "21/10/2026", "6", "30")))
+                        "21/10/2026", "6", "30"),
+                // Likwidacja w październiku: straty, które pokrywają gratisy za pokrycie strat.
+                line("PL", "PL" + transfer, 1, "538", "0000000151642", "KONCENTRAT 190G", "PUDLISZKI", "011605",
+                        "22/10/2026", "-12", "60")))
                 .andExpect(status().isCreated());
         String list = mvc.perform(get(documentsUrl(storeId, "/ppp")).cookie(owner))
                 .andReturn().getResponse().getContentAsString();
@@ -445,7 +448,15 @@ class SupplierGratisIntegrationTests {
                 .andExpect(jsonPath("$.summary.label").value("Wrzesień – październik 2026"))
                 .andExpect(jsonPath("$.summary.documentCount").value(2))
                 .andExpect(jsonPath("$.summary.total.tradeValue").value(149.99))
-                .andExpect(jsonPath("$.summary.total.lossValue").value(30));
+                .andExpect(jsonPath("$.summary.total.lossValue").value(30))
+                // Gratis za straty (30 zł, rozliczony we wrześniu) pokrywa połowę likwidacji z okresu (60 zł brutto).
+                .andExpect(jsonPath("$.months[0].total.liquidationValue").value(0))
+                .andExpect(jsonPath("$.months[0].total.lossCoverPercent").value(nullValue()))
+                .andExpect(jsonPath("$.months[1].total.liquidationValue").value(60))
+                .andExpect(jsonPath("$.months[1].total.lossCoverPercent").value(0))
+                .andExpect(jsonPath("$.months[1].regions[0].figures.liquidationValue").value(60))
+                .andExpect(jsonPath("$.summary.total.liquidationValue").value(60))
+                .andExpect(jsonPath("$.summary.total.lossCoverPercent").value(50));
 
         // Jeden miesiąc: bez podsumowania. Cofnięty gratis znika z raportu.
         mvc.perform(delete(documentsUrl(storeId, "/ppp/" + lossesId + "/gratis")).cookie(owner).with(csrf()))

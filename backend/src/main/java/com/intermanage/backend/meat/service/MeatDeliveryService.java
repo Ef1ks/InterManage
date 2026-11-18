@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.intermanage.backend.ai.component.AiUsageMeter;
+import com.intermanage.backend.ai.dto.AiUsageSummary;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.ScanFiles;
@@ -110,16 +112,22 @@ public class MeatDeliveryService {
         }
         Catalog lists = transaction.execute(status -> catalog(storeId));
         MeatScanReader.Reading reading;
+        AiUsageMeter.Scope usage = AiUsageMeter.scope(storeId, userId);
         try {
-            reading = reader.read(content, contentType, lists.articleLabels(), lists.supplierLabels());
+            reading = AiUsageMeter.call(usage,
+                    () -> reader.read(content, contentType, lists.articleLabels(), lists.supplierLabels()));
         } catch (MeatScanReader.Unavailable e) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Nie udało się odczytać dokumentu: " + e.getMessage() + ". Spróbuj ponownie za chwilę.");
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
         }
         return transaction.execute(status -> {
             MeatDeliveryScan scan = scans.save(new MeatDeliveryScan(storeId, ScanFiles.fileName(file, contentType),
                     contentType, content, users.getReferenceById(userId)));
-            return result(storeId, scan, reading, lists);
+            return result(storeId, scan, reading, usage.summary(), lists);
         });
     }
 
@@ -286,7 +294,7 @@ public class MeatDeliveryService {
     }
 
     private MeatScanResult result(UUID storeId, MeatDeliveryScan scan, MeatScanReader.Reading reading,
-            Catalog lists) {
+            AiUsageSummary usage, Catalog lists) {
         SupplierMatch supplierMatch = supplier(storeId, reading, lists.suppliers());
         Supplier supplier = supplierMatch == null ? null : supplierMatch.supplier();
 
@@ -323,7 +331,7 @@ public class MeatDeliveryService {
                 supplier == null ? null : mapper.toSupplier(supplier),
                 supplierMatch == null ? null : supplierMatch.how(), reading.supplierName(), nip(reading.supplierNip()),
                 bdo(reading.supplierBdo()), vetNumber(reading.supplierVetNumber()), reading.documentNumber(), date,
-                duplicateId, lines);
+                duplicateId, lines, usage);
     }
 
     private record SupplierMatch(Supplier supplier, String how) {

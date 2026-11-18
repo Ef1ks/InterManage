@@ -12,6 +12,7 @@ import { useDocumentCandidates, useLinkOrderDocument, useUnlinkOrderDocument } f
 import { documentPaths, formatDocumentDate } from '@/features/documents/format'
 import { ApiError } from '@/lib/api'
 import type { DeliOrder } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const MOVEMENT_TYPE = 'MM'
 
@@ -162,7 +163,7 @@ function DocumentPicker({ storeId, order, onClose }: { storeId: string; order: D
       </p>
       <div className="grid gap-1">
         {isPending ? (
-          <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="h-24 rounded-lg" />
         ) : candidates?.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">
             {query.trim()

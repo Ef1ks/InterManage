@@ -15,6 +15,7 @@ import { ReportsGrid } from '@/features/sales/ReportsGrid'
 import { SalesComparisonReport } from '@/features/sales/SalesComparisonReport'
 import { TopSalesReport } from '@/features/sales/TopSalesReport'
 import { SlowMovingReport } from '@/features/sales/SlowMovingReport'
+import { MissingAssortmentReport } from '@/features/sales/MissingAssortmentReport'
 import { StockGapReport } from '@/features/sales/StockGapReport'
 import { SupplierTurnoverReport } from '@/features/sales/SupplierTurnoverReport'
 import { NegativeStockReport } from '@/features/sales/NegativeStockReport'
@@ -60,6 +61,7 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="zerowki" element={<ZeroStockReport storeId={store.id} />} />
         <Route path="niesprzedajace-sie" element={<SlowMovingReport storeId={store.id} />} />
         <Route path="braki" element={<StockGapReport storeId={store.id} />} />
+        <Route path="brakujacy-asortyment" element={<MissingAssortmentReport storeId={store.id} />} />
         <Route path="ujemne-stany" element={<NegativeStockReport storeId={store.id} />} />
         <Route path="*" element={<Navigate to={salesPaths.overview} replace />} />
       </Routes>

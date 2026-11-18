@@ -18,6 +18,7 @@ import {
 import { ApiError, downloadFile } from '@/lib/api'
 import type { NomenclatureMargin, NomenclatureMarginImport } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const ACCEPTED_EXTENSIONS = ['.xlsx', '.xlsm']
 const numberFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2, useGrouping: false })
@@ -182,7 +183,11 @@ export function NomenclatureMargins({ storeId }: { storeId: string }) {
       <Card className="gap-0 py-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
           <p className="text-sm text-muted-foreground tabular-nums">
-            {isPending ? ' ' : setCount ? `Marża ustawiona na ${setCount} z ${items.length} pozycji` : 'Marże nie są jeszcze ustawione'}
+            {isPending
+              ? ' '
+              : setCount
+                ? `Marża ustawiona na ${setCount} z ${items.length} pozycji`
+                : 'Marże nie są jeszcze ustawione'}
           </p>
           {expanded.size > 0 && (
             <Button variant="ghost" size="sm" onClick={() => setExpanded(new Set())}>
@@ -192,7 +197,7 @@ export function NomenclatureMargins({ storeId }: { storeId: string }) {
         </div>
         {isPending ? (
           <div className="p-4">
-            <div aria-hidden className="h-40 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+            <LoadingPanel className="h-40 rounded-lg" />
           </div>
         ) : items.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -200,7 +205,10 @@ export function NomenclatureMargins({ storeId }: { storeId: string }) {
           </p>
         ) : (
           <div role="table" className="tabular-nums">
-            <div role="row" className="flex items-end gap-3 border-b px-4 py-2 text-sm font-medium text-muted-foreground">
+            <div
+              role="row"
+              className="flex items-end gap-3 border-b px-4 py-2 text-sm font-medium text-muted-foreground"
+            >
               <span role="columnheader" className="flex-1">
                 Nomenklatura
               </span>
@@ -249,7 +257,9 @@ export function NomenclatureMargins({ storeId }: { storeId: string }) {
                       {item.name}
                     </span>
                     {below > 0 && (
-                      <span className="shrink-0 text-xs font-normal text-muted-foreground">· niżej ustawione: {below}</span>
+                      <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                        · niżej ustawione: {below}
+                      </span>
                     )}
                   </span>
                   {/* Siatka do wpisywania liczb: pola bez pływającej etykiety, opisane nagłówkiem kolumny. */}
@@ -296,7 +306,12 @@ export function NomenclatureMargins({ storeId }: { storeId: string }) {
               Anuluj
             </Button>
           )}
-          <Button size="lg" loading={save.isPending} disabled={changed.length === 0 || invalid.length > 0} onClick={submit}>
+          <Button
+            size="lg"
+            loading={save.isPending}
+            disabled={changed.length === 0 || invalid.length > 0}
+            onClick={submit}
+          >
             Zapisz marże
           </Button>
         </div>

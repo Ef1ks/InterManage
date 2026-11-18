@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.intermanage.backend.ai.component.AiUsageMeter;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
@@ -146,11 +147,12 @@ public class DataEntrySuggestionService {
     public SuggestionResponse suggest(UUID storeId, SuggestionRequest request, UUID userId) {
         List<SuggestionRequest.Item> items = request.items();
         Context context = readTransaction.execute(status -> context(storeId, request));
+        AiUsageMeter.Scope usage = AiUsageMeter.scope(storeId, userId);
 
         String[] error = {model.available() ? null : "Model AI nie jest skonfigurowany: propozycje tylko z kartoteki"};
         Map<Integer, SuggestionModel.Answer> answers = new HashMap<>();
         if (model.available()) {
-            for (Map.Entry<Integer, BatchResult> batch : askModel(request, context).entrySet()) {
+            for (Map.Entry<Integer, BatchResult> batch : askModel(request, context, usage).entrySet()) {
                 if (batch.getValue().error() != null) {
                     error[0] = batch.getValue().error() + ": część propozycji tylko z kartoteki, spróbuj ponownie";
                 }
@@ -165,7 +167,7 @@ public class DataEntrySuggestionService {
                         measure(items.get(index), answer)));
             }
         });
-        shortenNames(items, answers, names, context);
+        shortenNames(items, answers, names, context, usage);
 
         return writeTransaction.execute(status -> {
             Store store = stores.getReferenceById(storeId);
@@ -178,7 +180,8 @@ public class DataEntrySuggestionService {
             }
             boolean modelUsed = answers.size() == items.size();
             return new SuggestionResponse(modelUsed, modelUsed ? null
-                    : error[0] != null ? error[0] : "Model nie podał propozycji dla części pozycji", result);
+                    : error[0] != null ? error[0] : "Model nie podał propozycji dla części pozycji", result,
+                    usage.summary());
         });
     }
 
@@ -273,7 +276,8 @@ public class DataEntrySuggestionService {
     }
 
     /** Paczki po {@value #BATCH} pozycji naraz; klucz to indeks pierwszej pozycji paczki. */
-    private Map<Integer, BatchResult> askModel(SuggestionRequest request, Context context) {
+    private Map<Integer, BatchResult> askModel(SuggestionRequest request, Context context,
+            AiUsageMeter.Scope usage) {
         List<SuggestionPrompt.Example> examples = request.examples() == null ? List.of()
                 : request.examples().stream().limit(EXAMPLES_IN_PROMPT)
                         .map(example -> new SuggestionPrompt.Example(example.invoiceName(), example.catalogName(),
@@ -289,7 +293,7 @@ public class DataEntrySuggestionService {
                     batch.add(promptItem(request.items().get(index), context, index));
                 }
                 String prompt = SuggestionPrompt.prompt(request.sellerName(), examples, batch);
-                futures.put(from, executor.submit(() -> ask(context.instruction(), prompt, to - from)));
+                futures.put(from, executor.submit(() -> AiUsageMeter.call(usage, () -> ask(context.instruction(), prompt, to - from))));
             }
         }
         Map<Integer, BatchResult> results = new LinkedHashMap<>();
@@ -327,7 +331,7 @@ public class DataEntrySuggestionService {
      * zastępuje dłuższą. Gdy model nie odpowie, nazwy zostają, a tabela pokaże je jako za długie.
      */
     private void shortenNames(List<SuggestionRequest.Item> items, Map<Integer, SuggestionModel.Answer> answers,
-            Map<Integer, String> names, Context context) {
+            Map<Integer, String> names, Context context, AiUsageMeter.Scope usage) {
         List<Integer> tooLong = names.entrySet().stream().filter(entry -> entry.getValue().length() > NAME_LIMIT)
                 .map(Map.Entry::getKey).sorted().toList();
         if (tooLong.isEmpty()) {
@@ -349,7 +353,7 @@ public class DataEntrySuggestionService {
                     prompt.add(new SuggestionPrompt.ShortenItem(items.get(index).invoiceName().strip(), withoutLabel,
                             label.isEmpty() ? NAME_LIMIT : NAME_LIMIT - label.length() - 1));
                 }
-                futures.put(start, executor.submit(() -> model.shorten(SuggestionPrompt.shorten(prompt))));
+                futures.put(start, executor.submit(() -> AiUsageMeter.call(usage, () -> model.shorten(SuggestionPrompt.shorten(prompt)))));
             }
         }
         futures.forEach((start, future) -> {

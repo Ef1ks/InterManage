@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { StaffDepartment, StaffPosition, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type DepartmentEditor = { open: boolean; department?: StaffDepartment }
 type PositionEditor = { open: boolean; departmentId?: string; position?: StaffPosition }
@@ -45,7 +46,7 @@ export function StructurePanel({ storeId: currentStoreId, stores }: { storeId: s
     )
   }
   if (!departments) {
-    return <div className="h-40 animate-pulse rounded-xl bg-muted" aria-busy />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
 
   const deleteDepartment = (department: StaffDepartment) =>

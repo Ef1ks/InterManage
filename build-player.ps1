@@ -1,5 +1,5 @@
-# Kompiluje player.ahk do player-vNN.exe i kopiuje na player.exe.
-# Numer wersji bierze z linii  global PlayerVersion := NN  w player.ahk.
+# Kompiluje player.ahk do player-v0.NN.exe i kopiuje na player.exe.
+# Numer wersji bierze z linii  global PlayerVersion := "0.NN"  w player.ahk.
 #
 # Uruchom w PowerShellu z katalogu projektu:
 #   .\build-player.ps1            # bez kompresji (zalecane)
@@ -21,9 +21,9 @@ if (-not (Test-Path $ahk2exe)) { throw "Brak kompilatora: $ahk2exe" }
 if (-not (Test-Path $base))    { throw "Brak bazy: $base" }
 
 # Wersja z player.ahk
-$m = Select-String -Path $ahk -Pattern 'global PlayerVersion := (\d+)' | Select-Object -First 1
-if (-not $m) { throw "Nie znalazlem 'global PlayerVersion := NN' w player.ahk" }
-$ver = [int]$m.Matches[0].Groups[1].Value
+$m = Select-String -Path $ahk -Pattern 'global PlayerVersion := "(\d+\.\d+)"' | Select-Object -First 1
+if (-not $m) { throw "Nie znalazlem 'global PlayerVersion := ""0.NN""' w player.ahk" }
+$ver = $m.Matches[0].Groups[1].Value
 $out = Join-Path $root "player-v$ver.exe"
 
 # Zamknij dzialajacy odtwarzacz, bo trzyma plik zablokowany

@@ -85,7 +85,7 @@ export function ArticleCodesCard({ storeId, itm8, onClose }: { storeId: string; 
       </div>
 
       {codes.isPending ? (
-        <div aria-hidden className="h-24 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+        <div aria-hidden className="h-24 loading-shimmer rounded-md" />
       ) : codes.isError ? (
         <p className="text-sm text-muted-foreground">{codes.error.message || 'Nie udało się pobrać kodów artykułu.'}</p>
       ) : (

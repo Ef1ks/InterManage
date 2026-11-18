@@ -19,11 +19,14 @@ export function SavedFolder({
   folder,
   className,
   onPicked,
+  pathFieldWhenMissing = false,
 }: {
   folder: SavedFolderSpec
   className?: string
   /** Po wybraniu folderu, np. żeby zdjąć ostrzeżenie o jego braku. */
   onPicked?: () => void
+  /** Pole ścieżki sklepu tylko, gdy sklep jej jeszcze nie ma (np. w kolejce plików: ścieżka jest już ustawiona). */
+  pathFieldWhenMissing?: boolean
 }) {
   const { name, loaded, pick } = useSavedFolder(folder.key)
   const [picking, setPicking] = useState(false)
@@ -88,7 +91,7 @@ export function SavedFolder({
           {name ? 'Zmień' : 'Wybierz folder'}
         </Button>
       </div>
-      {!folder.pathInSettings && store && (
+      {!folder.pathInSettings && store && !(pathFieldWhenMissing && path) && (
         <StoreLocationField
           storeId={store.id}
           locationKey={locationKey}

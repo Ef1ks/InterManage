@@ -68,6 +68,7 @@ import type { KsefInvoice, KsefInvoiceDocument, KsefOverview } from '@/lib/types
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const ENTERED_OPTIONS: { value: EnteredFilter; label: string }[] = [
   { value: 'ALL', label: 'Wszystkie' },
@@ -105,7 +106,7 @@ export function InvoicesList({ storeId }: { storeId: string }) {
   const canEdit = useCan('KSEF_INVOICES', 'EDIT')
 
   if (overviewPending) {
-    return <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-64 rounded-xl" />
   }
   if (!overview?.configured) {
     return (

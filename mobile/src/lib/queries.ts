@@ -29,7 +29,13 @@ export type LookupResult =
 export async function lookupArticle(storeId: string, code: string): Promise<LookupResult> {
   const wanted = code.trim()
   const page = await api<ProductListPage>(`/stores/${storeId}/products?${new URLSearchParams({ query: wanted })}`)
-  const exact = page.items.find((item) => withoutLeadingZeros(item.ean) === withoutLeadingZeros(wanted))
+  // Jak `pickScanned` w Magazynie: artykuł spoza najnowszego raportu kartoteki ma ten EAN tylko z dawnego raportu,
+  // więc wygrywa jedyny artykuł z ostatniego raportu (kod jako multikod, np. po połączeniu ITM8 w systemie sklepu).
+  const exactItems = page.items.filter((item) => withoutLeadingZeros(item.ean) === withoutLeadingZeros(wanted))
+  const others = page.items.filter((item) => item.inLastReport)
+  const exact =
+    exactItems.find((item) => item.inLastReport) ??
+    (exactItems.length > 0 && others.length === 1 && page.total === page.items.length ? others[0] : exactItems[0])
   if (exact) return { kind: 'found', itm8: exact.itm8 }
   if (page.total === 1 && page.items[0]) return { kind: 'found', itm8: page.items[0].itm8 }
   if (page.items.length > 0) return { kind: 'several', items: page.items }

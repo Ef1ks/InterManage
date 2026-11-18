@@ -39,6 +39,7 @@ import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
 import type { StaffRecord, StaffWarning } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Profil pracownika w Kadrach: sprawy do sprawdzenia, umowy, staż, urlop, orzeczenie i terminy. */
 export function RecordPage({ storeId }: { storeId: string }) {
@@ -61,7 +62,7 @@ export function RecordPage({ storeId }: { storeId: string }) {
     )
   }
   if (!record) {
-    return <div className="h-40 animate-pulse rounded-xl bg-muted" aria-busy />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
 
   const { person } = record

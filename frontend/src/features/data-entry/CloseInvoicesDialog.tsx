@@ -201,7 +201,7 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
             <span className="font-medium">Drukuj bony po zamknięciu</span>
             <span className="text-xs text-muted-foreground">
               {print
-                ? 'Każdy bon otwarty w Adobe Acrobat pójdzie od razu do drukarki domyślnej, potem się zamknie (odtwarzacz od wersji 51).'
+                ? 'Każdy bon otwarty w Adobe Acrobat pójdzie od razu do drukarki domyślnej, potem się zamknie (odtwarzacz od wersji 0.51).'
                 : 'Bony otwarte w Adobe Acrobat zostaną zamknięte bez drukowania.'}
             </span>
           </span>

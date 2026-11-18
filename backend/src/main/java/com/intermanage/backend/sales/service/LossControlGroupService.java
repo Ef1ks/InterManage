@@ -1,5 +1,8 @@
 package com.intermanage.backend.sales.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -13,14 +16,20 @@ import org.springframework.transaction.annotation.Transactional;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.document.entity.GratisKind;
+import com.intermanage.backend.document.repository.DocumentGratisRepository;
+import com.intermanage.backend.document.repository.DocumentGratisRepository.SupplierGratis;
 import com.intermanage.backend.sales.dto.LossControlGroupRequest;
 import com.intermanage.backend.sales.dto.LossControlGroupResponse;
+import com.intermanage.backend.sales.dto.LossControlSettlements;
 import com.intermanage.backend.sales.entity.LossControlGroup;
 import com.intermanage.backend.sales.entity.LossControlGroupArticle;
 import com.intermanage.backend.sales.mapper.LossControlGroupMapper;
 import com.intermanage.backend.sales.repository.LossControlGroupArticleRepository;
 import com.intermanage.backend.sales.repository.LossControlGroupRepository;
 import com.intermanage.backend.store.repository.StoreRepository;
+import com.intermanage.backend.supplier.entity.Supplier;
+import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
  * Dostawcy do kontroli strat w raporcie protokołów: grupy artykułów z kolorem, po których raport się filtruje. Każda
@@ -40,14 +49,19 @@ public class LossControlGroupService {
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final LossControlGroupMapper mapper;
+    private final SupplierRepository suppliers;
+    private final DocumentGratisRepository gratis;
 
     public LossControlGroupService(LossControlGroupRepository groups, LossControlGroupArticleRepository articles,
-            StoreRepository stores, AppUserRepository users, LossControlGroupMapper mapper) {
+            StoreRepository stores, AppUserRepository users, LossControlGroupMapper mapper,
+            SupplierRepository suppliers, DocumentGratisRepository gratis) {
         this.groups = groups;
         this.articles = articles;
         this.stores = stores;
         this.users = users;
         this.mapper = mapper;
+        this.suppliers = suppliers;
+        this.gratis = gratis;
     }
 
     @Transactional(readOnly = true)
@@ -63,14 +77,15 @@ public class LossControlGroupService {
     @Transactional
     public List<LossControlGroupResponse> create(UUID storeId, LossControlGroupRequest request, UUID userId) {
         String name = name(storeId, request, NONE);
-        groups.save(new LossControlGroup(stores.getReferenceById(storeId), name, color(request), user(userId)));
+        groups.save(new LossControlGroup(stores.getReferenceById(storeId), name, color(request),
+                supplier(storeId, request), user(userId)));
         return list(storeId);
     }
 
     @Transactional
     public List<LossControlGroupResponse> update(UUID storeId, UUID id, LossControlGroupRequest request) {
         LossControlGroup group = active(storeId, id);
-        group.update(name(storeId, request, id), color(request));
+        group.update(name(storeId, request, id), color(request), supplier(storeId, request));
         return list(storeId);
     }
 
@@ -112,6 +127,47 @@ public class LossControlGroupService {
         AppUser user = user(userId);
         articles.findActive(id, itm8s(itm8s)).forEach(article -> article.remove(user));
         return list(storeId);
+    }
+
+    /**
+     * Gratisy za pokrycie strat od dostawców podpiętych do dostawców do kontroli, z miesiącem rozliczenia w miesiącach
+     * okresu [from, to]: miesiąc wybrany przy gratisie albo miesiąc daty dokumentu.
+     */
+    @Transactional(readOnly = true)
+    public LossControlSettlements settlements(UUID storeId, LocalDate from, LocalDate to) {
+        if (to.isBefore(from)) {
+            throw ApiException.badRequest("Koniec okresu jest przed początkiem");
+        }
+        YearMonth fromMonth = YearMonth.from(from);
+        YearMonth toMonth = YearMonth.from(to);
+        List<LossControlGroup> linked = groups.findActive(storeId).stream()
+                .filter(group -> group.getSupplier() != null).toList();
+        if (linked.isEmpty()) {
+            return new LossControlSettlements(fromMonth, toMonth, List.of());
+        }
+        Map<UUID, List<SupplierGratis>> bySupplier = gratis.findBySuppliers(storeId, GratisKind.LOSSES.name(),
+                        linked.stream().map(group -> group.getSupplier().getId()).collect(Collectors.toSet()),
+                        fromMonth.atDay(1), toMonth.atDay(1))
+                .stream().collect(Collectors.groupingBy(SupplierGratis::getSupplierId));
+        return new LossControlSettlements(fromMonth, toMonth, linked.stream().map(group -> {
+            List<SupplierGratis> rows = bySupplier.getOrDefault(group.getSupplier().getId(), List.of());
+            List<LossControlSettlements.Gratis> items = rows.stream()
+                    .map(row -> new LossControlSettlements.Gratis(row.getDocumentId(), row.getDocumentType(),
+                            row.getDocumentNumber(), row.getDocumentDate(), YearMonth.from(row.getMonth()),
+                            row.getManualMonth(), row.getSaleValueGross()))
+                    .toList();
+            BigDecimal total = items.stream().map(LossControlSettlements.Gratis::saleValueGross)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            return new LossControlSettlements.Group(group.getId(), total, items);
+        }).toList());
+    }
+
+    private Supplier supplier(UUID storeId, LossControlGroupRequest request) {
+        if (request.supplierId() == null) {
+            return null;
+        }
+        return suppliers.findInStore(storeId, request.supplierId())
+                .orElseThrow(() -> ApiException.badRequest("Nie ma takiego dostawcy na liście dostawców sklepu"));
     }
 
     private LossControlGroup active(UUID storeId, UUID id) {

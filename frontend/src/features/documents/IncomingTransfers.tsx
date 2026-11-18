@@ -55,6 +55,7 @@ import { folderSavingSupported, saveApiFileToFolder, useSavedFolder } from '@/li
 import { matchesSearch } from '@/lib/search'
 import type { IncomingTransfer } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
@@ -139,7 +140,7 @@ export function IncomingTransfersPage({ storeId }: { storeId: string }) {
           inline
         />
       ) : isPending ? (
-        <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-40 rounded-xl" />
       ) : (
         <div className="grid gap-6">
           <TransferGroup title="Do wprowadzenia" transfers={data.pending} empty="Nic nie czeka na wprowadzenie." />
@@ -200,7 +201,7 @@ export function IncomingTransferDetail({ storeId }: { storeId: string }) {
     return (
       <>
         {back}
-        <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-64 rounded-xl" />
       </>
     )
   }

@@ -19,6 +19,7 @@ import { todayIso } from '@/lib/dates'
 import { matchesSearch } from '@/lib/search'
 import type { SupplierTurnoverAmount, SupplierTurnoverReport as Report, SupplierTurnoverRow } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const MODES: { value: Exclude<PeriodMode, 'day' | 'week'>; label: string }[] = [
   { value: 'month', label: 'Miesiąc' },
@@ -142,7 +143,7 @@ export function SupplierTurnoverReport({ storeId }: { storeId: string }) {
           </Button>
         </Card>
       ) : !report.data ? (
-        <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-96 rounded-xl" />
       ) : (
         <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
           <TurnoverTable

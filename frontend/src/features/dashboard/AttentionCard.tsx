@@ -17,6 +17,7 @@ import { useIncomingTransfersCount } from '@/features/documents/api'
 import { useStorePartners } from '@/features/store-settings/api'
 import { useTimeAttention } from '@/features/staff-time/api'
 import { useTimeRequestCount } from '@/features/staff-time/requests-api'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Item = {
   key: string
@@ -138,7 +139,7 @@ export function AttentionCard({ storeId }: { storeId: string }) {
             ))}
           </ul>
         ) : loading ? (
-          <div className="h-16 animate-pulse rounded-lg bg-muted" />
+          <LoadingPanel className="h-16 rounded-lg" />
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <CheckCircle2Icon className="size-4 text-emerald-600 dark:text-emerald-400" />

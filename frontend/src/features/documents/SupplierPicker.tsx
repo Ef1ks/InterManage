@@ -17,6 +17,7 @@ import { applyServerErrors } from '@/lib/form-errors'
 import { fillFromGus } from '@/lib/gus'
 import { matchesSearch } from '@/lib/search'
 import type { Supplier } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Wybór dostawcy z listy sklepu z wyszukiwarką (nazwa, kod, NIP, miasto); podpowiedź na górze, dopóki nie szukasz.
@@ -65,7 +66,7 @@ export function SupplierPicker({
       <SearchInput value={query} onChange={setQuery} placeholder="Szukaj dostawcy: nazwa, kod, NIP, miasto" />
       <div className="h-72 overflow-y-auto overscroll-contain rounded-xl border">
         {isPending ? (
-          <div aria-hidden className="m-2 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-2 h-24 rounded-lg" />
         ) : visible.length === 0 ? (
           <EmptySuppliers searching={suppliers.length > 0} canAdd={onAdd != null} />
         ) : (

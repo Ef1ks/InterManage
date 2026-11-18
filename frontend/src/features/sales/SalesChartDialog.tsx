@@ -30,6 +30,7 @@ import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
 import { marginOf, marginShare } from '@/lib/margin'
 import type { ArticleDelivery, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type ChartRange = 'month' | 'quarter' | 'half' | 'year'
 type Metric = 'price' | 'quantity' | 'sale' | 'cost'
@@ -437,7 +438,7 @@ function ChartBody({
             {history.isError && !data ? (
               <p className="py-16 text-center text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
             ) : !data ? (
-              <div aria-hidden className="h-80 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+              <div aria-hidden className="h-80 loading-shimmer rounded-lg" />
             ) : (
               <BarChart
                 scope={`${data.from}:${data.to}`}
@@ -635,8 +636,7 @@ function ArticleFacts({
   const canMarkDown = useCan('INVENTORY', 'EDIT')
   const deliveries = useArticleDeliveries(storeId, target.itm8)
   const supplier = deliveries.data ? pickSupplier(deliveries.data, todayIso()) : null
-  if (isPending)
-    return <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+  if (isPending) return <LoadingPanel className="h-24 rounded-lg" />
   if (!article) {
     return (
       <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
@@ -817,7 +817,7 @@ function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string })
         deliveries.isError ? (
           <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">Nie udało się wczytać dostaw.</p>
         ) : (
-          <div aria-hidden className="h-32 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="h-32 rounded-lg" />
         )
       ) : list.length === 0 ? (
         <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
@@ -968,7 +968,7 @@ function ArticleProtocols({ storeId, itm8 }: { storeId: string; itm8: string }) 
             Nie udało się wczytać protokołów.
           </p>
         ) : (
-          <div aria-hidden className="h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <div aria-hidden className="h-20 loading-shimmer rounded-lg" />
         )
       ) : list.length === 0 ? (
         <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">

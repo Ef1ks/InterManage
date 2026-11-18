@@ -24,6 +24,10 @@ public interface ProductImportRepository extends JpaRepository<ProductImport, UU
     @Query("select i from ProductImport i where i.store.id = :storeId and i.importedAt < :before order by i.importedAt desc, i.id desc")
     List<ProductImport> findLatestBefore(UUID storeId, Instant before, Limit limit);
 
+    /** Id importu z najnowszym raportem: artykuł, którego w nim nie było, zniknął z kartoteki systemu sklepu. */
+    @Query("select i.id from ProductImport i where i.store.id = :storeId order by i.reportGeneratedAt desc, i.id desc")
+    List<UUID> findNewestReportIds(UUID storeId, Limit limit);
+
     @Query("select max(i.reportGeneratedAt) from ProductImport i where i.store.id = :storeId")
     Optional<LocalDateTime> findNewestReportGeneratedAt(UUID storeId);
 

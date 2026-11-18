@@ -20,6 +20,7 @@ import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
 import type { NomenclatureOption, ZeroStockReport as Report } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const SUMMARY_LIMIT = 6
 
@@ -66,7 +67,7 @@ export function ZeroStockReport({ storeId }: { storeId: string }) {
         (report.isError ? (
           <p className="text-sm text-destructive">Nie udało się wczytać raportu.</p>
         ) : !report.data ? (
-          <div aria-hidden className="h-72 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="h-72 rounded-xl" />
         ) : (
           <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
             <Results storeId={storeId} codes={confirmed} report={report.data} />
@@ -111,7 +112,7 @@ function NomenclaturePicker({
       {nomenclatures.isError ? (
         <p className="text-sm text-destructive">Nie udało się wczytać nomenklatury.</p>
       ) : !nomenclatures.data ? (
-        <div aria-hidden className="h-48 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-48 rounded-lg" />
       ) : regions.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
           Wgraj nomenklaturę w Imporcie danych.

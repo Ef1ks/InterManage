@@ -8,6 +8,7 @@ import {
   PanelLeftIcon,
   PercentIcon,
   ScaleIcon,
+  SparklesIcon,
   StoreIcon,
   TagIcon,
   TargetIcon,
@@ -16,6 +17,8 @@ import { Link, Navigate, Route, Routes } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
+import { AiUsagePanel, useAiUsage } from '@/features/ai-usage/AiUsagePanel'
+import { tokenFormat } from '@/features/ai-usage/format'
 import { Form, SelectField } from '@/components/form'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
@@ -43,9 +46,11 @@ import { hasCustomSidebarOrder, SidebarOrderEditor } from '@/features/store-sett
 import { SupplierSalePrices } from '@/features/store-settings/SupplierSalePrices'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
+import { currentMonth, todayIso } from '@/lib/dates'
 import { PROTOCOLS, useProtoSettings } from '@/lib/proto-files'
 import type { StorePartner, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 const budgetPercent = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
@@ -64,6 +69,9 @@ export function StoreSettingsPage() {
   const canEditDocuments = useCan('DOCUMENTS', 'EDIT')
   const canEditProto = useCanEditProtoFiles()
   const canEditDataEntry = useCan('DATA_ENTRY', 'EDIT')
+  // Zużycie AI widzą ci, którzy mogą wołać model (uzupełnianie artykułów, odczyt WZ mięsa).
+  const canEditMeat = useCan('MEAT_PURCHASES', 'EDIT')
+  const canUseAi = canEditDataEntry || canEditMeat
   if (!store) {
     return (
       <>
@@ -72,7 +80,7 @@ export function StoreSettingsPage() {
       </>
     )
   }
-  if (!canEditSales && !canEditDocuments && !canEditProto) {
+  if (!canEditSales && !canEditDocuments && !canEditProto && !canUseAi) {
     return (
       <>
         <PageHeader title="Ustawienia sklepu" description={storeLabel(store)} />
@@ -98,6 +106,7 @@ export function StoreSettingsPage() {
               canEditDocuments={canEditDocuments}
               canEditProto={canEditProto}
               canEditDataEntry={canEditDataEntry}
+              canUseAi={canUseAi}
             />
           }
         />
@@ -229,6 +238,28 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        {canUseAi && (
+          <Route
+            path="zuzycie-ai"
+            element={
+              <section aria-labelledby="ai-usage-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="ai-usage-heading" className="text-lg font-semibold tracking-tight">
+                    Zużycie AI
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Ile tokenów zużyły zapytania do modeli AI w tym sklepie i na jakim modelu: uzupełnianie artykułów we
+                    wprowadzaniu danych i odczyt WZ w zakupie mięsa.
+                  </p>
+                </div>
+                <div className="max-w-5xl">
+                  <AiUsagePanel key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         <Route
           path="menu-boczne"
           element={
@@ -278,12 +309,14 @@ function SettingsGrid({
   canEditDocuments,
   canEditProto,
   canEditDataEntry,
+  canUseAi,
 }: {
   storeId: string
   canEditSales: boolean
   canEditDocuments: boolean
   canEditProto: boolean
   canEditDataEntry: boolean
+  canUseAi: boolean
 }) {
   const me = useCurrentUser()
   const budgets = useRegionBudgets(storeId, canEditSales)
@@ -292,6 +325,7 @@ function SettingsGrid({
   const partners = useStorePartners(storeId, canEditDocuments)
   const proto = useProtoSettings(storeId, canEditProto)
   const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
+  const aiUsage = useAiUsage(storeId, { from: `${currentMonth()}-01`, to: todayIso() }, canUseAi)
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
   const budgeted = budgets.data?.filter(
     (budget) => budget.marginPercent != null || budget.maxLossPercent != null,
@@ -379,6 +413,21 @@ function SettingsGrid({
           title="Protokoły i zmiana cen"
           description="Folder, z którego program sklepu wczytuje protokoły i zmiany cen, oraz protokoły dostępne we wprowadzaniu danych."
           status={proto.data ? `${proto.data.folderPath} · protokoły: ${visibleProtocols} z ${PROTOCOLS.length}` : ' '}
+        />
+      )}
+      {canUseAi && (
+        <SettingsTile
+          to={paths.aiUsage}
+          icon={SparklesIcon}
+          title="Zużycie AI"
+          description="Tokeny zużyte przez zapytania do modeli AI w tym sklepie, według modelu."
+          status={
+            aiUsage.data
+              ? aiUsage.data.total.requests
+                ? `Ten miesiąc: ${tokenFormat.format(aiUsage.data.total.totalTokens)} tokenów`
+                : 'W tym miesiącu bez zapytań'
+              : ' '
+          }
         />
       )}
       <SettingsTile
@@ -525,7 +574,7 @@ function StorePartners({ store }: { store: StoreSummary }) {
 
       <Card className="gap-0 py-0">
         {isPending ? (
-          <div aria-hidden className="m-4 h-16 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-4 h-16 rounded-lg" />
         ) : accepted.length === 0 && sent.length === 0 ? (
           <div className="flex flex-col items-center gap-1 px-6 py-8 text-center">
             <HandshakeIcon aria-hidden className="mb-1 size-6 text-muted-foreground" />

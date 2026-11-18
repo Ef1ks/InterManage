@@ -33,6 +33,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.intermanage.backend.ai.component.AiUsageMeter;
+import com.intermanage.backend.ai.entity.AiFeature;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -77,6 +81,9 @@ class DataEntryIntegrationTests {
 
     @MockitoBean
     SuggestionModel model;
+
+    @Autowired
+    AiUsageMeter usageMeter;
 
     private Cookie owner;
     private String storeId;
@@ -978,6 +985,34 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.items[0].name").value("WINSTON BLUE SUPERLINE"))
                 .andExpect(jsonPath("$.items[0].brand").value("WINSTON"))
                 .andExpect(jsonPath("$.items[1].name").value("KREM DO RAK"));
+    }
+
+    @Test
+    void recordsTokenUsageOfModelForStore() throws Exception {
+        when(model.available()).thenReturn(true);
+        when(model.name()).thenReturn("test-model");
+        // Jak klient Gemini: po odpowiedzi zapisuje usageMetadata i modelVersion (w wątku paczki).
+        when(model.suggest(anyString(), anyString())).thenAnswer(invocation -> {
+            usageMeter.record(AiFeature.DATA_ENTRY_SUGGESTIONS, "test-model", JsonMapper.builder().build().readTree("""
+                    {"modelVersion":"gemini-test-001","usageMetadata":{"promptTokenCount":1200,
+                     "candidatesTokenCount":300,"thoughtsTokenCount":50,"totalTokenCount":1550}}"""));
+            return List.of(new SuggestionModel.Answer(2, "Pianki 30g", "Wisła", "010909", List.of(), 0.6, "kg",
+                    new BigDecimal("0.03"), false));
+        });
+
+        suggest(owner, items()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.usage.model").value("gemini-test-001"))
+                .andExpect(jsonPath("$.usage.requests").value(1))
+                .andExpect(jsonPath("$.usage.promptTokens").value(1200))
+                .andExpect(jsonPath("$.usage.totalTokens").value(1550));
+
+        String today = java.time.LocalDate.now(com.intermanage.backend.common.component.StoreTime.ZONE).toString();
+        mvc.perform(get("/api/stores/" + storeId + "/ai-usage").param("from", today).param("to", today).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows[0].model").value("gemini-test-001"))
+                .andExpect(jsonPath("$.rows[0].feature").value("DATA_ENTRY_SUGGESTIONS"))
+                .andExpect(jsonPath("$.rows[0].outputTokens").value(300))
+                .andExpect(jsonPath("$.total.totalTokens").value(1550));
     }
 
     @Test

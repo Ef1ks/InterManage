@@ -184,12 +184,16 @@ public class PeriodSummaryService {
     private record ArticleDetails(String name, String ean, String brand) {
     }
 
-    /** Wydruk podsumowania (PDF, A4 poziomo). */
+    private static final int YEAR_AGO_DAYS = 364;
+
+    /** Wydruk podsumowania (PDF, A4 poziomo) z kafelkami porównanymi do tego samego okresu rok temu. */
     public ExportFile pdf(UUID storeId, LocalDate from, LocalDate to, UUID userId) {
         PeriodSummaryResponse summary = summary(storeId, from, to);
+        // Ten sam okres rok temu w te same dni tygodnia (52 tygodnie), jak kafelki na stronie.
+        PeriodSummaryResponse yearAgo = summary(storeId, from.minusDays(YEAR_AGO_DAYS), to.minusDays(YEAR_AGO_DAYS));
         String printedBy = userId != null ? users.findById(userId).map(AppUser::getDisplayName).orElse(null) : null;
         return new ExportFile("podsumowanie-" + summary.storeNumber() + "-" + from + "-" + to + ".pdf",
-                "application/pdf", summaryPdf.pdf(summary, printedBy));
+                "application/pdf", summaryPdf.pdf(summary, yearAgo, printedBy));
     }
 
     public record ExportFile(String fileName, String contentType, byte[] content) {

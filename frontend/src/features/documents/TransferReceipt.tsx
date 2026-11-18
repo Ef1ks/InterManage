@@ -14,6 +14,7 @@ import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import type { IncomingTransfer } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
@@ -162,7 +163,7 @@ function ReceiptPicker({
         {isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać dokumentów.</p>
         ) : isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : candidates.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
             Brak pasujących dokumentów w tym sklepie.

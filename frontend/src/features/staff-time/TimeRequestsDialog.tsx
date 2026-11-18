@@ -21,6 +21,7 @@ import { ApiError } from '@/lib/api'
 import { addDays, addMonths, currentMonth, formatMonth } from '@/lib/dates'
 import type { TimeRequest } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const failed = (cause: unknown, fallback: string) => (cause instanceof ApiError ? cause.message : fallback)
 
@@ -146,7 +147,7 @@ export function TimeRequestsDialog({
         </div>
 
         {requests.isPending ? (
-          <div className="h-40 animate-pulse rounded-xl bg-muted" aria-busy />
+          <LoadingPanel className="h-40 rounded-xl" />
         ) : items.length === 0 ? (
           <p className="rounded-xl bg-muted px-4 py-6 text-center text-sm text-muted-foreground">
             {mode === 'open' ? 'Żaden wniosek nie czeka na Twoją decyzję.' : 'W tym miesiącu nie ma wniosków.'}

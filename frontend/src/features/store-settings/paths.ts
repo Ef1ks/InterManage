@@ -10,4 +10,5 @@ export const storeSettingsPaths = {
   partners: `${base}/sklepy-zaprzyjaznione`,
   protoFiles: `${base}/pliki-proto`,
   sidebar: `${base}/menu-boczne`,
+  aiUsage: `${base}/zuzycie-ai`,
 }

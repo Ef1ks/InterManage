@@ -20,6 +20,7 @@ import { lookupProducts, useLinkProduct, useLinkSuggestions, useUnlinkProduct } 
 import { CatalogListDialog } from './CatalogListDialog'
 import { bonLineSuggestions } from './correction-macro'
 import type { DataEntryRow, RowLink } from './rows'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Wyszukiwanie w liście towarów z nazwy z faktury: początki pierwszych dwóch słów, bo kartoteka skraca nazwy
@@ -226,7 +227,7 @@ function LinkContent({
         {suggestions.isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać propozycji.</p>
         ) : suggestions.isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : list.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
             Brak podobnych artykułów. Poszukaj w liście towarów.

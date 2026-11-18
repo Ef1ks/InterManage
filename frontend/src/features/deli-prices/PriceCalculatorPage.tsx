@@ -9,6 +9,7 @@ import { PartnerCalculations } from '@/features/deli-prices/PartnerCalculations'
 import { pricePaths } from '@/features/deli-prices/format'
 import { useCurrentStore } from '@/features/stores/current-store'
 import type { StoreSummary } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Kalkulator cen garmażu: lista kalkulacji z wyszukiwarką i kreator, w którym przepis składa się z produktów
@@ -59,7 +60,7 @@ function SavedCalculation({ storeId }: { storeId: string }) {
     )
   }
   if (isPending) {
-    return <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-64 rounded-xl" />
   }
   // Po zapisie i odświeżeniu cen kreator startuje od nowa z zapisanego stanu (i bez niezapisanych zmian).
   return (

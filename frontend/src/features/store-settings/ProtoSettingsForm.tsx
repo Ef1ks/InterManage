@@ -17,6 +17,7 @@ import {
   useSaveProtoSettings,
 } from '@/lib/proto-files'
 import type { ProtocolKind, ProtoSettings } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Folder domyślny z backendu (StoreProtoSettingsService.DEFAULT_FOLDER). */
 const DEFAULT_FOLDER = 'N:\\AVISOCONFIG\\BACKUP'
@@ -40,7 +41,7 @@ export function ProtoSettingsForm({ storeId }: { storeId: string }) {
     )
   }
   if (!data) {
-    return <div aria-hidden className="h-72 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-72 rounded-xl" />
   }
   return <SettingsForm key={data.updatedAt ?? 'new'} storeId={storeId} settings={data} />
 }

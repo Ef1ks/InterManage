@@ -10,6 +10,7 @@ import { TableSkeletonRows } from '@/components/TableSkeleton'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan } from '@/features/auth/api'
+import { usageLabel } from '@/features/ai-usage/format'
 import { meatPaths, scanKey, useMeatDeliveries, useScanMeatDocument } from '@/features/meat/api'
 import { prepareScan } from '@/features/meat/format'
 import { ApiError } from '@/lib/api'
@@ -98,9 +99,7 @@ export function DeliveriesList({ store }: { store: StoreSummary }) {
                   <TableCell className="tabular-nums">{delivery.documentNumber}</TableCell>
                   <TableCell className="text-right tabular-nums">{delivery.lineCount}</TableCell>
                   <TableCell>
-                    {delivery.hasScan && (
-                      <ImageIcon aria-label="Ze skanem" className="size-4 text-muted-foreground" />
-                    )}
+                    {delivery.hasScan && <ImageIcon aria-label="Ze skanem" className="size-4 text-muted-foreground" />}
                   </TableCell>
                 </TableRow>
               ))}
@@ -129,6 +128,7 @@ function ScanButtons({ storeId }: { storeId: string }) {
     scan.mutate(prepared, {
       onSuccess: (result) => {
         queryClient.setQueryData(scanKey(storeId, result.scanId), result)
+        if (result.usage) toast.success('Odczytano dokument', { description: usageLabel(result.usage) })
         navigate(meatPaths.fromScan(result.scanId))
       },
       onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się odczytać dokumentu'),
@@ -141,7 +141,9 @@ function ScanButtons({ storeId }: { storeId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">Nowy dokument WZ</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">Zdjęcie albo skan: AI odczyta dostawcę i ceny netto za kg.</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Zdjęcie albo skan: AI odczyta dostawcę i ceny netto za kg.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="xl" onClick={() => cameraInput.current?.click()} disabled={busy}>
@@ -152,7 +154,13 @@ function ScanButtons({ storeId }: { storeId: string }) {
             <FileUpIcon />
             Wgraj skan
           </Button>
-          <Button size="xl" variant="ghost" nativeButton={false} render={<Link to={meatPaths.create} />} disabled={busy}>
+          <Button
+            size="xl"
+            variant="ghost"
+            nativeButton={false}
+            render={<Link to={meatPaths.create} />}
+            disabled={busy}
+          >
             <PencilLineIcon />
             Wpisz ręcznie
           </Button>

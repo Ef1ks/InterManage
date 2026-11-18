@@ -71,6 +71,7 @@ class GratisReportPdfTests {
 
     private static Figures figures() {
         return new Figures(new BigDecimal("12345.67"), new BigDecimal("2345.10"), new BigDecimal("14690.77"),
-                new BigDecimal("1234567.89"), new BigDecimal("1.19"));
+                new BigDecimal("1234567.89"), new BigDecimal("1.19"), new BigDecimal("4690.20"),
+                new BigDecimal("50"));
     }
 }

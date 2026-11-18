@@ -607,6 +607,32 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
             """, nativeQuery = true)
     List<ArticleLoss> sumArticleLosses(UUID storeId, String prefix, LocalDate from, LocalDate to);
 
+    /** Wartość w cenach sprzedaży brutto w miesiącu i rejonie nomenklatury (pusty kod = linie bez nomenklatury). */
+    interface MonthRegionGross {
+        LocalDate getMonth();
+
+        String getRegionCode();
+
+        BigDecimal getSaleValueGross();
+    }
+
+    /**
+     * Wartość w cenach sprzedaży brutto linii dokumentów jednego typu (np. likwidacji) w okresie [from, to] wg daty
+     * dokumentu, po miesiącu (pierwszy dzień) i rejonie nomenklatury linii. Bez przyjęć oznaczonych jako błąd.
+     */
+    @Query(value = """
+            select cast(date_trunc('month', d.document_date) as date) as month,
+                   coalesce(left(replace(l.nomenclature_code, ' ', ''), 2), '') as region_code,
+                   coalesce(sum(l.sale_value_gross), 0) as sale_value_gross
+            from document_lines l
+            join documents d on d.id = l.document_id and d.error_marked_at is null
+            where d.store_id = :storeId and d.type = :type
+              and d.document_date >= cast(:from as timestamp)
+              and d.document_date < cast(:to as timestamp) + interval '1 day'
+            group by 1, 2
+            """, nativeQuery = true)
+    List<MonthRegionGross> sumGrossByMonthAndRegion(UUID storeId, String type, LocalDate from, LocalDate to);
+
     /** Wartość zakupu linii jednego typu dokumentu w rejonie nomenklatury (pusty kod = linie bez nomenklatury). */
     interface RegionValue {
         String getRegionCode();

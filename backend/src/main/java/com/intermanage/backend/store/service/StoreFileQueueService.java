@@ -51,8 +51,8 @@ public class StoreFileQueueService {
     }
 
     @Transactional
-    public FileQueueItemResponse add(UUID storeId, String folderKey, String folderLabel, String fileName,
-            MultipartFile file, UUID userId) {
+    public FileQueueItemResponse add(UUID storeId, String folderKey, String folderLabel, String groupKey,
+            String groupLabel, String fileName, MultipartFile file, UUID userId) {
         if (folderKey == null || !FOLDER_KEY.matcher(folderKey).matches()) {
             throw ApiException.badRequest("Nieznany folder pliku");
         }
@@ -73,8 +73,10 @@ public class StoreFileQueueService {
         } catch (IOException e) {
             throw ApiException.badRequest("Nie udało się odczytać pliku");
         }
-        StoreFileQueueItem saved = queue.save(
-                new StoreFileQueueItem(storeId, folderKey, label, name, content, user(userId)));
+        String group = trimmed(groupKey, 200);
+        String groupName = group == null ? null : trimmed(groupLabel, 300);
+        StoreFileQueueItem saved = queue.save(new StoreFileQueueItem(storeId, folderKey, label, group,
+                groupName == null ? group : groupName, name, content, user(userId)));
         return pending(storeId).stream().filter(item -> item.id().equals(saved.getId())).findFirst()
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono pliku w kolejce"));
     }
@@ -113,6 +115,14 @@ public class StoreFileQueueService {
     private StoreFileQueueItem find(UUID storeId, UUID id) {
         return queue.findById(id).filter(item -> item.getStoreId().equals(storeId))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono pliku w kolejce"));
+    }
+
+    private static String trimmed(String value, int max) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String text = value.trim();
+        return text.length() > max ? text.substring(0, max) : text;
     }
 
     private AppUser user(UUID userId) {

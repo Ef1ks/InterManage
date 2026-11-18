@@ -7,6 +7,7 @@ import org.hibernate.annotations.UuidGenerator;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.supplier.entity.Supplier;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,6 +38,11 @@ public class LossControlGroup {
     @Column(nullable = false)
     private String color;
 
+    /** Dostawca z listy dostawców sklepu, którego gratisy za pokrycie strat rozliczają tę grupę; pusty = bez. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id")
+    private Supplier supplier;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
     private AppUser createdBy;
@@ -57,10 +63,11 @@ public class LossControlGroup {
     protected LossControlGroup() {
     }
 
-    public LossControlGroup(Store store, String name, String color, AppUser createdBy) {
+    public LossControlGroup(Store store, String name, String color, Supplier supplier, AppUser createdBy) {
         this.store = store;
         this.name = name;
         this.color = color;
+        this.supplier = supplier;
         this.createdBy = createdBy;
     }
 
@@ -75,9 +82,10 @@ public class LossControlGroup {
         updatedAt = Instant.now();
     }
 
-    public void update(String name, String color) {
+    public void update(String name, String color, Supplier supplier) {
         this.name = name;
         this.color = color;
+        this.supplier = supplier;
     }
 
     public void delete(AppUser user) {
@@ -100,6 +108,10 @@ public class LossControlGroup {
 
     public String getColor() {
         return color;
+    }
+
+    public Supplier getSupplier() {
+        return supplier;
     }
 
     public Instant getDeletedAt() {

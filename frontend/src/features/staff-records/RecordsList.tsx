@@ -16,6 +16,7 @@ import { matchesSearch } from '@/lib/search'
 import type { StaffRecordRow, StoreSummary } from '@/lib/types'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const ALL = 'wszystkie'
 /** Filtr „do sprawdzenia”, w adresie jako `?sprawy=tak`. */
@@ -110,7 +111,7 @@ export function RecordsList({ storeId }: { storeId: string }) {
           inline
         />
       ) : !rows ? (
-        <div className="h-72 animate-pulse rounded-2xl bg-muted" aria-busy />
+        <LoadingPanel className="h-72 rounded-2xl" />
       ) : rows.length === 0 ? (
         <FullPageMessage
           title="Nie ma jeszcze pracowników"

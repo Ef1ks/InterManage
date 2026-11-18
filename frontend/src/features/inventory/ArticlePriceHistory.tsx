@@ -6,6 +6,7 @@ import { useProductPrices } from '@/features/inventory/api'
 import { parseIsoDate, todayIso } from '@/lib/dates'
 import type { ProductPriceChange, ProductPromotion } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Historia cen artykułu pod wykresem: zmiany ceny sprzedaży (pliki z kasy po EAN-ie, importy kartoteki, pliki zmiany
@@ -96,7 +97,7 @@ function HistorySection({
           Nie udało się wczytać historii cen.
         </p>
       ) : isPending ? (
-        <div aria-hidden className="h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-24 rounded-lg" />
       ) : empty ? (
         <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">{empty}</p>
       ) : (

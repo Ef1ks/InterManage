@@ -1,8 +1,10 @@
 package com.intermanage.backend.sales.controller;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -12,12 +14,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.sales.dto.LossControlArticlesRequest;
 import com.intermanage.backend.sales.dto.LossControlGroupRequest;
 import com.intermanage.backend.sales.dto.LossControlGroupResponse;
+import com.intermanage.backend.sales.dto.LossControlSettlements;
 import com.intermanage.backend.sales.service.LossControlGroupService;
 
 import jakarta.validation.Valid;
@@ -40,6 +44,15 @@ public class LossControlGroupController {
     @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
     public List<LossControlGroupResponse> list(@PathVariable UUID storeId) {
         return service.list(storeId);
+    }
+
+    /** Gratisy za pokrycie strat podpiętych dostawców z miesiącem rozliczenia w miesiącach okresu raportu. */
+    @GetMapping("/settlements")
+    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public LossControlSettlements settlements(@PathVariable UUID storeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return service.settlements(storeId, from, to);
     }
 
     @PostMapping

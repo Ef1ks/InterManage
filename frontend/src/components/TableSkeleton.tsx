@@ -7,7 +7,7 @@ export function TableSkeletonRows({ columns, rows = 4 }: { columns: number; rows
       {Array.from({ length: columns }, (_, column) => (
         <TableCell key={column} className="py-3.5">
           <div
-            className="h-3.5 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+            className="h-3.5 loading-shimmer rounded-full"
             style={{ width: `${column === columns - 1 ? 24 : 40 + ((row * 7 + column * 13) % 45)}%` }}
           />
         </TableCell>

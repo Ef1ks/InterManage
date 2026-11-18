@@ -10,6 +10,7 @@ import {
   FileStackIcon,
   GiftIcon,
   type LucideIcon,
+  PackageOpenIcon,
   PackageSearchIcon,
   PackageXIcon,
   PercentIcon,
@@ -119,6 +120,14 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
           'Za ile netto kupiliśmy od dostawcy w każdym miesiącu, po nomenklaturze, z korektami. Suma zaznaczonych pozycji.',
         icon: TruckIcon,
         fromDocuments: 'Z przyjęć PZ i ich korekt',
+      },
+      {
+        path: salesPaths.missingAssortment,
+        title: 'Brakujący asortyment',
+        description:
+          'Towar kupiony poza bazą, którego nie ma na stanie i który się nie sprzedaje: czego brakuje od którego dostawcy i ile schodziło, gdy był.',
+        icon: PackageOpenIcon,
+        fromDocuments: 'Z przyjęć PZ, kartoteki i sprzedaży',
       },
       {
         path: TOOL_ROUTES.MEAT_PURCHASES.path,

@@ -63,6 +63,7 @@ import { storeLabel } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import type { OrderCategory, OrderProduct, OrderSection, OrderUnit, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Confirmation = { title: string; description: string; confirmLabel: string; onConfirm: () => void }
 
@@ -154,7 +155,7 @@ export function FormEditor({ store }: { store: StoreSummary }) {
           inline
         />
       ) : isPending ? (
-        <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-40 rounded-xl" />
       ) : sections.length === 0 ? (
         <Card className="items-center px-6 py-10 text-center">
           <p className="font-medium">Formularz jest pusty</p>

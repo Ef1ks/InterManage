@@ -32,6 +32,7 @@ import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import { fillFromGus } from '@/lib/gus'
 import type { SupplierContact, SupplierDetails } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Karta dostawcy: dane z listy z systemu sklepu (u dodanego ręcznie wpisane w aplikacji), strona, telefon, e-mail,
@@ -53,7 +54,7 @@ export function SupplierCard({ storeId }: { storeId: string }) {
     )
   }
   if (isPending) {
-    return <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-64 rounded-xl" />
   }
   return <SupplierView storeId={storeId} supplier={supplier} />
 }

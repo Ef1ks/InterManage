@@ -13,6 +13,7 @@ import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { KsefCompany, KsefCompanyStore, KsefConnection, KsefSettings } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
@@ -24,7 +25,7 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
   const { data: settings, isPending, isError, refetch } = useKsefSettings(storeId)
 
   if (isPending) {
-    return <div aria-hidden className="h-64 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-64 rounded-xl" />
   }
   if (isError) {
     return (
@@ -49,12 +50,12 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
           </>,
           <>
             Wgraj oba pliki, wpisz hasło do klucza i NIP firmy. Po zapisie od razu sprawdzimy logowanie. Faktury są
-            wspólne dla firmy: inne sklepy z tym samym NIP-em (Ustawienia → Sklepy) podłączysz potem jednym
-            kliknięciem, bez ponownego wgrywania certyfikatu.
+            wspólne dla firmy: inne sklepy z tym samym NIP-em (Ustawienia → Sklepy) podłączysz potem jednym kliknięciem,
+            bez ponownego wgrywania certyfikatu.
           </>,
           <>
-            Dodaj <strong className="font-semibold text-foreground">IDWew sklepu</strong>: sklep zobaczy faktury z
-            tym IDWew i wszystkie bez IDWew. Faktury pobierają się same co pół godziny.
+            Dodaj <strong className="font-semibold text-foreground">IDWew sklepu</strong>: sklep zobaczy faktury z tym
+            IDWew i wszystkie bez IDWew. Faktury pobierają się same co pół godziny.
           </>,
         ]}
       />
@@ -148,10 +149,9 @@ function CompanyStoresCard({
   const onShare = () =>
     shareConnection.mutate(selected, {
       onSuccess: () => {
-        toast.success(
-          selected.length === 1 ? 'Sklep podłączony do firmy' : `Podłączono sklepy: ${selected.length}`,
-          { description: 'Widzą faktury firmy od razu, bez wgrywania certyfikatu.' },
-        )
+        toast.success(selected.length === 1 ? 'Sklep podłączony do firmy' : `Podłączono sklepy: ${selected.length}`, {
+          description: 'Widzą faktury firmy od razu, bez wgrywania certyfikatu.',
+        })
         setSelected([])
       },
       onError: (error) => toast.error(errorMessage(error, 'Nie udało się podłączyć sklepów')),
@@ -193,12 +193,7 @@ function CompanyStoresCard({
             value={selected}
             onChange={setSelected}
           />
-          <Button
-            size="xl"
-            disabled={selected.length === 0}
-            loading={shareConnection.isPending}
-            onClick={onShare}
-          >
+          <Button size="xl" disabled={selected.length === 0} loading={shareConnection.isPending} onClick={onShare}>
             <LinkIcon />
             Podłącz{selected.length > 0 && ` (${selected.length})`}
           </Button>
@@ -257,7 +252,10 @@ function ConnectionCard({
           setPrivateKey(undefined)
           resetField('password')
           if (result.connection?.testOk) toast.success('Połączono z KSeF')
-          else toast.error('Zapisano, ale logowanie do KSeF się nie udało', { description: result.connection?.testMessage ?? undefined })
+          else
+            toast.error('Zapisano, ale logowanie do KSeF się nie udało', {
+              description: result.connection?.testMessage ?? undefined,
+            })
         },
         onError: (error) => {
           if (error instanceof ApiError) {
@@ -568,7 +566,13 @@ function InternalIdsCard({ storeId, settings }: { storeId: string; settings: Kse
           })}
         />
         <TextField label="Opis (opcjonalnie)" autoComplete="off" error={errors.name?.message} {...register('name')} />
-        <Button type="submit" variant="outline" size="lg" className="sm:mt-0.5 sm:h-11" loading={addInternalId.isPending}>
+        <Button
+          type="submit"
+          variant="outline"
+          size="lg"
+          className="sm:mt-0.5 sm:h-11"
+          loading={addInternalId.isPending}
+        >
           <PlusIcon />
           Dodaj IDWew
         </Button>
@@ -647,7 +651,11 @@ function SkippedSuppliersCard({ storeId, settings }: { storeId: string; settings
         </ul>
       )}
 
-      <Form onSubmit={onSubmit} error={formError} className="sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-start">
+      <Form
+        onSubmit={onSubmit}
+        error={formError}
+        className="sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-start"
+      >
         <TextField
           label="NIP dostawcy"
           inputMode="numeric"
@@ -656,7 +664,13 @@ function SkippedSuppliersCard({ storeId, settings }: { storeId: string; settings
           {...register('nip', { required: 'Podaj NIP dostawcy' })}
         />
         <TextField label="Nazwa (opcjonalnie)" autoComplete="off" error={errors.name?.message} {...register('name')} />
-        <Button type="submit" variant="outline" size="lg" className="sm:mt-0.5 sm:h-11" loading={addSkippedSupplier.isPending}>
+        <Button
+          type="submit"
+          variant="outline"
+          size="lg"
+          className="sm:mt-0.5 sm:h-11"
+          loading={addSkippedSupplier.isPending}
+        >
           <PlusIcon />
           Pomijaj
         </Button>

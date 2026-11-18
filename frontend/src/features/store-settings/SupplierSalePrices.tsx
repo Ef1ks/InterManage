@@ -11,8 +11,13 @@ import { SupplierPicker } from '@/features/documents/SupplierPicker'
 import { useSupplierSalePriceActions, useSupplierSalePrices } from '@/features/store-settings/api'
 import { ApiError } from '@/lib/api'
 import type { SupplierSalePrice } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
-const moneyText = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false })
+const moneyText = new Intl.NumberFormat('pl-PL', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+})
 
 /** Cena z pola: przecinek albo kropka, „zł” pomijane; {@code null} = pusta albo błędna. */
 function parsePrice(text: string): number | null {
@@ -64,7 +69,7 @@ export function SupplierSalePrices({ storeId }: { storeId: string }) {
   return (
     <Card className="gap-0 py-0">
       {isPending ? (
-        <div aria-hidden className="m-4 h-16 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="m-4 h-16 rounded-lg" />
       ) : prices.length === 0 ? (
         <div className="flex flex-col items-center gap-1 px-6 py-8 text-center">
           <TagIcon aria-hidden className="mb-1 size-6 text-muted-foreground" />
@@ -189,7 +194,11 @@ function PriceForm({
         value={text}
         onChange={(event) => setText(event.target.value)}
         error={touched && price === null ? 'Podaj cenę większą od zera, najwyżej dwa miejsca po przecinku' : undefined}
-        hint={current && !initial.supplierId ? `Dostawca ma już cenę ${formatMoney(current.salePrice)}, zapis ją zmieni.` : undefined}
+        hint={
+          current && !initial.supplierId
+            ? `Dostawca ma już cenę ${formatMoney(current.salePrice)}, zapis ją zmieni.`
+            : undefined
+        }
       />
 
       <FormActions>

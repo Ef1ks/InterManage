@@ -106,8 +106,6 @@ type Props = {
   columns?: Column[]
   /** Dodatek w nagłówku kolumny, np. filtr jak w Excelu. */
   headerExtra?: (column: Column) => React.ReactNode
-  /** Pole pod nagłówkiem kolumny (np. wartość dla całej kolumny); bez niego tabela nie ma tego wiersza. */
-  columnFill?: (column: Column) => React.ReactNode
   /** Klik w nagłówek kolumny sortuje tabelę (sortuje strona); {@code sort} to strzałka przy sortowanej kolumnie. */
   onSort?: (key: ColumnKey) => void
   sort?: { key: ColumnKey; direction: 'asc' | 'desc' } | null
@@ -206,7 +204,6 @@ export function DataEntryGrid({
   stickyTop = '3.5rem',
   columns = COLUMNS,
   headerExtra,
-  columnFill,
   onSort,
   sort,
   ref,
@@ -535,6 +532,13 @@ export function DataEntryGrid({
         handled()
         return clearRange()
     }
+    // Ctrl+C sam, bez zdarzenia copy: przy fokusie na tabeli bez zaznaczonego tekstu przeglądarka wysyła copy do
+    // body, więc kopiowanie zależało od tego, co akurat było zaznaczone (działało tylko w części kolumn).
+    if (ctrl && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c') {
+      handled()
+      void navigator.clipboard.writeText(selectionTsv()).catch(() => undefined)
+      return
+    }
     if (ctrl && event.key.toLowerCase() === 'a') {
       handled()
       return selectAll()
@@ -555,13 +559,17 @@ export function DataEntryGrid({
     }
   }
 
+  const selectionTsv = () =>
+    toTsv(
+      rows
+        .slice(range.top, range.bottom + 1)
+        .map((row) => columns.slice(range.left, range.right + 1).map((column) => cellText(row, column.key, pricing))),
+    )
+
   const onCopy = (event: React.ClipboardEvent) => {
     if (editing || picker) return
     event.preventDefault()
-    const cells = rows
-      .slice(range.top, range.bottom + 1)
-      .map((row) => columns.slice(range.left, range.right + 1).map((column) => cellText(row, column.key, pricing)))
-    event.clipboardData.setData('text/plain', toTsv(cells))
+    event.clipboardData.setData('text/plain', selectionTsv())
   }
 
   const onPaste = (event: React.ClipboardEvent) => {
@@ -690,8 +698,8 @@ export function DataEntryGrid({
     startSelectDrag('cells', pointer)
   }
 
-  // Listy (nomenklatura, rodzaj): pierwsze kliknięcie tylko zaznacza komórkę (pojawia się w niej pole ze strzałką na
-  // całą szerokość), kliknięcie w zaznaczoną otwiera listę. Przeciągnięcie zaznacza zakres jak zwykle.
+  // Listy (nomenklatura, rodzaj): pierwsze kliknięcie tylko zaznacza komórkę (cała komórka ze strzałką jest polem
+  // wyboru, więc Ctrl+C kopiuje jej wartość), kliknięcie w zaznaczoną otwiera listę. Przeciągnięcie zaznacza zakres jak zwykle.
   const onClick = (event: React.MouseEvent) => {
     const cell = cellFromEvent(event)
     if (!cell || event.shiftKey || editing || picker || !clickedActive.current) return
@@ -1077,35 +1085,6 @@ export function DataEntryGrid({
                 </th>
               ))}
             </tr>
-            {columnFill && (
-              // Pola przewijają się ze stroną (przykleja się sam nagłówek). Zdarzenia nie idą do tabeli, żeby
-              // pisanie, wklejanie i klik w polu nie zmieniały zaznaczenia komórek.
-              <tr
-                data-keep-grid-selection
-                onMouseDown={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-                onCopy={(event) => event.stopPropagation()}
-                onPaste={(event) => event.stopPropagation()}
-                onDoubleClick={(event) => event.stopPropagation()}
-                className="select-text"
-              >
-                <th aria-hidden className={cn('sticky left-0 z-10 h-8 bg-muted/60', CELL_RULES, HEADER_RULE)} />
-                {columns.map((column, index) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    className={cn(
-                      'h-8 bg-muted/60 p-0.5 font-normal',
-                      CELL_RULES,
-                      HEADER_RULE,
-                      index === 0 && cn('sticky left-(--sticky-left) z-10', FROZEN_RULE),
-                    )}
-                  >
-                    {columnFill(column)}
-                  </th>
-                ))}
-              </tr>
-            )}
           </thead>
           <tbody>
             {rows.map((row, index) => {
@@ -1393,13 +1372,6 @@ const GridRow = memo(function GridRow({
                 onLinkArticle={onLinkArticle}
                 onSplitQuantity={onSplitQuantity}
                 active={isActive}
-              />
-            )}
-            {list && !service && isActive && (
-              // Zaznaczona komórka z listą wygląda jak pole wyboru: kliknięcie w nie otwiera listę.
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-1 rounded-sm ring-1 ring-blue-700/70 dark:ring-blue-400/70"
               />
             )}
             {list && !service && (

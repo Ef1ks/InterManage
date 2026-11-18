@@ -40,6 +40,7 @@ import { todayIso } from '@/lib/dates'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { Document, KsefInvoiceCandidate, LinkedKsefInvoice, ManualInvoice } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
@@ -498,7 +499,7 @@ function KsefInvoicePicker({
         {isError ? (
           <p className="px-4 py-6 text-center text-sm text-destructive">Nie udało się wczytać faktur z KSeF.</p>
         ) : isPending ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : candidates.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
             {amountRange

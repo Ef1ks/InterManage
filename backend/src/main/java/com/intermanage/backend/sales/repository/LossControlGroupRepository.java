@@ -12,7 +12,7 @@ import com.intermanage.backend.sales.entity.LossControlGroup;
 public interface LossControlGroupRepository extends JpaRepository<LossControlGroup, UUID> {
 
     @Query("""
-            select lossGroup from LossControlGroup lossGroup
+            select lossGroup from LossControlGroup lossGroup left join fetch lossGroup.supplier
             where lossGroup.store.id = :storeId and lossGroup.deletedAt is null
             order by lower(lossGroup.name)""")
     List<LossControlGroup> findActive(UUID storeId);

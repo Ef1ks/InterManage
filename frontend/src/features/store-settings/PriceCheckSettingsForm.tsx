@@ -9,6 +9,7 @@ import { usePriceCheckSettings, useSavePriceCheckSettings } from '@/features/sal
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
 import type { PriceCheckSettings } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const numberFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2, useGrouping: false })
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
@@ -37,7 +38,7 @@ export function PriceCheckSettingsForm({ storeId }: { storeId: string }) {
     )
   }
   if (!data) {
-    return <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
   return <SettingsForm key={data.updatedAt ?? 'new'} storeId={storeId} settings={data} />
 }

@@ -27,6 +27,7 @@ import {
   useProtocolReportPdf,
   useProtocolReportsOverview,
   useLossControlGroups,
+  useLossControlSettlements,
   useSalesReportsOverview,
 } from '@/features/sales/api'
 import { displayCode } from '@/features/sales/nomenclature-levels'
@@ -44,6 +45,7 @@ import {
   tintStyle,
   useControlGroupsByItm8,
 } from '@/features/sales/LossControlGroups'
+import { type ControlLosses, ControlPanels, settlementPeriod } from '@/features/sales/ControlPanels'
 import { useCan } from '@/features/auth/api'
 import {
   COMPARE_LABELS,
@@ -72,6 +74,7 @@ import type {
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
 import { useSearchParamText } from '@/lib/use-search-param-text'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Stan raportu w adresie po polsku, żeby link otwierał ten sam widok. */
 const PROTOCOL_PARAMS: Record<ProtocolKind, string> = {
@@ -175,7 +178,8 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
   const protocols = overview.data?.protocols ?? []
   const protocol =
     protocols.find((item) => PROTOCOL_PARAMS[item.kind] === params.get('protokol')) ?? protocols[0] ?? null
-  const grouping = find(GROUPINGS, params.get('grupuj'))
+  // Domyślnie po nomenklaturze: tak czyta się straty działów.
+  const grouping = GROUPINGS.find((item) => item.param === params.get('grupuj')) ?? GROUPINGS[3]
   const level = find(LEVELS, params.get('poziom'))
   const period = useReportPeriod({ params, lastDate, defaultMode: 'month', customDays: 30 })
   const { mode, anchor, custom, customError } = period
@@ -216,7 +220,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
       </p>
 
       {overview.isPending ? (
-        <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+        <LoadingPanel className="h-96 rounded-xl" />
       ) : !protocol ? (
         <Card className="items-center px-6 py-10 text-center">
           <p className="font-medium">Wszystkie protokoły są wyłączone</p>
@@ -335,7 +339,7 @@ export function ProtocolReport({ storeId }: { storeId: string }) {
               </Button>
             </Card>
           ) : !report.data ? (
-            <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+            <LoadingPanel className="h-96 rounded-xl" />
           ) : (
             <div className={cn('transition-opacity duration-150', report.isPlaceholderData && 'opacity-60')}>
               <Report
@@ -391,6 +395,11 @@ function Report({
   const canEdit = useCan('SALES', 'EDIT')
   const controlGroups = useLossControlGroups(storeId).data ?? NO_CONTROL_GROUPS
   const controlByItm8 = useControlGroupsByItm8(controlGroups)
+  const settlements = useLossControlSettlements(
+    storeId,
+    reportQuery.range,
+    controlGroups.some((group) => group.supplierId != null),
+  ).data
   const [editor, setEditor] = useState<EditorState>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const activeControl = searchParams.getAll('kontrola').filter((id) => controlGroups.some((group) => group.id === id))
@@ -469,7 +478,24 @@ function Report({
       }
     })
   }, [report.groups, articleTexts, query, sort, groupQueries, controlGroups, activeControlKey])
+  // Straty każdego dostawcy do kontroli: jego artykuły w raporcie (każdy ITM8 raz), bez wyszukiwania.
+  const controlLosses = useMemo(() => {
+    const articles = new Map(report.groups.flatMap((group) => group.articles.map((article) => [article.itm8, article])))
+    return new Map<string, ControlLosses>(
+      controlGroups.map((group) => {
+        const own = group.itm8s.flatMap((itm8) => articles.get(itm8) ?? [])
+        const total = sumFigures(own.map((article) => article.current))
+        return [
+          group.id,
+          { purchaseValue: total.purchaseValue, saleValueGross: total.saleValueGross, articleCount: own.length },
+        ]
+      }),
+    )
+  }, [report.groups, controlGroups])
   const controlFiltered = activeControl.length > 0
+  // Gratisy za straty dostawców z filtra (tylko tych z podpiętym dostawcą z listy).
+  const filteredSettlements = settlements?.groups.filter((group) => activeControl.includes(group.groupId)) ?? []
+  const settledTotal = filteredSettlements.reduce((sum, group) => sum + group.saleValueGross, 0)
   const controlTotal = sumFigures(groups.map((row) => row.group.current))
   const controlPrevious = compare ? sumFigures(groups.map((row) => row.group.previous!)) : null
 
@@ -614,6 +640,18 @@ function Report({
           <ControlFilterBar
             storeId={storeId}
             groups={controlGroups}
+            active={activeControl}
+            onActive={(ids) => {
+              setActiveControl(ids)
+              setShown(PAGE)
+            }}
+            canEdit={canEdit}
+            onEdit={setEditor}
+          />
+          <ControlPanels
+            groups={controlGroups}
+            losses={controlLosses}
+            settlements={settlements}
             active={activeControl}
             onActive={(ids) => {
               setActiveControl(ids)
@@ -927,6 +965,27 @@ function Report({
                       <Figures current={controlTotal} previous={controlPrevious} compare={compare} strong />
                       <TableCell className={cn('pr-4 text-right font-semibold', compare && 'border-l')}>
                         {share(controlTotal.purchaseValue)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {controlFiltered && settlements && filteredSettlements.length > 0 && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell className="sticky left-0 z-10 bg-card pl-4 font-semibold">
+                        Rozliczone gratisem za straty ({settlementPeriod(settlements)})
+                      </TableCell>
+                      <TableCell colSpan={columnCount - 1} className="pr-4 text-right tabular-nums">
+                        <span className="font-semibold">{formatMoney(settledTotal)} zł</span>
+                        <span className="text-muted-foreground"> w cenach sprzedaży brutto · do rozliczenia </span>
+                        <span
+                          className={cn(
+                            'font-semibold',
+                            controlTotal.saleValueGross - settledTotal > 0.005
+                              ? 'text-red-700 dark:text-red-300'
+                              : 'text-green-700 dark:text-green-300',
+                          )}
+                        >
+                          {formatMoney(Math.max(controlTotal.saleValueGross - settledTotal, 0))} zł
+                        </span>
                       </TableCell>
                     </TableRow>
                   )}

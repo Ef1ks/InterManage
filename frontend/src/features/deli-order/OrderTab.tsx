@@ -32,6 +32,7 @@ import {
   setDraftQuantity,
   updateDraft,
 } from '@/store/deliOrderDraftSlice'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 /** Składanie zamówienia z formularza dostawcy: własnego albo sklepu, którego zaproszenie przyjęliśmy. */
 export function OrderTab({ store }: { store: StoreSummary }) {
@@ -42,7 +43,7 @@ export function OrderTab({ store }: { store: StoreSummary }) {
   const supplier = suppliers.find((s) => s.store.id === supplierId) ?? suppliers[0]
 
   if (isPending) {
-    return <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
   if (!supplier) {
     return (
@@ -151,7 +152,7 @@ function SupplierOrder({ storeId, supplier }: { storeId: string; supplier: DeliS
     )
   }
   if (isPending) {
-    return <div aria-hidden className="h-40 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+    return <LoadingPanel className="h-40 rounded-xl" />
   }
 
   const units = unitsByItem(form)

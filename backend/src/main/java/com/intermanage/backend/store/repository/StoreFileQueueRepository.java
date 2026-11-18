@@ -19,6 +19,10 @@ public interface StoreFileQueueRepository extends JpaRepository<StoreFileQueueIt
 
         String getFolderLabel();
 
+        String getGroupKey();
+
+        String getGroupLabel();
+
         String getFileName();
 
         int getSizeBytes();
@@ -30,7 +34,8 @@ public interface StoreFileQueueRepository extends JpaRepository<StoreFileQueueIt
 
     /** Pliki czekające na zapis, w kolejności dodania (tak też się zapisują). */
     @Query("""
-            select q.id as id, q.folderKey as folderKey, q.folderLabel as folderLabel, q.fileName as fileName,
+            select q.id as id, q.folderKey as folderKey, q.folderLabel as folderLabel,
+                q.groupKey as groupKey, q.groupLabel as groupLabel, q.fileName as fileName,
                 q.sizeBytes as sizeBytes, q.createdAt as createdAt, u.displayName as createdBy
             from StoreFileQueueItem q left join q.createdBy u
             where q.storeId = :storeId and q.savedAt is null and q.removedAt is null

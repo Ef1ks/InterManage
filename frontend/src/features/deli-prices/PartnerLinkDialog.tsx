@@ -10,6 +10,7 @@ import { formatMoney } from '@/features/deli-prices/format'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { ApiError } from '@/lib/api'
 import type { PartnerCalculation } from '@/lib/types'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 type Props = {
   storeId: string
@@ -136,7 +137,7 @@ function LinkContent({
 
       <div className="max-h-[45svh] min-h-32 overflow-y-auto overscroll-contain rounded-xl border">
         {loading ? (
-          <div aria-hidden className="m-3 h-24 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+          <LoadingPanel className="m-3 h-24 rounded-lg" />
         ) : items.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
             {searching ? 'Nic nie pasuje.' : 'Brak podobnych artykułów. Poszukaj w kartotece.'}

@@ -37,6 +37,8 @@ import type {
   TurnoverSupplier,
   ProtocolReportGrouping,
   ProtocolReportsOverview,
+  ProfitTarget,
+  ProfitTargetProgress,
   RegionBudget,
   SalesArticle,
   SalesComparison,
@@ -48,8 +50,11 @@ import type {
   TopSalesReport,
   SlowMovingExcludedItem,
   LossControlGroup,
+  LossControlSettlements,
   SlowMovingReport,
   StockGapReport,
+  MissingAssortmentCategory,
+  MissingAssortmentReport,
   NegativeStockDelivery,
   NegativeStockReport,
   ZeroStockReport,
@@ -259,6 +264,44 @@ export function usePeriodSummary(storeId: string, range: DateRange, enabled: boo
   })
 }
 
+/** Roczne cele zysku sklepu (ustawienia podsumowania sprzedaży i strat). */
+export function useProfitTargets(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'profit-targets'],
+    queryFn: () => api<ProfitTarget[]>(`${reportsPath(storeId)}/profit-targets`),
+    enabled,
+  })
+}
+
+/** Zapis celu roku; oba pola puste usuwają cel. Zapis unieważnia wszystkie zapytania (także postęp). */
+export function useSaveProfitTarget(storeId: string) {
+  return useMutation({
+    mutationFn: ({
+      year,
+      marginValue,
+      marginAfterLossesValue,
+    }: {
+      year: number
+      marginValue: number | null
+      marginAfterLossesValue: number | null
+    }) =>
+      api<ProfitTarget[]>(`${reportsPath(storeId)}/profit-targets/${year}`, {
+        method: 'PUT',
+        json: { marginValue, marginAfterLossesValue },
+      }),
+  })
+}
+
+/** Ile z celu roku osiągnięto od 1 stycznia do {@code to}. */
+export function useProfitTargetProgress(storeId: string, to: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'profit-targets', 'progress', to],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () =>
+      api<ProfitTargetProgress>(`${reportsPath(storeId)}/profit-targets/progress?${new URLSearchParams({ to })}`),
+  })
+}
+
 /** Protokoły do raportu protokołów (bez wyłączonych w Ustawieniach sklepu) i do kiedy są wgrane dokumenty. */
 export function useProtocolReportsOverview(storeId: string) {
   return useQuery({
@@ -456,6 +499,87 @@ export function useStockGaps(storeId: string, query: StockGapQuery, enabled: boo
   })
 }
 
+export type MissingAssortmentQuery = {
+  months: number
+  silentDays: number
+  nomenclatures: string[]
+}
+
+const missingAssortmentPath = (storeId: string) => `${reportsPath(storeId)}/missing-assortment`
+const missingAssortmentKey = (storeId: string) => [...reportsKey(storeId), 'missing-assortment'] as const
+
+/** Brakujący asortyment: kategorie, dostawcę, wyszukiwanie i sortowanie robi strona. */
+export function useMissingAssortment(storeId: string, query: MissingAssortmentQuery, enabled: boolean) {
+  const search = new URLSearchParams({ months: String(query.months), silentDays: String(query.silentDays) })
+  query.nomenclatures.forEach((code) => search.append('nomenclatures', code))
+  return useQuery({
+    queryKey: [...missingAssortmentKey(storeId), query],
+    enabled,
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<MissingAssortmentReport>(`${missingAssortmentPath(storeId)}?${search}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export type MissingAssortmentChange =
+  | { action: 'create'; name: string }
+  | { action: 'rename'; id: string; name: string }
+  | { action: 'delete' | 'restore'; id: string }
+  | { action: 'assign'; items: { itm8: string; categoryId: string | null }[] }
+
+/**
+ * Zmiany kategorii i przypisań. Raport liczy się kilka sekund, więc zamiast pobierać go od nowa podmieniamy w nim
+ * kategorie i przypisania artykułów.
+ */
+export function useChangeMissingAssortment(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (change: MissingAssortmentChange) => {
+      const path = `${missingAssortmentPath(storeId)}/categories`
+      switch (change.action) {
+        case 'create':
+          return api<MissingAssortmentCategory[]>(path, { method: 'POST', json: { name: change.name } })
+        case 'rename':
+          return api<MissingAssortmentCategory[]>(`${path}/${change.id}`, {
+            method: 'PUT',
+            json: { name: change.name },
+          })
+        case 'delete':
+          return api<MissingAssortmentCategory[]>(`${path}/${change.id}`, { method: 'DELETE' })
+        case 'restore':
+          return api<MissingAssortmentCategory[]>(`${path}/${change.id}/restore`, { method: 'POST' })
+        case 'assign':
+          return api<MissingAssortmentCategory[]>(`${missingAssortmentPath(storeId)}/assignments`, {
+            method: 'PUT',
+            json: { items: change.items },
+          })
+      }
+    },
+    onSuccess: (categories, change) => {
+      const assigned = change.action === 'assign' ? new Map(change.items.map((i) => [i.itm8, i.categoryId])) : null
+      if (change.action === 'delete' || change.action === 'restore') {
+        // Usunięcie i przywrócenie zmienia, które przypisania są widoczne: to zna tylko serwer.
+        void queryClient.invalidateQueries({ queryKey: missingAssortmentKey(storeId) })
+        return
+      }
+      queryClient.setQueriesData<MissingAssortmentReport>({ queryKey: missingAssortmentKey(storeId) }, (report) =>
+        report
+          ? {
+              ...report,
+              categories,
+              items: assigned
+                ? report.items.map((item) =>
+                    assigned.has(item.itm8) ? { ...item, categoryId: assigned.get(item.itm8) ?? null } : item,
+                  )
+                : report.items,
+            }
+          : report,
+      )
+    },
+    meta: { invalidates: false },
+  })
+}
+
 export type NegativeStockQuery = {
   delivery: NegativeStockDelivery
   days: number
@@ -560,8 +684,8 @@ export function useLossControlGroups(storeId: string) {
 }
 
 export type LossControlChange =
-  | { action: 'create'; name: string; color: string }
-  | { action: 'update'; id: string; name: string; color: string }
+  | { action: 'create'; name: string; color: string; supplierId: string | null }
+  | { action: 'update'; id: string; name: string; color: string; supplierId: string | null }
   | { action: 'delete' | 'restore'; id: string }
   | { action: 'add' | 'remove'; id: string; itm8s: string[] }
 
@@ -573,11 +697,14 @@ export function useChangeLossControlGroups(storeId: string) {
       const path = controlGroupsPath(storeId)
       switch (change.action) {
         case 'create':
-          return api<LossControlGroup[]>(path, { method: 'POST', json: { name: change.name, color: change.color } })
+          return api<LossControlGroup[]>(path, {
+            method: 'POST',
+            json: { name: change.name, color: change.color, supplierId: change.supplierId },
+          })
         case 'update':
           return api<LossControlGroup[]>(`${path}/${change.id}`, {
             method: 'PUT',
-            json: { name: change.name, color: change.color },
+            json: { name: change.name, color: change.color, supplierId: change.supplierId },
           })
         case 'delete':
           return api<LossControlGroup[]>(`${path}/${change.id}`, { method: 'DELETE' })
@@ -595,8 +722,23 @@ export function useChangeLossControlGroups(storeId: string) {
           })
       }
     },
-    onSuccess: (groups) => queryClient.setQueryData(controlGroupsKey(storeId), groups),
+    onSuccess: (groups) => {
+      queryClient.setQueryData(controlGroupsKey(storeId), groups)
+      // Podpięty dostawca i usunięta grupa zmieniają rozliczenia gratisami.
+      void queryClient.invalidateQueries({ queryKey: [...controlGroupsKey(storeId), 'settlements'] })
+    },
     meta: { invalidates: false },
+  })
+}
+
+/** Gratisy za pokrycie strat dostawców do kontroli z miesiącem rozliczenia w miesiącach okresu raportu. */
+export function useLossControlSettlements(storeId: string, range: DateRange, enabled: boolean) {
+  return useQuery({
+    queryKey: [...controlGroupsKey(storeId), 'settlements', range.from, range.to],
+    queryFn: () =>
+      api<LossControlSettlements>(`${controlGroupsPath(storeId)}/settlements?from=${range.from}&to=${range.to}`),
+    enabled,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -1004,13 +1146,61 @@ export function usePriceCheckCategoryActions(storeId: string) {
 /** Raport, którego dotyczy status wyjaśniania: statusy obu raportów są niezależne. */
 export type ReviewedReport = 'BASE_PURCHASE' | 'OVERPAYMENT' | 'LOW_MARGIN'
 
-/** Status wyjaśniania przyjęcia: nowy wpis, cofnięcie (znacznik) i przywrócenie; każde zwraca historię. */
+/** Klucz zapytań raportu ze statusami wyjaśniania (wszystkie okresy i progi). */
+const reviewedReportKey = (storeId: string, report: ReviewedReport) =>
+  ({
+    BASE_PURCHASE: [...reportsKey(storeId), 'price-check', 'report'],
+    OVERPAYMENT: [...reportsKey(storeId), 'overpayments'],
+    LOW_MARGIN: [...reportsKey(storeId), 'low-margins'],
+  })[report]
+
+/** Przyjęcie każdej cofniętej zmiany statusu, do przywrócenia jej z toastu. */
+const reviewDocuments = new Map<string, string>()
+
+type ReviewedReportData = { deliveries: { id: string; review: PriceCheckReview | null; history: PriceCheckReview[] }[] }
+
+/**
+ * Status wyjaśniania przyjęcia: nowy wpis, cofnięcie (znacznik) i przywrócenie; każde zwraca historię. Historia trafia
+ * od razu do raportu w pamięci zapytań, bez przeliczania raportu (kilka sekund na produkcji: historia dostaw,
+ * przepłacone, zakup poza bazą), bo status niczego w nim nie zmienia poza samym przyjęciem. Raport jest tylko
+ * oznaczony jako nieaktualny, więc policzy się od nowa przy następnym wejściu.
+ */
 export function usePriceReviewActions(storeId: string, report: ReviewedReport) {
+  const queryClient = useQueryClient()
   const reportPath = {
     BASE_PURCHASE: priceCheckPath(storeId),
     OVERPAYMENT: `${reportsPath(storeId)}/overpayments`,
     LOW_MARGIN: `${reportsPath(storeId)}/low-margins`,
   }[report]
+  const queryKey = reviewedReportKey(storeId, report)
+
+  /**
+   * Podmienia historię przyjęcia: wskazanego id albo tego, w którego historii jest zmiana `reviewId` (po cofnięciu
+   * zmiany nie ma jej już w historii, więc przyjęcie zostaje zapamiętane do przywrócenia).
+   */
+  const applyHistory = (history: PriceCheckReview[], match: { documentId?: string; reviewId?: string }) => {
+    let documentId = match.documentId ?? (match.reviewId ? reviewDocuments.get(match.reviewId) : undefined)
+    if (!documentId && match.reviewId) {
+      for (const [, data] of queryClient.getQueriesData<ReviewedReportData>({ queryKey })) {
+        documentId ??= data?.deliveries?.find((d) => d.history.some((entry) => entry.id === match.reviewId))?.id
+      }
+    }
+    if (!documentId) return void queryClient.invalidateQueries({ queryKey })
+    if (match.reviewId) reviewDocuments.set(match.reviewId, documentId)
+    queryClient.setQueriesData<ReviewedReportData>({ queryKey }, (data) => {
+      if (!data?.deliveries) return data
+      const owns = (delivery: ReviewedReportData['deliveries'][number]) => delivery.id === documentId
+      if (!data.deliveries.some(owns)) return data
+      return {
+        ...data,
+        deliveries: data.deliveries.map((delivery) =>
+          owns(delivery) ? { ...delivery, review: history[0] ?? null, history } : delivery,
+        ),
+      }
+    })
+    void queryClient.invalidateQueries({ queryKey, refetchType: 'none' })
+  }
+
   return {
     review: useMutation({
       mutationFn: ({ documentId, status, note }: { documentId: string; status: PriceCheckStatus; note: string }) =>
@@ -1018,14 +1208,20 @@ export function usePriceReviewActions(storeId: string, report: ReviewedReport) {
           method: 'POST',
           json: { status, note },
         }),
+      onSuccess: (history, { documentId }) => applyHistory(history, { documentId }),
+      meta: { invalidates: false },
     }),
     remove: useMutation({
       mutationFn: (reviewId: string) =>
         api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/reviews/${reviewId}`, { method: 'DELETE' }),
+      onSuccess: (history, reviewId) => applyHistory(history, { reviewId }),
+      meta: { invalidates: false },
     }),
     restore: useMutation({
       mutationFn: (reviewId: string) =>
         api<PriceCheckReview[]>(`${priceCheckPath(storeId)}/reviews/${reviewId}/restore`, { method: 'POST' }),
+      onSuccess: (history, reviewId) => applyHistory(history, { reviewId }),
+      meta: { invalidates: false },
     }),
   }
 }

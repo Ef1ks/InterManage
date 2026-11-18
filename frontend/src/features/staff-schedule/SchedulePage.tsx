@@ -68,6 +68,7 @@ import type {
   TimeOffInitiative,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { LoadingPanel } from '@/components/LoadingPanel'
 
 const STATUS: Record<Schedule['status'], { label: string; className: string }> = {
   DRAFT: { label: 'Roboczy', className: 'bg-zinc-300 text-zinc-900 dark:bg-zinc-600 dark:text-zinc-50' },
@@ -142,7 +143,7 @@ function StoreSchedule({ store }: { store: StoreSummary }) {
           inline
         />
       ) : !departments.data ? (
-        <div className="h-64 animate-pulse rounded-xl bg-muted" aria-busy />
+        <LoadingPanel className="h-64 rounded-xl" />
       ) : !department || !scope ? (
         <FullPageMessage
           title="Nie ma jeszcze działów"
@@ -197,7 +198,7 @@ function StoreSchedule({ store }: { store: StoreSummary }) {
               inline
             />
           ) : !schedule.data ? (
-            <div className="h-96 animate-pulse rounded-xl bg-muted" aria-busy />
+            <LoadingPanel className="h-96 rounded-xl" />
           ) : (
             <Loaded
               key={scope.departmentId + month}
