@@ -144,7 +144,7 @@ const BASE_BL_TIMEOUT_MS = 60000
 const BASE_FILE_SUPPLIERS = ['538', '88110']
 
 /**
- * „Zbierz brakujące ITM8”: dla każdego dostawcy bonu Zakup → Obsługa BL bazy, wiersz z plikiem tego bonu i tego dostawcy
+ * „Zbierz brakujące ITM8”: dla każdego dostawcy z linii bonu (tylko 538, gdy nie ma alkoholu) Zakup → Obsługa BL bazy, wiersz z plikiem tego bonu i tego dostawcy
  * (nazwa `…_<nr bonu>_<dostawca>`, zera wiodące dowolne; brak pliku od dostawcy to nie błąd), Wybór, sprawdzenie, że linie
  * są z tego bonu, i kody ITM8 z błędem „ITM nie istnieje” ze wszystkich stron. Kody z wszystkich plików trafiają razem do
  * Schowka. Każdy plik zaczyna się od pozycji menu Obsługa BL bazy (Powrót z linii bonu zostawia stronę pod innym
@@ -155,13 +155,16 @@ const BASE_FILE_SUPPLIERS = ['538', '88110']
 export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[] = []) {
   const screen = BASE_BL_SCREEN
   const digits = bonNumber.replace(/\D/g, '').replace(/^0+/, '')
-  const suppliers = [
-    ...new Set(
-      [...BASE_FILE_SUPPLIERS, ...supplierCodes]
-        .map((code) => code.replace(/\D/g, '').replace(/^0+/, ''))
-        .filter(Boolean),
-    ),
-  ]
+  // Plik bazy jest tylko od dostawcy, który ma linie w dokumencie: bon bez alkoholu nie ma pliku 88110, więc krok dla niego
+  // tylko czekał. Bez linii (stary szkic) oba pliki bazy.
+  const normalize = (code: string) => code.replace(/\D/g, '').replace(/^0+/, '')
+  const fromDocument = [...new Set(supplierCodes.map(normalize).filter(Boolean))]
+  const suppliers = fromDocument.length
+    ? [
+        ...BASE_FILE_SUPPLIERS.filter((code) => fromDocument.includes(code)),
+        ...fromDocument.filter((code) => !BASE_FILE_SUPPLIERS.includes(code)),
+      ]
+    : BASE_FILE_SUPPLIERS
   const fileSteps = suppliers.flatMap((supplier) => {
     const label = `bon-${digits}-${supplier}`
     // Każdy plik zaczyna się od pozycji menu, która wczytuje listę plików pod adresem ac-e034, i od czekania na nią.

@@ -201,6 +201,12 @@ public class DocumentPrintService {
                     List.of("Wydał(a)", "Odebrał(a)", "Zatwierdził(a)"), null);
             case RWDA -> new Layout("PROTOKÓŁ DAROWIZNY", "protokol-darowizny",
                     List.of("Przekazał(a)", "Odebrał(a) dla obdarowanego", "Zatwierdził(a)"), "Obdarowany");
+            case RWREK -> new Layout("PROTOKÓŁ WYDANIA NA REKLAMĘ", "protokol-reklamy",
+                    List.of("Wydał(a)", "Odebrał(a)", "Zatwierdził(a)"), null);
+            case NB -> new Layout("ZDJĘCIE ZE STANU", "zdjecie-ze-stanu",
+                    List.of("Sporządził(a)", "Zatwierdził(a)"), null);
+            case PI -> new Layout("INWENTARYZACJA", "inwentaryzacja",
+                    List.of("Sporządził(a)", "Członek komisji", "Zatwierdził(a)"), null);
         };
     }
 

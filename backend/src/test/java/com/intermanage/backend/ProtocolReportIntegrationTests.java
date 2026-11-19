@@ -89,7 +89,7 @@ class ProtocolReportIntegrationTests {
                 .andExpect(jsonPath("$.protocols[0].kind").value("LIQUIDATION"))
                 .andExpect(jsonPath("$.protocols[0].documentType").value("PL"))
                 .andExpect(jsonPath("$.protocols[2].kind").value("ADVERTISING"))
-                .andExpect(jsonPath("$.protocols[2].documentType").doesNotExist())
+                .andExpect(jsonPath("$.protocols[2].documentType").value("RWREK"))
                 .andExpect(jsonPath("$.documentsCoveredUntil").value("2026-10-31"));
 
         mvc.perform(get(base + "/LIQUIDATION?grouping=ARTICLE&" + PERIODS).cookie(owner))

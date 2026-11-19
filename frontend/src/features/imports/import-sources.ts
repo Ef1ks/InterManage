@@ -246,13 +246,40 @@ export async function newestReportFile(storeId: string, kind: DailyReport, mask:
  * Pliki do wgrania przy odświeżeniu, od najstarszego: raport z okresem (sprzedaż, dokumenty) bierze wszystkie nowsze
  * niż ostatnie wgranie, bo makro zapisuje zaległość w częściach; pozostałe tylko najnowszy.
  */
-export async function newReportFiles(storeId: string, kind: DailyReport, mask: string, since: number) {
+export async function newReportFiles(
+  storeId: string,
+  kind: DailyReport,
+  mask: string,
+  since: number,
+  history: ImportedFile[] = [],
+) {
   const files = await reportFiles(storeId, kind, mask)
-  const fresh = files.filter((file) => file.lastModified > since)
-  return {
-    newest: files.length > 0 ? files[files.length - 1] : null,
-    files: (PERIOD_REPORTS as string[]).includes(kind) ? fresh : fresh.slice(-1),
+  const newest = files.length > 0 ? files[files.length - 1] : null
+  if (!(PERIOD_REPORTS as string[]).includes(kind)) {
+    return { newest, files: files.filter((file) => file.lastModified > since).slice(-1) }
   }
+  return { newest, files: files.filter((file) => file.lastModified > since || notImportedYet(file, history)) }
+}
+
+/** Wgranie raportu z historii: nazwa pliku i chwila wgrania. */
+export type ImportedFile = { fileName: string; importedAt: string }
+
+/** Pełna lista historii z serwera ma tyle pozycji; przy pełnej starsze wgrania mogły z niej wypaść. */
+const HISTORY_SIZE = 30
+
+/**
+ * Część zaległości zapisana przez makro, której jeszcze nie wgrano: żadne wgranie pliku o tej nazwie nie było po
+ * jego ostatniej zmianie. Samo „nowszy niż ostatnie wgranie” gubiło części, gdy po przerwanym odświeżeniu ktoś wgrał
+ * ponownie część 1 (06713, 19.11.2026: części 4-24 uznane za wgrane). Przy pełnej historii pliki starsze niż
+ * najstarsze widoczne wgranie zostają pominięte, bo ich wgrania mogły z niej wypaść.
+ */
+function notImportedYet(file: File, history: ImportedFile[]) {
+  const times = history.map((item) => Date.parse(item.importedAt)).filter((time) => !Number.isNaN(time))
+  if (history.length >= HISTORY_SIZE && times.length > 0 && file.lastModified <= Math.min(...times)) return false
+  const name = file.name.toLowerCase()
+  return !history.some(
+    (item) => item.fileName.toLowerCase() === name && Date.parse(item.importedAt) >= file.lastModified,
+  )
 }
 
 /** Pliki raportu w jego folderze od najstarszego (po dacie zmiany); podfolderów nie przeszukuje. */

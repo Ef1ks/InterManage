@@ -14,12 +14,13 @@ import { cn } from '@/lib/utils'
 /** Sekcje strony; kolejność kodów to kolejność kafelków. Kody z backendu (DocumentType.java). */
 const GROUPS = [
   { title: 'Dokumenty dostaw', codes: ['PZ', 'PK', 'WZ', 'ZW'] },
-  { title: 'Protokoły', codes: ['PL', 'MM', 'RWPO', 'RWREP', 'RWDA'] },
-  { title: 'Przeniesienia stanów', codes: ['PPP'] },
+  { title: 'Protokoły', codes: ['PL', 'MM', 'RWPO', 'RWREP', 'RWDA', 'RWREK'] },
+  { title: 'Przeniesienia stanów', codes: ['PPP', 'NB'] },
+  { title: 'Inwentaryzacje', codes: ['PI'] },
 ]
 
 /** Typy rzadkie: kafelek tylko, gdy są dokumenty. */
-const HIDDEN_WHEN_EMPTY = ['RWDA']
+const HIDDEN_WHEN_EMPTY = ['RWDA', 'RWREK', 'NB', 'PI']
 
 /** Typ spoza {@link GROUPS} trafia do „Pozostałe”, żeby nowy typ z backendu nie zniknął ze strony. */
 function typeSections(types: DocumentTypeSummary[]) {

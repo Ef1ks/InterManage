@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795093022.4342124,
-    "seen": 1795093081.2042966,
-    "ast_hash": "22ebf0de34c890ca948c83f4eca1819b",
+    "mtime": 1795097525.0449655,
+    "seen": 1795097582.6450357,
+    "ast_hash": "c443cf7ac5dcd21591ae976040ab0c53",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1795026141.9642932,
-    "seen": 1795026244.0904622,
-    "ast_hash": "18c30a219539b9ef9073317ee0fa1a46",
+    "mtime": 1795097230.0203004,
+    "seen": 1795097582.5890002,
+    "ast_hash": "b4dfe5a8732ee8553af5f5b434653610",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
@@ -1302,9 +1302,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DocumentImportIntegrationTests.java": {
-    "mtime": 1794896858.030048,
-    "seen": 1794897062.3820693,
-    "ast_hash": "a26542e72a631d4430caa07a0e84f324",
+    "mtime": 1795097462.23877,
+    "seen": 1795097582.5414755,
+    "ast_hash": "bf01cdbbbdce2ce28efe6eae00fd3401",
     "semantic_hash": ""
   },
   "frontend/src/components/FileDropZone.tsx": {
@@ -1344,9 +1344,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/format.ts": {
-    "mtime": 1793639311.3710783,
-    "seen": 1793639796.3915331,
-    "ast_hash": "7a312b86dadf1884aaf5ae4cb971c4a4",
+    "mtime": 1795097361.1585982,
+    "seen": 1795097582.5870006,
+    "ast_hash": "d6582cf5eadc6111d6a00b6c973dec80",
     "semantic_hash": ""
   },
   "frontend/src/lib/search.ts": {
@@ -1380,9 +1380,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentTypesGrid.tsx": {
-    "mtime": 1794946932.756477,
-    "seen": 1794947085.2672129,
-    "ast_hash": "09fdfe323e27cd9def9ab6398d58dae3",
+    "mtime": 1795097361.1094203,
+    "seen": 1795097582.585998,
+    "ast_hash": "950a8d149749dac4c1960cbd433139ec",
     "semantic_hash": ""
   },
   "frontend/src/features/documents/DocumentsList.tsx": {
@@ -1398,9 +1398,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/documents/document-icons.ts": {
-    "mtime": 1793639311.3468325,
-    "seen": 1793639796.3915331,
-    "ast_hash": "30c6ea9a21736c1da4a11b0cb86dd874",
+    "mtime": 1795097361.0618744,
+    "seen": 1795097582.5870006,
+    "ast_hash": "b3318cacb3e28f61c7310b953483757f",
     "semantic_hash": ""
   },
   "frontend/src/lib/use-debounced-value.ts": {
@@ -2580,9 +2580,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/entity/DocumentType.java": {
-    "mtime": 1794774259.54571,
-    "seen": 1794804559.9741092,
-    "ast_hash": "a3edf730d615d0a6b03cda11e287a811",
+    "mtime": 1795097340.0752347,
+    "seen": 1795097582.4126775,
+    "ast_hash": "0a833c9ff4dbfad5ae1c242bbb961d30",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/mapper/DeliveryReportMapper.java": {
@@ -6168,15 +6168,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/ProtocolReportService.java": {
-    "mtime": 1794774259.6542623,
-    "seen": 1794804560.0235505,
-    "ast_hash": "679ba16de8f2c5a25a1f534da436b4e2",
+    "mtime": 1795097340.1834702,
+    "seen": 1795097582.4975867,
+    "ast_hash": "94100c6f64d9ee2dbad994e44ab716f6",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProtocolReportIntegrationTests.java": {
-    "mtime": 1794940021.497023,
-    "seen": 1794941208.1588361,
-    "ast_hash": "4eddf276bbb40df3ad099336df275080",
+    "mtime": 1795097462.2873566,
+    "seen": 1795097582.5492685,
+    "ast_hash": "9b3255a18d1b342a221ea7dc401bf485",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/ProductFiltersPanel.tsx": {
@@ -6528,15 +6528,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/import-sources.ts": {
-    "mtime": 1795026128.2957962,
-    "seen": 1795026244.0904622,
-    "ast_hash": "e96ea873e8f401c0a3320a1578b292c0",
+    "mtime": 1795097223.7600083,
+    "seen": 1795097582.59,
+    "ast_hash": "c378c07685217da053a8fd9e54293bd3",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
-    "mtime": 1794938368.7324343,
-    "seen": 1794941208.175878,
-    "ast_hash": "78a534430e5ae6bc9e8395292ffc83fa",
+    "mtime": 1795097470.2210667,
+    "seen": 1795097582.566973,
+    "ast_hash": "114126b94987d7b8f9f54bc5b914028e",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/itm8-macro.ts": {
@@ -6930,9 +6930,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/service/DocumentPrintService.java": {
-    "mtime": 1793855350.784673,
-    "seen": 1793866067.0458717,
-    "ast_hash": "cdaf912e6143a3592a5cafb73936b2a7",
+    "mtime": 1795097340.120734,
+    "seen": 1795097582.4166777,
+    "ast_hash": "7fb3317bc999da18fa4cd79af3208e3c",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DocumentPrintTests.java": {
@@ -7968,9 +7968,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1795096458.2067647,
-    "seen": 1795096564.732309,
-    "ast_hash": "464ee5c6697cfa26fa29bf03d7f0dd00",
+    "mtime": 1795097470.16259,
+    "seen": 1795097582.5764792,
+    "ast_hash": "9c155ae7c485f10a7d5139b131e9bc09",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {

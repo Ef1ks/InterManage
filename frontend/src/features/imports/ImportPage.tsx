@@ -262,7 +262,14 @@ function StoreImports({ store }: { store: StoreSummary }) {
     for (const kind of ready) {
       setRefreshing(kind)
       try {
-        const { newest, files } = await newReportFiles(store.id, kind, masks[kind] ?? '', lastImported[kind])
+        const history = kind === 'SALES' ? sales.data?.imports : kind === 'DOCUMENTS' ? documents.data : undefined
+        const { newest, files } = await newReportFiles(
+          store.id,
+          kind,
+          masks[kind] ?? '',
+          lastImported[kind],
+          history ?? [],
+        )
         if (!newest) {
           notes[kind] = { tone: 'warning', text: 'W folderze nie ma pliku raportu pasującego do ustawień.' }
         } else if (files.length === 0) {

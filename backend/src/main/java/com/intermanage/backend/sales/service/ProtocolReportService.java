@@ -58,13 +58,14 @@ import com.intermanage.backend.store.service.StoreProtoSettingsService;
 public class ProtocolReportService {
 
     /**
-     * Typ dokumentu z raportu Wejścia/Wyjścia, którym system sklepu zapisuje protokół. Reklamy nie było jeszcze w
-     * żadnym raporcie, więc nie znamy jej kodu.
+     * Typ dokumentu z raportu Wejścia/Wyjścia, którym system sklepu zapisuje protokół. Reklama to najpewniej RWREK
+     * (pierwszy raz w raportach 06713 i 10024, 11.2026).
      */
     private static final Map<ProtocolKind, DocumentType> DOCUMENT_TYPES = new EnumMap<>(Map.of(
             ProtocolKind.LIQUIDATION, DocumentType.PL,
             ProtocolKind.STORE_NEEDS, DocumentType.RWPO,
             ProtocolKind.DONATION, DocumentType.RWDA,
+            ProtocolKind.ADVERTISING, DocumentType.RWREK,
             ProtocolKind.REPRESENTATION, DocumentType.RWREP,
             ProtocolKind.TRANSFER, DocumentType.MM));
 

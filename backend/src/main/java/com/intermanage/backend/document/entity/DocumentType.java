@@ -20,7 +20,19 @@ public enum DocumentType {
     MM("Ruchy międzymagazynowe", "Ruch międzymagazynowy", "Towar wysłany do innego sklepu"),
     RWPO("Potrzeby sklepu", "Wydanie na potrzeby sklepu", "Towar zużyty na własne potrzeby sklepu"),
     RWREP("Reprezentacja", "Wydanie na reprezentację", "Towar wydany na cele reprezentacyjne"),
-    RWDA("Darowizny", "Wydanie na darowiznę", "Towar przekazany jako darowizna");
+    RWDA("Darowizny", "Wydanie na darowiznę", "Towar przekazany jako darowizna"),
+    /** Kod z raportów 06713 i 10024 (11.2026), linii jeszcze nie oglądaliśmy; najpewniej reklama (PROTO3). */
+    RWREK("Reklama", "Wydanie na reklamę", "Towar wydany na cele reklamowe"),
+    /**
+     * Na próbce z 10023 (12-15.11.2026, 110 linii, 36 dokumentów, numery jak protokoły: NB0002720261113): ilość,
+     * zakup i sprzedaż na minusie, głównie od bazy (538, 16538), rejon 55. Znaczenia kodu nie znamy.
+     */
+    NB("Zdjęcia ze stanu", "Zdjęcie ze stanu", "Towar zdjęty ze stanu: ilość i wartości na minusie"),
+    /**
+     * Kod z raportów 06713, 09575, 10023 (11.2026), dziesiątki tysięcy linii w miesiącu inwentury (06713, styczeń
+     * 2025: ok. 128 tys.), więc najpewniej różnice inwentaryzacyjne; linii jeszcze nie oglądaliśmy.
+     */
+    PI("Inwentaryzacje", "Inwentaryzacja", "Różnice stanów z inwentaryzacji");
 
     private final String label;
     private final String singular;
@@ -66,7 +78,7 @@ public enum DocumentType {
      * i sprzedaż plus.
      */
     public boolean isIssue() {
-        return this == PL || this == MM || this == ZW || this == RWPO || this == RWREP || this == RWDA;
+        return this == PL || this == MM || this == ZW || this == RWPO || this == RWREP || this == RWDA || this == RWREK;
     }
 
     public String label() {

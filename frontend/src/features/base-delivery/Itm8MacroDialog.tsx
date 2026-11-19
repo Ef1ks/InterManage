@@ -58,8 +58,7 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
     const suppliers = delivery.lines.map((line) => line.supplierCode)
     if (!(await copy(buildMissingItm8Macro(delivery.number, suppliers)))) return
     toast.success('Makro w schowku', {
-      description:
-        'Wciśnij Alt+E (odtwarzacz od wersji 0.45). Makro przejdzie pliki bonu od 538 i 88110 (pliku 88110 może nie być, wtedy go pomija), a kody z błędem „ITM nie istnieje” trafią do schowka. Potem kliknij „Wklej ze schowka”.',
+      description: `Wciśnij Alt+E (odtwarzacz od wersji 0.45). Makro przejdzie pliki bonu od ${[...new Set(suppliers)].join(' i ')}, a kody z błędem „ITM nie istnieje” trafią do schowka. Potem kliknij „Wklej ze schowka”.`,
       duration: 10_000,
     })
   }
