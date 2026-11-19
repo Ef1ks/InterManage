@@ -542,18 +542,29 @@ export type PromoMacroItem = { ean: string; price: number; dateTo: string; vatCo
  * Wprowadzanie promocji: Taryfa → Wprowadzanie promocji, kod i nazwa operacji, typ 1, koniec operacji = najpóźniejszy
  * koniec artykułów, Zatwierdź, Tak, Wpisz; potem dla każdego artykułu EAN, koniec sprzedaży, cena promocji z Enterem,
  * Tak przy sprzedaży ze stratą (gdy Mercalys zapyta) i Tak przy „Utworzyć zapis ?”. Na końcu Powrót i Mercalys na
- * pasek zadań. Początku operacji makro nie zmienia: Mercalys podpowiada dzisiejszy. Kod istniejącej operacji wypełnia
+ * pasek zadań. Początek operacji makro wpisuje, gdy jest podany ({@code start}); bez niego zostaje dzisiejszy
+ * podpowiedziany przez Mercalys. Kod istniejącej operacji wypełnia
  * panel: makro ją usuwa (Usuń, Tak) i wpisuje kod od nowa. Gdy po EAN-ie Mercalys zgłosi stawkę VAT niezgodną z kodem
  * CN (pole VAT z 0), makro zamyka okno i wpisuje kod stawki artykułu. Wymaga odtwarzacza od wersji 50 (WEBDIALOG po
  * tekście przycisku).
  */
-export function buildPromoEntryMacro({ code, name, items }: { code: string; name: string; items: PromoMacroItem[] }) {
+export function buildPromoEntryMacro({
+  code,
+  name,
+  start,
+  items,
+}: {
+  code: string
+  name: string
+  start?: string
+  items: PromoMacroItem[]
+}) {
   const screen = PROMO_SCREEN
   const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
   const out = [
-    `# Wprowadzanie promocji ${code}: ${items.length} art.`,
+    `# Wprowadzanie promocji ${code}: ${items.length} art.${start ? `, od ${start}` : ''}`,
     mercalysOpenLine(PROGRAM_WINDOW),
-    ...promoHeaderLines({ code, name, end, label: screen.freeCodeLabel }),
+    ...promoHeaderLines({ code, name, start, end, label: screen.freeCodeLabel }),
     ...promoArticleLines(items, 0),
     ...promoEndLines(),
   ]

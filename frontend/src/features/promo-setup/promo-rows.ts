@@ -20,6 +20,10 @@ export function promoMargin({ article, price }: PromoRow) {
 /** Kafelek z artykułami i pełnym okresem daje plik. */
 export const hasPeriod = (tile: PromoTile) => tile.dateTo !== '' && tile.dateTo >= tile.dateFrom
 
+/** Tryb makra: początek operacji, nie wcześniej niż dziś ({@code today} RRRR-MM-DD). */
+export const macroStartOf = (tile: PromoTile, today: string) =>
+  tile.macroStart && tile.macroStart > today ? tile.macroStart : today
+
 /** Tryb makra: błąd końca promocji artykułu, {@code null} gdy koniec jest i nie wypada przed początkiem. */
 export function rowEndError(tile: PromoTile, row: PromoRow) {
   if (!row.dateTo) return 'Wybierz koniec promocji'

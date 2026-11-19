@@ -46,7 +46,16 @@ import {
 import { fetchPromoArticles, savePromoLabels } from './api'
 import { DiscountLevelsDialog } from './DiscountLevelsDialog'
 import type { PromoSetupHandoff } from './paths'
-import { codeKey, discountedPrice, hasPeriod, macroBlocked, macroRows, promoFiles, tileTariff } from './promo-rows'
+import {
+  codeKey,
+  discountedPrice,
+  hasPeriod,
+  macroBlocked,
+  macroRows,
+  macroStartOf,
+  promoFiles,
+  tileTariff,
+} from './promo-rows'
 
 const macroItems = (tile: PromoTile) =>
   macroRows(tile).map((row) => ({
@@ -269,16 +278,21 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
   /**
    * Tryb makra: makro wprowadzania promocji do schowka (odtwarzacz, Alt+E). Kod operacji jak kod taryfy w .PRO, ale
    * przy każdym kopiowaniu z nowymi cyframi, żeby makro nie trafiło w operację z poprzedniego razu. Nazwa jak nazwa
-   * pliku .PRO: dzień początku (dziś) i najpóźniejszego końca.
+   * pliku .PRO: dzień początku operacji (bez wybranego dziś) i najpóźniejszego końca. Początek po dziś makro wpisuje,
+   * dzisiejszy zostawia z podpowiedzi Mercalys.
    */
   const copyMacro = async (tile: PromoTile) => {
     const items = macroItems(tile)
     const end = items.reduce((latest, item) => (item.dateTo > latest ? item.dateTo : latest), '')
     const operation = randomOperation()
     const code = tileTariff({ ...draft, operation }, tile)
-    const name = proFileName(todayIso(), end).replace(/\.PRO$/, '')
+    const today = todayIso()
+    const start = macroStartOf(tile, today)
+    const name = proFileName(start, end).replace(/\.PRO$/, '')
     try {
-      await navigator.clipboard.writeText(buildPromoEntryMacro({ code, name, items }))
+      await navigator.clipboard.writeText(
+        buildPromoEntryMacro({ code, name, start: start > today ? start : undefined, items }),
+      )
     } catch {
       toast.error('Nie udało się skopiować makra do schowka')
       return
@@ -299,7 +313,7 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
     const markdowns = toLabel.map((row) => ({
       itm8: row.article!.itm8!,
       newPrice: row.price!,
-      validFrom: todayIso(),
+      validFrom: start,
       validTo: row.dateTo!,
     }))
     const latest = draftsOf(mode)[store.id] ?? draft
@@ -447,7 +461,7 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
               levels,
               selected,
               onSelect: select,
-              onDates: (changes: { dateFrom?: string; dateTo?: string }) =>
+              onDates: (changes: { dateFrom?: string; dateTo?: string; macroStart?: string }) =>
                 dispatch(updatePromoTile({ storeId: store.id, mode, tileId: tile.id, changes })),
               onCodes: (codes: string[]) => void addCodes(tile.id, codes),
               onSearch: (query: string) => setListFor({ tileId: tile.id, query }),
@@ -464,8 +478,8 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
                 {...shared}
                 onRowEnd={(row, dateTo) => setRowEnd(tile, row, dateTo)}
                 onAllEnds={() => setAllEnds(tile)}
-                tile={{ ...tile, dateFrom: todayIso() }}
-                createBlocked={macroBlocked({ ...tile, dateFrom: todayIso() })}
+                tile={{ ...tile, dateFrom: macroStartOf(tile, todayIso()) }}
+                createBlocked={macroBlocked({ ...tile, dateFrom: macroStartOf(tile, todayIso()) })}
                 onCreate={() => void copyMacro(tile)}
                 onResume={(from) => void copyResumeMacro(tile, from)}
               />

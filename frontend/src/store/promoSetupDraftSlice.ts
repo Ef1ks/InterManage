@@ -29,7 +29,15 @@ export const promoLabelKey = (itm8: string, price: number, dateTo: string) => `$
 export type PromoMode = 'macro' | 'pro'
 
 /** Kafelek: osobne artykuły i okres. {@code number} to dwie ostatnie cyfry kodu taryfy, nadawany raz i nie wraca. */
-export type PromoTile = { id: string; number: number; dateFrom: string; dateTo: string; rows: PromoRow[] }
+export type PromoTile = {
+  id: string
+  number: number
+  dateFrom: string
+  dateTo: string
+  /** Tryb makra: początek operacji w Mercalys; puste albo przed dziś = dziś (podpowiedź Mercalys). */
+  macroStart?: string
+  rows: PromoRow[]
+}
 
 /** {@code operation}: cztery losowe cyfry kodu taryfy, wspólne dla kafelków tej pracy. */
 export type PromoSetupDraft = { operation: string; nextNumber: number; tiles: PromoTile[] }
@@ -119,7 +127,7 @@ const promoSetupDraftSlice = createSlice({
     },
     updatePromoTile(
       state,
-      action: PayloadAction<TileAction & { changes: Partial<Pick<PromoTile, 'dateFrom' | 'dateTo'>> }>,
+      action: PayloadAction<TileAction & { changes: Partial<Pick<PromoTile, 'dateFrom' | 'dateTo' | 'macroStart'>> }>,
     ) {
       const tile = tileOf(state, action.payload)
       if (tile) Object.assign(tile, action.payload.changes)

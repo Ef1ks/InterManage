@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { parseNumber } from '@/features/data-entry/grid-values'
 import { formatDocumentDate, formatMoney, formatPercent, formatPrice } from '@/features/documents/format'
+import { todayIso } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import type { PromoMode, PromoRow, PromoTile } from '@/store/promoSetupDraftSlice'
 
@@ -40,7 +41,7 @@ type Props = {
   levels: number[]
   selected: string | null
   onSelect: (row: PromoRow) => void
-  onDates: (changes: { dateFrom?: string; dateTo?: string }) => void
+  onDates: (changes: { dateFrom?: string; dateTo?: string; macroStart?: string }) => void
   onCodes: (codes: string[]) => void
   /** Wpisany tekst to nie kod: lista towarów z tym wyszukiwaniem. */
   onSearch: (text: string) => void
@@ -113,8 +114,16 @@ export function PromoTileCard(props: Props) {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {/* W trybie makra początek to dzień ustawienia: Mercalys podpowiada dzisiejszy i makro go nie zmienia. */}
-        {!macro && (
+        {/* W trybie makra początek operacji w Mercalys: domyślnie dziś (podpowiedź Mercalys), późniejszy makro wpisuje. */}
+        {macro ? (
+          <DateField
+            label="Początek operacji"
+            value={tile.dateFrom}
+            min={todayIso()}
+            hint={tile.dateFrom === todayIso() ? 'Dziś, jak podpowiada Mercalys' : undefined}
+            onChange={(macroStart) => onDates({ macroStart })}
+          />
+        ) : (
           <DateField label="Początek promocji" value={tile.dateFrom} onChange={(dateFrom) => onDates({ dateFrom })} />
         )}
         <DateField
