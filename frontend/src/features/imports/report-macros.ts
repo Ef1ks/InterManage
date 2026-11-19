@@ -279,6 +279,7 @@ function openSteps(
   settings: ReportMacroSettings,
   period: Period | null,
   emptyLabel = 'pusty',
+  continuing = false,
 ): string[] | null {
   if (kind === 'PRODUCTS' || kind === 'CADENCIER') {
     const s = PRINT_SCREEN
@@ -367,14 +368,24 @@ function openSteps(
   if (kind === 'DOCUMENTS') {
     const s = DOCUMENTS_SCREEN
     if (!period) return null
+    // Kolejna część: po Zatwierdź formularz zostaje na ekranie (Excel otwiera się sam), więc menu nie klikamy.
+    // Ponowny klik przeładowywał formularz z datami poprzedniej części, a pole daty było widać już na starej stronie:
+    // makro wpisywało daty przed przeładowaniem i drukowało w kółko poprzednią część (06713, 19.11.2026).
+    const open = continuing
+      ? []
+      : [
+          `WEBENSURE|${WINDOW}|${s.statesMenu}|${s.pilotageTab}`,
+          `WEBOPEN|${WINDOW}|${s.statesMenu}|${s.menuItem}|${s.dateFrom}`,
+        ]
     return [
-      `WEBENSURE|${WINDOW}|${s.statesMenu}|${s.pilotageTab}`,
-      `WEBOPEN|${WINDOW}|${s.statesMenu}|${s.menuItem}|${s.dateFrom}`,
+      ...open,
       `WEBWAIT|${WINDOW}|${s.dateFrom}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${s.dateFrom}|^a${typedDate(period.from)}{Tab}`,
       `WEBVALUE|${WINDOW}|${s.dateFrom}|${datePattern(period.from)}|${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${s.dateTo}|^a${typedDate(period.to)}{Tab}`,
       `WEBVALUE|${WINDOW}|${s.dateTo}|${datePattern(period.to)}|${PAGE_TIMEOUT_MS}`,
+      // Obie daty jeszcze raz tuż przed Zatwierdź: przeładowany w międzyczasie formularz zatrzyma makro.
+      `WEBVALUE|${WINDOW}|${s.dateFrom}|${datePattern(period.from)}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${s.approveButton}`,
     ]
   }
@@ -412,7 +423,7 @@ export function buildReportSaveMacro(
     const parts = periodParts(kind, context, settings.partLength)
     parts.forEach((period, part) => {
       const emptyLabel = `pusty-${index + 1}-${part + 1}`
-      const steps = openSteps(kind, settings, period, emptyLabel)
+      const steps = openSteps(kind, settings, period, emptyLabel, part > 0)
       const partLabel =
         parts.length > 1 && period ? `, część ${part + 1} z ${parts.length}: ${period.from} - ${period.to}` : ''
       lines.push(`# ${title}${step}${partLabel}`)
