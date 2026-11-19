@@ -384,8 +384,13 @@ public class DocumentReportParser {
                 throw new IllegalArgumentException(LABELS.getOrDefault(column, column) + " \"" + value + "\" nie jest liczbą");
             }
             if (number.abs().compareTo(MAX_DECIMAL) >= 0) {
-                throw new IllegalArgumentException(LABELS.getOrDefault(column, column) + " \"" + value
-                        + "\" jest poza dopuszczalnym zakresem");
+                if (column.equals(QUANTITY) || column.equals(LINE)) {
+                    throw new IllegalArgumentException(LABELS.getOrDefault(column, column) + " \"" + value
+                            + "\" jest poza dopuszczalnym zakresem");
+                }
+                // Mercalys potrafi wydrukować w kwocie śmieci (np. cena FIFO -2.18302084009358E+18 przy linii
+                // bez kosztu): taka kwota to brak wartości, a nie powód do odrzucenia całego raportu.
+                return null;
             }
             return number;
         }
