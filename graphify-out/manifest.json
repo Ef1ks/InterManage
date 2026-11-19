@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/api.ts": {
-    "mtime": 1795022503.9224775,
-    "seen": 1795022716.7308738,
-    "ast_hash": "fecf09af5b65c30898e04999bf0e715d",
+    "mtime": 1795099433.2398632,
+    "seen": 1795099776.9302971,
+    "ast_hash": "fd9ab76e0ae60cc71828936fa7b583bc",
     "semantic_hash": ""
   },
   "frontend/src/lib/form-errors.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795097525.0449655,
-    "seen": 1795097582.6450357,
-    "ast_hash": "c443cf7ac5dcd21591ae976040ab0c53",
+    "mtime": 1795099717.3616881,
+    "seen": 1795099776.9631598,
+    "ast_hash": "190e24cb2ee35fd117530829b4ac180d",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ProductImportIntegrationTests.java": {
-    "mtime": 1795025202.5241468,
-    "seen": 1795025465.6920428,
-    "ast_hash": "eb1df8cb125e50b2a97d7c68075b6617",
+    "mtime": 1795099645.0383453,
+    "seen": 1795099776.860582,
+    "ast_hash": "deb0f360a3c114f395584dfc21ddb49b",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
@@ -1302,9 +1302,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DocumentImportIntegrationTests.java": {
-    "mtime": 1795097462.23877,
-    "seen": 1795097582.5414755,
-    "ast_hash": "bf01cdbbbdce2ce28efe6eae00fd3401",
+    "mtime": 1795099566.20019,
+    "seen": 1795099776.8545823,
+    "ast_hash": "ffb7e890d15ecd813a5f807b4311d0e6",
     "semantic_hash": ""
   },
   "frontend/src/components/FileDropZone.tsx": {
@@ -1674,9 +1674,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/auth/config/SecurityConfig.java": {
-    "mtime": 1795091175.4774904,
-    "seen": 1795091492.0999749,
-    "ast_hash": "a53d5a741165f41c1524f47f2bc6d091",
+    "mtime": 1795099394.3707917,
+    "seen": 1795099776.6457553,
+    "ast_hash": "31908d620ff2cf65c290aaa825ee6a8f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/auth/controller/AuthController.java": {
@@ -2340,9 +2340,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/component/DocumentReportParser.java": {
-    "mtime": 1794896838.01797,
-    "seen": 1794897062.251015,
-    "ast_hash": "65bb6dacbf6de4e9e2ff4bb0483f1a53",
+    "mtime": 1795099343.184815,
+    "seen": 1795099776.7128613,
+    "ast_hash": "5f7c90d5008331a7fe1187d0ddbf2ffb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/controller/DeliveryReportController.java": {
@@ -2424,9 +2424,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/dto/DocumentLineRow.java": {
-    "mtime": 1794774259.535937,
-    "seen": 1794804559.972109,
-    "ast_hash": "be49ff3c948857d34c1365603db39b9a",
+    "mtime": 1795099323.2662356,
+    "seen": 1795099776.7163699,
+    "ast_hash": "d0f53667f3a5bc900c265acb57167c70",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/document/dto/DocumentPage.java": {
@@ -7968,9 +7968,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1795097470.16259,
-    "seen": 1795097582.5764792,
-    "ast_hash": "9c155ae7c485f10a7d5139b131e9bc09",
+    "mtime": 1795099201.1566746,
+    "seen": 1795099307.5997117,
+    "ast_hash": "3f0c2e9f653e8e4944238efff843138a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -13038,9 +13038,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/report-upload.ts": {
-    "mtime": 1795025176.2797782,
-    "seen": 1795025465.7360923,
-    "ast_hash": "3891a463cb14a131fe66eeb219fa94dc",
+    "mtime": 1795099447.1736612,
+    "seen": 1795099776.9030952,
+    "ast_hash": "035e26a7f91d238f970ecff88f348b26",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/ChunkedUploads.java": {
@@ -13056,9 +13056,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/controller/ImportUploadController.java": {
-    "mtime": 1795025084.1078048,
-    "seen": 1795025465.561407,
-    "ast_hash": "067d0d9f0cd06ec4479bb6aeb3b93050",
+    "mtime": 1795099407.206908,
+    "seen": 1795099776.7340782,
+    "ast_hash": "9d94747f387153fa5ab57cba6af48d20",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/dto/ImportUploadRequest.java": {
@@ -13128,9 +13128,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PriceControlMacroDialog.tsx": {
-    "mtime": 1795030509.1417859,
-    "seen": 1795070644.8282373,
-    "ast_hash": "338812fdc0f2070ec7e3bce0633fa688",
+    "mtime": 1795099201.1943269,
+    "seen": 1795099307.5961995,
+    "ast_hash": "2673eb5fbdc4724631032d79ec2d0cc7",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/PromoPricesDialog.tsx": {
@@ -13323,6 +13323,12 @@
     "mtime": 1795092986.272484,
     "seen": 1795093081.158297,
     "ast_hash": "fad3ec26ac2f13cbd3a7b6dd9434ac16",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/auth/security/ProblemAccessDeniedHandler.java": {
+    "mtime": 1795099385.5726335,
+    "seen": 1795099776.6555555,
+    "ast_hash": "5158cc9d22ab53098ced337818db111e",
     "semantic_hash": ""
   }
 }

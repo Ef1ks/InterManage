@@ -67,7 +67,7 @@ export function PriceControlMacroDialog({
       return
     }
     toast.success(`Makro w schowku: ${chosen.length} ${chosen.length === 1 ? 'zmiana' : 'zmian'} cen`, {
-      description: 'Naciśnij Alt+E. Potrzebny odtwarzacz od wersji 0.56.',
+      description: 'Naciśnij Alt+E. Potrzebny odtwarzacz od wersji 0.57.',
     })
     onOpenChange(false)
   }

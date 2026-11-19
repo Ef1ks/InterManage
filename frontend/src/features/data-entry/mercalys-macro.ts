@@ -1323,8 +1323,11 @@ const PRICE_CONTROL_SCREEN = {
   /** Przycisk opracowania w wierszu historii (`dgHisto__ctl<n>_ImgButtonTraiter_ImageButton1`). */
   processButton: 'ImgButtonTraiter_ImageButton1',
   nextPageButton: 'pgrDetail_ibtSuivant',
-  /** Najnowsze pliki są na początku historii; dalej makro nie szuka. */
-  historyPages: 3,
+  /**
+   * Historia ma dziesiątki stron (10023, 19.11.2026: 29), a kolejności nie znamy, więc makro przegląda wszystkie;
+   * kończy wcześniej, gdy przycisk następnej strony jest wyłączony.
+   */
+  historyPages: 60,
   /** „Przetworzyć plik ponownie?” */
   processText: 'ponownie',
   differentPricesMenuItem: 'mnTv_TARIF_ar-e084_PrixDifferents',
@@ -1358,29 +1361,32 @@ export function priceControlFileTime(fileName: string) {
 }
 
 /**
- * Wiersz historii tego pliku: data (dowolny separator, rok z 2 albo 4 cyframi), godzina i minuta, liczba cen jako osobna
- * liczba i stan „Przetw. 0 raz”. Opracowany plik ma już 1 raz, więc ten sam plik nie przejdzie drugi raz. Bez `|`,
- * bo dzieli linię makra.
+ * Wiersz historii tego pliku: data (dowolny separator, rok z 2 albo 4 cyframi) oraz godzina i minuta z nazwy pliku albo
+ * minuta później (zapis pliku na przełomie minut). Historia ma tylko kolumny Data, Użytkownik i Stacja (skan z 10023,
+ * 19.11.2026), więc liczby cen ani stanu opracowania w wierszu nie ma: wcześniejszy wzorzec z nimi nie trafiał w żaden
+ * wiersz. Bez `|`, bo dzieli linię makra.
  */
 export function priceControlRowPattern(file: PriceControlMacroFile) {
   const time = priceControlFileTime(file.fileName)
   if (!time) return null
   const date = String.raw`(?<!\d)${time.day}[./-]${time.month}[./-](?:${time.year.slice(0, 2)})?${time.year.slice(2)}(?!\d)`
-  const clock = String.raw`(?<!\d)${time.hour}:${time.minute}(?!\d)`
-  const count = String.raw`(?<![\d:/.,])${file.lineCount}(?![\d:/.,])`
-  return String.raw`i)^(?=.*${date})(?=.*${clock})(?=.*${count})(?=.*(?<!\d)0\s*raz)`
+  // Kolejna minuta klasą znaków, bo alternatywa z `|` rozcięłaby linię; przy końcówce 9 (14:29 → 14:30) tylko ta minuta.
+  const last = Number(time.minute[1])
+  const minute = last < 9 ? `${time.minute[0]}[${last}${last + 1}]` : time.minute
+  const clock = String.raw`(?<!\d)${time.hour}:${minute}(?!\d)`
+  return String.raw`i)^(?=.*${date})(?=.*${clock})`
 }
 
 /**
  * „Wprowadź zmiany cen”: dla każdego pliku Taryfa → Kontrola ceny → Pobranie danych → Historia, opracowanie wiersza tego pliku (data,
  * godzina, liczba cen, „Przetw. 0 raz”), Tak, zamknięcie PDF-a, potem Różne ceny: Zaznacz wszystko, czekanie na
  * zaznaczone wiersze, Porównaj MSI, Zamknij przy komunikacie o promocjach i czekanie na pustą tabelę. Pliku, którego
- * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.56 (WEBROWBUTTON, WEBGRIDWAIT).
+ * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.57 (WEBROWBUTTON z opisem przejrzanych stron, WEBGRIDWAIT).
  */
 export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
   const screen = PRICE_CONTROL_SCREEN
   const out = [
-    `# Wprowadzenie zmian cen: ${files.length} (odtwarzacz od wersji 0.56)`,
+    `# Wprowadzenie zmian cen: ${files.length} (odtwarzacz od wersji 0.57)`,
     mercalysOpenLine(PROGRAM_WINDOW),
   ]
   files.forEach((file, index) => {

@@ -72,29 +72,48 @@ export async function sendInChunks<T>(
   let sent = 0
   for (let index = 0; sent < file.size; index++) {
     const chunk = file.slice(sent, sent + upload.chunkSize)
-    await withRetry(() =>
-      api(`${uploadsPath}/${upload.id}/chunks/${index}`, {
+    const bytes = new Uint8Array(await chunk.arrayBuffer())
+    await withRetry(() => {
+      const { masked, key } = mask(bytes)
+      return api(`${uploadsPath}/${upload.id}/chunks/${index}`, {
         method: 'PUT',
-        blob: chunk,
+        blob: new Blob([masked]),
+        headers: { 'X-Chunk-Mask': key },
         onUploadProgress: (percent) =>
           onProgress?.(Math.min(99, Math.floor(((sent + (chunk.size * percent) / 100) / file.size) * 100))),
-      }),
-    )
+      })
+    })
     sent += chunk.size
   }
   onProgress?.(100)
   return api<T>(`${path}/uploads/${upload.id}`, { method: 'POST' })
 }
 
+/**
+ * Maskuje kawałek losowym kluczem (XOR, serwer zdejmuje go po nagłówku `X-Chunk-Mask`). Zapora Cloudflare przegląda
+ * treść żądań i potrafi odrzucić kawałek pliku, którego bajty przypadkiem przypominają atak (403 „Brak uprawnień”
+ * w trakcie odświeżania danych); przy każdej próbie kawałek wygląda inaczej, więc ponowienie przechodzi.
+ */
+function mask(bytes: Uint8Array): { masked: Uint8Array<ArrayBuffer>; key: string } {
+  const key = crypto.getRandomValues(new Uint8Array(32))
+  const masked = new Uint8Array(bytes.length)
+  for (let i = 0; i < bytes.length; i++) masked[i] = bytes[i] ^ key[i % key.length]
+  return { masked, key: btoa(String.fromCharCode(...key)) }
+}
+
 const CHUNK_RETRIES = 3
 
-/** Ponawia kawałek po zerwanym połączeniu albo błędzie bramy (serwer pomija kawałek, który już ma). */
+/**
+ * Ponawia kawałek po zerwanym połączeniu, błędzie bramy albo blokadzie zapory Cloudflare (serwer pomija kawałek,
+ * który już ma).
+ */
 async function withRetry(send: () => Promise<unknown>) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await send()
     } catch (error) {
-      const temporary = error instanceof ApiError && (error.status === 0 || error.status >= 500)
+      const temporary =
+        error instanceof ApiError && (error.status === 0 || error.status >= 500 || error.problem.blocked === true)
       if (!temporary || attempt > CHUNK_RETRIES) throw error
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
     }

@@ -96,7 +96,10 @@ public class DocumentReportParser {
         private int totalLines;
         private final List<DocumentLineRow> lines = new ArrayList<>();
         private final Map<String, DocumentLineRow> headerByDocument = new HashMap<>();
-        private final Map<String, DocumentLineRow> seenLines = new HashMap<>();
+        /** Linia dokumentu (typ, numer, nr linii, ITM8) → miejsce w {@link #lines}. */
+        private final Map<String, Integer> lineIndex = new HashMap<>();
+        /** Wiersze raportu linii, która wystąpiła więcej niż raz (do rozpoznania powtórzeń). */
+        private final Map<String, List<DocumentLineRow>> lineParts = new HashMap<>();
         private final Map<String, Integer> skipped = new LinkedHashMap<>();
         private final List<String> errors = new ArrayList<>();
         private int errorCount;
@@ -126,23 +129,27 @@ public class DocumentReportParser {
                 }
                 DocumentLineRow line = toLine(type, cells);
                 String document = type.name() + " " + line.documentNumber();
-                DocumentLineRow previous = seenLines.putIfAbsent(document + "/" + line.lineKey(), line);
-                if (previous != null) {
-                    if (previous.sameExceptSupplierName(line)) {
-                        // Podwójny wiersz z drugą nazwą tego samego kodu dostawcy: zostaje pierwszy.
-                        return;
-                    }
-                    throw new IllegalArgumentException("linia " + line.lineNumber() + " z ITM8 " + line.itm8()
-                            + " dokumentu " + line.documentNumber() + " (" + type.singular().toLowerCase(Locale.ROOT)
-                            + ") występuje w pliku więcej niż raz");
-                }
                 DocumentLineRow header = headerByDocument.putIfAbsent(document, line);
                 if (header != null && !sameHeader(header, line)) {
                     throw new IllegalArgumentException("dokument " + line.documentNumber() + " ("
                             + type.singular().toLowerCase(Locale.ROOT)
                             + ") ma w pliku różną datę albo numer dokumentu dostawcy");
                 }
-                lines.add(line);
+                String key = document + "/" + line.lineKey();
+                Integer index = lineIndex.get(key);
+                if (index == null) {
+                    lineIndex.put(key, lines.size());
+                    lines.add(line);
+                    return;
+                }
+                List<DocumentLineRow> parts = lineParts.computeIfAbsent(key, k -> new ArrayList<>(List.of(lines.get(index))));
+                if (parts.stream().anyMatch(part -> part.sameFigures(line))) {
+                    // Powtórzony wiersz (np. druga nazwa tego samego kodu dostawcy): zostaje pierwszy.
+                    return;
+                }
+                // Ta sama linia drugi raz z innymi liczbami: część tej samej linii, więc się sumuje.
+                parts.add(line);
+                lines.set(index, lines.get(index).plus(line));
             } catch (IllegalArgumentException e) {
                 errorCount++;
                 if (errors.size() < ProductReportParser.MAX_REPORTED_ERRORS) {

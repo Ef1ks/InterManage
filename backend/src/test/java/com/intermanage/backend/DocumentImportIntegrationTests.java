@@ -227,9 +227,20 @@ class DocumentImportIntegrationTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.rowErrorCount").value(1));
 
+        // Ta sama linia drugi raz z innymi liczbami: to część tej linii, więc ilości i wartości się sumują.
         String number = docNumber();
-        upload(owner, report(STORE_NUMBER, line("PZ", number, "", 1, "1", "1", "1"), line("PZ", number, "", 1, "2", "1", "2")))
-                .andExpect(status().isBadRequest());
+        upload(owner, report(STORE_NUMBER, line("RWPO", number, "", 1, "1", "1", "1"), line("RWPO", number, "", 1, "2", "1", "2")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalLines").value(2))
+                .andExpect(jsonPath("$.savedLines").value(1));
+        String splitId = ((String) com.jayway.jsonpath.JsonPath.<List<Object>>read(
+                mvc.perform(get(url("/rwpo")).cookie(owner)).andReturn().getResponse().getContentAsString(),
+                "$.documents[?(@.number == '" + number + "')].id").getFirst());
+        mvc.perform(get(url("/rwpo/" + splitId)).cookie(owner))
+                .andExpect(jsonPath("$.lineCount").value(1))
+                .andExpect(jsonPath("$.lines[0].quantity").value(3))
+                .andExpect(jsonPath("$.lines[0].purchaseValue").value(3))
+                .andExpect(jsonPath("$.lines[0].saleValueGross").value(9.98));
 
         // Kod dostawcy z dwiema nazwami: raport podwaja linię, różni się tylko nazwa, więc zostaje pierwsza.
         String doubled = docNumber();

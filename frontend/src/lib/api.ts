@@ -33,8 +33,9 @@ function readCookie(name: string): string | undefined {
 }
 
 /** Backend czyści token przy logowaniu i wylogowaniu, więc pobieramy nowy, gdy go brak. */
-async function csrfToken(): Promise<string | undefined> {
-  if (!readCookie('XSRF-TOKEN')) {
+async function csrfToken(renew = false): Promise<string | undefined> {
+  if (renew) document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/'
+  if (renew || !readCookie('XSRF-TOKEN')) {
     await fetch('/api/auth/csrf', { credentials: 'same-origin' })
   }
   const token = readCookie('XSRF-TOKEN')
@@ -51,13 +52,15 @@ type RequestOptions = {
   blob?: Blob
   /** Postęp wysyłania treści żądania w procentach (duże pliki); fetch go nie daje, więc żądanie idzie przez XHR. */
   onUploadProgress?: (percent: number) => void
+  /** Dodatkowe nagłówki żądania. */
+  headers?: Record<string, string>
 }
 
 export async function api<T = void>(
   path: string,
-  { method = 'GET', json, formData, blob, onUploadProgress }: RequestOptions = {},
+  { method = 'GET', json, formData, blob, onUploadProgress, headers: extraHeaders }: RequestOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders }
   let body: BodyInit | undefined
 
   if (json !== undefined) {
@@ -70,17 +73,25 @@ export async function api<T = void>(
     body = blob
   }
 
-  if (!SAFE_METHODS.has(method)) {
-    const token = await csrfToken()
-    if (token) headers['X-XSRF-TOKEN'] = token
+  const send = async (renewToken: boolean) => {
+    if (!SAFE_METHODS.has(method)) {
+      const token = await csrfToken(renewToken)
+      if (token) headers['X-XSRF-TOKEN'] = token
+    }
+    return onUploadProgress
+      ? await sendWithProgress(`/api${path}`, method, headers, body, onUploadProgress)
+      : await fetch(`/api${path}`, { method, headers, body, credentials: 'same-origin' })
   }
 
-  const response = onUploadProgress
-    ? await sendWithProgress(`/api${path}`, method, headers, body, onUploadProgress)
-    : await fetch(`/api${path}`, { method, headers, body, credentials: 'same-origin' })
-
-  if (!response.ok) {
-    throw await toApiError(response)
+  let response = await send(false)
+  let error = response.ok ? undefined : await toApiError(response)
+  // Odrzucony token CSRF (serwer niczego nie zrobił): nowy token i jeszcze raz, zamiast „Brak uprawnień”.
+  if (error?.status === 403 && error.problem.csrf === true && !SAFE_METHODS.has(method)) {
+    response = await send(true)
+    error = response.ok ? undefined : await toApiError(response)
+  }
+  if (error) {
+    throw error
   }
   if (response.status === 204 || response.headers.get('Content-Length') === '0') {
     return undefined as T
@@ -125,6 +136,15 @@ function sendWithProgress(
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
+  // Strona HTML z 403 zamiast ProblemDetail to zapora Cloudflare (API zawsze odpowiada JSON-em), nie brak uprawnień.
+  if (response.status === 403 && /html/i.test(response.headers.get('Content-Type') ?? '')) {
+    return new ApiError(
+      403,
+      'Połączenie zablokowała zapora sieci (Cloudflare). Spróbuj ponownie za chwilę.',
+      {},
+      { blocked: true },
+    )
+  }
   const fallback: Record<number, string> = {
     401: 'Sesja wygasła. Zaloguj się ponownie.',
     403: 'Brak uprawnień do tej operacji.',

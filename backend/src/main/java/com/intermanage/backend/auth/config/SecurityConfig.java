@@ -30,6 +30,7 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.security.BackgroundAccounts;
 import com.intermanage.backend.auth.security.IdleLock;
 import com.intermanage.backend.auth.security.JwtAuthenticationFilter;
+import com.intermanage.backend.auth.security.ProblemAccessDeniedHandler;
 import com.intermanage.backend.auth.security.RateLimitFilter;
 import com.intermanage.backend.auth.security.RequestLimits;
 import com.intermanage.backend.auth.security.WorkdayLock;
@@ -81,7 +82,8 @@ public class SecurityConfig {
                         .logoutUrl("/api/auth/logout")
                         .addLogoutHandler((request, response, authentication) -> jwtService.clearTokenCookie(response))
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+                        .accessDeniedHandler(new ProblemAccessDeniedHandler()))
                 // Limity zapytań przed CSRF i JWT, żeby żądania ponad limit nie sięgały do bazy.
                 .addFilterBefore(new RateLimitFilter(requestLimits), CsrfFilter.class)
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts, workdayLock, idleLock),

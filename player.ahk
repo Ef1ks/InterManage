@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.56.0.0
+;@Ahk2Exe-SetVersion 0.57.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.56" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.57" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -157,11 +157,41 @@ ScanWindow() {
             if IsShown(element)
                 visible .= DescribeField(element) "`n"
         }
+        visible .= DescribeGridRows(doc)
         if (visible != "")
             report .= "`nStrona: " WebProp(doc, "URL") "`n" visible
     }
     A_Clipboard := report
     MsgBox report, "Przyciski strony (skopiowano do Schowka)"
+}
+
+; Skan (od 0.57): tekst widocznych wierszy tabel z przyciskami w wierszu (`<siatka>__ctlN_…`), żeby było widać, po czym
+; makro ma szukać wiersza (np. historia pobierania danych), bo same przyciski tego nie mówią.
+DescribeGridRows(doc) {
+    out := ""
+    seen := Map()
+    try {
+        inputs := doc.getElementsByTagName("input")
+        Loop inputs.length {
+            element := inputs.item(A_Index - 1)
+            id := WebProp(element, "id")
+            if !(RegExMatch(id, "^(.+?)__ctl(\d+)_", &match) && IsShown(element))
+                continue
+            key := match[1] "#" match[2]
+            if seen.Has(key)
+                continue
+            seen[key] := true
+            node := element
+            Loop 10 {
+                node := node.parentNode
+                if (WebProp(node, "tagName") = "TR") {
+                    out .= "wiersz | siatka=" match[1] " | ctl" match[2] " | tekst=" RowText(node) "`n"
+                    break
+                }
+            }
+        }
+    }
+    return out
 }
 
 ; Lewy Alt+E na jedną rękę; AltGr+E zostaje literą ę. Makro działa raz: przypadkowy skrót w innym programie nie może
@@ -708,11 +738,12 @@ PlayMacro(rawClip) {
                     MsgBox report "Linia WEBROWBUTTON wymaga okna, siatki, wyrażenia, przycisku, etykiety i opisu.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
+                seenRows := ""
                 problem := WebRowButton(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]),
                     parts.Length >= 8 ? Trim(parts[8]) : "", parts.Length >= 9 && Trim(parts[9]) != "" ? Integer(Trim(parts[9])) : 1,
-                    parts.Length >= 10 ? Integer(Trim(parts[10])) : 30000)
+                    parts.Length >= 10 ? Integer(Trim(parts[10])) : 30000, &seenRows)
                 if (problem = "SKIP") {
-                    report .= "Nie znaleziono: " Trim(parts[7]) "`n"
+                    report .= "Nie znaleziono: " Trim(parts[7]) (seenRows != "" ? "`n" seenRows : "") "`n"
                     target := LabelLine(lines, Trim(parts[6]), index)
                     if (target = 0) {
                         MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
@@ -1962,7 +1993,9 @@ RowButtons(title, grid, button) {
 }
 
 ; "" = kliknięto przycisk wiersza pasującego do wyrażenia, "SKIP" = żadna z przejrzanych stron go nie ma.
-WebRowButton(title, grid, pattern, button, nextPage, maxPages, timeoutMs) {
+; {@code seen}: przejrzane strony z pierwszym i ostatnim wierszem, do podsumowania, gdy wiersza nie ma.
+WebRowButton(title, grid, pattern, button, nextPage, maxPages, timeoutMs, &seen := "") {
+    seen := ""
     deadline := A_TickCount + timeoutMs
     page := 1
     signature := ""
@@ -1984,6 +2017,7 @@ WebRowButton(title, grid, pattern, button, nextPage, maxPages, timeoutMs) {
             stableSince := A_TickCount
         } else if (rows.Length > 0 && A_TickCount - stableSince >= 1000) {
             ; Strona ustała i nie ma wiersza: następna strona albo koniec.
+            seen .= "  strona " page ": " rows[1].text (rows.Length > 1 ? "  …  " rows[rows.Length].text : "") "`n"
             if (page >= maxPages || nextPage = "" || !PagerAvailable(title, nextPage))
                 return "SKIP"
             if (WebClick(title, nextPage, 5000) != "")
@@ -1996,8 +2030,9 @@ WebRowButton(title, grid, pattern, button, nextPage, maxPages, timeoutMs) {
                 fresh := RowButtons(title, grid, button)
                 if (fresh.Length > 0 && fresh[1].text != first)
                     break
+                ; Ta sama strona po kliknięciu: to była ostatnia (przycisk nie zawsze jest wyłączony), więc wiersza nie ma.
                 if (A_TickCount >= waitUntil)
-                    return "Następna strona listy `"" grid "`" się nie wczytała."
+                    return "SKIP"
             }
             signature := ""
             continue

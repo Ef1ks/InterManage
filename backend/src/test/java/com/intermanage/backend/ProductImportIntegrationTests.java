@@ -132,7 +132,21 @@ class ProductImportIntegrationTests {
         mvc.perform(chunk(uploadUrl, 0, first, owner)).andExpect(status().isNoContent());
         mvc.perform(chunk(uploadUrl, 0, first, owner)).andExpect(status().isNoContent());
         mvc.perform(post(importUrl).cookie(owner).with(csrf())).andExpect(status().isConflict());
-        mvc.perform(chunk(uploadUrl, 1, second, owner)).andExpect(status().isNoContent());
+        // Bez tokenu CSRF: odmowa z `csrf`, po której przeglądarka bierze nowy token i ponawia kawałek.
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(uploadUrl + "/chunks/1").cookie(owner)
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(second))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.csrf").value(true));
+        // Kawałek zamaskowany kluczem z nagłówka (XOR), żeby zapora Cloudflare nie odrzucała treści pliku.
+        byte[] key = {7, 42, -100};
+        byte[] masked = second.clone();
+        for (int i = 0; i < masked.length; i++) {
+            masked[i] ^= key[i % key.length];
+        }
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(uploadUrl + "/chunks/1").cookie(owner).with(csrf())
+                        .header("X-Chunk-Mask", java.util.Base64.getEncoder().encodeToString(key))
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(masked))
+                .andExpect(status().isNoContent());
 
         String job = mvc.perform(post(importUrl).cookie(owner).with(csrf()))
                 .andExpect(status().isAccepted())
