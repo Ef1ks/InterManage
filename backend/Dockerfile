@@ -23,7 +23,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-client-18 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-RUN useradd --system --uid 10001 app
+# Dziennik sklepu: folder na zdarzenia czekające na bazę (wolumen w deploy/docker-compose.yml przejmuje własność).
+RUN useradd --system --uid 10001 app && install -d -o app /app/store-events
 COPY --from=build /app/app.jar app.jar
 USER app
 EXPOSE 8080

@@ -9,6 +9,7 @@ import {
   ClipboardListIcon,
   FileStackIcon,
   GiftIcon,
+  ListTreeIcon,
   type LucideIcon,
   PackageOpenIcon,
   PackageSearchIcon,
@@ -53,6 +54,13 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         title: 'Podsumowanie sprzedaży i strat',
         description: 'Okres wg grup i rejonów: marża, likwidacje i marża po stratach względem budżetu. Z wydrukiem.',
         icon: ClipboardListIcon,
+      },
+      {
+        path: salesPaths.periodSales,
+        title: 'Sprzedaż za okres',
+        description:
+          'Sama sprzedaż za wybrane dni: nomenklatura, marka, dostawca, od rejonu do artykułów. Z wydrukiem.',
+        icon: ListTreeIcon,
       },
       {
         path: salesPaths.comparison,

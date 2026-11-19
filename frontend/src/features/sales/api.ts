@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { sendInChunks, uploadReport } from '@/features/imports/report-upload'
 import type { DateRange, Periods } from '@/features/sales/periods'
@@ -8,6 +8,7 @@ import type {
   ArticleDelivery,
   ArticleMea,
   ArticleProtocol,
+  ArticleRowsPage,
   DeliveryReviewLine,
   ReportExclusions,
   CadencierImport,
@@ -20,6 +21,9 @@ import type {
   IncidentImport,
   IncidentOverview,
   NomenclatureOption,
+  PeriodSalesArticle,
+  PeriodSalesDepth,
+  PeriodSalesReport,
   PeriodSummary,
   PeriodSummaryLevel,
   DeliveryLineHints,
@@ -208,6 +212,46 @@ export function useArticleDeliveries(storeId: string, itm8: string | null) {
     queryFn: () => api<ArticleDelivery[]>(`${reportsPath(storeId)}/articles/${itm8}/deliveries`),
     enabled: itm8 != null,
   })
+}
+
+/** Ile wierszy karty artykułu (dostawy, protokoły) przychodzi na raz; kolejne doczytuje przewijanie. */
+export const ARTICLE_PAGE_SIZE = 15
+
+/** Sortowanie i wyszukiwanie listy w karcie artykułu (po stronie serwera). */
+export type ArticleListParams = { query: string; sort: string; direction: 'asc' | 'desc' }
+
+function useArticleRows<T>(storeId: string, itm8: string | null, list: string, params: ArticleListParams) {
+  return useInfiniteQuery({
+    queryKey: [...reportsKey(storeId), 'article', itm8, list, 'page', params],
+    queryFn: ({ pageParam }) => {
+      const search = new URLSearchParams({
+        offset: String(pageParam),
+        limit: String(ARTICLE_PAGE_SIZE),
+        sort: params.sort,
+        direction: params.direction,
+      })
+      if (params.query.trim()) search.set('query', params.query.trim())
+      return api<ArticleRowsPage<T>>(`${reportsPath(storeId)}/articles/${itm8}/${list}/page?${search}`)
+    },
+    initialPageParam: 0,
+    getNextPageParam: (_last, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.items.length, 0)
+      return loaded < (pages.at(-1)?.total ?? 0) ? loaded : undefined
+    },
+    enabled: itm8 != null,
+    // Przy zmianie sortowania albo wyszukiwania tabela nie znika, tylko podmienia się po wczytaniu.
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Dostawy artykułu w karcie, po {@link ARTICLE_PAGE_SIZE}, z sortowaniem i wyszukiwaniem na serwerze. */
+export function useArticleDeliveryRows(storeId: string, itm8: string | null, params: ArticleListParams) {
+  return useArticleRows<ArticleDelivery>(storeId, itm8, 'deliveries', params)
+}
+
+/** Protokoły artykułu w karcie, jak dostawy. */
+export function useArticleProtocolRows(storeId: string, itm8: string | null, params: ArticleListParams) {
+  return useArticleRows<ArticleProtocol>(storeId, itm8, 'protocols', params)
 }
 
 /** Gazetki MEA artykułu, które trwają albo dopiero będą: rozrzuty i zamówione kartony. */
@@ -816,24 +860,110 @@ export function useTopSales(storeId: string, query: TopSalesQuery, enabled: bool
     queryKey: [...reportsKey(storeId), 'top-sales', query],
     staleTime: REPORT_STALE_TIME,
     placeholderData: keepPreviousData,
-    queryFn: () => {
-      const params = new URLSearchParams({
-        from: query.range.from,
-        to: query.range.to,
-        metric: query.metric,
-        level: query.level,
-        limit: String(query.limit),
-        minQuantity: String(query.minQuantity),
-        rankStore: query.rankStore,
-      })
-      query.filter.forEach((code) => params.append('nomenclatures', code))
-      query.brands.forEach((brand) => params.append('brands', brand))
-      query.suppliers.forEach((supplier) => params.append('suppliers', supplier))
-      query.compared.forEach((store) => params.append('compareStores', store))
-      return api<TopSalesReport>(`${reportsPath(storeId)}/top-sales?${params}`)
-    },
+    queryFn: () => api<TopSalesReport>(`${reportsPath(storeId)}/top-sales?${topSalesParams(query)}`),
     enabled,
   })
+}
+
+const topSalesParams = (query: TopSalesQuery) => {
+  const params = new URLSearchParams({
+    from: query.range.from,
+    to: query.range.to,
+    metric: query.metric,
+    level: query.level,
+    limit: String(query.limit),
+    minQuantity: String(query.minQuantity),
+    rankStore: query.rankStore,
+  })
+  query.filter.forEach((code) => params.append('nomenclatures', code))
+  query.brands.forEach((brand) => params.append('brands', brand))
+  query.suppliers.forEach((supplier) => params.append('suppliers', supplier))
+  query.compared.forEach((store) => params.append('compareStores', store))
+  return params
+}
+
+/** Sprzedaż za okres: filtry raportu (bez okresu tylko nomenklatura, marka, dostawca i wyszukiwanie). */
+export type PeriodSalesQuery = {
+  range: DateRange
+  nomenclatures: string[]
+  brands: string[]
+  suppliers: string[]
+  query: string
+}
+
+const periodSalesParams = (query: PeriodSalesQuery) => {
+  const params = new URLSearchParams({ from: query.range.from, to: query.range.to })
+  query.nomenclatures.forEach((code) => params.append('nomenclatures', code))
+  query.brands.forEach((brand) => params.append('brands', brand))
+  query.suppliers.forEach((supplier) => params.append('suppliers', supplier))
+  if (query.query.trim()) params.set('query', query.query.trim())
+  return params
+}
+
+export function usePeriodSales(storeId: string, query: PeriodSalesQuery, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'period-sales', query],
+    staleTime: REPORT_STALE_TIME,
+    placeholderData: keepPreviousData,
+    queryFn: () => api<PeriodSalesReport>(`${reportsPath(storeId)}/period-sales?${periodSalesParams(query)}`),
+    enabled,
+  })
+}
+
+/** Artykuły podrodziny (`brak` = bez nomenklatury) z tymi samymi filtrami. */
+export function usePeriodSalesArticles(storeId: string, query: PeriodSalesQuery, parent: string) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'period-sales', 'articles', query, parent],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => {
+      const params = periodSalesParams(query)
+      params.set('parent', parent)
+      return api<PeriodSalesArticle[]>(`${reportsPath(storeId)}/period-sales/articles?${params}`)
+    },
+  })
+}
+
+export type PeriodSalesPrint = { query: PeriodSalesQuery; depth: PeriodSalesDepth }
+
+const periodSalesPdfPath = (storeId: string, { query, depth }: PeriodSalesPrint) => {
+  const params = periodSalesParams(query)
+  params.set('depth', depth)
+  return `${reportsPath(storeId)}/period-sales/pdf?${params}`
+}
+
+export function usePeriodSalesPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (print: PeriodSalesPrint) => printFile(periodSalesPdfPath(storeId, print)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (print: PeriodSalesPrint) => downloadFile(periodSalesPdfPath(storeId, print), 'sprzedaz.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
+}
+
+/** Wydruk topów: te same filtry co ekran, `groups` = kody pozycji (`brak` = bez nomenklatury), puste = wszystkie. */
+export type TopSalesPrint = { query: TopSalesQuery; groups: string[] }
+
+const topSalesPdfPath = (storeId: string, { query, groups }: TopSalesPrint) => {
+  const params = topSalesParams(query)
+  groups.forEach((group) => params.append('groups', group))
+  return `${reportsPath(storeId)}/top-sales/pdf?${params}`
+}
+
+export function useTopSalesPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (print: TopSalesPrint) => printFile(topSalesPdfPath(storeId, print)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (print: TopSalesPrint) => downloadFile(topSalesPdfPath(storeId, print), 'topy.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
 }
 
 /** Sklepy zaprzyjaźnione do porównania w topach sprzedażowych. */

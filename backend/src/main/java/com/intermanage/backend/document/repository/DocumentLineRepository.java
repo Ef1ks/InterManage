@@ -122,6 +122,12 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
 
         /** Kody MEA artykułu z dostawy z bazy, której Nr_Bl = nr dok. dostawcy przyjęcia, po przecinku; bez nich pusty. */
         String getMeaCodes();
+
+        /** Cena zakupu po korektach poprzedniej (starszej) dostawy artykułu, bez względu na filtr i sortowanie. */
+        BigDecimal getPreviousPrice();
+
+        /** Ile dostaw pasuje do wyszukiwania (wszystkie strony). */
+        long getTotal();
     }
 
     /** Linie przypiętych korekt przyjęć z CTE {@code lines}, po artykule, CTE {@code fixes}. */
@@ -499,6 +505,38 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                 join mea_documents md on md.id = a.document_id
                 cross join lateral unnest(array[md.dispatch_1, md.dispatch_2, md.dispatch_3, md.dispatch_4]) x(day)
                 where x.day is not null
+            ), found as (
+                select d.id, d.number, d.document_date, d.supplier_document_number,
+                       coalesce(r.supplier_code, f.supplier_code) as supplier_code,
+                       coalesce(r.supplier_name, f.supplier_name) as supplier_name,
+                       coalesce(r.quantity, 0) as quantity, coalesce(r.purchase_value, 0) as purchase_value,
+                       coalesce(r.quantity, 0) + coalesce(f.quantity, 0) as corrected_quantity,
+                       coalesce(r.purchase_value, 0) + coalesce(f.purchase_value, 0) as corrected_value,
+                       f.delivery_id is not null as corrected
+                from deliveries ids
+                join documents d on d.id = ids.id
+                left join received r on r.document_id = d.id
+                left join fixed f on f.delivery_id = d.id
+            ), priced as (
+                select x.*, case when x.corrected_quantity <> 0
+                                 then round(x.corrected_value / x.corrected_quantity, 4) end as price
+                from found x
+            ), chronology as (
+                -- Cena poprzedniej (starszej) dostawy liczona na wszystkich dostawach, przed filtrem i stroną.
+                select p.*, lag(p.price) over (order by p.document_date, length(p.number), p.number) as previous_price
+                from priced p
+            ), matched as (
+                select c.*, count(*) over () as total
+                from chronology c
+                where cardinality(cast(:patterns as text[])) = 0
+                   or upper(translate(concat_ws(' ', c.number, c.supplier_code, c.supplier_name,
+                                                c.supplier_document_number),
+                                      'ąćęłńóśźżĄĆĘŁŃÓŚŹŻ', 'acelnoszzACELNOSZZ'))
+                      like all (cast(:patterns as text[]))
+            ), page as (
+                select d.* from matched d
+                """ + DELIVERY_ORDER + """
+                offset :offset limit :limit
             )
             select d.id as document_id, d.number as document_number, d.document_date,
                    (select string_agg(distinct code, ',' order by code)
@@ -531,23 +569,37 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
                           union
                           select (select am.number from article_mea am
                                   where abs(cast(d.document_date as date) - am.day) <= 2
-                                    and ltrim(coalesce(r.supplier_code, f.supplier_code), '0') in ('538', '88110')
+                                    and ltrim(d.supplier_code, '0') in ('538', '88110')
                                   order by abs(cast(d.document_date as date) - am.day), am.number desc
                                   limit 1)) codes) as mea_codes,
-                   coalesce(r.supplier_code, f.supplier_code) as supplier_code,
-                   coalesce(r.supplier_name, f.supplier_name) as supplier_name,
-                   coalesce(r.quantity, 0) as quantity, coalesce(r.purchase_value, 0) as purchase_value,
-                   coalesce(r.quantity, 0) + coalesce(f.quantity, 0) as corrected_quantity,
-                   coalesce(r.purchase_value, 0) + coalesce(f.purchase_value, 0) as corrected_value,
-                   f.delivery_id is not null as corrected
-            from deliveries ids
-            join documents d on d.id = ids.id
-            left join received r on r.document_id = d.id
-            left join fixed f on f.delivery_id = d.id
-            order by d.document_date desc, length(d.number) desc, d.number desc
-            limit :limit
-            """, nativeQuery = true)
-    List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, int limit);
+                   d.supplier_code, d.supplier_name, d.quantity, d.purchase_value,
+                   d.corrected_quantity, d.corrected_value, d.corrected, d.previous_price, d.total
+            from page d
+            """ + DELIVERY_ORDER, nativeQuery = true)
+    List<ArticleDelivery> findArticleDeliveries(UUID storeId, String itm8, String[] patterns, String sort,
+            boolean descending, int offset, int limit);
+
+    /**
+     * Kolejność dostaw artykułu: {@code :sort} = date, number, supplier, quantity, price, value, {@code :descending}
+     * kierunek; puste wartości na końcu, a przy równych zawsze od najnowszej.
+     */
+    String DELIVERY_ORDER = """
+            order by
+                case when :sort = 'date' and not :descending then d.document_date end asc,
+                case when :sort = 'number' and not :descending then length(d.number) end asc,
+                case when :sort = 'number' and not :descending then d.number end asc,
+                case when :sort = 'number' and :descending then length(d.number) end desc,
+                case when :sort = 'number' and :descending then d.number end desc,
+                case when :sort = 'supplier' and not :descending then d.supplier_name end asc nulls last,
+                case when :sort = 'supplier' and :descending then d.supplier_name end desc nulls last,
+                case when :sort = 'quantity' and not :descending then d.corrected_quantity end asc,
+                case when :sort = 'quantity' and :descending then d.corrected_quantity end desc,
+                case when :sort = 'price' and not :descending then d.price end asc nulls last,
+                case when :sort = 'price' and :descending then d.price end desc nulls last,
+                case when :sort = 'value' and not :descending then d.corrected_value end asc,
+                case when :sort = 'value' and :descending then d.corrected_value end desc,
+                d.document_date desc, length(d.number) desc, d.number desc
+            """;
 
     /** Stawka VAT (%) z najnowszej linii dokumentu artykułu, która ją ma. */
     @Query(value = """
@@ -572,27 +624,54 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
         boolean getGratis();
 
         BigDecimal getQuantity();
+
+        /** Ile protokołów pasuje do wyszukiwania (wszystkie strony). */
+        long getTotal();
     }
 
     /**
-     * Ostatnie dokumenty artykułu inne niż przyjęcia i ich korekty (likwidacje, ruchy międzymagazynowe, przeniesienia
-     * stanów, zwroty, wydania), od najnowszego. Ilość jak w raporcie, więc w przeniesieniu stanów ze znakiem.
+     * Dokumenty artykułu inne niż przyjęcia i ich korekty (likwidacje, ruchy międzymagazynowe, przeniesienia stanów,
+     * zwroty, wydania), strona po {@code :limit}. Ilość jak w raporcie, więc w przeniesieniu stanów ze znakiem.
+     * Wyszukiwanie: numer zawiera każde słowo ({@code :patterns}) albo rodzaj jest w {@code :types} (nazwy rodzajów
+     * dopasowuje serwis), a {@code :gratis} dokłada przeniesienia zarejestrowane jako gratis. {@code :sort} = date,
+     * type, number, quantity.
      */
     @Query(value = ARTICLE_EANS + ARTICLE_LINE_IDS + """
-            select d.id as document_id, d.type as document_type, d.number as document_number,
-                   d.document_date as document_date, sum(l.quantity) as quantity,
-                   exists (select 1 from document_gratis g
-                           where g.document_id = d.id and g.deleted_at is null) as gratis
-            from article_line_ids a
-            join document_lines l on l.id = a.id
-            join documents d on d.id = l.document_id and d.error_marked_at is null
-            where d.store_id = :storeId and d.type not in ('PZ', 'PK', 'WZ')
-            group by d.id, d.type, d.number, d.document_date
-            having sum(l.quantity) <> 0
-            order by d.document_date desc, length(d.number) desc, d.number desc
-            limit :limit
+            , found as (
+                select d.id as document_id, d.type as document_type, d.number as document_number,
+                       d.document_date as document_date, sum(l.quantity) as quantity,
+                       exists (select 1 from document_gratis g
+                               where g.document_id = d.id and g.deleted_at is null) as gratis
+                from article_line_ids a
+                join document_lines l on l.id = a.id
+                join documents d on d.id = l.document_id and d.error_marked_at is null
+                where d.store_id = :storeId and d.type not in ('PZ', 'PK', 'WZ')
+                group by d.id, d.type, d.number, d.document_date
+                having sum(l.quantity) <> 0
+            )
+            select d.*, count(*) over () as total
+            from found d
+            where cardinality(cast(:patterns as text[])) = 0
+               or upper(d.document_number) like all (cast(:patterns as text[]))
+               or d.document_type = any (cast(:types as text[]))
+               or (:gratis and d.gratis)
+            order by
+                case when :sort = 'date' and not :descending then d.document_date end asc,
+                case when :sort = 'type' and not :descending then d.gratis end asc,
+                case when :sort = 'type' and not :descending then d.document_type end asc,
+                case when :sort = 'type' and :descending then d.gratis end desc,
+                case when :sort = 'type' and :descending then d.document_type end desc,
+                case when :sort = 'number' and not :descending then length(d.document_number) end asc,
+                case when :sort = 'number' and not :descending then d.document_number end asc,
+                case when :sort = 'number' and :descending then length(d.document_number) end desc,
+                case when :sort = 'number' and :descending then d.document_number end desc,
+                case when :sort = 'quantity' and not :descending then d.quantity end asc,
+                case when :sort = 'quantity' and :descending then d.quantity end desc,
+                d.document_date desc, length(d.document_number) desc, d.document_number desc
+            offset :offset limit :limit
             """, nativeQuery = true)
-    List<ArticleProtocol> findArticleProtocols(UUID storeId, String itm8, int limit);
+    List<ArticleProtocol> findArticleProtocols(UUID storeId, String itm8, String[] patterns, String[] types,
+            boolean gratis, String sort, boolean descending, int offset, int limit);
 
     /**
      * Likwidacje (PL) artykułu dzień po dniu wg daty dokumentu, {@code from} i {@code to} włącznie: wartość zakupu

@@ -12,6 +12,7 @@ import {
   FileTextIcon,
   IdCardIcon,
   ReceiptTextIcon,
+  ScrollTextIcon,
   SheetIcon,
   ShoppingCartIcon,
   TimerIcon,
@@ -45,6 +46,7 @@ export const TOOL_ROUTES: Record<ToolCategory, { path: string; icon: LucideIcon 
   STAFF_SCHEDULE: { path: '/grafik', icon: CalendarDaysIcon },
   STAFF_TIME: { path: '/czas-pracy', icon: TimerIcon },
   CASH_REPORT: { path: '/raport-kasowy', icon: WalletIcon },
+  STORE_LOG: { path: '/dziennik-sklepu', icon: ScrollTextIcon },
 }
 
 /** Czy kategoria to narzędzie ze stroną (a nie np. zawartość pulpitu). */

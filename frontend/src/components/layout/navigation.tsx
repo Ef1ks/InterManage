@@ -271,7 +271,7 @@ const GROUPS: GroupSpec[] = [
     key: 'settings',
     path: '/ustawienia',
     label: 'Ustawienia',
-    description: 'Ustawienia wybranego sklepu oraz sklepy, użytkownicy, role, kopia zapasowa i pliki do pobrania.',
+    description: 'Ustawienia i dziennik wybranego sklepu oraz sklepy, użytkownicy, role, kopia zapasowa i pliki do pobrania.',
     icon: SettingsIcon,
     items: [
       {
@@ -289,6 +289,7 @@ const GROUPS: GroupSpec[] = [
           hasPermission(me, 'DELI_ORDERS', 'EDIT'),
         badge: (me) => canEditDocuments(me) && <PartnerInvitationsBadge />,
       },
+      { category: 'STORE_LOG', section: STORE_SCOPE },
       {
         key: 'stores',
         section: COMPANY_SCOPE,

@@ -296,7 +296,29 @@ class SalesReportIntegrationTests {
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].documentId").value(local))
                 .andExpect(jsonPath("$[0].purchasePrice").value(3.0))
-                .andExpect(jsonPath("$[1].documentId").value(own));
+                .andExpect(jsonPath("$[1].documentId").value(own))
+                .andExpect(jsonPath("$[0].previousPurchasePrice").value(4.0))
+                .andExpect(jsonPath("$[1].previousPurchasePrice").doesNotExist());
+
+        // Strona karty: po jednej, sortowanie po cenie rosnąco, cena poprzedniej dostawy zostaje z kolejności w czasie.
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/deliveries/page").cookie(owner)
+                        .param("sort", "price").param("direction", "asc").param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].documentId").value(local))
+                .andExpect(jsonPath("$.items[0].previousPurchasePrice").value(4.0));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/deliveries/page").cookie(owner)
+                        .param("sort", "price").param("direction", "asc").param("limit", "1").param("offset", "1"))
+                .andExpect(jsonPath("$.items[0].documentId").value(own));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/deliveries/page").cookie(owner)
+                        .param("query", "10001"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].documentId").value(own));
+        mvc.perform(get(reportsUrl(storeId) + "/articles/" + article + "/protocols/page").cookie(owner)
+                        .param("query", "likw"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
 
         // Bez kodu stawki w kartotece VAT idzie z ostatniego dokumentu artykułu.
         mvc.perform(get(reportsUrl(storeId) + "/articles/" + article).cookie(owner))

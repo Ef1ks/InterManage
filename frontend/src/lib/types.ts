@@ -19,6 +19,7 @@ export type PermissionCategory =
   | 'STAFF_TIME'
   | 'DASHBOARD'
   | 'CASH_REPORT'
+  | 'STORE_LOG'
 
 /** Kategorie, które są narzędziem z własną stroną (DASHBOARD to tylko zawartość pulpitu). */
 export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD'>
@@ -1332,6 +1333,47 @@ export type TopSalesGroup = {
   rows: TopSalesRow[]
 }
 
+/** Sprzedaż za okres: sumy tylko z artykułów spełniających filtry, marża % od sprzedaży brutto. */
+export type PeriodSalesFigures = {
+  quantity: number
+  costValue: number
+  saleValueGross: number
+  saleValueNet: number
+  marginValue: number
+  marginPercent: number | null
+}
+
+export type PeriodSalesLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY'
+
+/** Kod pusty = bez nomenklatury. Podrodzina nie ma `children`, jej artykuły to osobne zapytanie. */
+export type PeriodSalesNode = {
+  code: string
+  name: string | null
+  level: PeriodSalesLevel
+  figures: PeriodSalesFigures
+  articleCount: number
+  children: PeriodSalesNode[]
+}
+
+export type PeriodSalesArticle = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  figures: PeriodSalesFigures
+}
+
+export type PeriodSalesReport = {
+  from: string
+  to: string
+  total: PeriodSalesFigures
+  articleCount: number
+  brands: { name: string; articleCount: number }[]
+  regions: PeriodSalesNode[]
+}
+
+export type PeriodSalesDepth = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'ARTICLE'
+
 export type TopSalesReport = {
   from: string
   to: string
@@ -1473,7 +1515,12 @@ export type ArticleDelivery = {
   meaCodes: string[]
   /** Te same kody z nazwą i okresem promocji (bez pobranego formularza sam numer). */
   mea: { number: string; title: string | null; promoFrom: string | null; promoTo: string | null }[]
+  /** Cena zakupu poprzedniej (starszej) dostawy, bez względu na sortowanie i wyszukiwanie. */
+  previousPurchasePrice: number | null
 }
+
+/** Strona listy w karcie artykułu: wiersze i ile pasuje do wyszukiwania na wszystkich stronach. */
+export type ArticleRowsPage<T> = { items: T[]; total: number }
 
 /**
  * Stan zamówienia gazetki MEA artykułu: z aplikacji z kartonami (ORDERED) albo bez tego artykułu (NOT_ORDERED), plik
@@ -4793,4 +4840,33 @@ export type FileQueueItem = {
   sizeBytes: number
   createdAt: string
   createdBy: string | null
+}
+
+/** Dziennik sklepu (StoreEventResponse): zmiany przez API, odrzucone próby i problemy z logów backendu. */
+export type StoreEventKind = 'ACTION' | 'FAILED' | 'SYSTEM'
+export type StoreEventLevel = 'INFO' | 'WARN' | 'ERROR'
+
+export type StoreEvent = {
+  id: string
+  occurredAt: string
+  userId: string | null
+  /** Pusty: zdarzenie bez zalogowanej osoby (zadanie w tle). */
+  userName: string | null
+  kind: StoreEventKind
+  level: StoreEventLevel
+  module: string | null
+  moduleLabel: string
+  method: string | null
+  path: string | null
+  status: number | null
+  durationMs: number | null
+  summary: string
+  detail: string | null
+}
+
+export type StoreEventPage = { items: StoreEvent[]; hasMore: boolean }
+
+export type StoreEventFilters = {
+  modules: { key: string; label: string }[]
+  users: { id: string; name: string }[]
 }

@@ -23,6 +23,8 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CsrfFilter;
 
+import com.intermanage.backend.activity.component.StoreEventBuffer;
+import com.intermanage.backend.activity.component.StoreEventFilter;
 import com.intermanage.backend.auth.security.AppUserDetailsService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.security.BackgroundAccounts;
@@ -46,7 +48,7 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
             BackgroundAccounts backgroundAccounts, WorkdayLock workdayLock, IdleLock idleLock,
-            RequestLimits requestLimits) throws Exception {
+            RequestLimits requestLimits, StoreEventBuffer storeEvents) throws Exception {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
@@ -83,7 +85,9 @@ public class SecurityConfig {
                 // Limity zapytań przed CSRF i JWT, żeby żądania ponad limit nie sięgały do bazy.
                 .addFilterBefore(new RateLimitFilter(requestLimits), CsrfFilter.class)
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts, workdayLock, idleLock),
-                        AnonymousAuthenticationFilter.class);
+                        AnonymousAuthenticationFilter.class)
+                // Dziennik sklepu: po JWT, żeby znać osobę, i przed autoryzacją, żeby widzieć też odmowy.
+                .addFilterAfter(new StoreEventFilter(storeEvents), JwtAuthenticationFilter.class);
 
         return http.build();
     }

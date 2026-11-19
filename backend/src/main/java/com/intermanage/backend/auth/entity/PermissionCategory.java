@@ -23,7 +23,8 @@ public enum PermissionCategory {
     STAFF_SCHEDULE("Grafik", "Miesięczne grafiki działów: układanie, publikacja i wersje przekazane pracownikom"),
     STAFF_TIME("Czas pracy", "Karty czasu pracy z odbić kart NFC: realny czas pracy, akceptacja nadgodzin i spóźnień"),
     DASHBOARD("Pełny pulpit", "Wyniki sklepu na pulpicie: sprzedaż ostatnich 7 dni wobec roku wcześniej i trend tygodni"),
-    CASH_REPORT("Raport kasowy", "Dokumenty KP i KW z wydrukiem i pieczątką sklepu, raport kasowy za okres i historia dokumentów");
+    CASH_REPORT("Raport kasowy", "Dokumenty KP i KW z wydrukiem i pieczątką sklepu, raport kasowy za okres i historia dokumentów"),
+    STORE_LOG("Dziennik sklepu", "Kto, kiedy i co zmienił w sklepie, odrzucone próby i problemy systemu. Dla kierowników");
 
     private final String label;
     private final String description;

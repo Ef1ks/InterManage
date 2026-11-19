@@ -74,7 +74,8 @@ public interface SalesMapper {
                                     ? new ArticleDeliveryResponse.Mea(code, null, null, null)
                                     : new ArticleDeliveryResponse.Mea(code, document.getTitle(),
                                             document.getPromoFrom(), document.getPromoTo());
-                        }).toList());
+                        }).toList(),
+                delivery.getPreviousPrice());
     }
 
     @Mapping(target = "label", expression = "java(protocolLabel(protocol))")

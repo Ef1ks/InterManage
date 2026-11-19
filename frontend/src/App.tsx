@@ -53,6 +53,7 @@ import { ToolPlaceholderPage } from '@/features/tools/ToolPlaceholderPage'
 import type { PermissionCategory, ToolCategory } from '@/lib/types'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { CashPage } from '@/features/cash/CashPage'
+import { StoreLogPage } from '@/features/store-log/StoreLogPage'
 
 /** Gotowe moduły; reszta kategorii pokazuje stronę "w przygotowaniu". */
 const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
@@ -72,6 +73,7 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   STAFF_SCHEDULE: <SchedulePage />,
   STAFF_TIME: <TimePage />,
   CASH_REPORT: <CashPage />,
+  STORE_LOG: <StoreLogPage />,
 }
 
 const toolRoutes = (Object.keys(TOOL_ROUTES) as ToolCategory[]).map((category) => ({

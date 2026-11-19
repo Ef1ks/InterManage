@@ -14,6 +14,7 @@ import { ProtocolReport } from '@/features/sales/ProtocolReport'
 import { ReportsGrid } from '@/features/sales/ReportsGrid'
 import { SalesComparisonReport } from '@/features/sales/SalesComparisonReport'
 import { TopSalesReport } from '@/features/sales/TopSalesReport'
+import { PeriodSalesReport } from '@/features/sales/PeriodSalesReport'
 import { SlowMovingReport } from '@/features/sales/SlowMovingReport'
 import { MissingAssortmentReport } from '@/features/sales/MissingAssortmentReport'
 import { StockGapReport } from '@/features/sales/StockGapReport'
@@ -47,6 +48,7 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="porownanie" element={<SalesComparisonReport storeId={store.id} />} />
         <Route path="podsumowanie" element={<PeriodSummaryReport storeId={store.id} />} />
         <Route path="topy" element={<TopSalesReport storeId={store.id} />} />
+        <Route path="sprzedaz-okresu" element={<PeriodSalesReport storeId={store.id} />} />
         <Route path="raport-lady" element={<CounterReport storeId={store.id} />} />
         <Route path="koszty-garmazu" element={<SalesComparisonReport key="deli" storeId={store.id} kind="deli" />} />
         <Route path="zakup-bazowy-poza-baza" element={<PriceCheckReport storeId={store.id} />} />

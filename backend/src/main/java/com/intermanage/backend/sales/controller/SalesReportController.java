@@ -22,6 +22,7 @@ import com.intermanage.backend.product.dto.ArticleCodesResponse;
 import com.intermanage.backend.product.service.ArticleCodesService;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
+import com.intermanage.backend.sales.dto.ArticleRowsPage;
 import com.intermanage.backend.sales.dto.DeliCostsOverview;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
@@ -132,6 +133,29 @@ public class SalesReportController {
     @PreAuthorize(ARTICLE_VIEW)
     public List<ArticleDeliveryResponse> articleDeliveries(@PathVariable UUID storeId, @PathVariable String itm8) {
         return salesReportService.deliveries(storeId, itm8);
+    }
+
+    /**
+     * Strona dostaw artykułu w karcie: {@code limit} wierszy od {@code offset}, sortowanie {@code sort} (date, number,
+     * supplier, quantity, price, value) i wyszukiwanie {@code query} po numerze i dostawcy.
+     */
+    @GetMapping("/articles/{itm8}/deliveries/page")
+    @PreAuthorize(ARTICLE_VIEW)
+    public ArticleRowsPage<ArticleDeliveryResponse> articleDeliveryPage(@PathVariable UUID storeId,
+            @PathVariable String itm8, @RequestParam(required = false) String query,
+            @RequestParam(required = false) String sort, @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "15") int limit) {
+        return salesReportService.deliveryPage(storeId, itm8, query, sort, !"asc".equals(direction), offset, limit);
+    }
+
+    /** Strona protokołów artykułu w karcie, jak dostawy; {@code sort}: date, type, number, quantity. */
+    @GetMapping("/articles/{itm8}/protocols/page")
+    @PreAuthorize(ARTICLE_VIEW)
+    public ArticleRowsPage<ArticleProtocolResponse> articleProtocolPage(@PathVariable UUID storeId,
+            @PathVariable String itm8, @RequestParam(required = false) String query,
+            @RequestParam(required = false) String sort, @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "15") int limit) {
+        return salesReportService.protocolPage(storeId, itm8, query, sort, !"asc".equals(direction), offset, limit);
     }
 
     /** Gazetki MEA artykułu, które trwają albo dopiero będą: okres, rozrzuty i zamówione kartony. */

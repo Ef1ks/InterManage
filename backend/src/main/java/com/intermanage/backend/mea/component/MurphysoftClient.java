@@ -190,7 +190,10 @@ public class MurphysoftClient {
         try {
             response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
         } catch (IOException exception) {
-            log.warn("Portal {}: {}", path, exception.toString());
+            // HttpClient zgłasza nieudane połączenie jako ConnectException bez opisu, a przyczyna jest dopiero w cause.
+            Throwable cause = exception;
+            while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+            log.warn("Portal {}: {}{}", path, exception, cause == exception ? "" : " (przyczyna: " + cause + ")");
             throw new Unavailable("Brak połączenia z portalem Grupy Muszkieterów. Spróbuj ponownie za chwilę");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();

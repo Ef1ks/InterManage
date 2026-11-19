@@ -20,6 +20,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.component.Percent;
 import com.intermanage.backend.common.exception.ApiException;
@@ -29,6 +31,7 @@ import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
 import com.intermanage.backend.promotion.service.PromotionReportService;
 import com.intermanage.backend.sales.component.RegionGroups;
+import com.intermanage.backend.sales.component.TopSalesPdf;
 import com.intermanage.backend.sales.dto.TopSalesLevel;
 import com.intermanage.backend.sales.dto.TopSalesMetric;
 import com.intermanage.backend.sales.dto.TopSalesReport;
@@ -39,6 +42,8 @@ import com.intermanage.backend.sales.dto.TopSalesReport.Partner;
 import com.intermanage.backend.sales.dto.TopSalesReport.Row;
 import com.intermanage.backend.sales.repository.SaleRepository;
 import com.intermanage.backend.sales.repository.SaleRepository.ArticleSales;
+import com.intermanage.backend.sales.service.PeriodSummaryService.ExportFile;
+import com.intermanage.backend.supplier.repository.SupplierRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StorePartnerRepository;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -64,6 +69,8 @@ public class TopSalesService {
     private static final String UNASSIGNED = "";
     /** Paczka ITM8 w zapytaniu o ostatniego dostawcę (limit parametrów JDBC). */
     private static final int SUPPLIER_BATCH = 5000;
+    /** Kod pozycji „Bez nomenklatury” w wyborze do wydruku. */
+    public static final String UNASSIGNED_GROUP = "brak";
 
     private final SaleRepository sales;
     private final PromotionReportService promotions;
@@ -71,11 +78,18 @@ public class TopSalesService {
     private final StoreRepository stores;
     private final StorePartnerRepository partners;
     private final DocumentLineRepository lines;
+    private final SupplierRepository supplierList;
+    private final AppUserRepository users;
+    private final TopSalesPdf reportPdf;
 
     public TopSalesService(SaleRepository sales, PromotionReportService promotions,
             NomenclatureRepository nomenclatures, StoreRepository stores, StorePartnerRepository partners,
-            DocumentLineRepository lines) {
+            DocumentLineRepository lines, SupplierRepository supplierList, AppUserRepository users,
+            TopSalesPdf reportPdf) {
         this.lines = lines;
+        this.supplierList = supplierList;
+        this.users = users;
+        this.reportPdf = reportPdf;
         this.sales = sales;
         this.promotions = promotions;
         this.nomenclatures = nomenclatures;
@@ -145,6 +159,75 @@ public class TopSalesService {
                 .toList();
         return new TopSalesReport(from, to, metric, level, limit, minQuantity, MAX_PROMOTION_MARGIN_PERCENT, ranked,
                 shown, groups, standings.get(ranked).brands);
+    }
+
+    /**
+     * Wydruk topów z tymi samymi filtrami co ekran. {@code printed}: kody pozycji nomenklatury do wydruku
+     * ({@value #UNASSIGNED_GROUP} = bez nomenklatury), puste = wszystkie pozycje raportu.
+     */
+    @Transactional(readOnly = true)
+    public ExportFile pdf(UUID storeId, LocalDate from, LocalDate to, TopSalesMetric metric, TopSalesLevel level,
+            int limit, BigDecimal minQuantity, List<String> filter, List<String> brands, List<String> suppliers,
+            List<UUID> compareStores, UUID rankStore, List<String> printed, UUID userId) {
+        TopSalesReport report = report(storeId, from, to, metric, level, limit, minQuantity, filter, brands,
+                suppliers, compareStores, rankStore);
+        List<Group> groups = report.groups();
+        if (printed != null && !printed.isEmpty() && level != TopSalesLevel.STORE) {
+            Set<String> chosen = printed.stream()
+                    .map(code -> UNASSIGNED_GROUP.equals(code) ? UNASSIGNED : code.trim())
+                    .collect(Collectors.toSet());
+            groups = groups.stream().filter(group -> chosen.contains(group.code())).toList();
+        }
+        if (groups.isEmpty()) {
+            throw ApiException.badRequest("Brak artykułów do wydruku");
+        }
+        String printedBy = userId != null ? users.findById(userId).map(AppUser::getDisplayName).orElse(null) : null;
+        String single = groups.size() == 1 ? groups.getFirst().code() : null;
+        String fileName = "topy-" + report.stores().getFirst().number()
+                + (single != null && !single.isEmpty() ? "-" + single : "") + ".pdf";
+        return new ExportFile(fileName, "application/pdf",
+                reportPdf.pdf(report, groups, filterNotes(report, filter, brands, suppliers), printedBy));
+    }
+
+    /** Opis filtrów do nagłówka wydruku. */
+    private List<String> filterNotes(TopSalesReport report, List<String> filter, List<String> brands,
+            List<String> suppliers) {
+        List<String> notes = new ArrayList<>();
+        notes.add("poziom: " + switch (report.level()) {
+            case STORE -> "cały sklep";
+            case REGION -> "rejon";
+            case FAMILY -> "rodzina";
+            case SUBFAMILY -> "podrodzina";
+        });
+        if (report.metric() == TopSalesMetric.MARGIN_PERCENT && report.minQuantity().signum() > 0) {
+            notes.add("najmniejsza ilość "
+                    + report.minQuantity().stripTrailingZeros().toPlainString().replace('.', ','));
+        }
+        if (filter != null && !filter.isEmpty()) {
+            Map<String, String> names = nomenclatures.findAllByStore(report.rankStoreId()).stream()
+                    .collect(Collectors.toMap(Nomenclature::getCode, Nomenclature::getName));
+            notes.add("nomenklatura: " + filter.stream().distinct().sorted()
+                    .map(code -> TopSalesPdf.spaced(code)
+                            + (names.containsKey(code) ? " " + TopSalesPdf.nomenclatureName(names.get(code)) : ""))
+                    .collect(Collectors.joining(", ")));
+        }
+        if (brands != null && !brands.isEmpty()) {
+            notes.add("marka: " + brands.stream().map(TopSalesService::brandKey).distinct().sorted()
+                    .collect(Collectors.joining(", ")));
+        }
+        if (suppliers != null && !suppliers.isEmpty()) {
+            Map<String, String> names = new HashMap<>();
+            supplierList.findByStore(report.rankStoreId()).stream().filter(supplier -> supplier.getCode() != null)
+                    .forEach(supplier -> names.putIfAbsent(supplier.getCode().trim(), supplier.getName()));
+            notes.add("dostawca: " + suppliers.stream().map(String::trim).distinct().sorted()
+                    .map(code -> code + (names.containsKey(code) ? " " + names.get(code) : ""))
+                    .collect(Collectors.joining(", ")));
+        }
+        if (report.stores().size() > 1) {
+            notes.add("porównanie ze sklepami: " + report.stores().subList(1, report.stores().size()).stream()
+                    .map(TopSalesReport.Store::number).collect(Collectors.joining(", ")));
+        }
+        return notes;
     }
 
     /** Ranking jednego sklepu: grupy w kolejności kodów (bez nomenklatury na końcu), artykuły od najlepszego. */

@@ -8,6 +8,7 @@ export const salesPaths = {
   deliCosts: `${base}/koszty-garmazu`,
   counter: `${base}/raport-lady`,
   periodSummary: `${base}/podsumowanie`,
+  periodSales: `${base}/sprzedaz-okresu`,
   priceCheck: `${base}/zakup-bazowy-poza-baza`,
   overpayments: `${base}/przeplacone-artykuly`,
   lowMargins: `${base}/za-niskie-marze`,

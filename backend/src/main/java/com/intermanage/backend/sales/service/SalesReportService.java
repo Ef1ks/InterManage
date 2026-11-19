@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.common.component.ReportPeriod;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.dataentry.service.DataEntryService;
+import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.nomenclature.mapper.NomenclatureMapper;
@@ -33,6 +35,7 @@ import com.intermanage.backend.mea.entity.MeaDocument;
 import com.intermanage.backend.mea.repository.MeaDocumentRepository;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
+import com.intermanage.backend.sales.dto.ArticleRowsPage;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse.Level;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
@@ -279,8 +282,19 @@ public class SalesReportService {
 
     /** Ostatnie dostawy artykułu (przyjęcia PZ), od najnowszej, najwyżej {@link #DELIVERY_LIMIT}. */
     public List<ArticleDeliveryResponse> deliveries(UUID storeId, String itm8) {
-        List<DocumentLineRepository.ArticleDelivery> deliveries =
-                documentLines.findArticleDeliveries(storeId, itm8.strip(), DELIVERY_LIMIT);
+        return deliveryPage(storeId, itm8, null, null, true, 0, DELIVERY_LIMIT).items();
+    }
+
+    /**
+     * Strona dostaw artykułu w karcie: {@code limit} od {@code offset} (najwyżej {@link #PAGE_LIMIT}), posortowana po
+     * {@code sort} ({@link #DELIVERY_SORTS}, domyślnie data), z wyszukiwaniem po numerze, dostawcy i nr dok. dostawcy
+     * (każde słowo). Zmiana ceny liczy się zawsze względem poprzedniej dostawy w czasie.
+     */
+    public ArticleRowsPage<ArticleDeliveryResponse> deliveryPage(UUID storeId, String itm8, String query, String sort,
+            boolean descending, int offset, int limit) {
+        List<DocumentLineRepository.ArticleDelivery> deliveries = documentLines.findArticleDeliveries(storeId,
+                itm8.strip(), DataEntryService.likePatterns(query, true), sortOf(sort, DELIVERY_SORTS), descending,
+                Math.max(offset, 0), pageLimit(limit));
         // Nazwa i okres gazetki przy kodzie MEA (z formularzy pobranych z portalu).
         Set<String> codes = deliveries.stream().map(DocumentLineRepository.ArticleDelivery::getMeaCodes)
                 .filter(Objects::nonNull).flatMap(value -> Arrays.stream(value.split(",")))
@@ -288,14 +302,53 @@ public class SalesReportService {
         Map<String, MeaDocument> mea = codes.isEmpty() ? Map.of()
                 : meaDocuments.findByNumberIn(codes).stream()
                         .collect(Collectors.toMap(MeaDocument::getNumber, Function.identity()));
-        return deliveries.stream().map(delivery -> salesMapper.toDelivery(delivery, mea)).toList();
+        return new ArticleRowsPage<>(deliveries.stream().map(delivery -> salesMapper.toDelivery(delivery, mea)).toList(),
+                deliveries.isEmpty() ? 0 : deliveries.getFirst().getTotal());
     }
 
     /** Ostatnie protokoły artykułu (bez przyjęć i korekt), od najnowszego, najwyżej {@link #PROTOCOL_LIMIT}. */
     public List<ArticleProtocolResponse> protocols(UUID storeId, String itm8) {
-        return documentLines.findArticleProtocols(storeId, itm8.strip(), PROTOCOL_LIMIT).stream()
-                .map(salesMapper::toProtocol)
-                .toList();
+        return protocolPage(storeId, itm8, null, null, true, 0, PROTOCOL_LIMIT).items();
+    }
+
+    /**
+     * Strona protokołów artykułu w karcie, jak {@link #deliveryPage}. Wyszukiwanie: numer zawiera każde słowo albo
+     * całe zapytanie jest fragmentem nazwy rodzaju („likw” = likwidacje, „gratis” = przeniesienia jako gratis).
+     */
+    public ArticleRowsPage<ArticleProtocolResponse> protocolPage(UUID storeId, String itm8, String query, String sort,
+            boolean descending, int offset, int limit) {
+        String[] patterns = DataEntryService.likePatterns(query, true);
+        String needle = patterns.length == 0 ? null : plain(query);
+        String[] types = needle == null ? new String[0]
+                : Arrays.stream(DocumentType.values())
+                        .filter(type -> plain(type.label()).contains(needle) || plain(type.singular()).contains(needle))
+                        .map(Enum::name).toArray(String[]::new);
+        boolean gratis = needle != null && "GRATIS".contains(needle);
+        List<DocumentLineRepository.ArticleProtocol> protocols = documentLines.findArticleProtocols(storeId,
+                itm8.strip(), patterns, types, gratis, sortOf(sort, PROTOCOL_SORTS), descending, Math.max(offset, 0),
+                pageLimit(limit));
+        return new ArticleRowsPage<>(protocols.stream().map(salesMapper::toProtocol).toList(),
+                protocols.isEmpty() ? 0 : protocols.getFirst().getTotal());
+    }
+
+    private static final Set<String> DELIVERY_SORTS = Set.of("date", "number", "supplier", "quantity", "price", "value");
+    private static final Set<String> PROTOCOL_SORTS = Set.of("date", "type", "number", "quantity");
+
+    /** Najwięcej wierszy na stronę karty artykułu. */
+    static final int PAGE_LIMIT = 100;
+
+    private static String sortOf(String sort, Set<String> allowed) {
+        return sort != null && allowed.contains(sort) ? sort : "date";
+    }
+
+    private static int pageLimit(int limit) {
+        return Math.clamp(limit, 1, PAGE_LIMIT);
+    }
+
+    /** Wielkie litery bez polskich znaków, jak wzorce z {@link DataEntryService#likePatterns}. */
+    private static String plain(String text) {
+        return java.text.Normalizer.normalize(text.strip().toUpperCase(java.util.Locale.ROOT).replace('Ł', 'L'),
+                java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 
     private static String parentCode(String parent, boolean unassigned) {

@@ -219,6 +219,27 @@ class TopSalesIntegrationTests {
     }
 
     @Test
+    void printsChosenGroupsOrWholeReport() throws Exception {
+        sale(store, salesImport, BEST, "2026-10-05", 100, "100.00", "200.00");
+        sale(store, salesImport, OTHER_REGION, "2026-10-05", 5, "5.00", "10.00");
+        sale(store, salesImport, NOT_IN_CATALOG, "2026-10-05", 1, "1.00", "2.00");
+        String pdf = "/api/stores/" + store + "/reports/top-sales/pdf?" + PERIOD + "&metric=QUANTITY";
+
+        byte[] whole = mvc.perform(get(pdf).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentType(MediaType.APPLICATION_PDF))
+                .andReturn().getResponse().getContentAsByteArray();
+        org.junit.jupiter.api.Assertions.assertEquals("%PDF", new String(whole, 0, 4));
+
+        mvc.perform(get(pdf + "&groups=01&groups=brak").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Disposition", org.hamcrest.Matchers.containsString("topy-")));
+        mvc.perform(get(pdf + "&groups=99").cookie(owner)).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rejectsWrongLimit() throws Exception {
         mvc.perform(get(url("metric=QUANTITY&limit=0")).cookie(owner)).andExpect(status().isBadRequest());
     }

@@ -1,17 +1,27 @@
-import { useId, useState, type ReactNode } from 'react'
+import { type ReactNode, useMemo, useRef, useState } from 'react'
 
 import { SelectField } from '@/components/form'
+import { LoadingPanel } from '@/components/LoadingPanel'
 import { formatDocumentDate, formatMoney, formatPercent } from '@/features/documents/format'
 import { useProductPrices } from '@/features/inventory/api'
+import {
+  ArticleListSection,
+  EmptyListRow,
+  LoadMoreRow,
+  SortTh,
+  useListControls,
+  useLocalPages,
+} from '@/features/sales/ArticleListSection'
 import { parseIsoDate, todayIso } from '@/lib/dates'
+import { type SortAccessors, sortRows } from '@/lib/table-sort'
 import type { ProductPriceChange, ProductPromotion } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { LoadingPanel } from '@/components/LoadingPanel'
 
 /**
  * Historia cen artykułu pod wykresem: zmiany ceny sprzedaży (pliki z kasy po EAN-ie, importy kartoteki, pliki zmiany
  * cen z wprowadzania danych) i przeceny z listy promocji, od najnowszych. Artykuł z kilkoma EAN-ami (także z etykiet
- * obniżek) pokazuje jeden naraz, domyślnie główny.
+ * obniżek) pokazuje jeden naraz, domyślnie główny. Historia przychodzi w całości, więc sortowanie i wyszukiwanie
+ * liczy przeglądarka, a wiersze rysują się po 15 przy przewijaniu.
  */
 export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: string }) {
   const prices = useProductPrices(storeId, itm8)
@@ -19,120 +29,183 @@ export function ArticlePriceHistory({ storeId, itm8 }: { storeId: string; itm8: 
   const [chosenEan, setChosenEan] = useState<string | null>(null)
   const eans = [...new Set(data?.changes.flatMap((change) => change.ean ?? []))]
   const ean = chosenEan ?? (eans.find((code) => code === data?.mainEan) || eans[0]) ?? null
-  const changes = data?.changes.filter((change) => change.ean === null || change.ean === ean) ?? []
+  const changes = useMemo(
+    () => data?.changes.filter((change) => change.ean === null || change.ean === ean) ?? [],
+    [data, ean],
+  )
+
+  if (!data) {
+    return (
+      <>
+        {['Zmiany cen', 'Przeceny'].map((title) => (
+          <section key={title} className="grid min-w-0 gap-2">
+            <h3 className="text-sm font-semibold">{title}</h3>
+            {prices.isError ? (
+              <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+                Nie udało się wczytać historii cen.
+              </p>
+            ) : (
+              <LoadingPanel className="h-24 rounded-lg" />
+            )}
+          </section>
+        ))}
+      </>
+    )
+  }
 
   return (
     <>
-      <HistorySection
-        title="Zmiany cen"
-        note="cena sprzedaży brutto, od najnowszej"
-        isError={prices.isError}
-        isPending={prices.isPending}
-        empty={
-          data?.changes.length === 0
-            ? 'Brak zapisanych zmian ceny. Ceny z kasy mamy od stycznia 2026, zmiany z importów kartoteki od 2 listopada 2026, a z wprowadzania danych od pierwszego pliku zmiany cen.'
-            : null
-        }
-        toolbar={
-          eans.length > 1 && ean ? (
-            <div className="max-w-sm">
-              <SelectField
-                label="EAN"
-                options={eans.map((code) => ({
-                  value: code,
-                  label: code === data?.mainEan ? `${code} (główny)` : code,
-                }))}
-                value={ean}
-                onChange={(next) => setChosenEan(next)}
-              />
-            </div>
-          ) : null
-        }
-      >
-        {data && <PriceChangesTable changes={changes} />}
-      </HistorySection>
-      <HistorySection
-        title="Przeceny"
-        note="promocje z listy promocji, od najpóźniej kończącej się"
-        isError={prices.isError}
-        isPending={prices.isPending}
-        empty={data?.promotions.length === 0 ? 'Artykułu nie ma we wgranych listach promocji.' : null}
-      >
-        {data && <PromotionsTable promotions={data.promotions} />}
-      </HistorySection>
+      {data.changes.length === 0 ? (
+        <EmptySection title="Zmiany cen">
+          Brak zapisanych zmian ceny. Ceny z kasy mamy od stycznia 2026, zmiany z importów kartoteki od 2 listopada
+          2026, a z wprowadzania danych od pierwszego pliku zmiany cen.
+        </EmptySection>
+      ) : (
+        <PriceChanges
+          changes={changes}
+          toolbar={
+            eans.length > 1 && ean ? (
+              <div className="w-56">
+                <SelectField
+                  label="EAN"
+                  options={eans.map((code) => ({
+                    value: code,
+                    label: code === data.mainEan ? `${code} (główny)` : code,
+                  }))}
+                  value={ean}
+                  onChange={(next) => setChosenEan(next)}
+                />
+              </div>
+            ) : null
+          }
+        />
+      )}
+      {data.promotions.length === 0 ? (
+        <EmptySection title="Przeceny">Artykułu nie ma we wgranych listach promocji.</EmptySection>
+      ) : (
+        <Promotions promotions={data.promotions} />
+      )}
     </>
   )
 }
 
-function HistorySection({
-  title,
-  note,
-  isError,
-  isPending,
-  empty,
-  toolbar,
-  children,
-}: {
-  title: string
-  note: string
-  isError: boolean
-  isPending: boolean
-  empty: string | null
-  toolbar?: ReactNode
-  children: ReactNode
-}) {
-  // Historia bywa naraz na stronie i w oknie statystyk nad nią, więc id nagłówka musi być unikalne.
-  const id = useId()
+function EmptySection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="grid min-w-0 gap-2" aria-labelledby={id}>
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 id={id} className="text-sm font-semibold">
-          {title}
-        </h3>
-        <p className="text-xs text-muted-foreground">{note}</p>
-      </div>
-      {toolbar}
-      {isError ? (
-        <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Nie udało się wczytać historii cen.
-        </p>
-      ) : isPending ? (
-        <LoadingPanel className="h-24 rounded-lg" />
-      ) : empty ? (
-        <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <div className="max-h-80 min-w-0 overflow-auto rounded-lg border bg-card">{children}</div>
-      )}
+    <section className="grid min-w-0 gap-2">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">{children}</p>
     </section>
   )
 }
 
-function PriceChangesTable({ changes }: { changes: ProductPriceChange[] }) {
+/** Każde słowo wyszukiwania musi być w tekście wiersza (bez wielkości liter). */
+function matches(text: string, query: string) {
+  const haystack = text.toLowerCase()
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => haystack.includes(word))
+}
+
+type ChangeColumn = 'date' | 'price' | 'promo'
+
+const CHANGE_SORT: SortAccessors<ProductPriceChange, ChangeColumn> = {
+  date: (change) => change.changedAt,
+  price: (change) => change.salePrice,
+  promo: (change) => change.promoPrice,
+}
+
+const SOURCE_LABELS: Record<ProductPriceChange['source'], string> = {
+  TILL: 'kasa',
+  REPORT: 'kartoteka',
+  DATA_ENTRY: 'wprowadzanie danych',
+}
+
+/** Tekst zmiany do wyszukiwania: data, ceny, źródło, opis i osoba. */
+function changeText(change: ProductPriceChange) {
+  return [
+    change.changedAt && formatDateTime(change.changedAt),
+    change.salePrice != null && formatMoney(change.salePrice),
+    change.previousSalePrice != null && formatMoney(change.previousSalePrice),
+    change.promoPrice != null && `${formatMoney(change.promoPrice)} promocja`,
+    SOURCE_LABELS[change.source],
+    change.description,
+    change.user,
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function PriceChanges({ changes, toolbar }: { changes: ProductPriceChange[]; toolbar: ReactNode }) {
+  const controls = useListControls<ChangeColumn>({ key: 'date', direction: 'desc' })
+  const { sort, toggleSort } = controls
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rows = useMemo(
+    () =>
+      sortRows(
+        changes.filter((change) => matches(changeText(change), controls.query)),
+        CHANGE_SORT,
+        sort,
+      ),
+    [changes, controls.query, sort],
+  )
+  const pages = useLocalPages(rows)
+  const searching = controls.query.trim() !== ''
+
   return (
-    <table className="w-full min-w-[40rem] text-sm tabular-nums">
-      <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
-        <tr>
-          <th className="px-3 py-2 text-left font-medium">Kiedy</th>
-          <th className="px-3 py-2 text-right font-medium">Cena</th>
-          <th className="px-3 py-2 text-left font-medium">Promocja</th>
-        </tr>
-      </thead>
-      <tbody>
-        {changes.map((change, index) => (
-          <tr key={index} className="border-t align-top">
-            <td className="px-3 py-1.5 whitespace-nowrap">
-              {change.changedAt ? formatDateTime(change.changedAt) : '—'}
-            </td>
-            <td className="px-3 py-1.5 text-right whitespace-nowrap">
-              <PriceStep before={change.previousSalePrice} after={change.salePrice} />
-            </td>
-            <td className="px-3 py-1.5 whitespace-nowrap">
-              <PromoCell change={change} />
-            </td>
+    <ArticleListSection
+      title="Zmiany cen"
+      note={
+        <span title="Cena sprzedaży brutto">{searching ? `pasuje: ${rows.length}` : `zmiany: ${rows.length}`}</span>
+      }
+      searchLabel="Szukaj: data, cena, źródło"
+      search={controls.text}
+      onSearch={controls.setText}
+      toolbar={toolbar}
+      scrollRef={scrollRef}
+      className="max-h-80"
+    >
+      <table className="w-full min-w-[40rem] text-sm tabular-nums">
+        <thead className="sticky top-0 z-10 bg-muted text-xs text-muted-foreground">
+          <tr>
+            <SortTh column="date" sort={sort} onSort={toggleSort}>
+              Kiedy
+            </SortTh>
+            <SortTh column="price" sort={sort} onSort={toggleSort} align="right">
+              Cena
+            </SortTh>
+            <SortTh column="promo" sort={sort} onSort={toggleSort}>
+              Promocja
+            </SortTh>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <EmptyListRow colSpan={3}>Żadna zmiana nie pasuje do wyszukiwania.</EmptyListRow>}
+          {pages.visible.map((change, index) => (
+            <tr key={index} className="border-t align-top">
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                {change.changedAt ? formatDateTime(change.changedAt) : '—'}
+              </td>
+              <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                <PriceStep before={change.previousSalePrice} after={change.salePrice} />
+              </td>
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                <PromoCell change={change} />
+              </td>
+            </tr>
+          ))}
+          <LoadMoreRow
+            colSpan={3}
+            hasMore={pages.hasMore}
+            loading={false}
+            loaded={pages.visible.length}
+            onLoadMore={pages.loadMore}
+            root={scrollRef}
+          />
+        </tbody>
+      </table>
+    </ArticleListSection>
   )
 }
 
@@ -177,63 +250,146 @@ function PromoCell({ change }: { change: ProductPriceChange }) {
   )
 }
 
-function PromotionsTable({ promotions }: { promotions: ProductPromotion[] }) {
+type PromotionColumn = 'period' | 'regular' | 'promo' | 'discount' | 'margin' | 'status'
+
+const discountOf = (promotion: ProductPromotion) =>
+  promotion.regularSalePrice && promotion.promoPrice != null
+    ? ((promotion.regularSalePrice - promotion.promoPrice) / promotion.regularSalePrice) * 100
+    : null
+
+/** Kolejność statusów przy sortowaniu: najpierw trwające, potem zaplanowane, zakończone i odwołane. */
+const STATUS_ORDER = { trwa: 0, zaplanowana: 1, zakończona: 2, odwołana: 3 } as const
+
+function promotionStatus(promotion: ProductPromotion, today: string): keyof typeof STATUS_ORDER {
+  if (promotion.cancelled) return 'odwołana'
+  if (promotion.startDate > today) return 'zaplanowana'
+  return promotion.endDate >= today ? 'trwa' : 'zakończona'
+}
+
+function Promotions({ promotions }: { promotions: ProductPromotion[] }) {
+  // Domyślnie od najpóźniej kończącej się, jak lista promocji.
+  const controls = useListControls<PromotionColumn>({ key: 'period', direction: 'desc' })
+  const { sort, toggleSort } = controls
+  const scrollRef = useRef<HTMLDivElement>(null)
   const today = todayIso()
+  const accessors = useMemo<SortAccessors<ProductPromotion, PromotionColumn>>(
+    () => ({
+      period: (promotion) => promotion.endDate,
+      regular: (promotion) => promotion.regularSalePrice,
+      promo: (promotion) => promotion.promoPrice,
+      discount: discountOf,
+      margin: (promotion) => promotion.marginPercent,
+      status: (promotion) => STATUS_ORDER[promotionStatus(promotion, today)],
+    }),
+    [today],
+  )
+  const rows = useMemo(() => {
+    const found = promotions.filter((promotion) =>
+      matches(
+        [
+          formatDocumentDate(promotion.startDate),
+          formatDocumentDate(promotion.endDate),
+          promotion.regularSalePrice != null && formatMoney(promotion.regularSalePrice),
+          promotion.promoPrice != null && formatMoney(promotion.promoPrice),
+          promotionStatus(promotion, today),
+        ]
+          .filter(Boolean)
+          .join(' '),
+        controls.query,
+      ),
+    )
+    return sortRows(found, accessors, sort)
+  }, [promotions, controls.query, accessors, sort, today])
+  const pages = useLocalPages(rows)
+  const searching = controls.query.trim() !== ''
+
   return (
-    <table className="w-full min-w-[40rem] text-sm tabular-nums">
-      <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
-        <tr>
-          <th className="px-3 py-2 text-left font-medium">Okres</th>
-          <th className="px-3 py-2 text-right font-medium">Cena regularna</th>
-          <th className="px-3 py-2 text-right font-medium">Cena promocyjna</th>
-          <th className="px-3 py-2 text-right font-medium">Rabat</th>
-          <th className="px-3 py-2 text-right font-medium">Marża</th>
-          <th className="px-3 py-2 text-left font-medium">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {promotions.map((promotion) => {
-          const discount =
-            promotion.regularSalePrice && promotion.promoPrice != null
-              ? ((promotion.regularSalePrice - promotion.promoPrice) / promotion.regularSalePrice) * 100
-              : null
-          return (
-            <tr key={`${promotion.startDate}:${promotion.endDate}`} className="border-t">
-              <td className="px-3 py-1.5 whitespace-nowrap">
-                {formatDocumentDate(promotion.startDate)} – {formatDocumentDate(promotion.endDate)}
-              </td>
-              <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                {promotion.regularSalePrice == null ? '—' : `${formatMoney(promotion.regularSalePrice)} zł`}
-              </td>
-              <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap text-orange-600 dark:text-orange-400">
-                {promotion.promoPrice == null ? '—' : `${formatMoney(promotion.promoPrice)} zł`}
-              </td>
-              <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                {discount == null ? '—' : `−${formatPercent(discount)}`}
-              </td>
-              <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                {promotion.marginPercent == null ? '—' : formatPercent(promotion.marginPercent)}
-              </td>
-              <td className="px-3 py-1.5 whitespace-nowrap">
-                <PromotionStatus promotion={promotion} today={today} />
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <ArticleListSection
+      title="Przeceny"
+      note={
+        <span title="Promocje z listy promocji">
+          {searching ? `pasuje: ${rows.length}` : `promocje: ${rows.length}`}
+        </span>
+      }
+      searchLabel="Szukaj: data, cena, status"
+      search={controls.text}
+      onSearch={controls.setText}
+      scrollRef={scrollRef}
+      className="max-h-80"
+    >
+      <table className="w-full min-w-[40rem] text-sm tabular-nums">
+        <thead className="sticky top-0 z-10 bg-muted text-xs text-muted-foreground">
+          <tr>
+            <SortTh column="period" sort={sort} onSort={toggleSort}>
+              Okres
+            </SortTh>
+            <SortTh column="regular" sort={sort} onSort={toggleSort} align="right">
+              Cena regularna
+            </SortTh>
+            <SortTh column="promo" sort={sort} onSort={toggleSort} align="right">
+              Cena promocyjna
+            </SortTh>
+            <SortTh column="discount" sort={sort} onSort={toggleSort} align="right">
+              Rabat
+            </SortTh>
+            <SortTh column="margin" sort={sort} onSort={toggleSort} align="right">
+              Marża
+            </SortTh>
+            <SortTh column="status" sort={sort} onSort={toggleSort}>
+              Status
+            </SortTh>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <EmptyListRow colSpan={6}>Żadna promocja nie pasuje do wyszukiwania.</EmptyListRow>}
+          {pages.visible.map((promotion) => {
+            const discount = discountOf(promotion)
+            return (
+              <tr key={`${promotion.startDate}:${promotion.endDate}`} className="border-t">
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  {formatDocumentDate(promotion.startDate)} – {formatDocumentDate(promotion.endDate)}
+                </td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                  {promotion.regularSalePrice == null ? '—' : `${formatMoney(promotion.regularSalePrice)} zł`}
+                </td>
+                <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap text-orange-600 dark:text-orange-400">
+                  {promotion.promoPrice == null ? '—' : `${formatMoney(promotion.promoPrice)} zł`}
+                </td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                  {discount == null ? '—' : `−${formatPercent(discount)}`}
+                </td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                  {promotion.marginPercent == null ? '—' : formatPercent(promotion.marginPercent)}
+                </td>
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <PromotionStatus status={promotionStatus(promotion, today)} />
+                </td>
+              </tr>
+            )
+          })}
+          <LoadMoreRow
+            colSpan={6}
+            hasMore={pages.hasMore}
+            loading={false}
+            loaded={pages.visible.length}
+            onLoadMore={pages.loadMore}
+            root={scrollRef}
+          />
+        </tbody>
+      </table>
+    </ArticleListSection>
   )
 }
 
-function PromotionStatus({ promotion, today }: { promotion: ProductPromotion; today: string }) {
-  const [label, style] = promotion.cancelled
-    ? ['odwołana', 'bg-muted text-muted-foreground line-through']
-    : promotion.startDate > today
-      ? ['zaplanowana', 'bg-sky-200 text-sky-950 dark:bg-sky-900 dark:text-sky-50']
-      : promotion.endDate >= today
-        ? ['trwa', 'bg-orange-200 text-orange-950 dark:bg-orange-900 dark:text-orange-50']
-        : ['zakończona', 'bg-muted text-muted-foreground']
-  return <span className={cn('rounded px-1.5 py-px text-xs font-medium', style)}>{label}</span>
+const STATUS_STYLES: Record<keyof typeof STATUS_ORDER, string> = {
+  odwołana: 'bg-muted text-muted-foreground line-through',
+  zaplanowana: 'bg-sky-200 text-sky-950 dark:bg-sky-900 dark:text-sky-50',
+  trwa: 'bg-orange-200 text-orange-950 dark:bg-orange-900 dark:text-orange-50',
+  zakończona: 'bg-muted text-muted-foreground',
+}
+
+function PromotionStatus({ status }: { status: keyof typeof STATUS_ORDER }) {
+  return <span className={cn('rounded px-1.5 py-px text-xs font-medium', STATUS_STYLES[status])}>{status}</span>
 }
 
 const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', {

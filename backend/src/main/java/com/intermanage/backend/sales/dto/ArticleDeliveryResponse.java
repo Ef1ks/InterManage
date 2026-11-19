@@ -12,6 +12,7 @@ import java.util.UUID;
  * to wartości z bonu, inaczej są puste. Dostawca z linii przyjęcia. {@code meaCodes}: kody MEA artykułu z dostawy z
  * bazy tego przyjęcia (Nr_Bl = nr dok. dostawcy) i z formularzy MEA (ITM8 promocyjny w linii przyjęcia), pusta lista,
  * gdy towar nie przyszedł na gazetkę; {@code mea} to te same kody z nazwą i okresem promocji.
+ * {@code previousPurchasePrice}: cena poprzedniej (starszej) dostawy, bez względu na sortowanie i wyszukiwanie.
  */
 public record ArticleDeliveryResponse(
         UUID documentId,
@@ -27,7 +28,8 @@ public record ArticleDeliveryResponse(
         BigDecimal originalPurchasePrice,
         BigDecimal originalPurchaseValue,
         List<String> meaCodes,
-        List<Mea> mea) {
+        List<Mea> mea,
+        BigDecimal previousPurchasePrice) {
 
     /** Gazetka MEA, na którą przyszła dostawa; bez pobranego formularza tylko numer. */
     public record Mea(String number, String title, LocalDate promoFrom, LocalDate promoTo) {

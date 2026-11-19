@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, TriangleAlertIcon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  DownloadIcon,
+  PrinterIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
+import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
 import { MultiComboboxField, SegmentedField, SelectField, TextField } from '@/components/form'
@@ -9,10 +17,13 @@ import { Card } from '@/components/ui/card'
 import { formatMoney, formatQuantity } from '@/features/documents/format'
 import {
   type SalesChartTarget,
+  type TopSalesPrint,
+  type TopSalesQuery,
   useSalesNomenclatures,
   useSalesReportsOverview,
   useTopSales,
   useTopSalesPartners,
+  useTopSalesPdf,
   useTurnoverSuppliers,
 } from '@/features/sales/api'
 import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
@@ -28,6 +39,7 @@ import {
 } from '@/features/sales/report-period'
 import { dayCount, daysLabel, formatRange, PERIOD_MODES } from '@/features/sales/periods'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import { ApiError } from '@/lib/api'
 import type { TopSalesGroup, TopSalesLevel, TopSalesMetric, TopSalesReport as Report, TopSalesRow } from '@/lib/types'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
@@ -101,22 +113,19 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
   const minQuantityError = Number.isFinite(minQuantity) && minQuantity >= 0 ? undefined : 'Podaj ilość.'
 
   const valid = !customError && !limitError && !(metric === 'MARGIN_PERCENT' && minQuantityError)
-  const report = useTopSales(
-    storeId,
-    {
-      range,
-      metric,
-      level,
-      limit,
-      minQuantity: metric === 'MARGIN_PERCENT' ? minQuantity : 0,
-      filter,
-      brands,
-      suppliers: supplierCodes,
-      compared,
-      rankStore,
-    },
-    valid && !overview.isPending,
-  )
+  const query: TopSalesQuery = {
+    range,
+    metric,
+    level,
+    limit,
+    minQuantity: metric === 'MARGIN_PERCENT' ? minQuantity : 0,
+    filter,
+    brands,
+    suppliers: supplierCodes,
+    compared,
+    rankStore,
+  }
+  const report = useTopSales(storeId, query, valid && !overview.isPending)
 
   // Wybrane marki zostają na liście, nawet gdy w nowym okresie ich nie ma, żeby dało się je odznaczyć.
   const brandOptions = useMemo(() => {
@@ -272,6 +281,7 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
           key={`${level}:${report.data.rankStoreId}`}
           storeId={storeId}
           report={report.data}
+          query={query}
           lastSaleDate={lastSaleDate}
           refreshing={report.isFetching}
         />
@@ -283,15 +293,31 @@ export function TopSalesReport({ storeId }: { storeId: string }) {
 function Results({
   storeId,
   report,
+  query,
   lastSaleDate,
   refreshing,
 }: {
   storeId: string
   report: Report
+  query: TopSalesQuery
   lastSaleDate: string
   refreshing: boolean
 }) {
   const { groups, level } = report
+  const pdf = useTopSalesPdf(storeId)
+  const [printingGroup, setPrintingGroup] = useState<string | null>(null)
+  const onPdfError = (error: unknown) =>
+    toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
+  // Wydruk bierze filtry raportu na ekranie; w trakcie przeliczania ekran pokazuje jeszcze poprzedni wynik.
+  const printAll: TopSalesPrint = { query, groups: [] }
+  const printGroup = (group: TopSalesGroup) => {
+    const key = groupKey(group)
+    setPrintingGroup(key)
+    pdf.print.mutate(
+      { query, groups: group.code === null ? [] : [group.code === '' ? UNASSIGNED_KEY : group.code] },
+      { onError: onPdfError, onSettled: () => setPrintingGroup(null) },
+    )
+  }
   const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set())
   const [current, setCurrent] = useState<string | null>(null)
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
@@ -369,12 +395,33 @@ function Results({
             </p>
           )}
         </div>
-        {!single && (
-          <Button variant="outline" onClick={() => setOpened(allOpen ? new Set() : new Set(groups.map(groupKey)))}>
-            {allOpen ? <ChevronsDownUpIcon /> : <ChevronsUpDownIcon />}
-            {allOpen ? 'Zwiń wszystko' : 'Rozwiń wszystko'}
+        <div className="flex flex-wrap gap-2">
+          {!single && (
+            <Button variant="outline" onClick={() => setOpened(allOpen ? new Set() : new Set(groups.map(groupKey)))}>
+              {allOpen ? <ChevronsDownUpIcon /> : <ChevronsUpDownIcon />}
+              {allOpen ? 'Zwiń wszystko' : 'Rozwiń wszystko'}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            loading={pdf.download.isPending}
+            disabled={groups.length === 0}
+            onClick={() => pdf.download.mutate(printAll, { onError: onPdfError })}
+          >
+            <DownloadIcon />
+            Pobierz PDF
           </Button>
-        )}
+          <Button
+            variant="outline"
+            loading={pdf.print.isPending && printingGroup === null}
+            disabled={groups.length === 0}
+            title={single ? undefined : 'Wszystkie pozycje z wybranymi filtrami'}
+            onClick={() => pdf.print.mutate(printAll, { onError: onPdfError })}
+          >
+            <PrinterIcon />
+            {single ? 'Drukuj' : `Drukuj wszystkie (${groups.length})`}
+          </Button>
+        </div>
       </div>
 
       {withoutSales.length > 0 && (
@@ -407,6 +454,8 @@ function Results({
                   open={isOpen(key)}
                   collapsible={!single}
                   onToggle={() => toggle(key)}
+                  onPrint={single ? undefined : () => printGroup(group)}
+                  printing={printingGroup === key}
                   onChart={
                     report.rankStoreId === storeId
                       ? (row) =>
@@ -442,6 +491,8 @@ function Tile({
   open,
   collapsible,
   onToggle,
+  onPrint,
+  printing,
   onChart,
 }: {
   ref: (element: HTMLDivElement | null) => void
@@ -451,6 +502,9 @@ function Tile({
   open: boolean
   collapsible: boolean
   onToggle: () => void
+  /** Wydruk samej tej pozycji. */
+  onPrint?: () => void
+  printing: boolean
   onChart?: (row: TopSalesRow) => void
 }) {
   const header = (
@@ -488,21 +542,37 @@ function Tile({
 
   return (
     <Card ref={ref} className="scroll-mt-20 gap-0 overflow-hidden py-0">
-      {collapsible ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={onToggle}
-          className={cn(
-            headerClass,
-            'transition-colors duration-150 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset',
-          )}
-        >
-          {header}
-        </button>
-      ) : (
-        <div className={headerClass}>{header}</div>
-      )}
+      <div className="flex items-stretch">
+        {collapsible ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={onToggle}
+            className={cn(
+              headerClass,
+              'min-w-0 flex-1 transition-colors duration-150 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset',
+            )}
+          >
+            {header}
+          </button>
+        ) : (
+          <div className={cn(headerClass, 'min-w-0 flex-1')}>{header}</div>
+        )}
+        {onPrint && (
+          <div className="flex items-center pr-3">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              loading={printing}
+              onClick={onPrint}
+              title={`Drukuj: ${group.code === null ? 'cały sklep' : groupName(group)}`}
+              aria-label={`Drukuj ${group.code === null ? 'cały sklep' : groupName(group)}`}
+            >
+              {!printing && <PrinterIcon />}
+            </Button>
+          </div>
+        )}
+      </div>
 
       {open && (
         <div className="overflow-x-auto border-t">

@@ -21,8 +21,9 @@ import {
   type ReportKind,
   type SalesChartTarget,
   useArticleDeliveries,
+  useArticleDeliveryRows,
   useArticleMea,
-  useArticleProtocols,
+  useArticleProtocolRows,
   useSalesArticle,
   useSalesHistory,
 } from '@/features/sales/api'
@@ -32,6 +33,14 @@ import { marginOf, marginShare } from '@/lib/margin'
 import type { ArticleDelivery, MergedArticle, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LoadingPanel } from '@/components/LoadingPanel'
+import {
+  ArticleListSection,
+  EmptyListRow,
+  LoadMoreRow,
+  SortTh,
+  useListControls,
+} from '@/features/sales/ArticleListSection'
+import type { SortState } from '@/lib/table-sort'
 
 type ChartRange = 'month' | 'quarter' | 'half' | 'year'
 type Metric = 'price' | 'quantity' | 'sale' | 'cost'
@@ -215,11 +224,12 @@ function useArticleCardLoading(storeId: string, itm8: string | null, historyLoad
   const canSeeSalesPrices = useCan('SALES')
   const article = useSalesArticle(storeId, itm8)
   const deliveries = useArticleDeliveries(storeId, itm8)
-  const protocols = useArticleProtocols(storeId, itm8)
+  const deliveryRows = useArticleDeliveryRows(storeId, itm8, firstPage(DELIVERY_SORT))
+  const protocols = useArticleProtocolRows(storeId, itm8, firstPage(PROTOCOL_SORT))
   const mea = useArticleMea(storeId, itm8)
   const prices = useProductPrices(storeId, itm8 ?? '', itm8 != null && (canSeePrices || canSeeSalesPrices))
   if (itm8 == null) return false
-  return [article, deliveries, protocols, mea, prices].some((query) => query.isLoading) || historyLoading
+  return [article, deliveries, deliveryRows, protocols, mea, prices].some((query) => query.isLoading) || historyLoading
 }
 
 function CardLoading({ target, inline }: { target: SalesChartTarget; inline?: boolean }) {
@@ -863,242 +873,348 @@ function MeaBadge({ mea, canOpen }: { mea: ArticleDelivery['mea'][number]; canOp
   )
 }
 
-function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string }) {
-  const deliveries = useArticleDeliveries(storeId, itm8)
-  const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
-  const canOpenMea = useCan('DATA_ENTRY', 'VIEW')
-  const list = deliveries.data
+type DeliveryColumn = 'date' | 'number' | 'supplier' | 'quantity' | 'price' | 'value'
+type ProtocolColumn = 'date' | 'type' | 'number' | 'quantity'
 
-  // Kolumna gazetki tylko, gdy któraś dostawa przyszła na MEA (towar spoza bazy by jej nie miał).
-  const withMea = list?.some((delivery) => delivery.mea.length > 0) ?? false
+/** Domyślnie od najnowszej; na te same parametry czeka karta przy wczytywaniu, więc pierwsza strona idzie raz. */
+const DELIVERY_SORT: SortState<DeliveryColumn> = { key: 'date', direction: 'desc' }
+const PROTOCOL_SORT: SortState<ProtocolColumn> = { key: 'date', direction: 'desc' }
+const firstPage = (sort: SortState<string>) => ({ query: '', sort: sort.key, direction: sort.direction })
 
+/** Nagłówek sekcji bez tabeli: wczytywanie, błąd albo brak danych. */
+function ListPlaceholder({ title, children }: { title: string; children: ReactNode }) {
   return (
-    // min-w-0: element siatki okna nie może rozpychać go szerokością tabeli.
-    <section className="grid min-w-0 gap-2" aria-labelledby="article-deliveries">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 id="article-deliveries" className="text-sm font-semibold">
-          Dostawy
-        </h3>
-        {list && list.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {list.length === 50 ? 'ostatnie 50 przyjęć' : `przyjęcia: ${list.length}`}, od najnowszej · cena zakupu
-            netto po korektach
-          </p>
-        )}
-      </div>
-      {!list ? (
-        deliveries.isError ? (
-          <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">Nie udało się wczytać dostaw.</p>
-        ) : (
-          <LoadingPanel className="h-32 rounded-lg" />
-        )
-      ) : list.length === 0 ? (
-        <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Brak przyjęć tego artykułu we wgranych raportach dokumentów.
-        </p>
-      ) : (
-        <div className="max-h-72 min-w-0 overflow-auto rounded-lg border">
-          {/* Stały układ: długa nazwa dostawcy skraca się wielokropkiem zamiast poszerzać okno. Najmniejsza szerokość
-              zostawia dostawcy co najmniej 10rem: bez niej kolumna gazetki zjadała mu całe miejsce w wąskim panelu,
-              a tabela przewija się wtedy w bok. */}
-          <table className={cn('w-full table-fixed text-sm tabular-nums', withMea ? 'min-w-[56rem]' : 'min-w-[47rem]')}>
-            <colgroup>
-              <col className="w-28" />
-              <col className="w-20" />
-              {withMea && <col className="w-36" />}
-              <col />
-              <col className="w-20" />
-              <col className="w-52" />
-              <col className="w-28" />
-            </colgroup>
-            <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Data</th>
-                <th className="px-3 py-2 text-left font-medium">Bon</th>
-                {withMea && (
-                  <th
-                    className="px-3 py-2 text-left font-medium"
-                    title="Towar przyszedł na gazetkę: kod MEA z dostawy z bazy albo ITM8 promocyjny z formularza MEA"
-                  >
-                    Gazetka MEA
-                  </th>
-                )}
-                <th className="px-3 py-2 text-left font-medium">Dostawca</th>
-                <th className="px-3 py-2 text-right font-medium">Ilość</th>
-                <th className="px-3 py-2 text-right font-medium">Cena zakupu</th>
-                <th className="px-3 py-2 text-right font-medium">Wartość</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((delivery, index) => (
-                <tr key={delivery.documentId} className="border-t">
-                  <td className="px-3 py-1.5 whitespace-nowrap">
-                    {deliveryDate.format(parseIsoDate(delivery.documentDate.slice(0, 10)))}
-                  </td>
-                  <td className="px-3 py-1.5 whitespace-nowrap">
-                    {canOpenDocuments ? (
-                      <Link
-                        to={documentPaths.document('PZ', delivery.documentId)}
-                        title={`Przyjęcie ${delivery.documentNumber}`}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {bonNumber(delivery.documentNumber)}
-                      </Link>
-                    ) : (
-                      <span title={`Przyjęcie ${delivery.documentNumber}`}>{bonNumber(delivery.documentNumber)}</span>
-                    )}
-                  </td>
-                  {withMea && (
-                    <td className="px-3 py-1">
-                      {delivery.mea.length > 0 ? (
-                        <div className="grid gap-0.5">
-                          {delivery.mea.map((mea) => (
-                            <MeaBadge key={mea.number} mea={mea} canOpen={canOpenMea} />
-                          ))}
-                        </div>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  )}
-                  <td className="truncate px-3 py-1.5" title={delivery.supplierName ?? undefined}>
-                    {delivery.supplierName ?? delivery.supplierCode ?? '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
-                    {formatQuantity(delivery.quantity)}
-                    <BeforeCorrection
-                      changed={delivery.originalQuantity != null && delivery.originalQuantity !== delivery.quantity}
-                    >
-                      {delivery.originalQuantity != null && formatQuantity(delivery.originalQuantity)}
-                    </BeforeCorrection>
-                  </td>
-                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                    <PriceChange delivery={delivery} previous={list[index + 1]} />
-                    {delivery.purchasePrice == null ? '—' : `${formatPrice(delivery.purchasePrice)} zł`}
-                    {delivery.originalQuantity != null && (
-                      <span
-                        className="ml-1.5 rounded bg-amber-200 px-1 py-px text-xs font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-50"
-                        title="Cena po korektach przypiętych do przyjęcia"
-                      >
-                        po korekcie
-                      </span>
-                    )}
-                    <BeforeCorrection
-                      changed={
-                        delivery.originalPurchasePrice != null &&
-                        (delivery.purchasePrice == null ||
-                          Math.abs(delivery.originalPurchasePrice - delivery.purchasePrice) >= 0.00005)
-                      }
-                    >
-                      {delivery.originalPurchasePrice != null && `${formatPrice(delivery.originalPurchasePrice)} zł`}
-                    </BeforeCorrection>
-                  </td>
-                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                    {formatZloty(delivery.purchaseValue)}
-                    <BeforeCorrection
-                      changed={
-                        delivery.originalPurchaseValue != null &&
-                        Math.abs(delivery.originalPurchaseValue - delivery.purchaseValue) >= 0.005
-                      }
-                    >
-                      {delivery.originalPurchaseValue != null && formatZloty(delivery.originalPurchaseValue)}
-                    </BeforeCorrection>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <section className="grid min-w-0 gap-2">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {children}
     </section>
   )
 }
 
 /**
- * Ostatnie protokoły artykułu inne niż przyjęcia i korekty, od najnowszego: rodzaj, numer i ilość. Przeniesienie stanów
+ * Przyjęcia PZ artykułu po 15, kolejne przy przewijaniu tabeli. Sortowanie kliknięciem w nagłówek i wyszukiwanie
+ * (lupa w nagłówku sekcji) liczy serwer, więc obejmują wszystkie dostawy, nie tylko wczytane.
+ */
+function ArticleDeliveries({ storeId, itm8 }: { storeId: string; itm8: string }) {
+  const controls = useListControls(DELIVERY_SORT)
+  const { sort, toggleSort } = controls
+  const deliveries = useArticleDeliveryRows(storeId, itm8, {
+    query: controls.query,
+    sort: sort.key,
+    direction: sort.direction,
+  })
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
+  const canOpenMea = useCan('DATA_ENTRY', 'VIEW')
+  const pages = deliveries.data?.pages
+  const list = pages?.flatMap((page) => page.items)
+  const total = pages?.at(-1)?.total ?? 0
+  const searching = controls.query.trim() !== ''
+
+  // Kolumna gazetki tylko, gdy któraś wczytana dostawa przyszła na MEA (towar spoza bazy by jej nie miał).
+  const withMea = list?.some((delivery) => delivery.mea.length > 0) ?? false
+  const columns = withMea ? 7 : 6
+
+  if (!list) {
+    return (
+      <ListPlaceholder title="Dostawy">
+        {deliveries.isError ? (
+          <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">Nie udało się wczytać dostaw.</p>
+        ) : (
+          <LoadingPanel className="h-32 rounded-lg" />
+        )}
+      </ListPlaceholder>
+    )
+  }
+  if (total === 0 && !searching) {
+    return (
+      <ListPlaceholder title="Dostawy">
+        <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+          Brak przyjęć tego artykułu we wgranych raportach dokumentów.
+        </p>
+      </ListPlaceholder>
+    )
+  }
+
+  return (
+    <ArticleListSection
+      title="Dostawy"
+      note={
+        <span title="Cena zakupu netto po korektach przypiętych do przyjęcia">
+          {searching ? `pasuje: ${total}` : `przyjęcia: ${total}`}
+        </span>
+      }
+      searchLabel="Szukaj: bon, dostawca"
+      search={controls.text}
+      onSearch={controls.setText}
+      scrollRef={scrollRef}
+      className="max-h-72"
+    >
+      {/* Stały układ: długa nazwa dostawcy skraca się wielokropkiem zamiast poszerzać okno. Najmniejsza szerokość
+          zostawia dostawcy co najmniej 10rem: bez niej kolumna gazetki zjadała mu całe miejsce w wąskim panelu,
+          a tabela przewija się wtedy w bok. */}
+      <table
+        className={cn(
+          'w-full table-fixed text-sm tabular-nums transition-opacity',
+          withMea ? 'min-w-[57rem]' : 'min-w-[48rem]',
+          deliveries.isPlaceholderData && 'opacity-60',
+        )}
+      >
+        <colgroup>
+          <col className="w-28" />
+          <col className="w-20" />
+          {withMea && <col className="w-36" />}
+          <col />
+          <col className="w-24" />
+          <col className="w-52" />
+          <col className="w-28" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-muted text-xs text-muted-foreground">
+          <tr>
+            <SortTh column="date" sort={sort} onSort={toggleSort}>
+              Data
+            </SortTh>
+            <SortTh column="number" sort={sort} onSort={toggleSort}>
+              Bon
+            </SortTh>
+            {withMea && (
+              <th
+                className="px-3 py-2 text-left font-medium"
+                title="Towar przyszedł na gazetkę: kod MEA z dostawy z bazy albo ITM8 promocyjny z formularza MEA"
+              >
+                Gazetka MEA
+              </th>
+            )}
+            <SortTh column="supplier" sort={sort} onSort={toggleSort}>
+              Dostawca
+            </SortTh>
+            <SortTh column="quantity" sort={sort} onSort={toggleSort} align="right">
+              Ilość
+            </SortTh>
+            <SortTh column="price" sort={sort} onSort={toggleSort} align="right" title="Cena zakupu netto po korektach">
+              Cena zakupu
+            </SortTh>
+            <SortTh column="value" sort={sort} onSort={toggleSort} align="right">
+              Wartość
+            </SortTh>
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 && (
+            <EmptyListRow colSpan={columns}>Żadna dostawa nie pasuje do wyszukiwania.</EmptyListRow>
+          )}
+          {list.map((delivery) => (
+            <tr key={delivery.documentId} className="border-t">
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                {deliveryDate.format(parseIsoDate(delivery.documentDate.slice(0, 10)))}
+              </td>
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                {canOpenDocuments ? (
+                  <Link
+                    to={documentPaths.document('PZ', delivery.documentId)}
+                    title={`Przyjęcie ${delivery.documentNumber}`}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {bonNumber(delivery.documentNumber)}
+                  </Link>
+                ) : (
+                  <span title={`Przyjęcie ${delivery.documentNumber}`}>{bonNumber(delivery.documentNumber)}</span>
+                )}
+              </td>
+              {withMea && (
+                <td className="px-3 py-1">
+                  {delivery.mea.length > 0 ? (
+                    <div className="grid gap-0.5">
+                      {delivery.mea.map((mea) => (
+                        <MeaBadge key={mea.number} mea={mea} canOpen={canOpenMea} />
+                      ))}
+                    </div>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+              )}
+              <td className="truncate px-3 py-1.5" title={delivery.supplierName ?? undefined}>
+                {delivery.supplierName ?? delivery.supplierCode ?? '—'}
+              </td>
+              <td className="px-3 py-1.5 text-right">
+                {formatQuantity(delivery.quantity)}
+                <BeforeCorrection
+                  changed={delivery.originalQuantity != null && delivery.originalQuantity !== delivery.quantity}
+                >
+                  {delivery.originalQuantity != null && formatQuantity(delivery.originalQuantity)}
+                </BeforeCorrection>
+              </td>
+              <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                <PriceChange delivery={delivery} />
+                {delivery.purchasePrice == null ? '—' : `${formatPrice(delivery.purchasePrice)} zł`}
+                {delivery.originalQuantity != null && (
+                  <span
+                    className="ml-1.5 rounded bg-amber-200 px-1 py-px text-xs font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-50"
+                    title="Cena po korektach przypiętych do przyjęcia"
+                  >
+                    po korekcie
+                  </span>
+                )}
+                <BeforeCorrection
+                  changed={
+                    delivery.originalPurchasePrice != null &&
+                    (delivery.purchasePrice == null ||
+                      Math.abs(delivery.originalPurchasePrice - delivery.purchasePrice) >= 0.00005)
+                  }
+                >
+                  {delivery.originalPurchasePrice != null && `${formatPrice(delivery.originalPurchasePrice)} zł`}
+                </BeforeCorrection>
+              </td>
+              <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                {formatZloty(delivery.purchaseValue)}
+                <BeforeCorrection
+                  changed={
+                    delivery.originalPurchaseValue != null &&
+                    Math.abs(delivery.originalPurchaseValue - delivery.purchaseValue) >= 0.005
+                  }
+                >
+                  {delivery.originalPurchaseValue != null && formatZloty(delivery.originalPurchaseValue)}
+                </BeforeCorrection>
+              </td>
+            </tr>
+          ))}
+          <LoadMoreRow
+            colSpan={columns}
+            hasMore={deliveries.hasNextPage}
+            loading={deliveries.isFetchingNextPage}
+            loaded={list.length}
+            onLoadMore={() => void deliveries.fetchNextPage()}
+            root={scrollRef}
+          />
+        </tbody>
+      </table>
+    </ArticleListSection>
+  )
+}
+
+/**
+ * Protokoły artykułu inne niż przyjęcia i korekty, po 15 jak dostawy: rodzaj, numer i ilość. Przeniesienie stanów
  * zarejestrowane jako gratis ma plakietkę „Gratis”. Numer prowadzi do dokumentu.
  */
 function ArticleProtocols({ storeId, itm8 }: { storeId: string; itm8: string }) {
-  const protocols = useArticleProtocols(storeId, itm8)
+  const controls = useListControls(PROTOCOL_SORT)
+  const { sort, toggleSort } = controls
+  const protocols = useArticleProtocolRows(storeId, itm8, {
+    query: controls.query,
+    sort: sort.key,
+    direction: sort.direction,
+  })
+  const scrollRef = useRef<HTMLDivElement>(null)
   const canOpenDocuments = useCan('DOCUMENTS', 'VIEW')
-  const list = protocols.data
+  const pages = protocols.data?.pages
+  const list = pages?.flatMap((page) => page.items)
+  const total = pages?.at(-1)?.total ?? 0
+  const searching = controls.query.trim() !== ''
 
-  return (
-    <section className="grid min-w-0 gap-2" aria-labelledby="article-protocols">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 id="article-protocols" className="text-sm font-semibold">
-          Protokoły
-        </h3>
-        {list && list.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {list.length === 20 ? 'ostatnie 20' : `dokumenty: ${list.length}`}, od najnowszego
-          </p>
-        )}
-      </div>
-      {!list ? (
-        protocols.isError ? (
+  if (!list) {
+    return (
+      <ListPlaceholder title="Protokoły">
+        {protocols.isError ? (
           <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
             Nie udało się wczytać protokołów.
           </p>
         ) : (
           <div aria-hidden className="h-20 loading-shimmer rounded-lg" />
-        )
-      ) : list.length === 0 ? (
+        )}
+      </ListPlaceholder>
+    )
+  }
+  if (total === 0 && !searching) {
+    return (
+      <ListPlaceholder title="Protokoły">
         <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
           Brak protokołów tego artykułu we wgranych raportach dokumentów.
         </p>
-      ) : (
-        <div className="max-h-56 min-w-0 overflow-y-auto rounded-lg border">
-          <table className="w-full table-fixed text-sm tabular-nums">
-            <colgroup>
-              <col className="w-28" />
-              <col />
-              <col className="w-36" />
-              <col className="w-20" />
-            </colgroup>
-            <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Data</th>
-                <th className="px-3 py-2 text-left font-medium">Protokół</th>
-                <th className="px-3 py-2 text-left font-medium">Numer</th>
-                <th className="px-3 py-2 text-right font-medium">Ilość</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((protocol) => (
-                <tr key={protocol.documentId} className="border-t">
-                  <td className="px-3 py-1.5 whitespace-nowrap">
-                    {deliveryDate.format(parseIsoDate(protocol.documentDate.slice(0, 10)))}
-                  </td>
-                  <td className="truncate px-3 py-1.5" title={protocol.label}>
-                    {protocol.gratis ? (
-                      <span className="rounded bg-emerald-200 px-1.5 py-px text-xs font-medium text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50">
-                        {protocol.label}
-                      </span>
-                    ) : (
-                      protocol.label
-                    )}
-                  </td>
-                  <td className="truncate px-3 py-1.5">
-                    {canOpenDocuments ? (
-                      <Link
-                        to={documentPaths.document(protocol.documentType, protocol.documentId)}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {protocol.documentNumber}
-                      </Link>
-                    ) : (
-                      protocol.documentNumber
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-right">{formatQuantity(protocol.quantity)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+      </ListPlaceholder>
+    )
+  }
+
+  return (
+    <ArticleListSection
+      title="Protokoły"
+      note={searching ? `pasuje: ${total}` : `dokumenty: ${total}`}
+      searchLabel="Szukaj: numer, rodzaj"
+      search={controls.text}
+      onSearch={controls.setText}
+      scrollRef={scrollRef}
+      className="max-h-56"
+    >
+      <table
+        className={cn(
+          'w-full table-fixed text-sm tabular-nums transition-opacity',
+          protocols.isPlaceholderData && 'opacity-60',
+        )}
+      >
+        <colgroup>
+          <col className="w-28" />
+          <col />
+          <col className="w-36" />
+          <col className="w-24" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-muted text-xs text-muted-foreground">
+          <tr>
+            <SortTh column="date" sort={sort} onSort={toggleSort}>
+              Data
+            </SortTh>
+            <SortTh column="type" sort={sort} onSort={toggleSort}>
+              Protokół
+            </SortTh>
+            <SortTh column="number" sort={sort} onSort={toggleSort}>
+              Numer
+            </SortTh>
+            <SortTh column="quantity" sort={sort} onSort={toggleSort} align="right">
+              Ilość
+            </SortTh>
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 && <EmptyListRow colSpan={4}>Żaden protokół nie pasuje do wyszukiwania.</EmptyListRow>}
+          {list.map((protocol) => (
+            <tr key={protocol.documentId} className="border-t">
+              <td className="px-3 py-1.5 whitespace-nowrap">
+                {deliveryDate.format(parseIsoDate(protocol.documentDate.slice(0, 10)))}
+              </td>
+              <td className="truncate px-3 py-1.5" title={protocol.label}>
+                {protocol.gratis ? (
+                  <span className="rounded bg-emerald-200 px-1.5 py-px text-xs font-medium text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50">
+                    {protocol.label}
+                  </span>
+                ) : (
+                  protocol.label
+                )}
+              </td>
+              <td className="truncate px-3 py-1.5">
+                {canOpenDocuments ? (
+                  <Link
+                    to={documentPaths.document(protocol.documentType, protocol.documentId)}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {protocol.documentNumber}
+                  </Link>
+                ) : (
+                  protocol.documentNumber
+                )}
+              </td>
+              <td className="px-3 py-1.5 text-right">{formatQuantity(protocol.quantity)}</td>
+            </tr>
+          ))}
+          <LoadMoreRow
+            colSpan={4}
+            hasMore={protocols.hasNextPage}
+            loading={protocols.isFetchingNextPage}
+            loaded={list.length}
+            onLoadMore={() => void protocols.fetchNextPage()}
+            root={scrollRef}
+          />
+        </tbody>
+      </table>
+    </ArticleListSection>
   )
 }
 
@@ -1112,9 +1228,9 @@ function BeforeCorrection({ changed, children }: { changed: boolean; children: R
   )
 }
 
-/** Zmiana ceny względem poprzedniej (starszej) dostawy; bez zmiany nic. */
-function PriceChange({ delivery, previous }: { delivery: ArticleDelivery; previous: ArticleDelivery | undefined }) {
-  const before = previous?.purchasePrice
+/** Zmiana ceny względem poprzedniej (starszej) dostawy, także przy innym sortowaniu; bez zmiany nic. */
+function PriceChange({ delivery }: { delivery: ArticleDelivery }) {
+  const before = delivery.previousPurchasePrice
   const now = delivery.purchasePrice
   if (before == null || now == null || before === 0 || Math.abs(now - before) < 0.005) return null
   const change = ((now - before) / before) * 100
