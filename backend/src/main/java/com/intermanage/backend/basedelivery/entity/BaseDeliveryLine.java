@@ -166,11 +166,18 @@ public class BaseDeliveryLine {
 
     /**
      * Towar przyjechał z krótszym terminem, niż baza ma zostawić sklepowi: termin przed dniem dostawy + dni dla
-     * sklepu. Bez terminu albo dni (0000-00-00, 0) i bez przyjętej ilości nie liczymy.
+     * sklepu. Bez terminu albo dni (0000-00-00, 0), bez przyjętej ilości i przy owocach i warzywach (1401) nie liczymy;
+     * surówki, przetwory, zioła i reszta rejonu 14 zostają.
      */
     public boolean isShortDated() {
         return bestBefore != null && daysForStore != null && daysForStore > 0
-                && coliPrepared.signum() > 0 && bestBefore.isBefore(getRequiredBestBefore());
+                && coliPrepared.signum() > 0 && !isFruitOrVegetable()
+                && bestBefore.isBefore(getRequiredBestBefore());
+    }
+
+    /** Owoce i warzywa (rodzina 1401): termin w pliku bazy nic tam nie znaczy. */
+    private boolean isFruitOrVegetable() {
+        return "14".equals(regionCode) && "01".equals(familyCode);
     }
 
     /** Najwcześniejszy termin, z którym towar może przyjechać. */

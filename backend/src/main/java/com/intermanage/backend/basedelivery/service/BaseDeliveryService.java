@@ -186,10 +186,17 @@ public class BaseDeliveryService {
         Store store = delivery.getStore();
         List<ShortDatesPdf.Line> lines = delivery.getLines().stream().filter(BaseDeliveryLine::isShortDated)
                 .map(line -> new ShortDatesPdf.Line(line.getCarrier(), line.getItm8(), line.getEan(), line.getName(),
-                        line.getQuantity(), line.getBestBefore(), line.getRequiredBestBefore()))
+                        line.getQuantity(), line.getBestBefore(), line.getDaysForStore(),
+                        line.getRequiredBestBefore()))
                 .toList();
+        // Standardowe DLV: najczęstsze dni dla sklepu w całym dokumencie (przy remisie mniejsze), jak w oknie.
+        Integer standardDlv = delivery.getLines().stream().map(BaseDeliveryLine::getDaysForStore)
+                .filter(days -> days != null && days > 0)
+                .collect(Collectors.groupingBy(days -> days, Collectors.counting())).entrySet().stream()
+                .sorted(Map.Entry.<Integer, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .map(Map.Entry::getKey).findFirst().orElse(null);
         byte[] content = shortDatesPdf.pdf(new ShortDatesPdf.Report(store.getNumber() + " " + store.getName(),
-                delivery.getNumber(), delivery.getDeliveryDate(), lines));
+                delivery.getNumber(), delivery.getDeliveryDate(), standardDlv, lines));
         return new DocumentService.ExportFile("krotkie-terminy-" + delivery.getNumber() + ".pdf", "application/pdf",
                 content);
     }

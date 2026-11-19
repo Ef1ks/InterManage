@@ -4,14 +4,17 @@ import {
   CalendarClockIcon,
   CarrotIcon,
   CheckCheckIcon,
+  ClipboardListIcon,
   CloudDownloadIcon,
   FileInputIcon,
   FileSearchIcon,
   FileOutputIcon,
   FileDownIcon,
   FilePlusIcon,
+  FileUpIcon,
   FilterXIcon,
   LayersIcon,
+  ListChecksIcon,
   PackageCheckIcon,
   Redo2Icon,
   SettingsIcon,
@@ -36,6 +39,8 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { ACTION_TONES, ActionItem, ActionMenu } from '@/features/data-entry/ActionMenu'
 import {
   type PriceControlPayload,
   type ProductFilePayload,
@@ -821,128 +826,219 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         className="mb-4"
         title="Jak wprowadzić dostawę z bazy"
         steps={[
-          'Wczytaj dokument z bazy (plik Excel) i wybierz nośniki: ich artykuły trafią do tabeli z ilościami w sztukach. Linie, które nie przyjechały, mają ilość 0.',
+          '„Wczytaj”: dokument z portalu, z dysku albo wgrany wcześniej. Artykuły wszystkich nośników trafią do tabeli z ilościami w sztukach; „Nośniki” je zawęża. Linie, które nie przyjechały, mają ilość 0.',
           'Sprawdź kaucje (czerwona komórka = inna kaucja w dokumencie niż w kartotece; blokuje zmianę cen i protokół) i ujemne marże na cenach cadencier.',
-          'Krótkie terminy: raport całego dokumentu do wydruku. Dodaj nowe artykuły: dodaje do kartoteki nowe artykuły z danymi z dokumentu. Zmień artykuły: zmienia w kartotece wybrane artykuły tabeli.',
-          'Weryfikuj warzywa / mięso pakowane: przenosi artykuły z całego dokumentu (bez tych w promocji) do wprowadzania danych, cena sugerowana z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
+          '„Wytwórz”: nowe i zmienione artykuły, zmiana cen, protokół, plik dostawy, raport krótkich terminów i makro ITM8.',
+          '„Weryfikuj”: warzywa albo mięso pakowane z całego dokumentu (bez tych w promocji) idą do wprowadzania danych z ceną sugerowaną z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
           'Filtr w nagłówku każdej kolumny działa jak w Excelu; Ctrl+Z cofa.',
         ]}
       />
 
       <CommandBar onHeightChange={setToolbarHeight}>
         {draft.delivery && (
-          <div className="flex shrink-0 flex-col items-center justify-center rounded-md border-2 border-foreground/20 bg-card px-2 py-1.5 text-center">
-            <span className="text-xs text-muted-foreground">Bon z bazy</span>
+          <div className="flex shrink-0 flex-col items-center justify-center rounded-md border-2 border-foreground/20 bg-card px-2 py-1 text-center">
+            <span className="text-xs leading-tight text-muted-foreground">Bon z bazy</span>
             <span className="flex items-center gap-0.5">
-              <span className="text-lg leading-tight font-bold tracking-tight tabular-nums">
+              <span className="text-xl leading-tight font-bold tracking-tight tabular-nums">
                 {draft.delivery.number}
               </span>
               <CopyButton value={draft.delivery.number} label="Kopiuj numer bonu" />
             </span>
-            <span className="flex items-center gap-0.5 text-xs">
+            <span className="flex items-center gap-0.5 text-xs leading-tight">
               {formatDocumentDate(draft.delivery.deliveryDate)}
               <CopyButton value={formatDocumentDate(draft.delivery.deliveryDate)} label="Kopiuj datę dostawy" />
             </span>
           </div>
         )}
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
-            <Button
-              variant={draft.delivery ? 'outline' : 'default'}
-              size="sm"
-              loading={upload.isPending}
-              onClick={() => fileInput.current?.click()}
-            >
-              <FileInputIcon />
-              Wczytaj dokument z bazy
-            </Button>
-            <Button
-              variant={draft.delivery ? 'outline' : 'default'}
-              size="sm"
+        <div className="flex shrink-0 gap-1.5" role="group" aria-label="Pliki">
+          <ActionMenu
+            label="Wczytaj"
+            icon={<FileInputIcon />}
+            tone="load"
+            tile
+            loading={upload.isPending}
+            title="Wczytaj dokument z bazy: z portalu, z dysku albo wgrany wcześniej"
+          >
+            <ActionItem
+              icon={<CloudDownloadIcon />}
+              label="Z portalu Grupy Muszkieterów"
+              hint="Bon prosto z portalu, bez zapisywania pliku"
               onClick={() => setPortalOpen(true)}
-              title="Pobierz bon prosto z portalu Grupy Muszkieterów"
-            >
-              <CloudDownloadIcon />
-              Pobierz dokument
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+            />
+            <ActionItem
+              icon={<FileUpIcon />}
+              label="Plik z dysku"
+              hint="Dokument z bazy zapisany jako .xls, .xlsx albo .htm"
+              onClick={() => fileInput.current?.click()}
+            />
+            <DropdownMenuSeparator />
+            <ActionItem
+              icon={<HistoryIcon />}
+              label="Wgrane wcześniej"
+              hint="Dokumenty z bazy wgrane w tym sklepie"
               onClick={() => setPickerOpen(true)}
-              title="Dokumenty z bazy wgrane wcześniej"
+            />
+          </ActionMenu>
+          {draft.delivery && (
+            <ActionMenu
+              label="Wytwórz"
+              icon={<FileOutputIcon />}
+              tone="make"
+              tile
+              loading={saving !== null || savingNote || savingPlu}
+              title="Pliki dla programu sklepu, wydruki i makra z dokumentu"
             >
-              <HistoryIcon />
-              Wgrane wcześniej
-            </Button>
+              {blocked && (
+                <p className="mb-1 rounded-md bg-amber-200 px-2 py-1.5 text-xs font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-50">
+                  {blockedTitle}
+                </p>
+              )}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Kartoteka</DropdownMenuLabel>
+                <ActionItem
+                  icon={<FilePlusIcon />}
+                  label="Dodaj nowe artykuły"
+                  count={newArticles}
+                  disabled={newArticles === 0}
+                  hint={
+                    newArticles > 0
+                      ? 'Nowe artykuły całego dokumentu z danymi z bazy, osobno dla każdego dostawcy'
+                      : 'Wszystkie artykuły dokumentu są w kartotece'
+                  }
+                  onClick={() => void saveNewArticles()}
+                />
+                <ActionItem
+                  icon={<PackageCheckIcon />}
+                  label="Zmień artykuły"
+                  disabled={rows.length === 0}
+                  hint="Wybierz artykuły tabeli do zmiany w kartotece; zmiana przepisuje je na dostawcę dokumentu"
+                  onClick={() => setArticleFileOpen(true)}
+                />
+                <ActionItem
+                  icon={<TagIcon />}
+                  label="Zmień ceny"
+                  count={priceRows.length}
+                  disabled={priceRows.length === 0 || blocked}
+                  hint={
+                    blocked
+                      ? 'Najpierw popraw błędy opisane wyżej'
+                      : priceRows.length > 0
+                        ? 'Artykuły z kartoteki ze zmienioną w tabeli ceną sprzedaży'
+                        : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
+                  }
+                  onClick={() => void savePriceChanges()}
+                />
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Pliki i wydruki</DropdownMenuLabel>
+                <ActionItem
+                  icon={<ClipboardListIcon />}
+                  label="Protokół"
+                  disabled={protocolLines.length === 0 || blocked}
+                  hint={
+                    blocked
+                      ? 'Najpierw popraw błędy opisane wyżej'
+                      : protocolLines.length > 0
+                        ? 'Np. MM wybranych nośników dla innego sklepu'
+                        : 'Żaden artykuł tabeli nie ma EAN-u i ilości'
+                  }
+                  onClick={() => setProtocolOpen(true)}
+                />
+                <ActionItem
+                  icon={<FileDownIcon />}
+                  label="Plik dostawy"
+                  disabled={!delivery}
+                  hint="Plik dostawy dla programu sklepu z całego dokumentu, osobno dla każdego dostawcy"
+                  onClick={() => void saveNoteFiles()}
+                />
+                <ActionItem
+                  icon={<CalendarClockIcon />}
+                  label="Raport krótkich terminów"
+                  count={shortDated}
+                  disabled={!delivery}
+                  hint="Krótkie terminy całego dokumentu do wydruku, z miejscem na podpisy"
+                  onClick={() => setShortDatesOpen(true)}
+                />
+                {plu.length > 0 && (
+                  <ActionItem
+                    icon={<ScanBarcodeIcon />}
+                    label="Sprawdź PLU"
+                    count={plu.length}
+                    hint={`Lista EAN-ów artykułów z nomenklatury ${PLU_REGIONS.join(' i ')} do sprawdzenia na wadze`}
+                    onClick={() => void savePlu()}
+                  />
+                )}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Makro</DropdownMenuLabel>
+                <ActionItem
+                  icon={<KeyboardIcon />}
+                  label="Uzupełnij ITM8"
+                  disabled={!delivery}
+                  hint="Do schowka, Alt+E: kody ITM8 artykułom z dokumentu w Mercalys"
+                  onClick={() => setItm8MacroOpen(true)}
+                />
+              </DropdownMenuGroup>
+            </ActionMenu>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Dokument">
             {draft.delivery && (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!delivery}
-                  onClick={() => delivery && showCarriers(delivery)}
-                  title="Wybierz nośniki do tabeli (zastąpią wiersze)"
-                >
-                  <LayersIcon />
-                  Nośniki
-                  {view === 'carriers' && delivery && ` (${draft.carriers.length}/${delivery.carriers.length})`}
-                </Button>
                 {view !== 'carriers' ? (
-                  <Button variant="outline" size="sm" onClick={backToCarriers}>
+                  <Button variant="outline" onClick={backToCarriers}>
                     <ArrowLeftIcon />
                     Wróć do nośników
                   </Button>
-                ) : null}
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={!delivery}
+                    onClick={() => delivery && showCarriers(delivery)}
+                    title="Wybierz nośniki do tabeli (zastąpią wiersze)"
+                  >
+                    <LayersIcon />
+                    Nośniki
+                    {delivery && (
+                      <span className="text-muted-foreground tabular-nums">
+                        {draft.carriers.length}/{delivery.carriers.length}
+                      </span>
+                    )}
+                  </Button>
+                )}
                 {/* Weryfikacja tylko, gdy dokument ma artykuły z rejonu. */}
-                {regionCounts.vegetables > 0 && (
-                  <Button
-                    variant={view === 'vegetables' ? 'secondary' : 'outline'}
-                    size="sm"
-                    onClick={() => verify('vegetables')}
-                    title={`Artykuły z rejonu ${VIEW_REGIONS.vegetables} z całego dokumentu bez tych w promocji, cena sugerowana z bazy`}
+                {(regionCounts.vegetables > 0 || regionCounts.meat > 0) && (
+                  <ActionMenu
+                    label="Weryfikuj"
+                    icon={<ListChecksIcon />}
+                    title="Artykuły rejonu z całego dokumentu (bez promocji) do wprowadzania danych, cena sugerowana z bazy"
                   >
-                    <CarrotIcon />
-                    Weryfikuj warzywa ({regionCounts.vegetables})
-                  </Button>
+                    {regionCounts.vegetables > 0 && (
+                      <ActionItem
+                        icon={<CarrotIcon />}
+                        label="Warzywa"
+                        count={regionCounts.vegetables}
+                        hint={`Rejon ${VIEW_REGIONS.vegetables}, cena sugerowana z bazy`}
+                        onClick={() => verify('vegetables')}
+                      />
+                    )}
+                    {regionCounts.meat > 0 && (
+                      <ActionItem
+                        icon={<BeefIcon />}
+                        label="Mięso pakowane"
+                        count={regionCounts.meat}
+                        hint={`Rejon ${VIEW_REGIONS.meat}, cena sugerowana z bazy (cena z opakowania)`}
+                        onClick={() => verify('meat')}
+                      />
+                    )}
+                  </ActionMenu>
                 )}
-                {regionCounts.meat > 0 && (
-                  <Button
-                    variant={view === 'meat' ? 'secondary' : 'outline'}
-                    size="sm"
-                    onClick={() => verify('meat')}
-                    title={`Mięso pakowane: rejon ${VIEW_REGIONS.meat} z całego dokumentu bez artykułów w promocji, cena sugerowana z bazy (cena z opakowania)`}
-                  >
-                    <BeefIcon />
-                    Weryfikuj mięso pakowane ({regionCounts.meat})
-                  </Button>
-                )}
-                <ToolbarDivider />
                 <Button
                   variant="outline"
-                  size="sm"
-                  disabled={!delivery}
-                  onClick={() => setShortDatesOpen(true)}
-                  className={cn(
-                    shortDated > 0 &&
-                      'border-red-400 bg-red-200 text-red-950 hover:bg-red-300 dark:border-red-700 dark:bg-red-900 dark:text-red-50',
-                  )}
-                >
-                  <CalendarClockIcon />
-                  Krótkie terminy ({shortDated})
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!delivery}
-                  onClick={() => setItm8MacroOpen(true)}
-                  title="Makro AutoHotkey do schowka: wpisanie kodów ITM8 artykułom z dokumentu w programie sklepu (Alt+E w odtwarzaczu)"
-                >
-                  <KeyboardIcon />
-                  Uzupełnij ITM8
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
                   disabled={rows.length === 0}
                   onClick={() => setDifferencesOpen(true)}
                   title="Porównaj tabelę z tymczasowymi bonami dostawy z Mercalys (538, 88110): czego brakuje w programie albo co się różni"
@@ -950,94 +1046,27 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                   <FileSearchIcon />
                   Znajdź różnice
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  loading={saving === 'articles'}
-                  disabled={newArticles === 0 || saving !== null}
-                  onClick={saveNewArticles}
-                  title={
-                    newArticles > 0
-                      ? `Dodaje do kartoteki nowe artykuły całego dokumentu (${newArticles}) z danymi z dokumentu bazy, osobno dla każdego dostawcy`
-                      : 'Wszystkie artykuły dokumentu są w kartotece'
-                  }
-                >
-                  <FilePlusIcon />
-                  Dodaj nowe artykuły ({newArticles})
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={rows.length === 0 || saving !== null}
-                  onClick={() => setArticleFileOpen(true)}
-                  title="Wybierz artykuły tabeli do zmiany w kartotece, także bez zmian: zmiana przepisuje je na dostawcę dokumentu"
-                >
-                  <PackageCheckIcon />
-                  Zmień artykuły
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  loading={savingNote}
-                  disabled={!delivery}
-                  onClick={saveNoteFiles}
-                  title="Plik dostawy dla programu sklepu z całego dokumentu (osobno dla każdego dostawcy), zapisany w folderze z ustawień zapisu"
-                >
-                  <FileDownIcon />
-                  Plik dostawy
-                </Button>
-                {plu.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    loading={savingPlu}
-                    onClick={savePlu}
-                    title={`Lista EAN-ów artykułów z nomenklatury ${PLU_REGIONS.join(' i ')} (${plu.length}) w folderze „Sprawdź PLU” z ustawień zapisu`}
-                  >
-                    <ScanBarcodeIcon />
-                    Sprawdź PLU ({plu.length})
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  loading={saving === 'prices'}
-                  disabled={priceRows.length === 0 || blocked || saving !== null}
-                  onClick={savePriceChanges}
-                  title={
-                    blocked
-                      ? blockedTitle
-                      : priceRows.length > 0
-                        ? `Plik zmiany cen dla artykułów z kartoteki ze zmienioną ceną sprzedaży (${priceRows.length})`
-                        : 'Żaden artykuł z kartoteki nie ma w tabeli zmienionej ceny sprzedaży'
-                  }
-                >
-                  <TagIcon />
-                  Zmień ceny{priceRows.length > 0 && ` (${priceRows.length})`}
-                </Button>
               </>
             )}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-1">
               <Button
                 variant="outline"
-                size="sm"
                 nativeButton={false}
                 render={<Link to={meaPath} />}
-                className={cn(
-                  meaPending > 0 &&
-                    'border-amber-400 bg-amber-200 text-amber-950 hover:bg-amber-300 dark:border-amber-600 dark:bg-amber-900 dark:text-amber-50',
-                )}
+                className={cn(meaPending > 0 && ACTION_TONES.warn)}
                 title="Kody MEA z dokumentów bazy, których jeszcze nie wpisano w Mercalys"
               >
                 <HashIcon />
-                Kody MEA{meaPending > 0 && ` (${meaPending})`}
+                Kody MEA
+                {meaPending > 0 && <span className="tabular-nums">{meaPending}</span>}
               </Button>
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
+                className="text-muted-foreground"
                 onClick={() => setSettingsOpen(true)}
                 aria-label="Ustawienia zapisu"
-                title="Ustawienia zapisu: foldery na nowe artykuły, protokoły i zmianę cen"
+                title="Ustawienia zapisu: foldery na nowe artykuły, protokoły, zmianę cen, plik dostawy i PLU"
               >
                 <SettingsIcon />
               </Button>
@@ -1046,45 +1075,34 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 
           {rows.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" role="group" aria-label="Tabela">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => gridRef.current?.selectAll()}
-                aria-label="Zaznacz wszystkie"
-                title="Zaznacz wszystkie widoczne pozycje (Ctrl+A)"
-              >
-                <CheckCheckIcon />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => removeRows(selectedRows)}
-                disabled={selectedRows.length === 0}
-                aria-label="Usuń zaznaczone wiersze"
-                title={
-                  selectedRows.length > 0
-                    ? `Usuń zaznaczone wiersze (${selectedRows.length}) (Ctrl+−)`
-                    : 'Zaznacz wiersze w tabeli'
-                }
-              >
-                <Trash2Icon />
-              </Button>
+              <div className="flex items-center gap-1" role="group" aria-label="Zaznaczone wiersze">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => gridRef.current?.selectAll()}
+                  aria-label="Zaznacz wszystkie"
+                  title="Zaznacz wszystkie widoczne pozycje (Ctrl+A)"
+                >
+                  <CheckCheckIcon />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => removeRows(selectedRows)}
+                  disabled={selectedRows.length === 0}
+                  aria-label="Usuń zaznaczone wiersze"
+                  title={
+                    selectedRows.length > 0
+                      ? `Usuń zaznaczone wiersze (${selectedRows.length}) (Ctrl+−)`
+                      : 'Zaznacz wiersze w tabeli'
+                  }
+                >
+                  <Trash2Icon />
+                </Button>
+              </div>
               <ToolbarDivider />
               <Button
                 variant="outline"
-                size="sm"
-                onClick={() => setProtocolOpen(true)}
-                disabled={protocolLines.length === 0 || blocked}
-                title={
-                  blocked ? blockedTitle : 'Protokół (np. MM wybranych nośników dla innego sklepu) z artykułów tabeli'
-                }
-              >
-                <FileOutputIcon />
-                Wygeneruj protokół
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={applySuggestedPrices}
                 disabled={priceChanges.size === 0}
                 title={
@@ -1094,52 +1112,63 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                 }
               >
                 <BadgePercentIcon />
-                Ustaw ceny sugerowane{priceChanges.size > 0 && ` (${priceChanges.size})`}
+                Ustaw ceny sugerowane
+                {priceChanges.size > 0 && <span className="tabular-nums">({priceChanges.size})</span>}
               </Button>
-              <ToolbarDivider />
-              <QuickToggle
-                active={applied?.quick === 'negative'}
-                disabled={negativeCount === 0 && applied?.quick !== 'negative'}
-                onClick={() => toggleQuick('negative')}
-                title="Artykuły z ceną cadencier (niebieską), bez promocji, z marżą poniżej zera przy aktualnej cenie sprzedaży"
-              >
-                <TrendingDownIcon />
-                Ujemne marże ({negativeCount})
-              </QuickToggle>
+              {(negativeCount > 0 || applied?.quick === 'negative') && (
+                <QuickToggle
+                  active={applied?.quick === 'negative'}
+                  alert
+                  onClick={() => toggleQuick('negative')}
+                  title="Artykuły z ceną cadencier (niebieską), bez promocji, z marżą poniżej zera przy aktualnej cenie sprzedaży"
+                >
+                  <TrendingDownIcon />
+                  Ujemne marże ({negativeCount})
+                </QuickToggle>
+              )}
               {filtersActive && (
-                <Button variant="ghost" size="sm" onClick={() => applyFilter({}, null)}>
+                <Button variant="ghost" onClick={() => applyFilter({}, null)}>
                   <FilterXIcon />
                   Pokaż wszystkie ({visibleRows.length}/{rows.length})
                 </Button>
               )}
-              <div className="ml-auto flex items-center gap-1" role="group" aria-label="Historia zmian">
-                <Button variant="ghost" size="sm" onClick={clearAll}>
-                  Wyczyść
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={history.undo}
-                  disabled={!history.canUndo}
-                  aria-label="Cofnij"
-                  title="Cofnij ostatnią zmianę (Ctrl+Z)"
-                >
-                  <Undo2Icon />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={history.redo}
-                  disabled={!history.canRedo}
-                  aria-label="Ponów"
-                  title="Ponów cofniętą zmianę (Ctrl+Y)"
-                >
-                  <Redo2Icon />
-                </Button>
-              </div>
             </div>
           )}
         </div>
+
+        {rows.length > 0 && (
+          <div
+            className="flex shrink-0 flex-col items-center justify-center gap-2"
+            role="group"
+            aria-label="Historia zmian"
+          >
+            <Button variant="ghost" onClick={clearAll}>
+              Wyczyść
+            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={history.undo}
+                disabled={!history.canUndo}
+                aria-label="Cofnij"
+                title="Cofnij ostatnią zmianę (Ctrl+Z)"
+              >
+                <Undo2Icon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={history.redo}
+                disabled={!history.canRedo}
+                aria-label="Ponów"
+                title="Ponów cofniętą zmianę (Ctrl+Y)"
+              >
+                <Redo2Icon />
+              </Button>
+            </div>
+          </div>
+        )}
       </CommandBar>
 
       {draft.delivery && deliveryQuery.isError && (

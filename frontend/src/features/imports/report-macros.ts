@@ -20,6 +20,9 @@ const PROGRAM_WINDOW = 'Mercalys ahk_exe Mercalys.exe'
 const PAGE_TIMEOUT_MS = 30_000
 /** Ile czeka makro na Excel z jednym raportem: kartoteka i sprzedaż ładują się kilka minut. */
 const EXCEL_WAIT_MS = 600_000
+/** Raport sprzedaży i dokumentów za dłuższy okres Mercalys potrafi przygotowywać dużo dłużej. */
+const LONG_EXCEL_WAIT_MS = 1_800_000
+const LONG_EXCEL_REPORTS: MacroReport[] = ['SALES', 'DOCUMENTS']
 
 /** Artykuł → Wydruk artykułu → Wydruk Ustawialny (ar-e027), Excel → WG ITM8 (ar-e054) → Zatwierdź. */
 const PRINT_SCREEN = {
@@ -419,7 +422,8 @@ export function buildReportSaveMacro(
           `ASK|${title}${step}: otwórz ten raport w Mercalys. Kliknij Tak, a potem przycisk Excel w Mercalys. Nie kończy makro.`,
         )
       const path = partPath(settings.path.trim(), part + 1, parts.length)
-      lines.push(PDF_REPORTS.includes(kind) ? `PDFSAVE|${path}|${EXCEL_WAIT_MS}` : `EXCELSAVE|${path}|${EXCEL_WAIT_MS}`)
+      const wait = LONG_EXCEL_REPORTS.includes(kind) ? LONG_EXCEL_WAIT_MS : EXCEL_WAIT_MS
+      lines.push(PDF_REPORTS.includes(kind) ? `PDFSAVE|${path}|${wait}` : `EXCELSAVE|${path}|${wait}`)
       if (kind === 'SALES' && steps) lines.push(`LABEL|${emptyLabel}`)
     })
   })
