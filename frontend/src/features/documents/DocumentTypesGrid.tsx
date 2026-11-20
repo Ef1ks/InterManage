@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils'
 
 /** Sekcje strony; kolejność kodów to kolejność kafelków. Kody z backendu (DocumentType.java). */
 const GROUPS = [
-  { title: 'Dokumenty dostaw', codes: ['PZ', 'PK', 'WZ', 'ZW'] },
+  { title: 'Dokumenty dostaw', codes: ['PZ', 'PK', 'WZ', 'NB', 'ZW'] },
   { title: 'Protokoły', codes: ['PL', 'MM', 'RWPO', 'RWREP', 'RWDA', 'RWREK'] },
-  { title: 'Przeniesienia stanów', codes: ['PPP', 'NB'] },
+  { title: 'Przeniesienia stanów', codes: ['PPP'] },
   { title: 'Inwentaryzacje', codes: ['PI'] },
 ]
 

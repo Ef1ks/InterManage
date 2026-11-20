@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.product.entity.Product;
@@ -28,6 +29,19 @@ public interface ProductEanRepository extends JpaRepository<ProductEan, UUID> {
             join fetch pe.lastSeenImport
             where pe.product.store.id = :storeId and pe.ean in :eans and pe.firstSeenImport.id <> :importId""")
     List<ProductEan> findOfEansBefore(UUID storeId, Collection<String> eans, UUID importId);
+
+    /**
+     * Pary ITM8 + EAN z wierszy paczki były w imporcie (tablice tej samej długości, wiersz = pozycja). Jedno zapytanie
+     * zamiast UPDATE-u encji na każdą parę; pomija pary, które już mają ten import (dopisane w nim samym).
+     */
+    @Modifying
+    @Query(value = """
+            update product_eans e set last_seen_import_id = :importId
+            from products p, unnest(cast(:itm8s as varchar[]), cast(:eans as varchar[])) as r(itm8, ean)
+            where p.store_id = :storeId and p.itm8 = r.itm8 and e.product_id = p.id and e.ean = r.ean
+              and e.last_seen_import_id <> :importId
+            """, nativeQuery = true)
+    int markSeenInImport(UUID storeId, UUID importId, String[] itm8s, String[] eans);
 
     /** Para EAN + ITM8 z kartoteki sklepu. */
     interface EanItm8 {

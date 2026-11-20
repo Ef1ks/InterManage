@@ -461,7 +461,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                           {document.errorMarkedAt && (
                             <Badge className="bg-red-200 text-red-950 dark:bg-red-950/60 dark:text-red-100">błąd</Badge>
                           )}
-                          <GratisBadge document={document} />
+                          {gratisFilter && <GratisBadge document={document} />}
                           <CorrectionBadge document={document} type={upperType} />
                           <TransferTargetBadge document={document} />
                         </div>

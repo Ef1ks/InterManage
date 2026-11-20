@@ -48,11 +48,21 @@ public class MeaAthosService {
     @Transactional
     public MeaAthosStatus importHistory(UUID storeId, String fileName, Instant fileModified, byte[] file,
             UUID userId) {
+        return importHistory(storeId, fileName, fileModified, file, userId, false);
+    }
+
+    /**
+     * {@code partial}: sama końcówka dziennika od agenta sklepu (wolne łącze), z zakładką na poprzednią wysyłkę. Wysyłki
+     * już zapisane są pomijane, a końcówka bez żadnej wysyłki to zwykły odczyt bez nowych wysyłek, nie błąd.
+     */
+    @Transactional
+    public MeaAthosStatus importHistory(UUID storeId, String fileName, Instant fileModified, byte[] file,
+            UUID userId, boolean partial) {
         if (file.length > MAX_FILE_BYTES) {
             throw ApiException.badRequest("Dziennik ATHOS jest za duży (ponad 50 MB)");
         }
         List<AthosHistoryParser.Send> parsed = parser.parse(file);
-        if (parsed.isEmpty()) {
+        if (parsed.isEmpty() && !partial) {
             throw ApiException.badRequest("W pliku " + fileName + " nie ma wysyłek zamówień MEA. Sprawdź, czy to "
                     + "dziennik ATHOS (Histo.Log z folderu appres\\athos2000)");
         }
@@ -70,7 +80,7 @@ public class MeaAthosService {
         LocalDateTime lastSentAt = sends.stream().map(AthosHistoryParser.Send::sentAt)
                 .max(Comparator.naturalOrder()).orElse(null);
         imports.save(new MeaAthosImport(stores.getReferenceById(storeId), fileName, fileModified, sends.size(), added,
-                lastSentAt, users.getReferenceById(userId)));
+                lastSentAt, userId == null ? null : users.getReferenceById(userId)));
         return status(storeId);
     }
 

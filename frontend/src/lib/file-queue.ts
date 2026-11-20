@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import { api } from '@/lib/api'
+import type { FileQueueItem } from '@/lib/types'
 
 /*
  * Kolejka plików sklepu. Kto pracuje dla innego sklepu bez połączenia z jego komputerem (np. wprowadza faktury
@@ -107,8 +108,13 @@ export function onFileQueued(listener: (storeId: string) => void) {
   }
 }
 
-/** Wysyła plik do kolejki sklepu zamiast zapisu w folderze. */
-export async function enqueueFile(storeId: string, folderKey: string, fileName: string, data: Blob) {
+/** Wysyła plik do kolejki sklepu zamiast zapisu w folderze (też przy zapisie przez agenta sklepu). */
+export async function enqueueFile(
+  storeId: string,
+  folderKey: string,
+  fileName: string,
+  data: Blob,
+): Promise<FileQueueItem> {
   const formData = new FormData()
   formData.append('folderKey', folderKey)
   formData.append('folderLabel', QUEUE_FOLDER_LABELS[folderKey] ?? folderKey)
@@ -118,6 +124,7 @@ export async function enqueueFile(storeId: string, folderKey: string, fileName: 
   }
   formData.append('fileName', fileName)
   formData.append('file', data, fileName)
-  await api(`/stores/${storeId}/file-queue`, { method: 'POST', formData })
+  const item = await api<FileQueueItem>(`/stores/${storeId}/file-queue`, { method: 'POST', formData })
   queuedListeners.forEach((listener) => listener(storeId))
+  return item
 }

@@ -66,6 +66,17 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     int clearMissingFromImport(UUID storeId, UUID importId);
 
     /**
+     * Artykuły paczki były w imporcie: jedno zapytanie zamiast UPDATE-u encji na każdy wiersz (encja nie zapisuje
+     * {@code last_seen_import_id}). Pomija te, które już go mają (nowe artykuły tego importu).
+     */
+    @Modifying
+    @Query(value = """
+            update products set last_seen_import_id = :importId
+            where store_id = :storeId and itm8 = any(cast(:itm8s as varchar[])) and last_seen_import_id <> :importId
+            """, nativeQuery = true)
+    int markSeenInImport(UUID storeId, UUID importId, String[] itm8s);
+
+    /**
      * Blokada doradcza Postgresa na czas transakcji: dwa importy do tego samego sklepu wykonają się po kolei.
      * Funkcja zwraca {@code void}, więc owijamy ją w zapytanie zwracające liczbę.
      */

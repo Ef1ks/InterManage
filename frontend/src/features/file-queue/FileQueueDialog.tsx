@@ -186,9 +186,14 @@ export function FileQueueDialog({
         if (!ready.get(item.folderKey)) {
           next[item.id] = { ok: false, message: `Wybierz folder „${folder.label}” i zezwól na zapis.` }
         } else {
+          // Przydział przed zapisem: plik, który zapisuje właśnie agent sklepu, nie zapisze się drugi raz.
+          let claimed = false
           try {
+            await api(`/stores/${storeId}/file-queue/${item.id}/claim`, { method: 'POST' })
+            claimed = true
             const { blob } = await fetchNamedFile(`/stores/${storeId}/file-queue/${item.id}/file`, item.fileName)
             await writeToFolder(item.folderKey, item.fileName, blob)
+            claimed = false
             saved++
             try {
               await api(`/stores/${storeId}/file-queue/${item.id}/saved`, { method: 'POST' })
@@ -200,10 +205,14 @@ export function FileQueueDialog({
               }
             }
           } catch (error) {
-            next[item.id] = {
-              ok: false,
-              message: error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku w folderze',
+            const message = error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku w folderze'
+            if (claimed) {
+              await api(`/stores/${storeId}/file-queue/${item.id}/failed`, {
+                method: 'POST',
+                json: { error: message },
+              }).catch(() => {})
             }
+            next[item.id] = { ok: false, message }
           }
         }
         setResults((current) => ({ ...current, [item.id]: next[item.id] }))
@@ -320,6 +329,20 @@ export function FileQueueDialog({
                       {shortTime(first.createdAt)}
                       {first.createdBy && ` · ${first.createdBy}`}
                     </p>
+                    {row.items
+                      .filter((item) => item.claimedBy && !results[item.id])
+                      .map((item) => (
+                        <p key={`claim-${item.id}`} className="text-xs text-muted-foreground">
+                          {fileKind(item)}: zapisuje teraz {item.claimedBy}
+                        </p>
+                      ))}
+                    {row.items
+                      .filter((item) => item.lastError && !item.claimedBy && !results[item.id])
+                      .map((item) => (
+                        <p key={`error-${item.id}`} className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                          {fileKind(item)}: ostatni zapis się nie udał ({item.lastError})
+                        </p>
+                      ))}
                     {errors.map((error) => (
                       <p key={error} className="text-xs font-medium text-red-700 dark:text-red-300">
                         {error}

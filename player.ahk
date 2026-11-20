@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.57.0.0
+;@Ahk2Exe-SetVersion 0.60.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.57" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.60" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -181,14 +181,9 @@ DescribeGridRows(doc) {
             if seen.Has(key)
                 continue
             seen[key] := true
-            node := element
-            Loop 10 {
-                node := node.parentNode
-                if (WebProp(node, "tagName") = "TR") {
-                    out .= "wiersz | siatka=" match[1] " | ctl" match[2] " | tekst=" RowText(node) "`n"
-                    break
-                }
-            }
+            row := GridRowOf(element, match[1])
+            if IsObject(row)
+                out .= "wiersz | siatka=" match[1] " | ctl" match[2] " | tekst=" RowStateText(row) "`n"
         }
     }
     return out
@@ -761,7 +756,9 @@ PlayMacro(rawClip) {
                 ; WEBGRIDWAIT|okno|element strony|warunek|wyrażenie|etykieta|opis|limit w ms (od 0.56): czeka na stan wierszy tabeli
                 ; (wiersze z setSelectedLigne) na stronie z elementem. `all` = co najmniej jeden wiersz i każdy pasuje do wyrażenia
                 ; (np. Stan „Zaznaczony”); pusta tabela przez 3 s = opis do podsumowania i przeskok do LABEL|etykieta.
-                ; `none` = tabela bez wierszy przez 1 s (np. Różne ceny po wyrównaniu).
+                ; `none` = tabela bez wierszy przez 1 s (np. Różne ceny po wyrównaniu), a z wyrażeniem: każdy pozostały wiersz
+                ; do niego pasuje (artykuły w promocji zostają w tabeli). `page` (od 0.60) = jak `all`, ale wyrażenie sprawdza
+                ; tekst całej strony (np. „Suma wyboru” równa „Suma linii”), bo zaznaczenie wiersza widać tylko kolorem.
                 if (parts.Length < 4) {
                     MsgBox report "Linia WEBGRIDWAIT wymaga okna, elementu i warunku.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -1974,15 +1971,7 @@ RowButtons(title, grid, button) {
                     id := WebProp(element, "id")
                     if !(InStr(id, grid "__ctl") = 1 && SubStr(id, -StrLen(button) - 1) = "_" button && IsShown(element))
                         continue
-                    node := element
-                    row := ""
-                    Loop 10 {
-                        node := node.parentNode
-                        if (WebProp(node, "tagName") = "TR") {
-                            row := node
-                            break
-                        }
-                    }
+                    row := GridRowOf(element, grid)
                     if IsObject(row)
                         found.Push({doc: doc, hwnd: hwnd, id: id, text: RowText(row)})
                 }
@@ -2054,15 +2043,26 @@ WebGridWait(title, element, condition, pattern, timeoutMs) {
         for doc in PagesWith(title, element) {
             total := 0
             matching := 0
+            first := ""
             for item in GridRows(doc, "*") {
                 if !IsShown(item.row)
                     continue
                 total += 1
-                if (pattern != "" && RegExMatch(RowText(item.row), pattern))
+                text := RowStateText(item.row)
+                if (first = "")
+                    first := text
+                if (pattern != "" && RegExMatch(text, pattern))
                     matching += 1
             }
+            ; `page`: wyrażenie sprawdza tekst całej strony (np. „Suma wyboru” równa „Suma linii”), a nie wiersze.
+            if (condition = "page") {
+                body := ""
+                try body := RegExReplace(StrReplace(doc.body.innerText, Chr(160), " "), "[ \t]+", " ")
+                matching := RegExMatch(body, pattern) ? total : 0
+            }
             state := total ":" matching
-            seen := "wiersze: " total ", pasujące: " matching
+            ; Pierwszy wiersz w opisie: bez niego błąd nie mówi, jak Mercalys pokazuje stan wiersza.
+            seen := "wiersze: " total ", pasujące: " matching (first != "" ? ", pierwszy: " SubStr(first, 1, 200) : "")
             break
         }
         if (state != lastState) {
@@ -2072,9 +2072,10 @@ WebGridWait(title, element, condition, pattern, timeoutMs) {
         if (state != "") {
             parts := StrSplit(state, ":")
             total := Integer(parts[1])
-            if (condition = "none" && total = 0 && A_TickCount - since >= 1000)
+            ; `none` z wyrażeniem: zostały tylko wiersze, które do niego pasują (np. artykuły w promocji, których MSI nie rusza).
+            if (condition = "none" && (pattern = "" ? total = 0 : Integer(parts[2]) = total) && A_TickCount - since >= 1000)
                 return ""
-            if (condition = "all") {
+            if (condition = "all" || condition = "page") {
                 if (total > 0 && Integer(parts[2]) = total && A_TickCount - since >= 500)
                     return ""
                 if (total = 0 && A_TickCount - since >= 3000)
@@ -2221,6 +2222,62 @@ WebTextClick(title, text, timeoutMs) {
             return "Nie ma napisu `"" text "`" w oknie `"" title "`"."
         Sleep 100
     }
+}
+
+; Tekst wiersza razem z jego stanem, którego nie ma w samym tekście: zaznaczone pole wyboru dopisuje „[zaznaczone]”,
+; a obrazki i przyciski swój opis (alt, title), bo Mercalys pokazuje zaznaczenie wiersza także ikoną.
+RowStateText(row) {
+    text := RowText(row)
+    extra := ""
+    try {
+        inputs := row.getElementsByTagName("input")
+        Loop inputs.length {
+            item := inputs.item(A_Index - 1)
+            kind := StrLower(WebProp(item, "type"))
+            if ((kind = "checkbox" || kind = "radio") && WebProp(item, "checked"))
+                extra .= " [zaznaczone]"
+            for name in ["alt", "title"]
+                if ((value := Trim(WebProp(item, name))) != "")
+                    extra .= " " value
+        }
+        images := row.getElementsByTagName("img")
+        Loop images.length {
+            item := images.item(A_Index - 1)
+            for name in ["alt", "title"]
+                if ((value := Trim(WebProp(item, name))) != "")
+                    extra .= " " value
+        }
+    }
+    return Trim(text extra)
+}
+
+; Wiersz siatki, w którym stoi element. Przycisk Mercalys (ImgButton) ma własną tabelkę, więc najbliższy <tr> nad nim to
+; wiersz tej tabelki, bez tekstu wiersza listy (historia pobierania danych: puste wiersze dgHisto). Szukamy <tr>, którego
+; tabela ma id siatki albo który ma kliknięcie wiersza siatki (setSelectedLigne); bez takiego najbliższy <tr>.
+GridRowOf(element, grid) {
+    nearest := ""
+    node := element
+    Loop 20 {
+        try node := node.parentNode
+        catch
+            break
+        if !IsObject(node) || WebProp(node, "tagName") = ""
+            break
+        if (WebProp(node, "tagName") != "TR")
+            continue
+        if !IsObject(nearest)
+            nearest := node
+        table := ""
+        try table := node.parentNode
+        if (WebProp(table, "tagName") = "TBODY")
+            try table := table.parentNode
+        if (WebProp(table, "id") = grid)
+            return node
+        ; Idziemy w górę, więc pierwszy <tr> z kliknięciem wiersza to wiersz siatki, a nie ramka całej listy.
+        if InStr(WebProp(node, "outerHTML"), "setSelectedLigne('" grid "'")
+            return node
+    }
+    return nearest
 }
 
 ; Tekst całego wiersza z pojedynczymi spacjami. Komórki rozdziela spacja: innerText wiersza w IE skleja je

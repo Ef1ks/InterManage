@@ -5,6 +5,7 @@ import { hasPermission, useCurrentUser } from '@/features/auth/api'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { api, ApiError } from '@/lib/api'
 import { folderAccess, folderSavingSupported, listFolderFiles, requestStoredFolderAccess } from '@/lib/saved-folders'
+import { useAgentWatches } from '@/lib/store-agent'
 import type { PriceFileOverview, PriceFileUploadResult } from '@/lib/types'
 
 /*
@@ -197,7 +198,9 @@ export function usePriceFileWatcher() {
   const store = useCurrentStore()
   const queryClient = useQueryClient()
   const allowed = hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'IMPORTS', 'EDIT')
-  const storeId = allowed && folderSavingSupported ? (store?.id ?? null) : null
+  // Folder pilnuje agent sklepu (gdy sklep pracuje przez agenta i agent jest online): przeglądarka wraca, gdy zniknie.
+  const byAgent = useAgentWatches(store?.id, 'TRACEART')
+  const storeId = allowed && folderSavingSupported && !byAgent ? (store?.id ?? null) : null
 
   useEffect(() => {
     if (!storeId) return

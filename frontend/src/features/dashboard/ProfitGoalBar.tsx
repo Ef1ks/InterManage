@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { useCan } from '@/features/auth/api'
 import { useProfitTargetProgress } from '@/features/sales/api'
 import { yearShare } from '@/features/sales/year-share'
@@ -11,7 +13,8 @@ const money = (value: number) => `${whole.format(value)} zł`
 /**
  * Pasek na całą szerokość panelu wyników: marża po odliczeniu likwidacji od 1 stycznia do ostatniego dnia ze sprzedażą
  * wobec rocznego celu z ustawień Podsumowania sprzedaży i strat. Kreska to plan na ten dzień (cel rozłożony równo na
- * dni roku, jak w kafelkach podsumowania), a pod paskiem: ile zł i ile % celu, i o ile sklep jest przed albo za planem.
+ * dni roku, jak w kafelkach podsumowania). Nad paskiem po kolei: osiągnięta marża, cel roku, plan na ten dzień i o ile
+ * sklep jest przed albo za planem.
  */
 export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; lastSaleDate: string }) {
   const canSetGoal = useCan('SALES', 'EDIT')
@@ -23,7 +26,7 @@ export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; last
   const achieved = data.marginAfterLossesValue
   if (target == null || achieved == null) {
     return canSetGoal ? (
-      <p className="text-xs text-muted-foreground">
+      <p className="border-b pb-5 text-xs text-muted-foreground">
         Ustaw roczny cel marży po stratach w Podsumowaniu sprzedaży i strat (koło zębate), żeby widzieć tu postęp{' '}
         {data.year}.
       </p>
@@ -37,18 +40,28 @@ export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; last
   const ahead = difference >= 0
 
   return (
-    <div className="space-y-1.5 tabular-nums">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-sm">
-        <span className="text-muted-foreground">
-          Marża po likwidacjach od 1 stycznia do {formatShortDate(data.to)}:{' '}
-          <span className="font-semibold text-foreground">{money(achieved)}</span>
-        </span>
-        <span>
-          <span className="font-semibold">{percentFormat.format(share * 100)}%</span>
-          <span className="text-muted-foreground">
-            {' '}
-            celu {data.year} ({money(target)})
-          </span>
+    <div className="space-y-2.5 border-b pb-5 tabular-nums">
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
+        <GoalFigure label="Marża zrealizowana">
+          <span className="text-2xl font-semibold tracking-tight">{money(achieved)}</span>
+          <span className="ml-2 text-sm text-muted-foreground">{percentFormat.format(share * 100)}% celu</span>
+        </GoalFigure>
+        <GoalFigure label={`Cel ${data.year}`}>
+          <span className="text-base font-semibold">{money(target)}</span>
+        </GoalFigure>
+        <GoalFigure label={`Plan na ${formatShortDate(data.to)}`}>
+          <span className="text-base font-semibold">{money(plannedValue)}</span>
+          <span className="ml-1.5 text-sm text-muted-foreground">{percentFormat.format(planned * 100)}%</span>
+        </GoalFigure>
+        <span
+          className={cn(
+            'ml-auto rounded-md px-2 py-0.5 text-sm font-semibold',
+            ahead
+              ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-950/60 dark:text-emerald-100'
+              : 'bg-amber-200 text-amber-950 dark:bg-amber-950/60 dark:text-amber-100',
+          )}
+        >
+          {ahead ? `${money(difference)} przed planem` : `${money(-difference)} za planem`}
         </span>
       </div>
       <div
@@ -74,21 +87,16 @@ export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; last
           style={{ left: `${Math.min(planned, 1) * 100}%` }}
         />
       </div>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-xs">
-        <span className="text-muted-foreground">
-          plan na ten dzień {money(plannedValue)} ({percentFormat.format(planned * 100)}%)
-        </span>
-        <span
-          className={cn(
-            'rounded-md px-1.5 py-0.5 font-semibold',
-            ahead
-              ? 'bg-emerald-200 text-emerald-950 dark:bg-emerald-950/60 dark:text-emerald-100'
-              : 'bg-amber-200 text-amber-950 dark:bg-amber-950/60 dark:text-amber-100',
-          )}
-        >
-          {ahead ? `${money(difference)} przed planem` : `${money(-difference)} za planem`}
-        </span>
-      </div>
+    </div>
+  )
+}
+
+/** Jedna liczba nad paskiem: mały podpis i wartość pod nim. */
+function GoalFigure({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="flex items-baseline">{children}</div>
     </div>
   )
 }

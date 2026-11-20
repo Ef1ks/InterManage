@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError, fetchNamedFile } from '@/lib/api'
+import { saveViaAgent } from '@/lib/agent-save'
 import { enqueueFile, queueStoreFor } from '@/lib/file-queue'
+import { agentStoreFor } from '@/lib/store-agent'
 
 /*
  * Foldery na komputerze wybrane raz przez użytkownika (File System Access API, Chrome i Edge). Uchwyt folderu
@@ -141,8 +143,9 @@ export async function pickFolder(
  * działa tylko bezpośrednio po geście użytkownika.
  */
 export async function ensureFolderAccess(key: string, folderMode: FolderMode = 'readwrite'): Promise<boolean> {
-  // Kolejka plików sklepu (`lib/file-queue`): zapis idzie na serwer, folder nie jest potrzebny.
-  if (folderMode === 'readwrite' && queueStoreFor(key)) return true
+  // Kolejka plików sklepu (`lib/file-queue`) albo agent sklepu (`lib/store-agent`): zapis idzie na serwer, folder
+  // nie jest potrzebny. Zgody pyta dopiero zapas z przeglądarki, gdy agent nie odpowie (po kliknięciu w toaście).
+  if (folderMode === 'readwrite' && (queueStoreFor(key) || agentStoreFor(key))) return true
   return requestFolderAccess(key, folderMode)
 }
 
@@ -181,7 +184,7 @@ export async function hasSavedFolder(key: string): Promise<boolean> {
  * kolejnym kliknięciu ({@link ensureFolderAccess}).
  */
 export async function folderAccess(key: string, folderMode: FolderMode): Promise<PermissionState | 'missing'> {
-  if (folderMode === 'readwrite' && queueStoreFor(key)) return 'granted'
+  if (folderMode === 'readwrite' && (queueStoreFor(key) || agentStoreFor(key))) return 'granted'
   try {
     const handle = await readFolder(key)
     if (!handle) return 'missing'
@@ -269,12 +272,20 @@ async function collectFiles(
 
 /**
  * Zapisuje plik w folderze klucza, nadpisując plik o tej samej nazwie. Przy włączonej kolejce plików sklepu
- * (`lib/file-queue`) plik trafia do kolejki na serwerze i zapisze się w folderze sklepu później.
+ * (`lib/file-queue`) plik trafia do kolejki na serwerze i zapisze się w folderze sklepu później, a przy pracy przez
+ * agenta sklepu (`lib/store-agent`) zapisuje go agent (bez nadpisywania istniejącego pliku).
  */
 export async function saveToFolder(key: string, fileName: string, data: Blob): Promise<void> {
   const queueStore = queueStoreFor(key)
   if (queueStore) {
     await enqueueFile(queueStore, key, fileName, data)
+    return
+  }
+  // Sklep pracuje przez agenta, a agent jest online: plik idzie przez kolejkę do agenta (zapas: ta przeglądarka).
+  const agentStore = agentStoreFor(key)
+  if (agentStore) {
+    const item = await enqueueFile(agentStore, key, fileName, data)
+    await saveViaAgent(agentStore, item.id, fileName, () => writeToFolder(key, fileName, data))
     return
   }
   await writeToFolder(key, fileName, data)

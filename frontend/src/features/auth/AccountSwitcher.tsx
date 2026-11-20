@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { useEffect, useRef, useState } from 'react'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router'
 import { ArrowLeftIcon, ChevronRightIcon, KeyRoundIcon, LockKeyholeIcon, LogOutIcon, UserPlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -18,6 +18,9 @@ import {
 } from '@/features/auth/api'
 import { ApiError } from '@/lib/api'
 import type { Me, SwitchAccount, SwitchUnlock } from '@/lib/types'
+
+/** Najmniejszy odstęp między samoczynnymi próbami PIN-u, żeby szybkie poprawki nie zasypywały API. */
+const AUTO_SUBMIT_GAP_MS = 1500
 
 const UNLOCK_HINTS: Record<SwitchUnlock, string> = {
   NONE: 'bez PIN-u',
@@ -160,6 +163,7 @@ function UnlockForm({
     register,
     handleSubmit,
     resetField,
+    control,
     formState: { errors },
   } = useForm<{ secret: string }>({ defaultValues: { secret: '' } })
 
@@ -168,6 +172,24 @@ function UnlockForm({
     // Błędny PIN wpisuje się od nowa, bez kasowania znaków.
     resetField('secret')
   })
+
+  // PIN o znanej długości sprawdzamy sam po wpisaniu ostatniej cyfry. Każda próba liczy się na serwerze jak
+  // kliknięcie (5 błędnych = hasło), więc wysyłamy tylko pełny PIN, jedną próbę naraz, bez powtarzania tego samego
+  // PIN-u i nie częściej niż co AUTO_SUBMIT_GAP_MS; serwer ma do tego limit zapytań z adresu.
+  const secret = useWatch({ control, name: 'secret' })
+  const lastAuto = useRef<{ pin: string; at: number } | null>(null)
+  const pinLength = usesPin ? account.pinLength : null
+  useEffect(() => {
+    if (!pinLength || pending || secret.length !== pinLength || !/^\d+$/.test(secret)) return
+    const last = lastAuto.current
+    if (last?.pin === secret) return
+    const wait = last ? Math.max(0, last.at + AUTO_SUBMIT_GAP_MS - Date.now()) : 0
+    const timer = window.setTimeout(() => {
+      lastAuto.current = { pin: secret, at: Date.now() }
+      void submit()
+    }, wait)
+    return () => window.clearTimeout(timer)
+  }, [pinLength, pending, secret, submit])
 
   return (
     <Form onSubmit={submit} error={error}>
@@ -184,9 +206,15 @@ function UnlockForm({
         type="password"
         noSave
         inputMode={usesPin ? 'numeric' : undefined}
-        maxLength={usesPin ? 8 : undefined}
+        maxLength={usesPin ? (account.pinLength ?? 8) : undefined}
         autoFocus
-        hint={usesPin ? undefined : 'To konto nie ma PIN-u albo PIN został zablokowany po błędnych próbach.'}
+        hint={
+          !usesPin
+            ? 'To konto nie ma PIN-u albo PIN został zablokowany po błędnych próbach.'
+            : pinLength
+              ? undefined
+              : 'Wpisz PIN i kliknij Przełącz. Od następnego razu PIN sprawdzi się sam po ostatniej cyfrze.'
+        }
         error={errors.secret?.message}
         {...register('secret', { required: usesPin ? 'Podaj PIN' : 'Podaj hasło' })}
       />

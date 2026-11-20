@@ -13,6 +13,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.LiveEvents;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -34,9 +35,12 @@ public class BackgroundAccounts {
     private final JwtService jwtService;
     private final AppUserRepository users;
     private final TransactionTemplate readOnlyTx;
+    private final LiveEvents live;
 
-    public BackgroundAccounts(JwtService jwtService, AppUserRepository users, PlatformTransactionManager transactionManager) {
+    public BackgroundAccounts(JwtService jwtService, AppUserRepository users, PlatformTransactionManager transactionManager,
+            LiveEvents live) {
         this.jwtService = jwtService;
+        this.live = live;
         this.users = users;
         this.readOnlyTx = new TransactionTemplate(transactionManager);
         this.readOnlyTx.setReadOnly(true);
@@ -105,6 +109,8 @@ public class BackgroundAccounts {
         }
         jwtService.writeAccountsCookie(request, response, accounts.stream().map(Account::token).toList());
         jwtService.clearTokenCookie(response);
+        // Strumienie na żywo tego konta się zamykają; przeglądarka bez PIN-u nie połączy się ponownie.
+        live.closeUser(active.getId());
     }
 
     /** Odnawia tokeny kont w tle; woła go filtr, gdy odnawia token aktywnego konta. */

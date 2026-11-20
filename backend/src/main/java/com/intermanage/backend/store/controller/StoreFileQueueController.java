@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -79,7 +80,31 @@ public class StoreFileQueueController {
                 .body(item.getContent());
     }
 
-    /** Plik zapisany w folderze sklepu: znika z kolejki. */
+    /** Stan pliku (przeglądarka czeka na potwierdzenie zapisu od agenta sklepu). */
+    @GetMapping("/{id}")
+    @PreAuthorize(Access.STORE)
+    public StoreFileQueueService.FileStatus status(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return service.status(storeId, id);
+    }
+
+    /** Przydział pliku przed zapisem z przeglądarki; 409, gdy zapisuje go ktoś inny (agent sklepu). */
+    @PostMapping("/{id}/claim")
+    @PreAuthorize(Access.STORE)
+    public StoreFileQueueService.FileStatus claim(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.claim(storeId, id, principal.getId());
+    }
+
+    /** Nieudany zapis z przeglądarki: przydział wraca, plik czeka z opisem błędu. */
+    @PostMapping("/{id}/failed")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize(Access.STORE)
+    public void failed(@PathVariable UUID storeId, @PathVariable UUID id, @RequestBody(required = false)
+    Map<String, String> body, @AuthenticationPrincipal AppUserPrincipal principal) {
+        service.markFailed(storeId, id, principal.getId(), body == null ? null : body.get("error"));
+    }
+
+    /** Plik zapisany w folderze sklepu: znika z kolejki. Tylko od osoby z przydziałem ({@code /claim}). */
     @PostMapping("/{id}/saved")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize(Access.STORE)

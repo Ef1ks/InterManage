@@ -20,6 +20,8 @@ import jakarta.servlet.http.HttpServletResponse;
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
+    private static final java.util.regex.Pattern LIVE = java.util.regex.Pattern.compile("^/api/stores/[^/]+/live$");
+
     private final RequestLimits limits;
 
     public RateLimitFilter(RequestLimits limits) {
@@ -28,7 +30,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/");
+        // Strumień wiadomości na żywo to jedno długie połączenie, nie seria zapytań.
+        return !request.getRequestURI().startsWith("/api/") || LIVE.matcher(request.getRequestURI()).matches();
     }
 
     @Override

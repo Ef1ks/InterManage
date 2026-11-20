@@ -37,8 +37,12 @@ public class ProductEan {
     @JoinColumn(name = "first_seen_import_id", nullable = false, updatable = false)
     private ProductImport firstSeenImport;
 
+    /**
+     * Ostatni import z tą parą. Encja go nie zmienia: import ustawia go paczce jednym zapytaniem
+     * ({@code ProductEanRepository.markSeenInImport}), żeby para bez zmian nie dawała UPDATE-u.
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "last_seen_import_id", nullable = false)
+    @JoinColumn(name = "last_seen_import_id", nullable = false, updatable = false)
     private ProductImport lastSeenImport;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -59,16 +63,14 @@ public class ProductEan {
         createdAt = Instant.now();
     }
 
-    public void seenIn(ProductImport productImport) {
-        lastSeenImport = productImport;
-    }
-
     /**
      * Czy ta para występowała później niż {@code other}: nowszy ostatni import, przy remisie nowszy pierwszy import,
-     * a na końcu później utworzona para. Kolejność z dat, nie z identyfikatorów.
+     * a na końcu później utworzona para. Kolejność z dat, nie z identyfikatorów. {@code lastSeen} i
+     * {@code otherLastSeen} to ostatnie importy obu par, które import kartoteki podaje sam dla par widzianych już
+     * w trwającym imporcie (w bazie dostaną go dopiero po paczce).
      */
-    public boolean seenLaterThan(ProductEan other) {
-        int byLastImport = lastSeenImport.getImportedAt().compareTo(other.lastSeenImport.getImportedAt());
+    public boolean seenLaterThan(ProductEan other, ProductImport lastSeen, ProductImport otherLastSeen) {
+        int byLastImport = lastSeen.getImportedAt().compareTo(otherLastSeen.getImportedAt());
         if (byLastImport != 0) {
             return byLastImport > 0;
         }
@@ -77,6 +79,10 @@ public class ProductEan {
             return byFirstImport > 0;
         }
         return createdAt != null && other.createdAt != null && createdAt.isAfter(other.createdAt);
+    }
+
+    public ProductImport getLastSeenImport() {
+        return lastSeenImport;
     }
 
     public UUID getId() {

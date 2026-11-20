@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Agent sklepu Intermanage: zapis plików z kolejki sklepu w folderach na dysku sieciowym i pilnowanie folderów.
+    .NET Framework 4.8 (jest na każdym Windows 10/11), WinForms tylko do ikony przy zegarze i okna ustawień.
+    Budowanie: dotnet build -c Release (pakiet Microsoft.NETFramework.ReferenceAssemblies daje biblioteki 4.8 bez
+    instalowania Developer Packa). Bez packerów, zaciemniania i instalatora: wynik to folder z exe.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Intermanage.Agent</RootNamespace>
+    <AssemblyName>IntermanageAgent</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+
+    <!-- Zasoby wersji pliku exe (Właściwości → Szczegóły w Eksploratorze). -->
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Company>Intermanage</Company>
+    <Product>Intermanage – agent sklepu</Product>
+    <AssemblyTitle>Intermanage – agent sklepu</AssemblyTitle>
+    <Description>Zapisuje pliki dla programu sklepu w folderach sklepu i zgłasza zmiany w folderach do Intermanage.</Description>
+    <Copyright>Intermanage</Copyright>
+    <NeutralLanguage>pl-PL</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
+  </ItemGroup>
+
+</Project>

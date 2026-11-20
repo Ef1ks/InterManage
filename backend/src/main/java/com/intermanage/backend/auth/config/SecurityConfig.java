@@ -55,7 +55,8 @@ public class SecurityConfig {
                 // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
                 // Aplikacja mobilna wysyła token w nagłówku Authorization, którego przeglądarka sama nie dołącza
                 // (a bez CORS strona z innego originu nie może go ustawić), więc CSRF jej nie dotyczy.
-                .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**", "/api/auth/mobile/login")
+                .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**", "/api/store-agent/**",
+                                "/api/auth/mobile/login")
                         .ignoringRequestMatchers(request -> JwtService.bearerToken(request) != null))
                 .authorizeHttpRequests(auth -> auth
                         // Nieobsłużony wyjątek idzie do /error drugim przejściem (ERROR), w którym filtr JWT nie
@@ -70,6 +71,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/accounts/*").permitAll()
                         .requestMatchers("/api/time-clock/**").permitAll()
+                        // Agent sklepu przedstawia się własnym kluczem (StoreAgentApiController).
+                        .requestMatchers("/api/store-agent/**").permitAll()
                         // Jedyne endpointy dostępne, zanim użytkownik ustawi własne hasło.
                         .requestMatchers("/api/auth/me", "/api/auth/password/setup").authenticated()
                         .requestMatchers("/api/settings/**").hasAuthority(AppUserPrincipal.OWNER_AUTHORITY)

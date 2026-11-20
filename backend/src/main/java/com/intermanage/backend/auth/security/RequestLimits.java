@@ -66,6 +66,10 @@ public class RequestLimits {
         if (path.startsWith("/api/time-clock/")) {
             return limiter.acquire("clock:" + ip, timeClockPerMinute, MINUTE);
         }
+        // Agent sklepu: jak czytniki kart (czekanie na pliki to jedno długie żądanie, zdarzenia idą paczkami).
+        if (path.startsWith("/api/store-agent/")) {
+            return limiter.acquire("agent:" + ip, timeClockPerMinute, MINUTE);
+        }
         return limiter.acquire("api:" + ip, apiPerMinute, MINUTE);
     }
 

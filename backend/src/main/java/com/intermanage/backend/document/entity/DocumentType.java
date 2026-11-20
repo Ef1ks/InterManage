@@ -25,9 +25,9 @@ public enum DocumentType {
     RWREK("Reklama", "Wydanie na reklamę", "Towar wydany na cele reklamowe"),
     /**
      * Na próbce z 10023 (12-15.11.2026, 110 linii, 36 dokumentów, numery jak protokoły: NB0002720261113): ilość,
-     * zakup i sprzedaż na minusie, głównie od bazy (538, 16538), rejon 55. Znaczenia kodu nie znamy.
+     * zakup i sprzedaż na minusie, głównie od bazy (538, 16538), rejon 55. To korekty dostaw z bazy.
      */
-    NB("Zdjęcia ze stanu", "Zdjęcie ze stanu", "Towar zdjęty ze stanu: ilość i wartości na minusie"),
+    NB("Korekty do bazy", "Korekta do bazy", "Korekty dostaw z bazy wystawione w sklepie"),
     /**
      * Kod z raportów 06713, 09575, 10023 (11.2026), dziesiątki tysięcy linii w miesiącu inwentury (06713, styczeń
      * 2025: ok. 128 tys.), więc najpewniej różnice inwentaryzacyjne; linii jeszcze nie oglądaliśmy.

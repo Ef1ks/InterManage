@@ -121,9 +121,13 @@ public class Product {
     @JoinColumn(name = "first_seen_import_id", nullable = false, updatable = false)
     private ProductImport firstSeenImport;
 
-    /** Ostatni import, w którym produkt był w pliku. Starszy niż najnowszy import = zniknął z raportu. */
+    /**
+     * Ostatni import, w którym produkt był w pliku. Starszy niż najnowszy import = zniknął z raportu. Encja go nie
+     * zapisuje ({@code updatable = false}): import ustawia go całej paczce jednym zapytaniem
+     * ({@code ProductRepository.markSeenInImport}), żeby niezmieniony artykuł nie dawał UPDATE-u.
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "last_seen_import_id", nullable = false)
+    @JoinColumn(name = "last_seen_import_id", nullable = false, updatable = false)
     private ProductImport lastSeenImport;
 
     /**
@@ -185,9 +189,11 @@ public class Product {
         updatedAt = createdAt;
     }
 
-    /** Wiersz z kolejnego raportu. Zwraca {@code true}, gdy zmieniło się którekolwiek pole z pliku. */
+    /**
+     * Wiersz z kolejnego raportu. Zwraca {@code true}, gdy zmieniło się którekolwiek pole z pliku. Nie zmienia
+     * {@link #lastSeenImport}: ten import ustawia całej paczce {@code ProductRepository.markSeenInImport}.
+     */
     public boolean seenIn(ProductReportRow row, ProductImport productImport) {
-        lastSeenImport = productImport;
         if (salePriceAt != null && !priceFileNewerThan(productImport.getReportGeneratedAt())) {
             // Raport jest nowszy niż ostatni plik TRACEART: od teraz obowiązuje jego cena.
             salePriceAt = null;

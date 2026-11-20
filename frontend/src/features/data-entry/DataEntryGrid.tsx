@@ -9,7 +9,18 @@ import {
   SplitIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
-import { Fragment, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from 'react'
 
 import { formatDocumentDate, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { cn } from '@/lib/utils'
@@ -167,6 +178,22 @@ function edgeStep(position: number, start: number, end: number) {
   return 0
 }
 
+/**
+ * Okienkowanie wierszy: od tylu wierszy tabela rysuje tylko wiersze w oknie przeglądarki z zapasem, a resztę zastępują
+ * puste wiersze o tej samej wysokości. Bon z bazy ma ponad tysiąc linii po ponad 20 komórek, a pełna tabela zacinała
+ * każde przewinięcie, ruch po komórkach i edycję. Mała tabela (faktura) rysuje się cała, więc Ctrl+F dalej w niej szuka.
+ */
+const WINDOW_FROM = 150
+/** Zapas wierszy nad i pod oknem (przewijanie nie odsłania pustego miejsca przed dorysowaniem). */
+const OVERSCAN = 40
+/** Początek okna co tyle wierszy, żeby przewijanie nie przerysowywało tabeli przy każdym wierszu. */
+const WINDOW_STEP = 10
+
+type RowWindow = { start: number; end: number }
+
+/** Wiersz z uchwytem do przenoszenia: artykuł, bez pustego wiersza, kaucji i dostawy. */
+const isMovable = (row: DataEntryRow) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null
+
 /** Indeks elementu, w którego pas (do dołu albo prawej krawędzi) wpada pozycja; poza listą najbliższy z brzegu. */
 function indexAt(elements: HTMLElement[], position: number, axis: 'y' | 'x') {
   let low = 0
@@ -188,7 +215,7 @@ type SelectDrag = 'cells' | 'rows' | 'columns'
  * wpisanie albo F2/podwójne kliknięcie, Esc, Delete (czyści komórki), Ctrl+− (usuwa wiersze), Ctrl+C/Ctrl+V zakresu jako TSV (zgodne z Excelem). Nomenklatura
  * i rodzaj sprzedaży wybiera się z listy. Celowo bez animacji: nawigacja klawiaturą ma być natychmiastowa.
  */
-export function DataEntryGrid({
+export const DataEntryGrid = memo(function DataEntryGrid({
   rows,
   setRows,
   onEansChanged,
@@ -293,12 +320,83 @@ export function DataEntryGrid({
     [],
   )
 
+  // ---------- okienkowanie wierszy (duże tabele)
+
+  const windowed = rows.length > WINDOW_FROM
+  const tbodyRef = useRef<HTMLTableSectionElement>(null)
+  // Wysokość wiersza mierzona z narysowanego wiersza (zależy od bazowego rem), na start 2rem.
+  const [rowHeight, setRowHeight] = useState(32)
+  const [rowWindow, setRowWindow] = useState<RowWindow>({ start: 0, end: OVERSCAN * 2 })
+  const windowFor = useCallback((count: number, height: number): RowWindow => {
+    const top = tbodyRef.current?.getBoundingClientRect().top ?? 0
+    const first = Math.floor(Math.max(0, -top) / height)
+    const visible = Math.ceil(window.innerHeight / height)
+    const start = Math.max(0, Math.floor((first - OVERSCAN) / WINDOW_STEP) * WINDOW_STEP)
+    const end = Math.min(count, Math.ceil((first + visible + OVERSCAN) / WINDOW_STEP) * WINDOW_STEP)
+    return { start, end }
+  }, [])
+  const updateWindow = useCallback(() => {
+    if (!windowed) return
+    const next = windowFor(rows.length, rowHeight)
+    setRowWindow((current) => (current.start === next.start && current.end === next.end ? current : next))
+  }, [windowed, windowFor, rows.length, rowHeight])
+  useLayoutEffect(() => {
+    updateWindow()
+    if (!windowed) return
+    let frame = 0
+    const onChange = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(updateWindow)
+    }
+    window.addEventListener('scroll', onChange, { passive: true })
+    window.addEventListener('resize', onChange)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', onChange)
+      window.removeEventListener('resize', onChange)
+    }
+  }, [windowed, updateWindow])
+  useLayoutEffect(() => {
+    const row = tbodyRef.current?.querySelector<HTMLElement>('tr[aria-rowindex]')
+    const height = row?.getBoundingClientRect().height
+    if (height && Math.abs(height - rowHeight) > 0.5) setRowHeight(height)
+  }, [rows, rowWindow, rowHeight])
+  const shown = windowed
+    ? { start: Math.min(rowWindow.start, rows.length), end: Math.min(rowWindow.end, rows.length) }
+    : { start: 0, end: rows.length }
+
+  // Aktywna komórka zawsze w widoku. Poza narysowanymi wierszami najpierw przewijamy stronę do wiersza (wyliczonego
+  // z wysokości), a po dorysowaniu dopasowujemy komórkę także w poziomie.
+  const pendingScroll = useRef(false)
+  // Przewijanie tylko przy zmianie aktywnej komórki (nie przy zmianie wierszy), więc wysokość i okno z refów.
+  const windowRef = useRef({ rowHeight, updateWindow })
+  useLayoutEffect(() => {
+    windowRef.current = { rowHeight, updateWindow }
+  })
   useEffect(() => {
-    cellElement({ r: active.r, c: active.c })?.scrollIntoView({
-      block: 'nearest',
-      inline: 'nearest',
-    })
+    const { rowHeight, updateWindow } = windowRef.current
+    const cell = cellElement({ r: active.r, c: active.c })
+    if (cell) {
+      cell.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      return
+    }
+    const tbody = tbodyRef.current
+    if (!tbody) return
+    const header = gridRef.current?.querySelector('thead')?.getBoundingClientRect().bottom ?? 56
+    const top = tbody.getBoundingClientRect().top + active.r * rowHeight
+    const bottom = top + rowHeight
+    if (top < header) window.scrollBy(0, top - header)
+    else if (bottom > window.innerHeight) window.scrollBy(0, bottom - window.innerHeight)
+    pendingScroll.current = true
+    updateWindow()
   }, [active.r, active.c, cellElement])
+  useLayoutEffect(() => {
+    if (!pendingScroll.current) return
+    const cell = cellElement({ r: active.r, c: active.c })
+    if (!cell) return
+    pendingScroll.current = false
+    cell.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  })
 
   const focusGrid = () => gridRef.current?.focus({ preventScroll: true })
 
@@ -599,9 +697,15 @@ export function DataEntryGrid({
     const rowHeaders = () => [...grid.querySelectorAll<HTMLElement>('[data-row-header]')]
     const colHeaders = () => [...grid.querySelectorAll<HTMLElement>('[data-col-header]')]
 
+    // Przy okienkowaniu narysowana jest tylko część wierszy, więc numer wiersza bierzemy z nagłówka, nie z pozycji.
+    const rowAt = (position: number) => {
+      const headers = rowHeaders()
+      if (headers.length === 0) return 0
+      return Number(headers[indexAt(headers, position, 'y')].dataset.rowHeader)
+    }
     const update = () => {
       const cell = {
-        r: mode === 'columns' ? 0 : clamp(indexAt(rowHeaders(), y, 'y'), 0, lastRow),
+        r: mode === 'columns' ? 0 : clamp(rowAt(y), 0, lastRow),
         c: mode === 'rows' ? 0 : clamp(indexAt(colHeaders(), x, 'x'), 0, last),
       }
       if (cell.r === lastCell.r && cell.c === lastCell.c) return
@@ -720,14 +824,32 @@ export function DataEntryGrid({
   // ---------- przenoszenie wierszy (uchwyt przy numerze wiersza)
 
   const [rowDrag, setRowDrag] = useState<RowDrag | null>(null)
-  const isMovable = (row: DataEntryRow) => (row.ean !== '' || row.name !== '') && serviceKind(row) === null
   // Artykuły zostają nad pustym wierszem na kolejny EAN i nad kaucjami z dostawą (te układa strona).
-  const movableEnd = (() => {
+  // Liczone tylko przy zmianie wierszy: przy tysiącu wierszy przeliczanie przy każdym ruchu zaznaczenia zacinało tabelę.
+  const { movableEnd, firstService, tooLongNames, invalidEans, depositErrors, vatMismatches } = useMemo(() => {
     const services = rows.findIndex((row) => serviceKind(row) !== null)
     let end = services < 0 ? rows.length : services
     while (end > 0 && !isMovable(rows[end - 1])) end--
-    return end
-  })()
+    let tooLong = 0
+    let badEans = 0
+    let badDeposits = 0
+    let badVat = 0
+    for (const row of rows) {
+      if (row.name.length > NAME_LIMIT && !serviceKind(row)) tooLong++
+      if (eanError(row) !== null) badEans++
+      if (depositError(row) !== null) badDeposits++
+      if (vatMismatch(row)) badVat++
+    }
+    return {
+      movableEnd: end,
+      // Kaucje i dostawa są zawsze na końcu (układa je strona), nad nimi nagłówek sekcji.
+      firstService: services,
+      tooLongNames: tooLong,
+      invalidEans: badEans,
+      depositErrors: badDeposits,
+      vatMismatches: badVat,
+    }
+  }, [rows])
 
   /**
    * Przeciągnięcie uchwytu przenosi wiersz, a gdy jest w zaznaczeniu - wszystkie zaznaczone wiersze naraz. Linia
@@ -746,8 +868,9 @@ export function DataEntryGrid({
     setRowDrag(state)
 
     const target = () => {
-      const headers = gridRef.current?.querySelectorAll<HTMLElement>('[data-row-header]') ?? []
-      let to = rows.length
+      const headers = [...(gridRef.current?.querySelectorAll<HTMLElement>('[data-row-header]') ?? [])]
+      // Pod ostatnim narysowanym wierszem (okienkowanie): wiersz za nim, a nie koniec tabeli.
+      let to = headers.length > 0 ? Number(headers[headers.length - 1].dataset.rowHeader) + 1 : rows.length
       for (const header of headers) {
         const rect = header.getBoundingClientRect()
         if (pointerY < rect.top + rect.height / 2) {
@@ -925,14 +1048,6 @@ export function DataEntryGrid({
     />
   ) : null
 
-  const tooLongNames = rows.filter((row) => row.name.length > NAME_LIMIT && !serviceKind(row)).length
-  const invalidEans = rows.filter((row) => eanError(row) !== null).length
-  const depositErrors = rows.filter((row) => depositError(row) !== null).length
-  const vatMismatches = rows.filter(vatMismatch).length
-
-  // Kaucje i dostawa są zawsze na końcu (układa je strona), nad nimi nagłówek sekcji.
-  const firstService = rows.findIndex((row) => serviceKind(row) !== null)
-
   const pickerRow = picker ? rows[picker.r] : undefined
   const closePicker = () => {
     setPicker(null)
@@ -1086,8 +1201,20 @@ export function DataEntryGrid({
               ))}
             </tr>
           </thead>
-          <tbody>
-            {rows.map((row, index) => {
+          <tbody ref={tbodyRef}>
+            {shown.start > 0 && (
+              <tr aria-hidden>
+                <td
+                  colSpan={columns.length + 1}
+                  className="p-0"
+                  style={{
+                    height: (shown.start + (firstService >= 0 && firstService < shown.start ? 1 : 0)) * rowHeight,
+                  }}
+                />
+              </tr>
+            )}
+            {rows.slice(shown.start, shown.end).map((row, offset) => {
+              const index = shown.start + offset
               const inRows = index >= range.top && index <= range.bottom
               const dragged = rowDrag !== null && index >= rowDrag.start && index < rowDrag.start + rowDrag.count
               // Linia wstawienia: nad wierszem docelowym, a na końcu artykułów pod ostatnim z nich.
@@ -1139,6 +1266,17 @@ export function DataEntryGrid({
                 </Fragment>
               )
             })}
+            {shown.end < rows.length && (
+              <tr aria-hidden>
+                <td
+                  colSpan={columns.length + 1}
+                  className="p-0"
+                  style={{
+                    height: (rows.length - shown.end + (firstService >= shown.end ? 1 : 0)) * rowHeight,
+                  }}
+                />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1193,7 +1331,7 @@ export function DataEntryGrid({
       )}
     </div>
   )
-}
+})
 
 type RowProps = {
   columns: Column[]

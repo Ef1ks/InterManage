@@ -78,6 +78,12 @@ class StoreFileQueueIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(content().bytes("5900000000001000001000\r\n".getBytes(StandardCharsets.UTF_8)));
 
+        // Zapis tylko po przydziale (agent sklepu i przeglądarka nie zapiszą pliku dwa razy).
+        mvc.perform(post("/api/stores/" + storeId + "/file-queue/" + first + "/saved").cookie(owner).with(csrf()))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/stores/" + storeId + "/file-queue/" + first + "/claim").cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("CLAIMED"));
         mvc.perform(post("/api/stores/" + storeId + "/file-queue/" + first + "/saved").cookie(owner).with(csrf()))
                 .andExpect(status().isNoContent());
         // Usunięcie to znacznik z przywróceniem; zapisanego pliku nie da się już usunąć.

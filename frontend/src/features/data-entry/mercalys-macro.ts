@@ -118,8 +118,11 @@ export function buildDeliveryMacro(documents: MacroDocument[], print = false) {
 /** Obsługa BL bazy (ac-e034): lista plików bonów, a po Wybór linie bonu (ac-e080) z błędami. */
 const BASE_BL_SCREEN = {
   menuItem: 'mnTv_ACHAT_ac-e034_BlEuropa',
-  /** Adres listy plików: po kliknięciu menu czekamy na nią, a nie na sam przycisk Wybór. */
-  filesPage: 'ac-e034',
+  /**
+   * Nagłówek listy plików. Kliknięcie menu z linii bonu też pokazuje listę pod starym adresem (postback), więc od drugiego
+   * pliku listę rozpoznajemy po treści strony, nie po adresie (WEBPAGE czekało na ac-e034 do końca limitu).
+   */
+  filesHeading: 'Lista PZ do przetwarzania',
   selectionButton: 'btnSelection_LnkBouton',
   /** Przycisk ekranu linii bonu: mówi, że Wybór otworzył bon. */
   detailScreen: 'btnB3_Integration_LnkBouton',
@@ -135,10 +138,15 @@ const BASE_BL_SCREEN = {
   pageList: 'pgrDetail_ddlGoTo',
   /** Wiersze z błędami są na początku listy: strona bez „ITM nie istnieje” kończy przegląd. */
   stopOnEmptyPage: '1',
+  /** Powrót z linii bonu na listę plików. */
+  backButton: 'btnB1_Retour_LnkBouton',
 } as const
 
 /** Otwarcie dużego bonu potrafi trwać. */
 const BASE_BL_TIMEOUT_MS = 60000
+
+/** Przerwa po kliknięciu menu Obsługa BL bazy, zanim makro zacznie czekać na nową listę. */
+const BASE_BL_REOPEN_MS = 1500
 
 /** Dostawcy bazy: bon ma w Obsłudze BL bazy osobny plik od każdego (towar 538, alkohol 88110). */
 const BASE_FILE_SUPPLIERS = ['538', '88110']
@@ -147,8 +155,8 @@ const BASE_FILE_SUPPLIERS = ['538', '88110']
  * „Zbierz brakujące ITM8”: dla każdego dostawcy z linii bonu (tylko 538, gdy nie ma alkoholu) Zakup → Obsługa BL bazy, wiersz z plikiem tego bonu i tego dostawcy
  * (nazwa `…_<nr bonu>_<dostawca>`, zera wiodące dowolne; brak pliku od dostawcy to nie błąd), Wybór, sprawdzenie, że linie
  * są z tego bonu, i kody ITM8 z błędem „ITM nie istnieje” ze wszystkich stron. Kody z wszystkich plików trafiają razem do
- * Schowka. Każdy plik zaczyna się od pozycji menu Obsługa BL bazy (Powrót z linii bonu zostawia stronę pod innym
- * adresem, więc nie dało się poznać, że lista jest wczytana). Bez żadnego pliku makro staje.
+ * Schowka. Po każdym pliku Powrót i ponowne wejście w Obsługę BL bazy z menu (bez niego Mercalys zgłaszał błędy przy
+ * kolejnym pliku), a listę rozpoznajemy po nagłówku, nie po adresie. Bez żadnego pliku makro staje.
  * Na końcu powrót na Zakup i Mercalys na pasek zadań. Wymaga odtwarzacza od
  * wersji 45 (etykieta w WEBPICKRE, także przy pustej liście plików, numer bonu w WEBCOLLECT, WEBCOLLECTED).
  */
@@ -165,20 +173,32 @@ export function buildMissingItm8Macro(bonNumber: string, supplierCodes: string[]
         ...fromDocument.filter((code) => !BASE_FILE_SUPPLIERS.includes(code)),
       ]
     : BASE_FILE_SUPPLIERS
-  const fileSteps = suppliers.flatMap((supplier) => {
+  // Lista plików: przycisk Wybór na stronie z nagłówkiem listy. Adresu nie sprawdzamy, bo po Powrót i po kliknięciu menu
+  // z linii bonu zostaje adres linii (ac-e080), a sam przycisk nie wystarcza: bez nagłówka kolejny plik zaczynał się jeszcze
+  // na liniach poprzedniego bonu.
+  const waitForFiles = `WEBWAIT|${WINDOW}|${screen.selectionButton}|${screen.filesHeading}|${PAGE_TIMEOUT_MS}`
+  const openFiles = [
+    `WEBENSURE|${WINDOW}|${MENU.deliveries}|${MENU.purchasesTab}`,
+    `WEBOPEN|${WINDOW}|${MENU.deliveries}|${screen.menuItem}`,
+    // Klik w menu przeładowuje stronę, a stara lista ma ten sam nagłówek: bez przerwy czekanie przeszłoby od razu.
+    `SLEEP|${BASE_BL_REOPEN_MS}`,
+    waitForFiles,
+  ]
+  const fileSteps = suppliers.flatMap((supplier, index) => {
     const label = `bon-${digits}-${supplier}`
-    // Każdy plik zaczyna się od pozycji menu, która wczytuje listę plików pod adresem ac-e034, i od czekania na nią.
-    // Powrót z linii bonu też pokazuje listę, ale adres strony zostaje po postbacku inny, więc WEBPAGE jej nie rozpoznawał,
-    // a bez sprawdzenia adresu kolejny plik zaczynał się jeszcze na liniach poprzedniego bonu.
     return [
       `# Plik bonu ${bonNumber} od dostawcy ${supplier}`,
-      `WEBENSURE|${WINDOW}|${MENU.deliveries}|${MENU.purchasesTab}`,
-      `WEBOPEN|${WINDOW}|${MENU.deliveries}|${screen.menuItem}`,
-      `WEBPAGE|${WINDOW}|${screen.filesPage}|${screen.selectionButton}|${PAGE_TIMEOUT_MS}`,
+      // Pierwszy plik otwiera listę z menu, kolejne zaczynają na liście, na którą wróciło makro po poprzednim pliku.
+      ...(index === 0 ? openFiles : [waitForFiles]),
       `WEBPICKRE|${WINDOW}|${screen.filesGrid}|(?<!\\d)0*${digits}\\D+0*${supplier}(?!\\d)|${PAGE_TIMEOUT_MS}|${label}`,
       `WEBCLICK|${WINDOW}|${screen.selectionButton}`,
       `WEBWAIT|${WINDOW}|${screen.detailScreen}||${BASE_BL_TIMEOUT_MS}`,
       `WEBCOLLECT|${WINDOW}|${screen.linesGrid}|${screen.missingItm8Text}|${screen.itm8Column}|${screen.nextPageButton}|${screen.pageList}|${screen.stopOnEmptyPage}|${screen.bonColumn}|${bonNumber}`,
+      // Po liniach bonu Powrót, a potem jeszcze raz wejście w Obsługę BL bazy: sam Powrót zostawia listę, na której
+      // Mercalys przy kolejnym Wybór zgłasza błędy.
+      `WEBCLICK|${WINDOW}|${screen.backButton}`,
+      waitForFiles,
+      ...openFiles,
       `LABEL|${label}`,
     ]
   })
@@ -1333,8 +1353,13 @@ const PRICE_CONTROL_SCREEN = {
   differentPricesMenuItem: 'mnTv_TARIF_ar-e084_PrixDifferents',
   selectAllButton: 'btnB2_SelectTous_LnkBouton',
   alignMsiButton: 'btnB6_AlignerMSI_LnkBouton',
-  /** Stan wiersza po „Zaznacz wszystko”; „Niezaznaczony” się nie liczy. */
-  selectedPattern: 'i)(?<![a-ząćęłńóśźż])zazn',
+  /**
+   * Po „Zaznacz wszystko”: tabela nie ma kolumny stanu (zaznaczony wiersz widać tylko kolorem), więc czekamy, aż
+   * „Suma wyboru” w nagłówku strony zrówna się z „Suma linii”. Bez `|`, bo to separator pól makra.
+   */
+  selectedPagePattern: String.raw`i)Suma linii\s*:\s*([1-9]\d*)(?!\d)[\s\S]*?Suma wyboru\s*:\s*\1(?!\d)`,
+  /** Artykuł w promocji ma gwiazdkę przed nazwą („* PIERNIK…”): MSI go nie wyrównuje, więc zostaje w tabeli. */
+  promoRowPattern: String.raw`(?<!\S)\*\s`,
   /** „Art.w promocji nie będą uwzględnione”: komunikat bez tytułu, przycisk Zamknij. */
   alertWindow: 'ahk_class Internet Explorer_TridentDlgFrame',
   alertText: 'promocji',
@@ -1381,12 +1406,12 @@ export function priceControlRowPattern(file: PriceControlMacroFile) {
  * „Wprowadź zmiany cen”: dla każdego pliku Taryfa → Kontrola ceny → Pobranie danych → Historia, opracowanie wiersza tego pliku (data,
  * godzina, liczba cen, „Przetw. 0 raz”), Tak, zamknięcie PDF-a, potem Różne ceny: Zaznacz wszystko, czekanie na
  * zaznaczone wiersze, Porównaj MSI, Zamknij przy komunikacie o promocjach i czekanie na pustą tabelę. Pliku, którego
- * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.57 (WEBROWBUTTON z opisem przejrzanych stron, WEBGRIDWAIT).
+ * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.60 (WEBROWBUTTON z tekstem wiersza siatki, nie tabelki przycisku; WEBGRIDWAIT z warunkiem page i none z wyrażeniem).
  */
 export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
   const screen = PRICE_CONTROL_SCREEN
   const out = [
-    `# Wprowadzenie zmian cen: ${files.length} (odtwarzacz od wersji 0.57)`,
+    `# Wprowadzenie zmian cen: ${files.length} (odtwarzacz od wersji 0.60)`,
     mercalysOpenLine(PROGRAM_WINDOW),
   ]
   files.forEach((file, index) => {
@@ -1411,10 +1436,11 @@ export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
       `WEBOPEN|${WINDOW}|${screen.controlMenuItem}|${screen.differentPricesMenuItem}|${screen.selectAllButton}`,
       `WEBWAIT|${WINDOW}|${screen.selectAllButton}||${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.selectAllButton}`,
-      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|all|${screen.selectedPattern}|${empty}|Różne ceny bez artykułów: ${label}|${PAGE_TIMEOUT_MS}`,
+      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|page|${screen.selectedPagePattern}|${empty}|Różne ceny bez artykułów: ${label}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.alignMsiButton}`,
       `WEBDIALOG|${screen.alertWindow}|${screen.alertText}|${screen.alertButton}|${PRICE_CONTROL_ALERT_MS}`,
-      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|none||||${PRICE_CONTROL_TIMEOUT_MS}`,
+      // Po wyrównaniu zostają tylko artykuły w promocji (albo nic).
+      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|none|${screen.promoRowPattern}|||${PRICE_CONTROL_TIMEOUT_MS}`,
       `LABEL|${empty}`,
       `LABEL|${skip}`,
     )

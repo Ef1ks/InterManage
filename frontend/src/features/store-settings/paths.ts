@@ -11,4 +11,5 @@ export const storeSettingsPaths = {
   protoFiles: `${base}/pliki-proto`,
   sidebar: `${base}/menu-boczne`,
   aiUsage: `${base}/zuzycie-ai`,
+  agent: `${base}/agent`,
 }

@@ -31,6 +31,10 @@ public class UserSwitchSettings {
     @Column(name = "pin_hash")
     private String pinHash;
 
+    /** Liczba cyfr PIN-u; puste przy PIN-ie sprzed V168, dopóki pierwsze udane przejście jej nie zapisze. */
+    @Column(name = "pin_length")
+    private Short pinLength;
+
     @Column(name = "pin_required", nullable = false)
     private boolean pinRequired = true;
 
@@ -62,9 +66,21 @@ public class UserSwitchSettings {
     }
 
     /** Nowy PIN zeruje błędne próby. */
-    public void changePin(String pinHash) {
+    public void changePin(String pinHash, int pinLength) {
         this.pinHash = pinHash;
+        this.pinLength = (short) pinLength;
         this.failedAttempts = 0;
+    }
+
+    public Integer getPinLength() {
+        return pinLength == null ? null : pinLength.intValue();
+    }
+
+    /** Po udanym przejściu PIN-em: zapamiętuje jego długość, jeśli jej jeszcze nie znamy. */
+    public void learnPinLength(int length) {
+        if (pinLength == null) {
+            pinLength = (short) length;
+        }
     }
 
     public boolean isPinRequired() {

@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   FileOutputIcon,
   HandshakeIcon,
+  HardDriveIcon,
   type LucideIcon,
   PanelLeftIcon,
   PercentIcon,
@@ -36,6 +37,8 @@ import {
   useSupplierSalePrices,
 } from '@/features/store-settings/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
+import { useStoreAgents } from '@/features/store-agent/api'
+import { StoreAgentSettings } from '@/features/store-agent/StoreAgentSettings'
 import { NomenclatureMargins } from '@/features/store-settings/NomenclatureMargins'
 import { PriceRoundingRules } from '@/features/store-settings/PriceRoundingRules'
 import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCategories'
@@ -72,6 +75,7 @@ export function StoreSettingsPage() {
   // Zużycie AI widzą ci, którzy mogą wołać model (uzupełnianie artykułów, odczyt WZ mięsa).
   const canEditMeat = useCan('MEAT_PURCHASES', 'EDIT')
   const canUseAi = canEditDataEntry || canEditMeat
+  const owner = useCurrentUser().owner
   if (!store) {
     return (
       <>
@@ -260,6 +264,29 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        {owner && (
+          <Route
+            path="agent"
+            element={
+              <section aria-labelledby="agent-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="agent-heading" className="text-lg font-semibold tracking-tight">
+                    Agent sklepu
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Program na komputerze w sklepie, który zapisuje pliki dla programu sklepu w folderach na dysku
+                    sieciowym w 1-2 s i od razu zgłasza zmiany w folderach (wczytane zmiany cen, ceny z kasy, dziennik
+                    ATHOS). Sklep wybiera, czy pracuje przez agenta, czy jak dotąd przez przeglądarkę.
+                  </p>
+                </div>
+                <div className="max-w-2xl">
+                  <StoreAgentSettings key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         <Route
           path="menu-boczne"
           element={
@@ -326,6 +353,8 @@ function SettingsGrid({
   const proto = useProtoSettings(storeId, canEditProto)
   const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
   const aiUsage = useAiUsage(storeId, { from: `${currentMonth()}-01`, to: todayIso() }, canUseAi)
+  const agents = useStoreAgents(storeId, me.owner)
+  const activeAgents = agents.data?.agents.filter((agent) => !agent.deletedAt) ?? []
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
   const budgeted = budgets.data?.filter(
     (budget) => budget.marginPercent != null || budget.maxLossPercent != null,
@@ -426,6 +455,25 @@ function SettingsGrid({
               ? aiUsage.data.total.requests
                 ? `Ten miesiąc: ${tokenFormat.format(aiUsage.data.total.totalTokens)} tokenów`
                 : 'W tym miesiącu bez zapytań'
+              : ' '
+          }
+        />
+      )}
+      {me.owner && (
+        <SettingsTile
+          to={paths.agent}
+          icon={HardDriveIcon}
+          title="Agent sklepu"
+          description="Zapis plików w folderach sklepu i pilnowanie folderów przez program na komputerze w sklepie."
+          status={
+            agents.data
+              ? !agents.data.enabled
+                ? 'Pliki i foldery przez przeglądarkę'
+                : activeAgents.some((agent) => agent.online)
+                  ? 'Przez agenta · online'
+                  : activeAgents.length
+                    ? 'Przez agenta · offline, działa przeglądarka'
+                    : 'Przez agenta · brak agenta'
               : ' '
           }
         />

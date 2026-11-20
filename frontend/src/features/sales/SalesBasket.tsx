@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { SettingsIcon, ShoppingBasketIcon, ShoppingCartIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Link } from 'react-router'
@@ -10,12 +10,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { useCan } from '@/features/auth/api'
 import { MAX_QUANTITY, ORDER_EAN } from '@/features/data-entry/order-file'
-import { formatDocumentDate, formatMoney } from '@/features/documents/format'
-import { useArticleDeliveries, useSalesArticle } from '@/features/sales/api'
+import { formatDocumentDate, formatMoney, formatPercent, formatQuantity } from '@/features/documents/format'
+import { useArticleDeliveries, useSalesArticle, useSalesHistory, useSalesReportsOverview } from '@/features/sales/api'
+import { nomenclatureName } from '@/features/sales/report-parts'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
+import { addDays, formatShortDate } from '@/lib/dates'
+import { marginOf } from '@/lib/margin'
+import type { SalesArticle } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store'
 import {
@@ -71,6 +75,94 @@ const daysAgo = (days: number) => {
   return date.toISOString().slice(0, 10)
 }
 
+/** Sprzedaż z tylu ostatnich dni ze sprzedażą w mini karcie artykułu w koszyku. */
+const SALES_DAYS = 28
+const NO_NOMENCLATURES: string[] = []
+
+/**
+ * Mini karta artykułu nad wyborem dostawcy: stan, rotacja, sprzedaż z 4 tygodni i na ile dni starczy stan, ceny z
+ * marżą i karton, żeby zdecydować o ilości bez otwierania karty artykułu.
+ */
+function BasketArticleFacts({
+  article,
+  soldQuantity,
+  salesTo,
+}: {
+  article: SalesArticle
+  soldQuantity: number | null
+  salesTo: string | null
+}) {
+  const daily = soldQuantity != null && soldQuantity > 0 ? soldQuantity / SALES_DAYS : null
+  const cover = article.stock != null && daily != null && article.stock > 0 ? Math.floor(article.stock / daily) : null
+  const salePrice = article.promoPrice ?? article.salePrice
+  const margin =
+    salePrice != null && salePrice > 0 && article.purchasePrice != null && article.vatPercent != null
+      ? marginOf(salePrice, article.vatPercent, article.purchasePrice)
+      : null
+  const path = article.nomenclaturePath.map((item) => nomenclatureName(item.name)).join(' › ')
+
+  return (
+    <div className="space-y-2">
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+        <Fact label="Na stanie">
+          <span className={cn(article.stock != null && article.stock < 0 && 'text-red-700 dark:text-red-300')}>
+            {article.stock == null ? '–' : formatQuantity(article.stock)}
+          </span>
+          {cover != null && <Hint>na ok. {cover} dni</Hint>}
+        </Fact>
+        <Fact label="Rotacja tyg.">{article.rotation == null ? '–' : formatQuantity(article.rotation)}</Fact>
+        <Fact label={`Sprzedaż ${SALES_DAYS} dni`}>
+          {soldQuantity == null ? '–' : formatQuantity(soldQuantity)}
+          {salesTo && <Hint>do {formatShortDate(salesTo)}</Hint>}
+        </Fact>
+        <Fact label="Karton">{article.caseSize == null ? '–' : formatQuantity(article.caseSize)}</Fact>
+        <Fact label={article.promoPrice != null ? 'Cena w promocji' : 'Cena sprzedaży'}>
+          <span className={cn(article.promoPrice != null && 'text-orange-700 dark:text-orange-300')}>
+            {salePrice == null ? '–' : `${formatMoney(salePrice)} zł`}
+          </span>
+          {article.promoPrice != null && article.salePrice != null && (
+            <Hint>zwykła {formatMoney(article.salePrice)} zł</Hint>
+          )}
+        </Fact>
+        <Fact label="Cena zakupu">
+          {article.purchasePrice == null ? '–' : `${formatMoney(article.purchasePrice)} zł`}
+          <Hint>z kartoteki</Hint>
+        </Fact>
+        <Fact label="Marża">
+          <span className={cn(margin != null && margin < 0 && 'text-red-700 dark:text-red-300')}>
+            {margin == null ? '–' : formatPercent(margin)}
+          </span>
+          {article.vatPercent != null && <Hint>VAT {formatQuantity(article.vatPercent)}%</Hint>}
+        </Fact>
+        <Fact label="Cadencier">
+          {article.cadencier ? 'tak' : 'nie'}
+          {article.cadencierPrice != null && article.cadencierPrice > 0 && (
+            <Hint>cena {formatMoney(article.cadencierPrice)} zł</Hint>
+          )}
+        </Fact>
+      </dl>
+      {(path || article.brand) && (
+        <p className="truncate text-xs text-muted-foreground" title={path}>
+          {[article.brand, path].filter(Boolean).join(' · ')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 bg-card px-3 py-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-semibold tabular-nums">{children}</dd>
+    </div>
+  )
+}
+
+function Hint({ children }: { children: ReactNode }) {
+  return <span className="block text-xs font-normal text-muted-foreground">{children}</span>
+}
+
 /** Okno „Dodaj do koszyka”: dostawcy artykułu z ostatniego roku z ceną zakupu z ostatniej dostawy od każdego z nich. */
 export function AddToBasketDialog({
   storeId,
@@ -103,6 +195,16 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
   const basket = useBasket(storeId)
   const details = useSalesArticle(storeId, article.itm8)
   const deliveries = useArticleDeliveries(storeId, article.itm8)
+  const lastSaleDate = useSalesReportsOverview(storeId).data?.lastSaleDate ?? null
+  const salesRange = lastSaleDate ? { from: addDays(lastSaleDate, -(SALES_DAYS - 1)), to: lastSaleDate } : null
+  const sales = useSalesHistory(
+    storeId,
+    'sales',
+    { kind: 'article', itm8: article.itm8, name: article.name, ean: article.ean, brand: article.brand },
+    salesRange ?? { from: '', to: '' },
+    NO_NOMENCLATURES,
+    salesRange != null,
+  )
   const [chosen, setChosen] = useState<string | null>(null)
   const [quantityText, setQuantityText] = useState('1')
 
@@ -197,12 +299,20 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
     onDone()
   }
 
-  if (deliveries.isPending || details.isPending) {
-    return <div aria-hidden className="h-40 loading-shimmer rounded-lg" />
+  // Karta i dostawcy pojawiają się razem, żeby okno nie skakało przy wczytywaniu.
+  if (deliveries.isPending || details.isPending || (salesRange != null && sales.isPending)) {
+    return <div aria-hidden className="h-64 loading-shimmer rounded-lg" />
   }
 
   return (
     <>
+      {catalog && (
+        <BasketArticleFacts
+          article={catalog}
+          soldQuantity={sales.data?.total.quantity ?? null}
+          salesTo={salesRange?.to ?? null}
+        />
+      )}
       {cadencier && (
         <p className="rounded-lg bg-red-200 px-3 py-2 text-sm font-medium text-red-950 dark:bg-red-950/70 dark:text-red-100">
           Obecny w cadencier: zamawiaj z bazy

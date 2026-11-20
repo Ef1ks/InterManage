@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router'
 
 import { useCan } from '@/features/auth/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useSalesReportsOverview } from '@/features/sales/api'
+import { useProfitTargetProgress, useSalesReportsOverview } from '@/features/sales/api'
 import { formatLongDate, formatShortDate, parseIsoDate } from '@/lib/dates'
 import { specialDay, specialDayLabel, type SpecialDay } from '@/lib/holidays'
 import type { DashboardChartMetric, SalesHistory } from '@/lib/types'
@@ -79,16 +79,23 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
   const range = lastSaleDate ? storeWindow(lastSaleDate) : null
   const current = useStoreHistory(storeId, range?.current ?? null)
   const yearAgo = useStoreHistory(storeId, range?.yearAgo ?? null)
+  // Cel marży czeka razem z wykresem, żeby panel pojawił się w całości (ProfitGoalBar bierze te same dane z pamięci).
+  const goal = useProfitTargetProgress(storeId, lastSaleDate ?? '', lastSaleDate != null)
 
   let body
-  if (overview.isPending || (range && (current.isPending || yearAgo.isPending))) {
+  if (overview.isPending || (range && (current.isPending || yearAgo.isPending || goal.isPending))) {
     body = <LoadingPanel className="h-96 rounded-lg" />
   } else if (overview.isError || current.isError || yearAgo.isError) {
     body = <p className="text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
   } else if (!range || !current.data || !yearAgo.data) {
     body = <p className="text-sm text-muted-foreground">Sklep nie ma jeszcze wgranej sprzedaży.</p>
   } else {
-    body = <Results metric={metric} current={current.data} yearAgo={yearAgo.data} lastSaleDate={lastSaleDate!} />
+    body = (
+      <>
+        <ProfitGoalBar storeId={storeId} lastSaleDate={lastSaleDate!} />
+        <Results metric={metric} current={current.data} yearAgo={yearAgo.data} lastSaleDate={lastSaleDate!} />
+      </>
+    )
   }
 
   return (
@@ -120,14 +127,7 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
           ))}
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {lastSaleDate ? (
-          <div className="border-b pb-5">
-            <ProfitGoalBar storeId={storeId} lastSaleDate={lastSaleDate} />
-          </div>
-        ) : null}
-        {body}
-      </CardContent>
+      <CardContent className="space-y-6">{body}</CardContent>
     </Card>
   )
 }
@@ -589,14 +589,21 @@ function TrendStrip({
           )
         })}
       </svg>
-      <p className="text-xs text-muted-foreground tabular-nums">
-        {shortDay(week.from)} – {shortDay(week.through)}:{' '}
-        <span className="font-medium text-foreground">
-          {week.change == null ? 'brak danych' : formatChange(week.change)}
-        </span>
-        {week.change != null && week.skipped.length > 0 ? ` (bez ${week.skipped.map(shortDay).join(', ')})` : ''} ·{' '}
-        {formatTick(metric, week.now)}
-      </p>
+      {/* Zawsze dwie linie, żeby wysokość nie skakała przy przechodzeniu po tygodniach. */}
+      <div className="text-xs text-muted-foreground tabular-nums">
+        <p className="flex items-baseline justify-between gap-3 whitespace-nowrap">
+          <span>
+            {shortDay(week.from)} – {shortDay(week.through)}:{' '}
+            <span className="font-medium text-foreground">
+              {week.change == null ? 'brak danych' : formatChange(week.change)}
+            </span>
+          </span>
+          <span>{formatTick(metric, week.now)}</span>
+        </p>
+        <p className="h-4 truncate">
+          {week.change != null && week.skipped.length > 0 ? `bez ${week.skipped.map(shortDay).join(', ')}` : ''}
+        </p>
+      </div>
     </div>
   )
 }

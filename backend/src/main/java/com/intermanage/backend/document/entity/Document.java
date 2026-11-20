@@ -212,7 +212,7 @@ public class Document {
         boolean oneSupplier = lines.stream().map(DocumentLine::getSupplierCode).distinct().count() == 1;
         supplierCode = oneSupplier ? lines.getFirst().getSupplierCode() : null;
         supplierName = oneSupplier ? lines.getFirst().getSupplierName() : null;
-        gratisCandidate = lines.stream().anyMatch(DocumentLine::isGratisItem);
+        gratisCandidate = type.canBeGratis() && lines.stream().anyMatch(DocumentLine::isGratisItem);
     }
 
     /**
@@ -304,8 +304,9 @@ public class Document {
         return saleValueGross;
     }
 
+    /** Tylko przeniesienia stanów mogą być gratisem, więc pozycja GRATIS w innych typach nic nie znaczy. */
     public boolean isGratisCandidate() {
-        return gratisCandidate;
+        return gratisCandidate && type.canBeGratis();
     }
 
     public Instant getUpdatedAt() {

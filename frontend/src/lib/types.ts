@@ -80,6 +80,8 @@ export type SwitchAccount = {
   username: string
   avatar: UserAvatar | null
   unlock: SwitchUnlock
+  /** Liczba cyfr PIN-u: po jej wpisaniu konto przełącza się samo (puste = trzeba kliknąć „Przełącz”). */
+  pinLength: number | null
 }
 
 /** PIN do przełączania na to konto (Moje konto). */
@@ -4840,7 +4842,46 @@ export type FileQueueItem = {
   sizeBytes: number
   createdAt: string
   createdBy: string | null
+  /** Kto właśnie zapisuje plik (agent sklepu albo osoba); `null`, gdy nikt. */
+  claimedBy: string | null
+  claimExpiresAt: string | null
+  /** Ostatni nieudany zapis (np. agent: plik o tej nazwie już jest w folderze). */
+  failedAt: string | null
+  lastError: string | null
 }
+
+/** Stan agenta sklepu (AgentStatusResponse); `active` = sklep wybrał pracę przez agenta i agent jest online. */
+export type AgentStatus = {
+  enabled: boolean
+  present: boolean
+  online: boolean
+  active: boolean
+  name: string | null
+  version: string | null
+  machineName: string | null
+  lastSeenAt: string | null
+  /** Klucze folderów zapisu, które agent obsługuje. */
+  folders: string[]
+  /** Pilnowane foldery: `TRACEART`, `CTRLPRIX`, `ATHOS`. */
+  watches: string[]
+}
+
+/** Agent sklepu w Ustawieniach sklepu (StoreAgentResponse); `key` tylko zaraz po dodaniu. */
+export type StoreAgent = {
+  id: string
+  name: string
+  createdAt: string
+  createdBy: string | null
+  lastSeenAt: string | null
+  lastVersion: string | null
+  machineName: string | null
+  machineUser: string | null
+  online: boolean
+  deletedAt: string | null
+  key: string | null
+}
+
+export type StoreAgents = { enabled: boolean; agents: StoreAgent[] }
 
 /** Dziennik sklepu (StoreEventResponse): zmiany przez API, odrzucone próby i problemy z logów backendu. */
 export type StoreEventKind = 'ACTION' | 'FAILED' | 'SYSTEM'

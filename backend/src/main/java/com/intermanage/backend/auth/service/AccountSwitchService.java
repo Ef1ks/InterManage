@@ -152,7 +152,7 @@ public class AccountSwitchService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Obecne hasło jest nieprawidłowe");
         }
         UserSwitchSettings own = settingsOf(user);
-        own.changePin(passwordEncoder.encode(pin));
+        own.changePin(passwordEncoder.encode(pin), pin.length());
         return new PinSettingsResponse(true, own.isPinRequired());
     }
 
@@ -174,6 +174,7 @@ public class AccountSwitchService {
                 }
                 if (passwordEncoder.matches(unlock.pin(), own.getPinHash())) {
                     own.resetAttempts();
+                    own.learnPinLength(unlock.pin().length());
                     return;
                 }
                 own.failedAttempt();
@@ -209,8 +210,10 @@ public class AccountSwitchService {
 
     private SwitchAccountResponse toResponse(UUID userId) {
         AppUser user = loadUser(userId);
+        UserSwitchSettings own = settings.findOfUser(userId).orElse(null);
+        SwitchUnlock unlock = unlockOf(own);
         return new SwitchAccountResponse(user.getId(), user.getDisplayName(), user.getUsername(),
-                avatarService.current(userId), unlockOf(settings.findOfUser(userId).orElse(null)));
+                avatarService.current(userId), unlock, unlock == SwitchUnlock.PIN ? own.getPinLength() : null);
     }
 
     private UserSwitchSettings settingsOf(AppUser user) {

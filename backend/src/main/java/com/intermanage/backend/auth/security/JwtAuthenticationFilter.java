@@ -2,6 +2,7 @@ package com.intermanage.backend.auth.security;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.regex.Pattern;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -30,6 +31,11 @@ import jakarta.servlet.http.HttpServletResponse;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String LOGOUT_PATH = "/api/auth/logout";
+    /**
+     * Strumień wiadomości na żywo ({@code GET /api/stores/{id}/live}): przeglądarka łączy się sama, także bez ruchu
+     * użytkownika, więc ten żądanie nie odnawia tokenu (inaczej blokada po bezczynności i po pracy nigdy by nie nadeszła).
+     */
+    private static final Pattern LIVE_PATH = Pattern.compile("^/api/stores/[^/]+/live$");
 
     private final JwtService jwtService;
     private final BackgroundAccounts backgroundAccounts;
@@ -53,6 +59,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Cookie cookie = WebUtils.getCookie(request, JwtService.COOKIE_NAME);
         String token = bearer != null ? bearer : cookie != null ? cookie.getValue() : null;
         boolean logout = LOGOUT_PATH.equals(request.getRequestURI());
+        boolean live = LIVE_PATH.matcher(request.getRequestURI()).matches();
         jwtService.decode(token).ifPresent(jwt -> backgroundAccounts.principalOf(jwt).ifPresent(principal -> {
             Instant now = Instant.now();
             if (bearer == null && !logout && (workdayLock.due(jwt, now) || idleLock.due(jwt, now))) {
@@ -62,14 +69,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
                 // Konto bez PIN-u: blokada nic by nie dała, nowy token, żeby nie sprawdzać tego przy każdym żądaniu.
-                jwtService.writeTokenCookie(response, principal, JwtService.rememberMe(jwt));
+                // Strumień na żywo tokenu nie wymienia (zrobi to najbliższe zwykłe żądanie).
+                if (!live) {
+                    jwtService.writeTokenCookie(response, principal, JwtService.rememberMe(jwt));
+                }
             }
             SecurityContext context = contextHolder.createEmptyContext();
             context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
                     principal, null, principal.getAuthorities()));
             contextHolder.setContext(context);
             // Przy wylogowaniu nie odnawiamy, bo nowe ciasteczko przykryłoby to czyszczące.
-            if (!logout
+            if (!logout && !live
                     && jwtService.refreshIfDue(response, jwt, principal, bearer != null) && bearer == null) {
                 backgroundAccounts.refresh(request, response, principal.getId());
             }

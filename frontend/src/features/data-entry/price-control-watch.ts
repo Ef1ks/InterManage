@@ -5,6 +5,7 @@ import { hasPermission, useCurrentUser } from '@/features/auth/api'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { PROTO_FOLDER_KEY } from '@/lib/proto-files'
+import { useAgentWatches } from '@/lib/store-agent'
 import { folderAccess, folderSavingSupported, listFolderFiles } from '@/lib/saved-folders'
 import type { PriceControlFiles } from '@/lib/types'
 
@@ -135,7 +136,9 @@ export function usePriceControlWatcher() {
   const queryClient = useQueryClient()
   const storeId = hasPermission(me, 'DATA_ENTRY') && store ? store.id : null
   const { data: pending = 0 } = usePriceControlPendingCount(storeId ?? '', storeId !== null)
-  const active = storeId !== null && folderSavingSupported && pending > 0
+  // Zmian cen pilnuje agent sklepu (gdy sklep pracuje przez agenta i agent jest online), przeglądarka wraca bez niego.
+  const byAgent = useAgentWatches(storeId, 'CTRLPRIX')
+  const active = storeId !== null && folderSavingSupported && pending > 0 && !byAgent
 
   useEffect(() => {
     if (!active || !storeId) return

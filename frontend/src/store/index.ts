@@ -10,6 +10,31 @@ import promoSetupDraftReducer, { persistPromoSetup } from './promoSetupDraftSlic
 import salesBasketReducer, { persistSalesBasket } from './salesBasketSlice'
 import uiReducer from './uiSlice'
 
+/**
+ * Zapis dużych szkiców (tabele z tysiącem wierszy) po chwili bez zmian, a nie przy każdej zmianie: zapis całej tabeli do
+ * localStorage przy każdej edycji komórki zacinał tabelę. Przed zamknięciem albo schowaniem karty zapis idzie od razu.
+ */
+const pendingWrites = new Map<string, () => void>()
+let writeTimer: ReturnType<typeof setTimeout> | undefined
+function flushWrites() {
+  clearTimeout(writeTimer)
+  writeTimer = undefined
+  const writes = [...pendingWrites.values()]
+  pendingWrites.clear()
+  for (const write of writes) write()
+}
+function persistLater(key: string, write: () => void) {
+  pendingWrites.set(key, write)
+  clearTimeout(writeTimer)
+  writeTimer = setTimeout(flushWrites, 600)
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushWrites)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushWrites()
+  })
+}
+
 export const store = configureStore({
   reducer: {
     ui: uiReducer,
@@ -49,7 +74,7 @@ store.subscribe(() => {
   const drafts = store.getState().dataEntryDraft
   if (drafts !== savedDataEntry) {
     savedDataEntry = drafts
-    persistDataEntryDrafts(drafts)
+    persistLater('dataEntry', () => persistDataEntryDrafts(drafts))
   }
 })
 
@@ -59,7 +84,7 @@ store.subscribe(() => {
   const drafts = store.getState().baseDeliveryDraft
   if (drafts !== savedBaseDelivery) {
     savedBaseDelivery = drafts
-    persistBaseDeliveryDrafts(drafts)
+    persistLater('baseDelivery', () => persistBaseDeliveryDrafts(drafts))
   }
 })
 
@@ -69,7 +94,7 @@ store.subscribe(() => {
   const drafts = store.getState().protocolEntryDraft
   if (drafts !== savedProtocolEntry) {
     savedProtocolEntry = drafts
-    persistProtocolEntryDrafts(drafts)
+    persistLater('protocolEntry', () => persistProtocolEntryDrafts(drafts))
   }
 })
 

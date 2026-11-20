@@ -318,48 +318,52 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     },
     [pricing],
   )
-  const applyFilter = (filters: ColumnFilters, quick: QuickFilter | null) => {
-    if (!quick && Object.keys(filters).length === 0) {
-      setApplied(null)
-      return
-    }
-    const all = currentDraft().rows
-    setApplied({
-      filters,
-      quick,
-      known: new Set(all.map((row) => row.id)),
-      pass: new Set(all.filter((row) => passes(row, filters, quick)).map((row) => row.id)),
-    })
-  }
-  const setColumnFilter = (key: ColumnKey, selected: string[] | null) => {
-    const filters = { ...(applied?.filters ?? {}) }
-    if (selected === null) delete filters[key]
-    else filters[key] = selected
-    applyFilter(filters, applied?.quick ?? null)
-  }
+  const applyFilter = useCallback(
+    (filters: ColumnFilters, quick: QuickFilter | null) => {
+      if (!quick && Object.keys(filters).length === 0) {
+        setApplied(null)
+        return
+      }
+      const all = currentDraft().rows
+      setApplied({
+        filters,
+        quick,
+        known: new Set(all.map((row) => row.id)),
+        pass: new Set(all.filter((row) => passes(row, filters, quick)).map((row) => row.id)),
+      })
+    },
+    [currentDraft, passes],
+  )
   const toggleQuick = (quick: QuickFilter) =>
     applyFilter(applied?.filters ?? {}, applied?.quick === quick ? null : quick)
 
   // ---------- sortowanie: klik w nagłówek układa wiersze tabeli (jak w Excelu; Ctrl+Z cofa), puste zawsze na końcu.
 
   const [sort, setSort] = useState<SortState | null>(null)
-  const sortBy = (key: ColumnKey) => {
-    const direction = sort?.key === key && sort.direction === 'asc' ? 'desc' : 'asc'
-    const numeric = BASE_COLUMNS.find((column) => column.key === key)?.align === 'right'
-    const sign = direction === 'asc' ? 1 : -1
-    setSort({ key, direction })
-    setRows((current) =>
-      [...current].sort((a, b) => {
-        const left = cellText(a, key, pricing)
-        const right = cellText(b, key, pricing)
-        if (left === '' || right === '') return left === right ? 0 : left === '' ? 1 : -1
-        const order = numeric
-          ? Number(left.replace(',', '.')) - Number(right.replace(',', '.'))
-          : left.localeCompare(right, 'pl', { numeric: true })
-        return order * sign
-      }),
-    )
-  }
+  // Funkcje dla tabeli są stałe między odświeżeniami strony (np. przy każdym ruchu zaznaczenia), żeby tabela się wtedy
+  // nie przerysowywała.
+  const sortBy = useCallback(
+    (key: ColumnKey) => {
+      const direction = sort?.key === key && sort.direction === 'asc' ? 'desc' : 'asc'
+      const numeric = BASE_COLUMNS.find((column) => column.key === key)?.align === 'right'
+      const sign = direction === 'asc' ? 1 : -1
+      setSort({ key, direction })
+      // Tekst komórki liczony raz na wiersz, nie przy każdym porównaniu.
+      const texts = new Map(currentDraft().rows.map((row) => [row.id, cellText(row, key, pricing)]))
+      setRows((current) =>
+        [...current].sort((a, b) => {
+          const left = texts.get(a.id) ?? cellText(a, key, pricing)
+          const right = texts.get(b.id) ?? cellText(b, key, pricing)
+          if (left === '' || right === '') return left === right ? 0 : left === '' ? 1 : -1
+          const order = numeric
+            ? Number(left.replace(',', '.')) - Number(right.replace(',', '.'))
+            : left.localeCompare(right, 'pl', { numeric: true })
+          return order * sign
+        }),
+      )
+    },
+    [sort, pricing, currentDraft, setRows],
+  )
 
   /** Nowa zawartość tabeli: bez filtrów i strzałki sortowania. */
   const resetView = () => {
@@ -384,33 +388,44 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   )
 
   // Wartości kolumny do filtra liczone dopiero po otwarciu jego listy (z tabeli z tej chwili), nie przy każdej zmianie.
-  const columnValues = (column: Column): FilterValue[] => {
-    const counts = new Map<string, number>()
-    for (const row of currentDraft().rows) {
-      const value = cellText(row, column.key, pricing) || EMPTY_VALUE
-      counts.set(value, (counts.get(value) ?? 0) + 1)
-    }
-    const numeric = column.align === 'right'
-    return [...counts.entries()]
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) =>
-        a.value === EMPTY_VALUE
-          ? 1
-          : b.value === EMPTY_VALUE
-            ? -1
-            : numeric
-              ? Number(a.value.replace(',', '.')) - Number(b.value.replace(',', '.'))
-              : a.value.localeCompare(b.value, 'pl'),
-      )
-  }
+  const columnValues = useCallback(
+    (column: Column): FilterValue[] => {
+      const counts = new Map<string, number>()
+      for (const row of currentDraft().rows) {
+        const value = cellText(row, column.key, pricing) || EMPTY_VALUE
+        counts.set(value, (counts.get(value) ?? 0) + 1)
+      }
+      const numeric = column.align === 'right'
+      return [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) =>
+          a.value === EMPTY_VALUE
+            ? 1
+            : b.value === EMPTY_VALUE
+              ? -1
+              : numeric
+                ? Number(a.value.replace(',', '.')) - Number(b.value.replace(',', '.'))
+                : a.value.localeCompare(b.value, 'pl'),
+        )
+    },
+    [currentDraft, pricing],
+  )
 
-  const headerExtra = (column: Column) => (
-    <ColumnFilter
-      label={column.title ?? column.header}
-      getValues={() => columnValues(column)}
-      selected={applied?.filters[column.key] ?? null}
-      onChange={(selected) => setColumnFilter(column.key, selected)}
-    />
+  const headerExtra = useCallback(
+    (column: Column) => (
+      <ColumnFilter
+        label={column.title ?? column.header}
+        getValues={() => columnValues(column)}
+        selected={applied?.filters[column.key] ?? null}
+        onChange={(selected) => {
+          const filters = { ...(applied?.filters ?? {}) }
+          if (selected === null) delete filters[column.key]
+          else filters[column.key] = selected
+          applyFilter(filters, applied?.quick ?? null)
+        }}
+      />
+    ),
+    [applied, applyFilter, columnValues],
   )
 
   // ---------- dokument i nośniki
@@ -573,14 +588,18 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 
   // ---------- wiersze
 
-  const removeRows = (ids: string[]) => {
-    const before = currentDraft()
-    setRows((current) => current.filter((row) => !ids.includes(row.id)))
-    toast(`Usunięto ${ids.length} ${pieces(ids.length)}`, {
-      action: { label: 'Przywróć', onClick: () => setDraft(before) },
-    })
-    gridRef.current?.focus()
-  }
+  const removeRows = useCallback(
+    (ids: string[]) => {
+      const before = currentDraft()
+      const removed = new Set(ids)
+      setRows((current) => current.filter((row) => !removed.has(row.id)))
+      toast(`Usunięto ${ids.length} ${pieces(ids.length)}`, {
+        action: { label: 'Przywróć', onClick: () => setDraft(before) },
+      })
+      gridRef.current?.focus()
+    },
+    [currentDraft, setDraft, setRows],
+  )
 
   const priceChanges = useMemo(() => {
     const selectedIds = new Set(selectedRows)
@@ -1261,9 +1280,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
               onEansChanged={onEansChanged}
               onSelectedRowsChange={setSelectedRows}
               onDeleteRows={removeRows}
-              onInvalidPaste={(count) =>
-                toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
-              }
+              onInvalidPaste={warnInvalidPaste}
               nomenclature={nomenclature}
               names={names}
               pricing={pricing}
@@ -1354,6 +1371,9 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 }
 
 const NO_FILTER: string[] = []
+
+const warnInvalidPaste = (count: number) =>
+  toast.warning(`Pominięto ${count} ${count === 1 ? 'komórkę' : 'komórek'} z nieprawidłową wartością`)
 
 const FILTER_TONES = {
   violet:

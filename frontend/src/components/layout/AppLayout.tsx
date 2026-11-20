@@ -36,6 +36,8 @@ import { useIdleLock } from '@/features/auth/use-idle-lock'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceControlWatcher } from '@/features/data-entry/price-control-watch'
 import { FileQueueBanner } from '@/features/file-queue/FileQueueBanner'
+import { AgentStatusDot } from '@/features/store-agent/AgentStatusDot'
+import { useLiveEvents } from '@/features/store-agent/use-live-events'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore } from '@/features/stores/current-store'
@@ -54,6 +56,8 @@ export function AppLayout() {
   // Ceny z kasy (pliki TRACEART) sprawdzane w tle na każdej stronie aplikacji.
   usePriceFileWatcher()
   usePriceControlWatcher()
+  // Wiadomości na żywo sklepu i stan agenta sklepu (zapis plików i pilnowanie folderów przez agenta).
+  useLiveEvents()
   useWorkdayLock()
   useIdleLock()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)
@@ -163,7 +167,8 @@ export function AppLayout() {
           </Button>
           <BackButton />
           <GroupTabs />
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <AgentStatusDot />
             <UserMenu />
           </div>
         </header>

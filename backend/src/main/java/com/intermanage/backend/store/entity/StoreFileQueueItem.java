@@ -120,6 +120,18 @@ public class StoreFileQueueItem {
         return storeId;
     }
 
+    public String getFolderKey() {
+        return folderKey;
+    }
+
+    public String getFolderLabel() {
+        return folderLabel;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
     public String getFileName() {
         return fileName;
     }

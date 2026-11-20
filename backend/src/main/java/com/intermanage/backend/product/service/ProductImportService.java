@@ -9,6 +9,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -258,9 +259,14 @@ public class ProductImportService {
             }
             // Po wyczyszczeniu kontekstu import jest tylko odwołaniem: paczka wczytuje go od nowa.
             ProductImport productImport = imports.getReferenceById(importId);
-            mergeChunk(storeId, productImport, rows.subList(from, Math.min(rows.size(), from + CHUNK_SIZE)), counts,
-                    reportByEan);
+            List<ProductReportRow> chunk = rows.subList(from, Math.min(rows.size(), from + CHUNK_SIZE));
+            mergeChunk(storeId, productImport, chunk, counts, reportByEan);
             entityManager.flush();
+            // Encje zapisują tylko zmienione artykuły; „był w tym raporcie” dostaje cała paczka jednym zapytaniem.
+            String[] itm8s = chunk.stream().map(ProductReportRow::itm8).toArray(String[]::new);
+            String[] eans = chunk.stream().map(ProductReportRow::ean).toArray(String[]::new);
+            products.markSeenInImport(storeId, importId, itm8s);
+            productEans.markSeenInImport(storeId, importId, itm8s, eans);
             entityManager.clear();
             progress.saving(Math.min(rows.size(), from + CHUNK_SIZE), rows.size());
         }
@@ -300,7 +306,7 @@ public class ProductImportService {
         }
         Set<String> eans = new LinkedHashSet<>();
         rows.forEach(row -> eans.add(row.ean()));
-        Catalog catalog = Catalog.load(storeId, productImport.getId(), productsByItm8, eans, productEans);
+        Catalog catalog = Catalog.load(storeId, productImport, productsByItm8, eans, productEans);
 
         List<Product> newProducts = new ArrayList<>();
         List<ProductEan> newPairs = new ArrayList<>();
@@ -336,7 +342,7 @@ public class ProductImportService {
                 previousProduct = latestOther != null ? latestOther.getProduct() : null;
                 newPairs.add(new ProductEan(product, row.ean(), productImport));
             } else {
-                ownPair.seenIn(productImport);
+                catalog.seen(ownPair);
             }
 
             if (previousEan != null || previousProduct != null) {
@@ -386,10 +392,12 @@ public class ProductImportService {
      * Kartoteka paczki sprzed importu: jej produkty po ITM8 i istniejące pary EAN (pary jej produktów i pary jej
      * EAN-ów u innych produktów). Pary są porządkowane według ostatniego wystąpienia, przy remisie wygrywa nowsza.
      */
-    private record Catalog(Map<Product, List<ProductEan>> pairsByProduct, Map<String, List<ProductEan>> pairsByEan) {
+    private record Catalog(ProductImport productImport, Map<Product, List<ProductEan>> pairsByProduct,
+            Map<String, List<ProductEan>> pairsByEan, Set<ProductEan> seenNow) {
 
-        static Catalog load(UUID storeId, UUID importId, Map<String, Product> productsByItm8, Set<String> eans,
-                ProductEanRepository productEans) {
+        static Catalog load(UUID storeId, ProductImport productImport, Map<String, Product> productsByItm8,
+                Set<String> eans, ProductEanRepository productEans) {
+            UUID importId = productImport.getId();
             Map<UUID, ProductEan> pairs = new HashMap<>();
             if (!productsByItm8.isEmpty()) {
                 productEans.findByProductIn(productsByItm8.values()).forEach(pair -> pairs.put(pair.getId(), pair));
@@ -403,7 +411,19 @@ public class ProductImportService {
                 byProduct.computeIfAbsent(pair.getProduct(), p -> new ArrayList<>()).add(pair);
                 byEan.computeIfAbsent(pair.getEan(), e -> new ArrayList<>()).add(pair);
             }
-            return new Catalog(byProduct, byEan);
+            return new Catalog(productImport, byProduct, byEan, new HashSet<>());
+        }
+
+        /**
+         * Para była w wierszu tej paczki. W bazie dostanie bieżący import dopiero po paczce
+         * ({@link ProductEanRepository#markSeenInImport}), a kolejne wiersze paczki porównują ją już jak widzianą teraz.
+         */
+        void seen(ProductEan pair) {
+            seenNow.add(pair);
+        }
+
+        private ProductImport lastSeen(ProductEan pair) {
+            return seenNow.contains(pair) ? productImport : pair.getLastSeenImport();
         }
 
         ProductEan pair(Product product, String ean) {
@@ -423,10 +443,11 @@ public class ProductImportService {
             return latest(pairsByEan.getOrDefault(ean, List.of()), product);
         }
 
-        private static ProductEan latest(List<ProductEan> pairs, Product excluded) {
+        private ProductEan latest(List<ProductEan> pairs, Product excluded) {
             ProductEan latest = null;
             for (ProductEan pair : pairs) {
-                if (pair.getProduct() != excluded && (latest == null || pair.seenLaterThan(latest))) {
+                if (pair.getProduct() != excluded
+                        && (latest == null || pair.seenLaterThan(latest, lastSeen(pair), lastSeen(latest)))) {
                     latest = pair;
                 }
             }

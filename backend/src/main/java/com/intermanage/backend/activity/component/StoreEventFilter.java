@@ -41,7 +41,7 @@ public class StoreEventFilter extends OncePerRequestFilter {
     private static final Set<String> CHANGES = Set.of("POST", "PUT", "PATCH", "DELETE");
     /** Logowanie, własne konto, czytniki kart i usługi pomocnicze: to nie są zdarzenia sklepu. */
     private static final List<String> SKIPPED_PREFIXES = List.of("/api/auth/", "/api/me/", "/api/time-clock/",
-            "/api/gus/");
+            "/api/gus/", "/api/store-agent/");
     /** Kawałki wysyłanych plików i znaczniki odczytu: szum, a nie zmiana. */
     private static final Pattern SKIPPED = Pattern.compile(
             ".*/(chunks/\\d+|imports/uploads|seen|preview|read|pending)$");

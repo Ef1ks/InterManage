@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api'
 import { ensureFolderAccess, folderAccess, folderSavingSupported, listFolderFiles } from '@/lib/saved-folders'
+import { agentWatches } from '@/lib/store-agent'
 import type { MeaAthosStatus } from '@/lib/types'
 
 /*
@@ -83,6 +84,8 @@ export function useAthosHistorySync(storeId: string) {
   const check = useCallback(
     async (interactive = false) => {
       if (!folderSavingSupported || running.current) return
+      // Dziennik czyta agent sklepu (sklep pracuje przez agenta, agent online); kliknięcie dalej czyta go tutaj.
+      if (!interactive && agentWatches(storeId, 'ATHOS')) return
       running.current = true
       const key = athosFolderKey(storeId)
       try {

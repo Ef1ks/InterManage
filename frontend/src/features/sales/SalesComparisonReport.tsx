@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { createPortal } from 'react-dom'
 import { ChevronRightIcon, ChevronsDownUpIcon, ShoppingBasketIcon } from 'lucide-react'
 import { Link } from 'react-router'
 
@@ -142,6 +143,8 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
   const view = useMemo<View>(() => ({ other: otherStore, amounts }), [otherStore, amounts])
   const changeFilter =
     (Object.keys(CHANGE_PARAMS) as ChangeFilter[]).find((key) => CHANGE_PARAMS[key] === params.get('zmiana')) ?? 'all'
+  // Miejsce na tabelę marży rejonów w karcie filtrów (obok wyboru okresu); tabelę rysuje porównanie, które ma dane.
+  const [targetsSlot, setTargetsSlot] = useState<HTMLDivElement | null>(null)
 
   return (
     <>
@@ -222,76 +225,81 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           )}
         </div>
 
-        {!deli && (storeOptions.data?.length ?? 0) > 0 && (
-          <div className="flex flex-wrap items-end gap-3">
-            <SelectField
-              label="Porównaj ze sklepem"
-              options={[
-                { value: NO_STORE, label: 'Bez porównania ze sklepem' },
-                ...(storeOptions.data ?? []).map((option) => ({
-                  value: option.id,
-                  label: `${option.number} ${option.name}${option.partner ? ' (zaprzyjaźniony)' : ''}`,
-                })),
-              ]}
-              value={otherStore?.id ?? NO_STORE}
-              onChange={(id) => update({ sklep: id === NO_STORE ? null : id })}
-              className="w-full sm:w-80"
-            />
-            {otherStore && (
-              <SegmentedField
-                label="Kwoty sprzedaży"
-                options={[
-                  { value: 'hidden', label: 'Ukryte' },
-                  { value: 'shown', label: 'Pokaż' },
-                ]}
-                value={view.amounts ? 'shown' : 'hidden'}
-                onChange={(next) => update({ kwoty: next === 'shown' ? 'tak' : null })}
+        <div className={cn('grid gap-4', !deli && 'xl:grid-cols-2')}>
+          <div className="min-w-0 space-y-4">
+            {!deli && (storeOptions.data?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap items-end gap-3">
+                <SelectField
+                  label="Porównaj ze sklepem"
+                  options={[
+                    { value: NO_STORE, label: 'Bez porównania ze sklepem' },
+                    ...(storeOptions.data ?? []).map((option) => ({
+                      value: option.id,
+                      label: `${option.number} ${option.name}${option.partner ? ' (zaprzyjaźniony)' : ''}`,
+                    })),
+                  ]}
+                  value={otherStore?.id ?? NO_STORE}
+                  onChange={(id) => update({ sklep: id === NO_STORE ? null : id })}
+                  className="w-full sm:w-80"
+                />
+                {otherStore && (
+                  <SegmentedField
+                    label="Kwoty sprzedaży"
+                    options={[
+                      { value: 'hidden', label: 'Ukryte' },
+                      { value: 'shown', label: 'Pokaż' },
+                    ]}
+                    value={view.amounts ? 'shown' : 'hidden'}
+                    onChange={(next) => update({ kwoty: next === 'shown' ? 'tak' : null })}
+                  />
+                )}
+              </div>
+            )}
+
+            <PeriodPicker period={period} update={update}>
+              {compare === 'custom' && (
+                <>
+                  <DateField
+                    label="Porównaj od"
+                    value={compareCustom.from}
+                    onChange={(from) => update({ por_od: from, por_do: compareCustom.to })}
+                    max={lastSaleDate}
+                    shortcuts={[]}
+                    className="w-full sm:w-64"
+                  />
+                  <DateField
+                    label="Porównaj do"
+                    value={compareCustom.to}
+                    onChange={(to) => update({ por_od: compareCustom.from, por_do: to })}
+                    max={lastSaleDate}
+                    shortcuts={[]}
+                    error={compareError ?? undefined}
+                    className="w-full sm:w-64"
+                  />
+                </>
+              )}
+            </PeriodPicker>
+
+            {!deli && (
+              <MultiComboboxField
+                label="Nomenklatura"
+                description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
+                options={(nomenclatures.data ?? []).map((item) => ({
+                  value: item.code,
+                  label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
+                  hint: LEVEL_STYLES[item.level].label,
+                }))}
+                value={filter}
+                onChange={(codes) => update({ nom: codes })}
+                placeholder={
+                  nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
+                }
+                className="max-w-3xl"
               />
             )}
           </div>
-        )}
-
-        <PeriodPicker period={period} update={update}>
-          {compare === 'custom' && (
-            <>
-              <DateField
-                label="Porównaj od"
-                value={compareCustom.from}
-                onChange={(from) => update({ por_od: from, por_do: compareCustom.to })}
-                max={lastSaleDate}
-                shortcuts={[]}
-                className="w-full sm:w-64"
-              />
-              <DateField
-                label="Porównaj do"
-                value={compareCustom.to}
-                onChange={(to) => update({ por_od: compareCustom.from, por_do: to })}
-                max={lastSaleDate}
-                shortcuts={[]}
-                error={compareError ?? undefined}
-                className="w-full sm:w-64"
-              />
-            </>
-          )}
-        </PeriodPicker>
-
-        {!deli && (
-          <MultiComboboxField
-            label="Nomenklatura"
-            description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
-            options={(nomenclatures.data ?? []).map((item) => ({
-              value: item.code,
-              label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
-              hint: LEVEL_STYLES[item.level].label,
-            }))}
-            value={filter}
-            onChange={(codes) => update({ nom: codes })}
-            placeholder={
-              nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
-            }
-            className="max-w-3xl"
-          />
-        )}
+          {!deli && !otherStore && <div ref={setTargetsSlot} className="min-w-0" />}
+        </div>
 
         {valid && (
           <PeriodsSummary
@@ -316,6 +324,7 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           view={view}
           changeFilter={changeFilter}
           lastSaleDate={lastSaleDate}
+          targetsSlot={targetsSlot}
         />
       )}
       {!deli && <BasketButton storeId={storeId} />}
@@ -498,6 +507,7 @@ function Comparison({
   view,
   changeFilter,
   lastSaleDate,
+  targetsSlot,
 }: {
   storeId: string
   kind: ReportKind
@@ -508,6 +518,8 @@ function Comparison({
   view: View
   changeFilter: ChangeFilter
   lastSaleDate: string
+  /** Miejsce w karcie filtrów na tabelę marży rejonów. */
+  targetsSlot: HTMLElement | null
 }) {
   const deli = kind === 'deli'
   const compareStore = view.other?.id ?? null
@@ -638,6 +650,15 @@ function Comparison({
     })
   }, [])
 
+  /** Klik w rejon w tabeli marży rejonów: rozwija go do rodzin i przewija tabelę do niego. */
+  const openRegion = (key: string) => {
+    if (!expanded.has(key)) {
+      setExpanded((previous) => new Set(previous).add(key))
+      updatePinned()
+    }
+    requestAnimationFrame(() => scrollToRow(key, true))
+  }
+
   /** Klik w przypięty wiersz: zwija jego grupę i wraca do niej, bo po rozwinięciu mogła być daleko w górze. */
   const collapsePinned = (key: string) => {
     toggle(key)
@@ -701,40 +722,42 @@ function Comparison({
   collectNav('', 0)
 
   const empty = data && data.rows.length === 0
+  const regionTargets =
+    !deli && !view.other && targetsSlot
+      ? createPortal(<RegionTargets storeId={storeId} data={data} onPick={openRegion} />, targetsSlot)
+      : null
 
   return (
     <div className={cn('transition-opacity duration-150', isPlaceholderData && 'opacity-60')}>
+      {regionTargets}
       {view.other ? (
         <StoreTiles data={data} view={view} basis={basis} compare={compare} />
       ) : (
-        <div className={cn('mb-4 grid gap-3', !deli && 'xl:grid-cols-2')}>
-          <div className={cn('grid content-start gap-3 sm:grid-cols-2', deli && 'xl:grid-cols-4')}>
-            <TotalTile
-              label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
-              previous={data && saleValue(data.previousTotal, basis)}
-              current={data && saleValue(data.currentTotal, basis)}
-              format={formatZloty}
-              compare={compare}
-            />
-            <TotalTile
-              label="Marża"
-              previous={data?.previousTotal.marginValue ?? undefined}
-              current={data?.currentTotal.marginValue ?? undefined}
-              format={formatZloty}
-              compare={compare}
-              note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
-            />
-            <TotalTile
-              label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
-              previous={data?.previousTotal.costValue ?? undefined}
-              current={data?.currentTotal.costValue ?? undefined}
-              format={formatZloty}
-              compare={compare}
-              neutral
-            />
-            <MarginPercentTile previous={data?.previousTotal} current={data?.currentTotal} compare={compare} />
-          </div>
-          {!deli && <RegionTargets storeId={storeId} data={data} />}
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <TotalTile
+            label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
+            previous={data && saleValue(data.previousTotal, basis)}
+            current={data && saleValue(data.currentTotal, basis)}
+            format={formatZloty}
+            compare={compare}
+          />
+          <TotalTile
+            label="Marża"
+            previous={data?.previousTotal.marginValue ?? undefined}
+            current={data?.currentTotal.marginValue ?? undefined}
+            format={formatZloty}
+            compare={compare}
+            note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
+          />
+          <TotalTile
+            label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
+            previous={data?.previousTotal.costValue ?? undefined}
+            current={data?.currentTotal.costValue ?? undefined}
+            format={formatZloty}
+            compare={compare}
+            neutral
+          />
+          <MarginPercentTile previous={data?.previousTotal} current={data?.currentTotal} compare={compare} />
         </div>
       )}
 
@@ -773,8 +796,8 @@ function Comparison({
               </Button>
             )}
           </div>
-          {/* Od xl ściąga nomenklatury stoi w kolumnie obok tabeli, więc niczego nie zasłania. */}
-          <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start xl:gap-4">
+          {/* Od 2xl ściąga nomenklatury stoi w kolumnie obok tabeli (niżej tabela potrzebuje całej szerokości). */}
+          <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_16rem] 2xl:items-start 2xl:gap-4">
             <Card ref={cardRef} className="overflow-hidden py-0">
               <div
                 ref={scrollRef}
@@ -892,7 +915,7 @@ function Comparison({
                 </table>
               </div>
             </Card>
-            <NomenclatureNav items={navItems} current={current} onJump={(key) => scrollToRow(key, true)} />
+            <NomenclatureNav items={navItems} current={current} onJump={(key) => scrollToRow(key, true)} wide />
           </div>
         </>
       )}
@@ -1516,7 +1539,16 @@ function MarginPercentTile({
  * Czy rejony zrealizowały założoną marżę (budżet rejonów z Ustawień sklepu, osobny od marży wymaganej na
  * nomenklaturze): zrealizowana marża % aktualnego okresu wobec założonej, nadwyżka na zielono, brak na czerwono.
  */
-function RegionTargets({ storeId, data }: { storeId: string; data: SalesComparison | undefined }) {
+function RegionTargets({
+  storeId,
+  data,
+  onPick,
+}: {
+  storeId: string
+  data: SalesComparison | undefined
+  /** Klik w rejon: rozwija go w tabeli porównania i przewija do niego. */
+  onPick: (key: string) => void
+}) {
   const budgets = useRegionBudgets(storeId)
   const canEdit = useCan('SALES', 'EDIT')
   const targets = new Map(
@@ -1535,7 +1567,7 @@ function RegionTargets({ storeId, data }: { storeId: string; data: SalesComparis
   const reached = regions.filter((region) => region.diff >= 0).length
 
   return (
-    <Card className="gap-2 p-4">
+    <div className="flex h-full flex-col gap-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <p className="text-sm text-muted-foreground">Marża rejonów wobec założonej</p>
         {regions.length > 0 && (
@@ -1562,7 +1594,7 @@ function RegionTargets({ storeId, data }: { storeId: string; data: SalesComparis
             ))}
         </p>
       ) : (
-        <div className="max-h-56 overflow-y-auto">
+        <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-sm tabular-nums">
             <thead className="sticky top-0 bg-card text-xs text-muted-foreground">
               <tr>
@@ -1574,10 +1606,24 @@ function RegionTargets({ storeId, data }: { storeId: string; data: SalesComparis
             </thead>
             <tbody>
               {regions.map(({ row, target, realized, diff }) => (
-                <tr key={row.code} className="border-t">
+                <tr
+                  key={row.code}
+                  onClick={() => onPick(rowKey(row, 'REGION'))}
+                  className="cursor-pointer border-t transition-colors hover:bg-muted/60"
+                >
                   <td className="py-1 pr-2">
-                    <span className="mr-1.5 text-xs text-muted-foreground">{displayCode(row.code)}</span>
-                    {displayName(row) ?? 'Brak nazwy'}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onPick(rowKey(row, 'REGION'))
+                      }}
+                      className="text-left hover:underline focus-visible:underline focus-visible:outline-none"
+                      title="Pokaż rejon w tabeli"
+                    >
+                      <span className="mr-1.5 text-xs text-muted-foreground">{displayCode(row.code)}</span>
+                      {displayName(row) ?? 'Brak nazwy'}
+                    </button>
                   </td>
                   <td className="py-1 text-right font-medium">{percentLabel(realized)}</td>
                   <td className="py-1 text-right text-muted-foreground">{percentLabel(target)}</td>
@@ -1601,7 +1647,7 @@ function RegionTargets({ storeId, data }: { storeId: string; data: SalesComparis
           </table>
         </div>
       )}
-    </Card>
+    </div>
   )
 }
 

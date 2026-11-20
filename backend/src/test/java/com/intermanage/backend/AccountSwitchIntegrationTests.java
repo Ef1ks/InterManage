@@ -91,7 +91,9 @@ class AccountSwitchIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].username").value(anna))
-                .andExpect(jsonPath("$[0].unlock").value("PIN"));
+                .andExpect(jsonPath("$[0].unlock").value("PIN"))
+                // Strona logowania przełącza konto sama po wpisaniu tylu cyfr.
+                .andExpect(jsonPath("$[0].pinLength").value(4));
         String annaId = id(anna);
 
         // Bez PIN-u albo ze złym PIN-em przejścia nie ma.

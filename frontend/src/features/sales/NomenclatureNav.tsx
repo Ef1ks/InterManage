@@ -23,10 +23,13 @@ export function NomenclatureNav({
   items,
   current,
   onJump,
+  wide = false,
 }: {
   items: NomenclatureNavItem[]
   current: string | null
   onJump: (key: string) => void
+  /** Szeroka tabela obok: spis w kolumnie dopiero od 2xl, niżej strzałki. */
+  wide?: boolean
 }) {
   const listRef = useRef<HTMLOListElement>(null)
   const currentIndex = items.findIndex((item) => item.key === current)
@@ -50,7 +53,7 @@ export function NomenclatureNav({
 
   return (
     <>
-      <div className="fixed bottom-4 left-4 z-40 flex flex-col gap-2 xl:hidden">
+      <div className={cn('fixed bottom-4 left-4 z-40 flex flex-col gap-2', wide ? '2xl:hidden' : 'xl:hidden')}>
         <Button
           variant="outline"
           size="icon-lg"
@@ -73,7 +76,7 @@ export function NomenclatureNav({
         </Button>
       </div>
 
-      <nav aria-label="Nomenklatura" className="sticky top-20 hidden xl:block">
+      <nav aria-label="Nomenklatura" className={cn('sticky top-20 hidden', wide ? '2xl:block' : 'xl:block')}>
         <div className="overflow-hidden rounded-xl bg-background ring-1 ring-foreground/10">
           <div className="border-b px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Nomenklatura
