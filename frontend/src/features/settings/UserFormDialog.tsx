@@ -20,6 +20,7 @@ type UserForm = {
   password: string
   enabled: boolean
   storeIds: string[]
+  canAssignTasks: boolean
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -84,6 +85,7 @@ function UserFormBody({
       password: '',
       enabled: user?.enabled ?? true,
       storeIds: user?.storeIds ?? [],
+      canAssignTasks: user?.canAssignTasks ?? false,
     },
   })
   const selectedRoleId = useWatch({ control, name: 'roleId' })
@@ -125,6 +127,7 @@ function UserFormBody({
             enabled: values.enabled,
             newPassword: values.password || undefined,
             storeIds,
+            canAssignTasks: values.canAssignTasks,
           },
         },
         {
@@ -281,6 +284,20 @@ function UserFormBody({
               />
             )}
           />
+          {!user.owner && (
+            <Controller
+              control={control}
+              name="canAssignTasks"
+              render={({ field }) => (
+                <SwitchField
+                  label="Może zlecać zadania"
+                  description="Zleca zadania osobom ze swojego sklepu i prowadzi te, które sam zlecił: przyjmuje, odsyła, usuwa. Właściciel widzi wszystkie."
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              )}
+            />
+          )}
         </>
       )}
 

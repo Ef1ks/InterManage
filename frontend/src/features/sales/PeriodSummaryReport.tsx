@@ -31,6 +31,9 @@ import {
   useReportPeriod,
 } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import type { TaskItemDraft } from '@/features/tasks/api'
+import { taskMoney, taskNumber, useTaskPicks, useTaskSource, type TaskPicks } from '@/features/tasks/task-helpers'
+import { TaskPickBox, TaskPicksBar } from '@/features/tasks/task-selection'
 import { type DateRange, dayCount, daysLabel, formatRange, PERIOD_MODES, yearAgoRange } from '@/features/sales/periods'
 import { ApiError } from '@/lib/api'
 import type { PeriodSummary, PeriodSummaryFigures, PeriodSummaryLine, ProfitTargetProgress } from '@/lib/types'
@@ -193,6 +196,8 @@ function Summary({ storeId, data, loading }: { storeId: string; data: SummaryDat
     ) : null
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
+  const picks = useTaskPicks()
+  const taskSource = useTaskSource('PERIOD_SUMMARY', 'Podsumowanie sprzedaży i strat')
   const toggle = useCallback(
     (key: string) =>
       setExpanded((current) => {
@@ -216,8 +221,9 @@ function Summary({ storeId, data, loading }: { storeId: string; data: SummaryDat
       expanded,
       toggle,
       openChart: setChart,
+      picks,
     }),
-    [storeId, summary.from, summary.to, total.saleValueGross, expanded, toggle],
+    [storeId, summary.from, summary.to, total.saleValueGross, expanded, toggle, picks, setChart],
   )
   const warnings = [
     (!summary.lastSaleDate || summary.to > summary.lastSaleDate) &&
@@ -357,6 +363,7 @@ function Summary({ storeId, data, loading }: { storeId: string; data: SummaryDat
         lastSaleDate={summary.lastSaleDate ?? summary.to}
         onClose={() => setChart(null)}
       />
+      <TaskPicksBar picks={picks} title="Sprawdź sprzedaż i straty" source={taskSource} />
     </>
   )
 }
@@ -407,6 +414,28 @@ type Tree = {
   expanded: ReadonlySet<string>
   toggle: (key: string) => void
   openChart: (target: SalesChartTarget) => void
+  /** Zaznaczanie rejonów, rodzin, podrodzin i artykułów do zadania. */
+  picks: TaskPicks
+}
+
+/** Pozycja zadania z wiersza podsumowania, z liczbami z chwili zaznaczenia. */
+function summaryTaskItem(
+  name: string,
+  figures: PeriodSummaryFigures,
+  article?: { itm8: string; ean: string | null },
+): TaskItemDraft {
+  const details = [
+    `sprzedaż ${taskMoney(figures.saleValueGross)}`,
+    figures.marginPercent !== null ? `marża ${taskNumber(figures.marginPercent, 1)}%` : null,
+    figures.lossValue ? `straty ${taskMoney(figures.lossValue)}` : null,
+    figures.lossPercent !== null && figures.lossValue ? `${taskNumber(figures.lossPercent, 1)}% sprzedaży` : null,
+    figures.marginAfterLossesPercent !== null
+      ? `po stratach ${taskNumber(figures.marginAfterLossesPercent, 1)}%`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return { itm8: article?.itm8 ?? null, ean: article?.ean ?? null, name, details }
 }
 
 const TreeContext = createContext<Tree | null>(null)
@@ -419,7 +448,7 @@ function useTree() {
 
 /** Rejon z budżetem; rozwija się do rodzin (a „Bez nomenklatury” do artykułów), jak w porównaniu sprzedaży. */
 function RegionRow({ line, code }: { line: PeriodSummaryLine; code: string }) {
-  const { expanded, toggle, openChart } = useTree()
+  const { expanded, toggle, openChart, picks } = useTree()
   const key = code === '' ? UNASSIGNED_KEY : code
   const open = expanded.has(key)
   const name = code === '' ? 'Bez nomenklatury' : (line.name ?? 'Brak nazwy w nomenklaturze')
@@ -437,6 +466,12 @@ function RegionRow({ line, code }: { line: PeriodSummaryLine; code: string }) {
           style={{ paddingLeft: indent(line.depth) }}
         >
           <div className="flex items-start gap-1">
+            <TaskPickBox
+              picks={picks}
+              pickKey={`REGION:${key}`}
+              item={() => summaryTaskItem(code ? `${code} ${name}` : name, line.figures!)}
+              label={name}
+            />
             <ExpandButton open={open} onToggle={() => toggle(key)}>
               {code ? (
                 <span className="flex min-w-0 items-baseline gap-2">
@@ -483,7 +518,7 @@ function LevelRows({
   /** Klucze rozwiniętych wierszy nad tym poziomem, od rejonu (linie prowadzące). */
   ancestors: string[]
 }) {
-  const { storeId, range, storeGross, expanded, toggle, openChart } = useTree()
+  const { storeId, range, storeGross, expanded, toggle, openChart, picks } = useTree()
   const { data, isPending, isError, refetch } = usePeriodSummaryChildren(storeId, range, parent, unassigned)
   const baseDepth = depth - ancestors.length
 
@@ -583,6 +618,20 @@ function LevelRows({
               />
             ))}
             <div className="flex items-start gap-1">
+              <TaskPickBox
+                picks={picks}
+                pickKey={`${level}:${row.code}`}
+                item={() =>
+                  style
+                    ? summaryTaskItem(`${displayCode(row.code)} ${name ?? 'Brak nazwy w nomenklaturze'}`, figures)
+                    : summaryTaskItem(
+                        [row.name ?? 'Brak w kartotece', row.brand].filter(Boolean).join(' · '),
+                        figures,
+                        { itm8: row.code, ean: row.ean ?? null },
+                      )
+                }
+                label={style ? (name ?? row.code) : (row.name ?? row.code)}
+              />
               {style ? (
                 <ExpandButton open={open} onToggle={() => toggle(row.code)}>
                   {label}

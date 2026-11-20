@@ -19,5 +19,7 @@ public record UserResponse(
         List<UUID> storeIds,
         /** Stanowisko w panelu Pracownicy; to ono ustala rolę konta. */
         String positionName,
+        /** Właściciel włączył temu kontu zlecanie zadań (właściciel zleca zawsze). */
+        boolean canAssignTasks,
         Instant createdAt) {
 }

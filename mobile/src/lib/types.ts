@@ -15,6 +15,8 @@ export type Me = {
   displayName: string
   roleName: string
   owner: boolean
+  /** Konto zleca zadania (właściciel albo włączone przez niego zlecanie). */
+  canAssignTasks?: boolean
   permissions: Partial<Record<string, PermissionLevel>>
   passwordChangeRequired: boolean
   stores: StoreSummary[]
@@ -226,4 +228,58 @@ export type MyTimeAnomalies = {
     kinds: TimeRequestKind[]
     request: { id: string; kind: TimeRequestKind; status: TimeRequestStatus } | null
   }[]
+}
+
+export type TaskPriority = 'NORMAL' | 'URGENT'
+export type TaskStatus = 'OPEN' | 'DONE' | 'ACCEPTED'
+export type TaskPerson = { id: string; displayName: string }
+
+export type TaskItem = {
+  id: string
+  itm8: string | null
+  ean: string | null
+  name: string
+  details: string | null
+  checked: boolean
+  checkedAt: string | null
+  checkedByName: string | null
+  note: string | null
+}
+
+/** Zadanie sklepu (skopiowane z frontend/src/lib/types.ts, tylko używane pola). */
+export type StoreTask = {
+  id: string
+  title: string
+  description: string | null
+  dueDate: string | null
+  priority: TaskPriority
+  status: TaskStatus
+  assignee: TaskPerson
+  createdBy: TaskPerson | null
+  createdAt: string
+  sourceLabel: string | null
+  /** Ścieżka strony w aplikacji w przeglądarce (z filtrami), na której zlecono zadanie. */
+  sourceUrl: string | null
+  doneBy: TaskPerson | null
+  doneComment: string | null
+  returnComment: string | null
+  items: TaskItem[]
+  attachments: TaskAttachment[]
+  itemCount: number
+  checkedCount: number
+  canManage: boolean
+  canComplete: boolean
+}
+
+export type TaskCounts = { open: number; waiting: number }
+
+/** Zrzut ekranu przy zadaniu (dodany w przeglądarce). */
+export type TaskAttachment = {
+  id: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  createdAt: string
+  createdByName: string | null
+  canRemove: boolean
 }

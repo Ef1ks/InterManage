@@ -15,6 +15,8 @@ import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { salesPaths } from '@/features/sales/paths'
 import { nomenclatureName } from '@/features/sales/report-parts'
 import { ZeroStockOrderDialog } from '@/features/sales/ZeroStockOrderDialog'
+import { AssignTaskButton } from '@/features/tasks/AssignTaskButton'
+import { taskNumber, useTaskSource } from '@/features/tasks/task-helpers'
 import { markOf, type NomenclatureTree, nomenclatureTree, withMark } from '@/features/sales/zero-stock-selection'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
@@ -262,6 +264,7 @@ function Results({ storeId, codes, report }: { storeId: string; codes: string[];
   const onPdfError = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
   const empty = report.itemCount === 0
+  const taskSource = useTaskSource('ZERO_STOCK', 'Zerówki')
 
   return (
     <>
@@ -284,6 +287,24 @@ function Results({ storeId, codes, report }: { storeId: string; codes: string[];
           <ReportFreshness generatedAt={report.stockReportGeneratedAt} />
         </div>
         <div className="flex flex-wrap gap-2">
+          {!empty && (
+            <AssignTaskButton
+              size="default"
+              className="h-10"
+              title={`Zerówki: sprawdź ${report.itemCount} art.`}
+              items={() =>
+                items.map((item) => ({
+                  itm8: item.itm8,
+                  ean: item.ean,
+                  name: [item.name, item.brand].filter(Boolean).join(' · ') || item.itm8,
+                  details: `stan ${taskNumber(item.stock, 3)}`,
+                }))
+              }
+              source={taskSource}
+            >
+              Zleć wszystkie ({report.itemCount})
+            </AssignTaskButton>
+          )}
           <Button
             variant="outline"
             size="lg"

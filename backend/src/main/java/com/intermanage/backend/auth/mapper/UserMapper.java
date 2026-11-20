@@ -28,6 +28,7 @@ public interface UserMapper {
     @Mapping(target = "background", source = "background")
     @Mapping(target = "avatar", source = "avatar")
     @Mapping(target = "idleLockMinutes", source = "idleLockMinutes")
+    @Mapping(target = "canAssignTasks", expression = "java(user.mayAssignTasks())")
     MeResponse toMeResponse(AppUser user, List<StoreSummary> stores, Map<UUID, List<String>> sidebarOrders,
             BackgroundResponse background, AvatarResponse avatar, Integer idleLockMinutes);
 

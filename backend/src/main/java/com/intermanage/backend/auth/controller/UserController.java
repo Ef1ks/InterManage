@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.intermanage.backend.auth.dto.CreateUserRequest;
 import com.intermanage.backend.auth.dto.UpdateUserRequest;
 import com.intermanage.backend.auth.dto.UserResponse;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.service.UserService;
 
 import jakarta.validation.Valid;
@@ -51,5 +54,17 @@ public class UserController {
     @PutMapping("/{id}")
     public UserResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
         return userService.update(id, request);
+    }
+
+    /** Usunięcie konta (znacznik); toast „Przywróć” woła {@code restore}. */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        userService.delete(id, principal.getId());
+    }
+
+    @PostMapping("/{id}/restore")
+    public UserResponse restore(@PathVariable UUID id) {
+        return userService.restore(id);
     }
 }

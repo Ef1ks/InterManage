@@ -25,6 +25,8 @@ import com.intermanage.backend.store.entity.Store;
 public final class AppUserPrincipal implements UserDetails, CredentialsContainer {
 
     public static final String OWNER_AUTHORITY = "ROLE_OWNER";
+    /** Zlecanie zadań (właściciel albo konto z włączonym zlecaniem). */
+    public static final String TASK_ASSIGN_AUTHORITY = "TASKS:ASSIGN";
     public static final String PASSWORD_SETUP_AUTHORITY = "PASSWORD_SETUP_REQUIRED";
 
     private final UUID id;
@@ -57,6 +59,9 @@ public final class AppUserPrincipal implements UserDetails, CredentialsContainer
         List<GrantedAuthority> authorities = new ArrayList<>();
         if (user.getRole().isOwner()) {
             authorities.add(new SimpleGrantedAuthority(OWNER_AUTHORITY));
+        }
+        if (user.mayAssignTasks()) {
+            authorities.add(new SimpleGrantedAuthority(TASK_ASSIGN_AUTHORITY));
         }
         for (Map.Entry<PermissionCategory, PermissionLevel> entry : user.getRole().effectivePermissions().entrySet()) {
             for (PermissionLevel level : PermissionLevel.values()) {

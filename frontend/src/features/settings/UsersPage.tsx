@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MailIcon, PencilIcon, PlusIcon } from 'lucide-react'
+import { MailIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCurrentUser } from '@/features/auth/api'
-import { useResendActivationLink, useStores, useUsers } from '@/features/settings/api'
+import { useDeleteUser, useResendActivationLink, useRestoreUser, useStores, useUsers } from '@/features/settings/api'
 import { UserFormDialog } from '@/features/settings/UserFormDialog'
 import { ApiError } from '@/lib/api'
 import type { Store, User } from '@/lib/types'
@@ -20,6 +20,8 @@ export function UsersPage() {
   const { data: users, isPending, isError, refetch } = useUsers()
   const { data: stores = [] } = useStores()
   const resend = useResendActivationLink()
+  const removeUser = useDeleteUser()
+  const restoreUser = useRestoreUser()
   const [editor, setEditor] = useState<{ open: boolean; user?: User }>({ open: false })
 
   const resendLink = (user: User) =>
@@ -28,8 +30,25 @@ export function UsersPage() {
         toast.success('Wysłano nowy link aktywacyjny', {
           description: `Na adres ${user.email}. Poprzedni link przestał działać.`,
         }),
-      onError: (error) =>
-        toast.error(error instanceof ApiError ? error.message : 'Nie udało się wysłać linku'),
+      onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się wysłać linku'),
+    })
+
+  const remove = (user: User) =>
+    removeUser.mutate(user.id, {
+      onSuccess: () =>
+        toast('Usunięto konto', {
+          description: `${user.displayName} (${user.username}) zostaje wylogowany i nie zaloguje się.`,
+          action: {
+            label: 'Przywróć',
+            onClick: () =>
+              restoreUser.mutate(user.id, {
+                onSuccess: () => toast.success(`Przywrócono konto ${user.displayName}`),
+                onError: (error) =>
+                  toast.error(error instanceof ApiError ? error.message : 'Nie udało się przywrócić konta'),
+              }),
+          },
+        }),
+      onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się usunąć konta'),
     })
 
   return (
@@ -75,7 +94,9 @@ export function UsersPage() {
                     <TableCell className="py-3 pl-4">
                       <div className="font-medium">
                         {user.displayName}
-                        {user.id === me.id && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Ty)</span>}
+                        {user.id === me.id && (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Ty)</span>
+                        )}
                       </div>
                       {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
                     </TableCell>
@@ -83,6 +104,9 @@ export function UsersPage() {
                     <TableCell>
                       {user.roleName}
                       {user.positionName && <div className="text-xs text-muted-foreground">{user.positionName}</div>}
+                      {user.canAssignTasks && !user.owner && (
+                        <div className="text-xs text-muted-foreground">zleca zadania</div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <UserStores user={user} stores={stores} />
@@ -113,6 +137,24 @@ export function UsersPage() {
                         >
                           <PencilIcon />
                         </Button>
+                        {user.id !== me.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Usuń konto ${user.displayName}`}
+                            title={
+                              user.positionName
+                                ? `Pracuje na stanowisku „${user.positionName}”: najpierw zakończ pracę w Pracownikach`
+                                : 'Usuń konto'
+                            }
+                            disabled={
+                              Boolean(user.positionName) || (removeUser.isPending && removeUser.variables === user.id)
+                            }
+                            onClick={() => remove(user)}
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -139,7 +181,10 @@ function UserStores({ user, stores }: { user: User; stores: Store[] }) {
   const assigned = stores.filter((store) => user.storeIds.includes(store.id))
   if (assigned.length === 0) {
     return (
-      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+      <Badge
+        variant="outline"
+        className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+      >
         Brak sklepu
       </Badge>
     )
@@ -157,7 +202,10 @@ function UserStatus({ user }: { user: User }) {
   }
   if (user.pendingActivation) {
     return (
-      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+      <Badge
+        variant="outline"
+        className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+      >
         Czeka na aktywację
       </Badge>
     )

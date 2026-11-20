@@ -26,7 +26,7 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
 
     boolean existsByUsername(String username);
 
-    @Query("select count(u) > 0 from AppUser u where u.email = :email and (:excludedId is null or u.id <> :excludedId)")
+    @Query("select count(u) > 0 from AppUser u where u.email = :email and u.deletedAt is null and (:excludedId is null or u.id <> :excludedId)")
     boolean existsByEmailExcluding(String email, UUID excludedId);
 
     long countByRoleId(UUID roleId);

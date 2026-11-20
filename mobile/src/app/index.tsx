@@ -17,6 +17,7 @@ import { useDockInset } from '@/components/FloatingDock'
 import { MyScheduleCard } from '@/components/MyScheduleCard'
 import { ProductChoices } from '@/components/ProductChoices'
 import { StoreResultsCard } from '@/components/StoreResultsCard'
+import { TasksCard } from '@/components/TasksCard'
 import { TimeAnomaliesCard } from '@/components/TimeAnomaliesCard'
 import { Card, ErrorText, Muted } from '@/components/ui'
 import { ApiError } from '@/lib/api'
@@ -67,6 +68,7 @@ export default function HomeScreen() {
   if (!canSeeArticles) {
     return (
       <ScrollView contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: dockInset }}>
+        {store ? <TasksCard storeId={store.id} /> : null}
         <TimeAnomaliesCard />
         <MyScheduleCard storeNumber={store?.number} />
         <Card>
@@ -141,6 +143,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        {store ? <TasksCard storeId={store.id} /> : null}
         <TimeAnomaliesCard />
         <MyScheduleCard storeNumber={store?.number} />
         {/* Na razie tylko właściciel; dostęp dla innych ról ustalimy później. */}

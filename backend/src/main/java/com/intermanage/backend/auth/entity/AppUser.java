@@ -48,6 +48,10 @@ public class AppUser {
     @Column(name = "password_change_required", nullable = false)
     private boolean passwordChangeRequired;
 
+    /** Właściciel pozwolił temu kontu zlecać zadania (właściciel zleca zawsze). */
+    @Column(name = "can_assign_tasks", nullable = false)
+    private boolean canAssignTasks;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
@@ -70,6 +74,16 @@ public class AppUser {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @Column(name = "deleted_by")
+    private UUID deletedBy;
+
+    /** Czy konto było odblokowane przed usunięciem: przywrócenie oddaje je w tym stanie. */
+    @Column(name = "enabled_before_delete")
+    private Boolean enabledBeforeDelete;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -128,6 +142,26 @@ public class AppUser {
         this.passwordChangeRequired = true;
     }
 
+    /** Usunięcie przez właściciela: znacznik, blokada i wylogowanie ze wszystkich urządzeń. */
+    public void markDeleted(UUID by) {
+        this.enabledBeforeDelete = enabled;
+        this.enabled = false;
+        this.deletedAt = Instant.now();
+        this.deletedBy = by;
+        this.sessionVersion++;
+    }
+
+    public void restoreDeleted() {
+        this.enabled = Boolean.TRUE.equals(enabledBeforeDelete);
+        this.enabledBeforeDelete = null;
+        this.deletedAt = null;
+        this.deletedBy = null;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
     public boolean isPendingActivation() {
         return passwordHash == null;
     }
@@ -179,6 +213,19 @@ public class AppUser {
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    public boolean isCanAssignTasks() {
+        return canAssignTasks;
+    }
+
+    public void setCanAssignTasks(boolean canAssignTasks) {
+        this.canAssignTasks = canAssignTasks;
+    }
+
+    /** Czy konto zleca zadania: właściciel zawsze, inni z włączonym zlecaniem. */
+    public boolean mayAssignTasks() {
+        return canAssignTasks || (role != null && role.isOwner());
     }
 
     public boolean isEnabled() {

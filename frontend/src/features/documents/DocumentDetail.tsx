@@ -34,6 +34,7 @@ import {
   showsSupplier,
 } from '@/features/documents/format'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
+import { DocumentTaskButton } from '@/features/tasks/DocumentTaskButton'
 import { matchesSearch } from '@/lib/search'
 import { type SortAccessors, useTableSort } from '@/lib/table-sort'
 import { useLoadMore } from '@/lib/use-load-more'
@@ -159,6 +160,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
           </h2>
           <div className="flex flex-wrap items-center gap-2">
             <MarkAsErrorButton storeId={storeId} document={document} />
+            <DocumentTaskButton document={document} />
             <DocumentPrintMenu
               path={(format) => documentPrintPath(storeId, document, format)}
               number={document.number}

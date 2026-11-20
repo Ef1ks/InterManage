@@ -479,3 +479,16 @@
     --card-surface: var(--card);
   }
 }
+
+/* Zrzut ekranu bieżącej karty (lib/screen-capture.ts): okna, listy i powiadomienia znikają na czas zrzutu, żeby
+ na obrazie był sam widok spod okna zadania. */
+html.screen-capture [data-slot="dialog-overlay"],
+html.screen-capture [data-slot="dialog-content"],
+html.screen-capture [data-slot="dropdown-menu-content"],
+html.screen-capture [data-slot="select-content"],
+html.screen-capture [data-slot="popover-content"],
+html.screen-capture [data-slot="tooltip-content"],
+html.screen-capture [data-sonner-toaster],
+html.screen-capture [data-quick-task] {
+  visibility: hidden !important;
+}

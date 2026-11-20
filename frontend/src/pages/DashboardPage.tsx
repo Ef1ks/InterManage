@@ -7,6 +7,7 @@ import { AttentionCard } from '@/features/dashboard/AttentionCard'
 import { PresenceCard } from '@/features/dashboard/PresenceCard'
 import { StoreResultsPanel } from '@/features/dashboard/StoreResultsPanel'
 import { useCurrentStore } from '@/features/stores/current-store'
+import { TasksPanel } from '@/features/tasks/TasksPanel'
 import { TOOL_ROUTES, isTool, usePermissionCategories } from '@/features/tools/categories'
 import { cn } from '@/lib/utils'
 
@@ -39,6 +40,9 @@ export function DashboardPage() {
           </div>
         </div>
       ) : null}
+
+      {/* Zadania jako lista do odhaczania: zleca na razie właściciel, wykonawca widzi swoje. */}
+      {store ? <TasksPanel key={store.id} storeId={store.id} canAssign={me.canAssignTasks} /> : null}
 
       {tools.length === 0 ? (
         <Card>

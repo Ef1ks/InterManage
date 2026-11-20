@@ -22,6 +22,10 @@ import { type NegativeStockQuery, useNegativeStock, useSalesNomenclatures } from
 import { InsertIntoDataEntry } from '@/features/data-entry/InsertIntoDataEntry'
 import { emptyRow, withScannedProduct } from '@/features/data-entry/rows'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
+import type { TaskItemDraft } from '@/features/tasks/api'
+import { AssignTaskButton } from '@/features/tasks/AssignTaskButton'
+import { taskMoney, taskNumber, useTaskSelection, useTaskSource } from '@/features/tasks/task-helpers'
+import { TaskSelectCell, TaskSelectHead, TaskSelectionBar } from '@/features/tasks/task-selection'
 import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
 import { nomenclatureName, StatTile } from '@/features/sales/report-parts'
@@ -402,6 +406,8 @@ function Results({
       return next
     })
   const paired = items.filter((item) => item.counterparts.length > 0).length
+  const selection = useTaskSelection()
+  const source = useTaskSource('NEGATIVE_STOCK', 'Ujemne stany')
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < items.length, shown)
   const sorting = { sort, onSort }
   const selling = items.filter((item) => item.soldQuantity > 0).length
@@ -435,143 +441,174 @@ function Results({
           Żaden artykuł nie spełnia tych filtrów.
         </p>
       ) : (
-        <Card className="overflow-clip p-0">
-          <div className="overflow-x-auto lg:overflow-x-visible">
-            <table className="w-full caption-bottom text-sm">
-              <TableHeader className="bg-card lg:sticky lg:top-14 lg:z-10">
-                <TableRow>
-                  <SortableHead column="itm8" {...sorting}>
-                    ITM8
-                  </SortableHead>
-                  <SortableHead column="ean" {...sorting}>
-                    EAN
-                  </SortableHead>
-                  <SortableHead column="name" {...sorting} className="min-w-72">
-                    Nazwa
-                  </SortableHead>
-                  <SortableHead column="supplier" {...sorting}>
-                    Ostatni dostawca
-                  </SortableHead>
-                  <SortableHead column="delivery" {...sorting} className="whitespace-nowrap">
-                    Ostatnia dostawa
-                  </SortableHead>
-                  <SortableHead column="deliveries" align="right" {...sorting} className="whitespace-nowrap">
-                    {inPeriod ? 'Dostaw w okresie' : 'Dni z dostawą'}
-                  </SortableHead>
-                  <SortableHead column="stock" align="right" {...sorting}>
-                    Stan
-                  </SortableHead>
-                  <SortableHead column="pair" {...sorting} className="min-w-56 whitespace-nowrap">
-                    Podobny na plusie
-                  </SortableHead>
-                  <SortableHead column="value" align="right" {...sorting} className="whitespace-nowrap">
-                    Wartość stanu
-                  </SortableHead>
-                  <SortableHead column="sold" align="right" {...sorting} className="whitespace-nowrap">
-                    Sprzedaż 28 dni
-                  </SortableHead>
-                  <SortableHead column="gross" align="right" {...sorting} className="whitespace-nowrap">
-                    Brutto 28 dni
-                  </SortableHead>
-                  <SortableHead column="lastSale" {...sorting} className="whitespace-nowrap">
-                    Ostatnia sprzedaż
-                  </SortableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.slice(0, shown).map((item) => (
-                  <Fragment key={item.itm8}>
-                    <TableRow className={cn(open.has(item.itm8) && 'border-b-0 bg-muted/50')}>
-                      <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
-                      <TableCell className="tabular-nums">{item.ean ?? '–'}</TableCell>
-                      <TableCell className="whitespace-normal">
-                        <div className="flex items-center gap-1.5">
-                          <span className="min-w-0">
-                            {item.name}
-                            {item.brand && <span className="ml-1.5 text-muted-foreground">{item.brand}</span>}
-                          </span>
-                          {item.cadencier && (
-                            <span className="shrink-0 rounded-md bg-blue-200 px-1.5 text-xs font-medium text-blue-950 dark:bg-blue-500/30 dark:text-blue-100">
-                              cadencier
+        <>
+          <div className="mb-3 flex justify-end">
+            <AssignTaskButton
+              title={`Ujemne stany: sprawdź ${formatQuantity(items.length)} art.`}
+              items={() => items.map(negativeTaskItem)}
+              source={source}
+            >
+              Zleć wszystkie ({formatQuantity(items.length)})
+            </AssignTaskButton>
+          </div>
+          <Card className="overflow-clip p-0">
+            <div className="overflow-x-auto lg:overflow-x-visible">
+              <table className="w-full caption-bottom text-sm">
+                <TableHeader className="bg-card lg:sticky lg:top-14 lg:z-10">
+                  <TableRow>
+                    <TaskSelectHead selection={selection} keys={items.slice(0, shown).map((item) => item.itm8)} />
+                    <SortableHead column="itm8" {...sorting}>
+                      ITM8
+                    </SortableHead>
+                    <SortableHead column="ean" {...sorting}>
+                      EAN
+                    </SortableHead>
+                    <SortableHead column="name" {...sorting} className="min-w-72">
+                      Nazwa
+                    </SortableHead>
+                    <SortableHead column="supplier" {...sorting}>
+                      Ostatni dostawca
+                    </SortableHead>
+                    <SortableHead column="delivery" {...sorting} className="whitespace-nowrap">
+                      Ostatnia dostawa
+                    </SortableHead>
+                    <SortableHead column="deliveries" align="right" {...sorting} className="whitespace-nowrap">
+                      {inPeriod ? 'Dostaw w okresie' : 'Dni z dostawą'}
+                    </SortableHead>
+                    <SortableHead column="stock" align="right" {...sorting}>
+                      Stan
+                    </SortableHead>
+                    <SortableHead column="pair" {...sorting} className="min-w-56 whitespace-nowrap">
+                      Podobny na plusie
+                    </SortableHead>
+                    <SortableHead column="value" align="right" {...sorting} className="whitespace-nowrap">
+                      Wartość stanu
+                    </SortableHead>
+                    <SortableHead column="sold" align="right" {...sorting} className="whitespace-nowrap">
+                      Sprzedaż 28 dni
+                    </SortableHead>
+                    <SortableHead column="gross" align="right" {...sorting} className="whitespace-nowrap">
+                      Brutto 28 dni
+                    </SortableHead>
+                    <SortableHead column="lastSale" {...sorting} className="whitespace-nowrap">
+                      Ostatnia sprzedaż
+                    </SortableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.slice(0, shown).map((item) => (
+                    <Fragment key={item.itm8}>
+                      <TableRow className={cn(open.has(item.itm8) && 'border-b-0 bg-muted/50')}>
+                        <TaskSelectCell selection={selection} rowKey={item.itm8} label={item.name ?? item.itm8} />
+                        <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
+                        <TableCell className="tabular-nums">{item.ean ?? '–'}</TableCell>
+                        <TableCell className="whitespace-normal">
+                          <div className="flex items-center gap-1.5">
+                            <span className="min-w-0">
+                              {item.name}
+                              {item.brand && <span className="ml-1.5 text-muted-foreground">{item.brand}</span>}
                             </span>
-                          )}
-                          {!item.active && (
-                            <span className="shrink-0 rounded-md bg-zinc-200 px-1.5 text-xs font-medium text-zinc-900 dark:bg-zinc-600/40 dark:text-zinc-100">
-                              nieaktywny
-                            </span>
-                          )}
-                          <ArticleStatsButton
-                            article={{ itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand }}
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell
-                        className="max-w-56 truncate text-muted-foreground"
-                        title={item.supplierName ?? undefined}
-                      >
-                        {item.supplierCode ? `${item.supplierCode} ${item.supplierName ?? ''}` : '–'}
-                      </TableCell>
-                      <TableCell
-                        className="whitespace-nowrap text-muted-foreground tabular-nums"
-                        title={item.daysSinceDelivery != null ? daysAgo(item.daysSinceDelivery) : undefined}
-                      >
-                        {item.lastDeliveryDate ? (
-                          formatDocumentDate(item.lastDeliveryDate)
-                        ) : (
-                          <span className="rounded-md bg-amber-200 px-1.5 text-xs font-medium text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">
-                            nigdy
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatQuantity(inPeriod ? item.periodDeliveries : item.deliveryDays)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-red-700 tabular-nums dark:text-red-400">
-                        {formatQuantity(item.stock)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <PairButton item={item} open={open.has(item.itm8)} onToggle={() => toggle(item.itm8)} />
-                          {item.counterparts[0] && (
+                            {item.cadencier && (
+                              <span className="shrink-0 rounded-md bg-blue-200 px-1.5 text-xs font-medium text-blue-950 dark:bg-blue-500/30 dark:text-blue-100">
+                                cadencier
+                              </span>
+                            )}
+                            {!item.active && (
+                              <span className="shrink-0 rounded-md bg-zinc-200 px-1.5 text-xs font-medium text-zinc-900 dark:bg-zinc-600/40 dark:text-zinc-100">
+                                nieaktywny
+                              </span>
+                            )}
                             <ArticleStatsButton
-                              article={{
-                                itm8: item.counterparts[0].itm8,
-                                name: item.counterparts[0].name,
-                                ean: item.counterparts[0].ean,
-                                brand: item.counterparts[0].brand,
-                              }}
+                              article={{ itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand }}
                             />
+                          </div>
+                        </TableCell>
+                        <TableCell
+                          className="max-w-56 truncate text-muted-foreground"
+                          title={item.supplierName ?? undefined}
+                        >
+                          {item.supplierCode ? `${item.supplierCode} ${item.supplierName ?? ''}` : '–'}
+                        </TableCell>
+                        <TableCell
+                          className="whitespace-nowrap text-muted-foreground tabular-nums"
+                          title={item.daysSinceDelivery != null ? daysAgo(item.daysSinceDelivery) : undefined}
+                        >
+                          {item.lastDeliveryDate ? (
+                            formatDocumentDate(item.lastDeliveryDate)
+                          ) : (
+                            <span className="rounded-md bg-amber-200 px-1.5 text-xs font-medium text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">
+                              nigdy
+                            </span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{money(item.stockValue)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {item.soldQuantity > 0 ? formatQuantity(item.soldQuantity) : '–'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {item.soldGross !== 0 ? money(item.soldGross) : '–'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground tabular-nums">
-                        {item.lastSale ? formatDocumentDate(item.lastSale) : 'nigdy'}
-                      </TableCell>
-                    </TableRow>
-                    {open.has(item.itm8) && (
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableCell colSpan={12} className="px-4 pt-0 pb-3 whitespace-normal">
-                          <PairComparison storeId={storeId} item={item} />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatQuantity(inPeriod ? item.periodDeliveries : item.deliveryDays)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-red-700 tabular-nums dark:text-red-400">
+                          {formatQuantity(item.stock)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <PairButton item={item} open={open.has(item.itm8)} onToggle={() => toggle(item.itm8)} />
+                            {item.counterparts[0] && (
+                              <ArticleStatsButton
+                                article={{
+                                  itm8: item.counterparts[0].itm8,
+                                  name: item.counterparts[0].name,
+                                  ean: item.counterparts[0].ean,
+                                  brand: item.counterparts[0].brand,
+                                }}
+                              />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{money(item.stockValue)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {item.soldQuantity > 0 ? formatQuantity(item.soldQuantity) : '–'}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {item.soldGross !== 0 ? money(item.soldGross) : '–'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground tabular-nums">
+                          {item.lastSale ? formatDocumentDate(item.lastSale) : 'nigdy'}
                         </TableCell>
                       </TableRow>
-                    )}
-                  </Fragment>
-                ))}
-              </TableBody>
-            </table>
-          </div>
-          <div ref={loadMore} />
-        </Card>
+                      {open.has(item.itm8) && (
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableCell colSpan={selection.enabled ? 13 : 12} className="px-4 pt-0 pb-3 whitespace-normal">
+                            <PairComparison storeId={storeId} item={item} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  ))}
+                </TableBody>
+              </table>
+            </div>
+            <div ref={loadMore} />
+          </Card>
+          <TaskSelectionBar
+            selection={selection}
+            rows={items}
+            rowKey={(item) => item.itm8}
+            toItem={negativeTaskItem}
+            title="Ujemne stany: sprawdź zaznaczone artykuły"
+            source={source}
+          />
+        </>
       )}
     </>
   )
+}
+
+/** Pozycja zadania z danymi z chwili zlecenia: stan, wartość i sprzedaż. */
+function negativeTaskItem(item: NegativeStockItem): TaskItemDraft {
+  return {
+    itm8: item.itm8,
+    ean: item.ean,
+    name: [item.name, item.brand].filter(Boolean).join(' · ') || item.itm8,
+    details: `stan ${taskNumber(item.stock, 3)} · wartość ${taskMoney(item.stockValue)} · sprzedaż 28 dni ${taskNumber(item.soldQuantity, 3)}`,
+  }
 }
 
 const similarityLabel = (similarity: number) => `${Math.round(similarity * 100)}%`

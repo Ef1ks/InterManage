@@ -48,6 +48,8 @@ export type Me = {
   avatar: UserAvatar | null
   /** Po tylu minutach bez ruchu myszy i klawiatury konto się blokuje (wraca po PIN-ie), `null` = bez blokady. */
   idleLockMinutes: number | null
+  /** Konto zleca zadania: właściciel zawsze, inni po włączeniu przez właściciela (Ustawienia → Użytkownicy). */
+  canAssignTasks: boolean
 }
 
 export type UserBackground = {
@@ -157,6 +159,8 @@ export type User = {
   storeIds: string[]
   /** Stanowisko z panelu Pracownicy; to ono ustala rolę konta. */
   positionName: string | null
+  /** Właściciel włączył temu kontu zlecanie zadań (właściciel zleca zawsze). */
+  canAssignTasks: boolean
   createdAt: string
 }
 
@@ -394,6 +398,8 @@ export type UpdateUserRequest = {
   enabled: boolean
   newPassword?: string
   storeIds: string[]
+  /** Zlecanie zadań; brak = bez zmian. */
+  canAssignTasks?: boolean
 }
 
 /**
@@ -4923,3 +4929,82 @@ export type StoreEventFilters = {
   modules: { key: string; label: string }[]
   users: { id: string; name: string }[]
 }
+
+export type TaskPriority = 'NORMAL' | 'URGENT'
+export type TaskStatus = 'OPEN' | 'DONE' | 'ACCEPTED'
+
+export type TaskPerson = { id: string; displayName: string }
+
+/** Pozycja zadania: artykuł z danymi z chwili zlecenia, do odhaczenia. */
+export type TaskItem = {
+  id: string
+  itm8: string | null
+  ean: string | null
+  name: string
+  details: string | null
+  checked: boolean
+  checkedAt: string | null
+  checkedByName: string | null
+  note: string | null
+}
+
+/** Zadanie sklepu: {@code canManage} = zlecający (zmienia, przyjmuje), {@code canComplete} = wykonawca. */
+export type StoreTask = {
+  id: string
+  title: string
+  description: string | null
+  dueDate: string | null
+  priority: TaskPriority
+  status: TaskStatus
+  assignee: TaskPerson
+  createdBy: TaskPerson | null
+  createdAt: string
+  sourceKind: string | null
+  sourceLabel: string | null
+  /** Ścieżka widoku w aplikacji (z filtrami), z którego zadanie powstało. */
+  sourceUrl: string | null
+  doneBy: TaskPerson | null
+  doneAt: string | null
+  doneComment: string | null
+  acceptedAt: string | null
+  returnComment: string | null
+  items: TaskItem[]
+  /** Zrzuty ekranu i zdjęcia (z dorysowanymi oznaczeniami). */
+  attachments: TaskAttachment[]
+  itemCount: number
+  checkedCount: number
+  canManage: boolean
+  canComplete: boolean
+}
+
+/** Zrzut albo zdjęcie przy zadaniu; {@code canRemove}: zalogowany je dodał albo zarządza zadaniem. */
+export type TaskAttachment = {
+  id: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  createdAt: string
+  createdByName: string | null
+  canRemove: boolean
+}
+
+export type TaskEventKind =
+  | 'CREATED'
+  | 'EDITED'
+  | 'ITEM_CHECKED'
+  | 'ITEM_UNCHECKED'
+  | 'DONE'
+  | 'UNDONE'
+  | 'ACCEPTED'
+  | 'RETURNED'
+  | 'DELETED'
+  | 'RESTORED'
+  | 'ATTACHMENT_ADDED'
+  | 'ATTACHMENT_REMOVED'
+  | 'ATTACHMENT_RESTORED'
+
+export type TaskEvent = { id: string; kind: TaskEventKind; userName: string | null; at: string; comment: string | null }
+
+export type TaskAssignee = { id: string; displayName: string; roleName: string }
+
+export type TaskCounts = { open: number; waiting: number }

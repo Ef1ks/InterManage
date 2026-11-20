@@ -24,6 +24,8 @@ import { ChartButton, nomenclatureName, StatTile } from '@/features/sales/report
 import { lastCompleteDay, useReportParams } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { ZeroStockOrderDialog } from '@/features/sales/ZeroStockOrderDialog'
+import { AssignTaskButton } from '@/features/tasks/AssignTaskButton'
+import { taskMoney, taskNumber, useTaskSource } from '@/features/tasks/task-helpers'
 import { nextSort, type SortAccessors, sortRows, type SortState } from '@/lib/table-sort'
 import type { StockGapItem, StockGapKind } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
@@ -349,6 +351,7 @@ function Results({
   const usesCover = kind === 'RUNNING_OUT'
   const empty = items.length === 0
   const cadencierItems = items.filter((item) => item.cadencier)
+  const taskSource = useTaskSource('STOCK_GAPS', 'Braki towaru')
 
   return (
     <>
@@ -376,6 +379,25 @@ function Results({
           </div>
         )}
       </div>
+
+      {!empty && (
+        <div className="mb-3 flex justify-end">
+          <AssignTaskButton
+            title={`Braki towaru: sprawdź ${formatQuantity(items.length)} art.`}
+            items={() =>
+              items.map((item) => ({
+                itm8: item.itm8,
+                ean: item.ean,
+                name: [item.name, item.brand].filter(Boolean).join(' · ') || item.itm8,
+                details: `stan ${taskNumber(item.stock, 3)} · typowy tydzień ${taskNumber(item.typicalWeek, 1)} · marża tyg. ${taskMoney(item.weeklyMargin)}`,
+              }))
+            }
+            source={taskSource}
+          >
+            Zleć wszystkie ({formatQuantity(items.length)})
+          </AssignTaskButton>
+        </div>
+      )}
 
       {empty ? (
         <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">

@@ -46,6 +46,9 @@ import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { ApiError } from '@/lib/api'
 import { compareSupplierCodes } from '@/lib/supplier-order'
 import { nextSort, type SortAccessors, sortRows, type SortState } from '@/lib/table-sort'
+import type { TaskItemDraft } from '@/features/tasks/api'
+import { AssignTaskButton } from '@/features/tasks/AssignTaskButton'
+import { taskMoney, taskNumber, useTaskSource } from '@/features/tasks/task-helpers'
 import type { MissingAssortmentCategory, MissingAssortmentItem } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
@@ -361,6 +364,7 @@ function Results({
   const sorting = { sort, onSort }
   const chosen = items.filter((item) => selected.has(item.itm8))
   const supplierCount = new Set(items.map((item) => item.supplierCode)).size
+  const taskSource = useTaskSource('MISSING_ASSORTMENT', 'Brakujący asortyment')
   const toggle = (itm8: string) =>
     setSelected((current) => {
       const next = new Set(current)
@@ -389,6 +393,18 @@ function Results({
           detail="W cenach z kartoteki: tyle mniej więcej ucieka co tydzień"
         />
       </div>
+
+      {items.length > 0 && (
+        <div className="mb-3 flex justify-end">
+          <AssignTaskButton
+            title={`Brakujący asortyment: sprawdź ${formatQuantity(items.length)} art.`}
+            items={() => items.map(missingTaskItem)}
+            source={taskSource}
+          >
+            Zleć wszystkie ({formatQuantity(items.length)})
+          </AssignTaskButton>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
@@ -588,6 +604,11 @@ function Results({
                     Przenieś do kategorii
                   </Button>
                 }
+              />
+              <AssignTaskButton
+                title="Brakujący asortyment: sprawdź zaznaczone artykuły"
+                items={() => chosen.map(missingTaskItem)}
+                source={taskSource}
               />
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
                 <XIcon />
@@ -924,4 +945,20 @@ function CategoriesDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** Pozycja zadania z danymi z chwili zlecenia: dostawca, ostatni zakup i sprzedaż na stanie. */
+function missingTaskItem(item: MissingAssortmentItem): TaskItemDraft {
+  return {
+    itm8: item.itm8,
+    ean: item.ean,
+    name: [item.name, item.brand].filter(Boolean).join(' · ') || item.itm8,
+    details: [
+      item.supplierName ?? item.supplierCode,
+      `stan ${taskNumber(item.stock, 3)}`,
+      item.weeklyValue != null ? `sprzedaż tyg. ${taskMoney(item.weeklyValue)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }
 }

@@ -54,6 +54,7 @@ public class UserService {
             positions.put((UUID) row[0], (String) row[1]);
         }
         return users.findAllWithRole().stream()
+                .filter(user -> user.getDeletedAt() == null)
                 .map(user -> userMapper.toResponse(user, positions.get(user.getId())))
                 .toList();
     }
@@ -134,11 +135,53 @@ public class UserService {
         if (request.storeIds() != null) {
             user.setStores(Set.copyOf(storeService.loadAll(request.storeIds())));
         }
+        if (request.canAssignTasks() != null) {
+            user.setCanAssignTasks(request.canAssignTasks());
+        }
         if (request.newPassword() != null && !request.newPassword().isBlank()) {
             user.resetPassword(passwordEncoder.encode(request.newPassword()));
             activationService.revokeLinks(user);
         }
         return userMapper.toResponse(user, position);
+    }
+
+    /**
+     * Usunięcie konta przez właściciela: znacznik, blokada i wylogowanie, a konto znika z listy. Login zostaje zajęty,
+     * adres e-mail się zwalnia. Nie usuwa się siebie, ostatniego aktywnego właściciela ani osoby, która pracuje
+     * (najpierw koniec pracy w Pracownikach, bo grafik i czas pracy liczą się dalej).
+     */
+    @Transactional
+    public void delete(UUID id, UUID byUserId) {
+        AppUser user = users.findWithRoleById(id).orElseThrow(() -> ApiException.notFound("Nie znaleziono użytkownika"));
+        if (user.getDeletedAt() != null) {
+            return;
+        }
+        if (user.getId().equals(byUserId)) {
+            throw ApiException.conflict("Nie możesz usunąć własnego konta");
+        }
+        if (user.getRole().isOwner() && user.isEnabled() && users.countOtherActiveOwners(user.getId()) == 0) {
+            throw ApiException.conflict("Musi pozostać co najmniej jeden aktywny właściciel");
+        }
+        String position = positionName(user.getId());
+        if (position != null) {
+            throw ApiException.conflict("To konto pracuje na stanowisku „" + position
+                    + "”. Najpierw zakończ jego pracę w Pracownikach.");
+        }
+        user.markDeleted(byUserId);
+        activationService.revokeLinks(user);
+    }
+
+    @Transactional
+    public UserResponse restore(UUID id) {
+        AppUser user = users.findWithRoleById(id).orElseThrow(() -> ApiException.notFound("Nie znaleziono użytkownika"));
+        if (user.getDeletedAt() != null) {
+            String email = AppUser.normalizeEmail(user.getEmail());
+            if (email != null && users.existsByEmailExcluding(email, user.getId())) {
+                throw ApiException.conflict("Adres " + email + " ma już inne konto. Zmień go tam, żeby przywrócić to.");
+            }
+            user.restoreDeleted();
+        }
+        return userMapper.toResponse(user, positionName(user.getId()));
     }
 
     /** Imię i nazwisko oraz adres e-mail konta. */

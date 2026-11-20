@@ -42,6 +42,9 @@ import {
   useComparisonSettings,
 } from '@/features/sales/SalesBasket'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
+import type { TaskItemDraft } from '@/features/tasks/api'
+import { taskMoney, taskNumber, useTaskPicks, useTaskSource, type TaskPicks } from '@/features/tasks/task-helpers'
+import { TaskPickBox, TaskPicksBar } from '@/features/tasks/task-selection'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { NomenclatureNav, type NomenclatureNavItem } from '@/features/sales/NomenclatureNav'
 import { salesPaths } from '@/features/sales/paths'
@@ -480,6 +483,10 @@ type Tree = {
   /** Po wczytaniu poziomu przeliczamy przypięte wiersze i ściągę (zmieniła się tabela). */
   onLevelLoaded: () => void
   openChart: (target: SalesChartTarget) => void
+  /** Zaznaczanie wierszy do zadania (rejony, rodziny, podrodziny i artykuły). */
+  picks: TaskPicks
+  /** Nazwa okresu porównania do opisu pozycji zadania („rok temu”). */
+  compareLabel: string
 }
 
 const TreeContext = createContext<Tree | null>(null)
@@ -534,6 +541,11 @@ function Comparison({
     compareStore,
   )
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
+  const picks = useTaskPicks()
+  const taskSource = useTaskSource(
+    deli ? 'DELI_COSTS' : 'SALES_COMPARISON',
+    deli ? 'Koszty garmażu' : 'Porównanie sprzedaży',
+  )
   const [basketArticle, setBasketArticle] = useState<BasketArticle | null>(null)
   const { sort } = useComparisonSettings()
   const queryClient = useQueryClient()
@@ -681,8 +693,26 @@ function Comparison({
       toggle,
       onLevelLoaded,
       openChart: setChart,
+      picks,
+      compareLabel: COMPARE_LABELS[compare].inline,
     }),
-    [storeId, kind, periods, filter, basis, view, groups, changeFilter, sort, deli, expanded, toggle, onLevelLoaded],
+    [
+      storeId,
+      kind,
+      periods,
+      filter,
+      basis,
+      view,
+      groups,
+      changeFilter,
+      sort,
+      deli,
+      expanded,
+      toggle,
+      onLevelLoaded,
+      picks,
+      compare,
+    ],
   )
 
   if (isError && !data) {
@@ -930,6 +960,7 @@ function Comparison({
         onClose={() => setChart(null)}
       />
       <AddToBasketDialog storeId={storeId} article={basketArticle} onClose={() => setBasketArticle(null)} />
+      <TaskPicksBar picks={picks} title={deli ? 'Sprawdź koszty garmażu' : 'Sprawdź sprzedaż'} source={taskSource} />
     </div>
   )
 }
@@ -1015,6 +1046,8 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
     toggle,
     onLevelLoaded,
     openChart,
+    picks,
+    compareLabel,
   } = useTree()
   const { data, isPending, isError, refetch } = useSalesComparison(
     storeId,
@@ -1115,6 +1148,12 @@ function LevelRows({ parent, unassigned = false, ancestors }: LevelProps) {
               />
             ))}
             <div className="flex items-start gap-1">
+              <TaskPickBox
+                picks={picks}
+                pickKey={`${level}:${key}`}
+                item={() => comparisonTaskItem(row, level, basis, compareLabel)}
+                label={level === 'PRODUCT' ? (row.name ?? row.code) : (displayName(row) ?? row.code)}
+              />
               {expandable ? (
                 <button
                   type="button"
@@ -1232,6 +1271,42 @@ const indent = (depth: number) => `${1 + depth * 1.25}rem`
 
 /** Nazwa bez kodu z systemu sklepu: rejony mają nazwy z kodem ("01_DELIKATESY"), a kod i tak stoi obok. */
 const displayName = (row: SalesComparisonRow) => (row.name ? nomenclatureName(row.name) : null)
+
+/** Pozycja zadania z wiersza porównania: artykuł albo pozycja nomenklatury z liczbami z chwili zaznaczenia. */
+function comparisonTaskItem(
+  row: SalesComparisonRow,
+  level: SalesComparisonLevel,
+  basis: SaleBasis,
+  compareLabel: string,
+): TaskItemDraft {
+  const now = saleValue(row.current, basis)
+  const before = saleValue(row.previous, basis)
+  const change =
+    before !== 0 ? `${now >= before ? '+' : ''}${taskNumber(((now - before) / Math.abs(before)) * 100, 1)}%` : null
+  const margin = marginPercent(row.current)
+  const details = [
+    `sprzedaż ${taskMoney(now)}`,
+    `${compareLabel} ${taskMoney(before)}`,
+    change ? `zmiana ${change}` : null,
+    `ilość ${taskNumber(row.current.quantity, 2)}`,
+    margin !== null ? `marża ${taskNumber(margin, 1)}%` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  if (level === 'PRODUCT') {
+    return {
+      itm8: row.code,
+      ean: row.ean ?? null,
+      name: [row.name ?? 'Brak w kartotece', row.brand].filter(Boolean).join(' · '),
+      details,
+    }
+  }
+  const name =
+    row.code === ''
+      ? 'Bez nomenklatury'
+      : `${displayCode(row.code)} ${displayName(row) ?? 'Brak nazwy w nomenklaturze'}`
+  return { itm8: null, ean: null, name, details }
+}
 
 function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesComparisonLevel }) {
   if (level === 'PRODUCT') {

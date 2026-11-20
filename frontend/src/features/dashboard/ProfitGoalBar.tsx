@@ -14,7 +14,7 @@ const money = (value: number) => `${whole.format(value)} zł`
  * Pasek na całą szerokość panelu wyników: marża po odliczeniu likwidacji od 1 stycznia do ostatniego dnia ze sprzedażą
  * wobec rocznego celu z ustawień Podsumowania sprzedaży i strat. Kreska to plan na ten dzień (cel rozłożony równo na
  * dni roku, jak w kafelkach podsumowania). Nad paskiem po kolei: osiągnięta marża, cel roku, plan na ten dzień i o ile
- * sklep jest przed albo za planem.
+ * sklep jest przed planem albo ile brakuje do planu.
  */
 export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; lastSaleDate: string }) {
   const canSetGoal = useCan('SALES', 'EDIT')
@@ -61,7 +61,7 @@ export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; last
               : 'bg-amber-200 text-amber-950 dark:bg-amber-950/60 dark:text-amber-100',
           )}
         >
-          {ahead ? `${money(difference)} przed planem` : `${money(-difference)} za planem`}
+          {ahead ? `${money(difference)} przed planem` : `${money(-difference)} do planu`}
         </span>
       </div>
       <div

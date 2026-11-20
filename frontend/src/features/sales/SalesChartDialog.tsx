@@ -17,6 +17,7 @@ import { meaDocumentPath } from '@/features/mea/paths'
 import { PriceMarkdownButton } from '@/features/inventory/PriceMarkdownDialog'
 import { ArticleCodeFields, ArticleCodesCard } from '@/features/sales/ArticleCodes'
 import { ArticleUpcomingMea } from '@/features/sales/ArticleUpcomingMea'
+import { ArticleTaskButton } from '@/features/tasks/ArticleTaskButton'
 import {
   type ReportKind,
   type SalesChartTarget,
@@ -346,7 +347,10 @@ function ChartBody({
             )}
             {codeFields && <div className="mt-1">{codeFields}</div>}
           </div>
-          {article.data?.cadencier && <CadencierBadge />}
+          <div className="flex items-start gap-2">
+            {target.kind === 'article' && <ArticleTaskButton target={target} article={article.data ?? null} />}
+            {article.data?.cadencier && <CadencierBadge />}
+          </div>
         </div>
       ) : (
         <DialogHeader className="pr-8">
@@ -356,7 +360,10 @@ function ChartBody({
               <DialogDescription>{subtitle(target, article.data) || 'Statystyki artykułu'}</DialogDescription>
               {codeFields && <div className="pt-1">{codeFields}</div>}
             </div>
-            {article.data?.cadencier && <CadencierBadge />}
+            <div className="flex items-start gap-2">
+              {target.kind === 'article' && <ArticleTaskButton target={target} article={article.data ?? null} />}
+              {article.data?.cadencier && <CadencierBadge />}
+            </div>
           </div>
         </DialogHeader>
       )}

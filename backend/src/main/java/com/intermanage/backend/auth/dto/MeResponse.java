@@ -30,5 +30,7 @@ public record MeResponse(
          * Po tylu minutach bez ruchu myszy i klawiatury przeglądarka blokuje konto ({@code POST /api/auth/lock}),
          * {@code null} = konto bez blokady (PIN wyłączony przez właściciela konta albo blokada wyłączona).
          */
-        Integer idleLockMinutes) {
+        Integer idleLockMinutes,
+        /** Konto zleca zadania (właściciel albo włączone przez niego zlecanie). */
+        boolean canAssignTasks) {
 }

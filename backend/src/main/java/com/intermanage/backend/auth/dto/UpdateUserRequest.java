@@ -18,5 +18,7 @@ public record UpdateUserRequest(
         boolean enabled,
         @Size(min = 8, max = 72, message = "Hasło musi mieć od 8 do 72 znaków") String newPassword,
         /** {@code null} = bez zmian, pusta lista = odbiera dostęp do wszystkich sklepów. */
-        List<UUID> storeIds) {
+        List<UUID> storeIds,
+        /** Zlecanie zadań; {@code null} = bez zmian. */
+        Boolean canAssignTasks) {
 }

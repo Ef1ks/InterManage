@@ -40,7 +40,8 @@ import { AgentStatusDot } from '@/features/store-agent/AgentStatusDot'
 import { useLiveEvents } from '@/features/store-agent/use-live-events'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
-import { useCurrentStore } from '@/features/stores/current-store'
+import { useCurrentStore, useStoreFromAddress } from '@/features/stores/current-store'
+import { QuickTaskButton } from '@/features/tasks/QuickTaskButton'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { useCheckboxDragSelect } from '@/lib/use-checkbox-drag-select'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
@@ -124,6 +125,8 @@ export function AppLayout() {
 
   // Przeciągnięcie myszą po polach wyboru zaznacza albo odznacza wiele wierszy naraz (cała aplikacja, też okna).
   useCheckboxDragSelect()
+  // Odnośnik z `?w_sklepie=` (np. miejsce zlecenia zadania) przełącza na swój sklep.
+  useStoreFromAddress()
 
   return (
     // Szerokie strony (data-wide-page) zwijają menu do paska z ikonami (wariant rail); rozwinięte wysuwa się nad treść.
@@ -183,6 +186,7 @@ export function AppLayout() {
             w adresie (ta sama ścieżka) nie przerzuca strony na górę. */}
         <ScrollRestoration getKey={(location) => location.pathname} />
       </div>
+      <QuickTaskButton />
     </div>
   )
 }

@@ -104,6 +104,7 @@ function Navigator() {
             <Stack.Screen name="article/[itm8]" options={{ title: 'Artykuł' }} />
             <Stack.Screen name="schedule" options={{ title: 'Mój grafik' }} />
             <Stack.Screen name="requests" options={{ title: 'Wnioski' }} />
+            <Stack.Screen name="tasks" options={{ title: 'Zadania' }} />
             <Stack.Screen
               name="request-new"
               options={{

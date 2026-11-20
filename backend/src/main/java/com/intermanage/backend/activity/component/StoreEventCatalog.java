@@ -38,7 +38,7 @@ public final class StoreEventCatalog {
             Map.entry("file-locations", "store-settings"), Map.entry("proto-settings", "store-settings"),
             Map.entry("nomenclature-margins", "store-settings"), Map.entry("price-rounding", "store-settings"),
             Map.entry("supplier-sale-prices", "store-settings"),
-            Map.entry("file-queue", "files"));
+            Map.entry("file-queue", "files"), Map.entry("tasks", "tasks"));
 
     static {
         MODULES.put("documents", "Dokumenty");
@@ -58,6 +58,7 @@ public final class StoreEventCatalog {
         MODULES.put("suppliers", "Dostawcy");
         MODULES.put("store-settings", "Ustawienia sklepu");
         MODULES.put("files", "Kolejka plików");
+        MODULES.put("tasks", "Zadania");
         MODULES.put("company", "Ustawienia firmy");
         MODULES.put("system", "System");
         MODULES.put("other", "Inne");
@@ -77,7 +78,9 @@ public final class StoreEventCatalog {
             Map.entry("delete", "Usunięcie"), Map.entry("remove", "Usunięcie"), Map.entry("auto", "Automatyczne"),
             Map.entry("paste", "Wklejenie"), Map.entry("position", "Zmiana kolejności"),
             Map.entry("loaded", "Oznaczenie wgrania"), Map.entry("invite", "Zaproszenie"),
-            Map.entry("link", "Podłączenie"), Map.entry("share", "Udostępnienie"));
+            Map.entry("link", "Podłączenie"), Map.entry("share", "Udostępnienie"),
+            Map.entry("done", "Oznaczenie wykonania"), Map.entry("undone", "Cofnięcie wykonania"),
+            Map.entry("return", "Odesłanie do poprawy"));
 
     /** Człony, które nic nie mówią o przedmiocie (sposób wysyłki, wersja API). */
     private static final List<String> NOISE = List.of("uploads", "jobs", "file", "export", "settings");
@@ -85,6 +88,7 @@ public final class StoreEventCatalog {
     /** Przedmiot zmiany: człon ścieżki → rzeczownik. */
     private static final Map<String, String> OBJECTS = Map.ofEntries(
             Map.entry("documents", "dokument"), Map.entry("corrections", "korekta przyjęcia"),
+            Map.entry("tasks", "zadanie"), Map.entry("attachments", "zrzut przy zadaniu"),
             Map.entry("ksef-invoices", "faktura KSeF przy dokumencie"), Map.entry("manual-invoices", "faktura spoza KSeF"),
             Map.entry("gratis", "gratis"), Map.entry("error", "oznaczenie błędu przyjęcia"),
             Map.entry("supplier-document-number", "numer dokumentu dostawcy"),

@@ -251,6 +251,46 @@ class AuthAndRolesIntegrationTests {
     }
 
     @Test
+    void ownerDeletesUserAndRestoresIt() throws Exception {
+        Cookie owner = login(OWNER, OWNER_PASSWORD);
+        String roleId = createRole(owner, "{}");
+        String username = createUser(owner, roleId);
+        String userId = userId(owner, username);
+        Cookie employee = login(username, "haslo-pracownika");
+
+        mvc.perform(delete("/api/settings/users/" + userId).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/auth/me").cookie(employee)).andExpect(status().isUnauthorized());
+        mvc.perform(loginRequest(username, "haslo-pracownika")).andExpect(status().isUnauthorized());
+        String list = mvc.perform(get("/api/settings/users").cookie(owner)).andReturn().getResponse()
+                .getContentAsString();
+        assertThat(list).doesNotContain(username);
+
+        // Adres usuniętego konta jest wolny, ale wtedy przywrócenie się nie uda, dopóki go nie zwolnimy.
+        mvc.perform(post("/api/settings/users").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "x\",\"displayName\":\"Jan\",\"email\":\""
+                                + emailOf(username) + "\",\"roleId\":\"" + roleId + "\",\"storeIds\":[\""
+                                + defaultStore(owner) + "\"]}"))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/settings/users/" + userId + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isConflict());
+        String otherId = userId(owner, username + "x");
+        mvc.perform(delete("/api/settings/users/" + otherId).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/settings/users/" + userId + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true));
+        login(username, "haslo-pracownika");
+
+        // Siebie właściciel nie usunie.
+        String ownerId = userId(owner, OWNER);
+        mvc.perform(delete("/api/settings/users/" + ownerId).cookie(owner).with(csrf()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void passwordResetByOwnerEndsOldSessions() throws Exception {
         Cookie owner = login(OWNER, OWNER_PASSWORD);
         String roleId = createRole(owner, "{}");

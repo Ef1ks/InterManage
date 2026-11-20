@@ -73,6 +73,23 @@ export function useResendActivationLink() {
   })
 }
 
+/** Usunięcie konta (znacznik: konto jest zablokowane i znika z listy); „Przywróć” oddaje je jak było. */
+export function useDeleteUser() {
+  const invalidate = useInvalidateSettings()
+  return useMutation({
+    mutationFn: (id: string) => api(`/settings/users/${id}`, { method: 'DELETE' }),
+    onSuccess: invalidate,
+  })
+}
+
+export function useRestoreUser() {
+  const invalidate = useInvalidateSettings()
+  return useMutation({
+    mutationFn: (id: string) => api<User>(`/settings/users/${id}/restore`, { method: 'POST' }),
+    onSuccess: invalidate,
+  })
+}
+
 export function useUpdateUser() {
   const invalidate = useInvalidateSettings()
   return useMutation({
