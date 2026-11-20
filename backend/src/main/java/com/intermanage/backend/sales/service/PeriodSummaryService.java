@@ -96,6 +96,7 @@ public class PeriodSummaryService {
         documentLines.sumByRegion(storeId, List.of(DocumentType.PL.name()), from, to)
                 .forEach(row -> byRegion.merge(row.getRegionCode(), new Sums(BigDecimal.ZERO, BigDecimal.ZERO,
                         BigDecimal.ZERO, BigDecimal.ZERO, row.getPurchaseValue().negate()), Sums::plus));
+        byRegion.keySet().removeAll(RegionGroups.EXCLUDED_FROM_REPORTS);
         byRegion.values().removeIf(Sums::empty);
 
         Map<String, String> names = regionNames(storeId);

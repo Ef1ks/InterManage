@@ -202,6 +202,68 @@ class SalesReportIntegrationTests {
     }
 
     @Test
+    void marksArticlesThatWereInLeafletInEitherPeriod() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 2, 2, 0, 0, 0) returning id""", String.class, storeId);
+        String inLeaflet = insertProduct(storeId, productImport, "KAWA MIELONA", "01 01 01");
+        String plain = insertProduct(storeId, productImport, "HERBATA", "01 01 01");
+        String salesImport = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', timestamp '2026-10-03 07:15:00', date '2026-09-01',
+                    date '2026-10-02', 2, 2, 0, 0) returning id""", String.class, storeId);
+        insertSale(storeId, salesImport, "2026-10-01", inLeaflet, null, "5", "10", "27", "2", "15");
+        insertSale(storeId, salesImport, "2026-09-29", plain, null, "1", "2", "5.4", "0.4", "3");
+
+        // MEA po ITM8 równoległym w aktualnym okresie, druga po EAN-ie w okresie porównania, trzecia poza okresami.
+        String current = insertMea("2026-09-30", "2026-10-06", "GAZETKA 40");
+        jdbc.update("""
+                insert into mea_document_lines (document_id, lp, mea_itm8, parallel_itm8, name)
+                values (?::uuid, 1, '61999001', ?, 'KAWA')""", current, inLeaflet.replaceFirst("^0+", ""));
+        String previous = insertMea("2026-09-20", "2026-09-29", "GAZETKA 39");
+        jdbc.update("""
+                insert into mea_document_lines (document_id, lp, mea_itm8, ean, name)
+                values (?::uuid, 1, '61999002', ?, 'KAWA')""", previous, "59" + inLeaflet.substring(2));
+        String later = insertMea("2026-11-01", "2026-11-07", "GAZETKA 45");
+        jdbc.update("""
+                insert into mea_document_lines (document_id, lp, mea_itm8, parallel_itm8, name)
+                values (?::uuid, 1, '61999003', ?, 'KAWA')""", later, inLeaflet.replaceFirst("^0+", ""));
+
+        mvc.perform(get(comparisonUrl(storeId) + "&parent=010101").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rows[0].code").value(inLeaflet))
+                .andExpect(jsonPath("$.rows[1].code").value(plain))
+                .andExpect(jsonPath("$.rows[%d].leaflets.length()".formatted(0)).value(2))
+                .andExpect(jsonPath("$.rows[%d].leaflets[0].title".formatted(0))
+                        .value("GAZETKA 39"))
+                .andExpect(jsonPath("$.rows[%d].leaflets[0].previous".formatted(0))
+                        .value(true))
+                .andExpect(jsonPath("$.rows[%d].leaflets[0].current".formatted(0))
+                        .value(false))
+                .andExpect(jsonPath("$.rows[%d].leaflets[1].title".formatted(0))
+                        .value("GAZETKA 40"))
+                .andExpect(jsonPath("$.rows[%d].leaflets[1].current".formatted(0))
+                        .value(true))
+                .andExpect(jsonPath("$.rows[%d].leaflets.length()".formatted(1)).value(0));
+        // Nomenklatura nie dostaje gazetek.
+        mvc.perform(get(comparisonUrl(storeId) + "&parent=").cookie(owner))
+                .andExpect(jsonPath("$.rows[0].leaflets.length()").value(0));
+    }
+
+    private String insertMea(String from, String to, String title) {
+        String number = String.valueOf(ThreadLocalRandom.current().nextInt(10_000_000, 99_999_999));
+        return jdbc.queryForObject("""
+                insert into mea_documents (number, title, promo_from, promo_to, file_path, line_count, fetched_at,
+                    attempts)
+                values (?, ?, ?::date, ?::date, 'x.xls', 1, now(), 1) returning id""", String.class, number, title,
+                from, to);
+    }
+
+    @Test
     void monthlySumsGiveSameTotalsAsDailySales() throws Exception {
         Cookie owner = login();
         String storeId = createStore(owner);

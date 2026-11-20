@@ -72,6 +72,7 @@ import {
 } from '@/features/sales/periods'
 import { marginShare } from '@/lib/margin'
 import type {
+  ArticleLeafletMark,
   CounterStoreOption,
   SalesComparison,
   SalesComparisonLevel,
@@ -1223,14 +1224,20 @@ const saleChange = (row: SalesComparisonRow, basis: SaleBasis) =>
   saleValue(row.current, basis) - saleValue(row.previous, basis)
 
 /**
- * Wiersze poziomu po filtrze zmiany sprzedaży i w kolejności z ustawień raportu: najpierw największe spadki albo
+ * Wiersze poziomu po filtrze zmiany sprzedaży (kwota albo ilość) i w kolejności z ustawień raportu: najpierw największe spadki albo
  * wzrosty w zł; „Bez nomenklatury” zostaje na końcu jak w raporcie z serwera.
  */
 function arrangeRows(rows: SalesComparisonRow[], basis: SaleBasis, changeFilter: ChangeFilter, sort: ComparisonSort) {
+  // Spadek albo wzrost sprzedaży w zł lub ilości: wystarczy jedno z nich.
+  const quantityChange = (row: SalesComparisonRow) => row.current.quantity - row.previous.quantity
   const filtered =
     changeFilter === 'all'
       ? rows
-      : rows.filter((row) => (changeFilter === 'decline' ? saleChange(row, basis) < 0 : saleChange(row, basis) > 0))
+      : rows.filter((row) =>
+          changeFilter === 'decline'
+            ? saleChange(row, basis) < 0 || quantityChange(row) < 0
+            : saleChange(row, basis) > 0 || quantityChange(row) > 0,
+        )
   if (sort === 'default') return filtered
   const direction = sort === 'decline' ? 1 : -1
   return [...filtered].sort((a, b) => {
@@ -1308,6 +1315,49 @@ function comparisonTaskItem(
   return { itm8: null, ean: null, name, details }
 }
 
+const leafletDate = (value: string) => `${value.slice(8, 10)}.${value.slice(5, 7)}`
+
+/** Opis gazetki do podpowiedzi: „MEA 80662 GAZETKA 14 KANWA · 31.03-07.04.2026”. */
+function leafletLine(leaflet: ArticleLeafletMark) {
+  const name = leaflet.number ? `MEA ${leaflet.number}${leaflet.title ? ` ${leaflet.title}` : ''}` : 'Gazetka sklepu'
+  return `${name} · ${leafletDate(leaflet.from)}-${leafletDate(leaflet.to)}.${leaflet.to.slice(0, 4)}`
+}
+
+/**
+ * Plakietki pod nazwą artykułu: był w gazetce w okresie aktualnym (niebieska, jak słupek „teraz” na pulpicie)
+ * albo w okresie porównania (bursztynowa), bo wtedy zmiana sprzedaży mówi głównie o promocji.
+ */
+function LeafletBadges({ leaflets }: { leaflets: ArticleLeafletMark[] }) {
+  // Przypięte wiersze stoją poza drzewem, ale to zawsze grupy, nie artykuły.
+  const compareLabel = useContext(TreeContext)?.compareLabel ?? 'porównywany'
+  const previousLabel = compareLabel === 'porównywany' ? 'w okresie porównania' : compareLabel
+  const current = leaflets.filter((leaflet) => leaflet.current)
+  const previous = leaflets.filter((leaflet) => leaflet.previous)
+  if (current.length === 0 && previous.length === 0) return null
+  const badge = 'inline-flex items-center rounded-md px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-none'
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {current.length > 0 && (
+        <span
+          className={cn(badge, 'bg-blue-200 text-blue-950 dark:bg-blue-900/70 dark:text-blue-100')}
+          title={current.map(leafletLine).join('\n')}
+        >
+          gazetka teraz{current.length > 1 ? ` ×${current.length}` : ''}
+        </span>
+      )}
+      {previous.length > 0 && (
+        <span
+          className={cn(badge, 'bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-100')}
+          title={previous.map(leafletLine).join('\n')}
+        >
+          gazetka {previousLabel}
+          {previous.length > 1 ? ` ×${previous.length}` : ''}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesComparisonLevel }) {
   if (level === 'PRODUCT') {
     const details = [`ITM8 ${row.code}`, row.ean && `EAN ${row.ean}`, row.brand].filter(Boolean).join(' · ')
@@ -1315,6 +1365,7 @@ function RowLabel({ row, level }: { row: SalesComparisonRow; level: SalesCompari
       <span className="min-w-0">
         <span className={cn('block', !row.name && 'text-muted-foreground')}>{row.name ?? 'Brak w kartotece'}</span>
         <span className="block text-xs text-muted-foreground">{details}</span>
+        <LeafletBadges leaflets={row.leaflets ?? []} />
       </span>
     )
   }
@@ -1370,7 +1421,7 @@ function FigureCells({
       />
     )
   }
-  const valueClass = cn('text-right', strong && 'font-medium')
+  const valueClass = cn('text-right text-base', strong ? 'font-bold' : 'font-semibold')
   const previousClass = 'border-l text-right text-muted-foreground'
   return (
     <>
@@ -1806,7 +1857,7 @@ function StoreFigureCells({
   basis: SaleBasis
   strong?: boolean
 }) {
-  const valueClass = cn('text-right', strong && 'font-medium')
+  const valueClass = cn('text-right text-base', strong ? 'font-bold' : 'font-semibold')
   const previousClass = 'border-l text-right text-muted-foreground'
   const small = smallGrowth(previous.quantity, current.quantity)
   const moreQuantity = other.quantity > current.quantity

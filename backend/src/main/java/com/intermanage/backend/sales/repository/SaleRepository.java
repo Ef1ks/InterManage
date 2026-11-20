@@ -112,6 +112,15 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             """;
 
     /**
+     * Artykuł {@code p} liczony w raportach sprzedaży: bez rejonów 90 i 91 (opakowania zwrotne, materiały promocyjne),
+     * {@link com.intermanage.backend.sales.component.RegionGroups#EXCLUDED_FROM_REPORTS}. Sprzedaż bez nomenklatury
+     * zostaje.
+     */
+    String COUNTED = """
+            (p.subfamily_code is null or left(p.subfamily_code, 2) not in ('90', '91'))
+            """;
+
+    /**
      * Pełne miesiące okresów: {@code pf} (włącznie) do {@code pt} (bez) dla poprzedniego okresu, {@code cf}..{@code ct}
      * dla aktualnego. Pierwszy pełny miesiąc to miesiąc dnia "od", gdy wypada 1., inaczej następny; koniec to
      * pierwszy dzień miesiąca po dniu "do". Okres krótszy niż miesiąc nie ma pełnych miesięcy ({@code pf >= pt}).
@@ -221,6 +230,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                 from article a
                 left join products p on p.store_id = :storeId and p.itm8 = a.itm8
                 where """ + IN_CODES + """
+                  and """ + COUNTED + """
             )
             """;
 
@@ -362,6 +372,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
               and case when :unassigned then p.subfamily_code is null
                        else :prefix = '' or p.subfamily_code like :prefix || '%' end
               and """ + IN_CODES + """
+              and """ + COUNTED + """
             group by s.sale_date
             order by s.sale_date
             """, nativeQuery = true)
@@ -448,6 +459,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                    sum(a.sale_value_net) as sale_value_net, sum(a.margin_value) as margin_value
             from article a
             left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+            where """ + COUNTED + """
             group by 1
             """, nativeQuery = true)
     List<RegionSales> sumByRegion(UUID storeId, LocalDate from, LocalDate to);
@@ -480,6 +492,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                    a.sale_value_net, a.margin_value
             from article a
             left join products p on p.store_id = :storeId and p.itm8 = a.itm8
+            where """ + COUNTED + """
             """;
 
     /** Przelicza ceny artykułów ({@code sales_month_prices}) w miesiącach, których dotyczy okres. */
@@ -508,7 +521,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
 
     /** Sprzedaż w okresie artykułów bez nomenklatury, także spoza kartoteki. */
     @Query(value = STORE_PERIOD_ARTICLES + PERIOD_ARTICLE_ROWS + """
-            where p.subfamily_code is null
+            and p.subfamily_code is null
             """, nativeQuery = true)
     List<ArticleSales> sumUnassignedArticles(UUID storeId, LocalDate from, LocalDate to);
 
@@ -570,6 +583,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             from sales_monthly m
             left join products p on p.store_id = :storeId and p.itm8 = m.itm8
             where m.store_id = :storeId and m.month between :from and :to
+              and """ + COUNTED + """
             group by 1, 2
             """, nativeQuery = true)
     List<MonthRegionSales> sumGrossByMonthAndRegion(UUID storeId, LocalDate from, LocalDate to);

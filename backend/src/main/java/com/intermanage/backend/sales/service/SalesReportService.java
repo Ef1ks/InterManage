@@ -34,6 +34,7 @@ import com.intermanage.backend.product.repository.ProductRepository;
 import com.intermanage.backend.mea.entity.MeaDocument;
 import com.intermanage.backend.mea.repository.MeaDocumentRepository;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
+import com.intermanage.backend.sales.dto.ArticleLeafletMark;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.ArticleRowsPage;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
@@ -146,12 +147,58 @@ public class SalesReportService {
             rows = withOther(rows, theirs, level);
             otherTotal = rows.stream().map(SalesComparisonRow::other).reduce(SalesFigures.ZERO, SalesFigures::plus);
         }
+        if (level == Level.PRODUCT) {
+            rows = withLeaflets(storeId, rows, previousFrom, previousTo, currentFrom, currentTo);
+        }
         SalesFigures previousTotal = rows.stream().map(SalesComparisonRow::previous)
                 .reduce(SalesFigures.ZERO, SalesFigures::plus);
         SalesFigures currentTotal = rows.stream().map(SalesComparisonRow::current)
                 .reduce(SalesFigures.ZERO, SalesFigures::plus);
         return new SalesComparisonResponse(previousFrom, previousTo, currentFrom, currentTo,
                 unassigned ? null : code, level, rows, previousTotal, currentTotal, otherTotal);
+    }
+
+    /**
+     * Artykuły z gazetkami (MEA i gazetki sklepu), które nachodzą na okres porównania albo aktualny. Gazetka sklepu
+     * z tym samym okresem co MEA artykułu to zwykle ta sama promocja (plik ma NR MEA), więc zostaje tylko MEA.
+     */
+    private List<SalesComparisonRow> withLeaflets(UUID storeId, List<SalesComparisonRow> rows,
+            LocalDate previousFrom, LocalDate previousTo, LocalDate currentFrom, LocalDate currentTo) {
+        String[] itm8s = rows.stream().map(SalesComparisonRow::code).filter(code -> !code.isEmpty()).distinct()
+                .toArray(String[]::new);
+        if (itm8s.length == 0) {
+            return rows;
+        }
+        LocalDate from = previousFrom.isBefore(currentFrom) ? previousFrom : currentFrom;
+        LocalDate to = previousTo.isAfter(currentTo) ? previousTo : currentTo;
+        Map<String, List<ArticleLeafletMark>> byArticle = new HashMap<>();
+        for (MeaDocumentRepository.ArticleLeaflet leaflet : meaDocuments.findArticleLeaflets(storeId, itm8s, from,
+                to)) {
+            boolean previous = overlaps(leaflet, previousFrom, previousTo);
+            boolean current = overlaps(leaflet, currentFrom, currentTo);
+            if (!previous && !current) {
+                continue;
+            }
+            List<ArticleLeafletMark> marks = byArticle.computeIfAbsent(leaflet.getItm8(), key -> new ArrayList<>());
+            boolean sameAsMea = leaflet.getNumber() == null && marks.stream().anyMatch(mark -> mark.number() != null
+                    && mark.from().equals(leaflet.getPromoFrom()) && mark.to().equals(leaflet.getPromoTo()));
+            if (!sameAsMea) {
+                marks.add(new ArticleLeafletMark(leaflet.getNumber(), leaflet.getTitle(), leaflet.getPromoFrom(),
+                        leaflet.getPromoTo(), previous, current));
+            }
+        }
+        if (byArticle.isEmpty()) {
+            return rows;
+        }
+        return rows.stream().map(row -> {
+            List<ArticleLeafletMark> marks = byArticle.get(row.code());
+            return marks == null ? row : row.withLeaflets(List.copyOf(marks));
+        }).toList();
+    }
+
+    private static boolean overlaps(MeaDocumentRepository.ArticleLeaflet leaflet, LocalDate from, LocalDate to) {
+        return leaflet.getPromoFrom() != null && leaflet.getPromoTo() != null
+                && !leaflet.getPromoFrom().isAfter(to) && !leaflet.getPromoTo().isBefore(from);
     }
 
     /** Dzień sprzed wszystkich raportów: okres porównania drugiego sklepu, który niczego nie czyta. */

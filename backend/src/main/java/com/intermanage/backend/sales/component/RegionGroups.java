@@ -43,7 +43,13 @@ public final class RegionGroups {
             Group.of("Artykuły przemysłowe", "50", "51", "52", "53", "54", "55", "56", "57", "58", "60", "63",
                     "64"),
             Group.of("Papierosy", "39"),
-            new Group("Pozostałe", List.of(), List.of("40", "90", "91", "61", "99"), true));
+            new Group("Pozostałe", List.of(), List.of("40", "61", "99"), true));
+
+    /**
+     * Rejony, których nie liczą porównania i raporty sprzedaży (opakowania zwrotne, materiały promocyjne); ten sam warunek
+     * w SQL to {@code SaleRepository.COUNTED}.
+     */
+    public static final List<String> EXCLUDED_FROM_REPORTS = List.of("90", "91");
 
     /** Torby i artykuły dla sklepów, artykuły kosztowe, opakowania zwrotne, materiały promocyjne: to nie jest towar. */
     private static final List<String> NOT_GOODS = List.of("60", "61", "90", "91");

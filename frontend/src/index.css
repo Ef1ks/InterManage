@@ -492,3 +492,9 @@ html.screen-capture [data-sonner-toaster],
 html.screen-capture [data-quick-task] {
   visibility: hidden !important;
 }
+
+/* Edge dokłada do pól hasła własne „oczko” (i krzyżyk czyszczenia); pola mają swój przycisk pokazywania hasła. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}

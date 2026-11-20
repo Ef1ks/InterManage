@@ -16,6 +16,28 @@ export function isCaptureCancelled(error: unknown) {
   return error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')
 }
 
+/**
+ * Czeka, aż strona przestanie zmieniać rozmiar: po rozpoczęciu udostępniania Chrome dokłada nad kartą pasek
+ * „Udostępniasz tę kartę”, okno robi się niższe i strona układa się od nowa. Zrzut w trakcie łapał stary układ.
+ */
+function settledSize(quietMs: number, maxMs: number) {
+  return new Promise<void>((resolve) => {
+    let quiet = setTimeout(done, quietMs)
+    const limit = setTimeout(done, maxMs)
+    function onResize() {
+      clearTimeout(quiet)
+      quiet = setTimeout(done, quietMs)
+    }
+    function done() {
+      clearTimeout(quiet)
+      clearTimeout(limit)
+      window.removeEventListener('resize', onResize)
+      resolve()
+    }
+    window.addEventListener('resize', onResize)
+  })
+}
+
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -35,15 +57,19 @@ function freshFrame(video: HTMLVideoElement, timeoutMs: number) {
 /** Zrzut bieżącej karty jako PNG. Wołać prosto z kliknięcia (okno zgody wymaga gestu użytkownika). */
 export async function captureCurrentTab(): Promise<Blob> {
   const options = {
-    video: { displaySurface: 'browser', width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 10 } },
+    // Natywny rozmiar karty, bez skalowania i przycinania do proporcji (żądany 16:9 ucinał dół strony).
+    video: { displaySurface: 'browser', resizeMode: 'none', frameRate: { ideal: 10 } },
     audio: false,
     preferCurrentTab: true,
     selfBrowserSurface: 'include',
     surfaceSwitching: 'exclude',
     monitorTypeSurfaces: 'exclude',
   } as DisplayMediaStreamOptions
+  // Wysokość okna przed paskiem „Udostępniasz tę kartę”: zrzut ma objąć tyle, ile było widać przed kliknięciem.
+  const heightBefore = window.innerHeight
   const stream = await navigator.mediaDevices.getDisplayMedia(options)
   const root = document.documentElement
+  const zoomBefore = root.style.zoom
   root.classList.add(CAPTURE_CLASS)
   try {
     const video = document.createElement('video')
@@ -51,6 +77,13 @@ export async function captureCurrentTab(): Promise<Blob> {
     video.playsInline = true
     video.srcObject = stream
     await video.play()
+    await settledSize(400, 2000)
+    // Pasek Chrome zabiera wysokość okna, więc dół strony by się nie zmieścił. Na czas zrzutu strona jest
+    // pomniejszona dokładnie o tyle: układ ma znowu dawną wysokość, a wchodzi w niższe okno.
+    const heightNow = window.innerHeight
+    if (heightNow < heightBefore - 1) {
+      root.style.zoom = String(heightNow / heightBefore)
+    }
     // Okna znikają w następnej klatce strony, a obraz karty dochodzi chwilę później.
     await nextFrame()
     await nextFrame()
@@ -68,6 +101,7 @@ export async function captureCurrentTab(): Promise<Blob> {
   } finally {
     stream.getTracks().forEach((track) => track.stop())
     root.classList.remove(CAPTURE_CLASS)
+    root.style.zoom = zoomBefore
   }
 }
 

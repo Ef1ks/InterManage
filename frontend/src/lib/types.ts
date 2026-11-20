@@ -1276,6 +1276,20 @@ export type SalesComparisonRow = {
   current: SalesFigures
   /** Sprzedaż drugiego sklepu w aktualnym okresie (porównanie ze sklepem); bez porównania null. */
   other: SalesFigures | null
+  /** Gazetki artykułu nachodzące na któryś z okresów (przy nomenklaturze puste). */
+  leaflets: ArticleLeafletMark[]
+}
+
+/** Gazetka artykułu: MEA z numerem i tytułem albo gazetka sklepu z pliku (bez numeru). */
+export type ArticleLeafletMark = {
+  number: string | null
+  title: string | null
+  from: string
+  to: string
+  /** Nachodzi na okres porównania. */
+  previous: boolean
+  /** Nachodzi na okres aktualny. */
+  current: boolean
 }
 
 export type SalesComparison = {

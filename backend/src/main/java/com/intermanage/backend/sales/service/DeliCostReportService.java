@@ -72,7 +72,7 @@ public class DeliCostReportService {
         if (sales.level() != Level.REGION) {
             List<SalesComparisonRow> rows = sales.rows().stream()
                     .map(row -> new SalesComparisonRow(row.code(), row.name(), row.ean(), row.brand(),
-                            withoutCost(row.previous()), withoutCost(row.current())))
+                            withoutCost(row.previous()), withoutCost(row.current())).withLeaflets(row.leaflets()))
                     .toList();
             return new SalesComparisonResponse(previousFrom, previousTo, currentFrom, currentTo, sales.parent(),
                     sales.level(), rows, withoutCost(sales.previousTotal()), withoutCost(sales.currentTotal()));
