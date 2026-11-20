@@ -3,6 +3,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   FileOutputIcon,
+  FolderTreeIcon,
   HandshakeIcon,
   HardDriveIcon,
   type LucideIcon,
@@ -39,6 +40,7 @@ import {
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { useStoreAgents } from '@/features/store-agent/api'
 import { StoreAgentSettings } from '@/features/store-agent/StoreAgentSettings'
+import { FolderPaths } from '@/features/store-settings/FolderPaths'
 import { NomenclatureMargins } from '@/features/store-settings/NomenclatureMargins'
 import { PriceRoundingRules } from '@/features/store-settings/PriceRoundingRules'
 import { PriceCheckCategories } from '@/features/store-settings/PriceCheckCategories'
@@ -51,6 +53,7 @@ import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
 import { currentMonth, todayIso } from '@/lib/dates'
 import { PROTOCOLS, useProtoSettings } from '@/lib/proto-files'
+import { useStoreLocations } from '@/lib/store-locations'
 import type { StorePartner, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LoadingPanel } from '@/components/LoadingPanel'
@@ -59,6 +62,8 @@ const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 const budgetPercent = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
 
 const paths = storeSettingsPaths
+/** Ścieżki folderów zapisu i odczytu (bez ustawień importu raportów, które mają własne okno). */
+const FOLDER_KEY = /^folder:(?!import:)/
 
 /**
  * Ustawienia wybranego sklepu: kafelek na każde ustawienie, samo ustawienie na osobnej podstronie. Budżet rejonów
@@ -264,6 +269,27 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        <Route
+          path="sciezki"
+          element={
+            <section aria-labelledby="folders-heading" className="grid gap-4">
+              <BackToSettings />
+              <div>
+                <h2 id="folders-heading" className="text-lg font-semibold tracking-tight">
+                  Ścieżki folderów
+                </h2>
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  Wszystkie foldery sklepu w jednym miejscu: gdzie program sklepu wczytuje pliki z Intermanage i skąd
+                  Intermanage czyta ceny z kasy i dziennik ATHOS. Ścieżka wpisana raz działa na każdym komputerze
+                  sklepu i dla agenta sklepu. Zapisuje się po wyjściu z pola albo Enterze.
+                </p>
+              </div>
+              <div className="max-w-4xl">
+                <FolderPaths key={store.id} storeId={store.id} canEditProto={canEditProto} />
+              </div>
+            </section>
+          }
+        />
         {owner && (
           <Route
             path="agent"
@@ -354,6 +380,7 @@ function SettingsGrid({
   const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
   const aiUsage = useAiUsage(storeId, { from: `${currentMonth()}-01`, to: todayIso() }, canUseAi)
   const agents = useStoreAgents(storeId, me.owner)
+  const locations = useStoreLocations(storeId)
   const activeAgents = agents.data?.agents.filter((agent) => !agent.deletedAt) ?? []
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
   const budgeted = budgets.data?.filter(
@@ -459,6 +486,17 @@ function SettingsGrid({
           }
         />
       )}
+      <SettingsTile
+        to={paths.folders}
+        icon={FolderTreeIcon}
+        title="Ścieżki folderów"
+        description="Wszystkie foldery sklepu w jednym miejscu: zapis plików dla programu sklepu i foldery, które czyta Intermanage."
+        status={
+          locations.data
+            ? `Wpisane ścieżki: ${Object.keys(locations.data).filter((key) => FOLDER_KEY.test(key)).length}`
+            : ' '
+        }
+      />
       {me.owner && (
         <SettingsTile
           to={paths.agent}

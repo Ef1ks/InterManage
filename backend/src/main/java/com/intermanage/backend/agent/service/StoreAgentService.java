@@ -200,6 +200,7 @@ public class StoreAgentService {
             }
         });
         // Foldery tylko do odczytu (pilnowane), nie do zapisu.
+        folders.remove("price-files");
         folders.remove("price-files:" + storeId);
         folders.remove("mea-athos:" + storeId);
         return folders;
@@ -211,7 +212,9 @@ public class StoreAgentService {
         Map<String, String> values = locations.get(storeId).locations();
         String proto = protoSettings.get(storeId).folderPath();
         List<AgentApi.Watch> watches = new ArrayList<>();
-        String traceart = values.getOrDefault(FOLDER_PREFIX + "price-files:" + storeId, proto);
+        // Folder cen z kasy: ścieżka sklepu z ustawień (front zapisuje ją pod `folder:price-files`), bez niej folder PROTO.
+        String traceart = firstFolder(values.get(FOLDER_PREFIX + "price-files"),
+                values.get(FOLDER_PREFIX + "price-files:" + storeId), proto);
         watches.add(new AgentApi.Watch(TRACEART, traceart, true, "^TRACEART_\\d{8}_\\d{6}(_.*)?$"));
         watches.add(new AgentApi.Watch(CTRLPRIX, proto, true, "^CTRLPRIX_.+\\.traite\\d+$"));
         String athos = values.get(FOLDER_PREFIX + "mea-athos:" + storeId);
@@ -219,6 +222,15 @@ public class StoreAgentService {
             watches.add(new AgentApi.Watch(ATHOS, athos.strip(), false, "^Histo\\.Log$"));
         }
         return watches;
+    }
+
+    private static String firstFolder(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank() && looksLikeFolder(value)) {
+                return value.strip();
+            }
+        }
+        return values[values.length - 1];
     }
 
     public static boolean online(StoreAgent agent, Instant now) {

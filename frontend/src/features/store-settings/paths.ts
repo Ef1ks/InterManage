@@ -12,4 +12,5 @@ export const storeSettingsPaths = {
   sidebar: `${base}/menu-boczne`,
   aiUsage: `${base}/zuzycie-ai`,
   agent: `${base}/agent`,
+  folders: `${base}/sciezki`,
 }

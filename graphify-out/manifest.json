@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795151070.0453389,
-    "seen": 1795151134.9454956,
-    "ast_hash": "18102628905729e6954a2737ff33f3bf",
+    "mtime": 1795157058.8789997,
+    "seen": 1795157118.9023323,
+    "ast_hash": "edae95b482ace929263c309f77f173e9",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -3714,9 +3714,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/StoreSettingsPage.tsx": {
-    "mtime": 1795146890.0454996,
-    "seen": 1795147412.7549975,
-    "ast_hash": "7ade5b5a711857576ccaa787f7eff962",
+    "mtime": 1795156930.5368116,
+    "seen": 1795157118.8674204,
+    "ast_hash": "d6d072066ac24ca7a68dc00acbd50dcb",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/api.ts": {
@@ -4038,9 +4038,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/paths.ts": {
-    "mtime": 1795146890.044497,
-    "seen": 1795147412.7549975,
-    "ast_hash": "6f046a0d4a409737e93c34abf6f12656",
+    "mtime": 1795156930.5338092,
+    "seen": 1795157118.8674204,
+    "ast_hash": "634c0a8a649b4a906338326dc0ec212a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/component/CadencierReportParser.java": {
@@ -13482,9 +13482,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/service/StoreAgentService.java": {
-    "mtime": 1795146272.9896822,
-    "seen": 1795147412.4831305,
-    "ast_hash": "9ae368d79b993db4ecc1e58dfc2ce331",
+    "mtime": 1795156862.5952435,
+    "seen": 1795157118.5875704,
+    "ast_hash": "bdb359941abd09ae6c405665c84dfcbb",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/LiveEvents.java": {
@@ -13557,6 +13557,12 @@
     "mtime": 1795150996.6481156,
     "seen": 1795151134.8366044,
     "ast_hash": "4d8dad5ecee3139d836ad6417d13dffd",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/store-settings/FolderPaths.tsx": {
+    "mtime": 1795156961.614254,
+    "seen": 1795157118.8653002,
+    "ast_hash": "99a6065e39656836b16320cbe11ae71d",
     "semantic_hash": ""
   }
 }
