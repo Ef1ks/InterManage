@@ -455,7 +455,7 @@ function TransferDownloads({ storeId, transferId }: { storeId: string; transferI
                 <span className="text-xs text-muted-foreground">
                   {folder.name
                     ? 'Folder zapamiętany w przeglądarce'
-                    : `Wybierz folder raz, np. ${protoFolder.suggestedPath} (ścieżka w schowku)`}
+                    : 'Wybierz folder raz (ścieżka jest w schowku)'}
                 </span>
               </span>
             </DropdownMenuItem>

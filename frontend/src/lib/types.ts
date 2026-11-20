@@ -4850,6 +4850,18 @@ export type FileQueueItem = {
   lastError: string | null
 }
 
+/**
+ * Folder sklepu na stronie „Ścieżki folderów” (FolderPathResponse): `custom` = własna ścieżka sklepu, inaczej domyślna
+ * aplikacji; `folder` = skrót ścieżki (ten sam folder = ten sam skrót); `path` i `defaultPath` tylko dla właściciela.
+ */
+export type FolderPath = {
+  key: string
+  custom: boolean
+  folder: string
+  path: string | null
+  defaultPath: string | null
+}
+
 /** Stan agenta sklepu (AgentStatusResponse); `active` = sklep wybrał pracę przez agenta i agent jest online. */
 export type AgentStatus = {
   enabled: boolean

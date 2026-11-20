@@ -295,6 +295,48 @@ class StoreAgentIntegrationTests {
         presence.check();
     }
 
+    @Test
+    void foldersHaveAppDefaultsAndOwnPathOnlyForItsStore() throws Exception {
+        Cookie owner = login();
+        String first = createStore(owner);
+        String second = createStore(owner);
+        // Bez wpisu: domyślne ścieżki aplikacji, także folder ATHOS pod kluczem z id sklepu.
+        mvc.perform(get("/api/stores/" + second + "/file-locations").cookie(owner))
+                .andExpect(jsonPath("$.locations['folder:data-entry-xml']").value("H:\\GCOM\\Aviso\\BLdirect"))
+                .andExpect(jsonPath("$.locations['folder:mea-comrnis:" + second + "']").value("N:\\comrnis"));
+        // Własna ścieżka tylko w pierwszym sklepie; ścieżka równa domyślnej to domyślna.
+        mvc.perform(put("/api/stores/" + first + "/file-locations").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"locations":{"folder:data-entry-xml":"P:\\\\XML",
+                                  "folder:data-entry-lst":"n:\\\\aloa\\\\lst\\\\import\\\\"}}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locations['folder:data-entry-xml']").value("P:\\XML"));
+        mvc.perform(get("/api/stores/" + second + "/file-locations").cookie(owner))
+                .andExpect(jsonPath("$.locations['folder:data-entry-xml']").value("H:\\GCOM\\Aviso\\BLdirect"));
+        mvc.perform(get("/api/stores/" + first + "/file-locations/folders").cookie(owner))
+                .andExpect(jsonPath("$[?(@.key == 'data-entry-xml')].custom").value(true))
+                .andExpect(jsonPath("$[?(@.key == 'data-entry-xml')].path").value("P:\\XML"))
+                .andExpect(jsonPath("$[?(@.key == 'data-entry-lst')].custom").value(false))
+                .andExpect(jsonPath("$[?(@.key == 'deli-order-proto')].path").value("N:\\AVISOCONFIG\\BACKUP"));
+        String key = addAgent(owner, first, "Biuro");
+        hello(key).andExpect(jsonPath("$.folders['data-entry-xml']").value("P:\\XML"))
+                .andExpect(jsonPath("$.folders['data-entry-product-file']").value("H:\\GCOM\\Aviso\\BLdirect\\CAD_BEZP"))
+                .andExpect(jsonPath("$.watches[?(@.kind == 'ATHOS')].path").value("N:\\ATHOS2000"));
+        // Przywrócenie domyślnej: pusta ścieżka.
+        mvc.perform(put("/api/stores/" + first + "/file-locations").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"locations\":{\"folder:data-entry-xml\":\"\"}}"))
+                .andExpect(jsonPath("$.locations['folder:data-entry-xml']").value("H:\\GCOM\\Aviso\\BLdirect"));
+        // Folder plików PROTO: własny tylko w sklepie.
+        mvc.perform(put("/api/stores/" + first + "/proto-settings").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"folderPath\":\"N:\\\\PROTO\",\"hiddenProtocols\":[]}"))
+                .andExpect(jsonPath("$.folderPath").value("N:\\PROTO"));
+        mvc.perform(get("/api/stores/" + second + "/proto-settings").cookie(owner))
+                .andExpect(jsonPath("$.folderPath").value("N:\\AVISOCONFIG\\BACKUP"))
+                .andExpect(jsonPath("$.defaultFolder").value(true));
+    }
+
+
     private void awaitContent(MvcResult stream, String text) throws Exception {
         Instant deadline = Instant.now().plusSeconds(10);
         while (!stream.getResponse().getContentAsString().contains(text) && Instant.now().isBefore(deadline)) {

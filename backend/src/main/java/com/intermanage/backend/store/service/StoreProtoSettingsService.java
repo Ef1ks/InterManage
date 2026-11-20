@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.store.component.DefaultFolders;
 import com.intermanage.backend.store.dto.ProtoSettingsRequest;
 import com.intermanage.backend.store.dto.ProtoSettingsResponse;
 import com.intermanage.backend.store.entity.StoreProtoSettings;
@@ -47,19 +48,25 @@ public class StoreProtoSettingsService {
     @Transactional
     public ProtoSettingsResponse save(UUID storeId, ProtoSettingsRequest request, UUID userId) {
         StoreProtoSettings saved = find(storeId);
-        if (saved.update(trimToNull(request.folderPath()), trimToNull(request.productFileFolderPath()),
+        if (saved.update(custom(request.folderPath(), DEFAULT_FOLDER),
+                custom(request.productFileFolderPath(), DefaultFolders.PATHS.get(DefaultFolders.PRODUCT_FILE)),
                 request.hiddenProtocols(), users.getReferenceById(userId))) {
             settings.saveAndFlush(saved);
         }
         return get(storeId);
     }
 
-    private static String trimToNull(String path) {
-        return path == null || path.isBlank() ? null : path.trim();
+    /** Własna ścieżka sklepu; pusta albo równa domyślnej aplikacji = domyślna ({@code null}). */
+    private static String custom(String path, String defaultPath) {
+        String value = path == null || path.isBlank() ? null : path.trim();
+        return DefaultFolders.same(value, defaultPath) ? null : value;
     }
 
     private ProtoSettingsResponse toResponse(StoreProtoSettings value) {
         boolean defaultFolder = value.getFolderPath() == null;
-        return mapper.toProtoSettingsResponse(value, defaultFolder ? DEFAULT_FOLDER : value.getFolderPath(), defaultFolder);
+        String productFile = value.getProductFileFolder() != null ? value.getProductFileFolder()
+                : DefaultFolders.PATHS.get(DefaultFolders.PRODUCT_FILE);
+        return mapper.toProtoSettingsResponse(value, defaultFolder ? DEFAULT_FOLDER : value.getFolderPath(), defaultFolder,
+                productFile);
     }
 }

@@ -34,11 +34,11 @@ public interface StoreMapper {
     @Mapping(target = "folderPath", source = "effectivePath")
     @Mapping(target = "defaultFolder", source = "defaultFolder")
     @Mapping(target = "hiddenProtocols", source = "settings.hiddenProtocols")
-    @Mapping(target = "productFileFolderPath", source = "settings.productFileFolder")
+    @Mapping(target = "productFileFolderPath", source = "productFilePath")
     @Mapping(target = "updatedBy", source = "settings.updatedBy.displayName")
     @Mapping(target = "updatedAt", source = "settings.updatedAt")
     ProtoSettingsResponse toProtoSettingsResponse(StoreProtoSettings settings, String effectivePath,
-            boolean defaultFolder);
+            boolean defaultFolder, String productFilePath);
 
     FileQueueItemResponse toQueueItem(StoreFileQueueRepository.Summary item);
 }

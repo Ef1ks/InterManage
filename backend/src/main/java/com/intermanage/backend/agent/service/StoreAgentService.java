@@ -57,8 +57,6 @@ public class StoreAgentService {
     private static final String PROTO_FOLDER_KEY = "deli-order-proto";
     private static final String PRODUCT_FILE_KEY = "data-entry-product-file";
     private static final String FOLDER_PREFIX = "folder:";
-    /** Domyślne ścieżki z frontu (gdy sklep nie ustawił własnej). */
-    private static final Map<String, String> DEFAULT_PATHS = Map.of("leaflet-pro", "N:\\ALOA\\PRO\\IMPORT");
     private static final SecureRandom RANDOM = new SecureRandom();
 
     /** Agent po kluczu: kto i w którym sklepie. */
@@ -188,7 +186,7 @@ public class StoreAgentService {
     /** Foldery zapisu sklepu: klucz folderu przeglądarki → ścieżka na dysku. */
     @Transactional(readOnly = true)
     public Map<String, String> folders(UUID storeId) {
-        Map<String, String> folders = new LinkedHashMap<>(DEFAULT_PATHS);
+        Map<String, String> folders = new LinkedHashMap<>();
         ProtoSettingsResponse proto = protoSettings.get(storeId);
         folders.put(PROTO_FOLDER_KEY, proto.folderPath());
         if (proto.productFileFolderPath() != null && !proto.productFileFolderPath().isBlank()) {

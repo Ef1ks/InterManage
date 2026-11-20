@@ -54,7 +54,9 @@ class StoreFileLocationIntegrationTests {
 
         mvc.perform(get("/api/stores/" + otherStoreId + "/file-locations").cookie(owner))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.locations.length()").value(0));
+                // Własna ścieżka obowiązuje tylko w swoim sklepie; drugi ma domyślne ścieżki aplikacji.
+                .andExpect(jsonPath("$.locations['folder:import:PRODUCTS']").doesNotExist())
+                .andExpect(jsonPath("$.locations['folder:data-entry-xml']").value("H:\\GCOM\\Aviso\\BLdirect"));
     }
 
     @Test

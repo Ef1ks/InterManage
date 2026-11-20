@@ -39,7 +39,9 @@ function readStores(): string[] {
 let enabledStores = readStores()
 let currentStoreId: string | null = null
 const listeners = new Set<() => void>()
-const queuedListeners = new Set<(storeId: string) => void>()
+/** `viaAgent`: plik zapisze agent sklepu za chwilę, więc nie mówimy o „Zapisz wszystkie”. */
+type QueuedListener = (storeId: string, info: { viaAgent: boolean }) => void
+const queuedListeners = new Set<QueuedListener>()
 
 function emit() {
   listeners.forEach((listener) => listener())
@@ -101,7 +103,7 @@ export function setFileQueueDocument(storeId: string, document: FileQueueDocumen
 }
 
 /** Po dodaniu pliku do kolejki (np. odświeżenie licznika). */
-export function onFileQueued(listener: (storeId: string) => void) {
+export function onFileQueued(listener: QueuedListener) {
   queuedListeners.add(listener)
   return () => {
     queuedListeners.delete(listener)
@@ -114,6 +116,7 @@ export async function enqueueFile(
   folderKey: string,
   fileName: string,
   data: Blob,
+  { viaAgent = false }: { viaAgent?: boolean } = {},
 ): Promise<FileQueueItem> {
   const formData = new FormData()
   formData.append('folderKey', folderKey)
@@ -125,6 +128,6 @@ export async function enqueueFile(
   formData.append('fileName', fileName)
   formData.append('file', data, fileName)
   const item = await api<FileQueueItem>(`/stores/${storeId}/file-queue`, { method: 'POST', formData })
-  queuedListeners.forEach((listener) => listener(storeId))
+  queuedListeners.forEach((listener) => listener(storeId, { viaAgent }))
   return item
 }

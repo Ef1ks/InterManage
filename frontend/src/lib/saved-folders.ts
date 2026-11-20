@@ -284,7 +284,7 @@ export async function saveToFolder(key: string, fileName: string, data: Blob): P
   // Sklep pracuje przez agenta, a agent jest online: plik idzie przez kolejkę do agenta (zapas: ta przeglądarka).
   const agentStore = agentStoreFor(key)
   if (agentStore) {
-    const item = await enqueueFile(agentStore, key, fileName, data)
+    const item = await enqueueFile(agentStore, key, fileName, data, { viaAgent: true })
     await saveViaAgent(agentStore, item.id, fileName, () => writeToFolder(key, fileName, data))
     return
   }

@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { TagIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { StoreLocationField } from '@/components/StoreLocationField'
+import { ClipboardPathHint, FolderPathNote } from '@/components/FolderPathNote'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
 import { DEFAULT_FOLDER } from '@/lib/proto-files'
@@ -74,10 +74,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
           {access === 'missing' ? (
             <>
               <span className="font-medium">Wybierz folder z plikami cen</span>
-              <span className="block text-xs text-muted-foreground">
-                Ścieżkę <span className="font-mono">{folderPath}</span> skopiujemy do schowka. W oknie wyboru wklej ją
-                (Ctrl+V) w pasek adresu u góry, naciśnij Enter i kliknij „Wybierz folder”.
-              </span>
+              <ClipboardPathHint path={folderPath} />
             </>
           ) : needsAccess ? (
             <>
@@ -136,13 +133,7 @@ export function PriceFileStatus({ storeId }: { storeId: string }) {
           </div>
         )}
       </div>
-      <StoreLocationField
-        storeId={storeId}
-        locationKey={locationKey}
-        label="Ścieżka folderu w sklepie"
-        className="font-mono"
-        hint={`Wspólna dla wszystkich komputerów sklepu. Bez wpisu: ${DEFAULT_FOLDER}`}
-      />
+      <FolderPathNote />
       <p className="text-xs text-muted-foreground">
         Folder i jego podfolder BACKUP sprawdzamy od razu po wejściu i co 10 minut, gdy aplikacja jest otwarta; pliki z
         dni bez aplikacji wczytują się same, od najstarszego. Cena z pliku nowszego niż raport kartoteki zastępuje cenę

@@ -279,9 +279,9 @@ export function StoreSettingsPage() {
                   Ścieżki folderów
                 </h2>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Wszystkie foldery sklepu w jednym miejscu: gdzie program sklepu wczytuje pliki z Intermanage i skąd
-                  Intermanage czyta ceny z kasy i dziennik ATHOS. Ścieżka wpisana raz działa na każdym komputerze
-                  sklepu i dla agenta sklepu. Zapisuje się po wyjściu z pola albo Enterze.
+                  Wszystkie foldery w jednym miejscu: gdzie program sklepu wczytuje pliki z Intermanage i skąd
+                  Intermanage czyta ceny z kasy i dziennik ATHOS. Ścieżki są wspólne dla wszystkich sklepów i
+                  użytkowników, także dla agentów sklepów. Zapisują się po wyjściu z pola albo Enterze.
                 </p>
               </div>
               <div className="max-w-4xl">
@@ -490,7 +490,7 @@ function SettingsGrid({
         to={paths.folders}
         icon={FolderTreeIcon}
         title="Ścieżki folderów"
-        description="Wszystkie foldery sklepu w jednym miejscu: zapis plików dla programu sklepu i foldery, które czyta Intermanage."
+        description="Wszystkie foldery w jednym miejscu, wspólne dla wszystkich sklepów: zapis plików dla programu sklepu i foldery, które czyta Intermanage."
         status={
           locations.data
             ? `Wpisane ścieżki: ${Object.keys(locations.data).filter((key) => FOLDER_KEY.test(key)).length}`

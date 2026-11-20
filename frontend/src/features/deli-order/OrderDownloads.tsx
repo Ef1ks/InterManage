@@ -104,7 +104,7 @@ export function OrderDownloads({ storeId, orderId, compact }: { storeId: string;
                 <span className="text-xs text-muted-foreground">
                   {folder.name
                     ? 'Folder zapamiętany w przeglądarce'
-                    : `Wybierz folder raz, np. ${protoFolder.suggestedPath} (ścieżka w schowku)`}
+                    : 'Wybierz folder raz (ścieżka jest w schowku)'}
                 </span>
               </span>
             </DropdownMenuItem>

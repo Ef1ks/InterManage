@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { FolderIcon, FolderOpenIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { StoreLocationField } from '@/components/StoreLocationField'
+import { ClipboardPathHint, FolderPathNote } from '@/components/FolderPathNote'
 import { Button } from '@/components/ui/button'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
@@ -78,12 +78,7 @@ export function SavedFolder({
           ) : (
             <>
               <span className="font-medium">Wybierz folder na: {folder.label.toLowerCase()}</span>
-              {path && (
-                <span className="block text-xs text-muted-foreground">
-                  Ścieżkę <span className="font-mono">{path}</span> skopiujemy do schowka. W oknie wyboru wklej ją
-                  (Ctrl+V) w pasek adresu u góry, naciśnij Enter i kliknij „Wybierz folder”.
-                </span>
-              )}
+              <ClipboardPathHint path={path} />
             </>
           )}
         </div>
@@ -92,20 +87,7 @@ export function SavedFolder({
           {loaded && !name ? 'Wybierz folder' : 'Zmień'}
         </Button>
       </div>
-      {!folder.pathInSettings && store && !(pathFieldWhenMissing && path) && (
-        <StoreLocationField
-          storeId={store.id}
-          locationKey={locationKey}
-          label="Ścieżka folderu w sklepie"
-          className="font-mono"
-          placeholderPath={folder.suggestedPath}
-          hint={
-            folder.suggestedPath
-              ? `Wspólna dla wszystkich komputerów sklepu. Bez wpisu: ${folder.suggestedPath}`
-              : 'Wspólna dla wszystkich komputerów sklepu, np. P:\\Dokumenty\\XML'
-          }
-        />
-      )}
+      {!pathFieldWhenMissing && <FolderPathNote />}
     </div>
   )
 }

@@ -25,13 +25,6 @@ type FileStatus = {
   error: string | null
 }
 
-const time = (value?: string | null) =>
-  (value ? new Date(value) : new Date()).toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-
 /**
  * Wysyła plik do agenta i czeka na zapis. Kończy się, gdy plik leży w folderze (agent albo zapas z przeglądarki);
  * błąd, gdy użytkownik zostawi plik w kolejce albo zapas się nie uda.
@@ -43,7 +36,6 @@ export async function saveViaAgent(
   writeHere: () => Promise<void>,
 ): Promise<void> {
   const toastId = `agent-save:${fileId}`
-  toast.loading(`Czeka na agenta sklepu… ${fileName}`, { id: toastId, duration: Infinity })
 
   return new Promise<void>((resolve, reject) => {
     let done = false
@@ -57,14 +49,19 @@ export async function saveViaAgent(
       else resolve()
     }
 
-    const saved = (at?: string | null, byAgent = true) => {
-      toast.success(`Zapisano w folderze: ${fileName} · ${time(at)}`, {
-        id: toastId,
-        duration: 5_000,
-        description: byAgent ? 'Zapisał agent sklepu.' : 'Zapisano z tej przeglądarki.',
-      })
+    // Udany zapis potwierdza narzędzie, z którego zapisano (jedno powiadomienie), więc tu tylko zdejmujemy
+    // „Czeka na agenta…”, jeśli zdążyło się pokazać.
+    const saved = () => {
+      toast.dismiss(toastId)
       finish()
     }
+    // Agent zapisuje zwykle w 1-2 s: „Czeka na agenta…” dopiero, gdy trwa to dłużej.
+    const waiting = window.setTimeout(() => {
+      if (!done && !fallbackShown) {
+        toast.loading(`Czeka na agenta sklepu… ${fileName}`, { id: toastId, duration: Infinity })
+      }
+    }, 2_000)
+    cleanup.push(() => window.clearTimeout(waiting))
 
     const leaveInQueue = () => {
       toast.message(`Plik ${fileName} czeka w kolejce sklepu`, {
@@ -99,7 +96,7 @@ export async function saveViaAgent(
       } catch {
         // Plik już leży w folderze; potwierdzenie dojdzie przy kolejnym zapisie z kolejki albo zostanie do usunięcia.
       }
-      saved(null, false)
+      saved()
     }
 
     const offerFallback = (reason: string) => {
@@ -114,7 +111,7 @@ export async function saveViaAgent(
 
     const apply = (status: Pick<FileStatus, 'state' | 'savedAt' | 'savedByAgent' | 'error'>) => {
       if (done) return
-      if (status.state === 'SAVED') saved(status.savedAt, status.savedByAgent)
+      if (status.state === 'SAVED') saved()
       else if (status.state === 'REMOVED') leaveInQueue()
       else if (status.state === 'FAILED' && !fallbackShown) {
         offerFallback(`Agent nie zapisał pliku: ${status.error ?? 'błąd zapisu'}`)

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
-import { Form, FormActions, FormNote, SwitchField, TextField } from '@/components/form'
+import { Form, FormActions, FormNote, SwitchField } from '@/components/form'
+import { FolderPathNote } from '@/components/FolderPathNote'
 import { SavedFolder } from '@/components/SavedFolder'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -19,8 +20,6 @@ import {
 import type { ProtocolKind, ProtoSettings } from '@/lib/types'
 import { LoadingPanel } from '@/components/LoadingPanel'
 
-/** Folder domyślny z backendu (StoreProtoSettingsService.DEFAULT_FOLDER). */
-const DEFAULT_FOLDER = 'N:\\AVISOCONFIG\\BACKUP'
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
 /**
@@ -54,12 +53,11 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
   const productFolder = useProductFileFolder(storeId)
   const [formError, setFormError] = useState<string | null>(null)
   const {
-    register,
     handleSubmit,
     setError,
     control,
     setValue,
-    formState: { errors, isSubmitting, isDirty },
+    formState: { isSubmitting, isDirty },
   } = useForm<Values>({
     defaultValues: {
       folderPath: settings.defaultFolder ? '' : settings.folderPath,
@@ -93,13 +91,8 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
   return (
     <Card className="p-4">
       <Form onSubmit={submit} error={formError}>
-        <TextField
-          label="Folder protokołów i zmiany cen"
-          autoComplete="off"
-          error={errors.folderPath?.message}
-          hint={`Folder, z którego program sklepu wczytuje pliki: zamówienia garmażu, przyjęcia MM, protokoły i zmiany cen. Podpowiadany przy wyborze folderu w przeglądarce. Puste pole = ${DEFAULT_FOLDER}.`}
-          {...register('folderPath', { maxLength: { value: 300, message: 'Najwyżej 300 znaków' } })}
-        />
+        {/* Foldery (protokołów i nowych artykułów) ustala aplikacja: Ustawienia sklepu → Ścieżki folderów. */}
+        <FolderPathNote />
         <div className="grid gap-2">
           <p className="text-sm font-medium">Protokoły we wprowadzaniu danych</p>
           {PROTOCOLS.map((protocol) => (
@@ -111,13 +104,6 @@ function SettingsForm({ storeId, settings }: { storeId: string; settings: ProtoS
             />
           ))}
         </div>
-        <TextField
-          label="Folder pliku nowych artykułów"
-          autoComplete="off"
-          error={errors.productFileFolderPath?.message}
-          hint="Przy zapisie pliku XML we wprowadzaniu danych nowe i zmienione artykuły trafiają tu dla programu sklepu."
-          {...register('productFileFolderPath', { maxLength: { value: 300, message: 'Najwyżej 300 znaków' } })}
-        />
         {settings.updatedAt && (
           <FormNote>
             Zmienione {dateFormat.format(new Date(settings.updatedAt))}

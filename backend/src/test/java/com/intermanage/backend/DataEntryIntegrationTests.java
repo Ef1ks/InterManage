@@ -1271,7 +1271,8 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.folderPath").value("N:\\AVISOCONFIG\\BACKUP"))
                 .andExpect(jsonPath("$.defaultFolder").value(true))
                 .andExpect(jsonPath("$.hiddenProtocols.length()").value(0))
-                .andExpect(jsonPath("$.productFileFolderPath").doesNotExist());
+                // Folder nowych artykułów też ma domyślną ścieżkę aplikacji.
+                .andExpect(jsonPath("$.productFileFolderPath").value("H:\\GCOM\\Aviso\\BLdirect\\CAD_BEZP"));
 
         // Plik nowych i zmienionych artykułów (CADBEZP): stary Excel, nazwa z dostawcy i numeru faktury.
         byte[] products = mvc.perform(post(url("/export/product-file")).cookie(owner).with(csrf())

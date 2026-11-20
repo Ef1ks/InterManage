@@ -1,5 +1,6 @@
 package com.intermanage.backend.store.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,8 +14,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.store.dto.FolderPathResponse;
 import com.intermanage.backend.store.dto.StoreFileLocationsRequest;
 import com.intermanage.backend.store.dto.StoreFileLocationsResponse;
+import com.intermanage.backend.store.service.FolderPathService;
 import com.intermanage.backend.store.service.StoreFileLocationService;
 
 import jakarta.validation.Valid;
@@ -28,9 +31,24 @@ import jakarta.validation.Valid;
 public class StoreFileLocationController {
 
     private final StoreFileLocationService service;
+    private final FolderPathService folders;
 
-    public StoreFileLocationController(StoreFileLocationService service) {
+    public StoreFileLocationController(StoreFileLocationService service, FolderPathService folders) {
         this.service = service;
+        this.folders = folders;
+    }
+
+    /**
+     * Stan folderów sklepu do strony „Ścieżki folderów”: domyślna aplikacji albo własna sklepu. Ścieżki widzi tylko
+     * właściciel; zmienić (wpisać nową albo przywrócić domyślną) może każdy z dostępem do sklepu.
+     */
+    @GetMapping("/folders")
+    @PreAuthorize(Access.STORE)
+    public List<FolderPathResponse> folders(@PathVariable UUID storeId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        boolean owner = principal.getAuthorities().stream()
+                .anyMatch(authority -> AppUserPrincipal.OWNER_AUTHORITY.equals(authority.getAuthority()));
+        return folders.list(storeId, owner);
     }
 
     @GetMapping

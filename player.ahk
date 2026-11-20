@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.60.0.0
+;@Ahk2Exe-SetVersion 0.61.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.60" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.61" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -1030,13 +1030,34 @@ ExcelSnapshot() {
 }
 
 ; Zwraca "", gdy zapisano, a inaczej opis problemu.
+; Folder zapisu raportu (od 0.61): brakujący zakładamy razem z folderami nad nim. Zwraca "" albo opis problemu.
+EnsureFolder(dir) {
+    if (dir = "")
+        return "Ścieżka zapisu nie ma folderu. Podaj pełną ścieżkę pliku, np. N:\Raporty\sprzedaz.xlsx."
+    if DirExist(dir)
+        return ""
+    drive := ""
+    SplitPath dir, , , , , &drive
+    if (drive != "" && !DirExist(drive "\"))
+        return "Nie ma dysku `"" drive "`" albo nie ma do niego dostępu, więc nie da się założyć folderu `"" dir "`"."
+    ; Ten sam folder może w tej chwili zakładać inne stanowisko: liczy się to, że po próbie folder jest
+    try DirCreate dir
+    catch as err {
+        if DirExist(dir)
+            return ""
+        return "Nie udało się założyć folderu `"" dir "`": " err.Message
+    }
+    return DirExist(dir) ? "" : "Nie udało się założyć folderu `"" dir "`" (brak uprawnień?)."
+}
+
 ExcelSave(path, timeoutMs, seen) {
     SplitPath path, , &dir, &ext
     format := ExcelFormat(ext)
     if !format
         return "Nieznany format pliku `"" path "`". Użyj końcówki .xlsx, .xlsm, .xlsb, .xls albo .csv."
-    if (dir = "" || !DirExist(dir))
-        return "Nie ma folderu `"" dir "`" albo nie ma do niego dostępu."
+    problem := EnsureFolder(dir)
+    if (problem != "")
+        return problem
     deadline := A_TickCount + timeoutMs
     Loop {
         for item in ExcelWorkbooks() {
@@ -1168,8 +1189,9 @@ PdfSave(path, timeoutMs, seen) {
     SplitPath path, , &dir, &ext
     if (StrLower(ext) != "pdf")
         return "Plik `"" path "`" musi kończyć się na .pdf."
-    if (dir = "" || !DirExist(dir))
-        return "Nie ma folderu `"" dir "`" albo nie ma do niego dostępu."
+    problem := EnsureFolder(dir)
+    if (problem != "")
+        return problem
     since := DateAdd(A_Now, -60, "Seconds") ; plik PDF powstaje dopiero po kliknięciu w Mercalys
     deadline := A_TickCount + timeoutMs
     hwnd := 0

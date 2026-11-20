@@ -36,8 +36,10 @@ export function FileQueueBanner() {
 
   useEffect(
     () =>
-      onFileQueued((queuedStoreId) => {
+      onFileQueued((queuedStoreId, { viaAgent }) => {
         void queryClient.invalidateQueries({ queryKey: fileQueueKey(queuedStoreId) })
+        // Plik dla agenta sklepu: potwierdzenie (albo zapas z przeglądarki) pokazuje lib/agent-save.
+        if (viaAgent) return
         toast.info('Plik czeka w kolejce sklepu', {
           description: 'Zapisze się w folderze sklepu po „Zapisz wszystkie” na jego komputerze.',
         })
