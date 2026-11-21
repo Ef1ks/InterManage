@@ -1,7 +1,9 @@
 package com.intermanage.backend.auth.component;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -25,6 +27,11 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * Przy starcie, zanim serwer przyjmie żądania: każdy sklep bez rang dostaje domyślne, a konta z dawną rolą
  * globalną dostają w swoich sklepach rangę z tej roli (jej uprawnienia przechodzą na rangę), stanowiska klucz rangi,
  * a konto rolę „Konto sklepu”. Po pierwszym razie nic już nie robi (poza sklepem bez rang).
+ *
+ * Rangą w sklepie staje się tylko dawna rola, która jest tam potrzebna: rola konta z dostępem do sklepu albo rola
+ * stanowiska (stanowiska są wspólne dla firmy, więc ich role trafiają do każdego sklepu). Rola bez kont w sklepie
+ * nie zakłada w nim rangi; wcześniej każda rola trafiała do każdego sklepu, co przy wielu rolach i sklepach (baza
+ * testów) dawało setki tysięcy rang przy każdym starcie.
  */
 @Component
 public class StoreRoleBootstrap implements SmartInitializingSingleton {
@@ -58,24 +65,37 @@ public class StoreRoleBootstrap implements SmartInitializingSingleton {
         List<Role> legacyRoles = roles.findAllWithPermissions().stream()
                 .filter(role -> !role.isOwner() && role.getSystemKey() == null).toList();
         boolean migrate = !legacyUsers.isEmpty();
+        Set<UUID> positionRoles = migrate ? new HashSet<>(positions.findRoleIdsWithoutKey()) : Set.of();
         for (Store store : stores.findAll()) {
-            if (migrate) {
-                Map<UUID, StoreRole> byRole = service.adoptLegacyRoles(store, legacyRoles);
-                for (AppUser user : legacyUsers) {
-                    StoreRole rank = byRole.get(user.getRole().getId());
-                    if (rank != null && user.getStores().stream().anyMatch(own -> own.getId().equals(store.getId()))) {
-                        service.assign(user, rank, null);
-                    }
-                }
-            } else {
+            if (!migrate) {
                 service.ensureDefaults(store, null);
+                continue;
+            }
+            List<AppUser> storeUsers = legacyUsers.stream()
+                    .filter(user -> user.getStores().stream().anyMatch(own -> own.getId().equals(store.getId())))
+                    .toList();
+            Set<UUID> needed = new HashSet<>(positionRoles);
+            storeUsers.forEach(user -> needed.add(user.getRole().getId()));
+            List<Role> storeRoles = legacyRoles.stream().filter(role -> needed.contains(role.getId())).toList();
+            if (storeRoles.isEmpty()) {
+                service.ensureDefaults(store, null);
+                continue;
+            }
+            Map<UUID, StoreRole> byRole = service.adoptLegacyRoles(store, storeRoles);
+            for (AppUser user : storeUsers) {
+                StoreRole rank = byRole.get(user.getRole().getId());
+                if (rank != null) {
+                    service.assign(user, rank, null);
+                }
             }
         }
         if (!migrate) {
             return;
         }
         for (Role role : legacyRoles) {
-            positions.adoptRoleKey(role.getId(), StoreRoleService.legacyKey(role));
+            if (positionRoles.contains(role.getId())) {
+                positions.adoptRoleKey(role.getId(), StoreRoleService.legacyKey(role));
+            }
         }
         Role account = roles.findBySystemKey(Role.ACCOUNT_KEY)
                 .orElseThrow(() -> new IllegalStateException("Brak roli Konto sklepu - sprawdź migracje Flyway"));

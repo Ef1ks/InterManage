@@ -34,6 +34,11 @@ public interface StaffPositionRepository extends JpaRepository<StaffPosition, UU
             + " and p.deletedAt is null and p.department.deletedAt is null")
     long countActiveWithRoleKey(String companyKey, String roleKey);
 
+    /** Dawne role stanowisk, które nie mają jeszcze klucza rangi (przed przeniesieniem na rangi sklepów). */
+    @Query(value = "select distinct role_id from staff_positions where role_id is not null and role_key is null",
+            nativeQuery = true)
+    List<UUID> findRoleIdsWithoutKey();
+
     /** Przeniesienie dawnej roli stanowiska (role_id) na klucz rangi sklepu. */
     @Modifying
     @Query(value = "update staff_positions set role_key = :roleKey where role_id = :roleId and role_key is null",
