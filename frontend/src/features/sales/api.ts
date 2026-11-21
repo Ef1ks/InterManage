@@ -48,6 +48,7 @@ import type {
   SalesArticle,
   SalesComparison,
   SalesHistory,
+  SalesPromotionShare,
   SalesReportsOverview,
   TopSalesLevel,
   TopSalesMetric,
@@ -150,6 +151,29 @@ export function useSalesComparison(
       return api<SalesComparison>(`${reportsPath(storeId)}/${kind}-comparison?${params}`)
     },
     // Po zmianie okresu tabela nie znika, tylko podmienia liczby po wczytaniu.
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Sprzedaż brutto z dni promocji w obu okresach porównania (lista promocji, gazetki, MEA, cena poniżej zwykłej), z tym
+ * samym filtrem nomenklatury. Osobne zapytanie (do kilku sekund rok do roku), więc kafelek nie wstrzymuje tabeli.
+ */
+export function useSalesPromotionShare(storeId: string, periods: Periods, filter: string[], enabled = true) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'sales-comparison-promotions', periods, filter] as const,
+    staleTime: REPORT_STALE_TIME,
+    enabled,
+    queryFn: () => {
+      const params = new URLSearchParams({
+        previousFrom: periods.previous.from,
+        previousTo: periods.previous.to,
+        currentFrom: periods.current.from,
+        currentTo: periods.current.to,
+      })
+      filter.forEach((code) => params.append('nomenclatures', code))
+      return api<SalesPromotionShare>(`${reportsPath(storeId)}/sales-comparison/promotions?${params}`)
+    },
     placeholderData: keepPreviousData,
   })
 }

@@ -36,6 +36,7 @@ import {
   useImportPromotions,
   useImportSales,
   useImportSuppliers,
+  useAgentReportFiles,
   useNomenclatureImports,
   useProductCodeImports,
   useProductImports,
@@ -44,6 +45,7 @@ import {
   useSupplierImports,
 } from '@/features/imports/api'
 import { ImportSourcesDialog } from '@/features/imports/ImportSourcesDialog'
+import { AgentReportFiles, agentNote } from '@/features/imports/AgentReportFiles'
 import {
   DAILY_REPORTS,
   MACRO_REPORTS,
@@ -73,6 +75,7 @@ import { ApiError } from '@/lib/api'
 import { parseIsoDate } from '@/lib/dates'
 import { formatReportDate } from '@/lib/report-freshness'
 import { ensureFolderAccess, folderAccess, folderSavingSupported } from '@/lib/saved-folders'
+import { useAgentState } from '@/lib/store-agent'
 import { useLoadMore } from '@/lib/use-load-more'
 import type {
   CadencierImport,
@@ -218,6 +221,13 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const [refreshing, setRefreshing] = useState<DailyReport | 'access' | null>(null)
   const [refreshNotes, setRefreshNotes] = useState<Partial<Record<DailyReport, RefreshNote>>>({})
   const lastProductImport = products.data?.imports[0]
+  // Raporty, których folder pilnuje agent sklepu: wgrywa je sam, a „Odśwież dane” je pomija.
+  const agent = useAgentState()
+  const agentKinds = DAILY_REPORTS.filter(
+    (kind) => agent?.storeId === store.id && agent.status.active && agent.status.watches.includes(`IMPORT_${kind}`),
+  )
+  const agentFiles = useAgentReportFiles(store.id, agentKinds.length > 0)
+  const lastAgentFile = (kind: DailyReport) => agentFiles.data?.find((file) => file.kind === kind)
 
   const guideOf = (kind: ImportReportKind) => guides.data?.find((guide) => guide.kind === kind)
   const lastImported: Record<DailyReport, number> = {
@@ -240,18 +250,46 @@ function StoreImports({ store }: { store: StoreSummary }) {
     }
     setRefreshing('access')
     setRefreshNotes({})
+    try {
+      await refreshReports()
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się odświeżyć danych')
+    } finally {
+      setRefreshing(null)
+    }
+  }
+
+  const refreshReports = async () => {
     const { masks } = importSettings.settings
     const notes: Partial<Record<DailyReport, RefreshNote>> = {}
     const ready: DailyReport[] = []
-    // Zgody najpierw, wszystkie zaraz po kliknięciu: okno zgody działa tylko bezpośrednio po geście użytkownika.
-    for (const kind of DAILY_REPORTS) {
-      const key = sourceFolderKey(store.id, kind)
-      if ((await folderAccess(key, 'read')) === 'missing') continue
-      if (await ensureFolderAccess(key, 'read')) ready.push(kind)
-      else notes[kind] = { tone: 'warning', text: 'Brak zgody na odczyt folderu. Kliknij „Odśwież dane” i zezwól.' }
+    // Zgody najpierw, wszystkie zaraz po kliknięciu: okno zgody działa tylko bezpośrednio po geście użytkownika,
+    // więc stan folderów sprawdzamy naraz. Błąd jednego folderu (zawieszony dysk, IndexedDB) nie zatrzymuje reszty.
+    const kinds = DAILY_REPORTS.filter((kind) => !agentKinds.includes(kind))
+    if (kinds.length === 0) {
+      toast.info('Wszystkie raporty wgrywa agent sklepu', {
+        description: 'Agent sam wgrywa nowe pliki z folderów raportów. Wynik jest w tabeli pod raportami.',
+      })
+      return
     }
+    const states = await Promise.all(kinds.map((kind) => folderAccess(sourceFolderKey(store.id, kind), 'read')))
+    for (const [index, kind] of kinds.entries()) {
+      if (states[index] === 'missing') continue
+      try {
+        if (states[index] === 'granted' || (await ensureFolderAccess(sourceFolderKey(store.id, kind), 'read'))) {
+          ready.push(kind)
+        } else {
+          notes[kind] = { tone: 'warning', text: 'Brak zgody na odczyt folderu. Kliknij „Odśwież dane” i zezwól.' }
+        }
+      } catch (error) {
+        notes[kind] = {
+          tone: 'warning',
+          text: error instanceof ApiError ? error.message : 'Nie udało się sprawdzić zgody na folder.',
+        }
+      }
+    }
+    setRefreshNotes({ ...notes })
     if (ready.length === 0 && Object.keys(notes).length === 0) {
-      setRefreshing(null)
       setSourcesOpen(true)
       toast.info('Wskaż foldery, w których zapisujesz raporty')
       return
@@ -298,7 +336,6 @@ function StoreImports({ store }: { store: StoreSummary }) {
       setRefreshNotes({ ...notes })
     }
     setRefreshNotes(notes)
-    setRefreshing(null)
 
     const skipped = Object.values(notes).filter((note) => note.tone === 'warning').length
     if (failed > 0 || skipped > 0) {
@@ -381,7 +418,11 @@ function StoreImports({ store }: { store: StoreSummary }) {
     kind,
     guide: guideOf(kind),
     canEditGuide: isOwner,
-    refreshNote: kind in lastImported ? refreshNotes[kind as DailyReport] : undefined,
+    refreshNote: !(kind in lastImported)
+      ? undefined
+      : agentKinds.includes(kind as DailyReport)
+        ? agentNote(lastAgentFile(kind as DailyReport))
+        : refreshNotes[kind as DailyReport],
     refreshing: refreshing === kind,
     onMercalys:
       canImport && (MACRO_REPORTS as readonly string[]).includes(kind)
@@ -635,6 +676,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
           )}
         </ReportCard>
       </div>
+
+      {agentKinds.length > 0 && agentFiles.data && <AgentReportFiles files={agentFiles.data} />}
 
       <section aria-labelledby="import-history">
         <h2 id="import-history" className="mb-3 text-base font-semibold">

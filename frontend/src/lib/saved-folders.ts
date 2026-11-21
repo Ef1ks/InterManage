@@ -59,6 +59,8 @@ const PERMISSION_CHECK_TIMEOUT_MS = 15_000
 /** Okno zgody czeka na użytkownika, więc dłużej. */
 const PERMISSION_PROMPT_TIMEOUT_MS = 120_000
 const WRITE_TIMEOUT_MS = 60_000
+/** Odczyt listy plików folderu (z podfolderami, np. BACKUP z historią) na dysku sieciowym. */
+const LIST_TIMEOUT_MS = 120_000
 
 class FolderTimeout extends ApiError {
   constructor(message: string) {
@@ -94,11 +96,15 @@ function openDb(): Promise<IDBDatabase> {
 async function transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openDb()
   try {
-    return await new Promise<T>((resolve, reject) => {
-      const request = run(db.transaction(STORE, mode).objectStore(STORE))
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(request.error)
-    })
+    return await withTimeout(
+      new Promise<T>((resolve, reject) => {
+        const request = run(db.transaction(STORE, mode).objectStore(STORE))
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      }),
+      DB_TIMEOUT_MS,
+      `Przeglądarka nie odczytała zapamiętanych folderów w ${seconds(DB_TIMEOUT_MS)}. Zamknij inne karty z aplikacją albo uruchom przeglądarkę ponownie.`,
+    )
   } finally {
     db.close()
   }
@@ -231,13 +237,18 @@ export async function listFolderFiles(
   if (!handle) throw new ApiError(0, 'Nie wybrano folderu.')
   const files: FileSystemFileHandle[] = []
   try {
-    await collectFiles(
-      handle,
-      match,
-      files,
-      (name) => subfolder !== undefined && name.toUpperCase() === subfolder.toUpperCase(),
+    await withTimeout(
+      collectFiles(
+        handle,
+        match,
+        files,
+        (name) => subfolder !== undefined && name.toUpperCase() === subfolder.toUpperCase(),
+      ),
+      LIST_TIMEOUT_MS,
+      `Folder ${handle.name} nie odpowiada (${seconds(LIST_TIMEOUT_MS)}). Sprawdź, czy dysk sieciowy jest podłączony.`,
     )
   } catch (error) {
+    if (error instanceof FolderTimeout) throw error
     if (error instanceof DOMException && error.name === 'NotFoundError') {
       throw new ApiError(0, `Folderu ${handle.name} już nie ma (albo dysk jest odłączony). Wybierz go ponownie.`)
     }

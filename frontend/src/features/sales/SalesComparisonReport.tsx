@@ -31,6 +31,7 @@ import {
   useRegionBudgets,
   useSalesComparison,
   useSalesNomenclatures,
+  useSalesPromotionShare,
   useSalesReportsOverview,
 } from '@/features/sales/api'
 import { barClass, displayCode, LEVEL_STYLES, type NomenclatureLevel } from '@/features/sales/nomenclature-levels'
@@ -78,6 +79,7 @@ import type {
   SalesComparisonLevel,
   SalesComparisonRow,
   SalesFigures,
+  SalesPromotionShare,
 } from '@/lib/types'
 import { specialDayLabel, specialDaysIn } from '@/lib/holidays'
 import { cn } from '@/lib/utils'
@@ -541,6 +543,7 @@ function Comparison({
     false,
     compareStore,
   )
+  const promotions = useSalesPromotionShare(storeId, periods, filter, !deli && !view.other)
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const picks = useTaskPicks()
   const taskSource = useTaskSource(
@@ -764,7 +767,9 @@ function Comparison({
       {view.other ? (
         <StoreTiles data={data} view={view} basis={basis} compare={compare} />
       ) : (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div
+          className={cn('mb-4 grid gap-3 sm:grid-cols-2', deli ? 'xl:grid-cols-4' : 'lg:grid-cols-3 2xl:grid-cols-5')}
+        >
           <TotalTile
             label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
             previous={data && saleValue(data.previousTotal, basis)}
@@ -772,6 +777,15 @@ function Comparison({
             format={formatZloty}
             compare={compare}
           />
+          {!deli && (
+            <PromotionTile
+              share={promotions.data}
+              failed={promotions.isError}
+              previousTotal={data?.previousTotal.saleValueGross}
+              currentTotal={data?.currentTotal.saleValueGross}
+              compare={compare}
+            />
+          )}
           <TotalTile
             label="Marża"
             previous={data?.previousTotal.marginValue ?? undefined}
@@ -1610,6 +1624,77 @@ function TotalTile({
 }
 
 const formatZloty = (value: number) => `${formatMoney(value)} zł`
+
+/**
+ * Sprzedaż brutto z dni, w których artykuły były w promocji (lista promocji, gazetki, MEA, cena poniżej zwykłej): kwota
+ * z okresem porównania i zmianą, a pod nią udział w całej sprzedaży brutto obu okresów ze zmianą w p.p.
+ */
+function PromotionTile({
+  share,
+  failed,
+  previousTotal,
+  currentTotal,
+  compare,
+}: {
+  share: SalesPromotionShare | undefined
+  failed: boolean
+  previousTotal: number | undefined
+  currentTotal: number | undefined
+  compare: CompareMode
+}) {
+  const loaded = share != null && previousTotal != null && currentTotal != null
+  const delta = loaded ? change(share.previousSaleValueGross, share.currentSaleValueGross) : null
+  const before = loaded && previousTotal > 0 ? (share.previousSaleValueGross / previousTotal) * 100 : null
+  const after = loaded && currentTotal > 0 ? (share.currentSaleValueGross / currentTotal) * 100 : null
+  const points = before != null && after != null ? after - before : null
+  return (
+    <Card
+      className="gap-1 p-4"
+      title="Sprzedaż brutto artykułów w dniach, w których były w promocji: lista promocji, gazetka sklepu, MEA albo cena dnia poniżej 85% ceny zwykłej (promocje z kasy, przeceny)."
+    >
+      <p className="text-sm text-muted-foreground">Sprzedaż w promocji (brutto)</p>
+      {loaded ? (
+        <>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <p className="text-2xl font-semibold tracking-tight tabular-nums">
+              {formatZloty(share.currentSaleValueGross)}
+            </p>
+            <p className={cn('text-sm font-medium tabular-nums', directionClass(delta!.direction))}>{delta!.label}</p>
+          </div>
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {COMPARE_LABELS[compare].inline} {formatZloty(share.previousSaleValueGross)}
+          </p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
+            <p>
+              <span className="font-semibold">{percentLabel(after)}</span>{' '}
+              <span className="text-muted-foreground">
+                sprzedaży · {COMPARE_LABELS[compare].inline} {percentLabel(before)}
+              </span>
+            </p>
+            {points != null && (
+              <p
+                className={cn(
+                  'font-medium',
+                  directionClass(Math.abs(points) < 0.05 ? 'flat' : points > 0 ? 'up' : 'down', true),
+                )}
+              >
+                {pointsText(points)}
+              </p>
+            )}
+          </div>
+        </>
+      ) : failed ? (
+        <p className="mt-1 text-sm text-muted-foreground">Nie udało się policzyć sprzedaży w promocji</p>
+      ) : (
+        <div aria-hidden className="mt-1 space-y-2">
+          <div className="h-7 w-32 loading-shimmer rounded-md" />
+          <div className="h-4 w-24 loading-shimmer rounded-md" />
+          <div className="h-4 w-36 loading-shimmer rounded-md" />
+        </div>
+      )}
+    </Card>
+  )
+}
 
 /** Zmiana w punktach procentowych ze znakiem (−1,2 p.p.). */
 const pointsText = (points: number) =>

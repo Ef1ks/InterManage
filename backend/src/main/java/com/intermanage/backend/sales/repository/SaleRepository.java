@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import com.intermanage.backend.leaflet.repository.PromoLeafletRepository;
 import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.sales.entity.Sale;
 
@@ -587,4 +588,106 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             group by 1, 2
             """, nativeQuery = true)
     List<MonthRegionSales> sumGrossByMonthAndRegion(UUID storeId, LocalDate from, LocalDate to);
+
+    /** Sprzedaż brutto z dni promocji w okresie ({@code period} p / c) i liczba artykułów, które ją dały. */
+    interface PromotionSales {
+        String getPeriod();
+
+        BigDecimal getSaleValueGross();
+
+        long getArticles();
+    }
+
+    /**
+     * Sprzedaż brutto artykułów w dniach, w których były w promocji, osobno dla okresu porównania i aktualnego: dzień
+     * jest promocyjny, gdy artykuł był na liście promocji ({@code effective_end}), w gazetce sklepu
+     * ({@link PromoLeafletRepository#ARTICLE_PERIODS}), w formularzu MEA (ITM8 promocyjny, równoległy albo EAN
+     * artykułu, jak plakietki gazetek w porównaniu) albo jego cena dnia była poniżej {@code priceFactor} × cena zwykła
+     * (rozpoznanie jak w skuteczności promocji, łapie też promocje z kasy i przeceny). Bez rejonów 90 i 91, z filtrem
+     * nomenklatury porównania. Ceny zwykłe i promocje czyta tylko dla dwóch okresów, nie dla roku między nimi
+     * (rok do roku za miesiąc na produkcji ok. 2,3 s, za dzień ok. 0,9 s). {@code dataFrom}-{@code dataTo} obejmuje oba
+     * okresy (gazetki sklepu).
+     */
+    @Query(value = "with leaflet as (" + PromoLeafletRepository.ARTICLE_PERIODS + """
+            ), days as (
+                select 'p' as period, s.itm8, s.sale_date, s.sale_value_gross as gross,
+                       case when s.quantity > 0 and s.sale_value_gross > 0
+                            then s.sale_value_gross / s.quantity end as price,
+                       cast(date_trunc('month', s.sale_date) as date) as month
+                from sales_by_article s
+                where s.store_id = :storeId
+                  and s.sale_date between cast(:previousFrom as date) and cast(:previousTo as date)
+                union all
+                select 'c', s.itm8, s.sale_date, s.sale_value_gross,
+                       case when s.quantity > 0 and s.sale_value_gross > 0
+                            then s.sale_value_gross / s.quantity end,
+                       cast(date_trunc('month', s.sale_date) as date)
+                from sales_by_article s
+                where s.store_id = :storeId
+                  and s.sale_date between cast(:currentFrom as date) and cast(:currentTo as date)
+            ), reference as (
+                select itm8, month,
+                       max(price) filter (where sale_days >= :minReferenceDays)
+                           over (partition by itm8 order by month
+                                 range between interval '2 month' preceding and current row) as price
+                from sales_month_prices
+                where store_id = :storeId
+                  and (month between cast(date_trunc('month', cast(:previousFrom as date)) - interval '2 month' as date)
+                                 and cast(:previousTo as date)
+                       or month between cast(date_trunc('month', cast(:currentFrom as date)) - interval '2 month' as date)
+                                    and cast(:currentTo as date))
+            ), mea_docs as (
+                select id, promo_from, promo_to from mea_documents
+                where promo_from <= cast(:previousTo as date) and promo_to >= cast(:previousFrom as date)
+                   or promo_from <= cast(:currentTo as date) and promo_to >= cast(:currentFrom as date)
+            ), mea_lines as (
+                select l.mea_itm8, ltrim(l.parallel_itm8, '0') as parallel, ltrim(btrim(l.ean), '0') as ean,
+                       d.promo_from, d.promo_to
+                from mea_docs d join mea_document_lines l on l.document_id = d.id
+            ), spans as materialized (
+                select p.itm8, p.start_date as date_from, p.effective_end as date_to
+                from promotions p
+                where p.store_id = :storeId
+                  and (p.effective_end >= cast(:previousFrom as date) and p.start_date <= cast(:previousTo as date)
+                       or p.effective_end >= cast(:currentFrom as date) and p.start_date <= cast(:currentTo as date))
+                union
+                select itm8, date_from, date_to from leaflet
+                union
+                select lpad(m.mea_itm8, 13, '0'), m.promo_from, m.promo_to from mea_lines m
+                where m.mea_itm8 ~ '^[0-9]+$'
+                union
+                select lpad(m.parallel, 13, '0'), m.promo_from, m.promo_to from mea_lines m
+                where m.parallel ~ '^[0-9]+$'
+                union
+                select p.itm8, m.promo_from, m.promo_to
+                from mea_lines m join products p on p.store_id = :storeId and ltrim(btrim(p.ean), '0') = m.ean
+                where m.ean <> ''
+                union
+                select c.itm8, m.promo_from, m.promo_to
+                from mea_lines m join product_codes c on c.store_id = :storeId and c.current
+                                                      and ltrim(btrim(c.ean), '0') = m.ean
+                where m.ean <> ''
+            ), counted as (
+                select d.* from days d
+                left join products p on p.store_id = :storeId and p.itm8 = d.itm8
+                where """ + COUNTED + """
+                  and """ + IN_CODES + """
+            ), promo_days as (
+                select d.period, d.itm8, d.sale_date
+                from counted d join reference r on r.itm8 = d.itm8 and r.month = d.month
+                where d.price < r.price * :priceFactor
+                union
+                select d.period, d.itm8, d.sale_date
+                from counted d join spans x on x.itm8 = d.itm8
+                where d.sale_date between x.date_from and x.date_to
+            )
+            select d.period as period, coalesce(sum(d.gross), 0) as saleValueGross,
+                   count(distinct d.itm8) as articles
+            from promo_days x
+            join counted d on d.period = x.period and d.itm8 = x.itm8 and d.sale_date = x.sale_date
+            group by d.period
+            """, nativeQuery = true)
+    List<PromotionSales> sumPromotionSales(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, LocalDate dataFrom, LocalDate dataTo, BigDecimal priceFactor,
+            int minReferenceDays, String[] codes);
 }

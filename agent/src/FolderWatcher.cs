@@ -11,7 +11,8 @@ namespace Intermanage.Agent;
 
 /// <summary>
 /// Pilnowanie folderów sklepu z konfiguracji (<c>watches</c>): pliki cen z kasy TRACEART (z podfolderem BACKUP), zmiany
-/// cen CTRLPRIX (.traite0 → .TraiteN po wczytaniu przez program sklepu) i dziennik ATHOS. Zmiany widzi od razu
+/// cen CTRLPRIX (.traite0 → .TraiteN po wczytaniu przez program sklepu), dziennik ATHOS i foldery raportów Importu
+/// danych (IMPORT_…: pliki, o które poprosi serwer, wysyła <see cref="ReportUploader"/>, a wgrane usuwa następnego dnia). Zmiany widzi od razu
 /// (<see cref="FileSystemWatcher"/>), zbiera je z odbiciem 500 ms (Windows zgłasza jedną zmianę kilka razy) i wysyła
 /// paczką najpóźniej sekundę po wykryciu; pliki, o które poprosi serwer, wysyła od razu po odpowiedzi.
 ///
@@ -44,6 +45,7 @@ internal sealed class FolderWatcher : IDisposable
     }
 
     private readonly AgentHost host;
+    private readonly ReportUploader reports;
     private readonly ConcurrentDictionary<string, DateTime> changed = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<FolderEvent> outbox = new();
     private readonly object outboxGate = new();
@@ -58,7 +60,11 @@ internal sealed class FolderWatcher : IDisposable
     private string configSignature = "";
     private DateTime nextFullScan = DateTime.MinValue;
 
-    public FolderWatcher(AgentHost host) => this.host = host;
+    public FolderWatcher(AgentHost host, ReportUploader reports)
+    {
+        this.host = host;
+        this.reports = reports;
+    }
 
     /// <summary>Pełny przegląd od razu (menu „Sprawdź teraz”).</summary>
     public void ScanNow()
@@ -324,6 +330,48 @@ internal sealed class FolderWatcher : IDisposable
                 }
             }
             await SendRequestedAsync(api, response.Requests, cancel);
+            await DeleteImportedAsync(api, response.Deletes, cancel);
+        }
+    }
+
+    /// <summary>
+    /// Wgrane raporty Importu danych, które serwer każe usunąć (następnego dnia po wgraniu). Usuwa plik tylko, gdy ma
+    /// dalej tę samą datę zmiany: nowszy raport zapisany pod tą samą nazwą zostaje.
+    /// </summary>
+    private async Task DeleteImportedAsync(ApiClient api, List<FileDelete> deletes, CancellationToken cancel)
+    {
+        foreach (var delete in deletes ?? new List<FileDelete>())
+        {
+            if (!paths.TryGetValue(delete.FileName, out var path)) continue;
+            bool removed;
+            try
+            {
+                removed = await Disk.Run(() =>
+                {
+                    var info = new FileInfo(path);
+                    if (!info.Exists) return false;
+                    var difference = Math.Abs((info.LastWriteTimeUtc - delete.Modified.UtcDateTime).TotalSeconds);
+                    if (difference >= 1) return false;
+                    info.Delete();
+                    return true;
+                }, TimeSpan.FromSeconds(60), cancel);
+            }
+            catch (Exception error) when (!(error is OperationCanceledException))
+            {
+                Log.Warn("Nie usunięto wgranego raportu " + path + ": " + error.Message);
+                continue;
+            }
+            if (!removed) continue;
+            paths.TryRemove(delete.FileName, out _);
+            Log.Info("Usunięto wgrany raport " + path);
+            try
+            {
+                await api.ReportRemovedAsync(delete.FolderKey, delete.FileName, delete.Modified, cancel);
+            }
+            catch (RejectedException)
+            {
+                // Historia na serwerze to tylko opis; plik i tak jest usunięty.
+            }
         }
     }
 
@@ -334,6 +382,12 @@ internal sealed class FolderWatcher : IDisposable
         foreach (var request in requests)
         {
             if (!paths.TryGetValue(request.FileName, out var path)) continue;
+            // Raporty Importu danych idą osobną kolejką w kawałkach (czyta je dopiero ona).
+            if (request.FolderKey.StartsWith("IMPORT_", StringComparison.OrdinalIgnoreCase))
+            {
+                reports.Enqueue(request.FolderKey, request.FileName, path);
+                continue;
+            }
             var content = await Disk.ReadWhenReady(path, cancel);
             if (content == null) continue;
             if (request.FolderKey == "ATHOS")

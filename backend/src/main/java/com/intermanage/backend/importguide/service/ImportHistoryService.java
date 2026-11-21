@@ -15,6 +15,7 @@ import com.intermanage.backend.document.entity.DocumentImport;
 import com.intermanage.backend.document.mapper.DocumentMapper;
 import com.intermanage.backend.document.repository.DocumentImportRepository;
 import com.intermanage.backend.importguide.dto.ImportHistoryPage;
+import com.intermanage.backend.importguide.entity.ImportReportKind;
 import com.intermanage.backend.nomenclature.entity.NomenclatureImport;
 import com.intermanage.backend.nomenclature.mapper.NomenclatureMapper;
 import com.intermanage.backend.nomenclature.repository.NomenclatureImportRepository;
@@ -113,6 +114,34 @@ public class ImportHistoryService {
         entries.sort(Comparator.comparing(ImportHistoryPage.Entry::importedAt).reversed());
         boolean hasMore = entries.size() > PAGE_SIZE;
         return new ImportHistoryPage(hasMore ? List.copyOf(entries.subList(0, PAGE_SIZE)) : entries, hasMore);
+    }
+
+    /** Wgranie raportu: nazwa pliku i chwila wgrania. */
+    public record ImportedFile(String fileName, Instant importedAt) {
+    }
+
+    /**
+     * Ostatnie wgrania jednego z codziennych raportów (nazwa pliku i chwila), od najnowszego; pusta lista dla raportów
+     * spoza codziennych. Z nich agent sklepu wie, które pliki z folderu są już wgrane.
+     */
+    @Transactional(readOnly = true)
+    public List<ImportedFile> recent(UUID storeId, ImportReportKind kind, int limit) {
+        Limit max = Limit.of(limit);
+        return switch (kind) {
+            case PRODUCTS -> products.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case PRODUCT_CODES -> productCodes.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case PROMOTIONS -> promotions.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case SALES -> sales.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case DOCUMENTS -> documents.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case CADENCIER -> cadencier.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case SUPPLIERS, NOMENCLATURES -> List.of();
+        };
     }
 
     private static <T> void add(List<ImportHistoryPage.Entry> entries, String kind, List<T> imports,

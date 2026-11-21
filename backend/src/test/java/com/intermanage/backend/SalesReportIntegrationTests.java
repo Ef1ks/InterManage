@@ -249,6 +249,16 @@ class SalesReportIntegrationTests {
                 .andExpect(jsonPath("$.rows[%d].leaflets[1].current".formatted(0))
                         .value(true))
                 .andExpect(jsonPath("$.rows[%d].leaflets.length()".formatted(1)).value(0));
+        // Sprzedaż z dni promocji: kawa w MEA 1.10, herbata 29.09 bez promocji.
+        mvc.perform(get(reportsUrl(storeId) + "/sales-comparison/promotions?" + PERIODS).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentSaleValueGross").value(27.0))
+                .andExpect(jsonPath("$.currentArticles").value(1))
+                .andExpect(jsonPath("$.previousSaleValueGross").value(0))
+                .andExpect(jsonPath("$.previousArticles").value(0));
+        mvc.perform(get(reportsUrl(storeId) + "/sales-comparison/promotions?" + PERIODS + "&nomenclatures=02")
+                        .cookie(owner))
+                .andExpect(jsonPath("$.currentSaleValueGross").value(0));
         // Nomenklatura nie dostaje gazetek.
         mvc.perform(get(comparisonUrl(storeId) + "&parent=").cookie(owner))
                 .andExpect(jsonPath("$.rows[0].leaflets.length()").value(0));

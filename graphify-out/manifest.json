@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1795198545.5106351,
-    "seen": 1795198769.3164756,
-    "ast_hash": "4e184a36a67e568c9df373252fb31929",
+    "mtime": 1795248108.0602362,
+    "seen": 1795248532.1366308,
+    "ast_hash": "d5449981052cd9002cd2473815b32221",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -336,9 +336,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795198709.47041,
-    "seen": 1795198769.346028,
-    "ast_hash": "0f7147162d06ad1947a3646ca371a2c5",
+    "mtime": 1795248447.5516026,
+    "seen": 1795248532.1728857,
+    "ast_hash": "b92e4c06e5726871750731731bdc46c3",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1134,15 +1134,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/imports/ImportPage.tsx": {
-    "mtime": 1795097230.0203004,
-    "seen": 1795097582.5890002,
-    "ast_hash": "b4dfe5a8732ee8553af5f5b434653610",
+    "mtime": 1795248151.3996131,
+    "seen": 1795248532.1011019,
+    "ast_hash": "1a82e6e69552e646e25d0216310adead",
     "semantic_hash": ""
   },
   "frontend/src/features/imports/api.ts": {
-    "mtime": 1795025176.3323357,
-    "seen": 1795025465.7355635,
-    "ast_hash": "f8e6b243f8c1d7d75385d679101a0a7e",
+    "mtime": 1795248108.0602362,
+    "seen": 1795248532.101623,
+    "ast_hash": "7af86640529f3989d77b21afd5450439",
     "semantic_hash": ""
   },
   "frontend/src/features/settings/StoreFormDialog.tsx": {
@@ -1596,9 +1596,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/SalesReportIntegrationTests.java": {
-    "mtime": 1795198653.3860743,
-    "seen": 1795198769.244338,
-    "ast_hash": "7f00cf5ed04cbfa6311683008d4e4d25",
+    "mtime": 1795200365.168327,
+    "seen": 1795200546.50754,
+    "ast_hash": "ef82c6598cf893f99d108c3b45972a3c",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ReportsGrid.tsx": {
@@ -1608,9 +1608,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesComparisonReport.tsx": {
-    "mtime": 1795198579.1102262,
-    "seen": 1795198769.2966492,
-    "ast_hash": "fb531e35960f0c05ecf938debe14d903",
+    "mtime": 1795200456.5463934,
+    "seen": 1795200546.5625682,
+    "ast_hash": "d56dae7f0a3e0b2580cc87aa81d48403",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/SalesPage.tsx": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/api.ts": {
-    "mtime": 1795092986.7508357,
-    "seen": 1795093081.161294,
-    "ast_hash": "2e795bc4973c33a0a44b26957969b4ab",
+    "mtime": 1795200431.9302723,
+    "seen": 1795200546.5640717,
+    "ast_hash": "4643bd78e9ff9f6c46b4f0d390cfd1fa",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/paths.ts": {
@@ -3210,9 +3210,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/controller/SalesReportController.java": {
-    "mtime": 1795070281.512193,
-    "seen": 1795070644.7370098,
-    "ast_hash": "280b8894d8292d7a1133bb2ae0f71f68",
+    "mtime": 1795200356.6656938,
+    "seen": 1795200546.4295855,
+    "ast_hash": "5ea330cbc9cbbb3bfd2d056e0996fb38",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/SalesComparisonResponse.java": {
@@ -3282,9 +3282,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/repository/SaleRepository.java": {
-    "mtime": 1795197619.1039743,
-    "seen": 1795197816.0524957,
-    "ast_hash": "325797605f55fb8bcb89763a9f7bc442",
+    "mtime": 1795200338.485216,
+    "seen": 1795200546.4451687,
+    "ast_hash": "0ef3d0ebadfa975859cea0dbf74e41b8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/repository/SalesImportRepository.java": {
@@ -3300,9 +3300,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/service/SalesReportService.java": {
-    "mtime": 1795198475.036331,
-    "seen": 1795198769.187024,
-    "ast_hash": "9e3a3f298a945b949921ca8cc245a3d1",
+    "mtime": 1795200356.6641889,
+    "seen": 1795200546.447783,
+    "ast_hash": "2bbc3d8bc7c50ed74e2824aee7fca123",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/store/controller/StoreController.java": {
@@ -3822,9 +3822,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/saved-folders.ts": {
-    "mtime": 1795159282.4600968,
-    "seen": 1795161406.52543,
-    "ast_hash": "3f454df4a110ef4e21f715b3d4fc6436",
+    "mtime": 1795246199.746168,
+    "seen": 1795246333.5935166,
+    "ast_hash": "ef95986d47d7331b9be5bea8060e715d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/deliorder/dto/ChangeDeliveryDateRequest.java": {
@@ -11652,9 +11652,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/service/ImportHistoryService.java": {
-    "mtime": 1794774259.5525792,
-    "seen": 1794804559.9816191,
-    "ast_hash": "bc7cd44a59d314ed5d3374a439e8df30",
+    "mtime": 1795247836.9890814,
+    "seen": 1795248531.915845,
+    "ast_hash": "a4f2481ca0bf13f5b9d89bf6d9966600",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/store/controller/StoreFileLocationController.java": {
@@ -13332,15 +13332,15 @@
     "semantic_hash": ""
   },
   "agent/Intermanage.Agent.csproj": {
-    "mtime": 1795147022.154886,
-    "seen": 1795147412.4801302,
-    "ast_hash": "e19d7d04b809c373fcbe1d01ffded467",
+    "mtime": 1795248073.721462,
+    "seen": 1795248531.8131971,
+    "ast_hash": "fc5a46f4307d55449e254e47681c037e",
     "semantic_hash": ""
   },
   "agent/src/AgentHost.cs": {
-    "mtime": 1795147212.2889705,
-    "seen": 1795147412.4801302,
-    "ast_hash": "911dfb078de82ecdc3b25433815e95e7",
+    "mtime": 1795248061.5313315,
+    "seen": 1795248531.8131971,
+    "ast_hash": "db1ae34a39e7ab40d8ad3111b994ac66",
     "semantic_hash": ""
   },
   "agent/src/AgentSettings.cs": {
@@ -13350,9 +13350,9 @@
     "semantic_hash": ""
   },
   "agent/src/ApiClient.cs": {
-    "mtime": 1795150981.356817,
-    "seen": 1795151134.617861,
-    "ast_hash": "f833ff3f007e9f4b696b6deb4bd65446",
+    "mtime": 1795248030.5378654,
+    "seen": 1795248531.8131971,
+    "ast_hash": "d2e5369b4f4ebbcb627687f38d9f4e14",
     "semantic_hash": ""
   },
   "agent/src/FileSaver.cs": {
@@ -13362,9 +13362,9 @@
     "semantic_hash": ""
   },
   "agent/src/FolderWatcher.cs": {
-    "mtime": 1795150981.3578134,
-    "seen": 1795151134.617861,
-    "ast_hash": "743306879b45cd3706d13a16f4a9b07f",
+    "mtime": 1795248061.5313315,
+    "seen": 1795248531.8131971,
+    "ast_hash": "6618519f1f50c33a055a678552577551",
     "semantic_hash": ""
   },
   "agent/src/Log.cs": {
@@ -13404,9 +13404,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/StoreAgentApiController.java": {
-    "mtime": 1795150925.053104,
-    "seen": 1795151134.6218648,
-    "ast_hash": "35f89da5c10a48173a49721b67a9bc8b",
+    "mtime": 1795247981.0127664,
+    "seen": 1795248531.8182175,
+    "ast_hash": "5ca6d856849851c47b836fd36845133e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/StoreAgentController.java": {
@@ -13416,9 +13416,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/dto/AgentApi.java": {
-    "mtime": 1795146229.690038,
-    "seen": 1795147412.4831305,
-    "ast_hash": "a5c5dbe1b19fbb8f8c5b354ce963e8a9",
+    "mtime": 1795247924.584159,
+    "seen": 1795248531.8182175,
+    "ast_hash": "28ec34295f3dc18ed057d825c40acc13",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/dto/AgentStatusResponse.java": {
@@ -13452,9 +13452,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/mapper/StoreAgentMapper.java": {
-    "mtime": 1795146229.7170715,
-    "seen": 1795147412.4831305,
-    "ast_hash": "5f91758f0a69474df3588c86025d6f5f",
+    "mtime": 1795247836.8989253,
+    "seen": 1795248531.8192174,
+    "ast_hash": "9357dfae57cfd0cb0db002884d03c683",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/repository/StoreAgentRepository.java": {
@@ -13470,9 +13470,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/service/AgentEventService.java": {
-    "mtime": 1795150925.053104,
-    "seen": 1795151134.6228662,
-    "ast_hash": "23e3d6485793ac424012693522c5d012",
+    "mtime": 1795247959.9297655,
+    "seen": 1795248531.8192174,
+    "ast_hash": "e9f067a90eff8554ef96595d0ce617e5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/service/AgentFileQueueService.java": {
@@ -13482,9 +13482,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/service/StoreAgentService.java": {
-    "mtime": 1795159197.6930447,
-    "seen": 1795161406.235612,
-    "ast_hash": "6d00b9cecdce8e4458c699a4fef24a4b",
+    "mtime": 1795247967.7560995,
+    "seen": 1795248531.8202174,
+    "ast_hash": "216cc498fa5b433798f7052680f5b75d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/LiveEvents.java": {
@@ -13494,9 +13494,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StoreAgentIntegrationTests.java": {
-    "mtime": 1795159230.7690344,
-    "seen": 1795161406.458216,
-    "ast_hash": "cfd2131f7ebc3360c631b42e037d9acb",
+    "mtime": 1795248371.4117029,
+    "seen": 1795248532.0585365,
+    "ast_hash": "5abaf32c6ca8a799c108287d9a4d4e7d",
     "semantic_hash": ""
   },
   "frontend/src/features/store-agent/AgentStatusDot.tsx": {
@@ -13518,9 +13518,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/store-agent/use-live-events.ts": {
-    "mtime": 1795146929.5879142,
-    "seen": 1795147412.7529974,
-    "ast_hash": "aba95fd76dd1cbd985db4b7b3dbf3aad",
+    "mtime": 1795248108.061236,
+    "seen": 1795248532.128136,
+    "ast_hash": "b483c5c3b5e069790e5fcda2bfa9c238",
     "semantic_hash": ""
   },
   "frontend/src/lib/agent-save.ts": {
@@ -13542,9 +13542,9 @@
     "semantic_hash": ""
   },
   "agent/README.md": {
-    "mtime": 1795151070.0437763,
-    "seen": 1795151134.9454956,
-    "ast_hash": "d70e13cf59c2ab8a571dc8ae4990d278",
+    "mtime": 1795248081.9769235,
+    "seen": 1795248532.1728857,
+    "ast_hash": "ed3c2838efce854dae07da9f394ddcfe",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/CompressedUploads.java": {
@@ -13794,9 +13794,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/screen-capture.ts": {
-    "mtime": 1795198600.6291661,
-    "seen": 1795198769.3154643,
-    "ast_hash": "7459479175c22afd227f65f3b021e09a",
+    "mtime": 1795198971.315534,
+    "seen": 1795200546.5803564,
+    "ast_hash": "1ddd1ebf1ae992be8b7e38ed651e7f39",
     "semantic_hash": ""
   },
   "mobile/src/components/TaskAttachments.tsx": {
@@ -13806,15 +13806,63 @@
     "semantic_hash": ""
   },
   "frontend/src/features/tasks/QuickTaskButton.tsx": {
-    "mtime": 1795196971.6948571,
-    "seen": 1795197107.6212263,
-    "ast_hash": "088853c64b8a3e76bc5cdac4c10cdf37",
+    "mtime": 1795200279.2811792,
+    "seen": 1795200546.5767398,
+    "ast_hash": "ca26c4df964c609acf859bc7a70029dc",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/sales/dto/ArticleLeafletMark.java": {
     "mtime": 1795198459.5342174,
     "seen": 1795198769.1735017,
     "ast_hash": "a6d57ecdd19c9023e86f78cdd88835b3",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/sales/dto/SalesPromotionShare.java": {
+    "mtime": 1795200356.6215878,
+    "seen": 1795200546.4382021,
+    "ast_hash": "5432e2e4f513db7c560e08b9db287a22",
+    "semantic_hash": ""
+  },
+  "agent/src/ReportUploader.cs": {
+    "mtime": 1795248060.2628913,
+    "seen": 1795248531.814698,
+    "ast_hash": "2f8b5c067f198ade74035507c7961c11",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/controller/AgentReportController.java": {
+    "mtime": 1795247989.900839,
+    "seen": 1795248531.8182175,
+    "ast_hash": "fadce3b286aad7087fe22a420eabe900",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/dto/AgentReportFileResponse.java": {
+    "mtime": 1795247836.809661,
+    "seen": 1795248531.8182175,
+    "ast_hash": "0d1e57fde65b477168b9f1e1caaec094",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/entity/AgentReportFile.java": {
+    "mtime": 1795247819.0776637,
+    "seen": 1795248531.8192174,
+    "ast_hash": "f74dbfe057fdab4360d02fc0062a350e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/repository/AgentReportFileRepository.java": {
+    "mtime": 1795247819.1058931,
+    "seen": 1795248531.8192174,
+    "ast_hash": "177af465035e9424e2d882ca567ba92b",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/service/AgentReportService.java": {
+    "mtime": 1795248456.0233588,
+    "seen": 1795248531.8202174,
+    "ast_hash": "eba24b6698043f41db8085fdc5bff6b1",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/imports/AgentReportFiles.tsx": {
+    "mtime": 1795248141.178162,
+    "seen": 1795248532.1011019,
+    "ast_hash": "75c5672835b51990844e8e575f15db81",
     "semantic_hash": ""
   }
 }

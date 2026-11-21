@@ -37,7 +37,8 @@ import com.intermanage.backend.product.service.PriceFileService;
  * <li>TRACEART: nowe nazwy → {@link PriceFileService#pending}, czyli prośba o pliki, których sklep jeszcze nie ma;
  * <li>CTRLPRIX: nazwa z końcówką .TraiteN → {@link DataEntryPriceControlService#seen} (program sklepu wczytał
  * zmianę cen), z wiadomością na żywo {@code price-control};
- * <li>ATHOS: zmieniony {@code Histo.Log} nowszy niż ostatnio wczytany → prośba o plik.
+ * <li>ATHOS: zmieniony {@code Histo.Log} nowszy niż ostatnio wczytany → prośba o plik;
+ * <li>raporty Importu danych ({@code IMPORT_…}): {@link AgentReportService#handle}.
  * </ul>
  */
 @Service
@@ -53,23 +54,30 @@ public class AgentEventService {
     private final DataEntryPriceControlService priceControl;
     private final MeaAthosService athos;
     private final LiveEvents live;
+    private final AgentReportService reports;
 
     public AgentEventService(PriceFileService priceFiles, DataEntryPriceControlService priceControl,
-            MeaAthosService athos, LiveEvents live) {
+            MeaAthosService athos, LiveEvents live, AgentReportService reports) {
         this.priceFiles = priceFiles;
         this.priceControl = priceControl;
         this.athos = athos;
         this.live = live;
+        this.reports = reports;
     }
 
     public AgentApi.EventsResponse handle(StoreAgentService.AgentContext agent, List<AgentApi.Event> events) {
         UUID storeId = agent.storeId();
         List<String> traceart = new ArrayList<>();
+        List<AgentApi.Event> reportEvents = new ArrayList<>();
         Map<String, Integer> processed = new HashMap<>();
         Instant athosModified = null;
         String athosName = null;
         for (AgentApi.Event event : events) {
             if ("DELETED".equalsIgnoreCase(event.kind())) {
+                continue;
+            }
+            if (AgentReportService.kindOf(event.folderKey()) != null) {
+                reportEvents.add(event);
                 continue;
             }
             String name = event.fileName();
@@ -108,7 +116,13 @@ public class AgentEventService {
                 requests.add(new AgentApi.FileRequest(StoreAgentService.ATHOS, athosName));
             }
         }
-        return new AgentApi.EventsResponse(requests);
+        List<AgentApi.FileDelete> deletes = new ArrayList<>();
+        if (!reportEvents.isEmpty()) {
+            AgentApi.EventsResponse fromReports = reports.handle(storeId, reportEvents);
+            requests.addAll(fromReports.requests());
+            deletes.addAll(fromReports.deletes());
+        }
+        return new AgentApi.EventsResponse(requests, deletes);
     }
 
     /** Pliki TRACEART od agenta (ta sama logika co z przeglądarki), także spakowane gzipem. */

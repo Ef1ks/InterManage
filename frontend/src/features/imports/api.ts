@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 
 import { importProgress, uploadReport } from './report-upload'
 import type {
+  AgentReportFile,
   DocumentImport,
   EanChange,
   ImportGuide,
@@ -213,6 +214,17 @@ export function useImportHistory(storeId: string) {
     },
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? (last.items.at(-1)?.importedAt ?? null) : null),
+  })
+}
+
+export const agentReportFilesKey = (storeId: string) => ['stores', storeId, 'imports', 'agent-files'] as const
+
+/** Ostatnie raporty wgrane przez agenta sklepu (odświeża je wiadomość na żywo `imports`). */
+export function useAgentReportFiles(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: agentReportFilesKey(storeId),
+    queryFn: () => api<AgentReportFile[]>(`/stores/${storeId}/imports/agent-files`),
+    enabled,
   })
 }
 

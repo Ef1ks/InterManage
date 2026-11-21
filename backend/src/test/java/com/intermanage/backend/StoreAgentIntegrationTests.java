@@ -352,6 +352,173 @@ class StoreAgentIntegrationTests {
         }
     }
 
+    /**
+     * Raport Importu danych przez agenta: folder ze ścieżki zapisu makra, prośba o nowy plik, wysyłka w kawałkach,
+     * import w tle tą samą drogą co z przeglądarki, a następnego dnia polecenie usunięcia wgranego pliku z folderu.
+     */
+    @Test
+    void agentImportsReportFromFolderAndDeletesItNextDay() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String storeNumber = jdbc.queryForObject("select number from stores where id = ?::uuid", String.class,
+                storeId);
+        String key = addAgent(owner, storeId, "Biuro");
+        // Bez pracy przez agenta raportów nie pilnuje.
+        hello(key).andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_CADENCIER')]").isEmpty());
+        enable(owner, storeId);
+        mvc.perform(put("/api/stores/" + storeId + "/file-locations").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"locations":{"import:CADENCIER:path":"P:\\\\Raporty\\\\obecne w cad.xlsx",
+                                  "import:CADENCIER:mask":"obecne w cad*"}}"""))
+                .andExpect(status().isOk());
+        hello(key)
+                .andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_CADENCIER')].path").value("P:\\Raporty"))
+                .andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_CADENCIER')].pattern")
+                        .value("^(?!~\\$)obecne w cad.*\\.(?:xlsx|xlsm)$"));
+
+        Instant modified = Instant.now().minus(java.time.Duration.ofDays(2)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        String event = """
+                {"events":[
+                  {"kind":"PRESENT","folderKey":"IMPORT_CADENCIER","fileName":"obecne w cad.xlsx","size":%d,
+                   "modified":"%s"},
+                  {"kind":"PRESENT","folderKey":"IMPORT_CADENCIER","fileName":"~$obecne w cad.xlsx","size":1,
+                   "modified":"%s"}
+                ]}""";
+        byte[] report = cadencierReport(storeNumber, "28/10/2026 15:02:59", "0000000001001", "0000000001002");
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(event.formatted(report.length, modified, modified)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requests.length()").value(1))
+                .andExpect(jsonPath("$.requests[0].folderKey").value("IMPORT_CADENCIER"))
+                .andExpect(jsonPath("$.requests[0].fileName").value("obecne w cad.xlsx"))
+                .andExpect(jsonPath("$.deletes.length()").value(0));
+
+        String start = mvc.perform(post("/api/store-agent/reports").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"folderKey":"IMPORT_CADENCIER","fileName":"obecne w cad.xlsx","size":%d,
+                                 "modified":"%s"}""".formatted(report.length, modified)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(start, "$.id");
+        // Ten sam plik w trakcie wysyłki: serwer o niego nie prosi i drugiej wysyłki nie przyjmuje.
+        mvc.perform(post("/api/store-agent/reports").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"folderKey":"IMPORT_CADENCIER","fileName":"obecne w cad.xlsx","size":%d,
+                                 "modified":"%s"}""".formatted(report.length, modified)))
+                .andExpect(status().isConflict());
+        int half = report.length / 2;
+        mvc.perform(put("/api/store-agent/reports/" + id + "/chunks/0").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .content(java.util.Arrays.copyOfRange(report, 0, half)))
+                .andExpect(status().isNoContent());
+        mvc.perform(put("/api/store-agent/reports/" + id + "/chunks/1").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .content(java.util.Arrays.copyOfRange(report, half, report.length)))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/store-agent/reports/" + id + "/finish").header(HttpHeaders.AUTHORIZATION, "Bearer " + key))
+                .andExpect(status().isAccepted());
+
+        String status = null;
+        for (int attempt = 0; attempt < 100 && !"IMPORTED".equals(status) && !"FAILED".equals(status); attempt++) {
+            Thread.sleep(100);
+            String files = mvc.perform(get("/api/stores/" + storeId + "/imports/agent-files").cookie(owner))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            status = JsonPath.read(files, "$[0].status");
+        }
+        assertThat(status).isEqualTo("IMPORTED");
+        assertThat(jdbc.queryForObject("select count(*) from cadencier_items where store_id = ?::uuid",
+                Integer.class, storeId)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select imported_by from cadencier_imports where store_id = ?::uuid",
+                String.class, storeId)).isNull();
+
+        // Wgrany dziś: nie prosi o niego drugi raz i jeszcze go nie usuwa.
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(event.formatted(report.length, modified, modified)))
+                .andExpect(jsonPath("$.requests.length()").value(0))
+                .andExpect(jsonPath("$.deletes.length()").value(0));
+
+        // Następnego dnia: usunąć ten plik, ale nie nowszy zapisany pod tą samą nazwą.
+        jdbc.update("update agent_report_files set finished_at = now() - interval '1 day' where id = ?::uuid", id);
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(event.formatted(report.length, modified, modified)))
+                .andExpect(jsonPath("$.requests.length()").value(0))
+                .andExpect(jsonPath("$.deletes.length()").value(1))
+                .andExpect(jsonPath("$.deletes[0].fileName").value("obecne w cad.xlsx"));
+        Instant newer = Instant.now().plusSeconds(60).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(event.formatted(report.length, newer, newer)))
+                .andExpect(jsonPath("$.requests.length()").value(1))
+                .andExpect(jsonPath("$.deletes.length()").value(0));
+
+        mvc.perform(post("/api/store-agent/reports/removed").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"folderKey":"IMPORT_CADENCIER","fileName":"obecne w cad.xlsx","modified":"%s"}"""
+                                .formatted(modified)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/stores/" + storeId + "/imports/agent-files").cookie(owner))
+                .andExpect(jsonPath("$[0].removedFromDiskAt").isNotEmpty());
+    }
+
+    /** Lista „OBECNE W CADENCIER” jak z systemu sklepu: minimalny skoroszyt .xlsx z tekstami. */
+    private static byte[] cadencierReport(String storeNumber, String date, String... itm8s) throws IOException {
+        List<String[]> rows = new java.util.ArrayList<>();
+        rows.add(new String[] {"TRYTOMA  Sp. z o.o. - Numer punktu sprzedaży " + storeNumber});
+        rows.add(new String[] {"Data : " + date});
+        rows.add(new String[] {"OBECNE W CAD"});
+        rows.add(new String[] {});
+        rows.add(new String[] {"Lista Automatyczna - 1996, OBECNE W CADENCIER (posort. wg. ITM8 Prio)"});
+        rows.add(new String[] {});
+        rows.add(new String[] {"ITM", "EAN"});
+        for (String itm8 : itm8s) {
+            rows.add(new String[] {itm8, "590" + itm8.substring(Math.max(0, itm8.length() - 10))});
+        }
+        rows.add(new String[] {});
+        rows.add(new String[] {"Ilość linii: :" + String.format("%06d", itm8s.length)});
+        List<String> shared = new java.util.ArrayList<>();
+        StringBuilder sheet = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+        for (int r = 0; r < rows.size(); r++) {
+            sheet.append("<row r=\"").append(r + 1).append("\">");
+            String[] cells = rows.get(r);
+            for (int c = 0; c < cells.length; c++) {
+                sheet.append("<c r=\"").append((char) ('A' + c)).append(r + 1).append("\" t=\"s\"><v>")
+                        .append(shared.size()).append("</v></c>");
+                shared.add(cells[c]);
+            }
+            sheet.append("</row>");
+        }
+        sheet.append("</sheetData></worksheet>");
+        StringBuilder strings = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+        shared.forEach(s -> strings.append("<si><t xml:space=\"preserve\">").append(s).append("</t></si>"));
+        strings.append("</sst>");
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(bytes)) {
+            entry(zip, "xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                    + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+                    + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                    + "<sheets><sheet name=\"Mercalys\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
+            entry(zip, "xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                    + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
+                    + "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>"
+                    + "</Relationships>");
+            entry(zip, "xl/worksheets/sheet1.xml", sheet.toString());
+            entry(zip, "xl/sharedStrings.xml", strings.toString());
+        }
+        return bytes.toByteArray();
+    }
+
+    private static void entry(java.util.zip.ZipOutputStream zip, String name, String content) throws IOException {
+        zip.putNextEntry(new java.util.zip.ZipEntry(name));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
     private MvcResult wait(String key) throws Exception {
         return mvc.perform(get("/api/store-agent/file-queue/wait?timeout=25")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + key))

@@ -92,6 +92,18 @@ export function useLiveEvents() {
           case 'athos':
             invalidate('mea')
             break
+          case 'imports':
+            // Wgrany raport zmienia dane całego sklepu (raporty, kartoteka, dokumenty), w toku tylko listę agenta.
+            if (message.action === 'imported') invalidate()
+            else invalidate('imports', 'agent-files')
+            if (message.action === 'failed') {
+              announce(
+                `Agent nie wgrał raportu ${String(message.fileName ?? '')}`,
+                typeof message.error === 'string' ? message.error : undefined,
+                `imports:${String(message.id)}`,
+              )
+            }
+            break
           case 'agent':
             void queryClient.invalidateQueries({ queryKey: agentsKey(messageStore) })
             if (message.action === 'offline') {

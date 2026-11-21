@@ -1280,6 +1280,14 @@ export type SalesComparisonRow = {
   leaflets: ArticleLeafletMark[]
 }
 
+/** Sprzedaż brutto z dni promocji w okresie porównania i aktualnym, z liczbą artykułów, które ją dały. */
+export type SalesPromotionShare = {
+  previousSaleValueGross: number
+  currentSaleValueGross: number
+  previousArticles: number
+  currentArticles: number
+}
+
 /** Gazetka artykułu: MEA z numerem i tytułem albo gazetka sklepu z pliku (bez numeru). */
 export type ArticleLeafletMark = {
   number: string | null
@@ -4894,8 +4902,25 @@ export type AgentStatus = {
   lastSeenAt: string | null
   /** Klucze folderów zapisu, które agent obsługuje. */
   folders: string[]
-  /** Pilnowane foldery: `TRACEART`, `CTRLPRIX`, `ATHOS`. */
+  /** Pilnowane foldery: `TRACEART`, `CTRLPRIX`, `ATHOS` i raporty importu `IMPORT_<raport>`. */
   watches: string[]
+}
+
+/**
+ * Próba wgrania raportu przez agenta sklepu (AgentReportFileResponse). `INTERRUPTED`: przerwana restartem serwera
+ * albo zerwaną wysyłką, plik pójdzie ponownie.
+ */
+export type AgentReportFile = {
+  id: string
+  kind: ImportReportKind
+  fileName: string
+  fileModified: string
+  fileSize: number
+  status: 'UPLOADING' | 'IMPORTING' | 'IMPORTED' | 'FAILED' | 'INTERRUPTED'
+  error: string | null
+  startedAt: string
+  finishedAt: string | null
+  removedFromDiskAt: string | null
 }
 
 /** Agent sklepu w Ustawieniach sklepu (StoreAgentResponse); `key` tylko zaraz po dodaniu. */

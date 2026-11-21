@@ -31,6 +31,7 @@ import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.product.repository.ArticleMergeRepository;
 import com.intermanage.backend.product.repository.ProductRepository;
+import com.intermanage.backend.promotion.service.PromotionReportService;
 import com.intermanage.backend.mea.entity.MeaDocument;
 import com.intermanage.backend.mea.repository.MeaDocumentRepository;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
@@ -44,6 +45,7 @@ import com.intermanage.backend.sales.dto.SalesComparisonRow;
 import com.intermanage.backend.sales.dto.SalesFigures;
 import com.intermanage.backend.sales.dto.SalesHistoryDay;
 import com.intermanage.backend.sales.dto.SalesHistoryResponse;
+import com.intermanage.backend.sales.dto.SalesPromotionShare;
 import com.intermanage.backend.sales.dto.SalesReportsOverview;
 import com.intermanage.backend.sales.mapper.SalesMapper;
 import com.intermanage.backend.sales.repository.SaleRepository;
@@ -199,6 +201,37 @@ public class SalesReportService {
     private static boolean overlaps(MeaDocumentRepository.ArticleLeaflet leaflet, LocalDate from, LocalDate to) {
         return leaflet.getPromoFrom() != null && leaflet.getPromoTo() != null
                 && !leaflet.getPromoFrom().isAfter(to) && !leaflet.getPromoTo().isBefore(from);
+    }
+
+    /**
+     * Ile sprzedaży brutto obu okresów dały artykuły w dniach promocji (lista promocji, gazetki, MEA, cena poniżej
+     * zwykłej), z tym samym filtrem nomenklatury co porównanie. Osobne zapytanie, bo jest wolniejsze od samego
+     * porównania (do kilku sekund rok do roku), więc kafelek nie wstrzymuje tabeli.
+     */
+    public SalesPromotionShare promotionShare(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
+            LocalDate currentFrom, LocalDate currentTo, List<String> filter) {
+        ReportPeriod.check(previousFrom, previousTo, ReportPeriod.MAX_DAYS, "Poprzedni okres");
+        ReportPeriod.check(currentFrom, currentTo, ReportPeriod.MAX_DAYS, "Aktualny okres");
+        String[] codes = filterCodes(filter);
+        sales.tuneForReport();
+        LocalDate from = previousFrom.isBefore(currentFrom) ? previousFrom : currentFrom;
+        LocalDate to = previousTo.isAfter(currentTo) ? previousTo : currentTo;
+        BigDecimal previous = BigDecimal.ZERO;
+        BigDecimal current = BigDecimal.ZERO;
+        long previousArticles = 0;
+        long currentArticles = 0;
+        for (SaleRepository.PromotionSales row : sales.sumPromotionSales(storeId, previousFrom, previousTo,
+                currentFrom, currentTo, from, to, PromotionReportService.PRICE_FACTOR,
+                PromotionReportService.MIN_REFERENCE_DAYS, codes)) {
+            if ("c".equals(row.getPeriod())) {
+                current = row.getSaleValueGross();
+                currentArticles = row.getArticles();
+            } else {
+                previous = row.getSaleValueGross();
+                previousArticles = row.getArticles();
+            }
+        }
+        return new SalesPromotionShare(previous, current, previousArticles, currentArticles);
     }
 
     /** Dzień sprzed wszystkich raportów: okres porównania drugiego sklepu, który niczego nie czyta. */

@@ -57,10 +57,39 @@ public final class AgentApi {
     public record Events(@NotNull @Size(max = 5000) List<@Valid Event> events) {
     }
 
-    /** Pliki, o które prosi serwer (agent wysyła je od razu): TRACEART do {@code /price-files}, ATHOS do {@code /athos-history}. */
-    public record EventsResponse(List<FileRequest> requests) {
+    /**
+     * Pliki, o które prosi serwer (agent wysyła je od razu): TRACEART do {@code /price-files}, ATHOS do
+     * {@code /athos-history}, raporty importu ({@code IMPORT_…}) w kawałkach przez {@code /reports}. {@code deletes}:
+     * wgrane wcześniej raporty do usunięcia z folderu.
+     */
+    public record EventsResponse(List<FileRequest> requests, List<FileDelete> deletes) {
+
+        public EventsResponse(List<FileRequest> requests) {
+            this(requests, List.of());
+        }
     }
 
     public record FileRequest(String folderKey, String fileName) {
+    }
+
+    /**
+     * Wgrany raport do usunięcia z folderu. Agent usuwa plik tylko, gdy ma dokładnie tę datę zmiany ({@code modified}),
+     * czyli nie nowszy plik pod tą samą nazwą.
+     */
+    public record FileDelete(String folderKey, String fileName, Instant modified) {
+    }
+
+    /** Początek wysyłki raportu z folderu: rodzaj folderu ({@code IMPORT_…}), plik i jego data zmiany na dysku. */
+    public record ReportStart(@NotBlank @Size(max = 30) String folderKey, @NotBlank @Size(max = 260) String fileName,
+            @NotNull Long size, @NotNull Instant modified) {
+    }
+
+    /** Wysyłka raportu: {@code id} próby wgrania, kawałki po {@code chunkSize} bajtów. */
+    public record ReportUpload(UUID id, int chunkSize) {
+    }
+
+    /** Agent usunął wgrany raport z folderu. */
+    public record ReportRemoved(@NotBlank @Size(max = 30) String folderKey, @NotBlank @Size(max = 260) String fileName,
+            @NotNull Instant modified) {
     }
 }

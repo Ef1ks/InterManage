@@ -82,9 +82,24 @@ internal sealed class FileRequest
     public string FileName { get; set; } = "";
 }
 
+/// <summary>Wgrany raport do usunięcia z folderu (tylko gdy plik ma dalej tę datę zmiany).</summary>
+internal sealed class FileDelete
+{
+    public string FolderKey { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public DateTimeOffset Modified { get; set; }
+}
+
 internal sealed class EventsResponse
 {
     public List<FileRequest> Requests { get; set; } = new();
+    public List<FileDelete> Deletes { get; set; } = new();
+}
+
+internal sealed class ReportUpload
+{
+    public string Id { get; set; } = "";
+    public int ChunkSize { get; set; } = 2 * 1024 * 1024;
 }
 
 /// <summary>
@@ -195,6 +210,48 @@ internal sealed class ApiClient : IDisposable
         {
             Content = form,
         }, TimeSpan.FromMinutes(5), cancel).ConfigureAwait(false);
+    }
+
+    /// <summary>Początek wysyłki raportu importu; 409 (<see cref="RejectedException"/>), gdy serwer już go nie chce.</summary>
+    public Task<ReportUpload> StartReportAsync(string folderKey, string fileName, long size, DateTimeOffset modified,
+        CancellationToken cancel) =>
+        SendJsonAsync<ReportUpload>(HttpMethod.Post, "/api/store-agent/reports", new
+        {
+            folderKey,
+            fileName,
+            size,
+            modified,
+        }, TimeSpan.FromSeconds(30), cancel);
+
+    /// <summary>Kawałek raportu: najwyżej 2 MB, przy wolnym łączu sklepu kilkanaście sekund.</summary>
+    public async Task ReportChunkAsync(string id, int index, byte[] content, int offset, int count,
+        CancellationToken cancel)
+    {
+        var body = new ByteArrayContent(content, offset, count);
+        body.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Put,
+            server + "/api/store-agent/reports/" + Uri.EscapeDataString(id) + "/chunks/" + index)
+        {
+            Content = body,
+        }, TimeSpan.FromSeconds(90), cancel).ConfigureAwait(false);
+    }
+
+    /// <summary>Cały raport wysłany: serwer wgrywa go w tle.</summary>
+    public async Task FinishReportAsync(string id, CancellationToken cancel)
+    {
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post,
+            server + "/api/store-agent/reports/" + Uri.EscapeDataString(id) + "/finish"), TimeSpan.FromSeconds(60),
+            cancel).ConfigureAwait(false);
+    }
+
+    /// <summary>Wgrany raport usunięty z folderu (historia na serwerze).</summary>
+    public async Task ReportRemovedAsync(string folderKey, string fileName, DateTimeOffset modified,
+        CancellationToken cancel)
+    {
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post, server + "/api/store-agent/reports/removed")
+        {
+            Content = JsonContent(new { folderKey, fileName, modified }),
+        }, TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
     }
 
     private async Task<T> SendJsonAsync<T>(HttpMethod method, string path, object? body, TimeSpan timeout,

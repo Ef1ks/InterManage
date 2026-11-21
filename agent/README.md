@@ -7,7 +7,11 @@ dysku sieciowego (`N:\…`), więc agent przejmuje styk z folderami sklepu:
   w 1-2 s po kliknięciu „Zapisz” w Intermanage: czeka na nie stałym połączeniem (long polling), plik zapisuje
   atomowo i potwierdza zapis, a ekran w przeglądarce pokazuje potwierdzenie z godziną;
 - **pilnuje folderów** i od razu zgłasza zmiany: pliki cen z kasy TRACEART (z podfolderem BACKUP), wczytanie zmiany cen
-  przez program sklepu (`.traite0` → `.Traite1`) i dziennik ATHOS (`Histo.Log`).
+  przez program sklepu (`.traite0` → `.Traite1`) i dziennik ATHOS (`Histo.Log`);
+- **wgrywa raporty Importu danych** (od wersji 1.1): pilnuje folderu każdego codziennego raportu (folder z ustawień
+  importu, bez niego folder ścieżki zapisu makra „Zapis z Mercalys”), nowy plik wysyła w kawałkach, a serwer wgrywa go
+  tym samym importem co „Odśwież dane”; wgrany raport usuwa z folderu następnego dnia (tylko plik z tą samą datą
+  zmiany, nowszy raport pod tą samą nazwą zostaje).
 
 Agent działa tylko w sklepie, który w Intermanage wybrał **Ustawienia sklepu → Agent sklepu → Praca z folderami przez
 agenta**. Bez tego (albo gdy agent jest offline) wszystko działa jak dotąd, w przeglądarce.
@@ -35,6 +39,7 @@ Robi:
   systemowe); nie nasłuchuje na żadnym porcie;
 - zapisuje **tylko** w folderach, które serwer podał dla jego klucza; nazwa pliku jest sprawdzana (bez `\`, `/`, `..`,
   znaków i nazw zastrzeżonych, do 200 znaków), a pełna ścieżka musi leżeć w folderze;
+- usuwa **tylko** raporty Importu danych, które serwer wgrał przed dzisiejszym dniem, w ich folderze raportu;
 - zapisuje atomowo (`<nazwa>.intermanage-tmp`, potem zmiana nazwy) i nadpisuje plik o tej samej nazwie, jak
   przeglądarka (podmiana dopiero po zapisaniu całego pliku tymczasowego, więc program sklepu nie zobaczy połowy pliku);
 - uruchamia się z Windows przez `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (wyłączane w menu ikony);

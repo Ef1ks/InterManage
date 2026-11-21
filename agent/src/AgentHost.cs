@@ -50,7 +50,8 @@ internal sealed class AgentHost : IDisposable
             return;
         }
         var cts = new CancellationTokenSource();
-        var folders = new FolderWatcher(this);
+        var reports = new ReportUploader(this);
+        var folders = new FolderWatcher(this, reports);
         lock (gate)
         {
             Api = new ApiClient(settings.ServerUrl, key!);
@@ -63,6 +64,7 @@ internal sealed class AgentHost : IDisposable
         Task.Run(() => HelloLoopAsync(cancel));
         Task.Run(() => new FileSaver(this).RunAsync(cancel));
         Task.Run(() => folders.RunAsync(cancel));
+        Task.Run(() => reports.RunAsync(cancel));
     }
 
     public void Stop()

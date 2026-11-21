@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.agent.dto.AgentApi;
 import com.intermanage.backend.agent.service.AgentEventService;
 import com.intermanage.backend.agent.service.AgentFileQueueService;
+import com.intermanage.backend.agent.service.AgentReportService;
 import com.intermanage.backend.agent.service.StoreAgentService;
 import com.intermanage.backend.mea.dto.MeaAthosStatus;
 import com.intermanage.backend.product.dto.PriceFileUploadResponse;
@@ -45,6 +47,10 @@ import jakarta.validation.Valid;
  * POST /api/store-agent/events             {events:[…]} → pliki, o które prosi serwer
  * POST /api/store-agent/price-files        multipart files (TRACEART, także .gz)
  * POST /api/store-agent/athos-history      multipart file, modified, partial (Histo.Log albo jego końcówka, także .gz)
+ * POST /api/store-agent/reports            {folderKey, fileName, size, modified} → {id, chunkSize} (raport importu)
+ * PUT  /api/store-agent/reports/{id}/chunks/{index}   surowe bajty kawałka, po kolei
+ * POST /api/store-agent/reports/{id}/finish           202, import w tle
+ * POST /api/store-agent/reports/removed    {folderKey, fileName, modified} (agent usunął wgrany raport z folderu)
  * </pre>
  */
 @RestController
@@ -57,13 +63,15 @@ public class StoreAgentApiController {
     private final AgentFileQueueService waiting;
     private final AgentEventService events;
     private final StoreFileQueueService queue;
+    private final AgentReportService reports;
 
     public StoreAgentApiController(StoreAgentService agents, AgentFileQueueService waiting, AgentEventService events,
-            StoreFileQueueService queue) {
+            StoreFileQueueService queue, AgentReportService reports) {
         this.agents = agents;
         this.waiting = waiting;
         this.events = events;
         this.queue = queue;
+        this.reports = reports;
     }
 
     @PostMapping("/hello")
@@ -125,6 +133,33 @@ public class StoreAgentApiController {
             @RequestParam(value = "modified", required = false) Long modified,
             @RequestParam(value = "partial", defaultValue = "false") boolean partial) {
         return events.athosHistory(agent(authorization), file, modified, partial);
+    }
+
+    @PostMapping("/reports")
+    public AgentApi.ReportUpload startReport(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @Valid @RequestBody AgentApi.ReportStart request) {
+        return reports.start(agent(authorization), request);
+    }
+
+    @PutMapping(path = "/reports/{id}/chunks/{index}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reportChunk(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @PathVariable UUID id, @PathVariable int index, @RequestBody byte[] bytes) {
+        reports.chunk(agent(authorization), id, index, bytes);
+    }
+
+    @PostMapping("/reports/{id}/finish")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void finishReport(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @PathVariable UUID id) {
+        reports.finish(agent(authorization), id);
+    }
+
+    @PostMapping("/reports/removed")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reportRemoved(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @Valid @RequestBody AgentApi.ReportRemoved request) {
+        reports.removed(agent(authorization), request);
     }
 
     private StoreAgentService.AgentContext agent(String authorization) {

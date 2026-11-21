@@ -3,7 +3,9 @@ package com.intermanage.backend.agent.mapper;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.intermanage.backend.agent.dto.AgentReportFileResponse;
 import com.intermanage.backend.agent.dto.StoreAgentResponse;
+import com.intermanage.backend.agent.entity.AgentReportFile;
 import com.intermanage.backend.agent.entity.StoreAgent;
 
 @Mapper
@@ -21,4 +23,6 @@ public interface StoreAgentMapper {
     @Mapping(target = "online", source = "online")
     @Mapping(target = "key", source = "key")
     StoreAgentResponse toResponse(StoreAgent agent, boolean online, String key);
+
+    AgentReportFileResponse toResponse(AgentReportFile file);
 }

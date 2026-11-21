@@ -41,7 +41,8 @@ import com.intermanage.backend.store.service.StoreProtoSettingsService;
  *
  * <p>Foldery zapisu to ścieżki sklepu ({@code folder:<klucz>} w {@code store_file_locations}), folder plików PROTO
  * i plików nowych artykułów z ustawień plików PROTO oraz znane domyślne ścieżki. Pilnowane foldery: pliki cen z kasy
- * (TRACEART, z podfolderem BACKUP), zmiany cen CTRLPRIX w folderze plików PROTO i dziennik ATHOS.
+ * (TRACEART, z podfolderem BACKUP), zmiany cen CTRLPRIX w folderze plików PROTO, dziennik ATHOS i foldery raportów
+ * Importu danych ({@link AgentReportService}).
  */
 @Service
 public class StoreAgentService {
@@ -71,10 +72,12 @@ public class StoreAgentService {
     private final StoreProtoSettingsService protoSettings;
     private final StoreAgentMapper mapper;
     private final LiveEvents live;
+    private final AgentReportService reports;
 
     public StoreAgentService(StoreAgentRepository agents, StoreAgentSettingsRepository settings,
             StoreRepository stores, AppUserRepository users, StoreFileLocationService locations,
-            StoreProtoSettingsService protoSettings, StoreAgentMapper mapper, LiveEvents live) {
+            StoreProtoSettingsService protoSettings, StoreAgentMapper mapper, LiveEvents live,
+            AgentReportService reports) {
         this.agents = agents;
         this.settings = settings;
         this.stores = stores;
@@ -83,6 +86,7 @@ public class StoreAgentService {
         this.protoSettings = protoSettings;
         this.mapper = mapper;
         this.live = live;
+        this.reports = reports;
     }
 
     @Transactional(readOnly = true)
@@ -219,6 +223,8 @@ public class StoreAgentService {
         if (athos != null && looksLikeFolder(athos)) {
             watches.add(new AgentApi.Watch(ATHOS, athos.strip(), false, "^Histo\\.Log$"));
         }
+        // Raporty Importu danych (tylko przy pracy przez agenta): agent wgrywa je sam i usuwa wgrane następnego dnia.
+        watches.addAll(reports.watches(storeId));
         return watches;
     }
 

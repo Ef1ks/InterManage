@@ -26,6 +26,7 @@ import com.intermanage.backend.sales.dto.ArticleRowsPage;
 import com.intermanage.backend.sales.dto.DeliCostsOverview;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
+import com.intermanage.backend.sales.dto.SalesPromotionShare;
 import com.intermanage.backend.sales.dto.SalesHistoryResponse;
 import com.intermanage.backend.sales.dto.SalesReportsOverview;
 import com.intermanage.backend.sales.service.DeliCostReportService;
@@ -88,6 +89,19 @@ public class SalesReportController {
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return salesReportService.compare(storeId, previousFrom, previousTo, currentFrom, currentTo, parent,
                 unassigned, nomenclatures, compareStore, principal.getId());
+    }
+
+    /** Sprzedaż brutto z dni promocji w obu okresach porównania (kafelek nad tabelą). */
+    @GetMapping("/sales-comparison/promotions")
+    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public SalesPromotionShare salesComparisonPromotions(@PathVariable UUID storeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousFrom,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousTo,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate currentFrom,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate currentTo,
+            @RequestParam(required = false) List<String> nomenclatures) {
+        return salesReportService.promotionShare(storeId, previousFrom, previousTo, currentFrom, currentTo,
+                nomenclatures);
     }
 
     /** Nomenklatura sklepu do filtrów i wyborów: słownik, widzi ją każdy z dostępem do sklepu. */
