@@ -1174,17 +1174,14 @@ class KsefIntegrationTests {
 
     /** Pracownik z uprawnieniem KSEF_INVOICES:EDIT przypisany do podanych sklepów. */
     private Cookie employee(Cookie owner, String... storeIds) throws Exception {
-        String roleJson = send(owner, post("/api/settings/roles"),
-                "{\"name\":\"KSeF " + UUID.randomUUID() + "\",\"permissions\":{\"KSEF_INVOICES\":\"EDIT\"}}")
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, "{\"KSEF_INVOICES\":\"EDIT\"}") + "\"}";
         String username = "ksef" + UUID.randomUUID().toString().substring(0, 8);
         String userId = jdbc.queryForObject("""
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
         for (String storeId : storeIds) {
-            jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, storeId);
+            TestRanks.join(jdbc, userId, storeId);
         }
         return mvc.perform(post("/api/auth/login").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

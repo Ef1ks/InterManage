@@ -6,22 +6,15 @@ import type {
   BackupSettings,
   BackupSettingsRequest,
   CreateUserRequest,
-  Role,
-  RoleRequest,
   Store,
   StoreRequest,
   UpdateUserRequest,
   User,
 } from '@/lib/types'
 
-const rolesKey = ['settings', 'roles'] as const
 const usersKey = ['settings', 'users'] as const
 const storesKey = ['settings', 'stores'] as const
 const backupKey = ['settings', 'backup'] as const
-
-export function useRoles() {
-  return useQuery({ queryKey: rolesKey, queryFn: () => api<Role[]>('/settings/roles') })
-}
 
 export function useUsers() {
   return useQuery({ queryKey: usersKey, queryFn: () => api<User[]>('/settings/users') })
@@ -31,32 +24,13 @@ export function useStores() {
   return useQuery({ queryKey: storesKey, queryFn: () => api<Store[]>('/settings/stores') })
 }
 
-/** Zmiana ról lub użytkowników wpływa na obie listy (liczniki, nazwy ról) i potencjalnie na własne uprawnienia. */
+/** Zmiana kont lub sklepów wpływa na listy (rangi, liczniki) i potencjalnie na własne uprawnienia. */
 function useInvalidateSettings() {
   const queryClient = useQueryClient()
   return () => {
     queryClient.invalidateQueries({ queryKey: ['settings'] })
     queryClient.invalidateQueries({ queryKey: meQueryKey })
   }
-}
-
-export function useSaveRole() {
-  const invalidate = useInvalidateSettings()
-  return useMutation({
-    mutationFn: ({ id, request }: { id?: string; request: RoleRequest }) =>
-      id === undefined
-        ? api<Role>('/settings/roles', { method: 'POST', json: request })
-        : api<Role>(`/settings/roles/${id}`, { method: 'PUT', json: request }),
-    onSuccess: invalidate,
-  })
-}
-
-export function useDeleteRole() {
-  const invalidate = useInvalidateSettings()
-  return useMutation({
-    mutationFn: (id: string) => api(`/settings/roles/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
-  })
 }
 
 export function useCreateUser() {

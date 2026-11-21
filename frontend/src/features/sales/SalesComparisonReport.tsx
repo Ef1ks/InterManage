@@ -93,7 +93,7 @@ const COMPARE_PARAMS: Record<CompareMode, string> = {
   custom: 'wlasny',
 }
 
-type SaleBasis = 'gross' | 'net'
+export type SaleBasis = 'gross' | 'net'
 
 /** Filtr wierszy po zmianie sprzedaży: wszystkie, tylko spadki albo tylko wzrosty (w adresie po polsku). */
 type ChangeFilter = 'all' | 'decline' | 'growth'
@@ -149,8 +149,10 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
   const view = useMemo<View>(() => ({ other: otherStore, amounts }), [otherStore, amounts])
   const changeFilter =
     (Object.keys(CHANGE_PARAMS) as ChangeFilter[]).find((key) => CHANGE_PARAMS[key] === params.get('zmiana')) ?? 'all'
-  // Miejsce na tabelę marży rejonów w karcie filtrów (obok wyboru okresu); tabelę rysuje porównanie, które ma dane.
+  // Miejsca na kafelki sum (pod filtrami) i tabelę marży rejonów (kolumna obok); rysuje je porównanie, które ma dane.
+  const showTargets = !deli && !otherStore
   const [targetsSlot, setTargetsSlot] = useState<HTMLDivElement | null>(null)
+  const [tilesSlot, setTilesSlot] = useState<HTMLDivElement | null>(null)
 
   return (
     <>
@@ -183,86 +185,41 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
         </div>
       )}
 
-      <Card className="mb-4 gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedField
-            label="Okres porównania"
-            options={PERIOD_MODES}
-            value={mode}
-            onChange={(next) => update({ okres: MODE_PARAMS[next] })}
-          />
-          <SegmentedField
-            label="Porównaj z"
-            options={compareModes(mode)}
-            value={compare}
-            onChange={(next) =>
-              // Własny okres zaczyna od tego, z czym porównujemy teraz, żeby było go łatwo przesunąć.
-              update(
-                next === 'custom' && compare !== 'custom'
-                  ? {
-                      porownaj: COMPARE_PARAMS[next],
-                      por_od: periods.previous.from,
-                      por_do: periods.previous.to,
-                    }
-                  : { porownaj: COMPARE_PARAMS[next] },
-              )
-            }
-          />
-          <SegmentedField
-            label="Sprzedaż"
-            options={[
-              { value: 'gross', label: 'Brutto' },
-              { value: 'net', label: 'Netto' },
-            ]}
-            value={basis}
-            onChange={setBasis}
-          />
-          {!deli && (
-            <SegmentedField
-              label="Pokaż"
-              options={[
-                { value: 'all', label: 'Wszystko' },
-                { value: 'decline', label: 'Spadki' },
-                { value: 'growth', label: 'Wzrosty' },
-              ]}
-              value={changeFilter}
-              onChange={(next) => update({ zmiana: CHANGE_PARAMS[next] })}
-            />
-          )}
-        </div>
+      {/*
+        Od xl: filtry i kafelki sum po lewej, a marża rejonów jako kolumna po prawej na całą ich wysokość, więc tabela
+        rejonów pokazuje kilkanaście wierszy zamiast trzech, a filtry nie zostawiają pustego miejsca pod sobą.
+      */}
+      <div className={cn('mb-4 grid gap-3', showTargets && 'xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]')}>
+        <div className="min-w-0 space-y-3">
+          <Card className="gap-0 overflow-hidden p-0">
+            <FilterRow label="Okres">
+              <SegmentedField
+                label="Okres porównania"
+                options={PERIOD_MODES}
+                value={mode}
+                onChange={(next) => update({ okres: MODE_PARAMS[next] })}
+              />
+              <PeriodPicker period={period} update={update} />
+            </FilterRow>
 
-        <div className={cn('grid gap-4', !deli && 'xl:grid-cols-2')}>
-          <div className="min-w-0 space-y-4">
-            {!deli && (storeOptions.data?.length ?? 0) > 0 && (
-              <div className="flex flex-wrap items-end gap-3">
-                <SelectField
-                  label="Porównaj ze sklepem"
-                  options={[
-                    { value: NO_STORE, label: 'Bez porównania ze sklepem' },
-                    ...(storeOptions.data ?? []).map((option) => ({
-                      value: option.id,
-                      label: `${option.number} ${option.name}${option.partner ? ' (zaprzyjaźniony)' : ''}`,
-                    })),
-                  ]}
-                  value={otherStore?.id ?? NO_STORE}
-                  onChange={(id) => update({ sklep: id === NO_STORE ? null : id })}
-                  className="w-full sm:w-80"
-                />
-                {otherStore && (
-                  <SegmentedField
-                    label="Kwoty sprzedaży"
-                    options={[
-                      { value: 'hidden', label: 'Ukryte' },
-                      { value: 'shown', label: 'Pokaż' },
-                    ]}
-                    value={view.amounts ? 'shown' : 'hidden'}
-                    onChange={(next) => update({ kwoty: next === 'shown' ? 'tak' : null })}
-                  />
-                )}
-              </div>
-            )}
-
-            <PeriodPicker period={period} update={update}>
+            <FilterRow label="Porównaj z">
+              <SegmentedField
+                label="Porównaj z"
+                options={compareModes(mode)}
+                value={compare}
+                onChange={(next) =>
+                  // Własny okres zaczyna od tego, z czym porównujemy teraz, żeby było go łatwo przesunąć.
+                  update(
+                    next === 'custom' && compare !== 'custom'
+                      ? {
+                          porownaj: COMPARE_PARAMS[next],
+                          por_od: periods.previous.from,
+                          por_do: periods.previous.to,
+                        }
+                      : { porownaj: COMPARE_PARAMS[next] },
+                  )
+                }
+              />
               {compare === 'custom' && (
                 <>
                   <DateField
@@ -271,7 +228,7 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
                     onChange={(from) => update({ por_od: from, por_do: compareCustom.to })}
                     max={lastSaleDate}
                     shortcuts={[]}
-                    className="w-full sm:w-64"
+                    className="w-full sm:w-56"
                   />
                   <DateField
                     label="Porównaj do"
@@ -280,43 +237,99 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
                     max={lastSaleDate}
                     shortcuts={[]}
                     error={compareError ?? undefined}
-                    className="w-full sm:w-64"
+                    className="w-full sm:w-56"
                   />
                 </>
               )}
-            </PeriodPicker>
+              {!deli && (storeOptions.data?.length ?? 0) > 0 && (
+                <>
+                  <SelectField
+                    label="Sklep do porównania"
+                    options={[
+                      { value: NO_STORE, label: 'Bez porównania ze sklepem' },
+                      ...(storeOptions.data ?? []).map((option) => ({
+                        value: option.id,
+                        label: `${option.number} ${option.name}${option.partner ? ' (zaprzyjaźniony)' : ''}`,
+                      })),
+                    ]}
+                    value={otherStore?.id ?? NO_STORE}
+                    onChange={(id) => update({ sklep: id === NO_STORE ? null : id })}
+                    className="w-full sm:ml-auto sm:w-72"
+                  />
+                  {otherStore && (
+                    <SegmentedField
+                      label="Kwoty sprzedaży"
+                      options={[
+                        { value: 'hidden', label: 'Bez kwot' },
+                        { value: 'shown', label: 'Z kwotami' },
+                      ]}
+                      value={view.amounts ? 'shown' : 'hidden'}
+                      onChange={(next) => update({ kwoty: next === 'shown' ? 'tak' : null })}
+                    />
+                  )}
+                </>
+              )}
+            </FilterRow>
 
-            {!deli && (
-              <MultiComboboxField
-                label="Nomenklatura"
-                description="Porównaj tylko wybrane rejony, rodziny albo podrodziny. Puste = cały sklep."
-                options={(nomenclatures.data ?? []).map((item) => ({
-                  value: item.code,
-                  label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
-                  hint: LEVEL_STYLES[item.level].label,
-                }))}
-                value={filter}
-                onChange={(codes) => update({ nom: codes })}
-                placeholder={
-                  nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
-                }
-                className="max-w-3xl"
+            <FilterRow label={deli ? 'Sprzedaż' : 'Pokaż'}>
+              {!deli && (
+                <MultiComboboxField
+                  label="Nomenklatura"
+                  hideLabel
+                  options={(nomenclatures.data ?? []).map((item) => ({
+                    value: item.code,
+                    label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
+                    hint: LEVEL_STYLES[item.level].label,
+                  }))}
+                  value={filter}
+                  onChange={(codes) => update({ nom: codes })}
+                  placeholder={
+                    nomenclatures.data?.length === 0
+                      ? 'Brak wgranej nomenklatury'
+                      : 'Cały sklep · zawęź do rejonów, rodzin albo podrodzin…'
+                  }
+                  className="min-w-64 flex-1"
+                />
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <SegmentedField
+                  label="Sprzedaż"
+                  options={[
+                    { value: 'gross', label: 'Brutto' },
+                    { value: 'net', label: 'Netto' },
+                  ]}
+                  value={basis}
+                  onChange={setBasis}
+                />
+                {!deli && (
+                  <SegmentedField
+                    label="Pokaż"
+                    options={[
+                      { value: 'all', label: 'Wszystko' },
+                      { value: 'decline', label: 'Spadki' },
+                      { value: 'growth', label: 'Wzrosty' },
+                    ]}
+                    value={changeFilter}
+                    onChange={(next) => update({ zmiana: CHANGE_PARAMS[next] })}
+                  />
+                )}
+              </div>
+            </FilterRow>
+
+            {valid && (
+              <PeriodsSummary
+                periods={periods}
+                compare={compare}
+                firstSaleDate={overview.data?.firstSaleDate ?? null}
+                lastSaleDate={lastSaleDate}
+                costsCoveredUntil={deli && costs.data ? costs.data.costsCoveredUntil : undefined}
               />
             )}
-          </div>
-          {!deli && !otherStore && <div ref={setTargetsSlot} className="min-w-0" />}
+          </Card>
+          {showTargets && <div ref={setTilesSlot} className="min-w-0" />}
         </div>
-
-        {valid && (
-          <PeriodsSummary
-            periods={periods}
-            compare={compare}
-            firstSaleDate={overview.data?.firstSaleDate ?? null}
-            lastSaleDate={lastSaleDate}
-            costsCoveredUntil={deli && costs.data ? costs.data.costsCoveredUntil : undefined}
-          />
-        )}
-      </Card>
+        {showTargets && <div ref={setTargetsSlot} className="min-w-0 xl:relative" />}
+      </div>
 
       {/* Domyślny dzień to ostatni dzień ze sprzedażą, więc liczymy dopiero, gdy wiadomo, który to. */}
       {valid && !overview.isPending && (
@@ -330,11 +343,25 @@ export function SalesComparisonReport({ storeId, kind = 'sales' }: { storeId: st
           view={view}
           changeFilter={changeFilter}
           lastSaleDate={lastSaleDate}
-          targetsSlot={targetsSlot}
+          targetsSlot={showTargets ? targetsSlot : null}
+          tilesSlot={showTargets ? tilesSlot : null}
         />
       )}
       {!deli && <BasketButton storeId={storeId} />}
     </>
+  )
+}
+
+/**
+ * Wiersz paska filtrów: krótka etykieta po lewej (od sm w stałej kolumnie, więc pola wszystkich wierszy zaczynają
+ * się w jednej linii) i kontrolki obok siebie, zawijane przy wąskim ekranie.
+ */
+function FilterRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 border-b px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-0">
+      <span className="shrink-0 text-xs font-medium text-muted-foreground sm:w-24">{label}</span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>
+    </div>
   )
 }
 
@@ -362,7 +389,7 @@ function PeriodsSummary({
   const comparedDays = dayCount(periods.previous)
   const label = COMPARE_LABELS[compare].column
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t pt-4 text-sm tabular-nums">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 bg-muted/50 px-4 py-2.5 text-sm tabular-nums sm:pl-28">
       <p>
         <span className="text-muted-foreground">Aktualny </span>
         <span className="font-medium">{formatRange(periods.current)}</span>
@@ -448,8 +475,14 @@ function SpecialDaysNote({ label, range }: { label: string; range: Periods['curr
 const saleValue = (figures: SalesFigures, basis: SaleBasis) =>
   basis === 'gross' ? figures.saleValueGross : figures.saleValueNet
 
-/** % marży od sprzedaży brutto, jak w raporcie systemu sklepu; bez marży (koszty garmażu poniżej rejonu) pusty. */
-const marginPercent = (figures: SalesFigures) => marginShare(figures.marginValue, figures.saleValueGross)
+/**
+ * % marży od sprzedaży wg wybranej podstawy: domyślnie od brutto, jak w raporcie systemu sklepu, a przy „Netto” od
+ * sprzedaży netto; bez marży (koszty garmażu poniżej rejonu) pusty.
+ */
+const marginPercent = (figures: SalesFigures, basis: SaleBasis) =>
+  marginShare(figures.marginValue, saleValue(figures, basis))
+
+const marginBasisLabel = (basis: SaleBasis) => (basis === 'gross' ? 'od brutto' : 'od netto')
 
 const percentFormat = new Intl.NumberFormat('pl-PL', {
   minimumFractionDigits: 1,
@@ -518,6 +551,7 @@ function Comparison({
   changeFilter,
   lastSaleDate,
   targetsSlot,
+  tilesSlot,
 }: {
   storeId: string
   kind: ReportKind
@@ -528,8 +562,10 @@ function Comparison({
   view: View
   changeFilter: ChangeFilter
   lastSaleDate: string
-  /** Miejsce w karcie filtrów na tabelę marży rejonów. */
+  /** Kolumna obok filtrów na tabelę marży rejonów (bez niej tabeli nie ma). */
   targetsSlot: HTMLElement | null
+  /** Miejsce pod filtrami na kafelki sum; bez niego kafelki stoją nad tabelą. */
+  tilesSlot: HTMLElement | null
 }) {
   const deli = kind === 'deli'
   const compareStore = view.other?.id ?? null
@@ -758,53 +794,33 @@ function Comparison({
   const empty = data && data.rows.length === 0
   const regionTargets =
     !deli && !view.other && targetsSlot
-      ? createPortal(<RegionTargets storeId={storeId} data={data} onPick={openRegion} />, targetsSlot)
+      ? createPortal(<RegionTargets storeId={storeId} data={data} basis={basis} onPick={openRegion} />, targetsSlot)
       : null
+
+  const totals = view.other ? (
+    <StoreTiles data={data} view={view} basis={basis} compare={compare} />
+  ) : (
+    <ComparisonTotalTiles
+      data={data}
+      promotions={promotions.data}
+      promotionsFailed={promotions.isError}
+      compare={compare}
+      basis={basis}
+      deli={deli}
+      className={cn(
+        'transition-opacity duration-150',
+        tilesSlot ? '' : 'mb-4',
+        deli ? 'sm:grid-cols-2' : 'md:grid-cols-2 2xl:grid-cols-3',
+        !tilesSlot && !deli && 'xl:grid-cols-3',
+        isPlaceholderData && 'opacity-60',
+      )}
+    />
+  )
 
   return (
     <div className={cn('transition-opacity duration-150', isPlaceholderData && 'opacity-60')}>
       {regionTargets}
-      {view.other ? (
-        <StoreTiles data={data} view={view} basis={basis} compare={compare} />
-      ) : (
-        <div
-          className={cn('mb-4 grid gap-3 sm:grid-cols-2', deli ? 'xl:grid-cols-4' : 'lg:grid-cols-3 2xl:grid-cols-5')}
-        >
-          <TotalTile
-            label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
-            previous={data && saleValue(data.previousTotal, basis)}
-            current={data && saleValue(data.currentTotal, basis)}
-            format={formatZloty}
-            compare={compare}
-          />
-          {!deli && (
-            <PromotionTile
-              share={promotions.data}
-              failed={promotions.isError}
-              previousTotal={data?.previousTotal.saleValueGross}
-              currentTotal={data?.currentTotal.saleValueGross}
-              compare={compare}
-            />
-          )}
-          <TotalTile
-            label="Marża"
-            previous={data?.previousTotal.marginValue ?? undefined}
-            current={data?.currentTotal.marginValue ?? undefined}
-            format={formatZloty}
-            compare={compare}
-            note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} />}
-          />
-          <TotalTile
-            label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
-            previous={data?.previousTotal.costValue ?? undefined}
-            current={data?.currentTotal.costValue ?? undefined}
-            format={formatZloty}
-            compare={compare}
-            neutral
-          />
-          <MarginPercentTile previous={data?.previousTotal} current={data?.currentTotal} compare={compare} />
-        </div>
-      )}
+      {tilesSlot ? createPortal(totals, tilesSlot) : totals}
 
       {empty ? (
         <Card className="items-center px-6 py-10 text-center">
@@ -1012,7 +1028,11 @@ function tableGroups(view: View, basis: SaleBasis, deli: boolean, compare: Compa
     const theirs = `Sklep ${view.other.number}`
     return [
       { key: 'quantity', label: 'Ilość', columns: [previous, 'Aktualny', theirs, 'U nich więcej'] },
-      { key: 'margin', label: 'Marża % (aktualny)', columns: ['Nasza', theirs, 'U nich więcej'] },
+      {
+        key: 'margin',
+        label: `Marża % ${marginBasisLabel(basis)} (aktualny)`,
+        columns: ['Nasza', theirs, 'U nich więcej'],
+      },
       ...(view.amounts ? [{ key: 'sale', label: sale, columns: [previous, 'Aktualny', theirs] }] : []),
     ]
   }
@@ -1020,7 +1040,7 @@ function tableGroups(view: View, basis: SaleBasis, deli: boolean, compare: Compa
     { key: 'quantity', label: 'Ilość', columns: [previous, 'Aktualny'] },
     { key: 'cost', label: deli ? 'Reprezentacja zł' : 'Zakup FIFO zł', columns: [previous, 'Aktualny'] },
     { key: 'sale', label: sale, columns: [previous, 'Aktualny'] },
-    { key: 'margin', label: 'Marża zł', columns: [previous, 'Aktualny', 'Zmiana'] },
+    { key: 'margin', label: `Marża zł · % ${marginBasisLabel(basis)}`, columns: [previous, 'Aktualny', 'Zmiana'] },
   ]
 }
 
@@ -1304,13 +1324,14 @@ function comparisonTaskItem(
   const before = saleValue(row.previous, basis)
   const change =
     before !== 0 ? `${now >= before ? '+' : ''}${taskNumber(((now - before) / Math.abs(before)) * 100, 1)}%` : null
-  const margin = marginPercent(row.current)
+  const margin = marginPercent(row.current, basis)
+  const net = basis === 'net' ? ' netto' : ''
   const details = [
-    `sprzedaż ${taskMoney(now)}`,
+    `sprzedaż${net} ${taskMoney(now)}`,
     `${compareLabel} ${taskMoney(before)}`,
     change ? `zmiana ${change}` : null,
     `ilość ${taskNumber(row.current.quantity, 2)}`,
-    margin !== null ? `marża ${taskNumber(margin, 1)}%` : null,
+    margin !== null ? `marża ${taskNumber(margin, 1)}%${net && ' od netto'}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -1476,15 +1497,15 @@ function FigureCells({
         <>
           <TableCell className={previousClass}>
             {formatMoney(previous.marginValue)}
-            <MarginPercent figures={previous} />
+            <MarginPercent figures={previous} basis={basis} />
           </TableCell>
           <TableCell className={valueClass}>
             {formatMoney(current.marginValue)}
-            <MarginPercent figures={current} />
+            <MarginPercent figures={current} basis={basis} />
           </TableCell>
           <TableCell className="text-right">
             <ChangeLine previous={previous.marginValue} current={current.marginValue} large />
-            <MarginPercentChange previous={previous} current={current} />
+            <MarginPercentChange previous={previous} current={current} basis={basis} />
           </TableCell>
         </>
       )}
@@ -1501,8 +1522,8 @@ function EmptyCell({ className }: { className: string }) {
   )
 }
 
-function MarginPercent({ figures }: { figures: SalesFigures }) {
-  const percent = marginPercent(figures)
+function MarginPercent({ figures, basis }: { figures: SalesFigures; basis: SaleBasis }) {
+  const percent = marginPercent(figures, basis)
   return (
     <span className="block text-xs font-normal text-muted-foreground">
       {percent == null ? '–' : `${percentFormat.format(percent)}%`}
@@ -1511,9 +1532,17 @@ function MarginPercent({ figures }: { figures: SalesFigures }) {
 }
 
 /** Różnica % marży w punktach procentowych. */
-function MarginPercentChange({ previous, current }: { previous: SalesFigures; current: SalesFigures }) {
-  const before = marginPercent(previous)
-  const after = marginPercent(current)
+function MarginPercentChange({
+  previous,
+  current,
+  basis,
+}: {
+  previous: SalesFigures
+  current: SalesFigures
+  basis: SaleBasis
+}) {
+  const before = marginPercent(previous, basis)
+  const after = marginPercent(current, basis)
   if (before == null || after == null) return <span className="block text-xs text-muted-foreground">–</span>
   const points = after - before
   return (
@@ -1576,6 +1605,75 @@ function ChangeLine({
   )
 }
 
+/**
+ * Kafelki sum porównania: sprzedaż i marża, sprzedaż w promocji (bez kosztów garmażu) oraz zakup FIFO (koszt
+ * reprezentacji) z marżą % zrealizowaną. Też na stronie Wyniki sklepów.
+ */
+export function ComparisonTotalTiles({
+  data,
+  promotions,
+  promotionsFailed,
+  compare,
+  basis,
+  deli = false,
+  className,
+}: {
+  data: SalesComparison | undefined
+  promotions: SalesPromotionShare | undefined
+  promotionsFailed: boolean
+  compare: CompareMode
+  basis: SaleBasis
+  deli?: boolean
+  className?: string
+}) {
+  return (
+    <div className={cn('grid gap-3', className)}>
+      <Card className="gap-0 p-4">
+        <TotalPart
+          label={basis === 'gross' ? 'Sprzedaż brutto' : 'Sprzedaż netto'}
+          previous={data && saleValue(data.previousTotal, basis)}
+          current={data && saleValue(data.currentTotal, basis)}
+          compare={compare}
+        />
+        <PartDivider />
+        <TotalPart
+          label="Marża"
+          previous={data?.previousTotal.marginValue ?? undefined}
+          current={data?.currentTotal.marginValue ?? undefined}
+          compare={compare}
+          note={data && <MarginPercentChange previous={data.previousTotal} current={data.currentTotal} basis={basis} />}
+        />
+      </Card>
+      {!deli && (
+        <PromotionTile
+          share={promotions}
+          failed={promotionsFailed}
+          previousTotal={data?.previousTotal}
+          currentTotal={data?.currentTotal}
+          compare={compare}
+          basis={basis}
+        />
+      )}
+      <Card className="gap-0 p-4">
+        <TotalPart
+          label={deli ? 'Koszt reprezentacji' : 'Zakup FIFO'}
+          previous={data?.previousTotal.costValue ?? undefined}
+          current={data?.currentTotal.costValue ?? undefined}
+          compare={compare}
+          neutral
+        />
+        <PartDivider />
+        <MarginPercentPart
+          previous={data?.previousTotal}
+          current={data?.currentTotal}
+          compare={compare}
+          basis={basis}
+        />
+      </Card>
+    </div>
+  )
+}
+
 function TotalTile({
   label,
   previous,
@@ -1623,11 +1721,64 @@ function TotalTile({
   )
 }
 
+/** Część kafelka sum (dwie części w jednym kafelku, rozdzielone {@link PartDivider}): kwota, zmiana i okres porównania. */
+function TotalPart({
+  label,
+  previous,
+  current,
+  compare,
+  neutral,
+  note,
+}: {
+  label: string
+  compare: CompareMode
+  previous: number | undefined
+  current: number | undefined
+  neutral?: boolean
+  note?: ReactNode
+}) {
+  const loaded = previous != null && current != null
+  const delta = loaded ? change(previous, current) : null
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      {loaded ? (
+        <>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <p className="text-2xl font-semibold tracking-tight tabular-nums">{formatZloty(current)}</p>
+            <p className={cn('text-sm font-medium tabular-nums', directionClass(delta!.direction, neutral))}>
+              {delta!.label}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm text-muted-foreground tabular-nums">
+            <p>
+              {COMPARE_LABELS[compare].inline} {formatZloty(previous)}
+            </p>
+            {note}
+          </div>
+        </>
+      ) : (
+        <PartSkeleton />
+      )}
+    </div>
+  )
+}
+
+const PartDivider = () => <div className="my-3 border-t" />
+
+const PartSkeleton = () => (
+  <div aria-hidden className="space-y-2">
+    <div className="h-7 w-32 loading-shimmer rounded-md" />
+    <div className="h-4 w-36 loading-shimmer rounded-md" />
+  </div>
+)
+
 const formatZloty = (value: number) => `${formatMoney(value)} zł`
 
 /**
- * Sprzedaż brutto z dni, w których artykuły były w promocji (lista promocji, gazetki, MEA, cena poniżej zwykłej): kwota
- * z okresem porównania i zmianą, a pod nią udział w całej sprzedaży brutto obu okresów ze zmianą w p.p.
+ * Sprzedaż brutto i marża z dni, w których artykuły były w promocji (lista promocji, gazetki, MEA, cena poniżej
+ * zwykłej), w jednym kafelku rozdzielonym kreską: kwota z udziałem w całej sprzedaży (marży) obok, pod nią to samo
+ * z okresu porównania; zmiana kwoty w % i udziału w p.p.
  */
 function PromotionTile({
   share,
@@ -1635,64 +1786,117 @@ function PromotionTile({
   previousTotal,
   currentTotal,
   compare,
+  basis,
 }: {
   share: SalesPromotionShare | undefined
   failed: boolean
-  previousTotal: number | undefined
-  currentTotal: number | undefined
+  previousTotal: SalesFigures | undefined
+  currentTotal: SalesFigures | undefined
   compare: CompareMode
+  basis: SaleBasis
 }) {
+  const gross = basis === 'gross'
+  const saleLabel = gross ? 'Sprzedaż w promocji (brutto)' : 'Sprzedaż w promocji (netto)'
   const loaded = share != null && previousTotal != null && currentTotal != null
-  const delta = loaded ? change(share.previousSaleValueGross, share.currentSaleValueGross) : null
-  const before = loaded && previousTotal > 0 ? (share.previousSaleValueGross / previousTotal) * 100 : null
-  const after = loaded && currentTotal > 0 ? (share.currentSaleValueGross / currentTotal) * 100 : null
-  const points = before != null && after != null ? after - before : null
   return (
     <Card
-      className="gap-1 p-4"
-      title="Sprzedaż brutto artykułów w dniach, w których były w promocji: lista promocji, gazetka sklepu, MEA albo cena dnia poniżej 85% ceny zwykłej (promocje z kasy, przeceny)."
+      className="gap-0 p-4"
+      title="Sprzedaż i marża artykułów w dniach, w których były w promocji: lista promocji, gazetka sklepu, MEA albo cena dnia poniżej 85% ceny zwykłej (promocje z kasy, przeceny)."
     >
-      <p className="text-sm text-muted-foreground">Sprzedaż w promocji (brutto)</p>
       {loaded ? (
         <>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <p className="text-2xl font-semibold tracking-tight tabular-nums">
-              {formatZloty(share.currentSaleValueGross)}
-            </p>
-            <p className={cn('text-sm font-medium tabular-nums', directionClass(delta!.direction))}>{delta!.label}</p>
-          </div>
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {COMPARE_LABELS[compare].inline} {formatZloty(share.previousSaleValueGross)}
-          </p>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
-            <p>
-              <span className="font-semibold">{percentLabel(after)}</span>{' '}
-              <span className="text-muted-foreground">
-                sprzedaży · {COMPARE_LABELS[compare].inline} {percentLabel(before)}
-              </span>
-            </p>
-            {points != null && (
-              <p
-                className={cn(
-                  'font-medium',
-                  directionClass(Math.abs(points) < 0.05 ? 'flat' : points > 0 ? 'up' : 'down', true),
-                )}
-              >
-                {pointsText(points)}
-              </p>
-            )}
-          </div>
+          <PromotionPart
+            label={saleLabel}
+            previous={gross ? share.previousSaleValueGross : share.previousSaleValueNet}
+            current={gross ? share.currentSaleValueGross : share.currentSaleValueNet}
+            previousTotal={saleValue(previousTotal, basis)}
+            currentTotal={saleValue(currentTotal, basis)}
+            shareTitle={gross ? 'Udział w całej sprzedaży brutto' : 'Udział w całej sprzedaży netto'}
+            compare={compare}
+          />
+          <PartDivider />
+          <PromotionPart
+            label="Marża w promocji"
+            previous={share.previousMarginValue}
+            current={share.currentMarginValue}
+            previousTotal={previousTotal.marginValue}
+            currentTotal={currentTotal.marginValue}
+            shareTitle="Udział w całej marży"
+            compare={compare}
+          />
         </>
       ) : failed ? (
-        <p className="mt-1 text-sm text-muted-foreground">Nie udało się policzyć sprzedaży w promocji</p>
-      ) : (
-        <div aria-hidden className="mt-1 space-y-2">
-          <div className="h-7 w-32 loading-shimmer rounded-md" />
-          <div className="h-4 w-24 loading-shimmer rounded-md" />
-          <div className="h-4 w-36 loading-shimmer rounded-md" />
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">Sprzedaż w promocji</p>
+          <p className="text-sm text-muted-foreground">Nie udało się policzyć sprzedaży w promocji</p>
         </div>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">{saleLabel}</p>
+            <PartSkeleton />
+          </div>
+          <PartDivider />
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">Marża w promocji</p>
+            <PartSkeleton />
+          </div>
+        </>
       )}
     </Card>
+  )
+}
+
+/** Jedna część kafelka promocji: kwota z udziałem w całości i to samo z okresu porównania. */
+function PromotionPart({
+  label,
+  previous,
+  current,
+  previousTotal,
+  currentTotal,
+  shareTitle,
+  compare,
+}: {
+  label: string
+  previous: number
+  current: number
+  previousTotal: number | null
+  currentTotal: number | null
+  shareTitle: string
+  compare: CompareMode
+}) {
+  const delta = change(previous, current)
+  const before = previousTotal != null && previousTotal > 0 ? (previous / previousTotal) * 100 : null
+  const after = currentTotal != null && currentTotal > 0 ? (current / currentTotal) * 100 : null
+  const points = before != null && after != null ? after - before : null
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="flex flex-wrap items-baseline gap-x-2 tabular-nums">
+          <span className="text-2xl font-semibold tracking-tight">{formatZloty(current)}</span>
+          <span className="text-lg font-semibold text-muted-foreground" title={shareTitle}>
+            {percentLabel(after)}
+          </span>
+        </p>
+        <p className={cn('text-sm font-medium tabular-nums', directionClass(delta.direction))}>{delta.label}</p>
+      </div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
+        <p className="text-muted-foreground">
+          {COMPARE_LABELS[compare].inline} {formatZloty(previous)} · {percentLabel(before)}
+        </p>
+        {points != null && (
+          <p
+            className={cn(
+              'font-medium',
+              directionClass(Math.abs(points) < 0.05 ? 'flat' : points > 0 ? 'up' : 'down', true),
+            )}
+          >
+            {pointsText(points)}
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -1700,23 +1904,25 @@ function PromotionTile({
 const pointsText = (points: number) =>
   `${points >= 0.05 ? '+' : points <= -0.05 ? '−' : ''}${percentFormat.format(Math.abs(points))} p.p.`
 
-/** Zrealizowany % marży (od sprzedaży brutto, bez strat), jego zmiana w p.p. i wartość z okresu porównania. */
-function MarginPercentTile({
+/** Zrealizowany % marży (od sprzedaży brutto albo netto wg przełącznika, bez strat), jego zmiana w p.p. i wartość z okresu porównania. */
+function MarginPercentPart({
   previous,
   current,
   compare,
+  basis,
 }: {
   previous: SalesFigures | undefined
   current: SalesFigures | undefined
   compare: CompareMode
+  basis: SaleBasis
 }) {
-  const before = previous ? marginPercent(previous) : null
-  const after = current ? marginPercent(current) : null
+  const before = previous ? marginPercent(previous, basis) : null
+  const after = current ? marginPercent(current, basis) : null
   const loaded = previous != null && current != null
   const points = before != null && after != null ? after - before : null
   return (
-    <Card className="gap-1 p-4">
-      <p className="text-sm text-muted-foreground">Marża % zrealizowana</p>
+    <div className="space-y-1">
+      <p className="text-sm text-muted-foreground">Marża % zrealizowana {marginBasisLabel(basis)}</p>
       {loaded ? (
         <>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -1737,26 +1943,27 @@ function MarginPercentTile({
           </p>
         </>
       ) : (
-        <div aria-hidden className="mt-1 space-y-2">
-          <div className="h-7 w-32 loading-shimmer rounded-md" />
-          <div className="h-4 w-24 loading-shimmer rounded-md" />
-        </div>
+        <PartSkeleton />
       )}
-    </Card>
+    </div>
   )
 }
 
 /**
  * Czy rejony zrealizowały założoną marżę (budżet rejonów z Ustawień sklepu, osobny od marży wymaganej na
  * nomenklaturze): zrealizowana marża % aktualnego okresu wobec założonej, nadwyżka na zielono, brak na czerwono.
+ * Założona marża jest od brutto, więc przy podstawie netto przeliczamy ją na netto proporcją sprzedaży brutto do netto
+ * rejonu (ta sama marża w zł), żeby porównanie zostało uczciwe.
  */
 function RegionTargets({
   storeId,
   data,
+  basis,
   onPick,
 }: {
   storeId: string
   data: SalesComparison | undefined
+  basis: SaleBasis
   /** Klik w rejon: rozwija go w tabeli porównania i przewija do niego. */
   onPick: (key: string) => void
 }) {
@@ -1770,25 +1977,34 @@ function RegionTargets({
   const regions =
     data?.level === 'REGION'
       ? data.rows.flatMap((row) => {
-          const target = targets.get(row.code)
-          const realized = marginPercent(row.current)
+          const grossTarget = targets.get(row.code)
+          const net = row.current.saleValueNet
+          const target =
+            grossTarget == null || basis === 'gross'
+              ? grossTarget
+              : net > 0
+                ? (grossTarget * row.current.saleValueGross) / net
+                : undefined
+          const realized = marginPercent(row.current, basis)
           return target == null || realized == null ? [] : [{ row, target, realized, diff: realized - target }]
         })
       : []
   const reached = regions.filter((region) => region.diff >= 0).length
 
   return (
-    <div className="flex h-full flex-col gap-2 rounded-lg border p-3">
+    // Od xl wypełnia kolumnę obok filtrów i kafelków (absolute, żeby długa lista nie wydłużała kolumny), niżej stoi
+    // pod kafelkami z ograniczoną wysokością.
+    <Card className="gap-3 p-4 xl:absolute xl:inset-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <p className="text-sm text-muted-foreground">Marża rejonów wobec założonej</p>
+        <h3 className="text-sm font-medium">Marża rejonów wobec założonej {marginBasisLabel(basis)}</h3>
         {regions.length > 0 && (
-          <p className="text-sm font-medium tabular-nums">
-            zrealizowało {reached} z {regions.length}
+          <p className="text-sm text-muted-foreground tabular-nums">
+            zrealizowało <span className="font-semibold text-foreground">{reached}</span> z {regions.length}
           </p>
         )}
       </div>
       {!data || budgets.isPending ? (
-        <div aria-hidden className="h-24 loading-shimmer rounded-md" />
+        <div aria-hidden className="h-24 loading-shimmer rounded-md xl:h-auto xl:flex-1" />
       ) : regions.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {targets.size === 0 ? 'Rejony nie mają założonej marży. ' : 'Brak sprzedaży rejonów z założoną marżą.'}
@@ -1805,14 +2021,14 @@ function RegionTargets({
             ))}
         </p>
       ) : (
-        <div className="max-h-64 overflow-y-auto">
+        <div className="-mr-2 max-h-80 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2 xl:max-h-none">
           <table className="w-full text-sm tabular-nums">
-            <thead className="sticky top-0 bg-card text-xs text-muted-foreground">
+            <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground">
               <tr>
-                <th className="py-1 text-left font-normal">Rejon</th>
-                <th className="py-1 text-right font-normal">Zrealizowana</th>
-                <th className="py-1 text-right font-normal">Założona</th>
-                <th className="py-1 pl-2 text-right font-normal">Różnica</th>
+                <th className="w-full pb-1.5 text-left font-normal">Rejon</th>
+                <th className="pb-1.5 pl-3 text-right font-normal whitespace-nowrap">Zrealiz.</th>
+                <th className="pb-1.5 pl-3 text-right font-normal whitespace-nowrap">Założona</th>
+                <th className="pb-1.5 pl-3 text-right font-normal whitespace-nowrap">Różnica</th>
               </tr>
             </thead>
             <tbody>
@@ -1822,23 +2038,25 @@ function RegionTargets({
                   onClick={() => onPick(rowKey(row, 'REGION'))}
                   className="cursor-pointer border-t transition-colors hover:bg-muted/60"
                 >
-                  <td className="py-1 pr-2">
+                  <td className="max-w-0 py-1.5 pr-2">
                     <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation()
                         onPick(rowKey(row, 'REGION'))
                       }}
-                      className="text-left hover:underline focus-visible:underline focus-visible:outline-none"
-                      title="Pokaż rejon w tabeli"
+                      className="block w-full truncate text-left hover:underline focus-visible:underline focus-visible:outline-none"
+                      title={`Pokaż w tabeli: ${displayName(row) ?? 'Brak nazwy'}`}
                     >
                       <span className="mr-1.5 text-xs text-muted-foreground">{displayCode(row.code)}</span>
                       {displayName(row) ?? 'Brak nazwy'}
                     </button>
                   </td>
-                  <td className="py-1 text-right font-medium">{percentLabel(realized)}</td>
-                  <td className="py-1 text-right text-muted-foreground">{percentLabel(target)}</td>
-                  <td className="py-1 pl-2 text-right">
+                  <td className="py-1.5 pl-3 text-right font-medium whitespace-nowrap">{percentLabel(realized)}</td>
+                  <td className="py-1.5 pl-3 text-right whitespace-nowrap text-muted-foreground">
+                    {percentLabel(target)}
+                  </td>
+                  <td className="py-1.5 pl-3 text-right whitespace-nowrap">
                     <span
                       className={cn(
                         'inline-block rounded px-1.5 py-0.5 text-xs font-semibold',
@@ -1858,7 +2076,7 @@ function RegionTargets({
           </table>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -1946,8 +2164,8 @@ function StoreFigureCells({
   const previousClass = 'border-l text-right text-muted-foreground'
   const small = smallGrowth(previous.quantity, current.quantity)
   const moreQuantity = other.quantity > current.quantity
-  const ours = marginPercent(current)
-  const theirs = marginPercent(other)
+  const ours = marginPercent(current, basis)
+  const theirs = marginPercent(other, basis)
   const lower = lowerMargin(ours, theirs)
   const ourSale = saleValue(current, basis)
   const theirSale = saleValue(other, basis)
@@ -2037,8 +2255,8 @@ function StoreTiles({
 }) {
   const other = data?.otherTotal ?? (data ? ZERO_FIGURES : undefined)
   const number = view.other?.number ?? ''
-  const ours = data ? marginPercent(data.currentTotal) : null
-  const theirs = other ? marginPercent(other) : null
+  const ours = data ? marginPercent(data.currentTotal, basis) : null
+  const theirs = other ? marginPercent(other, basis) : null
   return (
     <div className={cn('mb-4 grid gap-3 sm:grid-cols-2', view.amounts ? 'xl:grid-cols-4' : 'xl:grid-cols-3')}>
       <TotalTile
@@ -2054,7 +2272,7 @@ function StoreTiles({
         note={data && other && `u nich więcej: ${aheadLabel(data.currentTotal.quantity, other.quantity)}`}
       />
       <PlainTile
-        label="Marża % (aktualny)"
+        label={`Marża % ${marginBasisLabel(basis)} (aktualny)`}
         value={data && percentLabel(ours)}
         note={data && `sklep ${number}: ${percentLabel(theirs)} · u nich więcej: ${pointsLabel(ours, theirs)}`}
       />

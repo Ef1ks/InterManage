@@ -70,7 +70,7 @@ class StaffRecordsIntegrationTests {
                 .andReturn().getResponse().getContentAsString();
         String department = JsonPath.read(departments, "$[0].id");
         String positions = send(owner, post(staff("/positions")), "{\"departmentId\":\"" + department
-                + "\",\"name\":\"Kasjer\",\"roleId\":\"" + role + "\",\"shifts\":[]}")
+                + "\",\"name\":\"Kasjer\",\"roleId\":\"" + TestRanks.rank(jdbc, role, store) + "\",\"shifts\":[]}")
                 .andReturn().getResponse().getContentAsString();
         position = JsonPath.read(positions, "$[0].positions[0].id");
         employee = invite();
@@ -372,10 +372,7 @@ class StaffRecordsIntegrationTests {
     }
 
     private String createRole(String permissions) throws Exception {
-        String json = send(owner, post("/api/settings/roles"),
-                "{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissions + "}")
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String json = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         return JsonPath.read(json, "$.id");
     }
 
@@ -394,7 +391,7 @@ class StaffRecordsIntegrationTests {
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), roleId);
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, store);
+        TestRanks.join(jdbc, userId, store);
         return login(username, "haslo-pracownika");
     }
 

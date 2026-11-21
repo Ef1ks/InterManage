@@ -157,7 +157,10 @@ export function useSimulator(storeId: string) {
   const remove = useMutation({
     mutationFn: (id: string) => api<void>(path(storeId, `/punches/${id}`), { method: 'DELETE' }),
   })
-  return { punch, remove }
+  const restore = useMutation({
+    mutationFn: (id: string) => api<void>(path(storeId, `/punches/${id}/restore`), { method: 'POST' }),
+  })
+  return { punch, remove, restore }
 }
 
 export function useTimeSettings(storeId: string, enabled: boolean) {

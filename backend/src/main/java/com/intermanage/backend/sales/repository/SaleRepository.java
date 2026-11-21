@@ -589,11 +589,15 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             """, nativeQuery = true)
     List<MonthRegionSales> sumGrossByMonthAndRegion(UUID storeId, LocalDate from, LocalDate to);
 
-    /** Sprzedaż brutto z dni promocji w okresie ({@code period} p / c) i liczba artykułów, które ją dały. */
+    /** Sprzedaż brutto, netto i marża z dni promocji w okresie ({@code period} p / c) i liczba artykułów, które je dały. */
     interface PromotionSales {
         String getPeriod();
 
         BigDecimal getSaleValueGross();
+
+        BigDecimal getSaleValueNet();
+
+        BigDecimal getMarginValue();
 
         long getArticles();
     }
@@ -610,7 +614,8 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
      */
     @Query(value = "with leaflet as (" + PromoLeafletRepository.ARTICLE_PERIODS + """
             ), days as (
-                select 'p' as period, s.itm8, s.sale_date, s.sale_value_gross as gross,
+                select 'p' as period, s.itm8, s.sale_date, s.sale_value_gross as gross, s.sale_value_net as net,
+                       s.margin_value as margin,
                        case when s.quantity > 0 and s.sale_value_gross > 0
                             then s.sale_value_gross / s.quantity end as price,
                        cast(date_trunc('month', s.sale_date) as date) as month
@@ -618,7 +623,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                 where s.store_id = :storeId
                   and s.sale_date between cast(:previousFrom as date) and cast(:previousTo as date)
                 union all
-                select 'c', s.itm8, s.sale_date, s.sale_value_gross,
+                select 'c', s.itm8, s.sale_date, s.sale_value_gross, s.sale_value_net, s.margin_value,
                        case when s.quantity > 0 and s.sale_value_gross > 0
                             then s.sale_value_gross / s.quantity end,
                        cast(date_trunc('month', s.sale_date) as date)
@@ -682,6 +687,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                 where d.sale_date between x.date_from and x.date_to
             )
             select d.period as period, coalesce(sum(d.gross), 0) as saleValueGross,
+                   coalesce(sum(d.net), 0) as saleValueNet, coalesce(sum(d.margin), 0) as marginValue,
                    count(distinct d.itm8) as articles
             from promo_days x
             join counted d on d.period = x.period and d.itm8 = x.itm8 and d.sale_date = x.sale_date

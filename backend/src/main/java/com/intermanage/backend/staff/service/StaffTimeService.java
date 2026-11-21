@@ -235,7 +235,7 @@ public class StaffTimeService {
 
         TimeRounding rounding = rounding(punched.values());
         // Bez osoby (karta liczona dla wniosku) rodzaj nieobecności nie wychodzi poza serwer.
-        boolean records = principal == null || has(principal, AppUserPrincipal.OWNER_AUTHORITY)
+        boolean records = principal == null || principal.administers()
                 || has(principal, "STAFF_RECORDS:VIEW") || has(principal, "STAFF_RECORDS:EDIT");
         LocalDateTime now = LocalDateTime.now(StoreTime.ZONE);
         List<LocalDate> days = from.datesUntil(to.plusDays(1)).toList();
@@ -279,7 +279,7 @@ public class StaffTimeService {
         }
         return new TimeCardResponse(departmentId, from, to, principal != null && canDecide(department, principal),
                 principal != null && canConfigure(principal),
-                principal != null && has(principal, AppUserPrincipal.OWNER_AUTHORITY), tolerance,
+                principal != null && principal.administers(), tolerance,
                 days.stream().map(day -> new TimeCardResponse.Day(day, ScheduleCalendar.holiday(day))).toList(), rows,
                 withoutCard);
     }
@@ -796,7 +796,7 @@ public class StaffTimeService {
     /** Symulator w panelu (tylko właściciel): odbicie tak, jakby przyłożono kartę do czytnika. */
     @Transactional
     public void simulate(UUID storeId, TimeRequests.SimulatedPunch request, AppUserPrincipal principal) {
-        if (!has(principal, AppUserPrincipal.OWNER_AUTHORITY)) {
+        if (!principal.administers()) {
             throw ApiException.forbidden("Symulator odbić jest tylko dla właściciela");
         }
         Store store = store(storeId);
@@ -808,19 +808,30 @@ public class StaffTimeService {
                 users.getReferenceById(principal.getId())));
     }
 
-    /** Usunięcie odbicia z symulatora (znacznik); odbić z czytnika się nie usuwa. */
+    /**
+     * Usunięcie odbicia (tylko właściciel, także z czytnika: powtórzone przyłożenie karty albo pomyłka psuje parę
+     * wejście–wyjście i dzień zostaje bez wyjścia). To znacznik, więc {@link #restorePunch} je przywraca.
+     */
     @Transactional
     public void removePunch(UUID storeId, UUID punchId, AppUserPrincipal principal) {
-        if (!has(principal, AppUserPrincipal.OWNER_AUTHORITY)) {
-            throw ApiException.forbidden("Odbicia z symulatora usuwa tylko właściciel");
+        companyPunch(storeId, punchId, principal, false).markDeleted(users.getReferenceById(principal.getId()));
+    }
+
+    @Transactional
+    public void restorePunch(UUID storeId, UUID punchId, AppUserPrincipal principal) {
+        companyPunch(storeId, punchId, principal, true).restore();
+    }
+
+    /** Odbicie z dowolnego sklepu firmy (karta pracownika pokazuje odbicia ze wszystkich jej sklepów). */
+    private StaffTimePunch companyPunch(UUID storeId, UUID punchId, AppUserPrincipal principal, boolean deleted) {
+        if (!principal.administers()) {
+            throw ApiException.forbidden("Odbicia usuwa i przywraca tylko właściciel");
         }
-        StaffTimePunch punch = punches.findById(punchId)
-                .filter(found -> found.getDeletedAt() == null && found.getStore().getId().equals(storeId))
+        Store store = store(storeId);
+        return punches.findById(punchId)
+                .filter(found -> (found.getDeletedAt() != null) == deleted
+                        && found.getStore().companyKey().equals(store.companyKey()))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono odbicia"));
-        if (punch.getSource() != TimePunchSource.SIMULATED) {
-            throw ApiException.conflict("Odbić z czytnika się nie usuwa");
-        }
-        punch.markDeleted(users.getReferenceById(principal.getId()));
     }
 
     /**
@@ -1268,11 +1279,11 @@ public class StaffTimeService {
     }
 
     private static boolean canDecideAll(AppUserPrincipal principal) {
-        return has(principal, AppUserPrincipal.OWNER_AUTHORITY) || has(principal, STAFF_EDIT);
+        return principal.administers() || has(principal, STAFF_EDIT);
     }
 
     private static boolean canConfigure(AppUserPrincipal principal) {
-        return has(principal, AppUserPrincipal.OWNER_AUTHORITY) || has(principal, STAFF_EDIT);
+        return principal.administers() || has(principal, STAFF_EDIT);
     }
 
     private static boolean has(AppUserPrincipal principal, String authority) {

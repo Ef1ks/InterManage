@@ -17,6 +17,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -64,6 +65,10 @@ public class AppUser {
     @JoinTable(name = "user_stores", joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "store_id"))
     private Set<Store> stores = new HashSet<>();
+
+    /** Ranga konta w każdym sklepie (hierarchia sklepu). Właściciel aplikacji ich nie potrzebuje. */
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private Set<UserStoreRole> storeRoles = new HashSet<>();
 
     /**
      * Zwiększana przy zmianie hasła. Tokeny wydane ze starszą wersją są odrzucane
@@ -211,6 +216,33 @@ public class AppUser {
         this.stores.addAll(stores);
     }
 
+    public Set<UserStoreRole> getStoreRoles() {
+        return storeRoles;
+    }
+
+    /** Właściciel aplikacji: wszystkie sklepy i ustawienia firmy. */
+    public boolean isOwner() {
+        return role != null && role.isOwner();
+    }
+
+    /** Ranga w sklepie, {@code null} = brak (właściciel albo konto bez przypisanej rangi). */
+    public StoreRole rankIn(UUID storeId) {
+        if (storeId == null) {
+            return null;
+        }
+        return storeRoles.stream().filter(assignment -> assignment.getStore().getId().equals(storeId))
+                .map(UserStoreRole::getRole).filter(rank -> rank.getDeletedAt() == null).findFirst().orElse(null);
+    }
+
+    /** Nazwa rangi w sklepie do list: właściciel „Właściciel”, bez rangi pusta. */
+    public String rankNameIn(UUID storeId) {
+        if (isOwner()) {
+            return role.getName();
+        }
+        StoreRole rank = rankIn(storeId);
+        return rank == null ? null : rank.getName();
+    }
+
     public void setRole(Role role) {
         this.role = role;
     }
@@ -225,7 +257,7 @@ public class AppUser {
 
     /** Czy konto zleca zadania: właściciel zawsze, inni z włączonym zlecaniem. */
     public boolean mayAssignTasks() {
-        return canAssignTasks || (role != null && role.isOwner());
+        return canAssignTasks || isOwner();
     }
 
     public boolean isEnabled() {

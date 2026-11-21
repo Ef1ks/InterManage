@@ -22,6 +22,8 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     Optional<Role> findByOwnerTrue();
 
+    Optional<Role> findBySystemKey(String systemKey);
+
     boolean existsByNameIgnoreCase(String name);
 
     boolean existsByNameIgnoreCaseAndIdNot(String name, UUID id);

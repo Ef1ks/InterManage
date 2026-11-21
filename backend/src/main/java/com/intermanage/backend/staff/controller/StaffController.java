@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.auth.service.UserService;
 import com.intermanage.backend.staff.dto.AccountOption;
@@ -45,7 +46,7 @@ public class StaffController {
 
     private static final String VIEW = "hasAuthority('STAFF:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT = "hasAuthority('STAFF:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
-    private static final String OWNER = "hasAuthority('ROLE_OWNER') and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String OWNER = Access.STORE_ADMIN;
 
     private final StaffStructureService structure;
     private final StaffEmployeeService employees;
@@ -66,7 +67,7 @@ public class StaffController {
     @GetMapping("/roles")
     @PreAuthorize(EDIT)
     public List<RoleOption> roles(@PathVariable UUID storeId, @AuthenticationPrincipal AppUserPrincipal principal) {
-        return structure.roles(principal.getId());
+        return structure.roles(storeId, principal.getId());
     }
 
     @PostMapping("/departments")

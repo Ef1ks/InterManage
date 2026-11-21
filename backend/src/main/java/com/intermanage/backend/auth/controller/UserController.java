@@ -41,8 +41,9 @@ public class UserController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
-        return userService.create(request);
+    public UserResponse create(@Valid @RequestBody CreateUserRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return userService.create(request, principal.getId());
     }
 
     @PostMapping("/{id}/activation-link")
@@ -52,8 +53,9 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    public UserResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
-        return userService.update(id, request);
+    public UserResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return userService.update(id, request, principal.getId());
     }
 
     /** Usunięcie konta (znacznik); toast „Przywróć” woła {@code restore}. */

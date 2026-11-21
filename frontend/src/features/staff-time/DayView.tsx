@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 
-import { PrinterIcon, ScaleIcon } from 'lucide-react'
+import { FingerprintIcon, PrinterIcon, ScaleIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { ABSENCE } from '@/features/staff-schedule/schedule-utils'
@@ -30,6 +30,8 @@ type Props = {
   printing: string | null
   /** Wpis zwolnienia lekarskiego (L4) w Kadrach od tego dnia; bez dostępu do Kadr nie ma przycisku. */
   onSick?: (row: TimeCardRow) => void
+  /** Odbicia osoby w tym dniu z usuwaniem (tylko właściciel); bez tego nie ma przycisku. */
+  onPunches?: (row: TimeCardRow) => void
 }
 
 // Na wąskim ekranie oś godzin przewija się w bok, a nazwisko i sumy zostają na miejscu (jak w tygodniu i miesiącu).
@@ -43,7 +45,7 @@ const DEFAULT_TO = 22 * 60
  * Dzień: każdy pracownik ma pasek godzin. Ramka przerywana to zmiana z grafiku, kolorowe odcinki to czas z odbić
  * (praca, poza grafikiem, braki), kreski to odbicia. Odcinek do decyzji jest przyciskiem.
  */
-export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint, printing, onSick }: Props) {
+export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint, printing, onSick, onPunches }: Props) {
   const rows = cards.rows.map((row) => ({ row, day: row.days.find((day) => day.date === date) }))
   const now = useNow()
   const nowMinute = date === localDate(now) ? now.getHours() * 60 + now.getMinutes() : null
@@ -169,18 +171,9 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                       <span key={segment.part + segment.start} title={label} className={shared} style={position} />
                     )
                   })}
-                  {day?.openSince && (
-                    <span
-                      title={`Wejście ${clockOf(day.openSince)} bez wyjścia`}
-                      // Trwające wejście: pasek wygasa w stronę „teraz”, bez pulsowania, które przez cały dzień
-                      // ściągałoby wzrok z boku ekranu.
-                      className={cn(
-                        'absolute top-1.5 bottom-1.5 rounded-sm',
-                        day.missingExit
-                          ? 'bg-red-300 dark:bg-red-800'
-                          : 'bg-linear-to-r from-emerald-400 to-emerald-400/25 dark:from-emerald-600 dark:to-emerald-600/25',
-                      )}
-                      style={{
+                  {day?.openSince &&
+                    (() => {
+                      const open = {
                         left: at(minuteOf(day.openSince, date)),
                         width: width(
                           minuteOf(day.openSince, date),
@@ -188,9 +181,32 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                             ? minuteOf(day.openSince, date) + 30
                             : Math.max(nowMinute, minuteOf(day.openSince, date) + 5),
                         ),
-                      }}
-                    />
-                  )}
+                      }
+                      // Brak wyjścia właściciel poprawia w odbiciach dnia (zwykle powtórzone przyłożenie karty).
+                      return day.missingExit && onPunches ? (
+                        <button
+                          type="button"
+                          title={`Wejście ${clockOf(day.openSince)} bez wyjścia: pokaż odbicia dnia`}
+                          aria-label={`${row.name}: wejście ${clockOf(day.openSince)} bez wyjścia, pokaż odbicia`}
+                          onClick={() => onPunches(row)}
+                          className="absolute top-1.5 bottom-1.5 z-10 cursor-pointer rounded-sm bg-red-300 ring-2 ring-red-700 outline-none transition-[box-shadow] hover:ring-foreground/60 focus-visible:ring-3 focus-visible:ring-ring dark:bg-red-800 dark:ring-red-300"
+                          style={open}
+                        />
+                      ) : (
+                        <span
+                          title={`Wejście ${clockOf(day.openSince)} bez wyjścia`}
+                          // Trwające wejście: pasek wygasa w stronę „teraz”, bez pulsowania, które przez cały dzień
+                          // ściągałoby wzrok z boku ekranu.
+                          className={cn(
+                            'absolute top-1.5 bottom-1.5 rounded-sm',
+                            day.missingExit
+                              ? 'bg-red-300 dark:bg-red-800'
+                              : 'bg-linear-to-r from-emerald-400 to-emerald-400/25 dark:from-emerald-600 dark:to-emerald-600/25',
+                          )}
+                          style={open}
+                        />
+                      )
+                    })()}
                   {day?.breakSince && (
                     <span
                       title={`Na przerwie od ${clockOf(day.breakSince)}`}
@@ -249,6 +265,19 @@ export function DayView({ cards, date, onSegment, onBalance, balancing, onPrint,
                     >
                       <ScaleIcon aria-hidden />
                       Zrównoważ
+                    </Button>
+                  )}
+                  {day && onPunches && day.punches.length > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={day.missingExit ? 'default' : 'outline'}
+                      className="mt-1 mr-1"
+                      title="Odbicia tego dnia: usuń powtórzone albo błędne"
+                      onClick={() => onPunches(row)}
+                    >
+                      <FingerprintIcon aria-hidden />
+                      Odbicia {day.punches.length}
                     </Button>
                   )}
                   {day && onSick && !row.civil && !day.absence && day.planned > 0 && day.shortfall > 0 && (

@@ -28,7 +28,7 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 @RequestMapping("/api/stores/{storeId}/agents")
 public class StoreAgentController {
 
-    private static final String OWNER = "hasRole('OWNER') and " + Access.STORE;
+    private static final String OWNER = Access.STORE_ADMIN;
 
     private final StoreAgentService service;
 

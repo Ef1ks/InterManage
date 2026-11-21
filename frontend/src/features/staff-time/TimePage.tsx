@@ -26,7 +26,7 @@ import {
 import { RecordDialog } from '@/features/staff-records/RecordDialogs'
 import { DayView, WithoutCard } from '@/features/staff-time/DayView'
 import { PeriodGrid } from '@/features/staff-time/PeriodGrid'
-import { SegmentDialog, SimulatorDialog, TimeSettingsDialog } from '@/features/staff-time/TimeDialogs'
+import { PunchesDialog, SegmentDialog, SimulatorDialog, TimeSettingsDialog } from '@/features/staff-time/TimeDialogs'
 import { SymfoniaExportDialog } from '@/features/staff-time/SymfoniaExportDialog'
 import { TimeRequestsButton } from '@/features/staff-time/TimeRequestsDialog'
 import { LEGEND, STATUS_STYLES, hm, range, shift, type TimeView } from '@/features/staff-time/time-utils'
@@ -76,6 +76,12 @@ function StoreTime({ store }: { store: StoreSummary }) {
   // L4 to wpis w Kadrach (dane kadrowe), więc z Czasu pracy tylko z dostępem do nich.
   const canAddSick = useCan('STAFF_RECORDS', 'EDIT')
   const [sick, setSick] = useState<string | null>(null)
+  // Osoba, której odbicia dnia poprawia właściciel; wiersz bierzemy ze świeżych kart, żeby lista zmieniała się po usunięciu.
+  const [punchesOf, setPunchesOf] = useState<{ employeeId: string; civil: boolean } | null>(null)
+  const punchesRow =
+    (punchesOf &&
+      cards.data?.rows.find((row) => row.employeeId === punchesOf.employeeId && row.civil === punchesOf.civil)) ??
+    null
   const waiting = new Map(attention.data?.departments.map((item) => [item.departmentId, item.count]))
   const month = date.slice(0, 7)
   // Poprzedni okres pokazany do czasu odpowiedzi: dzień rysuje się z jego własnej daty.
@@ -284,6 +290,11 @@ function StoreTime({ store }: { store: StoreSummary }) {
                   onPrint={(row) => printSheet(row.employeeId)}
                   printing={busy}
                   onSick={canAddSick ? (row) => setSick(row.employeeId) : undefined}
+                  onPunches={
+                    cards.data.canSimulate
+                      ? (row) => setPunchesOf({ employeeId: row.employeeId, civil: row.civil })
+                      : undefined
+                  }
                 />
               ) : (
                 <PeriodGrid
@@ -323,6 +334,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
             segment={picked ? (currentSegment(cards.data, picked) ?? picked.segment) : null}
             onClose={() => setPicked(null)}
           />
+          <PunchesDialog storeId={store.id} row={punchesRow} date={shownDate} onClose={() => setPunchesOf(null)} />
           <TimeSettingsDialog open={dialog === 'settings'} storeId={store.id} onClose={() => setDialog(null)} />
         </div>
       )}

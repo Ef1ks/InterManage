@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { useCan } from '@/features/auth/api'
+import { canInStore, useCurrentUser } from '@/features/auth/api'
 import { useProfitTargetProgress } from '@/features/sales/api'
 import { yearShare } from '@/features/sales/year-share'
 import { formatShortDate } from '@/lib/dates'
@@ -17,7 +17,7 @@ const money = (value: number) => `${whole.format(value)} zł`
  * sklep jest przed planem albo ile brakuje do planu.
  */
 export function ProfitGoalBar({ storeId, lastSaleDate }: { storeId: string; lastSaleDate: string }) {
-  const canSetGoal = useCan('SALES', 'EDIT')
+  const canSetGoal = canInStore(useCurrentUser(), storeId, 'SALES', 'EDIT')
   const progress = useProfitTargetProgress(storeId, lastSaleDate)
   const data = progress.data
   if (!data) return null

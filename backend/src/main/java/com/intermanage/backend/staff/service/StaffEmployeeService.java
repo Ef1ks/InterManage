@@ -105,11 +105,11 @@ public class StaffEmployeeService {
     public List<AccountOption> accounts(UUID storeId, UUID actorId) {
         return users.findAllWithRole().stream()
                 .filter(AppUser::isEnabled)
-                .filter(user -> user.getRole().isOwner()
+                .filter(user -> user.isOwner()
                         || user.getStores().stream().anyMatch(store -> store.getId().equals(storeId)))
                 .filter(user -> !employees.existsActiveForUser(user.getId()))
-                .filter(user -> grants.canGrant(actorId, user.getRole()))
-                .map(mapper::toAccountOption)
+                .filter(user -> grants.canManage(actorId, storeId, user))
+                .map(user -> mapper.toAccountOption(user, user.rankNameIn(storeId)))
                 .toList();
     }
 
@@ -117,14 +117,14 @@ public class StaffEmployeeService {
     public EmployeeResponse invite(UUID storeId, CreateEmployeeRequest request, UUID actorId) {
         Store store = store(storeId);
         StaffPosition position = activePosition(store, request.positionId());
-        grants.requireGrantable(actorId, position.getRole());
+        grants.requireGrantableKey(actorId, storeId, position.getRoleKey());
         String username = request.username() == null || request.username().isBlank()
                 ? userService.suggestUsername(request.displayName()) : request.username();
         if (username.isEmpty()) {
             throw ApiException.badRequest("Nie da się złożyć loginu z imienia i nazwiska. Wpisz go ręcznie.");
         }
-        AppUser user = userService.invite(username, request.displayName(), request.email(), position.getRole(),
-                Set.of(store));
+        AppUser user = userService.invite(username, request.displayName(), request.email(), Set.of(store));
+        grants.applyPositionRank(user, storeId, position.getRoleKey(), actorId);
         return save(store, user, position, request.shifts(), actorId);
     }
 
@@ -150,10 +150,10 @@ public class StaffEmployeeService {
         if (!user.isEnabled()) {
             throw ApiException.conflict("To konto jest zablokowane");
         }
-        grants.requireGrantable(actorId, user.getRole());
-        grants.requireGrantable(actorId, employee.getPosition().getRole());
+        grants.requireManageable(actorId, employee.getStore().getId(), user);
+        grants.requireGrantableKey(actorId, employee.getStore().getId(), employee.getPosition().getRoleKey());
         requireNotEmployed(user);
-        attach(employee, user);
+        attach(employee, user, actorId);
         return response(employee);
     }
 
@@ -162,24 +162,23 @@ public class StaffEmployeeService {
     public EmployeeResponse inviteAccount(UUID storeId, UUID id, InviteAccountRequest request, UUID actorId) {
         StaffEmployee employee = withoutAccount(storeId, id, actorId);
         StaffPosition position = employee.getPosition();
-        grants.requireGrantable(actorId, position.getRole());
+        grants.requireGrantableKey(actorId, employee.getStore().getId(), position.getRoleKey());
         String name = employee.getDisplayName();
         String username = request.username() == null || request.username().isBlank()
                 ? userService.suggestUsername(name) : request.username();
         if (username.isEmpty()) {
             throw ApiException.badRequest("Nie da się złożyć loginu z imienia i nazwiska. Wpisz go ręcznie.");
         }
-        AppUser user = userService.invite(username, name, request.email(), position.getRole(),
-                Set.of(employee.getStore()));
-        attach(employee, user);
+        AppUser user = userService.invite(username, name, request.email(), Set.of(employee.getStore()));
+        attach(employee, user, actorId);
         return response(employee);
     }
 
-    private void attach(StaffEmployee employee, AppUser user) {
+    private void attach(StaffEmployee employee, AppUser user, UUID actorId) {
         employee.linkAccount(user);
-        if (!user.getRole().isOwner()) {
-            user.setRole(employee.getPosition().getRole());
+        if (!user.isOwner()) {
             user.getStores().add(employee.getStore());
+            grants.applyPositionRank(user, employee.getStore().getId(), employee.getPosition().getRoleKey(), actorId);
         }
         employees.flush();
     }
@@ -198,12 +197,12 @@ public class StaffEmployeeService {
         StaffPosition position = activePosition(store, request.positionId());
         AppUser user = users.findWithRoleById(request.userId())
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono konta"));
-        grants.requireGrantable(actorId, user.getRole());
-        grants.requireGrantable(actorId, position.getRole());
+        grants.requireManageable(actorId, storeId, user);
+        grants.requireGrantableKey(actorId, storeId, position.getRoleKey());
         requireNotEmployed(user);
-        if (!user.getRole().isOwner()) {
-            user.setRole(position.getRole());
+        if (!user.isOwner()) {
             user.getStores().add(store);
+            grants.applyPositionRank(user, storeId, position.getRoleKey(), actorId);
         }
         return save(store, user, position, request.shifts(), actorId);
     }
@@ -212,14 +211,15 @@ public class StaffEmployeeService {
     public EmployeeResponse update(UUID storeId, UUID id, UpdateEmployeeRequest request, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
         AppUser user = employee.getUser();
-        requireGrantable(actorId, user);
+        UUID employeeStore = employee.getStore().getId();
+        grants.requireManageable(actorId, employeeStore, user);
         if (!employee.getPosition().getId().equals(request.positionId())) {
             StaffPosition position = activePosition(employee.getStore(), request.positionId());
             if (user != null) {
-                grants.requireGrantable(actorId, position.getRole());
+                grants.requireGrantableKey(actorId, employeeStore, position.getRoleKey());
             }
             employee.setPosition(position);
-            StaffStructureService.applyRole(employee, position.getRole());
+            grants.applyPositionRank(user, employeeStore, position.getRoleKey(), actorId);
         }
         if (user != null) {
             userService.updateProfile(user, request.displayName(), request.email());
@@ -256,7 +256,7 @@ public class StaffEmployeeService {
     public EmployeeResponse transfer(UUID storeId, UUID id, TransferEmployeeRequest request, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
         AppUser user = employee.getUser();
-        requireGrantable(actorId, user);
+        grants.requireManageable(actorId, employee.getStore().getId(), user);
 
         Store source = employee.getStore();
         Store target = store(request.storeId());
@@ -274,17 +274,17 @@ public class StaffEmployeeService {
         }
         StaffPosition position = activePosition(target, request.positionId());
         if (user != null) {
-            grants.requireGrantable(actorId, position.getRole());
+            grants.requireGrantableKey(actorId, target.getId(), position.getRoleKey());
         }
 
         AppUser actor = users.getReferenceById(actorId);
         moves.save(new StaffEmployeeMove(employee, source, target, employee.getPosition(), position, actor));
         employee.moveTo(target, position);
-        StaffStructureService.applyRole(employee, position.getRole());
-        if (user != null && !user.getRole().isOwner()) {
+        if (user != null && !user.isOwner()) {
             user.getStores().removeIf(store -> store.getId().equals(source.getId()));
             user.getStores().add(target);
         }
+        grants.applyPositionRank(user, target.getId(), position.getRoleKey(), actorId);
         shiftService.replace(shifts.findActiveOfEmployees(List.of(id)), request.shifts(),
                 hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
         shifts.flush();
@@ -296,12 +296,12 @@ public class StaffEmployeeService {
     public void end(UUID storeId, UUID id, UUID actorId) {
         StaffEmployee employee = activeEmployee(storeId, id, actorId);
         AppUser user = employee.getUser();
-        requireGrantable(actorId, user);
+        grants.requireManageable(actorId, employee.getStore().getId(), user);
         if (user != null && user.getId().equals(actorId)) {
             throw ApiException.conflict("Nie możesz zakończyć pracy na własnym koncie");
         }
         employee.markEnded(users.getReferenceById(actorId));
-        if (user != null && !user.getRole().isOwner()) {
+        if (user != null && !user.isOwner()) {
             user.setEnabled(false);
         }
     }
@@ -318,12 +318,12 @@ public class StaffEmployeeService {
             throw ApiException.conflict("Stanowisko tej osoby jest usunięte. Najpierw je przywróć.");
         }
         if (user != null) {
-            grants.requireGrantable(actorId, user.getRole());
-            grants.requireGrantable(actorId, position.getRole());
+            grants.requireManageable(actorId, employee.getStore().getId(), user);
+            grants.requireGrantableKey(actorId, employee.getStore().getId(), position.getRoleKey());
             requireNotEmployed(user);
         }
         employee.restore();
-        StaffStructureService.applyRole(employee, position.getRole());
+        grants.applyPositionRank(user, employee.getStore().getId(), position.getRoleKey(), actorId);
         if (user != null) {
             user.setEnabled(true);
         }
@@ -360,7 +360,7 @@ public class StaffEmployeeService {
         if (!employee.hasAccount()) {
             throw ApiException.conflict("Ten pracownik nie ma konta w aplikacji");
         }
-        grants.requireGrantable(actorId, employee.getUser().getRole());
+        grants.requireManageable(actorId, employee.getStore().getId(), employee.getUser());
         userService.resendActivationLink(employee.getUser().getId());
     }
 
@@ -371,13 +371,6 @@ public class StaffEmployeeService {
         shiftService.replace(List.of(), requested, hours -> StaffShift.ofEmployee(employee, hours, actor), actor);
         shifts.flush();
         return response(employee);
-    }
-
-    /** Pracownik bez konta nie ma uprawnień, więc zmienić go może każdy z {@code STAFF:EDIT}. */
-    private void requireGrantable(UUID actorId, AppUser user) {
-        if (user != null) {
-            grants.requireGrantable(actorId, user.getRole());
-        }
     }
 
     private Set<UUID> accessibleStoreIds(UUID actorId) {

@@ -42,4 +42,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
 
     @Query("select u.role.id, count(u) from AppUser u group by u.role.id")
     List<Object[]> countUsersPerRole();
+
+    /** Konta, które mają jeszcze dawną rolę globalną zamiast rang w sklepach (przed przeniesieniem). */
+    @Query("select u from AppUser u join fetch u.role r where r.owner = false and r.systemKey is null")
+    List<AppUser> findWithLegacyRole();
 }

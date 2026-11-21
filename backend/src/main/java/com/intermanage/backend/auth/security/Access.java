@@ -19,6 +19,9 @@ public final class Access {
     /** Słownik sklepu: każdy z dostępem do sklepu, bez względu na rolę. */
     public static final String STORE = "@storeAccess.canAccess(authentication, #storeId)";
 
+    /** Właściciel albo Aderon sklepu z adresu (rzeczy, które dawniej robił tylko właściciel w sklepie). */
+    public static final String STORE_ADMIN = "hasAnyAuthority('ROLE_OWNER', 'STORE:ADMIN') and " + STORE;
+
     /** Kto widzi kartę artykułu (kartoteka, wykres sprzedaży artykułu, dostawy, protokoły, historia cen). */
     public static final String ARTICLE_STATS_AUTHORITIES =
             "hasAnyAuthority('SALES:VIEW', 'INVENTORY:VIEW', 'DATA_ENTRY:VIEW')";

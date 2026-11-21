@@ -16,6 +16,7 @@ import com.intermanage.backend.auth.dto.UpdateUserRequest;
 import com.intermanage.backend.auth.dto.UserResponse;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.entity.Role;
+import com.intermanage.backend.auth.entity.StoreRole;
 import com.intermanage.backend.auth.mapper.UserMapper;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.repository.RoleRepository;
@@ -34,10 +35,12 @@ public class UserService {
     private final UserMapper userMapper;
     private final StoreService storeService;
     private final StaffEmployeeRepository employees;
+    private final StoreRoleService ranks;
 
     public UserService(AppUserRepository users, RoleRepository roles, PasswordEncoder passwordEncoder,
             ActivationService activationService, UserMapper userMapper, StoreService storeService,
-            StaffEmployeeRepository employees) {
+            StaffEmployeeRepository employees, StoreRoleService ranks) {
+        this.ranks = ranks;
         this.users = users;
         this.roles = roles;
         this.passwordEncoder = passwordEncoder;
@@ -60,10 +63,18 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse create(CreateUserRequest request) {
-        AppUser user = invite(request.username(), request.displayName(), request.email(), loadRole(request.roleId()),
-                Set.copyOf(storeService.loadAll(request.storeIds())));
+    public UserResponse create(CreateUserRequest request, UUID actorId) {
+        Set<Store> stores = Set.copyOf(storeService.loadAll(request.storeIds()));
+        AppUser user = invite(request.username(), request.displayName(), request.email(),
+                Boolean.TRUE.equals(request.owner()) ? ownerRole() : accountRole(), stores);
+        applyRanks(user, stores, request.storeRoles(), null, actorId);
         return userMapper.toResponse(user, null);
+    }
+
+    /** Konto pracownika (bez rangi: nadaje ją stanowisko w sklepie). */
+    @Transactional
+    public AppUser invite(String login, String displayName, String email, Set<Store> stores) {
+        return invite(login, displayName, email, accountRole(), stores);
     }
 
     /** Zakłada konto bez hasła i wysyła link aktywacyjny. */
@@ -115,25 +126,26 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse update(UUID id, UpdateUserRequest request) {
+    public UserResponse update(UUID id, UpdateUserRequest request, UUID actorId) {
         AppUser user = users.findWithRoleById(id).orElseThrow(() -> ApiException.notFound("Nie znaleziono użytkownika"));
-        Role newRole = loadRole(request.roleId());
         String position = positionName(user.getId());
-        if (position != null && !user.getRole().isOwner() && !newRole.getId().equals(user.getRole().getId())) {
-            throw ApiException.conflict("Rolę tego konta ustala stanowisko „" + position + "”. Zmień je w Pracownikach.");
-        }
 
-        boolean losesOwnerAccess = user.getRole().isOwner() && user.isEnabled()
-                && (!newRole.isOwner() || !request.enabled());
+        boolean wantsOwner = request.owner() == null ? user.isOwner() : request.owner();
+        boolean losesOwnerAccess = user.isOwner() && user.isEnabled() && (!wantsOwner || !request.enabled());
         if (losesOwnerAccess && users.countOtherActiveOwners(user.getId()) == 0) {
             throw ApiException.conflict("Musi pozostać co najmniej jeden aktywny właściciel");
         }
 
         updateProfile(user, request.displayName(), request.email());
-        user.setRole(newRole);
+        if (wantsOwner != user.isOwner()) {
+            user.setRole(wantsOwner ? ownerRole() : accountRole());
+        }
         user.setEnabled(request.enabled());
         if (request.storeIds() != null) {
             user.setStores(Set.copyOf(storeService.loadAll(request.storeIds())));
+        }
+        if (!user.isOwner() && (request.storeRoles() != null || request.storeIds() != null)) {
+            applyRanks(user, user.getStores(), request.storeRoles(), positionRank(user.getId()), actorId);
         }
         if (request.canAssignTasks() != null) {
             user.setCanAssignTasks(request.canAssignTasks());
@@ -159,7 +171,7 @@ public class UserService {
         if (user.getId().equals(byUserId)) {
             throw ApiException.conflict("Nie możesz usunąć własnego konta");
         }
-        if (user.getRole().isOwner() && user.isEnabled() && users.countOtherActiveOwners(user.getId()) == 0) {
+        if (user.isOwner() && user.isEnabled() && users.countOtherActiveOwners(user.getId()) == 0) {
             throw ApiException.conflict("Musi pozostać co najmniej jeden aktywny właściciel");
         }
         String position = positionName(user.getId());
@@ -210,7 +222,56 @@ public class UserService {
         }
     }
 
-    private Role loadRole(UUID roleId) {
-        return roles.findById(roleId).orElseThrow(() -> ApiException.badRequest("Wybrana rola nie istnieje"));
+    private Role ownerRole() {
+        return roles.findByOwnerTrue().orElseThrow(() -> new IllegalStateException("Brak roli właściciela"));
+    }
+
+    private Role accountRole() {
+        return roles.findBySystemKey(Role.ACCOUNT_KEY)
+                .orElseThrow(() -> new IllegalStateException("Brak roli Konto sklepu"));
+    }
+
+    /**
+     * Ranga w każdym sklepie konta: wybrana w formularzu, a bez wyboru dotychczasowa albo Pracownik. Rangę w sklepie,
+     * w którym konto pracuje na stanowisku, ustala stanowisko (zmiana = 409).
+     */
+    private void applyRanks(AppUser user, Set<Store> stores, Map<UUID, UUID> requested, PositionRank position,
+            UUID actorId) {
+        if (user.isOwner()) {
+            return;
+        }
+        Map<UUID, UUID> wanted = requested == null ? Map.of() : requested;
+        for (Store store : stores) {
+            UUID roleId = wanted.get(store.getId());
+            StoreRole current = user.rankIn(store.getId());
+            StoreRole rank;
+            if (roleId != null) {
+                rank = ranks.active(store.getId(), roleId);
+            } else if (current != null) {
+                continue;
+            } else {
+                rank = ranks.lowest(store.getId());
+                if (rank == null) {
+                    continue;
+                }
+            }
+            boolean changes = current == null || !current.getId().equals(rank.getId());
+            if (roleId != null && changes && position != null && position.storeId().equals(store.getId())
+                    && position.key() != null && !rank.getKey().equals(position.key())) {
+                throw ApiException.conflict("Rangę tego konta w sklepie " + store.getNumber()
+                        + " ustala stanowisko „" + position.name() + "”. Zmień je w Pracownikach.");
+            }
+            ranks.assign(user, rank, actorId);
+        }
+    }
+
+    private record PositionRank(UUID storeId, String key, String name) {
+    }
+
+    private PositionRank positionRank(UUID userId) {
+        return employees.findActiveOfUsers(List.of(userId)).stream().findFirst()
+                .map(employee -> new PositionRank(employee.getStore().getId(), employee.getPosition().getRoleKey(),
+                        employee.getPosition().getName()))
+                .orElse(null);
     }
 }

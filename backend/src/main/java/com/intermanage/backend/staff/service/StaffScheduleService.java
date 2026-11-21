@@ -1087,7 +1087,7 @@ public class StaffScheduleService {
     }
 
     private static boolean seesRecords(AppUserPrincipal principal) {
-        return has(principal, AppUserPrincipal.OWNER_AUTHORITY) || has(principal, "STAFF_RECORDS:VIEW")
+        return principal.administers() || has(principal, "STAFF_RECORDS:VIEW")
                 || has(principal, "STAFF_RECORDS:EDIT");
     }
 
@@ -1393,7 +1393,7 @@ public class StaffScheduleService {
     }
 
     private static boolean canEditAll(AppUserPrincipal principal) {
-        return has(principal, AppUserPrincipal.OWNER_AUTHORITY) || has(principal, STAFF_EDIT);
+        return principal.administers() || has(principal, STAFF_EDIT);
     }
 
     private static boolean has(AppUserPrincipal principal, String authority) {

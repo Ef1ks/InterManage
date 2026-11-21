@@ -13,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.entity.StoreRole;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.auth.service.StoreRoleService;
 import com.intermanage.backend.common.component.ScanFiles;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.push.service.PushService;
@@ -37,8 +39,8 @@ import com.intermanage.backend.task.repository.StoreTaskItemRepository;
 import com.intermanage.backend.task.repository.StoreTaskRepository;
 
 /**
- * Zadania sklepu jako lista do odhaczania. Zleca na razie tylko właściciel (hierarchia kierowników dojdzie później),
- * wykonawcą jest konto z dostępem do sklepu. Wykonawca odhacza pozycje i oznacza wykonanie (odhaczenie ostatniej
+ * Zadania sklepu jako lista do odhaczania. Zleca właściciel, Aderon, konto z włączonym zlecaniem i każda ranga z kimś
+ * pod sobą w hierarchii sklepu (osobom niżej), wykonawcą jest konto z dostępem do sklepu. Wykonawca odhacza pozycje i oznacza wykonanie (odhaczenie ostatniej
  * pozycji robi to samo), zlecający przyjmuje albo odsyła z komentarzem. Każda zmiana zapisuje wpis w historii, a
  * powiadomienie push idzie do drugiej strony.
  */
@@ -63,9 +65,11 @@ public class StoreTaskService {
     private final AppUserRepository users;
     private final PushService push;
     private final TaskMapper mapper;
+    private final StoreRoleService ranks;
 
     public StoreTaskService(StoreTaskRepository tasks, StoreTaskItemRepository items, StoreTaskEventRepository events,
-            StoreTaskAttachmentRepository attachments, StoreRepository stores, AppUserRepository users, PushService push, TaskMapper mapper) {
+            StoreTaskAttachmentRepository attachments, StoreRepository stores, AppUserRepository users, PushService push,
+            TaskMapper mapper, StoreRoleService ranks) {
         this.tasks = tasks;
         this.items = items;
         this.events = events;
@@ -74,6 +78,7 @@ public class StoreTaskService {
         this.users = users;
         this.push = push;
         this.mapper = mapper;
+        this.ranks = ranks;
     }
 
     @Transactional(readOnly = true)
@@ -83,18 +88,19 @@ public class StoreTaskService {
 
     @Transactional(readOnly = true)
     public List<TaskResponse> all(UUID storeId, UUID userId) {
-        return responses(tasks.findOfStore(storeId, creatorFilter(userId), acceptedSince()), userId);
+        return responses(tasks.findOfStore(storeId, creatorFilter(userId, storeId), acceptedSince()), userId);
     }
 
     @Transactional(readOnly = true)
     public TaskCounts counts(UUID storeId, UUID userId) {
-        long waiting = assigns(userId) ? tasks.countWaitingForAcceptance(storeId, creatorFilter(userId)) : 0;
+        long waiting = assigns(userId, storeId)
+                ? tasks.countWaitingForAcceptance(storeId, creatorFilter(userId, storeId)) : 0;
         return new TaskCounts(tasks.countOpenOfAssignee(storeId, userId), waiting);
     }
 
     @Transactional(readOnly = true)
-    public List<TaskAssigneeResponse> assignees(UUID storeId) {
-        return tasks.findAssignees(storeId).stream().map(mapper::toAssignee).toList();
+    public List<TaskAssigneeResponse> assignees(UUID storeId, UUID userId) {
+        return assignable(storeId, userId).stream().map(user -> mapper.toAssignee(user, storeId)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -115,7 +121,7 @@ public class StoreTaskService {
         AppUser user = users.getReferenceById(userId);
         StoreTask task = new StoreTask(store, user, trim(request.sourceKind()), trim(request.sourceLabel()),
                 trim(request.sourceUrl()));
-        AppUser assignee = assignee(storeId, request.assigneeId());
+        AppUser assignee = assignee(storeId, request.assigneeId(), userId);
         task.describe(request.title().strip(), trim(request.description()), request.dueDate(), request.priority(),
                 assignee);
         if (request.items() != null) {
@@ -137,7 +143,7 @@ public class StoreTaskService {
     public TaskResponse update(UUID storeId, UUID id, TaskRequest request, UUID userId) {
         StoreTask task = managed(storeId, id, userId);
         AppUser previous = task.getAssignee();
-        AppUser assignee = assignee(storeId, request.assigneeId());
+        AppUser assignee = assignee(storeId, request.assigneeId(), userId);
         task.describe(request.title().strip(), trim(request.description()), request.dueDate(), request.priority(),
                 assignee);
         events.save(new StoreTaskEvent(task, TaskEventKind.EDITED, users.getReferenceById(userId), null));
@@ -341,9 +347,24 @@ public class StoreTaskService {
         }
     }
 
-    private AppUser assignee(UUID storeId, UUID assigneeId) {
-        return tasks.findAssignees(storeId).stream().filter(user -> user.getId().equals(assigneeId)).findFirst()
-                .orElseThrow(() -> ApiException.badRequest("To konto nie ma dostępu do tego sklepu"));
+    private AppUser assignee(UUID storeId, UUID assigneeId, UUID userId) {
+        return assignable(storeId, userId).stream().filter(user -> user.getId().equals(assigneeId)).findFirst()
+                .orElseThrow(() -> ApiException.badRequest(
+                        "Temu kontu nie zlecisz zadania: nie ma dostępu do sklepu albo nie stoi w hierarchii niżej"));
+    }
+
+    /**
+     * Komu można zlecić: właściciel, Aderon i konto z włączonym przez właściciela zlecaniem każdemu z dostępem do
+     * sklepu, pozostali osobom niżej w hierarchii sklepu (i sobie).
+     */
+    private List<AppUser> assignable(UUID storeId, UUID userId) {
+        StoreRoleService.Actor actor = ranks.actor(userId, storeId);
+        List<AppUser> all = tasks.findAssignees(storeId);
+        if (actor.admin() || actor.user().isCanAssignTasks()) {
+            return all;
+        }
+        return all.stream().filter(user -> user.getId().equals(userId)
+                || (!user.isOwner() && actor.above(user.rankIn(storeId)))).toList();
     }
 
     private StoreTask active(UUID storeId, UUID id) {
@@ -370,22 +391,30 @@ public class StoreTaskService {
         }
     }
 
-    private boolean isOwner(UUID userId) {
-        return users.findWithRoleById(userId).map(user -> user.getRole().isOwner()).orElse(false);
+    /** Właściciel albo Aderon sklepu: widzi i prowadzi wszystkie zadania sklepu. */
+    private boolean isOwner(UUID userId, UUID storeId) {
+        return ranks.administers(userId, storeId);
     }
 
-    private boolean assigns(UUID userId) {
-        return users.findWithRoleById(userId).map(AppUser::mayAssignTasks).orElse(false);
+    /** Czy konto zleca zadania w sklepie: właściciel, Aderon, włączone zlecanie albo ktoś pod nim w hierarchii. */
+    private boolean assigns(UUID userId, UUID storeId) {
+        StoreRoleService.Actor actor = ranks.actor(userId, storeId);
+        if (actor.admin() || actor.user().mayAssignTasks()) {
+            return true;
+        }
+        StoreRole rank = actor.rank();
+        return rank != null && !rank.isOutsideHierarchy() && rank.getLowerRanks() > 0;
     }
 
     /** Właściciel widzi wszystkie zlecone, inny zlecający tylko swoje ({@code null} = bez zawężenia). */
-    private UUID creatorFilter(UUID userId) {
-        return isOwner(userId) ? null : userId;
+    private UUID creatorFilter(UUID userId, UUID storeId) {
+        return isOwner(userId, storeId) ? null : userId;
     }
 
     /** Zadaniem zarządza właściciel, a inny zlecający tylko tym, które sam zlecił (dopóki ma zlecanie). */
     private boolean manages(StoreTask task, UUID userId) {
-        return manages(task, userId, isOwner(userId), assigns(userId));
+        UUID storeId = task.getStore().getId();
+        return manages(task, userId, isOwner(userId, storeId), assigns(userId, storeId));
     }
 
     private static boolean manages(StoreTask task, UUID userId, boolean owner, boolean assigner) {
@@ -408,8 +437,9 @@ public class StoreTaskService {
         if (found.isEmpty()) {
             return List.of();
         }
-        boolean owner = isOwner(userId);
-        boolean assigner = assigns(userId);
+        UUID storeId = found.get(0).getStore().getId();
+        boolean owner = isOwner(userId, storeId);
+        boolean assigner = assigns(userId, storeId);
         Map<UUID, List<TaskResponse.Item>> byTask = items.findOfTasks(found.stream().map(StoreTask::getId).toList())
                 .stream().collect(Collectors.groupingBy(item -> item.getTask().getId(),
                         Collectors.mapping(mapper::toItem, Collectors.toList())));

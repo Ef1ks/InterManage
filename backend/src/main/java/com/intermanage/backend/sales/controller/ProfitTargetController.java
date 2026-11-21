@@ -31,7 +31,8 @@ public class ProfitTargetController {
     private static final String VIEW =
             "hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
     /** Postęp celu to wynik całego sklepu, więc widzi go też pulpit z wynikami sklepu ({@code DASHBOARD}). */
-    private static final String PROGRESS = "(hasAuthority('SALES:VIEW') or hasAuthority('DASHBOARD:VIEW'))"
+    private static final String PROGRESS = "(hasAuthority('SALES:VIEW') or hasAuthority('DASHBOARD:VIEW')"
+            + " or hasAuthority('STORE_RESULTS:VIEW'))"
             + " and @storeAccess.canAccess(authentication, #storeId)";
     private static final String EDIT =
             "hasAuthority('SALES:EDIT') and @storeAccess.canAccess(authentication, #storeId)";

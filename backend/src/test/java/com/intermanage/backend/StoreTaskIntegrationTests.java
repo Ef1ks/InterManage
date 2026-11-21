@@ -198,13 +198,10 @@ class StoreTaskIntegrationTests {
                                 {"title":"Policz kawę","priority":"NORMAL","assigneeId":"%s"}""".formatted(managerId)))
                 .andExpect(status().isForbidden());
 
-        String roleId = jdbc.queryForObject("select role_id::text from users where id = ?::uuid", String.class,
-                assignerId);
         mvc.perform(put("/api/settings/users/" + assignerId).cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"displayName":"Kierownik","roleId":"%s","enabled":true,"canAssignTasks":true}"""
-                                .formatted(roleId)))
+                                {"displayName":"Kierownik","owner":false,"enabled":true,"canAssignTasks":true}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.canAssignTasks").value(true));
         mvc.perform(get("/api/auth/me").cookie(assigner)).andExpect(jsonPath("$.canAssignTasks").value(true));
@@ -277,17 +274,13 @@ class StoreTaskIntegrationTests {
     }
 
     private String user(String storeId) throws Exception {
-        String roleJson = mvc.perform(post("/api/settings/roles").cookie(owner).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":{}}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, "{}") + "\"}";
         String username = "kz" + UUID.randomUUID().toString().substring(0, 8);
         String userId = jdbc.queryForObject("""
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Kierownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, storeId);
+        TestRanks.join(jdbc, userId, storeId);
         return userId;
     }
 

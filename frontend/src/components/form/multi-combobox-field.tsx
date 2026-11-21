@@ -23,7 +23,33 @@ type MultiComboboxFieldProps = {
   /** Gdy wyszukiwanie nic nie znalazło. */
   emptyText?: string
   error?: string
+  /** Etykieta tylko dla czytników ekranu, gdy pole opisuje otaczający wiersz (np. pasek filtrów). */
+  hideLabel?: boolean
   className?: string
+}
+
+/** Małe litery bez polskich znaków, żeby „mieso” znalazło „MIĘSO”. */
+const normalize = (text: string) =>
+  text.toLocaleLowerCase('pl').normalize('NFD').replace(/\p{M}/gu, '').replace(/ł/g, 'l').trim()
+
+/**
+ * Pozycje pasujące do wpisanego tekstu, od najtrafniejszych: najpierw te, które się od niego zaczynają (wpisane „36”
+ * daje rejon 36 i jego rodziny „36 …”), potem te, w których od niego zaczyna się dalsze słowo („01 36”), na końcu
+ * dopasowania w środku słowa. W każdej grupie kolejność listy zostaje.
+ */
+function rankOptions(options: ComboboxOption[], query: string): ComboboxOption[] {
+  const needle = normalize(query)
+  if (!needle) return options
+  const groups: ComboboxOption[][] = [[], [], []]
+  for (const option of options) {
+    const label = normalize(option.label)
+    const at = label.indexOf(needle)
+    if (at < 0) continue
+    if (at === 0) groups[0].push(option)
+    else if (label.includes(` ${needle}`)) groups[1].push(option)
+    else groups[2].push(option)
+  }
+  return groups.flat()
 }
 
 /**
@@ -39,6 +65,7 @@ export function MultiComboboxField({
   placeholder = 'Szukaj…',
   emptyText = 'Nic nie znaleziono',
   error,
+  hideLabel = false,
   className,
 }: MultiComboboxFieldProps) {
   const id = useId()
@@ -46,10 +73,12 @@ export function MultiComboboxField({
   const selected = useMemo(() => options.filter((option) => value.includes(option.value)), [options, value])
   // Lista zostaje otwarta po każdym zaznaczeniu, więc zamyka ją też przycisk „Gotowe” na dole.
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const filtered = useMemo(() => rankOptions(options, query), [options, query])
 
   return (
     <div className={cn('grid gap-2', className)}>
-      <label htmlFor={id} className="text-sm font-medium">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-sm font-medium'}>
         {label}
       </label>
       {description && <p className="-mt-1 text-xs text-muted-foreground">{description}</p>}
@@ -59,6 +88,8 @@ export function MultiComboboxField({
         open={open}
         onOpenChange={setOpen}
         items={options}
+        filteredItems={filtered}
+        onInputValueChange={setQuery}
         value={selected}
         onValueChange={(next) => onChange(next.map((option) => option.value))}
         itemToStringLabel={(option) => option.label}
@@ -103,7 +134,9 @@ export function MultiComboboxField({
         <Combobox.Portal>
           <Combobox.Positioner anchor={anchorRef} sideOffset={6} align="start" className="isolate z-50">
             <Combobox.Popup className="max-h-(--available-height) w-max min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-xl glass-float text-popover-foreground transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
-              <Combobox.Empty className="px-3 py-3 text-sm text-muted-foreground empty:hidden">{emptyText}</Combobox.Empty>
+              <Combobox.Empty className="px-3 py-3 text-sm text-muted-foreground empty:hidden">
+                {emptyText}
+              </Combobox.Empty>
               <Combobox.List className="max-h-72 scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0">
                 {(option: ComboboxOption) => (
                   <Combobox.Item

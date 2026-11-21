@@ -118,6 +118,29 @@ class PermissionRulesIntegrationTests {
     }
 
     @Test
+    void storeResultsShowWholeStoreTotalsOnly() throws Exception {
+        Cookie results = employee("{\"STORE_RESULTS\":\"VIEW\"}", storeId);
+        String periods = "previousFrom=2025-10-24&previousTo=2025-10-24&currentFrom=2026-10-23&currentTo=2026-10-23";
+        for (String path : new String[] {"/reports", "/reports/sales-history?from=2026-10-01&to=2026-10-31",
+                "/reports/profit-targets/progress?to=2026-10-31", "/reports/sales-comparison?" + periods,
+                "/reports/sales-comparison?parent=&" + periods, "/reports/sales-comparison/promotions?" + periods}) {
+            mvc.perform(get(store(path)).cookie(results)).andExpect(status().isOk());
+        }
+        // Rozwijanie nomenklatury, filtr i porównanie z innym sklepem to dalej raport sprzedaży.
+        for (String path : new String[] {"/reports/sales-comparison?parent=01&" + periods,
+                "/reports/sales-comparison?unassigned=true&" + periods,
+                "/reports/sales-comparison?nomenclatures=01&" + periods,
+                "/reports/sales-comparison?compareStore=" + UUID.randomUUID() + "&" + periods,
+                "/reports/sales-comparison/promotions?nomenclatures=01&" + periods,
+                "/reports/sales-history?from=2026-10-01&to=2026-10-31&parent=01",
+                "/reports/profit-targets"}) {
+            mvc.perform(get(store(path)).cookie(results)).andExpect(status().isForbidden());
+        }
+        mvc.perform(get("/api/stores/" + createStore() + "/reports").cookie(results))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void readingNeverNeedsEdit() throws Exception {
         // Zamówienia garmażu: podgląd widzi zaproszenia i wyszukuje w kartotece, zaprasza dopiero EDIT.
         Cookie deli = employee("{\"DELI_ORDERS\":\"VIEW\"}", storeId);
@@ -143,17 +166,13 @@ class PermissionRulesIntegrationTests {
     }
 
     private Cookie employee(String permissions, String store) throws Exception {
-        String roleJson = mvc.perform(post("/api/settings/roles").cookie(owner).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissions + "}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         String username = "pr" + UUID.randomUUID().toString().substring(0, 8);
         String userId = jdbc.queryForObject("""
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, store);
+        TestRanks.join(jdbc, userId, store);
         return mvc.perform(post("/api/auth/login").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"" + username + "\",\"password\":\"haslo-pracownika\"}"))

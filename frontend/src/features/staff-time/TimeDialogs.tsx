@@ -436,7 +436,7 @@ export function SimulatorDialog({
   date: string
   onClose: () => void
 }) {
-  const { punch, remove } = useSimulator(storeId)
+  const { punch } = useSimulator(storeId)
   // Osoba z umową o pracę i zleceniem ma dwa wiersze, a odbija kartę raz: lista bez powtórzeń.
   const people = cards.rows.filter(
     (item, index) => cards.rows.findIndex((other) => other.employeeId === item.employeeId) === index,
@@ -487,33 +487,106 @@ export function SimulatorDialog({
             Odbij
           </Button>
         </div>
-        {punches.length > 0 && (
-          <ul className="grid gap-1 text-sm">
-            {punches.map((item, index) => (
-              <li key={item.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-1.5">
-                <span className="tabular-nums">
-                  {index % 2 === 0 ? 'Wejście' : 'Wyjście'} {clockOf(item.at)}
-                  {item.source === 'READER' && <span className="text-muted-foreground"> · czytnik</span>}
-                </span>
-                {item.source === 'SIMULATED' && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Usuń odbicie"
-                    onClick={() =>
-                      remove.mutate(item.id, {
-                        onError: (cause) => toast.error(failed(cause, 'Nie udało się usunąć odbicia')),
-                      })
-                    }
-                  >
-                    <Trash2Icon aria-hidden />
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        <PunchList storeId={storeId} punches={punches} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type Punch = TimeCards['rows'][number]['days'][number]['punches'][number]
+
+/** Godzina odbicia z sekundami: powtórzone przyłożenie karty różni się często o kilka sekund. */
+const secondsOf = (at: string) => at.slice(11, 19)
+
+/**
+ * Odbicia dnia z usuwaniem (tylko właściciel, także z czytnika): powtórzone przyłożenie karty albo pomyłka psuje parę
+ * wejście–wyjście. Usunięcie to znacznik z „Przywróć” w toaście.
+ */
+function PunchList({ storeId, punches }: { storeId: string; punches: Punch[] }) {
+  const { remove, restore } = useSimulator(storeId)
+  if (punches.length === 0) {
+    return <p className="text-sm text-muted-foreground">Brak odbić w tym dniu.</p>
+  }
+  const removePunch = (item: Punch) =>
+    remove.mutate(item.id, {
+      onSuccess: () =>
+        toast.success(`Usunięto odbicie ${secondsOf(item.at)}`, {
+          action: {
+            label: 'Przywróć',
+            onClick: () =>
+              restore.mutate(item.id, {
+                onError: (cause) => toast.error(failed(cause, 'Nie udało się przywrócić odbicia')),
+              }),
+          },
+        }),
+      onError: (cause) => toast.error(failed(cause, 'Nie udało się usunąć odbicia')),
+    })
+  return (
+    <ul className="grid gap-1 text-sm">
+      {punches.map((item, index) => {
+        // Ta sama karta w tej samej minucie co poprzednie odbicie: zwykle przyłożona dwa razy.
+        const repeated = index > 0 && punches[index - 1].at.slice(0, 16) === item.at.slice(0, 16)
+        return (
+          <li
+            key={item.id}
+            className={cn(
+              'flex items-center justify-between gap-2 rounded-lg px-3 py-1.5',
+              repeated ? 'bg-amber-200 text-amber-950 dark:bg-amber-900/60 dark:text-amber-100' : 'bg-muted',
+            )}
+          >
+            <span className="tabular-nums">
+              <span className="font-medium">{index % 2 === 0 ? 'Wejście' : 'Wyjście'}</span> {secondsOf(item.at)}
+              <span className="opacity-70">
+                {' · '}
+                {item.source === 'READER' ? 'czytnik' : 'symulator'}
+                {item.breakStart && ' · na przerwę'}
+                {repeated && ' · powtórzone'}
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Usuń odbicie ${secondsOf(item.at)}`}
+              title="Usuń odbicie"
+              disabled={remove.isPending}
+              onClick={() => removePunch(item)}
+            >
+              <Trash2Icon aria-hidden />
+            </Button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/** Odbicia jednej osoby w danym dniu (tylko właściciel): tu poprawia się dzień bez wyjścia albo z powtórzonym odbiciem. */
+export function PunchesDialog({
+  storeId,
+  row,
+  date,
+  onClose,
+}: {
+  storeId: string
+  row: TimeCardRow | null
+  date: string
+  onClose: () => void
+}) {
+  const punches = row?.days.find((item) => item.date === date)?.punches ?? []
+  return (
+    <Dialog open={row != null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="gap-4 p-6 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Odbicia · {row?.name} · {formatDay(date)}
+          </DialogTitle>
+          <DialogDescription>
+            Kolejne odbicia to na zmianę wejście i wyjście, więc powtórzone przyłożenie karty przesuwa resztę dnia i
+            zostawia go bez wyjścia. Usuń zbędne odbicie, a karta przeliczy się od razu.
+          </DialogDescription>
+        </DialogHeader>
+        <PunchList storeId={storeId} punches={punches} />
       </DialogContent>
     </Dialog>
   )

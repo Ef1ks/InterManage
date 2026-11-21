@@ -1,6 +1,8 @@
+import { useCallback } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api'
+import { useAppSelector } from '@/store'
 import type {
   AvatarChange,
   BackgroundChange,
@@ -13,9 +15,27 @@ import type {
 
 export const meQueryKey = ['me'] as const
 
+/**
+ * Konto widziane w bieżącym sklepie: uprawnienia, ranga i zlecanie zadań z rangi w tym sklepie (`storePermissions`),
+ * więc `hasPermission` i `useCan` działają według sklepu wybranego w przełączniku.
+ */
+export function inStore(me: Me, storeId: string | null): Me {
+  const store = me.stores.find((candidate) => candidate.id === storeId) ?? me.stores[0]
+  if (!store || !me.storePermissions) return me
+  return {
+    ...me,
+    permissions: me.storePermissions[store.id] ?? {},
+    roleName: me.storeRoles?.[store.id] ?? me.roleName,
+    canAssignTasks: me.owner || (me.taskAssignStores ?? []).includes(store.id),
+  }
+}
+
 /** Zalogowany użytkownik albo null, gdy brak sesji. */
 export function useMe() {
+  const storeId = useAppSelector((state) => state.ui.currentStoreId)
+  const select = useCallback((me: Me | null) => (me ? inStore(me, storeId) : me), [storeId])
   return useQuery({
+    select,
     queryKey: meQueryKey,
     queryFn: async (): Promise<Me | null> => {
       try {
@@ -38,6 +58,22 @@ export function useCurrentUser(): Me {
 
 export function hasPermission(me: Me, category: PermissionCategory, level: PermissionLevel = 'VIEW'): boolean {
   const granted = me.permissions[category]
+  if (!granted) return false
+  return level === 'VIEW' || granted === 'EDIT'
+}
+
+/**
+ * Uprawnienie w dowolnym sklepie konta (nie tylko w bieżącym), np. dane innego sklepu na stronie Wyniki sklepów.
+ * Właściciel ma wszystko w każdym sklepie.
+ */
+export function canInStore(
+  me: Me,
+  storeId: string,
+  category: PermissionCategory,
+  level: PermissionLevel = 'VIEW',
+): boolean {
+  if (me.owner) return true
+  const granted = me.storePermissions?.[storeId]?.[category]
   if (!granted) return false
   return level === 'VIEW' || granted === 'EDIT'
 }

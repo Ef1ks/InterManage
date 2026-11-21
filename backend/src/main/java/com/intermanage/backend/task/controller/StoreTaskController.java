@@ -76,8 +76,9 @@ public class StoreTaskController {
 
     @GetMapping("/assignees")
     @PreAuthorize(OWNER)
-    public List<TaskAssigneeResponse> assignees(@PathVariable UUID storeId) {
-        return service.assignees(storeId);
+    public List<TaskAssigneeResponse> assignees(@PathVariable UUID storeId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.assignees(storeId, principal.getId());
     }
 
     @GetMapping("/{id}")

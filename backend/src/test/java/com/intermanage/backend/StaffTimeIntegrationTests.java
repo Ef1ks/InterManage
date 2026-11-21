@@ -79,7 +79,7 @@ class StaffTimeIntegrationTests {
                 .andReturn().getResponse().getContentAsString();
         department = JsonPath.read(departments, "$[0].id");
         String positions = send(owner, post(staff("/positions")), "{\"departmentId\":\"" + department
-                + "\",\"name\":\"Kasjer\",\"roleId\":\"" + role + "\",\"shifts\":[]}")
+                + "\",\"name\":\"Kasjer\",\"roleId\":\"" + TestRanks.rank(jdbc, role, store) + "\",\"shifts\":[]}")
                 .andReturn().getResponse().getContentAsString();
         List<String> ids = JsonPath.read(positions, "$[?(@.name=='Kasy')].positions[0].id");
         position = ids.getFirst();
@@ -547,6 +547,35 @@ class StaffTimeIntegrationTests {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * Powtórzone przyłożenie karty psuje parę wejście–wyjście (dzień zostaje bez wyjścia), więc właściciel usuwa każde
+     * odbicie, także z czytnika. To znacznik: przywrócenie oddaje stan sprzed usunięcia.
+     */
+    @Test
+    void ownerRemovesRepeatedReaderPunchAndRestoresIt() throws Exception {
+        String settings = send(owner, post(staff("/time/settings/readers")), "{\"name\":\"Wejście\"}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String token = JsonPath.read(settings, "$.readers[0].token");
+        send(owner, put(staff("/time/settings/cards/" + employee)), "{\"cardUid\":\"0CC1\"}")
+                .andExpect(status().isOk());
+        reader(token, "0CC1", "2026-12-01T04:58:00Z").andExpect(status().isOk());
+        String repeated = reader(token, "0CC1", "2026-12-01T05:30:00Z").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String repeatedId = JsonPath.read(repeated, "$.punchId");
+        reader(token, "0CC1", "2026-12-01T05:31:00Z").andExpect(status().isOk());
+        reader(token, "0CC1", "2026-12-01T13:02:00Z").andExpect(status().isOk());
+        reader(token, "0CC1", "2026-12-01T13:30:00Z").andExpect(status().isOk());
+        day().andExpect(jsonPath("$.rows[0].days[0].punches.length()").value(5));
+
+        send(owner, delete(staff("/time/punches/" + repeatedId)), null).andExpect(status().isNoContent());
+        day().andExpect(jsonPath("$.rows[0].days[0].punches.length()").value(4));
+        send(owner, delete(staff("/time/punches/" + repeatedId)), null).andExpect(status().isNotFound());
+
+        send(owner, post(staff("/time/punches/" + repeatedId + "/restore")), null).andExpect(status().isNoContent());
+        day().andExpect(jsonPath("$.rows[0].days[0].punches.length()").value(5));
+        send(owner, post(staff("/time/punches/" + repeatedId + "/restore")), null).andExpect(status().isNotFound());
+    }
+
     /** Kiosk po wyjściu pyta o przerwę: jedna na dzień pracy, powrót kończy ją zwykłym odbiciem. */
     @Test
     void kioskTurnsExitIntoBreakOncePerDay() throws Exception {
@@ -850,10 +879,7 @@ class StaffTimeIntegrationTests {
     }
 
     private String createRole(String permissions) throws Exception {
-        String json = send(owner, post("/api/settings/roles"),
-                "{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissions + "}")
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String json = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         return JsonPath.read(json, "$.id");
     }
 
@@ -889,7 +915,7 @@ class StaffTimeIntegrationTests {
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), roleId);
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, store);
+        TestRanks.join(jdbc, userId, store);
         return userId;
     }
 

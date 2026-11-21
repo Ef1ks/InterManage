@@ -44,8 +44,19 @@ public class SalesReportController {
     private static final String ARTICLE_VIEW = Access.ARTICLE_STATS;
 
     /** Wyniki sklepu na pulpicie ({@code DASHBOARD}): tylko sprzedaż całego sklepu, bez artykułu i nomenklatury. */
-    private static final String DASHBOARD_STORE_HISTORY = "hasAuthority('DASHBOARD:VIEW') and #itm8 == null"
+    private static final String DASHBOARD_STORE_HISTORY =
+            "(hasAuthority('DASHBOARD:VIEW') or hasAuthority('STORE_RESULTS:VIEW')) and #itm8 == null"
             + " and #parent == null and !#unassigned and (#nomenclatures == null or #nomenclatures.isEmpty())";
+
+    /**
+     * Wyniki sklepów ({@code STORE_RESULTS}): kafelki sum porównania całego sklepu (sprzedaż, promocje, zakup FIFO),
+     * bez rozwijania nomenklatury i bez porównania z innym sklepem.
+     */
+    private static final String STORE_RESULTS_TOTALS = "hasAuthority('STORE_RESULTS:VIEW')"
+            + " and (#parent == null or #parent.isEmpty()) and !#unassigned"
+            + " and (#nomenclatures == null or #nomenclatures.isEmpty()) and #compareStore == null";
+    private static final String STORE_RESULTS_PROMOTIONS = "hasAuthority('STORE_RESULTS:VIEW')"
+            + " and (#nomenclatures == null or #nomenclatures.isEmpty())";
 
     private final SalesReportService salesReportService;
     private final DeliCostReportService deliCostReportService;
@@ -63,7 +74,8 @@ public class SalesReportController {
 
     /** Za jakie dni jest sprzedaż i z kiedy jest najnowszy raport (też wyniki sklepu na pulpicie). */
     @GetMapping
-    @PreAuthorize("(" + Access.ARTICLE_STATS_AUTHORITIES + " or hasAuthority('DASHBOARD:VIEW')) and " + Access.STORE)
+    @PreAuthorize("(" + Access.ARTICLE_STATS_AUTHORITIES + " or hasAuthority('DASHBOARD:VIEW')"
+            + " or hasAuthority('STORE_RESULTS:VIEW')) and " + Access.STORE)
     public SalesReportsOverview overview(@PathVariable UUID storeId) {
         return salesReportService.overview(storeId);
     }
@@ -76,7 +88,7 @@ public class SalesReportController {
      * zaprzyjaźnionego, lista jak w raporcie lady).
      */
     @GetMapping("/sales-comparison")
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize("(hasAuthority('SALES:VIEW') or (" + STORE_RESULTS_TOTALS + ")) and " + Access.STORE)
     public SalesComparisonResponse salesComparison(@PathVariable UUID storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousFrom,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousTo,
@@ -93,7 +105,7 @@ public class SalesReportController {
 
     /** Sprzedaż brutto z dni promocji w obu okresach porównania (kafelek nad tabelą). */
     @GetMapping("/sales-comparison/promotions")
-    @PreAuthorize("hasAuthority('SALES:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    @PreAuthorize("(hasAuthority('SALES:VIEW') or (" + STORE_RESULTS_PROMOTIONS + ")) and " + Access.STORE)
     public SalesPromotionShare salesComparisonPromotions(@PathVariable UUID storeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousFrom,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousTo,

@@ -100,18 +100,14 @@ class ImportGuideIntegrationTests {
     }
 
     private Cookie employee(String permissions) throws Exception {
-        String roleJson = mvc.perform(post("/api/settings/roles").cookie(owner).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissions + "}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         String storeId = createStore();
         String username = "ig" + UUID.randomUUID().toString().substring(0, 8);
         String userId = jdbc.queryForObject("""
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, storeId);
+        TestRanks.join(jdbc, userId, storeId);
         return mvc.perform(post("/api/auth/login").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"" + username + "\",\"password\":\"haslo-pracownika\"}"))

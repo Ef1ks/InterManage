@@ -135,17 +135,13 @@ class StoreEventIntegrationTests {
 
     private Cookie employee(String permissions, String store, String name) throws Exception {
         Cookie owner = login("wlasciciel", "haslo-wlasciciela");
-        String roleJson = mvc.perform(post("/api/settings/roles").cookie(owner).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissions + "}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         String username = "dz" + UUID.randomUUID().toString().substring(0, 8);
         String userId = jdbc.queryForObject("""
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, ?, ?, ?::uuid) returning id""", String.class,
                 username, name, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, store);
+        TestRanks.join(jdbc, userId, store);
         return login(username, "haslo-pracownika");
     }
 

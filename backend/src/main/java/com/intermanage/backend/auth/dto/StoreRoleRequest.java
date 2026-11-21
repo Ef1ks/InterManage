@@ -9,9 +9,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-public record RoleRequest(
-        @NotBlank(message = "Podaj nazwę roli")
+public record StoreRoleRequest(
+        @NotBlank(message = "Podaj nazwę rangi")
         @Size(max = 100, message = "Nazwa może mieć maksymalnie 100 znaków") String name,
         @Size(max = 500, message = "Opis może mieć maksymalnie 500 znaków") String description,
+        Boolean outsideHierarchy,
         @NotNull(message = "Podaj uprawnienia") Map<PermissionCategory, PermissionLevel> permissions) {
 }

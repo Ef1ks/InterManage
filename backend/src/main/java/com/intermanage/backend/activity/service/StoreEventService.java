@@ -76,7 +76,7 @@ public class StoreEventService {
                 .map(entry -> new StoreEventFilters.Option(entry.getKey(), entry.getValue()))
                 .toList();
         List<StoreEventFilters.Person> people = users.findAllWithRole().stream()
-                .filter(user -> storeId == null || user.getRole().isOwner()
+                .filter(user -> storeId == null || user.isOwner()
                         || user.getStores().stream().anyMatch(store -> store.getId().equals(storeId)))
                 .map(user -> new StoreEventFilters.Person(user.getId(), user.getDisplayName()))
                 .toList();

@@ -40,6 +40,10 @@ public class Role {
     @Column(nullable = false)
     private boolean owner;
 
+    /** {@code ACCOUNT} = zwykłe konto sklepu (uprawnienia daje ranga w sklepie). */
+    @Column(name = "system_key", length = 40, insertable = false, updatable = false)
+    private String systemKey;
+
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "role_permissions", joinColumns = @JoinColumn(name = "role_id"))
     @MapKeyColumn(name = "category")
@@ -95,6 +99,12 @@ public class Role {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public static final String ACCOUNT_KEY = "ACCOUNT";
+
+    public String getSystemKey() {
+        return systemKey;
     }
 
     public boolean isOwner() {

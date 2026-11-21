@@ -46,8 +46,7 @@ public class StoreFileLocationController {
     @PreAuthorize(Access.STORE)
     public List<FolderPathResponse> folders(@PathVariable UUID storeId,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        boolean owner = principal.getAuthorities().stream()
-                .anyMatch(authority -> AppUserPrincipal.OWNER_AUTHORITY.equals(authority.getAuthority()));
+        boolean owner = principal.administers();
         return folders.list(storeId, owner);
     }
 

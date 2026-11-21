@@ -6,6 +6,7 @@ import { hasPermission, useCurrentUser } from '@/features/auth/api'
 import { AttentionCard } from '@/features/dashboard/AttentionCard'
 import { PresenceCard } from '@/features/dashboard/PresenceCard'
 import { StoreResultsPanel } from '@/features/dashboard/StoreResultsPanel'
+import { OtherStoresCard } from '@/features/store-results/StoreGoalMini'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { TasksPanel } from '@/features/tasks/TasksPanel'
 import { TOOL_ROUTES, isTool, usePermissionCategories } from '@/features/tools/categories'
@@ -37,6 +38,8 @@ export function DashboardPage() {
           <div className={showResults ? 'flex min-w-0 flex-col gap-4' : 'contents'}>
             {showPresence ? <PresenceCard storeId={store.id} /> : null}
             <AttentionCard storeId={store.id} />
+            {/* Cel marży pozostałych sklepów w skrócie (uprawnienie Wyniki sklepów). */}
+            <OtherStoresCard />
           </div>
         </div>
       ) : null}

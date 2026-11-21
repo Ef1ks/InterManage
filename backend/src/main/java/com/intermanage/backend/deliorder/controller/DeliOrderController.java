@@ -191,9 +191,9 @@ public class DeliOrderController {
         return orderService.restore(storeId, orderId, canEdit(principal));
     }
 
+    /** Właściciel albo Aderon sklepu. */
     private static boolean isOwner(AppUserPrincipal principal) {
-        return principal.getAuthorities().stream()
-                .anyMatch(authority -> AppUserPrincipal.OWNER_AUTHORITY.equals(authority.getAuthority()));
+        return principal.administers();
     }
 
     private static boolean canEdit(AppUserPrincipal principal) {

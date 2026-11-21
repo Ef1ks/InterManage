@@ -235,6 +235,15 @@ public class StaffTimeController {
         time.removePunch(storeId, punchId, principal);
     }
 
+    /** Przywrócenie usuniętego odbicia (tylko właściciel, sprawdza serwis). */
+    @PostMapping("/punches/{punchId}/restore")
+    @PreAuthorize(VIEW)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void restorePunch(@PathVariable UUID storeId, @PathVariable UUID punchId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        time.restorePunch(storeId, punchId, principal);
+    }
+
     @GetMapping("/settings")
     @PreAuthorize(CONFIGURE)
     public TimeSettingsResponse settings(@PathVariable UUID storeId) {

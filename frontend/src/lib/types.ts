@@ -20,6 +20,7 @@ export type PermissionCategory =
   | 'DASHBOARD'
   | 'CASH_REPORT'
   | 'STORE_LOG'
+  | 'STORE_RESULTS'
 
 /** Kategorie, które są narzędziem z własną stroną (DASHBOARD to tylko zawartość pulpitu). */
 export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD'>
@@ -48,8 +49,17 @@ export type Me = {
   avatar: UserAvatar | null
   /** Po tylu minutach bez ruchu myszy i klawiatury konto się blokuje (wraca po PIN-ie), `null` = bez blokady. */
   idleLockMinutes: number | null
-  /** Konto zleca zadania: właściciel zawsze, inni po włączeniu przez właściciela (Ustawienia → Użytkownicy). */
+  /**
+   * Konto zleca zadania w bieżącym sklepie: właściciel i Aderon zawsze, inni z kimś pod sobą w hierarchii albo po
+   * włączeniu przez właściciela (Ustawienia → Użytkownicy).
+   */
   canAssignTasks: boolean
+  /** Uprawnienia w każdym sklepie (ranga konta w sklepie). `permissions` to już uprawnienia bieżącego sklepu. */
+  storePermissions: Record<string, Permissions>
+  /** Ranga konta w sklepie (id sklepu → nazwa rangi). */
+  storeRoles: Record<string, string>
+  /** Sklepy, w których konto zleca zadania. */
+  taskAssignStores: string[]
 }
 
 export type UserBackground = {
@@ -129,19 +139,53 @@ export type PermissionCategoryInfo = {
   description: string
 }
 
-export type Role = {
+/** Ranga w hierarchii sklepu: rola z uprawnieniami, ułożona od najwyższej. */
+export type StoreRole = {
   id: string
+  /** Ten sam w każdym sklepie (np. MANAGER): po nim stanowiska wskazują rangę, a przesłana hierarchia się łączy. */
+  key: string
   name: string
   description: string | null
-  owner: boolean
+  /** Aderon: wszystko w obrębie sklepu, zawsze na górze. */
+  admin: boolean
+  /** Poza hierarchią (Księgowość, Kadry): same uprawnienia, bez nikogo pod sobą. */
+  outsideHierarchy: boolean
+  position: number
   permissions: Permissions
   userCount: number
-  createdAt: string
+  /** Osoba może zmienić nazwę i uprawnienia (ranga niżej od jej własnej, albo właściciel i Aderon). */
+  editable: boolean
+  deletable: boolean
+  /** Osoba może nadać tę rangę kontu. */
+  grantable: boolean
 }
 
-export type RoleRequest = {
+export type StoreRoleOffer = {
+  id: string
+  storeId: string
+  storeNumber: string
+  storeName: string
+  roleNames: string[]
+  createdAt: string
+  createdBy: string | null
+}
+
+export type StoreRoles = {
+  roles: StoreRole[]
+  /** Ranga pytającego w tym sklepie; null = właściciel albo brak rangi. */
+  myRoleId: string | null
+  /** Właściciel albo Aderon: cała hierarchia, przesyłanie i przyjmowanie. */
+  admin: boolean
+  /** Może zmieniać rangi pod swoją (edycja Pracowników). */
+  canEdit: boolean
+  incoming: StoreRoleOffer[]
+  outgoing: StoreRoleOffer[]
+}
+
+export type StoreRoleRequest = {
   name: string
   description: string
+  outsideHierarchy?: boolean
   permissions: Permissions
 }
 
@@ -150,14 +194,16 @@ export type User = {
   username: string
   displayName: string
   email: string | null
-  roleId: string
-  roleName: string
+  /** Rangi w sklepach jednym napisem (właściciel: „Właściciel”). */
+  roleName: string | null
   owner: boolean
   enabled: boolean
   /** Zaproszony, ale jeszcze nie kliknął linku aktywacyjnego. */
   pendingActivation: boolean
   storeIds: string[]
-  /** Stanowisko z panelu Pracownicy; to ono ustala rolę konta. */
+  /** Ranga w każdym przypisanym sklepie (id sklepu → id rangi). */
+  storeRoles: Record<string, string>
+  /** Stanowisko z panelu Pracownicy; to ono ustala rangę konta w jego sklepie. */
   positionName: string | null
   /** Właściciel włączył temu kontu zlecanie zadań (właściciel zleca zawsze). */
   canAssignTasks: boolean
@@ -387,17 +433,21 @@ export type CreateUserRequest = {
   username: string
   displayName: string
   email: string
-  roleId: string
+  owner: boolean
   storeIds: string[]
+  /** Ranga w każdym sklepie; brak = Pracownik. */
+  storeRoles: Record<string, string>
 }
 
 export type UpdateUserRequest = {
   displayName: string
   email: string | null
-  roleId: string
+  owner: boolean
   enabled: boolean
   newPassword?: string
   storeIds: string[]
+  /** Ranga w każdym sklepie; brak wpisu = bez zmian (nowy sklep: Pracownik). */
+  storeRoles: Record<string, string>
   /** Zlecanie zadań; brak = bez zmian. */
   canAssignTasks?: boolean
 }
@@ -1284,6 +1334,10 @@ export type SalesComparisonRow = {
 export type SalesPromotionShare = {
   previousSaleValueGross: number
   currentSaleValueGross: number
+  previousSaleValueNet: number
+  currentSaleValueNet: number
+  previousMarginValue: number
+  currentMarginValue: number
   previousArticles: number
   currentArticles: number
 }

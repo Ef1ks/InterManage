@@ -103,8 +103,7 @@ class StaffIntegrationTests {
                 .andReturn().getResponse().getContentAsString();
 
         String userId = JsonPath.read(json, "$.userId");
-        assertThat(jdbc.queryForObject("select role_id::text from users where id = ?::uuid", String.class, userId))
-                .isEqualTo(cashierRole);
+        assertThat(TestRanks.roleOf(jdbc, userId)).isEqualTo(cashierRole);
         assertThat(jdbc.queryForObject("select store_id::text from user_stores where user_id = ?::uuid", String.class,
                 userId)).isEqualTo(store);
         assertThat(mailer.lastTokenFor(email(surname))).isNotBlank();
@@ -175,7 +174,8 @@ class StaffIntegrationTests {
 
         // W Użytkownikach roli takiego konta nie da się zmienić.
         send(owner, put("/api/settings/users/" + userId), "{\"displayName\":\"Jan " + surname + "\",\"email\":\""
-                + email(surname) + "\",\"roleId\":\"" + cashierRole + "\",\"enabled\":true}")
+                + email(surname) + "\",\"owner\":false,\"enabled\":true,\"storeRoles\":{\"" + store + "\":\""
+                + TestRanks.rank(jdbc, cashierRole, store) + "\"}}")
                 .andExpect(status().isConflict());
         mvc.perform(get("/api/settings/users").cookie(owner))
                 .andExpect(jsonPath("$[?(@.id == '" + userId + "')].positionName").value("Kierownik kas"));
@@ -375,7 +375,7 @@ class StaffIntegrationTests {
         String third = createStore();
         String json = invite("Jan " + surname(), cashier).andReturn().getResponse().getContentAsString();
         String userId = JsonPath.read(json, "$.userId");
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, third);
+        TestRanks.join(jdbc, userId, third);
 
         send(owner, post(path("/employees/" + JsonPath.read(json, "$.id") + "/transfer")), transfer(sister, cashier))
                 .andExpect(status().isOk());
@@ -448,7 +448,7 @@ class StaffIntegrationTests {
         String friday = "{\"dayOfWeek\":\"FRIDAY\",\"start\":\"10:00\",\"end\":\"18:00\"}";
 
         send(owner, put("/api/stores/" + sister + "/staff/positions/" + cashier),
-                position(department, "Kasjer", cashierRole, List.of(friday)))
+                position(sister, department, "Kasjer", cashierRole, List.of(friday)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].positions[0].shifts[*].dayOfWeek", contains("FRIDAY")));
 
@@ -483,7 +483,7 @@ class StaffIntegrationTests {
         String hrId = jdbc.queryForObject("select u.id::text from users u join user_stores s on s.user_id = u.id "
                 + "where s.store_id = ?::uuid and u.username like 'konto%' order by u.created_at desc limit 1",
                 String.class, store);
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", hrId, sister);
+        TestRanks.join(jdbc, hrId, sister);
 
         mvc.perform(get(path("/employees")).cookie(hr))
                 .andExpect(jsonPath("$[*].id", contains(inSister)));
@@ -520,9 +520,10 @@ class StaffIntegrationTests {
     }
 
     @Test
-    void ownerRoleCannotBeUsedOnPosition() throws Exception {
-        String ownerRole = jdbc.queryForObject("select id::text from roles where owner", String.class);
-        send(owner, post(path("/positions")), position(department, "Szef", ownerRole, List.of()))
+    void rankOfAnotherStoreCannotBeUsedOnPosition() throws Exception {
+        String foreign = TestRanks.defaultRank(jdbc, createStore(), "MANAGER");
+        send(owner, post(path("/positions")), "{\"departmentId\":\"" + department + "\",\"name\":\"Szef\","
+                + "\"roleId\":\"" + foreign + "\",\"shifts\":[]}")
                 .andExpect(status().isBadRequest());
     }
 
@@ -532,7 +533,8 @@ class StaffIntegrationTests {
 
         send(owner, delete(path("/positions/" + cashier)), null).andExpect(status().isConflict());
         send(owner, delete(path("/departments/" + department)), null).andExpect(status().isConflict());
-        send(owner, delete("/api/settings/roles/" + cashierRole), null).andExpect(status().isConflict());
+        send(owner, delete("/api/stores/" + store + "/roles/" + TestRanks.rank(jdbc, cashierRole, store)), null)
+                .andExpect(status().isConflict());
 
         send(owner, delete(path("/employees/" + employee)), null).andExpect(status().isNoContent());
         send(owner, delete(path("/positions/" + cashier)), null)
@@ -618,9 +620,14 @@ class StaffIntegrationTests {
                 + "\",\"shifts\":[" + String.join(",", shifts) + "]}";
     }
 
-    private static String position(String departmentId, String name, String roleId, List<String> shifts) {
-        return "{\"departmentId\":\"" + departmentId + "\",\"name\":\"" + name + "\",\"roleId\":\"" + roleId
-                + "\",\"shifts\":[" + String.join(",", shifts) + "]}";
+    private String position(String departmentId, String name, String roleId, List<String> shifts) {
+        return position(store, departmentId, name, roleId, shifts);
+    }
+
+    /** Stanowisko z rangą roli testowej w sklepie z adresu żądania. */
+    private String position(String storeId, String departmentId, String name, String roleId, List<String> shifts) {
+        return "{\"departmentId\":\"" + departmentId + "\",\"name\":\"" + name + "\",\"roleId\":\""
+                + TestRanks.rankEverywhere(jdbc, roleId, storeId) + "\",\"shifts\":[" + String.join(",", shifts) + "]}";
     }
 
     private String createDepartment(String name) throws Exception {
@@ -639,10 +646,7 @@ class StaffIntegrationTests {
     }
 
     private String createRole(String permissions) throws Exception {
-        String json = send(owner, post("/api/settings/roles"),
-                "{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":" + permissions + "}")
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String json = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         return JsonPath.read(json, "$.id");
     }
 
@@ -662,12 +666,12 @@ class StaffIntegrationTests {
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), roleId);
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId, store);
+        TestRanks.join(jdbc, userId, store);
         return login(username, "haslo-pracownika");
     }
 
     private String role(String userId) {
-        return jdbc.queryForObject("select role_id::text from users where id = ?::uuid", String.class, userId);
+        return TestRanks.roleOf(jdbc, userId);
     }
 
     private static String id(ResultActions result) throws Exception {

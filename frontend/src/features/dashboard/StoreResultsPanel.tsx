@@ -1,7 +1,8 @@
 import { useEffect, useId, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 
-import { useCan } from '@/features/auth/api'
+import { canInStore, useCurrentUser } from '@/features/auth/api'
+import { useOpenInStore } from '@/features/store-results/store-jump'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfitTargetProgress, useSalesReportsOverview } from '@/features/sales/api'
 import { formatLongDate, formatShortDate, parseIsoDate } from '@/lib/dates'
@@ -70,7 +71,18 @@ function noteLines(note: DayNote, beforeDate: string | undefined) {
  * ustawieniem konta, wspólnym z aplikacją mobilną. Z dostępem do raportów sprzedaży klik w dzień albo tydzień
  * otwiera porównanie sprzedaży za ten okres.
  */
-export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; storeNumber: string }) {
+export function StoreResultsPanel({
+  storeId,
+  storeNumber,
+  title,
+  className,
+}: {
+  storeId: string
+  storeNumber: string
+  /** Nagłówek karty; domyślnie „Wyniki sklepu <numer>”. */
+  title?: string
+  className?: string
+}) {
   const overview = useSalesReportsOverview(storeId)
   const settings = useDashboardSettings()
   const save = useSaveDashboardSettings()
@@ -93,16 +105,22 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
     body = (
       <>
         <ProfitGoalBar storeId={storeId} lastSaleDate={lastSaleDate!} />
-        <Results metric={metric} current={current.data} yearAgo={yearAgo.data} lastSaleDate={lastSaleDate!} />
+        <Results
+          storeId={storeId}
+          metric={metric}
+          current={current.data}
+          yearAgo={yearAgo.data}
+          lastSaleDate={lastSaleDate!}
+        />
       </>
     )
   }
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <CardTitle>Wyniki sklepu {storeNumber}</CardTitle>
+          <CardTitle>{title ?? `Wyniki sklepu ${storeNumber}`}</CardTitle>
           <CardDescription>
             Tydzień od poniedziałku do niedzieli wobec tych samych dni tygodnia rok temu
           </CardDescription>
@@ -133,18 +151,22 @@ export function StoreResultsPanel({ storeId, storeNumber }: { storeId: string; s
 }
 
 function Results({
+  storeId,
   metric,
   current,
   yearAgo,
   lastSaleDate,
 }: {
+  storeId: string
   metric: DashboardChartMetric
   current: SalesHistory
   yearAgo: SalesHistory
   lastSaleDate: string
 }) {
-  const navigate = useNavigate()
-  const canCompare = useCan('SALES')
+  // Panel bywa pokazany dla innego sklepu (Wyniki sklepów): porównanie otwiera się w jego sklepie.
+  const canCompare = canInStore(useCurrentUser(), storeId, 'SALES')
+  const { open, href, prepare } = useOpenInStore()
+  const navigate = (path: string) => open(path, storeId)
   const weeks = weeklyChanges(metric, current, yearAgo, lastSaleDate)
   const week = weeks[weeks.length - 1]
   const days = current.days.slice(-7)
@@ -228,7 +250,9 @@ function Results({
               <tr key={day.date}>
                 <td>
                   {canCompare ? (
-                    <Link to={dayComparison(day.date)}>{formatShortDate(day.date)}</Link>
+                    <Link to={href(dayComparison(day.date), storeId)} onClick={() => prepare(storeId)}>
+                      {formatShortDate(day.date)}
+                    </Link>
                   ) : (
                     formatShortDate(day.date)
                   )}

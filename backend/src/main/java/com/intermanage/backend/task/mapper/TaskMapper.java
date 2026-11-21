@@ -34,6 +34,8 @@ public interface TaskMapper {
     @Mapping(target = "userName", source = "user.displayName")
     TaskEventResponse toEvent(StoreTaskEvent event);
 
-    @Mapping(target = "roleName", source = "role.name")
-    TaskAssigneeResponse toAssignee(AppUser user);
+    @Mapping(target = "id", source = "user.id")
+    @Mapping(target = "displayName", source = "user.displayName")
+    @Mapping(target = "roleName", expression = "java(user.rankNameIn(storeId))")
+    TaskAssigneeResponse toAssignee(AppUser user, java.util.UUID storeId);
 }

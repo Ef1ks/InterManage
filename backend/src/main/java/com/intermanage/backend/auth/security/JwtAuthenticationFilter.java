@@ -2,6 +2,8 @@ package com.intermanage.backend.auth.security;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,6 +38,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * użytkownika, więc ten żądanie nie odnawia tokenu (inaczej blokada po bezczynności i po pracy nigdy by nie nadeszła).
      */
     private static final Pattern LIVE_PATH = Pattern.compile("^/api/stores/[^/]+/live$");
+    /** Sklep z adresu: uprawnienia konta to jego ranga w tym sklepie. */
+    private static final Pattern STORE_PATH = Pattern.compile("^/api/stores/([0-9a-fA-F-]{36})(?:/.*)?$");
 
     private final JwtService jwtService;
     private final BackgroundAccounts backgroundAccounts;
@@ -60,7 +64,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = bearer != null ? bearer : cookie != null ? cookie.getValue() : null;
         boolean logout = LOGOUT_PATH.equals(request.getRequestURI());
         boolean live = LIVE_PATH.matcher(request.getRequestURI()).matches();
-        jwtService.decode(token).ifPresent(jwt -> backgroundAccounts.principalOf(jwt).ifPresent(principal -> {
+        UUID storeId = storeOf(request.getRequestURI());
+        jwtService.decode(token).ifPresent(jwt -> backgroundAccounts.principalOf(jwt).map(found -> found.forStore(storeId))
+                .ifPresent(principal -> {
             Instant now = Instant.now();
             if (bearer == null && !logout && (workdayLock.due(jwt, now) || idleLock.due(jwt, now))) {
                 if (workdayLock.protects(principal.getId())) {
@@ -85,5 +91,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }));
         chain.doFilter(request, response);
+    }
+
+    static UUID storeOf(String path) {
+        Matcher matcher = path == null ? null : STORE_PATH.matcher(path);
+        if (matcher == null || !matcher.matches()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(matcher.group(1));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

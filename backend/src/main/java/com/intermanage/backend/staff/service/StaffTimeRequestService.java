@@ -388,7 +388,7 @@ public class StaffTimeRequestService {
     }
 
     private static boolean hr(AppUserPrincipal principal) {
-        return has(principal, AppUserPrincipal.OWNER_AUTHORITY) || has(principal, HR_EDIT);
+        return principal.administers() || has(principal, HR_EDIT);
     }
 
     private void requireManager(StaffTimeRequest request, AppUserPrincipal principal) {

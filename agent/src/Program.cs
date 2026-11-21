@@ -25,9 +25,39 @@ internal static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (_, e) => Log.Error("Nieobsłużony błąd okna", e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
             Log.Error("Nieobsłużony błąd", e.ExceptionObject as Exception);
-        Log.Info("Start agenta " + Version + " na " + Environment.MachineName);
-        Application.Run(new TrayApp());
+            if (e.IsTerminating) ShowStartError(e.ExceptionObject as Exception);
+        };
+        Log.Info("Start agenta " + Version + " na " + Environment.MachineName + " z " + AppDomain.CurrentDomain.BaseDirectory);
+        try
+        {
+            Application.Run(new TrayApp());
+        }
+        catch (Exception error)
+        {
+            // Bez tego agent znikał bez słowa (np. brak bibliotek obok exe po skopiowaniu samego pliku).
+            Log.Error("Agent nie wystartował", error);
+            ShowStartError(error);
+        }
         GC.KeepAlive(mutex);
+    }
+
+    private static void ShowStartError(Exception? error)
+    {
+        var missing = error is System.IO.FileNotFoundException || error is System.IO.FileLoadException
+            || error?.InnerException is System.IO.FileNotFoundException;
+        var text = "Agent sklepu nie mógł się uruchomić.\n\n" + (error == null ? "Nieznany błąd" : error.GetType().Name
+            + ": " + error.Message) + (missing
+            ? "\n\nObok IntermanageAgent.exe brakuje bibliotek. Rozpakuj cały folder agenta z archiwum (exe razem z plikami .dll i .config)."
+            : "") + "\n\nDziennik: " + Log.Folder;
+        try
+        {
+            MessageBox.Show(text, "Intermanage – agent sklepu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        catch
+        {
+            // Bez okna zostaje dziennik.
+        }
     }
 }

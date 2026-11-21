@@ -92,6 +92,15 @@ const COMPANY_SCOPE = 'Firma'
  */
 const GROUPS: GroupSpec[] = [
   {
+    key: 'store-results',
+    path: TOOL_ROUTES.STORE_RESULTS.path,
+    label: 'Wyniki sklepów',
+    description:
+      'Wyniki wszystkich sklepów na jednej stronie: tydzień wobec roku wcześniej, cel marży i ostatni dzień.',
+    icon: TOOL_ROUTES.STORE_RESULTS.icon,
+    items: [{ category: 'STORE_RESULTS' }],
+  },
+  {
     key: 'documents',
     path: TOOL_ROUTES.DOCUMENTS.path,
     label: 'Dokumenty',
@@ -271,7 +280,8 @@ const GROUPS: GroupSpec[] = [
     key: 'settings',
     path: '/ustawienia',
     label: 'Ustawienia',
-    description: 'Ustawienia i dziennik wybranego sklepu oraz sklepy, użytkownicy, role, kopia zapasowa i pliki do pobrania.',
+    description:
+      'Ustawienia, hierarchia i dziennik wybranego sklepu oraz sklepy, użytkownicy, kopia zapasowa i pliki do pobrania.',
     icon: SettingsIcon,
     items: [
       {
@@ -304,18 +314,18 @@ const GROUPS: GroupSpec[] = [
         section: COMPANY_SCOPE,
         path: '/ustawienia/uzytkownicy',
         label: 'Użytkownicy',
-        description: 'Zaproszenia, role i sklepy pracowników.',
+        description: 'Zaproszenia, sklepy i rangi kont w sklepach.',
         icon: UserCogIcon,
         visible: (me) => me.owner,
       },
       {
         key: 'roles',
-        section: COMPANY_SCOPE,
-        path: '/ustawienia/role',
-        label: 'Role i uprawnienia',
-        description: 'Co wolno każdej roli w poszczególnych narzędziach.',
+        section: STORE_SCOPE,
+        path: '/ustawienia/hierarchia',
+        label: 'Hierarchia i rangi',
+        description: 'Kto jest pod kim w sklepie i co wolno każdej randze.',
         icon: ShieldIcon,
-        visible: (me) => me.owner,
+        visible: (me) => me.owner || hasPermission(me, 'STAFF'),
       },
       {
         key: 'backup',

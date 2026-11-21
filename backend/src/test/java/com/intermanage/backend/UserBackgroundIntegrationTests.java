@@ -114,11 +114,7 @@ class UserBackgroundIntegrationTests {
     }
 
     private Cookie employee(Cookie owner) throws Exception {
-        String roleJson = mvc.perform(post("/api/settings/roles").cookie(owner).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rola " + UUID.randomUUID() + "\",\"permissions\":{}}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, "{}") + "\"}";
         String number = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000, 9_999_999_999L));
         String storeJson = mvc.perform(post("/api/settings/stores").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -130,8 +126,7 @@ class UserBackgroundIntegrationTests {
                 insert into users (username, display_name, password_hash, role_id)
                 values (?, 'Pracownik', ?, ?::uuid) returning id""", String.class,
                 username, passwordEncoder.encode("haslo-pracownika"), JsonPath.read(roleJson, "$.id"));
-        jdbc.update("insert into user_stores (user_id, store_id) values (?::uuid, ?::uuid)", userId,
-                JsonPath.read(storeJson, "$.id"));
+        TestRanks.join(jdbc, userId, JsonPath.read(storeJson, "$.id"));
         return login(username, "haslo-pracownika");
     }
 

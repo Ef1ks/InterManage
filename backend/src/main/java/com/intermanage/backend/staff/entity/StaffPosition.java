@@ -6,7 +6,6 @@ import java.util.UUID;
 import org.hibernate.annotations.UuidGenerator;
 
 import com.intermanage.backend.auth.entity.AppUser;
-import com.intermanage.backend.auth.entity.Role;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,10 +32,12 @@ public class StaffPosition {
     @Column(nullable = false, length = 80)
     private String name;
 
-    /** Pusta tylko w usuniętym stanowisku, którego rolę później usunięto. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "role_id")
-    private Role role;
+    /**
+     * Klucz rangi sklepu ({@code StoreRole.key}), ten sam w każdym sklepie firmy: pracownik na stanowisku dostaje
+     * rangę o tym kluczu w sklepie, w którym pracuje.
+     */
+    @Column(name = "role_key", length = 80)
+    private String roleKey;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
@@ -55,10 +56,10 @@ public class StaffPosition {
     protected StaffPosition() {
     }
 
-    public StaffPosition(StaffDepartment department, String name, Role role, AppUser createdBy) {
+    public StaffPosition(StaffDepartment department, String name, String roleKey, AppUser createdBy) {
         this.department = department;
         this.name = name;
-        this.role = role;
+        this.roleKey = roleKey;
         this.createdBy = createdBy;
     }
 
@@ -67,10 +68,10 @@ public class StaffPosition {
         createdAt = Instant.now();
     }
 
-    public void update(StaffDepartment department, String name, Role role) {
+    public void update(StaffDepartment department, String name, String roleKey) {
         this.department = department;
         this.name = name;
-        this.role = role;
+        this.roleKey = roleKey;
     }
 
     public void markDeleted(AppUser by) {
@@ -95,8 +96,8 @@ public class StaffPosition {
         return name;
     }
 
-    public Role getRole() {
-        return role;
+    public String getRoleKey() {
+        return roleKey;
     }
 
     public Instant getDeletedAt() {

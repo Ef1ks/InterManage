@@ -9,6 +9,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import com.intermanage.backend.auth.entity.AppUser;
+import com.intermanage.backend.auth.entity.StoreRole;
 import com.intermanage.backend.staff.dto.AccountOption;
 import com.intermanage.backend.staff.dto.DepartmentResponse;
 import com.intermanage.backend.staff.dto.EmployeeResponse;
@@ -36,11 +37,11 @@ public interface StaffMapper {
     @Mapping(target = "id", source = "position.id")
     @Mapping(target = "departmentId", source = "position.department.id")
     @Mapping(target = "name", source = "position.name")
-    @Mapping(target = "roleId", source = "position.role.id")
-    @Mapping(target = "roleName", source = "position.role.name")
+    @Mapping(target = "roleId", source = "rank.id")
+    @Mapping(target = "roleName", source = "rank.name")
     @Mapping(target = "shifts", source = "shifts")
     @Mapping(target = "employeeCount", source = "employeeCount")
-    PositionResponse toResponse(StaffPosition position, List<StaffShift> shifts, long employeeCount);
+    PositionResponse toResponse(StaffPosition position, List<StaffShift> shifts, long employeeCount, StoreRole rank);
 
     @Mapping(target = "id", source = "employee.id")
     @Mapping(target = "userId", source = "employee.user.id")
@@ -50,8 +51,9 @@ public interface StaffMapper {
     @Mapping(target = "email", source = "employee.user.email")
     @Mapping(target = "enabled", source = "employee.user.enabled")
     @Mapping(target = "pendingActivation", source = "employee.user.pendingActivation")
-    @Mapping(target = "ownerAccount", source = "employee.user.role.owner")
-    @Mapping(target = "roleName", source = "employee.user.role.name")
+    @Mapping(target = "ownerAccount", expression = "java(employee.getUser() != null && employee.getUser().isOwner())")
+    @Mapping(target = "roleName", expression = "java(employee.getUser() == null ? null"
+            + " : employee.getUser().rankNameIn(employee.getStore().getId()))")
     @Mapping(target = "storeId", source = "employee.store.id")
     @Mapping(target = "storeNumber", source = "employee.store.number")
     @Mapping(target = "storeName", source = "employee.store.name")
@@ -65,9 +67,12 @@ public interface StaffMapper {
     @Mapping(target = "extraPositionIds", source = "extraPositionIds")
     EmployeeResponse toResponse(StaffEmployee employee, List<StaffShift> shifts, List<UUID> extraPositionIds);
 
-    @Mapping(target = "roleName", source = "role.name")
-    @Mapping(target = "owner", source = "role.owner")
-    AccountOption toAccountOption(AppUser user);
+    @Mapping(target = "id", source = "user.id")
+    @Mapping(target = "displayName", source = "user.displayName")
+    @Mapping(target = "username", source = "user.username")
+    @Mapping(target = "roleName", source = "rankName")
+    @Mapping(target = "owner", expression = "java(user.isOwner())")
+    AccountOption toAccountOption(AppUser user, String rankName);
 
     default String time(LocalTime time) {
         return time == null ? null : time.format(TIME);

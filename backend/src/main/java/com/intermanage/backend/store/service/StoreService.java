@@ -22,6 +22,7 @@ import com.intermanage.backend.store.dto.StoreRequest;
 import com.intermanage.backend.store.dto.StoreResponse;
 import com.intermanage.backend.store.dto.StoreSummary;
 import com.intermanage.backend.store.entity.Store;
+import com.intermanage.backend.auth.service.StoreRoleService;
 import com.intermanage.backend.store.mapper.StoreMapper;
 import com.intermanage.backend.store.repository.StoreRepository;
 
@@ -34,9 +35,12 @@ public class StoreService {
     private final KsefConnectionRepository ksefConnections;
     private final StaffDepartmentRepository staffDepartments;
     private final StaffEmployeeRepository staffEmployees;
+    private final StoreRoleService storeRoles;
 
     public StoreService(StoreRepository stores, StoreMapper storeMapper, KsefConnectionRepository ksefConnections,
-            StaffDepartmentRepository staffDepartments, StaffEmployeeRepository staffEmployees) {
+            StaffDepartmentRepository staffDepartments, StaffEmployeeRepository staffEmployees,
+            StoreRoleService storeRoles) {
+        this.storeRoles = storeRoles;
         this.stores = stores;
         this.storeMapper = storeMapper;
         this.ksefConnections = ksefConnections;
@@ -61,7 +65,9 @@ public class StoreService {
         Store store = new Store(number, request.name().trim(), blankToNull(request.address()));
         store.setNip(nip(request.nip()));
         store.setActive(request.active());
-        return storeMapper.toResponse(stores.save(store), 0);
+        Store saved = stores.saveAndFlush(store);
+        storeRoles.ensureDefaults(saved, null);
+        return storeMapper.toResponse(saved, 0);
     }
 
     @Transactional
@@ -117,7 +123,7 @@ public class StoreService {
     /** Sklepy do wyboru: właściciel widzi wszystkie aktywne, pracownik tylko przypisane aktywne. */
     @Transactional(readOnly = true)
     public List<StoreSummary> accessibleStores(AppUser user) {
-        List<Store> result = user.getRole().isOwner()
+        List<Store> result = user.isOwner()
                 ? stores.findActiveOrdered()
                 : user.getStores().stream()
                         .filter(Store::isActive)

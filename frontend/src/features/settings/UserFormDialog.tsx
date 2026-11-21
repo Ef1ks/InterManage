@@ -6,16 +6,20 @@ import { toast } from 'sonner'
 import { Form, FormActions, FormNote, MultiComboboxField, SelectField, SwitchField, TextField } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useCreateUser, useRoles, useStores, useUpdateUser } from '@/features/settings/api'
+import { useCreateUser, useStores, useUpdateUser } from '@/features/settings/api'
+import { useStoresRoles } from '@/features/store-roles/api'
 import { storeLabel } from '@/features/stores/current-store'
 import { applyServerErrors } from '@/lib/form-errors'
-import type { Role, Store, User } from '@/lib/types'
+import type { Store, StoreRoles, User } from '@/lib/types'
 
 type UserForm = {
   username: string
   displayName: string
   email: string
-  roleId: string
+  /** Właściciel aplikacji: wszystkie sklepy i ustawienia firmy, bez rang. */
+  owner: boolean
+  /** Ranga w każdym sklepie (id sklepu → id rangi). */
+  storeRoles: Record<string, string>
   /** Tylko przy edycji: hasło tymczasowe, puste = bez zmiany. */
   password: string
   enabled: boolean
@@ -33,37 +37,20 @@ type Props = {
 }
 
 export function UserFormDialog({ open, onOpenChange, user }: Props) {
-  const { data: roles } = useRoles()
   const { data: stores } = useStores()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 p-6 sm:max-w-md">
-        {open && roles && stores && (
-          <UserFormBody
-            key={user?.id ?? 'new'}
-            user={user}
-            roles={roles}
-            stores={stores}
-            onDone={() => onOpenChange(false)}
-          />
+        {open && stores && (
+          <UserFormBody key={user?.id ?? 'new'} user={user} stores={stores} onDone={() => onOpenChange(false)} />
         )}
       </DialogContent>
     </Dialog>
   )
 }
 
-function UserFormBody({
-  user,
-  roles,
-  stores,
-  onDone,
-}: {
-  user?: User
-  roles: Role[]
-  stores: Store[]
-  onDone: () => void
-}) {
+function UserFormBody({ user, stores, onDone }: { user?: User; stores: Store[]; onDone: () => void }) {
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
   const [formError, setFormError] = useState<string | null>(null)
@@ -81,31 +68,45 @@ function UserFormBody({
       username: user?.username ?? '',
       displayName: user?.displayName ?? '',
       email: user?.email ?? '',
-      roleId: user?.roleId ?? '',
+      owner: user?.owner ?? false,
+      storeRoles: user?.storeRoles ?? {},
       password: '',
       enabled: user?.enabled ?? true,
       storeIds: user?.storeIds ?? [],
       canAssignTasks: user?.canAssignTasks ?? false,
     },
   })
-  const selectedRoleId = useWatch({ control, name: 'roleId' })
-  const ownerRoleSelected = roles.some((role) => role.id === selectedRoleId && role.owner)
+  const ownerSelected = useWatch({ control, name: 'owner' })
+  const selectedStoreIds = useWatch({ control, name: 'storeIds' })
+  const rankQueries = useStoresRoles(ownerSelected ? [] : selectedStoreIds)
+  const ranksOf = (storeId: string): StoreRoles | undefined => rankQueries[selectedStoreIds.indexOf(storeId)]?.data
   const roleFromPosition = user?.positionName != null && !user.owner
 
   const onError = (error: unknown) =>
     setFormError(
-      applyServerErrors(error, setError, ['username', 'displayName', 'email', 'roleId', 'password'], {
+      applyServerErrors(error, setError, ['username', 'displayName', 'email', 'password'], {
         newPassword: 'password',
       }),
     )
 
   const onSubmit = handleSubmit((values) => {
     setFormError(null)
-    const roleId = values.roleId
     const storeIds = values.storeIds
+    const owner = values.owner
+    // Ranga tylko dla wybranych sklepów; sklep bez wyboru dostaje Pracownika (nowy) albo zostaje bez zmian.
+    const storeRoles = Object.fromEntries(
+      Object.entries(values.storeRoles).filter(([storeId, roleId]) => roleId && storeIds.includes(storeId)),
+    )
     if (isNew) {
       createUser.mutate(
-        { username: values.username, displayName: values.displayName, email: values.email, roleId, storeIds },
+        {
+          username: values.username,
+          displayName: values.displayName,
+          email: values.email,
+          owner,
+          storeIds,
+          storeRoles,
+        },
         {
           onSuccess: (created) => {
             toast.success('Zaproszenie wysłane', {
@@ -123,10 +124,11 @@ function UserFormBody({
           request: {
             displayName: values.displayName,
             email: values.email || null,
-            roleId,
+            owner,
             enabled: values.enabled,
             newPassword: values.password || undefined,
             storeIds,
+            storeRoles,
             canAssignTasks: values.canAssignTasks,
           },
         },
@@ -141,7 +143,6 @@ function UserFormBody({
     }
   })
 
-  const roleOptions = roles.map((role) => ({ value: role.id, label: role.name }))
   const storeOptions = stores.map((store) => ({
     value: store.id,
     label: storeLabel(store),
@@ -202,25 +203,18 @@ function UserFormBody({
 
       <Controller
         control={control}
-        name="roleId"
-        rules={{ required: 'Wybierz rolę' }}
+        name="owner"
         render={({ field }) => (
-          <SelectField
-            label="Rola"
-            options={roleOptions}
-            value={field.value}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            error={errors.roleId?.message}
-            disabled={roleFromPosition}
-            hint={
-              roleFromPosition ? `Rolę ustala stanowisko ${user?.positionName}. Zmienisz je w Pracownikach.` : undefined
-            }
+          <SwitchField
+            label="Właściciel aplikacji"
+            description="Wszystkie sklepy, ustawienia firmy i konta. Stoi ponad hierarchią każdego sklepu."
+            checked={field.value}
+            onCheckedChange={field.onChange}
           />
         )}
       />
 
-      {ownerRoleSelected ? (
+      {ownerSelected ? (
         <FormNote icon={<StoreIcon />}>Właściciel ma dostęp do wszystkich sklepów.</FormNote>
       ) : storeOptions.length === 0 ? (
         <FormNote icon={<StoreIcon />}>
@@ -251,6 +245,40 @@ function UserFormBody({
           )}
         />
       )}
+
+      {!ownerSelected &&
+        selectedStoreIds.map((storeId) => {
+          const store = stores.find((candidate) => candidate.id === storeId)
+          const ranks = ranksOf(storeId)
+          const options = (ranks?.roles ?? []).map((rank) => ({
+            value: rank.id,
+            label: rank.outsideHierarchy ? `${rank.name} (poza hierarchią)` : rank.name,
+          }))
+          return (
+            <Controller
+              key={storeId}
+              control={control}
+              name={`storeRoles.${storeId}`}
+              render={({ field }) => (
+                <SelectField
+                  label={`Ranga w sklepie ${store ? storeLabel(store) : ''}`}
+                  options={options}
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  disabled={!ranks}
+                  hint={
+                    roleFromPosition
+                      ? `W sklepie, w którym pracuje, rangę ustala stanowisko ${user?.positionName} (Pracownicy).`
+                      : field.value
+                        ? undefined
+                        : 'Bez wyboru: Pracownik.'
+                  }
+                />
+              )}
+            />
+          )
+        })}
 
       {isNew ? (
         <FormNote icon={<MailIcon />}>

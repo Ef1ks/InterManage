@@ -22,6 +22,12 @@ export type Me = {
   stores: StoreSummary[]
   /** Zdjęcie profilowe (ustawiane w przeglądarce, Moje konto), `null` = inicjały. */
   avatar: { id: string; url: string } | null
+  /** Uprawnienia w każdym sklepie (ranga konta w sklepie); `permissions` to już uprawnienia wybranego sklepu. */
+  storePermissions?: Record<string, Partial<Record<string, PermissionLevel>>>
+  /** Ranga konta w sklepie (id sklepu → nazwa). */
+  storeRoles?: Record<string, string>
+  /** Sklepy, w których konto zleca zadania. */
+  taskAssignStores?: string[]
 }
 
 export type MobileLogin = { token: string; me: Me }

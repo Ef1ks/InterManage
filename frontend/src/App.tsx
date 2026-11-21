@@ -38,7 +38,7 @@ import { MeatPurchasesPage } from '@/features/meat/MeatPurchasesPage'
 import { BackupPage } from '@/features/settings/BackupPage'
 import { downloadsPath } from '@/features/downloads/paths'
 import { DownloadsPage } from '@/features/downloads/DownloadsPage'
-import { RolesPage } from '@/features/settings/RolesPage'
+import { HierarchyPage } from '@/features/store-roles/HierarchyPage'
 import { StoreSettingsPage } from '@/features/store-settings/StoreSettingsPage'
 import { StoresPage } from '@/features/settings/StoresPage'
 import { SchedulePage } from '@/features/staff-schedule/SchedulePage'
@@ -54,6 +54,7 @@ import type { PermissionCategory, ToolCategory } from '@/lib/types'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { CashPage } from '@/features/cash/CashPage'
 import { StoreLogPage } from '@/features/store-log/StoreLogPage'
+import { StoreResultsPage } from '@/features/store-results/StoreResultsPage'
 
 /** Gotowe moduły; reszta kategorii pokazuje stronę "w przygotowaniu". */
 const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
@@ -74,6 +75,7 @@ const TOOL_PAGES: Partial<Record<PermissionCategory, ReactNode>> = {
   STAFF_TIME: <TimePage />,
   CASH_REPORT: <CashPage />,
   STORE_LOG: <StoreLogPage />,
+  STORE_RESULTS: <StoreResultsPage />,
 }
 
 const toolRoutes = (Object.keys(TOOL_ROUTES) as ToolCategory[]).map((category) => ({
@@ -216,13 +218,14 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/ustawienia/role',
+        path: '/ustawienia/hierarchia',
         element: (
-          <RequireAuth ownerOnly>
-            <RolesPage />
+          <RequireAuth>
+            <HierarchyPage />
           </RequireAuth>
         ),
       },
+      { path: '/ustawienia/role', element: <Navigate to="/ustawienia/hierarchia" replace /> },
       {
         path: '/ustawienia/uzytkownicy',
         element: (

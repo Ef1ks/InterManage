@@ -32,5 +32,11 @@ public record MeResponse(
          */
         Integer idleLockMinutes,
         /** Konto zleca zadania (właściciel albo włączone przez niego zlecanie). */
-        boolean canAssignTasks) {
+        boolean canAssignTasks,
+        /** Uprawnienia w każdym sklepie z {@code stores}: ranga konta w tym sklepie. */
+        Map<UUID, Map<PermissionCategory, PermissionLevel>> storePermissions,
+        /** Nazwa rangi konta w sklepie (sklep bez rangi pominięty). */
+        Map<UUID, String> storeRoles,
+        /** Sklepy, w których konto zleca zadania. */
+        List<UUID> taskAssignStores) {
 }

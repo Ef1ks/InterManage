@@ -26,7 +26,8 @@ public interface StaffRecordMapper {
     @Mapping(target = "storeName", source = "store.name")
     @Mapping(target = "departmentName", source = "position.department.name")
     @Mapping(target = "positionName", source = "position.name")
-    @Mapping(target = "roleName", source = "user.role.name")
+    @Mapping(target = "roleName", expression = "java(employee.getUser() == null ? null"
+            + " : employee.getUser().rankNameIn(employee.getStore().getId()))")
     StaffRecordResponse.Person toPerson(StaffEmployee employee);
 
     StaffRecordResponse.Profile toProfile(StaffProfile profile);

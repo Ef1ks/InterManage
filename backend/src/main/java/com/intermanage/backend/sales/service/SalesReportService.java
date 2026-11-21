@@ -204,7 +204,7 @@ public class SalesReportService {
     }
 
     /**
-     * Ile sprzedaży brutto obu okresów dały artykuły w dniach promocji (lista promocji, gazetki, MEA, cena poniżej
+     * Ile sprzedaży brutto i marży obu okresów dały artykuły w dniach promocji (lista promocji, gazetki, MEA, cena poniżej
      * zwykłej), z tym samym filtrem nomenklatury co porównanie. Osobne zapytanie, bo jest wolniejsze od samego
      * porównania (do kilku sekund rok do roku), więc kafelek nie wstrzymuje tabeli.
      */
@@ -218,6 +218,10 @@ public class SalesReportService {
         LocalDate to = previousTo.isAfter(currentTo) ? previousTo : currentTo;
         BigDecimal previous = BigDecimal.ZERO;
         BigDecimal current = BigDecimal.ZERO;
+        BigDecimal previousNet = BigDecimal.ZERO;
+        BigDecimal currentNet = BigDecimal.ZERO;
+        BigDecimal previousMargin = BigDecimal.ZERO;
+        BigDecimal currentMargin = BigDecimal.ZERO;
         long previousArticles = 0;
         long currentArticles = 0;
         for (SaleRepository.PromotionSales row : sales.sumPromotionSales(storeId, previousFrom, previousTo,
@@ -225,13 +229,18 @@ public class SalesReportService {
                 PromotionReportService.MIN_REFERENCE_DAYS, codes)) {
             if ("c".equals(row.getPeriod())) {
                 current = row.getSaleValueGross();
+                currentNet = row.getSaleValueNet();
+                currentMargin = row.getMarginValue();
                 currentArticles = row.getArticles();
             } else {
                 previous = row.getSaleValueGross();
+                previousNet = row.getSaleValueNet();
+                previousMargin = row.getMarginValue();
                 previousArticles = row.getArticles();
             }
         }
-        return new SalesPromotionShare(previous, current, previousArticles, currentArticles);
+        return new SalesPromotionShare(previous, current, previousNet, currentNet, previousMargin, currentMargin,
+                previousArticles, currentArticles);
     }
 
     /** Dzień sprzed wszystkich raportów: okres porównania drugiego sklepu, który niczego nie czyta. */

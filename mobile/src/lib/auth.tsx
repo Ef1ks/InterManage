@@ -89,9 +89,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stores = me?.stores ?? []
     // Zapamiętany sklep mógł przestać być dostępny: wtedy pierwszy z listy, jak useCurrentStore w aplikacji.
     const store = stores.find((item) => item.id === storeId) ?? stores[0] ?? null
-    const permissions = me?.permissions ?? {}
+    // Uprawnienia, ranga i zlecanie zadań z rangi konta w wybranym sklepie (hierarchia sklepu).
+    const scoped: Me | null | undefined =
+      me && store && me.storePermissions
+        ? {
+            ...me,
+            permissions: me.storePermissions[store.id] ?? {},
+            roleName: me.storeRoles?.[store.id] ?? me.roleName,
+            canAssignTasks: me.owner || (me.taskAssignStores ?? []).includes(store.id),
+          }
+        : me
+    const permissions = scoped?.permissions ?? {}
     return {
-      me,
+      me: scoped,
       store,
       login,
       logout,

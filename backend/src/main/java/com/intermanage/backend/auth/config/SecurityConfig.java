@@ -62,6 +62,11 @@ public class SecurityConfig {
                         // Nieobsłużony wyjątek idzie do /error drugim przejściem (ERROR), w którym filtr JWT nie
                         // działa, więc bez tego błąd serwera wracał jako 401, a front przy 401 wylogowuje.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        // Koniec strumienia na żywo (SseEmitter) i long pollingu agenta (DeferredResult) to drugie
+                        // przejście (ASYNC) bez filtra JWT. Samo żądanie przeszło już sprawdzenie; bez tego domknięcie
+                        // strumienia (np. o 17:00, gdy konta idą do tła) kończyło się odmową na wysłanej już odpowiedzi
+                        // („response is already committed”).
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/mobile/login",
                                 "/api/auth/activate").permitAll()
                         // Konta zalogowane w tle: lista i przejście na konto (PIN-em) działają też na stronie
