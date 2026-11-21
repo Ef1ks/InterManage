@@ -576,6 +576,16 @@ class StaffTimeIntegrationTests {
         send(owner, post(staff("/time/punches/" + repeatedId + "/restore")), null).andExpect(status().isNotFound());
     }
 
+    /** Dwa odbicia o tej samej chwili nie znikają z karty: są w odbiciach dnia, więc da się je usunąć. */
+    @Test
+    void punchesAtSameMomentStayVisible() throws Exception {
+        simulate("04:00");
+        simulate("04:00");
+        simulate("15:00");
+        day().andExpect(jsonPath("$.rows[0].days[0].punches.length()").value(3))
+                .andExpect(jsonPath("$.rows[0].days[0].openSince").value(DAY + "T15:00:00"));
+    }
+
     /** Kiosk po wyjściu pyta o przerwę: jedna na dzień pracy, powrót kończy ją zwykłym odbiciem. */
     @Test
     void kioskTurnsExitIntoBreakOncePerDay() throws Exception {

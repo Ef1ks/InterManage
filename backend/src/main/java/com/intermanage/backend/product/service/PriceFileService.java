@@ -55,8 +55,11 @@ public class PriceFileService {
 
     private static final ZoneId STORE_ZONE = ZoneId.of("Europe/Warsaw");
     private static final int HISTORY_SIZE = 20;
-    /** Zwykle pliki mają do ok. 150 kB, ale przeładowanie wszystkich cen daje kilka MB. */
-    private static final long MAX_FILE_BYTES = 30L * 1024 * 1024;
+    /**
+     * Zwykle pliki mają do ok. 150 kB, ale przeładowanie wszystkich cen daje kilka MB, a plik FDPMACHINE (wszystkie
+     * kody sklepu, 21.11.2026 w 09575) ponad 30 MB. Tyle co limit wysyłki plików (multipart).
+     */
+    public static final long MAX_FILE_BYTES = 100L * 1024 * 1024;
     /** Starsza historia z BACKUP nie jest potrzebna, więc pliki sprzed tego dnia są pomijane. */
     static final LocalDateTime FIRST_FILE_TIME = LocalDate.of(2026, 1, 1).atStartOfDay();
     private static final int MAX_FILES = 200;

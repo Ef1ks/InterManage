@@ -464,8 +464,13 @@ public class AgentReportService {
             // sklep, starszy raport, zły układ) nie wraca, dopóki plik się nie zmieni.
             boolean retry = e.getStatus().is5xxServerError()
                     || (e.getMessage() != null && e.getMessage().startsWith("Trwa import"));
-            finish(attempt.getId(), e.getMessage(), retry);
-            publish(attempt.getStoreId(), attempt.getId(), kind, attempt.getFileName(), "failed", e.getMessage());
+            String message = withRowErrors(e);
+            if (!retry) {
+                log.warn("Agent: raport {} sklepu {} odrzucony: {}", attempt.getFileName(), attempt.getStoreId(),
+                        message);
+            }
+            finish(attempt.getId(), message, retry);
+            publish(attempt.getStoreId(), attempt.getId(), kind, attempt.getFileName(), "failed", message);
         } catch (RuntimeException e) {
             log.error("Import raportu {} od agenta do sklepu {} nie powiódł się", attempt.getFileName(),
                     attempt.getStoreId(), e);
@@ -502,6 +507,19 @@ public class AgentReportService {
             }
             current = products.job(storeId, job.id());
         }
+    }
+
+    /**
+     * Błąd importu z opisem błędnych wierszy (numer wiersza i powód, najwyżej kilka), bo przy wgraniu przez agenta
+     * nikt nie widzi odpowiedzi serwera, a sam napis „Plik zawiera błędne wiersze” nie mówi, co poprawić.
+     */
+    static String withRowErrors(ApiException e) {
+        Object rows = e.getProperties().get("rowErrors");
+        if (!(rows instanceof java.util.Collection<?> list) || list.isEmpty()) {
+            return e.getMessage();
+        }
+        String details = list.stream().limit(5).map(String::valueOf).collect(java.util.stream.Collectors.joining("; "));
+        return e.getMessage() + " " + details;
     }
 
     private void finish(UUID id, String error, boolean retryable) {

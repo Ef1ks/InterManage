@@ -1081,9 +1081,9 @@ public class StaffTimeService {
             if (open == null) {
                 open = punch;
             } else if (Duration.between(open.getPunchedAt(), punch.getPunchedAt()).compareTo(MAX_SHIFT) <= 0) {
-                if (punch.getPunchedAt().isAfter(open.getPunchedAt())) {
-                    result.add(new Pair(open, punch, rounding));
-                }
+                // Odbicie o tej samej chwili co wejście (karta albo symulator dwa razy) to para bez czasu (lasts()),
+                // a nie nic: dawniej oba odbicia znikały z karty, więc nie dało się ich usunąć w odbiciach dnia.
+                result.add(new Pair(open, punch, rounding));
                 open = null;
             } else {
                 result.add(new Pair(open, null, rounding));

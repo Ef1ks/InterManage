@@ -14,6 +14,8 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -47,7 +49,8 @@ public class AgentEventService {
     private static final Pattern CTRLPRIX = Pattern.compile("^(CTRLPRIX_.+)\\.traite(\\d+)$", Pattern.CASE_INSENSITIVE);
     private static final int PENDING_CHUNK = 1000;
     /** Limity rozpakowanych plików (jak przy wysyłce z przeglądarki). */
-    private static final long MAX_PRICE_FILE_BYTES = 30L * 1024 * 1024;
+    private static final Logger log = LoggerFactory.getLogger(AgentEventService.class);
+    private static final long MAX_PRICE_FILE_BYTES = PriceFileService.MAX_FILE_BYTES;
     private static final long MAX_ATHOS_BYTES = 50L * 1024 * 1024;
 
     private final PriceFileService priceFiles;
@@ -127,8 +130,20 @@ public class AgentEventService {
 
     /** Pliki TRACEART od agenta (ta sama logika co z przeglądarki), także spakowane gzipem. */
     public PriceFileUploadResponse priceFiles(StoreAgentService.AgentContext agent, List<MultipartFile> files) {
-        List<MultipartFile> unpacked = files.stream()
-                .map(file -> CompressedUploads.unpacked(file, MAX_PRICE_FILE_BYTES)).toList();
+        // Plik, którego nie da się rozpakować (uszkodzony, za duży), nie zatrzymuje reszty paczki: dawniej jeden plik
+        // odrzucał całą paczkę co kilka minut i pozostałe pliki cen też nie wchodziły.
+        List<MultipartFile> unpacked = new ArrayList<>();
+        for (MultipartFile file : files) {
+            try {
+                unpacked.add(CompressedUploads.unpacked(file, MAX_PRICE_FILE_BYTES));
+            } catch (ApiException e) {
+                log.warn("Agent sklepu {}: pomijam plik cen {}: {}", agent.storeNumber(), file.getOriginalFilename(),
+                        e.getMessage());
+            }
+        }
+        if (unpacked.isEmpty()) {
+            throw ApiException.badRequest("Żadnego pliku cen z paczki nie udało się rozpakować");
+        }
         PriceFileUploadResponse result = priceFiles.upload(agent.storeId(), unpacked, null);
         if (!result.imported().isEmpty()) {
             live.publish(agent.storeId(), "price-files", Map.of("imported", result.imported().size(),
