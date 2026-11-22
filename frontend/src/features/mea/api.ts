@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { MeaDocument, MeaLeafletSummary, MeaList, MeaQueueItem, MeaSettings } from '@/lib/types'
+import type { MeaArticleSales, MeaDocument, MeaLeafletSummary, MeaList, MeaQueueItem, MeaSettings } from '@/lib/types'
 
 const listKey = (storeId: string) => ['stores', storeId, 'mea'] as const
 const settingsKey = (storeId: string) => ['stores', storeId, 'mea', 'settings'] as const
@@ -29,6 +29,20 @@ export function useMeaDocument(storeId: string, number: string) {
     queryFn: () => api<MeaDocument>(`/stores/${storeId}/mea/documents/${number}`),
     staleTime: 10 * 60 * 1000,
     retry: false,
+  })
+}
+
+/** Sprzedaż artykułów dokumentu MEA w tygodniach czwartek-środa z promocjami (pod pozycjami i w panelu artykułu). */
+export function useMeaArticleSales(storeId: string, itm8s: string[]) {
+  return useQuery({
+    queryKey: [...listKey(storeId), 'article-sales', itm8s],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      itm8s.forEach((itm8) => params.append('itm8', itm8))
+      return api<MeaArticleSales>(`/stores/${storeId}/mea/article-sales?${params}`)
+    },
+    enabled: itm8s.length > 0,
+    staleTime: 10 * 60 * 1000,
   })
 }
 

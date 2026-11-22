@@ -12,6 +12,7 @@ import {
   DatabaseIcon,
   DownloadIcon,
   HashIcon,
+  MessageSquareWarningIcon,
   MegaphoneIcon,
   NewspaperIcon,
   PackageIcon,
@@ -41,6 +42,7 @@ import { salesPaths } from '@/features/sales/paths'
 import { stocktakePath } from '@/features/stocktake/paths'
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
 import { TimeAttentionBadge } from '@/features/staff-time/TimeAttentionBadge'
+import { NewFeedbackBadge } from '@/features/feedback/FeedbackPage'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import type { Me, PermissionCategoryInfo, ToolCategory } from '@/lib/types'
@@ -346,6 +348,24 @@ const GROUPS: GroupSpec[] = [
         // Pobiera każdy zalogowany, więc Ustawienia widzi każdy (z samym tym kafelkiem bez innych uprawnień).
         visible: () => true,
         badge: () => <NewDownloadsBadge />,
+      },
+    ],
+  },
+  {
+    key: 'feedback',
+    path: '/zgloszenia',
+    label: 'Zgłoszenia',
+    description: 'Poprawki i błędy zgłoszone przez pracowników, ze zrzutami ekranu.',
+    icon: MessageSquareWarningIcon,
+    items: [
+      {
+        key: 'feedback',
+        path: '/zgloszenia',
+        label: 'Zgłoszenia',
+        description: 'Poprawki i błędy zgłoszone przez pracowników, ze zrzutami ekranu.',
+        icon: MessageSquareWarningIcon,
+        visible: (me) => me.owner,
+        badge: () => <NewFeedbackBadge />,
       },
     ],
   },

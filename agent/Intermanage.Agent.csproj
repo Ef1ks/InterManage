@@ -19,9 +19,9 @@
     <Deterministic>true</Deterministic>
 
     <!-- Zasoby wersji pliku exe (Właściwości → Szczegóły w Eksploratorze). -->
-    <Version>1.2.0</Version>
-    <FileVersion>1.2.0.0</FileVersion>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <Version>1.2.1</Version>
+    <FileVersion>1.2.1.0</FileVersion>
+    <AssemblyVersion>1.2.1.0</AssemblyVersion>
     <Company>Intermanage</Company>
     <Product>Intermanage – agent sklepu</Product>
     <AssemblyTitle>Intermanage – agent sklepu</AssemblyTitle>

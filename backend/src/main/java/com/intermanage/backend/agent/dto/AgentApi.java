@@ -31,9 +31,15 @@ public final class AgentApi {
 
     /**
      * Folder do pilnowania: {@code kind} TRACEART, CTRLPRIX albo ATHOS, {@code pattern} = wyrażenie na nazwę pliku
-     * (bez wielkości liter), {@code subfolders} = także podfoldery (np. BACKUP).
+     * (bez wielkości liter), {@code subfolders} = także podfoldery (np. BACKUP). {@code freshPattern} (raporty Importu
+     * danych): plik, którego dzisiejsza data zmiany znaczy, że raport jest aktualny, czyli plik zapisywany przez makro;
+     * inny plik w folderze (np. raport zapisany ręcznie pod domyślną nazwą Mercalys) nie zwalnia z aktualizacji.
      */
-    public record Watch(String kind, String path, boolean subfolders, String pattern) {
+    public record Watch(String kind, String path, boolean subfolders, String pattern, String freshPattern) {
+
+        public Watch(String kind, String path, boolean subfolders, String pattern) {
+            this(kind, path, subfolders, pattern, null);
+        }
     }
 
     /** Plik z kolejki przydzielony agentowi. */

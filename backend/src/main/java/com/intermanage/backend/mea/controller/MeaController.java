@@ -27,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.mea.component.MurphysoftClient;
+import com.intermanage.backend.mea.dto.MeaArticleSales;
 import com.intermanage.backend.mea.dto.MeaAthosStatus;
 import com.intermanage.backend.mea.dto.MeaDocumentResponse;
 import com.intermanage.backend.mea.dto.MeaLeafletSummary;
@@ -40,6 +41,7 @@ import com.intermanage.backend.mea.service.MeaAthosService;
 import com.intermanage.backend.mea.service.MeaDocumentService;
 import com.intermanage.backend.mea.service.MeaLeafletService;
 import com.intermanage.backend.mea.service.MeaOrderService;
+import com.intermanage.backend.mea.service.MeaSalesService;
 import com.intermanage.backend.mea.service.MeaService;
 
 /**
@@ -55,10 +57,12 @@ public class MeaController {
     private final MeaAthosService athos;
     private final MeaOrderService orders;
     private final MeaLeafletService leaflets;
+    private final MeaSalesService sales;
 
     public MeaController(MeaService service, MeaDocumentService documents, MeaAthosService athos,
-            MeaOrderService orders, MeaLeafletService leaflets) {
+            MeaOrderService orders, MeaLeafletService leaflets, MeaSalesService sales) {
         this.leaflets = leaflets;
+        this.sales = sales;
         this.service = service;
         this.documents = documents;
         this.athos = athos;
@@ -86,6 +90,18 @@ public class MeaController {
         } catch (MurphysoftClient.Unavailable exception) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
         }
+    }
+
+    /**
+     * Sprzedaż dzienna artykułów (ITM8 z kartoteki) w ostatnich {@code weeks} tygodniach czwartek-środa z promocjami:
+     * tygodnie pod pozycjami dokumentu MEA i dni w panelu artykułu.
+     */
+    @GetMapping("/article-sales")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)")
+    public MeaArticleSales articleSales(@PathVariable UUID storeId,
+            @RequestParam(name = "itm8", required = false) List<String> itm8s,
+            @RequestParam(defaultValue = "" + MeaSalesService.DEFAULT_WEEKS) int weeks) {
+        return sales.sales(storeId, itm8s, weeks);
     }
 
     /** Wgrane opisy gazetek z centrali (wspólne dla sklepów), od najnowszej gazetki. */

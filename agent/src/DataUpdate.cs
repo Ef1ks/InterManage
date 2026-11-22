@@ -94,13 +94,15 @@ internal sealed class DataUpdate
             // Zegar serwera i komputera mogą się trochę różnić: próby wgrania liczymy od chwili z zapasem.
             var start = DateTimeOffset.UtcNow.AddMinutes(-2);
 
-            form.Status("Uruchamiam makro w Mercalys…");
-            if (!await WaitForPlayerAsync(cancel).ConfigureAwait(false))
+            form.Status("Szukam odtwarzacza makr (AutoJob)…");
+            if (!await WaitForPlayerAsync(form, cancel).ConfigureAwait(false))
             {
-                form.Finish(false, "Nie działa odtwarzacz makr (player.exe). Uruchom go i wybierz w menu ikony agenta "
+                Log.Warn("Aktualizacja danych: nie znaleziono działającego odtwarzacza makr");
+                form.Finish(false, "Nie działa odtwarzacz makr (AutoJob). Uruchom go i wybierz w menu ikony agenta "
                     + "„Aktualizuj dane z Mercalys”.");
                 return;
             }
+            form.Status("Uruchamiam makro w Mercalys…");
             var text = WithPassword(macro, settings.MercalysPassword);
             OnUi(() =>
             {
@@ -128,13 +130,17 @@ internal sealed class DataUpdate
         }
     }
 
-    /// <summary>Raporty, których najnowszy pasujący plik w folderze nie jest z dzisiaj (albo go nie ma).</summary>
+    /// <summary>
+    /// Raporty, których plik nie jest z dzisiaj (albo go nie ma): plik zapisywany przez makro, a bez ścieżki makra
+    /// najnowszy pasujący plik w folderze. Raport zapisany ręcznie pod inną nazwą nie zwalnia z aktualizacji.
+    /// </summary>
     private static async Task<List<string>> StaleReportsAsync(List<WatchConfig> watches, CancellationToken cancel)
     {
         var stale = new List<string>();
         foreach (var watch in watches)
         {
-            var pattern = new Regex(watch.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            var source = string.IsNullOrEmpty(watch.FreshPattern) ? watch.Pattern : watch.FreshPattern!;
+            var pattern = new Regex(source, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             DateTime newest;
             try
             {
@@ -183,7 +189,9 @@ internal sealed class DataUpdate
                 Log.Warn("Aktualizacja danych: stan wgrań niedostępny: " + error.Message);
                 continue;
             }
-            var latest = attempts.Where(a => a.StartedAt >= start)
+            // Tylko pliki zapisane przez to makro: stary plik o tej samej nazwie (np. wysłany przy starcie agenta,
+            // bo serwer go jeszcze nie wgrał) nie jest wynikiem tej aktualizacji.
+            var latest = attempts.Where(a => a.StartedAt >= start && a.FileModified != null && a.FileModified >= start)
                 .GroupBy(a => a.FileName.ToLowerInvariant())
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.StartedAt).First());
             var done = 0;
@@ -247,27 +255,94 @@ internal sealed class DataUpdate
     }
 
     /// <summary>Odtwarzacz makr startuje z Windows jak agent, więc przy starcie komputera chwilę na niego czekamy.</summary>
-    private static async Task<bool> WaitForPlayerAsync(CancellationToken cancel)
+    private static async Task<bool> WaitForPlayerAsync(UpdateForm form, CancellationToken cancel)
     {
         var until = DateTime.UtcNow + WaitForPlayer;
+        var logged = false;
         while (true)
         {
-            if (PlayerRunning()) return true;
-            if (DateTime.UtcNow > until) return false;
+            var player = FindPlayer();
+            if (player != null)
+            {
+                Log.Info("Aktualizacja danych: odtwarzacz makr " + player);
+                return true;
+            }
+            var left = until - DateTime.UtcNow;
+            if (left <= TimeSpan.Zero) return false;
+            if (!logged)
+            {
+                Log.Info("Aktualizacja danych: czekam na odtwarzacz makr");
+                logged = true;
+            }
+            form.Status("Czekam na odtwarzacz makr (AutoJob), jeszcze " + Math.Ceiling(left.TotalSeconds) + " s…");
             await Task.Delay(2000, cancel).ConfigureAwait(false);
         }
     }
 
-    private static bool PlayerRunning()
+    /// <summary>Produkt z <c>;@Ahk2Exe-SetName</c> w player.ahk: plik bywa nazwany player.exe, player-v60.exe albo AutoJob.exe.</summary>
+    private const string PlayerProduct = "Intermanage Makra";
+
+    /// <summary>Nazwa działającego odtwarzacza makr albo null. Rozpoznaje go po nazwie pliku albo po opisie programu.</summary>
+    private static string? FindPlayer()
     {
+        var session = Process.GetCurrentProcess().SessionId;
         foreach (var process in Process.GetProcesses())
         {
             using (process)
             {
-                if (process.ProcessName.StartsWith("player", StringComparison.OrdinalIgnoreCase)) return true;
+                try
+                {
+                    if (process.SessionId != session) continue;
+                    var name = process.ProcessName;
+                    if (name.StartsWith("player", StringComparison.OrdinalIgnoreCase)
+                        || name.StartsWith("autojob", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return name;
+                    }
+                    var path = ImagePath(process.Id);
+                    if (path == null) continue;
+                    var info = FileVersionInfo.GetVersionInfo(path);
+                    if (string.Equals(info.ProductName?.Trim(), PlayerProduct, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return name;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Proces mógł się zakończyć albo nie mamy do niego dostępu.
+                }
             }
         }
-        return false;
+        return null;
+    }
+
+    private const uint QueryLimitedInformation = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr process, int flags, System.Text.StringBuilder name,
+        ref int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>Ścieżka pliku procesu, także 64-bitowego z 32-bitowego agenta (MainModule tego nie umie).</summary>
+    private static string? ImagePath(int processId)
+    {
+        var handle = OpenProcess(QueryLimitedInformation, false, processId);
+        if (handle == IntPtr.Zero) return null;
+        try
+        {
+            var size = 1024;
+            var name = new System.Text.StringBuilder(size);
+            return QueryFullProcessImageName(handle, 0, name, ref size) ? name.ToString() : null;
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
     }
 
     private const byte LeftAlt = 0xA4;

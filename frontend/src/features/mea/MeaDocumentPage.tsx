@@ -1,10 +1,11 @@
-import { EraserIcon, LockIcon, MinusIcon, PlusIcon, SendIcon } from 'lucide-react'
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { EraserIcon, LockIcon, MinusIcon, PlusIcon, SendIcon, TagIcon } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
 import { FullPageMessage } from '@/components/FullPageMessage'
+import { LoadingPanel } from '@/components/LoadingPanel'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ArticleStatsButton, useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
@@ -27,7 +28,8 @@ import {
   type MeaOrderDraft,
 } from '@/store/meaOrderDraftSlice'
 
-import { useMeaDocument } from './api'
+import { useMeaArticleSales, useMeaDocument } from './api'
+import { averagePrice, salesWeeks, type SalesWeek } from './article-sales'
 import { MeaLeafletsDialog } from './MeaLeafletsDialog'
 import { isCardOnly, promoPricing } from './promo-pricing'
 import { reservationClosed } from './reservation'
@@ -72,8 +74,9 @@ function StoreMeaDocument({ store, number }: { store: StoreSummary; number: stri
   const document = useMeaDocument(store.id, number)
 
   return (
-    <div data-wide-page>
-      <BackLink to={meaOnlinePath} className="mb-3">
+    // Od lg strona ma wysokość okna (data-fit-page), a przewijają się tylko tabela i panel artykułu.
+    <div data-wide-page data-fit-page className="flex min-h-0 flex-1 flex-col">
+      <BackLink to={meaOnlinePath} className="mb-3 shrink-0">
         Moduł MEA
       </BackLink>
       {document.isPending ? (
@@ -104,6 +107,18 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
   const dispatchColumns = Array.from({ length: Math.max(1, document.dispatches.length) }, (_, index) => index)
 
   const lineDraft = (itm8: string) => draft[itm8] ?? EMPTY_LINE
+
+  // Sprzedaż w tygodniach czwartek-środa pod każdą pozycją z artykułem z kartoteki i dni w panelu artykułu.
+  const itm8s = useMemo(
+    () => [...new Set(document.lines.flatMap((line) => (line.product?.itm8 ? [line.product.itm8] : [])))],
+    [document.lines],
+  )
+  const sales = useMeaArticleSales(store.id, itm8s)
+  const weeksOf = (line: MeaDocumentLine) =>
+    sales.data && line.product?.itm8 ? salesWeeks(sales.data, line.product.itm8) : null
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null)
+  // Kolumny tabeli; wiersz tygodni zajmuje wszystkie poza Lp. i kodem.
+  const columnCount = 11 + dispatchColumns.length
 
   const totals = useMemo(() => {
     let coli = 0
@@ -173,7 +188,7 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
       {readOnly && (
         <p
           role="status"
-          className="mb-4 flex items-center gap-2 rounded-lg bg-amber-200 px-4 py-2.5 text-sm text-amber-950 dark:bg-amber-900/70 dark:text-amber-50"
+          className="mb-4 flex shrink-0 items-center gap-2 rounded-lg bg-amber-200 px-4 py-2.5 text-sm text-amber-950 dark:bg-amber-900/70 dark:text-amber-50"
         >
           <LockIcon className="size-4 shrink-0" />
           Rezerwacja zakończyła się {shortDate(document.reservationTo)}. Dokument jest tylko do podglądu, ilości nie
@@ -181,11 +196,12 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
         </p>
       )}
 
-      {/* Od xl tabela na 2/3 szerokości, a statystyki zaznaczonego artykułu obok na 1/3, każde z własnym przewijaniem,
-          żeby pracownik wpisując ilości widział od razu stan i sprzedaż. */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:items-start">
-        <Card className="overflow-clip p-0">
-          <div className="max-h-[calc(100dvh-18rem)] min-h-64 overflow-auto">
+      {/* Od xl tabela na 2/3 szerokości, a statystyki zaznaczonego artykułu obok na 1/3, każde z własnym przewijaniem
+          w wysokości okna, żeby pracownik wpisując ilości widział od razu stan i sprzedaż. Od lg do xl jedno pod
+          drugim, też każde z własnym przewijaniem. */}
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-rows-[minmax(0,3fr)_minmax(0,2fr)] xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-rows-1">
+        <Card className="flex min-h-0 flex-col overflow-clip p-0">
+          <div className="max-h-[70dvh] min-h-0 flex-1 overflow-auto lg:max-h-none">
             <table className="w-full border-separate border-spacing-0 text-sm">
               <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground">
                 <tr className="[&>th]:border-b [&>th]:px-2 [&>th]:py-2 [&>th]:text-left [&>th]:align-bottom [&>th]:leading-tight [&>th]:font-medium [&>th]:whitespace-nowrap">
@@ -254,39 +270,49 @@ function MeaDocumentView({ store, document }: { store: StoreSummary; document: M
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {document.lines.map((line, row) => (
-                  <MeaLineRow
-                    key={line.meaItm8}
-                    line={line}
-                    draft={lineDraft(line.meaItm8)}
-                    dispatchColumns={dispatchColumns}
-                    readOnly={readOnly}
-                    selected={line.meaItm8 === selected}
-                    onSelect={() => setSelected(line.meaItm8)}
-                    registerInput={(column, element) => {
-                      const id = `${line.meaItm8}:${column}`
-                      if (element) inputs.current.set(id, element)
-                      else inputs.current.delete(id)
-                    }}
-                    onCellKey={(event, column) => onCellKey(event, row, column)}
-                    onQuantity={(column, value) =>
-                      dispatch(setMeaQuantity({ key, itm8: line.meaItm8, dispatch: column, value }))
-                    }
-                    onMultiplier={(value) => dispatch(setMeaMultiplier({ key, itm8: line.meaItm8, value }))}
-                  />
-                ))}
-              </tbody>
+              {document.lines.map((line, row) => (
+                <MeaLineRow
+                  key={line.meaItm8}
+                  line={line}
+                  stripe={row % 2 === 0}
+                  columnCount={columnCount}
+                  weeks={weeksOf(line)}
+                  weeksLoading={sales.isPending && !!line.product?.itm8}
+                  selectedWeek={line.meaItm8 === selected ? selectedWeek : null}
+                  onWeek={(week) => {
+                    setSelected(line.meaItm8)
+                    setSelectedWeek(week)
+                  }}
+                  draft={lineDraft(line.meaItm8)}
+                  dispatchColumns={dispatchColumns}
+                  readOnly={readOnly}
+                  selected={line.meaItm8 === selected}
+                  onSelect={() => setSelected(line.meaItm8)}
+                  registerInput={(column, element) => {
+                    const id = `${line.meaItm8}:${column}`
+                    if (element) inputs.current.set(id, element)
+                    else inputs.current.delete(id)
+                  }}
+                  onCellKey={(event, column) => onCellKey(event, row, column)}
+                  onQuantity={(column, value) =>
+                    dispatch(setMeaQuantity({ key, itm8: line.meaItm8, dispatch: column, value }))
+                  }
+                  onMultiplier={(value) => dispatch(setMeaMultiplier({ key, itm8: line.meaItm8, value }))}
+                />
+              ))}
             </table>
           </div>
         </Card>
 
-        <aside
-          aria-label="Statystyki artykułu"
-          className="min-w-0 xl:sticky xl:top-18 xl:max-h-[calc(100dvh-5.5rem)] xl:overflow-y-auto"
-        >
+        <aside aria-label="Statystyki artykułu" className="min-w-0 lg:min-h-0 lg:overflow-y-auto">
           {selectedLine ? (
-            <ArticleDetails store={store} line={selectedLine} draft={lineDraft(selectedLine.meaItm8)} />
+            <ArticleDetails
+              store={store}
+              line={selectedLine}
+              weeks={weeksOf(selectedLine)}
+              weeksLoading={sales.isPending}
+              selectedWeek={selectedWeek}
+            />
           ) : (
             <Card className="px-5 py-6 text-sm text-muted-foreground">
               Kliknij pozycję, a zobaczysz stan, sprzedaż i dostawy artykułu.
@@ -314,7 +340,7 @@ function DocumentHeader({
   onSend?: () => void
 }) {
   return (
-    <Card className="mb-4 grid gap-4 px-5 py-4 lg:grid-cols-[auto_1fr_auto]">
+    <Card className="mb-4 grid shrink-0 gap-4 px-5 py-4 lg:grid-cols-[auto_1fr_auto]">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((index) => {
           const date = document.dispatches[index]
@@ -490,6 +516,12 @@ function AthosSendNote({ document, totals }: { document: MeaDocument; totals: { 
 
 function MeaLineRow({
   line,
+  stripe,
+  columnCount,
+  weeks,
+  weeksLoading,
+  selectedWeek,
+  onWeek,
   draft,
   dispatchColumns,
   readOnly,
@@ -501,6 +533,14 @@ function MeaLineRow({
   onMultiplier,
 }: {
   line: MeaDocumentLine
+  /** Co druga pozycja na tle; pozycja ma dwa wiersze tabeli (dane i tygodnie), więc `odd:` tu nie działa. */
+  stripe: boolean
+  columnCount: number
+  /** Tygodnie czwartek-środa; null = artykułu nie ma w kartotece albo sprzedaż się wczytuje. */
+  weeks: SalesWeek[] | null
+  weeksLoading: boolean
+  selectedWeek: string | null
+  onWeek: (from: string) => void
   draft: MeaLineDraft
   dispatchColumns: number[]
   /** Rezerwacja zamknięta: ilości i mnożnik tylko jako tekst. */
@@ -516,107 +556,334 @@ function MeaLineRow({
   const value = valueOf(line, draft, line.purchasePrice)
   const product = line.product
 
+  const withWeeks = weeks != null || weeksLoading
+  // Oba wiersze pozycji mają wspólne tło i znacznik zaznaczenia przy lewej krawędzi.
+  const rowTone = cn(
+    'cursor-default',
+    coli > 0 ? 'bg-emerald-200/70 dark:bg-emerald-900/50' : cn(stripe && 'bg-muted/40', 'group-hover:bg-accent/60'),
+    selected && '[&>td:first-child]:shadow-[inset_3px_0_0_var(--color-blue-500)]',
+  )
+
   return (
-    <tr
-      onClick={onSelect}
-      className={cn(
-        'cursor-default align-top [&>td]:border-b [&>td]:px-2 [&>td]:py-1.5',
-        coli > 0 ? 'bg-emerald-200/70 dark:bg-emerald-900/50' : 'odd:bg-muted/40 hover:bg-accent/60',
-        selected && 'outline-2 -outline-offset-2 outline-blue-500',
-      )}
-    >
-      <td className="tabular-nums text-muted-foreground">{line.lp}</td>
-      <td className="tabular-nums">
-        {line.meaItm8}
-        <span className="block text-xs text-muted-foreground">{line.ean}</span>
-        {line.parallelItm8 && <span className="block text-xs text-muted-foreground">CAD {line.parallelItm8}</span>}
-      </td>
-      <td>
-        <span className="flex items-start gap-1">
-          <span className="min-w-0">
-            <span className="block font-medium">{line.name}</span>
-            <span className="block text-xs text-muted-foreground">{line.brand}</span>
-            {line.note && <span className="mt-0.5 block text-xs text-amber-800 dark:text-amber-200">{line.note}</span>}
-            <PromoBadges line={line} />
+    <tbody className="group">
+      <tr
+        onClick={onSelect}
+        className={cn(
+          'align-top [&>td]:px-2',
+          withWeeks ? '[&>td]:pt-1.5 [&>td]:pb-1' : '[&>td]:border-b [&>td]:py-1.5',
+          rowTone,
+        )}
+      >
+        <td className="tabular-nums text-muted-foreground">{line.lp}</td>
+        <td className="tabular-nums">
+          {line.meaItm8}
+          <span className="block text-xs text-muted-foreground">{line.ean}</span>
+          {line.parallelItm8 && <span className="block text-xs text-muted-foreground">CAD {line.parallelItm8}</span>}
+        </td>
+        <td>
+          <span className="flex items-start gap-1">
+            <span className="min-w-0">
+              <span className="block font-medium">{line.name}</span>
+              <span className="block text-xs text-muted-foreground">{line.brand}</span>
+              {line.note && (
+                <span className="mt-0.5 block text-xs text-amber-800 dark:text-amber-200">{line.note}</span>
+              )}
+              <PromoBadges line={line} />
+            </span>
+            {product?.itm8 && (
+              <ArticleStatsButton
+                skipTab
+                article={{ itm8: product.itm8, name: product.name, ean: product.catalogEan, brand: product.brand }}
+              />
+            )}
           </span>
-          {product?.itm8 && (
-            <ArticleStatsButton
-              skipTab
-              article={{ itm8: product.itm8, name: product.name, ean: product.catalogEan, brand: product.brand }}
-            />
-          )}
-        </span>
-      </td>
-      <td className="text-right tabular-nums">
-        {line.unitsPerPack}
-        <span className="block text-muted-foreground">{line.packsPerPallet}</span>
-      </td>
-      <td className="text-right tabular-nums">
-        {line.vatPercent != null ? `${line.vatPercent}%` : ''}
-        <span className="block text-muted-foreground">{line.guaranteedDays}</span>
-      </td>
-      <td className="text-right tabular-nums">
-        {money(line.purchasePrice)}
-        <span className="block text-muted-foreground">
-          {line.parallelPurchasePrice ? money(line.parallelPurchasePrice) : ''}
-        </span>
-      </td>
-      <PromoPriceCell line={line} />
-      <td className="text-right tabular-nums">
-        {money(line.margin)}
-        <span className="block text-muted-foreground">{line.parallelMargin ? money(line.parallelMargin) : ''}</span>
-      </td>
-      {dispatchColumns.map((column) => (
-        <td key={column} className="text-center">
-          {readOnly ? (
-            <span className="font-semibold tabular-nums">{draft.quantities[column] || '—'}</span>
+        </td>
+        <td className="text-right tabular-nums">
+          {line.unitsPerPack}
+          <span className="block text-muted-foreground">{line.packsPerPallet}</span>
+        </td>
+        <td className="text-right tabular-nums">
+          {line.vatPercent != null ? `${line.vatPercent}%` : ''}
+          <span className="block text-muted-foreground">{line.guaranteedDays}</span>
+        </td>
+        <td className="text-right tabular-nums">
+          {money(line.purchasePrice)}
+          <span className="block text-muted-foreground">
+            {line.parallelPurchasePrice ? money(line.parallelPurchasePrice) : ''}
+          </span>
+        </td>
+        <PromoPriceCell line={line} />
+        <td className="text-right tabular-nums">
+          {money(line.margin)}
+          <span className="block text-muted-foreground">{line.parallelMargin ? money(line.parallelMargin) : ''}</span>
+        </td>
+        {dispatchColumns.map((column) => (
+          <td key={column} className="text-center">
+            {readOnly ? (
+              <span className="font-semibold tabular-nums">{draft.quantities[column] || '—'}</span>
+            ) : (
+              <QuantityStepper
+                label={`R${column + 1} ${line.name ?? line.meaItm8}`}
+                value={draft.quantities[column] ?? 0}
+                inputRef={(element) => registerInput(column, element)}
+                onKeyDown={(event) => onCellKey(event, column)}
+                onChange={(next) => onQuantity(column, next)}
+                onFocus={onSelect}
+              />
+            )}
+            {line.unitsPerPack != null && (
+              <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">
+                po {piecesPerColi(line, draft)} szt.
+              </span>
+            )}
+          </td>
+        ))}
+        <td className="text-right tabular-nums">
+          {product ? (
+            <>
+              <span className={cn(product.stock != null && product.stock < 0 && 'text-red-700 dark:text-red-300')}>
+                {plain(product.stock, 3)}
+              </span>
+              <span className="block text-muted-foreground">{plain(product.rotation)}</span>
+            </>
           ) : (
-            <QuantityStepper
-              label={`R${column + 1} ${line.name ?? line.meaItm8}`}
-              value={draft.quantities[column] ?? 0}
-              inputRef={(element) => registerInput(column, element)}
-              onKeyDown={(event) => onCellKey(event, column)}
-              onChange={(next) => onQuantity(column, next)}
-              onFocus={onSelect}
+            <span className="text-xs text-muted-foreground">brak w kartotece</span>
+          )}
+        </td>
+        <td className="min-w-20 text-right font-medium tabular-nums">
+          {money(value)}
+          {/* Krótko i w stałej szerokości kolumny, żeby wpisanie COLI nie przesuwało tabeli. */}
+          {coli > 0 && (
+            <span className="block text-xs font-normal whitespace-nowrap text-muted-foreground">
+              {coli * piecesPerColi(line, draft)} szt.
+            </span>
+          )}
+        </td>
+        <td className="text-center">
+          {readOnly ? (
+            <span className="tabular-nums">{String(draft.multiplier).replace('.', ',')}</span>
+          ) : (
+            <input
+              aria-label={`Mnożnik ${line.name ?? line.meaItm8}`}
+              inputMode="decimal"
+              defaultValue={draft.multiplier === 1 ? '1' : String(draft.multiplier).replace('.', ',')}
+              key={draft.multiplier}
+              onFocus={(event) => {
+                onSelect()
+                event.target.select()
+              }}
+              onBlur={(event) => {
+                const parsed = Number(event.target.value.replace(',', '.'))
+                onMultiplier(Number.isFinite(parsed) && parsed > 0 ? parsed : 1)
+              }}
+              className="h-8 w-14 rounded-md border border-input bg-background px-2 text-right tabular-nums dark:bg-input/30"
             />
           )}
         </td>
-      ))}
-      <td className="text-right tabular-nums">
-        {product ? (
-          <>
-            <span className={cn(product.stock != null && product.stock < 0 && 'text-red-700 dark:text-red-300')}>
-              {plain(product.stock, 3)}
+      </tr>
+      {withWeeks && (
+        <tr onClick={onSelect} className={cn('[&>td]:border-b [&>td]:px-2 [&>td]:pb-1.5', rowTone)}>
+          <td colSpan={2} />
+          <td colSpan={columnCount - 2}>
+            <WeeksStrip weeks={weeks} selectedWeek={selected ? selectedWeek : null} onWeek={onWeek} />
+          </td>
+        </tr>
+      )}
+    </tbody>
+  )
+}
+
+const dayMonth = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`
+
+const weekRange = (week: SalesWeek) => `${dayMonth(week.from)}–${dayMonth(week.to)}`
+
+const promoTone =
+  'border-orange-400 bg-orange-200 text-orange-950 dark:border-orange-700 dark:bg-orange-900/70 dark:text-orange-50'
+
+/**
+ * Sprzedaż artykułu w tygodniach czwartek-środa pod pozycją, od najstarszego; tydzień z promocją (lista, kasa,
+ * gazetka, MEA albo cena niższa o ponad 15%) na pomarańczowo. Klik pokazuje dni tygodnia w panelu artykułu.
+ */
+function WeeksStrip({
+  weeks,
+  selectedWeek,
+  onWeek,
+}: {
+  weeks: SalesWeek[] | null
+  selectedWeek: string | null
+  onWeek: (from: string) => void
+}) {
+  if (!weeks) {
+    return <span className="loading-shimmer block h-9 w-full max-w-xl rounded-md" aria-label="Wczytuję sprzedaż" />
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <span className="mr-1 text-[0.6875rem] leading-tight text-muted-foreground">
+        Sprzedaż
+        <br />
+        czw.–śr.
+      </span>
+      {weeks.map((week) => {
+        const promo = week.promos.length > 0
+        const average = averagePrice(week.gross, week.quantity)
+        return (
+          <button
+            key={week.from}
+            type="button"
+            tabIndex={-1}
+            onClick={(event) => {
+              event.stopPropagation()
+              onWeek(week.from)
+            }}
+            title={[
+              `${weekRange(week)}${week.partial ? ' (tydzień w toku)' : ''}`,
+              `Ilość: ${plain(week.quantity, 3) || '0'}`,
+              `Sprzedaż brutto: ${money(week.gross)} zł`,
+              average != null && `Średnia cena brutto: ${money(average)} zł`,
+              promo && `Promocja: ${week.promos.join(', ')}`,
+            ]
+              .filter(Boolean)
+              .join('\n')}
+            className={cn(
+              'flex min-w-15 flex-col items-center rounded-md border px-1.5 py-0.5 leading-tight tabular-nums hover:brightness-95',
+              promo ? promoTone : 'bg-background dark:bg-input/30',
+              week.partial && 'border-dashed',
+              selectedWeek === week.from && 'ring-2 ring-blue-500',
+            )}
+          >
+            <span className="text-[0.625rem] opacity-75">{weekRange(week)}</span>
+            <span className="flex items-center gap-0.5 font-semibold">
+              {promo && <TagIcon className="size-3" aria-label="promocja" />}
+              {plain(week.quantity, 3) || '0'}
             </span>
-            <span className="block text-muted-foreground">{plain(product.rotation)}</span>
-          </>
-        ) : (
-          <span className="text-xs text-muted-foreground">brak w kartotece</span>
-        )}
-      </td>
-      <td className="text-right font-medium tabular-nums">{money(value)}</td>
-      <td className="text-center">
-        {readOnly ? (
-          <span className="tabular-nums">{String(draft.multiplier).replace('.', ',')}</span>
-        ) : (
-          <input
-            aria-label={`Mnożnik ${line.name ?? line.meaItm8}`}
-            inputMode="decimal"
-            defaultValue={draft.multiplier === 1 ? '1' : String(draft.multiplier).replace('.', ',')}
-            key={draft.multiplier}
-            onFocus={(event) => {
-              onSelect()
-              event.target.select()
-            }}
-            onBlur={(event) => {
-              const parsed = Number(event.target.value.replace(',', '.'))
-              onMultiplier(Number.isFinite(parsed) && parsed > 0 ? parsed : 1)
-            }}
-            className="h-8 w-14 rounded-md border border-input bg-background px-2 text-right tabular-nums dark:bg-input/30"
-          />
-        )}
-      </td>
-    </tr>
+          </button>
+        )
+      })}
+    </span>
+  )
+}
+
+const weekdayShort = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('pl-PL', { weekday: 'short' })
+
+/**
+ * Sprzedaż dzienna artykułu: tygodnie czwartek-środa od najnowszego, każdy z sumą (ilość, średnia cena brutto,
+ * sprzedaż brutto) i dniami pod spodem, na dole suma całego okresu. Tydzień kliknięty pod pozycją jest podświetlony.
+ */
+function DailySales({
+  weeks,
+  loading,
+  selectedWeek,
+  bare = false,
+}: {
+  weeks: SalesWeek[] | null
+  loading: boolean
+  selectedWeek: string | null
+  /** Wewnątrz karty artykułu: bez własnej karty. */
+  bare?: boolean
+}) {
+  const sections = useRef(new Map<string, HTMLTableSectionElement>())
+  useEffect(() => {
+    if (selectedWeek) sections.current.get(selectedWeek)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedWeek])
+
+  if (!weeks) {
+    return loading ? <LoadingPanel className="h-72 rounded-xl" /> : null
+  }
+  const quantity = weeks.reduce((sum, week) => sum + week.quantity, 0)
+  const gross = weeks.reduce((sum, week) => sum + week.gross, 0)
+  const cell = '[&>td]:px-2 [&>td]:py-1 [&>td]:text-right [&>td:first-child]:text-left'
+
+  const Wrapper = bare ? 'section' : Card
+  return (
+    <Wrapper className={bare ? 'grid gap-3 text-sm' : 'gap-3 px-5 py-4 text-sm'}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-semibold">Sprzedaż dzienna</h2>
+        <span className="text-xs text-muted-foreground">
+          {weeks.length} tyg. czw.–śr. · <TagIcon className="inline size-3 text-orange-600" /> promocja
+        </span>
+      </div>
+      <div className="max-h-[26rem] overflow-auto rounded-md border">
+        <table className="w-full border-separate border-spacing-0 tabular-nums">
+          <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground">
+            <tr className="[&>th]:border-b [&>th]:px-2 [&>th]:py-1.5 [&>th]:text-right [&>th]:font-medium [&>th:first-child]:text-left">
+              <th>Dzień</th>
+              <th>Ilość</th>
+              <th>Śr. cena brutto</th>
+              <th>Sprzedaż brutto</th>
+            </tr>
+          </thead>
+          {[...weeks].reverse().map((week) => {
+            const promo = week.promos.length > 0
+            return (
+              <tbody
+                key={week.from}
+                ref={(element) => {
+                  if (element) sections.current.set(week.from, element)
+                  else sections.current.delete(week.from)
+                }}
+              >
+                <tr
+                  className={cn(
+                    cell,
+                    'font-semibold [&>td]:border-b',
+                    selectedWeek === week.from ? 'bg-blue-200 dark:bg-blue-900/70' : promo ? promoTone : 'bg-muted',
+                  )}
+                  title={promo ? `Promocja: ${week.promos.join(', ')}` : undefined}
+                >
+                  <td className="whitespace-nowrap">
+                    {promo && <TagIcon className="mr-1 inline size-3.5" aria-label="promocja" />}
+                    {weekRange(week)}
+                    {week.partial && <span className="ml-1 text-xs font-normal">w toku</span>}
+                  </td>
+                  <td>{plain(week.quantity, 3) || '0'}</td>
+                  <td>{money(averagePrice(week.gross, week.quantity))}</td>
+                  <td>{money(week.gross)}</td>
+                </tr>
+                {[...week.days].reverse().map((day) => (
+                  <tr key={day.date} className={cn(cell, '[&>td]:border-b [&>td]:border-border/50')}>
+                    <td
+                      className={cn(
+                        'whitespace-nowrap',
+                        day.promos.length > 0 && 'font-medium text-orange-700 dark:text-orange-300',
+                      )}
+                      title={day.promos.length > 0 ? `Promocja: ${day.promos.join(', ')}` : undefined}
+                    >
+                      {/* Stałe kolumny: dzień tygodnia („niedz.” najdłuższy), data i miejsce na znak promocji. */}
+                      <span className="inline-grid grid-cols-[3.25rem_auto_0.75rem] items-center gap-x-1.5">
+                        <span className="text-muted-foreground">{weekdayShort(day.date)}</span>
+                        <span>{dayMonth(day.date)}</span>
+                        {day.promos.length > 0 ? <TagIcon className="size-3" aria-label="promocja" /> : <span />}
+                      </span>
+                    </td>
+                    {day.quantity == null ? (
+                      <td colSpan={3} className="text-xs text-muted-foreground">
+                        brak danych
+                      </td>
+                    ) : (
+                      <>
+                        <td className={cn(!day.quantity && 'text-muted-foreground')}>
+                          {plain(day.quantity, 3) || '0'}
+                        </td>
+                        <td>{money(averagePrice(day.gross, day.quantity))}</td>
+                        <td className={cn(!day.gross && 'text-muted-foreground')}>{money(day.gross)}</td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            )
+          })}
+          <tfoot className="sticky bottom-0 bg-card font-semibold">
+            <tr className={cn(cell, '[&>td]:border-t')}>
+              <td>Razem</td>
+              <td>{plain(quantity, 3) || '0'}</td>
+              <td>{money(averagePrice(gross, quantity))}</td>
+              <td>{money(gross)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Wrapper>
   )
 }
 
@@ -852,7 +1119,19 @@ function QuantityStepper({
 }
 
 /** Dolny panel jak w eMEA: artykuł z kartoteki sklepu dla zaznaczonej pozycji i jego sprzedaż. */
-function ArticleDetails({ store, line, draft }: { store: StoreSummary; line: MeaDocumentLine; draft: MeaLineDraft }) {
+function ArticleDetails({
+  store,
+  line,
+  weeks,
+  weeksLoading,
+  selectedWeek,
+}: {
+  store: StoreSummary
+  line: MeaDocumentLine
+  weeks: SalesWeek[] | null
+  weeksLoading: boolean
+  selectedWeek: string | null
+}) {
   const canSeeStats = useCanSeeArticleStats()
   const overview = useSalesReportsOverview(store.id, canSeeStats)
   const yesterday = addDays(todayIso(), -1)
@@ -864,56 +1143,55 @@ function ArticleDetails({ store, line, draft }: { store: StoreSummary; line: Mea
     product?.salePrice && product.purchasePrice != null && vat != null
       ? marginOf(product.salePrice, vat, product.purchasePrice)
       : null
-  const pieces = coliOf(draft) * piecesPerColi(line, draft)
+  // Karta artykułu ma nazwę, kody, ceny, marżę, VAT, stan i rotację; bez niej te dane pokazuje krótka karta.
+  const withArticleCard = canSeeStats && !!product?.itm8
 
   return (
     <div className="grid gap-4">
-      <LeafletDetails line={line} />
-      <Card className="gap-3 px-5 py-4 text-sm">
-        {product ? (
-          <>
-            <div>
-              <p className="tabular-nums text-muted-foreground">{product.catalogEan ?? product.ean}</p>
-              <p className="font-semibold text-red-700 dark:text-red-300">{product.name}</p>
-              <p className="text-muted-foreground">{product.brand}</p>
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 tabular-nums">
-              <dt className="text-muted-foreground">ITM8</dt>
-              <dd>{product.itm8?.replace(/^0+/, '')}</dd>
-              <dt className="text-muted-foreground">Cena sprzedaży</dt>
-              <dd>
-                {money(product.salePrice)} zł
-                {product.promoPrice != null && (
-                  <span className="ml-2 text-orange-700 dark:text-orange-300">
-                    promocja {money(product.promoPrice)} zł
-                  </span>
-                )}
-              </dd>
-              <dt className="text-muted-foreground">Cena zakupu</dt>
-              <dd>{money(product.purchasePrice)} zł</dd>
-              <dt className="text-muted-foreground">Marża / VAT</dt>
-              <dd>
-                {margin != null ? `${plain(margin)}%` : '—'} / {vat != null ? `${vat}%` : '—'}
-              </dd>
-              <dt className="text-muted-foreground">Stan</dt>
-              <dd>{plain(product.stock, 3)}</dd>
-              <dt className="text-muted-foreground">Rotacja</dt>
-              <dd>{plain(product.rotation)}</dd>
-              <dt className="text-muted-foreground">Sztuk w COLI</dt>
-              <dd>{line.unitsPerPack}</dd>
-              <dt className="text-muted-foreground">Zamawiasz</dt>
-              <dd>
-                {coliOf(draft)} COLI = {pieces} szt.
-              </dd>
-            </dl>
-          </>
-        ) : (
-          <p className="text-muted-foreground">
-            Artykułu {line.name} (ITM8 {line.meaItm8}, EAN {line.ean}) nie ma w kartotece sklepu.
-          </p>
-        )}
-      </Card>
-      {canSeeStats && product?.itm8 && (
+      {!withArticleCard && (
+        <Card className="gap-3 px-5 py-4 text-sm">
+          {product ? (
+            <>
+              <div>
+                <p className="tabular-nums text-muted-foreground">{product.catalogEan ?? product.ean}</p>
+                <p className="font-semibold text-red-700 dark:text-red-300">{product.name}</p>
+                <p className="text-muted-foreground">{product.brand}</p>
+              </div>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 tabular-nums">
+                <dt className="text-muted-foreground">ITM8</dt>
+                <dd>{product.itm8?.replace(/^0+/, '')}</dd>
+                <dt className="text-muted-foreground">Cena sprzedaży</dt>
+                <dd>
+                  {money(product.salePrice)} zł
+                  {product.promoPrice != null && (
+                    <span className="ml-2 text-orange-700 dark:text-orange-300">
+                      promocja {money(product.promoPrice)} zł
+                    </span>
+                  )}
+                </dd>
+                <dt className="text-muted-foreground">Cena zakupu</dt>
+                <dd>{money(product.purchasePrice)} zł</dd>
+                <dt className="text-muted-foreground">Marża / VAT</dt>
+                <dd>
+                  {margin != null ? `${plain(margin)}%` : '—'} / {vat != null ? `${vat}%` : '—'}
+                </dd>
+                <dt className="text-muted-foreground">Stan</dt>
+                <dd>{plain(product.stock, 3)}</dd>
+                <dt className="text-muted-foreground">Rotacja</dt>
+                <dd>{plain(product.rotation)}</dd>
+              </dl>
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              Artykułu {line.name} (ITM8 {line.meaItm8}, EAN {line.ean}) nie ma w kartotece sklepu.
+            </p>
+          )}
+        </Card>
+      )}
+      {product?.itm8 && !withArticleCard && (
+        <DailySales weeks={weeks} loading={weeksLoading} selectedWeek={selectedWeek} />
+      )}
+      {withArticleCard && product?.itm8 && (
         <Card className="gap-5 px-5 py-5 sm:px-6">
           <ArticleSalesPanel
             storeId={store.id}
@@ -925,9 +1203,12 @@ function ArticleDetails({ store, line, draft }: { store: StoreSummary; line: Mea
               brand: product.brand,
             }}
             lastSaleDate={lastSaleDate}
+            afterFacts={<DailySales bare weeks={weeks} loading={weeksLoading} selectedWeek={selectedWeek} />}
           />
         </Card>
       )}
+      {/* Opis z gazetki na dole: przy zamawianiu ważniejsze są stan i sprzedaż. */}
+      <LeafletDetails line={line} />
     </div>
   )
 }

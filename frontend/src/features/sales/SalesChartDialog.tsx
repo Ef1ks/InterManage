@@ -155,13 +155,17 @@ export function ArticleSalesPanel({
   storeId,
   target,
   lastSaleDate,
+  afterFacts,
 }: {
   storeId: string
   target: Extract<SalesChartTarget, { kind: 'article' }>
   lastSaleDate: string
+  /** Treść strony między danymi z kartoteki a wykresem (np. sprzedaż dzienna w MEA). */
+  afterFacts?: ReactNode
 }) {
   return (
     <ChartContent
+      afterFacts={afterFacts}
       key={chartKey(target)}
       storeId={storeId}
       kind="sales"
@@ -256,6 +260,7 @@ function ChartBody({
   lastSaleDate,
   inline = false,
   foreignItm8 = null,
+  afterFacts = null,
 }: {
   storeId: string
   kind: ReportKind
@@ -267,6 +272,8 @@ function ChartBody({
   inline?: boolean
   /** Kod z wiersza spoza kartoteki (lokalny ITM8 dostawcy), zamieniony na artykuł z kartoteki po EAN-ie. */
   foreignItm8?: string | null
+  /** Treść między danymi z kartoteki a wykresem. */
+  afterFacts?: ReactNode
 }) {
   const metrics = metricsFor(kind, target)
   const [rangeKey, setRangeKey] = useState<ChartRange>('month')
@@ -416,6 +423,8 @@ function ChartBody({
           rangeLabel={RANGES[rangeKey].label.toLowerCase()}
         />
       )}
+
+      {afterFacts}
 
       {chartHidden ? (
         <div>
@@ -798,9 +807,14 @@ function ArticleFacts({
   const coverDays = stock != null && stock > 0 && cover && cover.daily > 0 ? stock / cover.daily : null
   const path = article.nomenclaturePath.map((item) => item.name.replace(/^\d+_/, '')).join(' › ')
   // Marża od sprzedaży brutto (jak w Mercalys): cena zwykła i cena zakupu z kartoteki, przy promocji z kasy też na niej.
+  // Cena zakupu z kartoteki bywa nieaktualna, więc liczy się ostatnia dostawa (PZ po korektach), a bez dostaw kartoteka.
+  const lastPurchases = (deliveries.data ?? [])
+    .filter((delivery) => delivery.purchasePrice != null && delivery.purchasePrice > 0)
+    .slice(0, LAST_PURCHASES)
+  const purchasePrice = lastPurchases[0]?.purchasePrice ?? article.purchasePrice
   const marginAt = (price: number | null) =>
-    price != null && price > 0 && article.purchasePrice != null && article.vatPercent != null
-      ? marginOf(price, article.vatPercent, article.purchasePrice)
+    price != null && price > 0 && purchasePrice != null && article.vatPercent != null
+      ? marginOf(price, article.vatPercent, purchasePrice)
       : null
   const margin = marginAt(article.salePrice)
   const promoMargin = article.promoPrice != null ? marginAt(article.promoPrice) : null
@@ -850,13 +864,33 @@ function ArticleFacts({
             </span>
           )}
         </Fact>
-        <Fact label="Cena zakupu">
-          {article.purchasePrice == null ? '—' : `${formatPrice(article.purchasePrice)} zł`}
+        <Fact label={lastPurchases.length > 0 ? 'Ostatnie zakupy' : 'Cena zakupu'}>
+          {purchasePrice == null ? '—' : `${formatPrice(purchasePrice)} zł`}
+          {lastPurchases.length > 0 && (
+            <span className="mt-0.5 grid text-xs font-normal text-muted-foreground tabular-nums">
+              {lastPurchases.map((delivery, index) => (
+                <span
+                  key={delivery.documentId}
+                  className="flex justify-between gap-2"
+                  title={[delivery.supplierName, `bon ${delivery.documentNumber}`].filter(Boolean).join(' · ')}
+                >
+                  <span>{shortDate.format(parseIsoDate(delivery.documentDate.slice(0, 10)))}</span>
+                  <span className={cn(index === 0 && 'text-foreground')}>{formatPrice(delivery.purchasePrice)} zł</span>
+                </span>
+              ))}
+              {article.purchasePrice != null && article.purchasePrice !== purchasePrice && (
+                <span className="flex justify-between gap-2">
+                  <span>kartoteka</span>
+                  <span>{formatPrice(article.purchasePrice)} zł</span>
+                </span>
+              )}
+            </span>
+          )}
         </Fact>
         <Fact label="Marża">
           <span
             className={cn(margin != null && margin < 0 && 'text-destructive')}
-            title="Od sprzedaży brutto: aktualna cena zwykła i cena zakupu z kartoteki"
+            title="Od sprzedaży brutto: aktualna cena zwykła i cena zakupu z ostatniej dostawy (bez dostaw z kartoteki)"
           >
             {margin == null ? '—' : formatPercentValue(margin)}
           </span>
@@ -2167,6 +2201,9 @@ const compactFormat = new Intl.NumberFormat('pl-PL', {
 })
 const lineTickFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 2 })
 const dayFormat = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 })
+/** Ile ostatnich cen zakupu z dostaw pokazuje karta artykułu. */
+const LAST_PURCHASES = 3
+
 const shortDate = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'numeric' })
 const deliveryDate = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const axisDate = new Intl.DateTimeFormat('pl-PL', {

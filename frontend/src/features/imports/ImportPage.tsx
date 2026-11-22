@@ -1162,7 +1162,7 @@ function ImportHistory({ storeId, onShowEanChanges }: { storeId: string; onShowE
                 <TableCell className="py-3 pl-4">
                   <div className="font-medium">{dateTimeFormat.format(new Date(row.importedAt))}</div>
                   <div className="max-w-72 truncate text-xs text-muted-foreground" title={row.item.fileName}>
-                    {row.item.importedBy ?? 'Usunięty użytkownik'} · {row.item.fileName}
+                    {row.item.importedBy ?? 'Agent sklepu'} · {row.item.fileName}
                   </div>
                 </TableCell>
                 <TableCell>{REPORT_NAMES[row.kind]}</TableCell>

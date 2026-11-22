@@ -36,6 +36,7 @@ import { InventoryPage } from '@/features/inventory/InventoryPage'
 import { KsefPage } from '@/features/ksef/KsefPage'
 import { MeatPurchasesPage } from '@/features/meat/MeatPurchasesPage'
 import { BackupPage } from '@/features/settings/BackupPage'
+import { FeedbackPage } from '@/features/feedback/FeedbackPage'
 import { downloadsPath } from '@/features/downloads/paths'
 import { DownloadsPage } from '@/features/downloads/DownloadsPage'
 import { HierarchyPage } from '@/features/store-roles/HierarchyPage'
@@ -231,6 +232,14 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth ownerOnly>
             <UsersPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: '/zgloszenia',
+        element: (
+          <RequireAuth ownerOnly>
+            <FeedbackPage />
           </RequireAuth>
         ),
       },

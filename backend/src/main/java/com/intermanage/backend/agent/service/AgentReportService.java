@@ -151,7 +151,8 @@ public class AgentReportService {
             String folder = folderOf(values, kind);
             if (folder != null) {
                 watches.add(new AgentApi.Watch(PREFIX + kind.name(), folder, false,
-                        pattern(values.get("import:" + kind.name() + ":mask"), kind)));
+                        pattern(values.get("import:" + kind.name() + ":mask"), kind),
+                        freshPattern(values.get("import:" + kind.name() + ":path"))));
             }
         }
         return watches;
@@ -208,6 +209,30 @@ public class AgentReportService {
         }
         String extensions = kind == ImportReportKind.PROMOTIONS ? "pdf" : "xlsx|xlsm";
         return "^(?!~\\$)" + source + "\\.(?:" + extensions + ")$";
+    }
+
+    /**
+     * Nazwa pliku, który makro zapisuje na końcu (ścieżka z „Zapis z Mercalys”; część z najnowszym okresem zawsze
+     * idzie pod tę nazwę, wcześniejsze dostają „ N z M”). Bez ścieżki null: aktualność po każdym pliku z folderu.
+     */
+    static String freshPattern(String macroPath) {
+        if (macroPath == null || macroPath.isBlank()) {
+            return null;
+        }
+        String path = macroPath.strip();
+        String name = path.substring(path.lastIndexOf('\\') + 1);
+        if (name.isEmpty()) {
+            return null;
+        }
+        // Bez \Q…\E: wyrażenie czyta agent w .NET.
+        StringBuilder source = new StringBuilder("^");
+        for (char c : name.toCharArray()) {
+            if (".+*?^${}()|[]\\#".indexOf(c) >= 0) {
+                source.append('\\');
+            }
+            source.append(c);
+        }
+        return source.append('$').toString();
     }
 
     private boolean enabled(UUID storeId) {

@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.ZipInputStream;
 
@@ -25,6 +27,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.common.component.StoreTime;
 import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;
@@ -224,6 +227,42 @@ class MeaOrderIntegrationTests {
         mvc.perform(get("/api/stores/" + storeId + "/reports/articles/" + other + "/mea").cookie(owner))
                 .andExpect(jsonPath("$[0].status").value("NOT_ORDERED"))
                 .andExpect(jsonPath("$[0].dispatches[0].colis").value(0));
+    }
+
+    @Test
+    void articleSalesComeInThursdayToWednesdayWeeksWithPromotions() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner, String.valueOf(ThreadLocalRandom.current().nextInt(12_000, 19_999)));
+        String itm8 = "00000" + ThreadLocalRandom.current().nextInt(63_000_000, 63_999_999);
+        LocalDate day = LocalDate.now(StoreTime.ZONE).minusDays(2);
+        String salesImport = jdbc.queryForObject("""
+                insert into sales_imports (store_id, file_name, report_generated_at, period_from, period_to,
+                    total_rows, created_count, existing_count, conflict_count)
+                values (?::uuid, 'sprzedaz.xlsx', now(), ?, ?, 1, 1, 0, 0) returning id""",
+                String.class, storeId, day, day);
+        jdbc.update("""
+                insert into sales (store_id, sale_date, itm8, ean, quantity, cost_value, sale_value_gross, vat_value,
+                    margin_value, import_id)
+                values (?::uuid, ?, ?, '5900000000001', 3, 10, 30, 0, 20, ?::uuid)""",
+                storeId, day, itm8, salesImport);
+        jdbc.update("""
+                insert into till_promotions (store_id, itm8, promo_from, promo_to, promo_price, regular_price, file_time)
+                values (?::uuid, ?, ?, ?, 9.99, 12.99, now())""", storeId, itm8, day.minusDays(1), day);
+
+        int toWednesday = (DayOfWeek.WEDNESDAY.getValue() - day.getDayOfWeek().getValue() + 7) % 7;
+        LocalDate to = day.plusDays(toWednesday);
+        // Bez zer wiodących, jak bywa w kartotece; odpowiedź ma ITM8 na 13 cyfrach.
+        mvc.perform(get("/api/stores/" + storeId + "/mea/article-sales").param("itm8", itm8.replaceFirst("^0+", ""))
+                        .param("weeks", "4").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.to").value(to.toString()))
+                .andExpect(jsonPath("$.from").value(to.minusDays(27).toString()))
+                .andExpect(jsonPath("$.lastSaleDate").value(day.toString()))
+                .andExpect(jsonPath("$.articles[0].itm8").value(itm8))
+                .andExpect(jsonPath("$.articles[0].days[0].date").value(day.toString()))
+                .andExpect(jsonPath("$.articles[0].days[0].quantity").value(3))
+                .andExpect(jsonPath("$.articles[0].days[0].gross").value(30))
+                .andExpect(jsonPath("$.articles[0].promos[0].source").value("TILL"));
     }
 
     private String createStore(Cookie owner, String number) throws Exception {

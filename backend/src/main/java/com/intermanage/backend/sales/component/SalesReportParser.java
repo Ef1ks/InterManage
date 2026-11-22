@@ -287,7 +287,7 @@ public class SalesReportParser {
             BigDecimal saleGross = required(decimal(at(cells, 5), SALE_GROSS, 2, MAX_AMOUNT), SALE_GROSS);
             BigDecimal vat = required(decimal(at(cells, 6), VAT, 2, MAX_AMOUNT), VAT);
             BigDecimal margin = required(decimal(at(cells, 7), MARGIN, 2, MAX_AMOUNT), MARGIN);
-            BigDecimal marginPercent = decimal(at(cells, 8), MARGIN_PERCENT, 2, MAX_PERCENT);
+            BigDecimal marginPercent = marginPercent(at(cells, 8));
             if (errorCount > 0) {
                 // Plik i tak zostanie odrzucony; dalej tylko zbieramy błędy.
                 return;
@@ -435,6 +435,16 @@ public class SalesReportParser {
                 throw new IllegalArgumentException(LABELS.get(column) + " \"" + value + "\" jest poza dopuszczalnym zakresem");
             }
             return number;
+        }
+
+        /**
+         * % marży z raportu tylko informacyjnie (raporty liczą go z sum). Przy sprzedaży bliskiej zera Mercalys daje
+         * absurdalne wartości (09575: 47095053,74%), które nie mieszczą się w kolumnie, więc zapisujemy wtedy pusty,
+         * zamiast odrzucać cały plik.
+         */
+        private static BigDecimal marginPercent(String value) {
+            BigDecimal number = decimal(value, MARGIN_PERCENT, 2, MAX_AMOUNT);
+            return number == null || number.abs().compareTo(MAX_PERCENT) >= 0 ? null : number;
         }
 
         private static BigDecimal required(BigDecimal value, String column) {

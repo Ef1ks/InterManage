@@ -54,6 +54,27 @@ function freshFrame(video: HTMLVideoElement, timeoutMs: number) {
   })
 }
 
+/**
+ * Telefon (Chrome na Androidzie) nagrywa cały ekran, a systemowe okno zgody znika dopiero po chwili: pierwsze klatki
+ * pokazywały samo okno „Zezwolić na nagrywanie?”. Czekamy, aż strona odzyska fokus (okno zgody go zabiera), potem
+ * jeszcze na koniec animacji znikania okna.
+ */
+const isTouchDevice = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true
+
+function pageBack(maxMs: number) {
+  return new Promise<void>((resolve) => {
+    const started = Date.now()
+    const check = () => {
+      if ((document.visibilityState === 'visible' && document.hasFocus()) || Date.now() - started > maxMs) {
+        resolve()
+      } else {
+        setTimeout(check, 100)
+      }
+    }
+    check()
+  })
+}
+
 /** Zrzut bieżącej karty jako PNG. Wołać prosto z kliknięcia (okno zgody wymaga gestu użytkownika). */
 export async function captureCurrentTab(): Promise<Blob> {
   const options = {
@@ -77,6 +98,11 @@ export async function captureCurrentTab(): Promise<Blob> {
     video.playsInline = true
     video.srcObject = stream
     await video.play()
+    const touch = isTouchDevice()
+    if (touch) {
+      await pageBack(5000)
+      await sleep(900)
+    }
     await settledSize(400, 2000)
     // Pasek Chrome zabiera wysokość okna, więc dół strony by się nie zmieścił. Na czas zrzutu strona jest
     // pomniejszona dokładnie o tyle: układ ma znowu dawną wysokość, a wchodzi w niższe okno.
@@ -89,6 +115,10 @@ export async function captureCurrentTab(): Promise<Blob> {
     await nextFrame()
     await sleep(150)
     await freshFrame(video, 700)
+    if (touch) {
+      // Ekran telefonu wysyła klatki rzadko: kolejna świeża klatka jest już bez okna zgody.
+      await freshFrame(video, 700)
+    }
     const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight

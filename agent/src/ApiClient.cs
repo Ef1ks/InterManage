@@ -51,6 +51,8 @@ internal sealed class WatchConfig
     public string Path { get; set; } = "";
     public bool Subfolders { get; set; }
     public string Pattern { get; set; } = "";
+    /// <summary>Raporty Importu danych: plik makra, którego dzisiejsza data znaczy, że raport jest aktualny.</summary>
+    public string? FreshPattern { get; set; }
 }
 
 internal sealed class QueueFile
@@ -130,6 +132,8 @@ internal sealed class ReportAttempt
     public string Status { get; set; } = "";
     public string? Error { get; set; }
     public DateTimeOffset StartedAt { get; set; }
+    /// <summary>Data zmiany pliku na dysku (z komputera sklepu).</summary>
+    public DateTimeOffset? FileModified { get; set; }
 }
 
 internal sealed class ReportUpload

@@ -224,6 +224,31 @@ class SalesImportIntegrationTests {
         }
     }
 
+    /** % marży poza kolumną (sprzedaż bliska zera, 09575) zapisuje się pusty, a plik nie jest odrzucany. */
+    @Test
+    void absurdMarginPercentIsSavedEmpty() throws Exception {
+        java.nio.file.Path file = java.nio.file.Files.createTempFile("sprzedaz", ".xlsx");
+        try {
+            java.nio.file.Files.write(file, report("10023", "26/10/2026   Godzina: 15:03:27", "01/05/2026", "17/05/2026",
+                    row("0000003633521", "15/05/2026", "1", "0", "0.01", "0", "0.01", "47095053.740000002")));
+            List<SalesReportBatch> batches = new ArrayList<>();
+            parser.parse(file, 2, new SalesReportParser.Sink() {
+                @Override
+                public void header(SalesReportHeader header) {
+                }
+
+                @Override
+                public void batch(SalesReportBatch batch) {
+                    batches.add(batch);
+                }
+            });
+            assertThat(batches).hasSize(1);
+            assertThat(batches.get(0).marginPercents()[0]).isNull();
+        } finally {
+            java.nio.file.Files.deleteIfExists(file);
+        }
+    }
+
     @Test
     void dayOfReportGenerationIsIncompleteAndAddedByNextDaysReport() throws Exception {
         Cookie owner = login();

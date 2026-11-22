@@ -42,6 +42,7 @@ import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore, useStoreFromAddress } from '@/features/stores/current-store'
 import { QuickTaskButton } from '@/features/tasks/QuickTaskButton'
+import { FeedbackButton } from '@/features/feedback/FeedbackButton'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
 import { useCheckboxDragSelect } from '@/lib/use-checkbox-drag-select'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
@@ -172,14 +173,16 @@ export function AppLayout() {
           <GroupTabs />
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <AgentStatusDot />
+            <FeedbackButton />
             <UserMenu />
           </div>
         </header>
         <DownloadUpdatesBanner />
         <FileQueueBanner />
         {/* Szerokie strony (data-wide-page) zajmują całą szerokość, a menu jest zwinięte do ikon. */}
-        {/* Strony z data-fit-page (od lg) mają wysokość okna pod nagłówkiem i przewijają się w środku, nie całe. */}
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none lg:has-[[data-fit-page]]:flex lg:has-[[data-fit-page]]:h-[calc(100svh-3.5rem)] lg:has-[[data-fit-page]]:flex-col lg:has-[[data-fit-page]]:overflow-y-auto">
+        {/* Strony z data-fit-page (od lg) mają wysokość okna pod nagłówkiem i przewijają się w środku, nie całe.
+            flex-none, bo flex-1 w kolumnie bez wysokości bierze wysokość treści i wygrywa z h-[…]. */}
+        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none lg:has-[[data-fit-page]]:flex lg:has-[[data-fit-page]]:h-[calc(100svh-3.5rem)] lg:has-[[data-fit-page]]:flex-none lg:has-[[data-fit-page]]:flex-col lg:has-[[data-fit-page]]:overflow-y-auto">
           <Outlet />
         </main>
         {/* Przewinięcie zapamiętane per ścieżka: powrót na listę wraca w to samo miejsce, a zmiana filtrów

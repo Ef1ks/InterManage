@@ -4052,6 +4052,24 @@ export type MeaDocument = {
   queued: { id: string; queuedAt: string; positions: number; colis: number; createdBy: string | null } | null
 }
 
+/** Skąd wiemy o promocji artykułu: lista promocji, kasa, gazetka sklepu, formularz MEA. */
+export type MeaPromoSource = 'LIST' | 'TILL' | 'LEAFLET' | 'MEA'
+
+/**
+ * Sprzedaż dzienna artykułów dokumentu MEA w ostatnich tygodniach czwartek-środa (`to` = środa ostatniego tygodnia)
+ * z promocjami. Dni bez sprzedaży nie ma w `days`; po `lastSaleDate` sprzedaży jeszcze nie wgrano.
+ */
+export type MeaArticleSales = {
+  from: string
+  to: string
+  lastSaleDate: string | null
+  articles: {
+    itm8: string
+    days: { date: string; quantity: number; gross: number; priceDrop: boolean }[]
+    promos: { source: MeaPromoSource; label: string | null; from: string; to: string }[]
+  }[]
+}
+
 /**
  * Plik zamówienia MEA w kolejce sklepu: zrobiony na dowolnym komputerze, zapisze go w folderze ATHOS dopiero
  * „Wyślij wszystkie” na komputerze z dostępem do ATHOS. Po końcu rezerwacji (`reservationTo`) ATHOS go nie przyjmie.
@@ -5101,3 +5119,28 @@ export type TaskEvent = { id: string; kind: TaskEventKind; userName: string | nu
 export type TaskAssignee = { id: string; displayName: string; roleName: string }
 
 export type TaskCounts = { open: number; waiting: number }
+
+/** Zgłoszenie poprawki albo błędu (przycisk w nagłówku, lista u właściciela). */
+export type FeedbackKind = 'BUG' | 'IMPROVEMENT'
+export type FeedbackStatus = 'NEW' | 'IN_PROGRESS' | 'DONE' | 'REJECTED'
+
+export type FeedbackReport = {
+  id: string
+  kind: FeedbackKind
+  status: FeedbackStatus
+  description: string
+  pageUrl: string | null
+  pageLabel: string | null
+  userAgent: string | null
+  storeId: string | null
+  storeNumber: string | null
+  storeName: string | null
+  createdByName: string | null
+  createdAt: string
+  ownerNote: string | null
+  statusChangedByName: string | null
+  statusChangedAt: string | null
+  attachments: { id: string; fileName: string; contentType: string; sizeBytes: number }[]
+}
+
+export type FeedbackCounts = { fresh: number; inProgress: number; done: number; rejected: number }
