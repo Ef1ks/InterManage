@@ -64,8 +64,8 @@ class ReportSaveMacroTests {
 
         assertThat(result.reports()).containsExactly(ImportReportKind.PROMOTIONS);
         assertThat(result.skipped()).extracting(ReportSaveMacro.Skipped::kind).containsExactly(
-                ImportReportKind.PRODUCTS, ImportReportKind.PRODUCT_CODES, ImportReportKind.SALES,
-                ImportReportKind.DOCUMENTS, ImportReportKind.CADENCIER);
+                ImportReportKind.PRODUCTS, ImportReportKind.PRODUCT_CODES, ImportReportKind.CADENCIER,
+                ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
         // Lista promocji: data końca dziś + 2 lata, zapis PDF.
         assertThat(result.macro()).contains("^a21112028{Tab}", "PDFSAVE|P:\\Raporty\\taryfy.pdf|600000");
         assertThat(result.playerVersion()).isEqualTo("0.49");

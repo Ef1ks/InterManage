@@ -10,7 +10,7 @@ import type { ImportReportKind } from '@/lib/types'
  */
 
 /** Raporty wgrywane codziennie, w kolejności odświeżania. Listę dostawców i nomenklatur wgrywa się tylko ręcznie. */
-export const DAILY_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'SALES', 'DOCUMENTS', 'CADENCIER'] as const
+export const DAILY_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'CADENCIER', 'SALES', 'DOCUMENTS'] as const
 
 export type DailyReport = (typeof DAILY_REPORTS)[number]
 
@@ -57,7 +57,7 @@ export type SourceMasks = Partial<Record<DailyReport, string>>
  * wspólna dla sklepu (ścieżki sklepu na serwerze). Makro zapisuje tam skoroszyt otwarty przyciskiem Excel w Mercalys, a „Odśwież
  * dane” bierze go z folderu raportu. Lista promocji jest drukowana tylko do PDF: zapisuje ją PDFSAVE (od wersji 49).
  */
-export const MACRO_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'SALES', 'DOCUMENTS', 'CADENCIER'] as const
+export const MACRO_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'CADENCIER', 'SALES', 'DOCUMENTS'] as const
 
 export type MacroReport = (typeof MACRO_REPORTS)[number]
 

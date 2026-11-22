@@ -69,8 +69,8 @@ public class AgentReportService {
 
     /** Codzienne raporty w kolejności odświeżania (jak {@code DAILY_REPORTS} we froncie). */
     static final List<ImportReportKind> DAILY = List.of(ImportReportKind.PRODUCTS, ImportReportKind.PRODUCT_CODES,
-            ImportReportKind.PROMOTIONS, ImportReportKind.SALES, ImportReportKind.DOCUMENTS,
-            ImportReportKind.CADENCIER);
+            ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER, ImportReportKind.SALES,
+            ImportReportKind.DOCUMENTS);
 
     /** Raporty z okresem: makro zapisuje zaległość w częściach, więc wgrywamy każdy niewgrany plik. */
     private static final Set<ImportReportKind> PERIOD = Set.of(ImportReportKind.SALES, ImportReportKind.DOCUMENTS);

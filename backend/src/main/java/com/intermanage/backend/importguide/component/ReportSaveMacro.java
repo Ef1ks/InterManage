@@ -42,8 +42,8 @@ public final class ReportSaveMacro {
 
     /** Raporty z makrem, w kolejności odświeżania. */
     public static final List<ImportReportKind> MACRO_REPORTS = List.of(ImportReportKind.PRODUCTS,
-            ImportReportKind.PRODUCT_CODES, ImportReportKind.PROMOTIONS, ImportReportKind.SALES,
-            ImportReportKind.DOCUMENTS, ImportReportKind.CADENCIER);
+            ImportReportKind.PRODUCT_CODES, ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER,
+            ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
 
     /** Limit okresu jednego wydruku w Mercalys (miesiące). */
     static final Map<ImportReportKind, Integer> PERIOD_MONTHS = Map.of(ImportReportKind.SALES, 6,
