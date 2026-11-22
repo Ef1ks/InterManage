@@ -11,11 +11,9 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +36,8 @@ import com.intermanage.backend.sales.dto.SalesReportHeader;
  */
 @Component
 public class SalesReportParser {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SalesReportParser.class);
 
     /** Odbiorca danych z pliku. Nagłówek przychodzi raz, przed pierwszą paczką. */
     public interface Sink {
@@ -127,7 +127,14 @@ public class SalesReportParser {
         private Integer declaredLines;
         private boolean footerReached;
         private int totalRows;
-        private final Set<RowKey> seenKeys = new HashSet<>();
+        /**
+         * Klucze wierszy pliku: miejsce w bieżącej paczce, a -1 dla wierszy z paczek już wysłanych. Ten sam ITM8, EAN
+         * i dzień drugi raz w tej samej paczce dokłada się do pierwszego wiersza (Mercalys bywa, że rozbija dzień
+         * artykułu na dwa wiersze, np. 09575, 15.05.2026); do paczki już zapisanej nie da się go dołożyć, więc
+         * taki wiersz jest pomijany (z wpisem w logu), a plik wchodzi.
+         */
+        private final Map<RowKey, Integer> seenKeys = new HashMap<>();
+        private RowKey[] batchKeys;
         private final List<String> errors = new ArrayList<>();
         private int errorCount;
 
@@ -261,10 +268,19 @@ public class SalesReportParser {
                 throw new IllegalArgumentException("data " + DATE.format(date) + " jest poza okresem raportu ("
                         + DATE.format(periodFrom) + " - " + DATE.format(periodTo) + ")");
             }
-            if (!seenKeys.add(new RowKey(Long.parseLong(itm8) * 100_000 + date.toEpochDay(),
-                    ean == null ? -1 : Long.parseLong(ean) * 100 + ean.length()))) {
-                throw new IllegalArgumentException("ITM8 " + itm8 + (ean == null ? " bez EAN" : " z EAN " + ean)
-                        + " z dnia " + DATE.format(date) + " występuje w pliku więcej niż raz");
+            RowKey key = new RowKey(Long.parseLong(itm8) * 100_000 + date.toEpochDay(),
+                    ean == null ? -1 : Long.parseLong(ean) * 100 + ean.length());
+            Integer earlier = seenKeys.get(key);
+            if (earlier != null && earlier >= 0) {
+                addToRow(earlier, cells);
+                return;
+            }
+            if (earlier != null) {
+                // Pierwszy wiersz jest już w zapisanej paczce: tego nie da się do niego dołożyć, więc go pomijamy,
+                // zamiast odrzucać cały plik.
+                log.warn("Raport sprzedaży: pominięty powtórzony wiersz ITM8 {}{} z dnia {} (pierwszy jest już zapisany)",
+                        itm8, ean == null ? " bez EAN" : " z EAN " + ean, DATE.format(date));
+                return;
             }
             BigDecimal quantity = required(decimal(at(cells, 3), QUANTITY, 3, MAX_AMOUNT), QUANTITY);
             BigDecimal cost = required(decimal(at(cells, 4), COST, 2, MAX_AMOUNT), COST);
@@ -276,6 +292,8 @@ public class SalesReportParser {
                 // Plik i tak zostanie odrzucony; dalej tylko zbieramy błędy.
                 return;
             }
+            seenKeys.put(key, filled);
+            batchKeys[filled] = key;
             dates[filled] = date;
             itm8s[filled] = itm8;
             eans[filled] = ean;
@@ -317,8 +335,30 @@ public class SalesReportParser {
             return new SalesReportParser.Summary(totalRows);
         }
 
+        /** Powtórzony wiersz tego samego ITM8, EAN i dnia w bieżącej paczce: kwoty i ilość się sumują. */
+        private void addToRow(int row, List<String> cells) {
+            BigDecimal quantity = required(decimal(at(cells, 3), QUANTITY, 3, MAX_AMOUNT), QUANTITY);
+            BigDecimal cost = required(decimal(at(cells, 4), COST, 2, MAX_AMOUNT), COST);
+            BigDecimal saleGross = required(decimal(at(cells, 5), SALE_GROSS, 2, MAX_AMOUNT), SALE_GROSS);
+            BigDecimal vat = required(decimal(at(cells, 6), VAT, 2, MAX_AMOUNT), VAT);
+            BigDecimal margin = required(decimal(at(cells, 7), MARGIN, 2, MAX_AMOUNT), MARGIN);
+            if (errorCount > 0) {
+                return;
+            }
+            quantities[row] = quantities[row].add(quantity);
+            costValues[row] = costValues[row].add(cost);
+            saleValuesGross[row] = saleValuesGross[row].add(saleGross);
+            vatValues[row] = vatValues[row].add(vat);
+            marginValues[row] = marginValues[row].add(margin);
+            // % marży z pliku dotyczy jednego wiersza; z sumy liczy go baza.
+            marginPercents[row] = null;
+        }
+
         /** Pełna paczka idzie dalej bez kopiowania (parser zaczyna nowe tablice), ostatnia jest przycinana. */
         private void flush() {
+            for (int i = 0; i < filled; i++) {
+                seenKeys.put(batchKeys[i], -1);
+            }
             if (filled == batchSize) {
                 sink.batch(new SalesReportBatch(dates, itm8s, eans, quantities, costValues, saleValuesGross, vatValues,
                         marginValues, marginPercents));
@@ -333,6 +373,7 @@ public class SalesReportParser {
         }
 
         private void newBatch() {
+            batchKeys = new RowKey[batchSize];
             dates = new LocalDate[batchSize];
             itm8s = new String[batchSize];
             eans = new String[batchSize];

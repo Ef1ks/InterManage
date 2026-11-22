@@ -31,6 +31,9 @@ internal sealed class AgentHost : IDisposable
 
     public event Action? StateChanged;
 
+    /// <summary>Pierwsza konfiguracja z serwera po starcie (np. aktualizacja danych przy starcie komputera).</summary>
+    public event Action? Connected;
+
     public ApiClient? Api { get; private set; }
     public HelloResponse? Config { get; private set; }
     public AgentState State { get; private set; } = AgentState.NotConfigured;
@@ -95,7 +98,11 @@ internal sealed class AgentHost : IDisposable
                 var config = await api.HelloAsync(Program.Version, cancel);
                 var first = Config == null;
                 Config = config;
-                if (first) Log.Info("Połączono: sklep " + config.StoreNumber + ", agent " + config.AgentName);
+                if (first)
+                {
+                    Log.Info("Połączono: sklep " + config.StoreNumber + ", agent " + config.AgentName);
+                    Connected?.Invoke();
+                }
                 ServerOk();
                 delay = TimeSpan.FromSeconds(2);
                 await Task.Delay(HelloEvery, cancel);

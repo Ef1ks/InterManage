@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -64,6 +65,7 @@ public class PriceFileService {
     static final LocalDateTime FIRST_FILE_TIME = LocalDate.of(2026, 1, 1).atStartOfDay();
     private static final int MAX_FILES = 200;
     private static final int EAN_LENGTH = 13;
+    private static final int CATALOG_BATCH = 10_000;
 
     private final PriceFileParser parser;
     private final PriceFileMapper mapper;
@@ -228,9 +230,18 @@ public class PriceFileService {
                 .collect(Collectors.groupingBy(PriceFileLine::itm8, LinkedHashMap::new, Collectors.toList()));
     }
 
+    /**
+     * Artykuły z pliku paczkami: pełny plik cen sklepu z dużą kartoteką (09575: 172 tys. artykułów) ma ponad 65 535
+     * kodów, a tylu parametrów jedno zapytanie PostgreSQL nie przyjmie (błąd wracał jako 409 „duplikat”).
+     */
     private Map<String, Product> catalog(UUID storeId, Map<String, List<PriceFileLine>> byItm8) {
-        return products.findByStoreIdAndItm8In(storeId, byItm8.keySet()).stream()
-                .collect(Collectors.toMap(Product::getItm8, product -> product));
+        List<String> itm8s = List.copyOf(byItm8.keySet());
+        Map<String, Product> result = new HashMap<>();
+        for (int from = 0; from < itm8s.size(); from += CATALOG_BATCH) {
+            products.findByStoreIdAndItm8In(storeId, itm8s.subList(from, Math.min(itm8s.size(), from + CATALOG_BATCH)))
+                    .forEach(product -> result.put(product.getItm8(), product));
+        }
+        return result;
     }
 
     /**

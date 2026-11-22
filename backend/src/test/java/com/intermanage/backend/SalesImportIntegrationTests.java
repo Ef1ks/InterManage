@@ -34,6 +34,9 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.sales.component.SalesReportParser;
+import com.intermanage.backend.sales.dto.SalesReportBatch;
+import com.intermanage.backend.sales.dto.SalesReportHeader;
 import com.intermanage.backend.sales.entity.Sale;
 import com.intermanage.backend.sales.repository.SaleRepository;
 import com.jayway.jsonpath.JsonPath;
@@ -52,6 +55,9 @@ class SalesImportIntegrationTests {
     private static final String[] HEADER = {"ITM8 Prio", "EAN Prio", "Nazwa", "Marka", "Data", "Ilość",
             "Wartosc FIFO", "Wartość ceny sprzedaży", "Wartość VAT", "Wart.Marza FIFO", "% Marża"};
     private static final String EAN = "5900983014894";
+
+    @Autowired
+    SalesReportParser parser;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -139,7 +145,7 @@ class SalesImportIntegrationTests {
                 .andExpect(jsonPath("$.lastSaleDate").value("2026-01-05"))
                 .andExpect(jsonPath("$.imports.length()").value(4));
 
-        // Raport innego sklepu, data spoza okresu i powtórzony wiersz.
+        // Raport innego sklepu i data spoza okresu (powtórzony wiersz się sumuje, patrz niżej).
         upload(owner, storeId, report("10023", "28/10/2026   Godzina: 08:00:00", "01/01/2026", "04/01/2026",
                 row("0000000000453", "04/01/2026", "9", "1", "1", "0", "0", "0")))
                 .andExpect(status().isConflict());
@@ -148,7 +154,7 @@ class SalesImportIntegrationTests {
                 row("0000000000453", "05/01/2026", "9", "1", "1", "0", "0", "0"),
                 row("0000000000453", "04/01/2026", "9", "1", "1", "0", "0", "0")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.rowErrorCount").value(2));
+                .andExpect(jsonPath("$.rowErrorCount").value(1));
         // Bez ostatniego wiersza z liczbą wierszy plik może być ucięty.
         List<String[]> withoutFooter = reportLines(storeNumber, "28/10/2026   Godzina: 08:00:00", "01/01/2026",
                 "04/01/2026", row("0000000000453", "03/01/2026", "9", "1", "1", "0", "0", "0"));
@@ -168,6 +174,54 @@ class SalesImportIntegrationTests {
                 .hasStackTraceContaining("Zapisanej sprzedaży nie można zmieniać ani usuwać");
         mvc.perform(get(importsUrl(storeId)).cookie(owner)).andExpect(jsonPath("$.rowCount").value(6));
         assertThat(sale(storeId, LocalDate.of(2026, 1, 4), "0000000000453").getQuantity()).isEqualByComparingTo("1");
+    }
+
+    /** Mercalys bywa, że rozbija dzień artykułu na dwa wiersze (09575, 15.05.2026): sumują się w jeden. */
+    @Test
+    void repeatedRowOfSameArticleAndDayIsAdded() throws Exception {
+        Cookie owner = login();
+        String storeNumber = storeNumber();
+        String storeId = createStore(owner, storeNumber);
+        upload(owner, storeId, report(storeNumber, "26/10/2026   Godzina: 15:03:27", "01/05/2026", "17/05/2026",
+                row("0000003633521", "15/05/2026", "2", "4", "6", "0.3", "1.5", "25"),
+                row("0000003633521", "16/05/2026", "1", "2", "3", "0.15", "0.75", "25"),
+                row("0000003633521", "15/05/2026", "1", "2.5", "3.5", "0.17", "0.83", "23.71")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalRows").value(3))
+                .andExpect(jsonPath("$.createdCount").value(2));
+        Sale sale = sale(storeId, LocalDate.of(2026, 5, 15), "0000003633521");
+        assertThat(sale.getQuantity()).isEqualByComparingTo("3");
+        assertThat(sale.getSaleValueGross()).isEqualByComparingTo("9.5");
+        assertThat(sale.getMarginValue()).isEqualByComparingTo("2.33");
+    }
+
+    /** Powtórzenie wiersza z już wysłanej paczki nie odrzuca pliku: ten wiersz jest pomijany. */
+    @Test
+    void repeatedRowFromEarlierBatchIsSkipped() throws Exception {
+        java.nio.file.Path file = java.nio.file.Files.createTempFile("sprzedaz", ".xlsx");
+        try {
+            java.nio.file.Files.write(file, report("10023", "26/10/2026   Godzina: 15:03:27", "01/05/2026", "17/05/2026",
+                    row("0000003633521", "15/05/2026", "2", "4", "6", "0.3", "1.5", "25"),
+                    row("0000003633521", "16/05/2026", "1", "2", "3", "0.15", "0.75", "25"),
+                    row("0000003633521", "17/05/2026", "1", "2", "3", "0.15", "0.75", "25"),
+                    row("0000003633521", "15/05/2026", "1", "2.5", "3.5", "0.17", "0.83", "23.71")));
+            List<SalesReportBatch> batches = new ArrayList<>();
+            SalesReportParser.Summary summary = parser.parse(file, 2, new SalesReportParser.Sink() {
+                @Override
+                public void header(SalesReportHeader header) {
+                }
+
+                @Override
+                public void batch(SalesReportBatch batch) {
+                    batches.add(batch);
+                }
+            });
+            assertThat(summary.totalRows()).isEqualTo(4);
+            assertThat(batches.stream().mapToInt(SalesReportBatch::size).sum()).isEqualTo(3);
+            assertThat(batches.get(0).quantities()[0]).isEqualByComparingTo("2");
+        } finally {
+            java.nio.file.Files.deleteIfExists(file);
+        }
     }
 
     @Test

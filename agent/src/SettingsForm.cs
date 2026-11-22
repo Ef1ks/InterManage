@@ -5,11 +5,20 @@ using System.Windows.Forms;
 
 namespace Intermanage.Agent;
 
-/// <summary>Okno ustawień: adres serwera i klucz agenta (z Ustawień sklepu w Intermanage), test przez /hello.</summary>
+/// <summary>
+/// Okno ustawień: adres serwera i klucz agenta (z Ustawień sklepu w Intermanage), test przez /hello, oraz hasło
+/// Mercalys i aktualizacja danych przy starcie komputera.
+/// </summary>
 internal sealed class SettingsForm : Form
 {
     private readonly TextBox server = new() { Dock = DockStyle.Fill };
     private readonly TextBox key = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
+    private readonly TextBox mercalysPassword = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
+    private readonly CheckBox updateOnStart = new()
+    {
+        Text = "Przy starcie komputera aktualizuj dane z Mercalys (pliki raportów nie z dzisiaj)",
+        AutoSize = true,
+    };
     private readonly Label result = new() { Dock = DockStyle.Fill, AutoSize = false, Height = 48 };
     private readonly Button save = new() { Text = "Sprawdź i zapisz", AutoSize = true };
     private readonly Button cancel = new() { Text = "Anuluj", AutoSize = true, DialogResult = DialogResult.Cancel };
@@ -24,13 +33,14 @@ internal sealed class SettingsForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(520, 230);
+        ClientSize = new Size(560, 340);
         Font = new Font("Segoe UI", 9f);
 
         server.Text = settings.ServerUrl;
         key.Text = "";
+        updateOnStart.Checked = settings.UpdateOnStart;
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 5 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 8 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label { Text = "Adres serwera", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
@@ -48,11 +58,24 @@ internal sealed class SettingsForm : Form
             ForeColor = SystemColors.GrayText,
         };
         layout.Controls.Add(hint, 1, 2);
-        layout.Controls.Add(result, 1, 3);
+        layout.Controls.Add(new Label { Text = "Hasło Mercalys", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
+        layout.Controls.Add(mercalysPassword, 1, 3);
+        layout.Controls.Add(new Label
+        {
+            Text = settings.HasMercalysPassword
+                ? "Hasło jest zapisane (zaszyfrowane na tym komputerze). Wpisz nowe tylko, gdy je zmieniasz."
+                : "Makro aktualizacji samo uruchomi Mercalys i zaloguje się tym hasłem. Bez hasła czeka na logowanie.",
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            Height = 36,
+            ForeColor = SystemColors.GrayText,
+        }, 1, 4);
+        layout.Controls.Add(updateOnStart, 1, 5);
+        layout.Controls.Add(result, 1, 6);
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(save);
-        layout.Controls.Add(buttons, 1, 4);
+        layout.Controls.Add(buttons, 1, 7);
         Controls.Add(layout);
         AcceptButton = save;
         CancelButton = cancel;
@@ -65,6 +88,12 @@ internal sealed class SettingsForm : Form
         if (url == null)
         {
             ShowResult("Podaj adres zaczynający się od https://", true);
+            return;
+        }
+        var newPassword = mercalysPassword.Text;
+        if (newPassword.Contains("|") || newPassword.Length > 20)
+        {
+            ShowResult("Hasło Mercalys: najwyżej 20 znaków i bez znaku |.", true);
             return;
         }
         var newKey = key.Text.Trim();
@@ -83,6 +112,8 @@ internal sealed class SettingsForm : Form
             var hello = await api.HelloAsync(Program.Version, limit.Token);
             settings.ServerUrl = url;
             if (newKey.Length > 0) settings.Key = newKey;
+            if (newPassword.Length > 0) settings.MercalysPassword = newPassword;
+            settings.UpdateOnStart = updateOnStart.Checked;
             settings.Save();
             Log.Info("Zapisano ustawienia (sklep " + hello.StoreNumber + ")");
             MessageBox.Show(this, "Połączono ze sklepem " + hello.StoreNumber

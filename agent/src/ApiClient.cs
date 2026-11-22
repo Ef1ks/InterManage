@@ -96,6 +96,42 @@ internal sealed class EventsResponse
     public List<FileDelete> Deletes { get; set; } = new();
 }
 
+/// <summary>Makro aktualizacji raportów z Mercalys (składa je serwer, to samo co przycisk w Imporcie danych).</summary>
+internal sealed class ReportMacro
+{
+    public string Macro { get; set; } = "";
+    /// <summary>Pierwsze polecenie makra; agent dokłada do niego hasło Mercalys (<c>|hasło</c>).</summary>
+    public string OpenLine { get; set; } = "";
+    public List<string> Reports { get; set; } = new();
+    public List<SkippedReport> Skipped { get; set; } = new();
+    public List<MacroFile> Files { get; set; } = new();
+    public string PlayerVersion { get; set; } = "";
+}
+
+internal sealed class SkippedReport
+{
+    public string Kind { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Reason { get; set; } = "";
+}
+
+/// <summary>Plik, który zapisze makro (część okresu albo cały raport).</summary>
+internal sealed class MacroFile
+{
+    public string Kind { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string FileName { get; set; } = "";
+}
+
+/// <summary>Próba wgrania raportu przez agenta (stan z serwera).</summary>
+internal sealed class ReportAttempt
+{
+    public string FileName { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string? Error { get; set; }
+    public DateTimeOffset StartedAt { get; set; }
+}
+
 internal sealed class ReportUpload
 {
     public string Id { get; set; } = "";
@@ -243,6 +279,16 @@ internal sealed class ApiClient : IDisposable
             server + "/api/store-agent/reports/" + Uri.EscapeDataString(id) + "/finish"), TimeSpan.FromSeconds(60),
             cancel).ConfigureAwait(false);
     }
+
+    /// <summary>Makro aktualizacji raportów z Mercalys dla podanych raportów (np. SALES).</summary>
+    public Task<ReportMacro> ReportMacroAsync(IReadOnlyList<string> kinds, CancellationToken cancel) =>
+        SendJsonAsync<ReportMacro>(HttpMethod.Post, "/api/store-agent/report-macro", new { kinds },
+            TimeSpan.FromSeconds(60), cancel);
+
+    /// <summary>Ostatnie próby wgrania raportów (okno aktualizacji czeka na potwierdzenie serwera).</summary>
+    public Task<List<ReportAttempt>> RecentReportsAsync(CancellationToken cancel) =>
+        SendJsonAsync<List<ReportAttempt>>(HttpMethod.Get, "/api/store-agent/reports", null,
+            TimeSpan.FromSeconds(30), cancel);
 
     /// <summary>Wgrany raport usunięty z folderu (historia na serwerze).</summary>
     public async Task ReportRemovedAsync(string folderKey, string fileName, DateTimeOffset modified,

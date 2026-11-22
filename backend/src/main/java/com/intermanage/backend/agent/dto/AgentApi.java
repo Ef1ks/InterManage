@@ -92,4 +92,8 @@ public final class AgentApi {
     public record ReportRemoved(@NotBlank @Size(max = 30) String folderKey, @NotBlank @Size(max = 260) String fileName,
             @NotNull Instant modified) {
     }
+
+    /** Raporty do aktualizacji z Mercalys (pliki w folderach nie są z dzisiaj); pusta lista = wszystkie z makrem. */
+    public record ReportMacroRequest(@Size(max = 20) List<@NotBlank @Size(max = 30) String> kinds) {
+    }
 }

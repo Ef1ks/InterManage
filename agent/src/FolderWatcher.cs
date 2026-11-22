@@ -379,15 +379,20 @@ internal sealed class FolderWatcher : IDisposable
     {
         var prices = new List<(string Name, byte[] Content)>();
         long bytes = 0;
+        // Raporty Importu danych idą osobną kolejką w kawałkach (czyta je dopiero ona). Najpierw wszystkie, żeby błąd
+        // wysyłki cen z kasy (rzuca wyjątek w pętli niżej) nie zostawiał próśb o raporty bez odpowiedzi.
         foreach (var request in requests)
         {
-            if (!paths.TryGetValue(request.FileName, out var path)) continue;
-            // Raporty Importu danych idą osobną kolejką w kawałkach (czyta je dopiero ona).
-            if (request.FolderKey.StartsWith("IMPORT_", StringComparison.OrdinalIgnoreCase))
+            if (!request.FolderKey.StartsWith("IMPORT_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (paths.TryGetValue(request.FileName, out var reportPath))
             {
-                reports.Enqueue(request.FolderKey, request.FileName, path);
-                continue;
+                reports.Enqueue(request.FolderKey, request.FileName, reportPath);
             }
+        }
+        foreach (var request in requests)
+        {
+            if (request.FolderKey.StartsWith("IMPORT_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!paths.TryGetValue(request.FileName, out var path)) continue;
             var content = await Disk.ReadWhenReady(path, cancel);
             if (content == null) continue;
             if (request.FolderKey == "ATHOS")

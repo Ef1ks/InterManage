@@ -24,8 +24,8 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useCan, useMe } from '@/features/auth/api'
 import {
+  copyReportMacro,
   useDocumentImports,
-  useImportCoverage,
   useEanChanges,
   useImportDocuments,
   useImportGuides,
@@ -49,7 +49,6 @@ import { AgentReportFiles, agentNote } from '@/features/imports/AgentReportFiles
 import {
   DAILY_REPORTS,
   MACRO_REPORTS,
-  macroPathError,
   newReportFiles,
   PDF_EXTENSIONS,
   REPORT_TITLES,
@@ -58,12 +57,6 @@ import {
   type DailyReport,
   type MacroReport,
 } from '@/features/imports/import-sources'
-import {
-  buildReportSaveMacro,
-  lastDocumentDate,
-  macroPlayerVersion,
-  macroSettingsReady,
-} from '@/features/imports/report-macros'
 import { ReportHelp } from '@/features/imports/ReportHelp'
 import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
@@ -200,7 +193,6 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const documents = useDocumentImports(store.id)
   const suppliers = useSupplierImports(store.id)
   const sales = useSalesImports(store.id)
-  const coverage = useImportCoverage(store.id)
   const nomenclatures = useNomenclatureImports(store.id)
   const promotions = usePromotionImports(store.id)
   const productCodes = useProductCodeImports(store.id)
@@ -352,33 +344,15 @@ function StoreImports({ store }: { store: StoreSummary }) {
   // Makro na wszystkie raporty z zapisaną ścieżką (ścieżki sklepu z ustawień importu).
   // Jeden raport (przycisk na karcie) albo wszystkie z ustawieniami (nagłówek strony)
   const copyMacros = async (kinds: readonly MacroReport[] = MACRO_REPORTS) => {
-    // Okres raportu sprzedaży liczy się od ostatniego dnia w bazie, więc bez tej listy makro wzięłoby za mało dni
-    if (sales.isPending || documents.isPending || coverage.isPending) {
-      toast.info('Wczytuję stan sprzedaży i dokumentów, spróbuj za chwilę')
+    // Makro składa serwer (to samo dostaje agent sklepu): ścieżki z ustawień importu i zaległe okresy.
+    let result
+    try {
+      result = await copyReportMacro(store.id, kinds)
+    } catch {
+      toast.error('Nie udało się skopiować makra')
       return
     }
-    if (!importSettings.loaded) {
-      toast.info('Wczytuję ustawienia importu, spróbuj za chwilę')
-      return
-    }
-    const { macroPaths: paths, printNumbers, listNumbers, partLengths, masks } = importSettings.settings
-    const ready = kinds
-      .map((kind) => ({
-        kind,
-        settings: {
-          path: paths[kind] ?? '',
-          printNumber: printNumbers[kind],
-          listNumber: listNumbers[kind],
-          partLength: partLengths[kind],
-        },
-      }))
-      .filter(
-        ({ kind, settings }) =>
-          settings.path.trim() !== '' &&
-          macroPathError(kind, settings.path, masks[kind] ?? '') === null &&
-          macroSettingsReady(kind, settings),
-      )
-    if (ready.length === 0) {
+    if (result.reports.length === 0) {
       toast.info(
         kinds.length === 1
           ? `${REPORT_TITLES[kinds[0]]}: uzupełnij ustawienia makra`
@@ -393,25 +367,12 @@ function StoreImports({ store }: { store: StoreSummary }) {
       setSourcesOpen(true)
       return
     }
-    try {
-      await navigator.clipboard.writeText(
-        buildReportSaveMacro(ready, {
-          lastSaleDate: sales.data?.lastSaleDate,
-          lastDocumentDate: lastDocumentDate(documents.data),
-          salesCovered: coverage.data?.sales,
-          documentsCovered: coverage.data?.documents,
-          openedOn: importSettings.settings.openedOn,
-        }),
-      )
-      const skipped = kinds.length - ready.length
-      toast.success(`Skopiowano makro: ${ready.map(({ kind }) => REPORT_TITLES[kind]).join(', ')}`, {
-        description: `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion(ready.map(({ kind }) => kind))}). Raport, którego makro nie otwiera samo, zapyta: po Tak kliknij Excel w Mercalys.${
-          skipped > 0 ? ` Bez ścieżki: ${skipped}.` : ''
-        }`,
-      })
-    } catch {
-      toast.error('Nie udało się skopiować makra')
-    }
+    const skipped = kinds.length - result.reports.length
+    toast.success(`Skopiowano makro: ${result.reports.map((kind) => REPORT_TITLES[kind]).join(', ')}`, {
+      description: `Naciśnij Alt+E (odtwarzacz od wersji ${result.playerVersion}).${
+        skipped > 0 ? ` Bez ustawień makra: ${skipped}.` : ''
+      }`,
+    })
   }
 
   const cardProps = (kind: ImportReportKind) => ({

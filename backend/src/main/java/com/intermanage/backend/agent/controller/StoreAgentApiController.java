@@ -1,6 +1,7 @@
 package com.intermanage.backend.agent.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,10 +24,15 @@ import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.agent.dto.AgentApi;
+import com.intermanage.backend.agent.dto.AgentReportFileResponse;
 import com.intermanage.backend.agent.service.AgentEventService;
 import com.intermanage.backend.agent.service.AgentFileQueueService;
 import com.intermanage.backend.agent.service.AgentReportService;
 import com.intermanage.backend.agent.service.StoreAgentService;
+import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.importguide.dto.ReportMacroResponse;
+import com.intermanage.backend.importguide.entity.ImportReportKind;
+import com.intermanage.backend.importguide.service.ReportMacroService;
 import com.intermanage.backend.mea.dto.MeaAthosStatus;
 import com.intermanage.backend.product.dto.PriceFileUploadResponse;
 import com.intermanage.backend.store.entity.StoreFileQueueItem;
@@ -51,6 +57,8 @@ import jakarta.validation.Valid;
  * PUT  /api/store-agent/reports/{id}/chunks/{index}   surowe bajty kawałka, po kolei
  * POST /api/store-agent/reports/{id}/finish           202, import w tle
  * POST /api/store-agent/reports/removed    {folderKey, fileName, modified} (agent usunął wgrany raport z folderu)
+ * GET  /api/store-agent/reports            ostatnie próby wgrania raportów (okno aktualizacji danych)
+ * POST /api/store-agent/report-macro       {kinds} → makro aktualizacji raportów z Mercalys (pliki nie z dzisiaj)
  * </pre>
  */
 @RestController
@@ -64,9 +72,11 @@ public class StoreAgentApiController {
     private final AgentEventService events;
     private final StoreFileQueueService queue;
     private final AgentReportService reports;
+    private final ReportMacroService macros;
 
     public StoreAgentApiController(StoreAgentService agents, AgentFileQueueService waiting, AgentEventService events,
-            StoreFileQueueService queue, AgentReportService reports) {
+            StoreFileQueueService queue, AgentReportService reports, ReportMacroService macros) {
+        this.macros = macros;
         this.agents = agents;
         this.waiting = waiting;
         this.events = events;
@@ -160,6 +170,32 @@ public class StoreAgentApiController {
     public void reportRemoved(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
     String authorization, @Valid @RequestBody AgentApi.ReportRemoved request) {
         reports.removed(agent(authorization), request);
+    }
+
+    /**
+     * Makro aktualizacji raportów z Mercalys: agent przy starcie komputera, gdy pliki raportów w folderach nie są
+     * z dzisiaj. Hasło Mercalys dokłada agent do pierwszego polecenia ({@code openLine}).
+     */
+    @PostMapping("/report-macro")
+    public ReportMacroResponse reportMacro(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @Valid @RequestBody AgentApi.ReportMacroRequest request) {
+        StoreAgentService.AgentContext agent = agent(authorization);
+        List<ImportReportKind> kinds = new ArrayList<>();
+        for (String kind : request.kinds() == null ? List.<String>of() : request.kinds()) {
+            ImportReportKind parsed = AgentReportService.kindOf(AgentReportService.PREFIX + kind);
+            if (parsed == null) {
+                throw ApiException.badRequest("Nieznany raport: " + kind);
+            }
+            kinds.add(parsed);
+        }
+        return macros.build(agent.storeId(), kinds);
+    }
+
+    /** Ostatnie próby wgrania raportów (okno aktualizacji czeka, aż serwer potwierdzi wgranie). */
+    @GetMapping("/reports")
+    public List<AgentReportFileResponse> recentReports(@RequestHeader(value = HttpHeaders.AUTHORIZATION,
+            required = false) String authorization) {
+        return reports.recent(agent(authorization).storeId(), 100);
     }
 
     private StoreAgentService.AgentContext agent(String authorization) {

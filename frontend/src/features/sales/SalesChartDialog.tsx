@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ChartColumnIcon, ChevronLeft, ChevronRight, EyeOffIcon, ZoomOut } from 'lucide-react'
+import { ChartColumnIcon, ChevronLeft, ChevronRight, EyeOffIcon, Loader2Icon, ZoomOut } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
@@ -272,11 +272,24 @@ function ChartBody({
   const [rangeKey, setRangeKey] = useState<ChartRange>('month')
   const [zoom, setZoom] = useState<DayWindow | null>(null)
   const [metric, setMetric] = useState<Metric>(metrics[0].value)
+  // Przesunięcie wykresu w przeszłość (dni przed ostatnim dniem ze sprzedażą, także ułamek: wykres zostaje tam, gdzie
+  // go puszczono) i bieżące przeciąganie (dodatnie = wstecz). Pobieranie idzie po pełnych krokach słupka (`shift`).
+  const [position, setPosition] = useState(0)
+  const [drag, setDrag] = useState(0)
+  const { days: rangeDays, step: rangeStep } = RANGES[rangeKey]
+  const shift = Math.max(0, Math.round(position / rangeStep) * rangeStep)
   const range: DateRange = {
-    from: addDays(lastSaleDate, -(RANGES[rangeKey].days - 1)),
-    to: lastSaleDate,
+    from: addDays(lastSaleDate, -(shift + rangeDays - 1)),
+    to: addDays(lastSaleDate, -shift),
   }
-  const history = useSalesHistory(storeId, kind, target, range, filter)
+  // Pobieramy też okres przed widocznym (i po nim, gdy jest przesunięty), żeby przy przeciąganiu słupki już były;
+  // serwer przyjmuje najwyżej 366 dni, więc rok przeciąga się bez zapasu (dni dociągają się po puszczeniu).
+  const spare = Math.min(rangeDays, Math.floor((366 - rangeDays) / 2 / rangeStep) * rangeStep)
+  const fetched: DateRange = {
+    from: addDays(range.from, -spare),
+    to: addDays(range.to, Math.min(spare, shift)),
+  }
+  const history = useSalesHistory(storeId, kind, target, fetched, filter)
   const article = useSalesArticle(storeId, target.kind === 'article' ? target.itm8 : null)
   const cardLoading = useArticleCardLoading(storeId, target.kind === 'article' ? target.itm8 : null, history.isLoading)
   const showMargin = hasMargin(kind, target)
@@ -317,13 +330,20 @@ function ChartBody({
   const bar = metric === 'sale' ? sale : metric === 'cost' ? cost : quantity
   const line = metric === 'price' ? price : metric === 'sale' && showMargin ? margin : null
 
-  const data = history.data
-  const allBars = data ? toBars(data.days, RANGES[rangeKey].step) : []
+  const response = history.data
+  // Widoczne dni jako indeksy dni odpowiedzi (przy starszej odpowiedzi w trakcie pobierania mogą wyjść poza nią).
+  const baseStart = response ? daysBetween(response.from, range.from) : 0
+  const baseEnd = baseStart + rangeDays
+  // Wstecz bez ograniczenia (dni spoza pobranych dociągają się po puszczeniu), do przodu najwyżej do ostatniego dnia.
+  const back = Math.max(0, position + drag)
+  const visible: DayWindow = { start: baseStart - (back - shift), end: baseEnd - (back - shift) }
+  const data = response ? visibleHistory(response, visible, range) : undefined
+  const allBars = response ? toBars(response.days, rangeStep) : []
   // Zbliżenie na słupek dłuższy niż dzień: jego dni (indeksy dni odpowiedzi, koniec bez niego).
   const zoomIndex = zoom ? allBars.findIndex((candidate) => candidate.start === zoom.start) : -1
   const zoomed = zoomIndex >= 0 ? allBars[zoomIndex] : null
   const step = zoomed ? 1 : RANGES[rangeKey].step
-  const bars = data && zoomed ? toBars(data.days.slice(zoomed.start, zoomed.end), 1, zoomed.start) : allBars
+  const bars = response && zoomed ? toBars(response.days.slice(zoomed.start, zoomed.end), 1, zoomed.start) : allBars
   const days = zoomed ? zoomed.end - zoomed.start : (data?.days.length ?? 0)
   const viewTotal = zoomed ? zoomed.figures : data?.total
   const viewLoss = zoomed ? zoomed.lossValue : (data?.lossValue ?? 0)
@@ -333,6 +353,19 @@ function ChartBody({
     const target = allBars[index]
     if (target) setZoom({ start: target.start, end: target.end })
   }
+  const moveBy = (daysBack: number) => {
+    setZoom(null)
+    setPosition((current) => Math.max(0, current + daysBack))
+  }
+  const pan = (daysBack: number, done: boolean) => {
+    if (!done) {
+      setDrag(daysBack)
+      return
+    }
+    setDrag(0)
+    moveBy(daysBack)
+  }
+  const shownRange = data && data.days.length > 0 ? { from: data.from, to: data.to } : range
 
   if (cardLoading) return <CardLoading target={target} inline={inline} />
 
@@ -418,16 +451,12 @@ function ChartBody({
               onChange={(value) => {
                 setZoom(null)
                 setRangeKey(value)
+                // Ten sam koniec okresu zostaje (pozycja jest w dniach).
               }}
             />
           </div>
 
-          <div
-            className={cn(
-              'grid min-w-0 gap-4 transition-opacity duration-150',
-              history.isPlaceholderData && 'opacity-60',
-            )}
-          >
+          <div className="grid min-w-0 gap-4">
             <div className="grid gap-2">
               {zoomed ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -458,10 +487,38 @@ function ChartBody({
                       <ChevronRight />
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">z okresu {formatRange(range)}</p>
+                  <p className="text-xs text-muted-foreground">z okresu {formatRange(shownRange)}</p>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">{formatRange(range)}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Wcześniej o ${RANGES[rangeKey].label.toLowerCase()}`}
+                      title="Wcześniej (możesz też przeciągnąć wykres w prawo)"
+                      onClick={() => moveBy(rangeDays - (rangeDays % rangeStep))}
+                    >
+                      <ChevronLeft />
+                    </Button>
+                    <p className="min-w-44 text-center text-sm font-medium tabular-nums">{formatRange(shownRange)}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Później o ${RANGES[rangeKey].label.toLowerCase()}`}
+                      title="Później (możesz też przeciągnąć wykres w lewo)"
+                      disabled={position === 0}
+                      onClick={() => moveBy(-Math.min(position, rangeDays - (rangeDays % rangeStep)))}
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </div>
+                  {position > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => moveBy(-position)}>
+                      Do ostatniego dnia
+                    </Button>
+                  )}
+                </div>
               )}
               {data && viewTotal && (
                 <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:auto-cols-fr sm:grid-flow-col sm:grid-cols-none">
@@ -491,14 +548,17 @@ function ChartBody({
               )}
             </div>
 
-            {history.isError && !data ? (
+            {history.isError && !response ? (
               <p className="py-16 text-center text-sm text-muted-foreground">Nie udało się wczytać sprzedaży.</p>
-            ) : !data ? (
+            ) : !response ? (
               <div aria-hidden className="h-80 loading-shimmer rounded-lg" />
             ) : (
               <BarChart
-                scope={`${data.from}:${data.to}`}
-                window={zoomed ?? { start: 0, end: data.days.length }}
+                scope={`${response.from}:${response.to}`}
+                window={zoomed ?? visible}
+                panning={drag !== 0}
+                loading={history.isPlaceholderData}
+                onPan={zoomed ? undefined : pan}
                 bars={bars}
                 bar={bar}
                 line={line}
@@ -1297,6 +1357,28 @@ function toBars(list: SalesHistory['days'], step: 1 | 7, offset = 0): Bar[] {
   return bars
 }
 
+/** Dni od {@code from} do {@code to} (ujemne, gdy {@code to} jest wcześniej). */
+function daysBetween(from: string, to: string) {
+  return Math.round((parseIsoDate(to).getTime() - parseIsoDate(from).getTime()) / 86_400_000)
+}
+
+/**
+ * Widoczna część odpowiedzi (pobieramy też dni przed i po do przeciągania): sumy, straty i dni tylko z okna, żeby
+ * kafelki i zapas na półce liczyły się z tego, co widać.
+ */
+function visibleHistory(response: SalesHistory, window: DayWindow, range: DateRange): SalesHistory {
+  const start = Math.max(0, Math.round(window.start))
+  const end = Math.min(response.days.length, Math.round(window.end))
+  const days = response.days.slice(start, Math.max(start, end))
+  return {
+    from: days[0]?.date ?? range.from,
+    to: days.at(-1)?.date ?? range.to,
+    days,
+    total: sumFigures(days.map((day) => day.figures)),
+    lossValue: days.reduce((sum, day) => sum + day.lossValue, 0),
+  }
+}
+
 function sumFigures(list: SalesFigures[]): SalesFigures {
   const sum = (pick: (figures: SalesFigures) => number) => list.reduce((total, figures) => total + pick(figures), 0)
   const sumNullable = (pick: (figures: SalesFigures) => number | null) =>
@@ -1318,7 +1400,7 @@ const ZOOM_MS = 520
 /** To, co widać: okno osi dni i skala lewej osi. */
 type Frame = { w0: number; w1: number; low: number; high: number }
 /** Ostatnio narysowane słupki z ich klatką, z nich startuje kolejne przejście (także przerwane w połowie). */
-type Scene = { scope: string; key: string; bars: Bar[]; values: number[]; frame: Frame }
+type Scene = { scope: string; key: string; bars: Bar[]; values: number[]; frame: Frame; panning: boolean }
 type Zoom = { from: Frame; outgoing: Scene; start: number }
 
 /** Mocne ease-in-out (quart): kamera rusza i hamuje płynnie, bo przesuwa coś, co już jest na ekranie. */
@@ -1365,6 +1447,9 @@ function BarChart({
   showMargin,
   step,
   onZoom,
+  panning = false,
+  onPan,
+  loading = false,
 }: {
   scope: string
   window: DayWindow
@@ -1376,6 +1461,15 @@ function BarChart({
   step: 1 | 7
   /** Zbliżenie na słupek dłuższy niż dzień; bez niego słupków nie da się kliknąć. */
   onZoom?: (index: number) => void
+  /** Trwa przeciąganie: okno zmienia się co ruch myszy, bez przelotu kamery. */
+  panning?: boolean
+  /**
+   * Przeciąganie wykresu w bok: przesunięcie od chwytu w dniach (dodatnie = wstecz, w prawo ciągnie się przeszłość),
+   * {@code done} po puszczeniu.
+   */
+  onPan?: (daysBack: number, done: boolean) => void
+  /** Dociągają się dni (nowy okres po przeciągnięciu albo strzałce): refleks w miejscu brakujących dni. */
+  loading?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const clipId = useId()
@@ -1387,6 +1481,9 @@ function BarChart({
   const [zoom, setZoom] = useState<Zoom | null>(null)
   const [now, setNow] = useState(0)
   const shown = useRef<Scene | null>(null)
+  // Chwyt przy przeciąganiu: położenie myszy, szerokość okna w dniach i czy już ruszyło (wtedy klik nie zbliża).
+  const grab = useRef<{ x: number; span: number; moved: boolean } | null>(null)
+  const justPanned = useRef(false)
 
   useEffect(() => {
     const element = ref.current
@@ -1397,8 +1494,13 @@ function BarChart({
   }, [])
 
   const paddingRight = line ? 56 : 12
+  // Przy dniach nad słupkami jest wiersz sum tygodni.
+  const padTop = step === 1 ? PADDING.top + 28 : PADDING.top
   const values = bars.map((bar) => barSeries.value(bar.figures) ?? 0)
-  const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values))
+  // Słupki spoza okna (zapas do przeciągania) nie wpływają na skalę, średnią ani podpisy.
+  const inView = (bar: Bar) => bar.end > shownDays.start + 0.01 && bar.start < shownDays.end - 0.01
+  const viewValues = values.filter((_, index) => inView(bars[index]))
+  const ticks = niceTicks(Math.min(0, ...viewValues), Math.max(0, ...viewValues))
   const key = `${shownDays.start}:${shownDays.end}`
   const hovered = hover?.key === key && hover.index < bars.length ? hover.index : null
   const target: Frame = { w0: shownDays.start, w1: shownDays.end, low: ticks[0], high: ticks.at(-1)! }
@@ -1407,12 +1509,19 @@ function BarChart({
   // Przed malowaniem, żeby nowe słupki nie mignęły w docelowym miejscu.
   useLayoutEffect(() => {
     const previous = shown.current
-    if (!previous || previous.key === key) return
-    if (previous.scope !== scope || prefersReducedMotion()) return
+    if (!previous) return
+    // Nowe dane (np. dociągnięte po przeciągnięciu) mają inne indeksy dni: trwający przelot liczony w starych
+    // indeksach zjechałby wykresem z powrotem, więc go kończymy.
+    if (previous.scope !== scope) {
+      setZoom(null)
+      return
+    }
+    // Przeciąganie i jego puszczenie przesuwają okno ręką, bez przelotu kamery.
+    if (previous.key === key || panning || previous.panning || prefersReducedMotion()) return
     const start = performance.now()
     setZoom({ from: previous.frame, outgoing: previous, start })
     setNow(start)
-  }, [key, scope])
+  }, [key, scope, panning])
 
   useEffect(() => {
     if (!zoom) return
@@ -1433,18 +1542,18 @@ function BarChart({
   const frame = zoom ? frameAt(zoom.from, target, progress) : target
 
   useLayoutEffect(() => {
-    shown.current = { scope, key, bars, values, frame }
+    shown.current = { scope, key, bars, values, frame, panning }
   })
 
   const plotWidth = Math.max(0, width - PADDING.left - paddingRight)
-  const plotHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom
+  const plotHeight = CHART_HEIGHT - padTop - PADDING.bottom
   const plotRight = PADDING.left + plotWidth
   const dayX = (day: number) => PADDING.left + ((day - frame.w0) / (frame.w1 - frame.w0 || 1)) * plotWidth
-  const y = (value: number) => PADDING.top + ((frame.high - value) / (frame.high - frame.low || 1)) * plotHeight
+  const y = (value: number) => padTop + ((frame.high - value) / (frame.high - frame.low || 1)) * plotHeight
   const left = (index: number) => dayX(bars[index].start)
   const bandOf = (bar: Bar) => dayX(bar.end) - dayX(bar.start)
   const center = (index: number) => left(index) + bandOf(bars[index]) / 2
-  const average = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
+  const average = viewValues.length > 0 ? viewValues.reduce((sum, value) => sum + value, 0) / viewValues.length : 0
 
   // Tydzień i jego dni zachodzą na siebie, więc się przenikają; sąsiedni tydzień tylko wjeżdża obok.
   const outgoing = zoom?.outgoing
@@ -1463,18 +1572,21 @@ function BarChart({
   ]
 
   const lineValues = line ? bars.map((bar) => line.value(bar.figures)) : []
-  const defined = lineValues.filter((value): value is number => value != null)
+  const defined = lineValues.filter((value, index): value is number => value != null && inView(bars[index]))
   const lineTicks = defined.length > 0 ? lineRangeTicks(Math.min(...defined), Math.max(...defined)) : []
   const lineLow = lineTicks[0] ?? 0
   const lineHigh = lineTicks.at(-1) ?? 1
-  const lineY = (value: number) => PADDING.top + ((lineHigh - value) / (lineHigh - lineLow || 1)) * plotHeight
+  const lineY = (value: number) => padTop + ((lineHigh - value) / (lineHigh - lineLow || 1)) * plotHeight
 
   // Przy dniach podpisujemy poniedziałki (co któryś, gdy się nie mieszczą), przy zbliżeniu na tydzień każdy dzień,
   // przy tygodniach co któryś słupek.
-  const everyDay = step === 1 && bars.length <= 14
+  const viewCount = bars.filter(inView).length
+  const everyDay = step === 1 && viewCount <= 14
   const maxLabels = Math.max(1, Math.floor(plotWidth / 72))
   const mondays = step === 1 ? bars.flatMap((bar, index) => (isMonday(bar.from) ? [index] : [])) : []
-  const candidates = step === 1 && !everyDay ? mondays : bars.map((_, index) => index)
+  const candidates = (step === 1 && !everyDay ? mondays : bars.map((_, index) => index)).filter((index) =>
+    inView(bars[index]),
+  )
   const every = Math.max(1, Math.ceil(candidates.length / maxLabels))
   const labelled = new Set(candidates.filter((_, position) => position % every === 0))
 
@@ -1484,6 +1596,31 @@ function BarChart({
   const activeTop =
     hovered == null ? 0 : Math.min(y(Math.max(0, values[hovered])), activeLine == null ? Infinity : lineY(activeLine))
   const zoomable = (bar: Bar) => onZoom != null && bar.end - bar.start > 1
+  const weeks = step === 1 ? weekTotals(bars, values) : []
+
+  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!onPan || event.button !== 0) return
+    grab.current = { x: event.clientX, span: shownDays.end - shownDays.start, moved: false }
+  }
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = grab.current
+    if (!current || !onPan || plotWidth <= 0) return
+    const dx = event.clientX - current.x
+    if (!current.moved && Math.abs(dx) < 4) return
+    if (!current.moved) {
+      current.moved = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      setHover(null)
+    }
+    onPan((dx / plotWidth) * current.span, false)
+  }
+  const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = grab.current
+    grab.current = null
+    if (!current?.moved || !onPan) return
+    justPanned.current = true
+    onPan(((event.clientX - current.x) / plotWidth) * current.span, true)
+  }
 
   const drawBars = (list: Bar[], listValues: number[], opacity: number, prefix: string) =>
     list.map((bar, index) => {
@@ -1531,7 +1668,20 @@ function BarChart({
 
       {/* overflow-hidden: SVG ma szerokość z pomiaru, więc przy zwężeniu okna (np. pojawia się pasek przewijania)
           nie może trzymać kontenera szerszym, inaczej pomiar nigdy by nie zmalał. */}
-      <div ref={ref} className="relative min-w-0 overflow-hidden" onMouseLeave={() => setHover(null)}>
+      <div
+        ref={ref}
+        className={cn(
+          'relative min-w-0 overflow-hidden select-none',
+          onPan && (panning ? 'cursor-grabbing' : 'cursor-grab'),
+        )}
+        // Przewijanie strony w pionie zostaje dotykowi, poziomy ruch przesuwa wykres.
+        style={onPan ? { touchAction: 'pan-y' } : undefined}
+        onMouseLeave={() => setHover(null)}
+        onPointerDown={startPan}
+        onPointerMove={movePan}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+      >
         {width > 0 && (
           <svg
             width={width}
@@ -1544,13 +1694,17 @@ function BarChart({
               <clipPath id={`${clipId}plot`}>
                 <rect x={PADDING.left} y={0} width={plotWidth} height={CHART_HEIGHT - PADDING.bottom + 1} />
               </clipPath>
+              {/* Podpisy, linia i kreski tygodni: tylko w szerokości wykresu (zapas do przeciągania leży obok). */}
+              <clipPath id={`${clipId}x`}>
+                <rect x={PADDING.left - 2} y={0} width={plotWidth + 4} height={CHART_HEIGHT} />
+              </clipPath>
               <clipPath id={`${clipId}ticks`}>
-                <rect x={0} y={PADDING.top - 8} width={width} height={plotHeight + 16} />
+                <rect x={0} y={padTop - 8} width={width} height={plotHeight + 16} />
               </clipPath>
             </defs>
 
             {settled && (
-              <g className="animate-in fade-in duration-200 motion-reduce:animate-none">
+              <g clipPath={`url(#${clipId}x)`} className="animate-in fade-in duration-200 motion-reduce:animate-none">
                 {mondays
                   .filter((index) => index > 0)
                   .map((index) => (
@@ -1558,11 +1712,43 @@ function BarChart({
                       key={`week${bars[index].start}`}
                       x1={left(index)}
                       x2={left(index)}
-                      y1={PADDING.top}
+                      y1={padTop - 28}
                       y2={CHART_HEIGHT - PADDING.bottom + 6}
-                      className="stroke-border"
+                      strokeWidth={2}
+                      className="stroke-foreground/20"
                     />
                   ))}
+                {weeks.map((week) => {
+                  const from = left(week.first)
+                  const to = left(week.last) + bandOf(bars[week.last])
+                  const room = to - from
+                  if (room < 44) return null
+                  const up = week.change != null && week.change >= 0
+                  return (
+                    <text
+                      key={`sum${bars[week.first].start}`}
+                      x={(from + to) / 2}
+                      y={padTop - 10}
+                      textAnchor="middle"
+                      className="text-sm tabular-nums"
+                    >
+                      <title>{weekTitle(bars, week, barSeries)}</title>
+                      <tspan className="fill-foreground font-semibold">{weekValue(barSeries, week.total)}</tspan>
+                      {week.change != null && room >= 96 && (
+                        <tspan
+                          dx={5}
+                          className={cn(
+                            'text-xs font-medium',
+                            up ? 'fill-emerald-600 dark:fill-emerald-400' : 'fill-red-600 dark:fill-red-400',
+                          )}
+                        >
+                          {up ? '▲' : '▼'}
+                          {percentFormat.format(Math.abs(week.change))}%
+                        </tspan>
+                      )}
+                    </text>
+                  )
+                })}
               </g>
             )}
             <g clipPath={`url(#${clipId}ticks)`}>
@@ -1590,17 +1776,17 @@ function BarChart({
             </g>
             <text
               x={PADDING.left - 8}
-              y={PADDING.top - 12}
+              y={padTop - 12}
               textAnchor="end"
               className="fill-sky-700 text-[0.6875rem] font-medium dark:fill-sky-300"
             >
               {barSeries.unit}
             </text>
 
-            {settled && hovered != null && (
+            {settled && !panning && hovered != null && (
               <rect
                 x={left(hovered)}
-                y={PADDING.top}
+                y={padTop}
                 width={bandOf(bars[hovered])}
                 height={plotHeight}
                 className="fill-foreground/5"
@@ -1613,7 +1799,7 @@ function BarChart({
             </g>
 
             {settled && (
-              <g className="animate-in fade-in duration-200 motion-reduce:animate-none">
+              <g clipPath={`url(#${clipId}x)`} className="animate-in fade-in duration-200 motion-reduce:animate-none">
                 {bars.map((bar, index) =>
                   labelled.has(index) ? (
                     <text
@@ -1664,7 +1850,7 @@ function BarChart({
                     ))}
                     <text
                       x={plotRight + 8}
-                      y={PADDING.top - 12}
+                      y={padTop - 12}
                       className="fill-amber-700 text-[0.6875rem] font-medium dark:fill-amber-300"
                     >
                       {line.unit}
@@ -1696,24 +1882,47 @@ function BarChart({
                   <rect
                     key={`hit${bar.start}`}
                     x={left(index)}
-                    y={PADDING.top}
+                    y={padTop}
                     width={bandOf(bar)}
                     height={plotHeight}
                     fill="transparent"
                     className={cn(zoomable(bar) && 'cursor-zoom-in')}
                     onMouseEnter={() => {
+                      if (grab.current?.moved) return
                       setOrigin(ref.current?.getBoundingClientRect() ?? null)
                       setHover({ key, index })
                     }}
-                    onClick={zoomable(bar) ? () => onZoom?.(index) : undefined}
+                    onClick={
+                      zoomable(bar)
+                        ? () => {
+                            // Puszczenie po przeciągnięciu to nie kliknięcie w tydzień.
+                            if (justPanned.current) {
+                              justPanned.current = false
+                              return
+                            }
+                            onZoom?.(index)
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </g>
             )}
           </svg>
         )}
+        {loading && width > 0 && (
+          <LoadingGaps
+            gaps={missingDays(bars, shownDays).map(([from, to]) => [
+              Math.max(PADDING.left, dayX(from)),
+              Math.min(plotRight, dayX(to)),
+            ])}
+            top={padTop}
+            height={plotHeight}
+          />
+        )}
         {/* Podpowiedź w portalu z position: fixed, więc może wyjść poza okno zamiast przewijać je w bok. */}
         {active &&
+          !panning &&
           hovered != null &&
           origin &&
           createPortal(
@@ -1738,9 +1947,53 @@ function BarChart({
       </div>
       <p className="text-xs text-muted-foreground">
         {step === 1
-          ? 'Słupek = dzień, pionowe linie oddzielają tygodnie (od poniedziałku), kreska na osi = dzień bez sprzedaży'
-          : `Słupek = 7 dni, do ostatniego dnia ze sprzedażą${onZoom ? ' · kliknij słupek, żeby rozbić go na dni' : ''}`}
+          ? `Słupek = dzień, grube linie oddzielają tygodnie (od poniedziałku), nad tygodniem jego suma i zmiana wobec poprzedniego, kreska na osi = dzień bez sprzedaży${onPan ? ' · przeciągnij wykres w bok, żeby oglądać wcześniejsze dni' : ''}`
+          : `Słupek = 7 dni${onZoom ? ' · kliknij słupek, żeby rozbić go na dni' : ''}${onPan ? ' · przeciągnij wykres w bok, żeby oglądać wcześniejsze tygodnie' : ''}`}
       </p>
+    </div>
+  )
+}
+
+/** Części okna bez pobranych dni (przed pierwszym i po ostatnim słupku odpowiedzi), w indeksach dni. */
+function missingDays(bars: Bar[], window: DayWindow): [number, number][] {
+  if (bars.length === 0) return [[window.start, window.end]]
+  const gaps: [number, number][] = []
+  if (window.start < bars[0].start) gaps.push([window.start, Math.min(window.end, bars[0].start)])
+  if (window.end > bars.at(-1)!.end) gaps.push([Math.max(window.start, bars.at(-1)!.end), window.end])
+  return gaps
+}
+
+/**
+ * Wczytywanie dni wykresu: cienki pasek z refleksem nad wykresem, a w miejscu brakujących dni blok z przesuwającym się
+ * refleksem (sam transform, jak `LoadingPanel`) i napisem, gdy jest miejsce. Pojawia się po chwili, żeby szybkie
+ * wczytanie nie migało; przy ograniczonym ruchu bez ruchu.
+ */
+function LoadingGaps({ gaps, top, height }: { gaps: number[][]; top: number; height: number }) {
+  return (
+    <div
+      aria-live="polite"
+      className="pointer-events-none absolute inset-0 motion-reduce:!animate-none"
+      // Po 150 ms: szybkie wczytanie nie miga.
+      style={{ animation: 'loading-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1) 150ms both' }}
+    >
+      <span className="sr-only">Wczytuję dni wykresu</span>
+      <div className="absolute inset-x-0 top-0 h-1 rounded-full loading-shimmer" />
+      {gaps.map(([from, to]) =>
+        to - from < 4 ? null : (
+          <div
+            key={from}
+            className="absolute flex items-center justify-center rounded-lg loading-shimmer"
+            style={{ left: from + 2, width: to - from - 4, top, height }}
+          >
+            {to - from > 110 && (
+              <span className="loading-label flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Loader2Icon aria-hidden className="loading-spinner size-3.5" />
+                Wczytuję dni…
+              </span>
+            )}
+          </div>
+        ),
+      )}
     </div>
   )
 }
@@ -1819,6 +2072,53 @@ function lineRangeTicks(min: number, max: number) {
 }
 
 const isMonday = (iso: string) => parseIsoDate(iso).getDay() === 1
+
+/** Suma tygodnia nad słupkami: zł skrótem (12,3 tys. zł), ilość skrótem. */
+const weekValue = (series: Series, total: number) =>
+  series.unit === 'zł' ? `${compactFormat.format(total)} zł` : compactFormat.format(total)
+
+type WeekTotal = { first: number; last: number; total: number; change: number | null; partial: boolean }
+
+function weekTitle(bars: Bar[], week: WeekTotal, series: Series) {
+  const range = formatRange({ from: bars[week.first].from, to: bars[week.last].to })
+  if (week.change == null) return `Tydzień ${range}: ${series.format(week.total)}`
+  const sign = week.change >= 0 ? '+' : '−'
+  const against = week.partial ? 'tych samych dni poprzedniego tygodnia' : 'poprzedniego tygodnia'
+  return `Tydzień ${range}: ${series.format(week.total)} (${sign}${percentFormat.format(Math.abs(week.change))}% wobec ${against})`
+}
+
+/**
+ * Tygodnie pon.-niedz. ze słupków dni (indeksy pierwszego i ostatniego słupka), suma serii i zmiana % wobec
+ * poprzedniego tygodnia. Niepełny tydzień na końcu (tydzień w toku) porównujemy z tymi samymi dniami tygodnia
+ * poprzedniego; niepełny na początku danych i poprzedni bez sprzedaży nie mają zmiany.
+ */
+function weekTotals(bars: Bar[], values: number[]): WeekTotal[] {
+  const weeks: { first: number; last: number; values: number[] }[] = []
+  bars.forEach((bar, index) => {
+    const current = weeks.at(-1)
+    if (!current || isMonday(bar.from)) {
+      weeks.push({ first: index, last: index, values: [values[index] ?? 0] })
+    } else {
+      current.last = index
+      current.values.push(values[index] ?? 0)
+    }
+  })
+  const sum = (list: number[]) => list.reduce((total, value) => total + value, 0)
+  return weeks.map((week, index) => {
+    const previous = weeks[index - 1]
+    const total = sum(week.values)
+    const full = week.values.length === 7
+    const comparable = previous != null && previous.values.length === 7 && (full || index === weeks.length - 1)
+    const before = comparable ? sum(previous.values.slice(0, week.values.length)) : 0
+    return {
+      first: week.first,
+      last: week.last,
+      total,
+      change: comparable && before > 0 ? ((total - before) / before) * 100 : null,
+      partial: !full,
+    }
+  })
+}
 
 /** Słupek z zaokrąglonym końcem (4px) od strony wartości i płaską podstawą na osi zera. */
 function barPath(x: number, base: number, width: number, height: number) {

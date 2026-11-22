@@ -461,6 +461,29 @@ class StoreAgentIntegrationTests {
                 .andExpect(status().isNoContent());
         mvc.perform(get("/api/stores/" + storeId + "/imports/agent-files").cookie(owner))
                 .andExpect(jsonPath("$[0].removedFromDiskAt").isNotEmpty());
+
+        // Aktualizacja przy starcie komputera: agent widzi swoje próby i dostaje makro z Mercalys dla raportów
+        // z ustawieniami (przeglądarka dostaje to samo makro); raport bez numeru wydruku jest pominięty z powodem.
+        mvc.perform(get("/api/store-agent/reports").header(HttpHeaders.AUTHORIZATION, "Bearer " + key))
+                .andExpect(jsonPath("$[0].fileName").value("obecne w cad.xlsx"))
+                .andExpect(jsonPath("$[0].status").value("IMPORTED"));
+        mvc.perform(post("/api/store-agent/report-macro").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"CADENCIER\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reports.length()").value(0))
+                .andExpect(jsonPath("$.skipped[0].kind").value("CADENCIER"))
+                .andExpect(jsonPath("$.openLine").value("WINOPEN|Mercalys ahk_exe Mercalys.exe"));
+        mvc.perform(put("/api/stores/" + storeId + "/file-locations").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locations\":{\"import:CADENCIER:print\":\"7\",\"import:CADENCIER:list\":\"12\"}}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/stores/" + storeId + "/imports/report-macro?kinds=CADENCIER").cookie(owner))
+                .andExpect(jsonPath("$.reports[0]").value("CADENCIER"))
+                .andExpect(jsonPath("$.files[0].fileName").value("obecne w cad.xlsx"))
+                .andExpect(jsonPath("$.macro").value(org.hamcrest.Matchers.containsString("EXCELSAVE|P:\\Raporty\\obecne w cad.xlsx|")));
+        mvc.perform(post("/api/store-agent/report-macro").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"NOPE\"]}"))
+                .andExpect(status().isBadRequest());
     }
 
     /** Lista „OBECNE W CADENCIER” jak z systemu sklepu: minimalny skoroszyt .xlsx z tekstami. */

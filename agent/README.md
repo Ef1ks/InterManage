@@ -43,15 +43,21 @@ Robi:
 - zapisuje atomowo (`<nazwa>.intermanage-tmp`, potem zmiana nazwy) i nadpisuje plik o tej samej nazwie, jak
   przeglądarka (podmiana dopiero po zapisaniu całego pliku tymczasowego, więc program sklepu nie zobaczy połowy pliku);
 - uruchamia się z Windows przez `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (wyłączane w menu ikony);
-- trzyma ustawienia w `%LOCALAPPDATA%\Intermanage\Agent\settings.json`, klucz zaszyfrowany DPAPI dla bieżącego
-  użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza).
+- przy starcie (od 1.2.0, wyłączane w Ustawieniach) sprawdza daty plików w folderach raportów Importu danych i gdy
+  któryś nie jest z dzisiaj, pokazuje na wierzchu okno „AKTUALIZACJA DANYCH – POCZEKAJ DO POTWIERDZENIA”, pobiera
+  z serwera makro zapisu raportów z Mercalys (to samo co „Zaktualizuj wszystkie pliki”), wkłada je do schowka
+  i naciska lewy Alt+E, a okno trzyma, aż serwer potwierdzi wgranie każdego pliku (menu ikony: „Aktualizuj dane
+  z Mercalys” robi to na żądanie dla wszystkich raportów);
+- trzyma ustawienia w `%LOCALAPPDATA%\Intermanage\Agent\settings.json`, klucz i hasło Mercalys zaszyfrowane DPAPI
+  dla bieżącego użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza).
 
 Nie robi:
 
 - nie wymaga administratora (`asInvoker`), nie instaluje usługi, nie pisze do HKLM ani Program Files;
 - nie uruchamia PowerShella, cmd ani skryptów, nie pobiera ani nie uruchamia kodu, nie aktualizuje się sam
   (nowe wersje są w Intermanage → Do pobrania);
-- nie klika w Mercalys i nie przechwytuje klawiatury ani myszy (makra zostają w `player.exe`);
+- nie klika w Mercalys i nie przechwytuje klawiatury ani myszy: makra wykonuje `player.exe`, a agent tylko wkłada
+  makro aktualizacji do schowka i naciska za pracownika Alt+E;
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
 
 ## Budowanie

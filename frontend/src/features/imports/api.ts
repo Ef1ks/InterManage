@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { documentsKey, suppliersKey } from '@/features/documents/api'
 import { reportsKey } from '@/features/sales/api'
 import { api } from '@/lib/api'
+import { mercalysOpenLine } from '@/lib/mercalys-login'
 
 import { importProgress, uploadReport } from './report-upload'
 import type {
@@ -269,4 +270,32 @@ export function useImportCoverage(storeId: string) {
     queryKey: ['stores', storeId, 'imports', 'coverage'],
     queryFn: () => api<ImportCoverage>(`/stores/${storeId}/imports/coverage`),
   })
+}
+
+/**
+ * Makro zapisu raportów z Mercalys, składane na serwerze (to samo dostaje agent sklepu): ścieżki i numery z ustawień
+ * importu, zaległe okresy z wgranych raportów. {@code openLine} to pierwsze polecenie, do którego dokładamy hasło
+ * Mercalys zapisane w tej przeglądarce.
+ */
+export type ReportMacro = {
+  macro: string
+  openLine: string
+  reports: ImportReportKind[]
+  skipped: { kind: ImportReportKind; title: string; reason: string }[]
+  files: { kind: ImportReportKind; title: string; fileName: string }[]
+  playerVersion: string
+}
+
+/** Makro z serwera do schowka (gdy jest w nim choć jeden raport); zwraca opis, co weszło, a co pominięto. */
+export async function copyReportMacro(storeId: string, kinds: readonly ImportReportKind[]): Promise<ReportMacro> {
+  const params = new URLSearchParams()
+  kinds.forEach((kind) => params.append('kinds', kind))
+  const result = await api<ReportMacro>(`/stores/${storeId}/imports/report-macro?${params}`)
+  if (result.reports.length > 0) {
+    const window = result.openLine.replace(/^WINOPEN\|/, '')
+    await navigator.clipboard.writeText(
+      result.macro.replace(`${result.openLine}\r\n`, `${mercalysOpenLine(window)}\r\n`),
+    )
+  }
+  return result
 }

@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Intermanage.Agent;
@@ -27,12 +29,17 @@ internal sealed class TrayApp : ApplicationContext
     private readonly Icon red = Dot(Color.FromArgb(220, 38, 38));
     private readonly Icon gray = Dot(Color.FromArgb(148, 163, 184));
     private AgentSettings settings;
+    private readonly DataUpdate update;
+    private readonly CancellationTokenSource closing = new();
+    /// <summary>Aktualizacja przy starcie idzie raz na uruchomienie agenta (nie po zmianie ustawień).</summary>
+    private bool startUpdateDone;
 
     public TrayApp()
     {
         // Uchwyt okna od razu: przez niego zmiany stanu z wątków w tle trafiają do ikony.
         _ = ui.Handle;
         settings = AgentSettings.Load();
+        update = new DataUpdate(host, ui);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(status);
@@ -41,6 +48,8 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add("Otwórz Intermanage", null, (_, _) => Open(settings.ServerUrl));
         menu.Items.Add("Ustawienia…", null, (_, _) => ShowSettings());
         menu.Items.Add("Sprawdź teraz", null, (_, _) => host.ScanNow());
+        menu.Items.Add("Aktualizuj dane z Mercalys", null,
+            (_, _) => Task.Run(() => update.RunAsync(settings, true, closing.Token)));
         menu.Items.Add("Pokaż logi", null, (_, _) => OpenFolder(Log.Folder));
         menu.Items.Add(autostart);
         menu.Items.Add(new ToolStripSeparator());
@@ -57,6 +66,13 @@ internal sealed class TrayApp : ApplicationContext
         host.StateChanged += () =>
         {
             if (ui.IsHandleCreated) ui.BeginInvoke(new Action(UpdateIcon));
+        };
+        // Przy starcie komputera (agent startuje z Windows): raporty Importu danych nie z dzisiaj aktualizuje makro.
+        host.Connected += () =>
+        {
+            if (startUpdateDone || !settings.UpdateOnStart) return;
+            startUpdateDone = true;
+            Task.Run(() => update.RunAsync(settings, false, closing.Token));
         };
 
         UpdateIcon();
@@ -156,6 +172,7 @@ internal sealed class TrayApp : ApplicationContext
     protected override void ExitThreadCore()
     {
         Log.Info("Zakończono agenta");
+        closing.Cancel();
         host.Dispose();
         icon.Visible = false;
         icon.Dispose();

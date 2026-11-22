@@ -101,6 +101,12 @@ public class AgentReportService {
     private final DocumentService documents;
     private final CadencierService cadencier;
 
+    /**
+     * Start tego procesu: plik odrzucony przez wcześniejszą wersję serwera (np. przed poprawką odczytu raportu) dostaje
+     * po wdrożeniu jedną nową próbę; odrzucony znowu czeka na zmianę pliku.
+     */
+    private final Instant startedAt = Instant.now();
+
     /** Próby w toku w tym procesie: po restarcie serwera wiersz UPLOADING / IMPORTING nie blokuje pliku. */
     private final Map<UUID, Instant> active = new ConcurrentHashMap<>();
     /** Wysyłki kawałków: id próby → id wysyłki w {@link ChunkedUploads}. */
@@ -344,8 +350,13 @@ public class AgentReportService {
                     }
                 }
                 case FAILED -> {
-                    if (!attempt.isRetryable() || attempt.getFinishedAt() == null
-                            || attempt.getFinishedAt().isAfter(now.minus(RETRY_AFTER))) {
+                    if (attempt.getFinishedAt() == null) {
+                        return true;
+                    }
+                    if (!attempt.isRetryable() && attempt.getFinishedAt().isAfter(startedAt)) {
+                        return true;
+                    }
+                    if (attempt.isRetryable() && attempt.getFinishedAt().isAfter(now.minus(RETRY_AFTER))) {
                         return true;
                     }
                 }

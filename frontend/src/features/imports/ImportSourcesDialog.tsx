@@ -22,10 +22,6 @@ import {
   type MacroReport,
 } from '@/features/imports/import-sources'
 import {
-  buildReportSaveMacro,
-  lastDocumentDate,
-  macroPlayerVersion,
-  opensItself,
   pathExample,
   LIST_NUMBER_REPORTS,
   listNumberError,
@@ -33,7 +29,7 @@ import {
   printNumberError,
   type ReportMacroSettings,
 } from '@/features/imports/report-macros'
-import { useDocumentImports, useImportCoverage, useSalesImports } from '@/features/imports/api'
+import { copyReportMacro } from '@/features/imports/api'
 import { useImportSettings } from '@/features/imports/use-import-settings'
 import { ApiError } from '@/lib/api'
 import { todayIso } from '@/lib/dates'
@@ -200,36 +196,22 @@ function MacroFields({
   const withPartLength = isPeriodReport(kind)
   const locations = useStoreLocations(storeId)
   const partLength = locations.data?.[importLocationKey(kind, 'part')] ?? ''
-  const openedOn = locations.data?.[OPENED_ON_KEY] || null
-  const macroSettings = { ...settings, partLength }
   const pathError = macroPathError(kind, settings.path, mask)
   const numberError =
     (withPrintNumber ? printNumberError(settings.printNumber ?? '') : null) ??
     (withListNumber ? listNumberError(settings.listNumber ?? '') : null)
-  // Okres raportu sprzedaży zależy od ostatniego dnia w bazie (ta sama lista co na stronie importu, z pamięci)
-  const sales = useSalesImports(storeId)
-  const documents = useDocumentImports(storeId)
-  const coverage = useImportCoverage(storeId)
-  const waitsForSales =
-    (kind === 'SALES' && (sales.isPending || coverage.isPending)) ||
-    (kind === 'DOCUMENTS' && (documents.isPending || coverage.isPending))
-  const ready = settings.path.trim() !== '' && pathError === null && numberError === null && !waitsForSales
+  const ready = settings.path.trim() !== '' && pathError === null && numberError === null
 
+  // Makro składa serwer z zapisanych ustawień (pola zapisują się po wyjściu z nich, czyli przed kliknięciem).
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(
-        buildReportSaveMacro([{ kind, settings: macroSettings }], {
-          lastSaleDate: sales.data?.lastSaleDate,
-          lastDocumentDate: lastDocumentDate(documents.data),
-          salesCovered: coverage.data?.sales,
-          documentsCovered: coverage.data?.documents,
-          openedOn,
-        }),
-      )
+      const result = await copyReportMacro(storeId, [kind])
+      if (result.reports.length === 0) {
+        toast.info(`${REPORT_TITLES[kind]}: ${result.skipped[0]?.reason ?? 'uzupełnij ustawienia makra'}`)
+        return
+      }
       toast.success(`Skopiowano makro: ${REPORT_TITLES[kind]}`, {
-        description: opensItself(kind)
-          ? `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion([kind])}). Makro samo otworzy raport w Mercalys i zapisze plik.`
-          : `Naciśnij Alt+E (odtwarzacz od wersji ${macroPlayerVersion([kind])}), otwórz raport w Mercalys i kliknij Excel.`,
+        description: `Naciśnij Alt+E (odtwarzacz od wersji ${result.playerVersion}). Makro samo otworzy raport w Mercalys i zapisze plik.`,
       })
     } catch {
       toast.error('Nie udało się skopiować makra')
@@ -299,7 +281,7 @@ function MacroFields({
 
 /**
  * Dzień otwarcia sklepu, wspólny dla sklepu: makro nie drukuje sprzedaży ani dokumentów sprzed niego (puste raporty
- * albo dni z niepełnym startem sklepu). Puste = od HISTORY_START, a data wcześniejsza i tak liczy się od niego.
+ * albo dni z niepełnym startem sklepu). Puste = od 1.01.2024, a data wcześniejsza i tak liczy się od niego.
  * Bez ograniczeń dat: sklep bywa otwierany w dowolnym roku, także później.
  */
 function OpenedOnField({ storeId }: { storeId: string }) {

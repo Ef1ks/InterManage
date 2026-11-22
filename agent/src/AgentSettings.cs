@@ -37,26 +37,45 @@ internal sealed class AgentSettings
     [JsonIgnore]
     public string? Key
     {
-        get
+        get => Unprotect(ProtectedKey);
+        set => ProtectedKey = Protect(value?.Trim());
+    }
+
+    /// <summary>Hasło Mercalys zaszyfrowane DPAPI (Base64): makro aktualizacji danych samo loguje się do Mercalys.</summary>
+    public string? ProtectedMercalysPassword { get; set; }
+
+    [JsonIgnore]
+    public bool HasMercalysPassword => !string.IsNullOrEmpty(ProtectedMercalysPassword);
+
+    [JsonIgnore]
+    public string? MercalysPassword
+    {
+        get => Unprotect(ProtectedMercalysPassword);
+        set => ProtectedMercalysPassword = Protect(value);
+    }
+
+    /// <summary>
+    /// Przy starcie agenta (logowanie do Windows) raporty Importu danych, których plik w folderze nie jest z dzisiaj,
+    /// aktualizuje makro z Mercalys. Domyślnie włączone.
+    /// </summary>
+    public bool UpdateOnStart { get; set; } = true;
+
+    private static string? Protect(string? value) => string.IsNullOrEmpty(value)
+        ? null
+        : Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), Entropy,
+            DataProtectionScope.CurrentUser));
+
+    private static string? Unprotect(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return null;
+        try
         {
-            if (string.IsNullOrEmpty(ProtectedKey)) return null;
-            try
-            {
-                var bytes = ProtectedData.Unprotect(Convert.FromBase64String(ProtectedKey), Entropy,
-                    DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(bytes);
-            }
-            catch (CryptographicException)
-            {
-                return null;
-            }
+            return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), Entropy,
+                DataProtectionScope.CurrentUser));
         }
-        set
+        catch (Exception error) when (error is CryptographicException || error is FormatException)
         {
-            ProtectedKey = string.IsNullOrEmpty(value)
-                ? null
-                : Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value!.Trim()), Entropy,
-                    DataProtectionScope.CurrentUser));
+            return null;
         }
     }
 
