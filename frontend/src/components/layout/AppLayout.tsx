@@ -38,6 +38,7 @@ import { usePriceControlWatcher } from '@/features/data-entry/price-control-watc
 import { FileQueueBanner } from '@/features/file-queue/FileQueueBanner'
 import { AgentStatusDot } from '@/features/store-agent/AgentStatusDot'
 import { useLiveEvents } from '@/features/store-agent/use-live-events'
+import { usePresenceHeartbeat } from '@/features/chat/use-presence'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore, useStoreFromAddress } from '@/features/stores/current-store'
@@ -60,6 +61,8 @@ export function AppLayout() {
   usePriceControlWatcher()
   // Wiadomości na żywo sklepu i stan agenta sklepu (zapis plików i pilnowanie folderów przez agenta).
   useLiveEvents()
+  // Obecność do czatu („online”, „ostatnio …”).
+  usePresenceHeartbeat()
   useWorkdayLock()
   useIdleLock()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)

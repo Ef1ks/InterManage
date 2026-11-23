@@ -10,7 +10,9 @@ import com.intermanage.backend.task.entity.TaskStatus;
 
 /**
  * Zadanie z pozycjami. {@code canManage}: zalogowany może je zmieniać, przyjmować i usuwać (zlecający);
- * {@code canComplete}: zalogowany jest wykonawcą (odhacza pozycje i oznacza wykonanie).
+ * {@code canComplete}: zalogowany jest wykonawcą (odhacza pozycje i oznacza wykonanie). {@code forStore}: zadanie
+ * całego sklepu ({@code assignee} pusty, wykonuje ktokolwiek ze sklepu). {@code group}: zlecenie kilku osobom
+ * naraz, każda ma swoją kopię.
  */
 public record TaskResponse(
         UUID id,
@@ -20,6 +22,8 @@ public record TaskResponse(
         TaskPriority priority,
         TaskStatus status,
         Person assignee,
+        boolean forStore,
+        Group group,
         Person createdBy,
         Instant createdAt,
         String sourceKind,
@@ -38,6 +42,13 @@ public record TaskResponse(
         boolean canComplete) {
 
     public record Person(UUID id, String displayName) {
+    }
+
+    /** Kopie zlecenia kilku osobom: ilu wykonało (oznaczyło albo przyjęte) i kto. */
+    public record Group(UUID id, int total, int done, List<GroupMember> members) {
+    }
+
+    public record GroupMember(UUID taskId, Person person, TaskStatus status) {
     }
 
     /** Zrzut ekranu albo zdjęcie; {@code canRemove}: zalogowany je dodał albo zarządza zadaniem. */

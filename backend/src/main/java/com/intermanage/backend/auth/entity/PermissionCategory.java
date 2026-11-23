@@ -25,7 +25,8 @@ public enum PermissionCategory {
     DASHBOARD("Pełny pulpit", "Wyniki sklepu na pulpicie: sprzedaż ostatnich 7 dni wobec roku wcześniej i trend tygodni"),
     CASH_REPORT("Raport kasowy", "Dokumenty KP i KW z wydrukiem i pieczątką sklepu, raport kasowy za okres i historia dokumentów"),
     STORE_LOG("Dziennik sklepu", "Kto, kiedy i co zmienił w sklepie, odrzucone próby i problemy systemu. Dla kierowników"),
-    STORE_RESULTS("Wyniki sklepów", "Szybki podgląd wszystkich sklepów: sprzedaż tygodnia wobec roku wcześniej, cel marży i wynik ostatniego dnia");
+    STORE_RESULTS("Wyniki sklepów", "Szybki podgląd wszystkich sklepów: sprzedaż tygodnia wobec roku wcześniej, cel marży i wynik ostatniego dnia"),
+    CHAT("Czat", "Zarządzanie czatem: zakładanie grup, członkowie i podgląd cofniętych wiadomości (pisze każdy)");
 
     private final String label;
     private final String description;

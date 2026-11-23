@@ -1,5 +1,7 @@
 package com.intermanage.backend.auth.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,6 +26,20 @@ public interface UserAvatarRepository extends JpaRepository<UserAvatar, UUID> {
             select a.id as id, a.storageKey as storageKey
             from UserAvatar a where a.user.id = :userId and a.removedAt is null""")
     Optional<Summary> findSummary(UUID userId);
+
+    /** Obowiązujące zdjęcia wielu kont naraz (czat, listy osób). */
+    interface OwnerSummary {
+        UUID getUserId();
+
+        UUID getId();
+
+        String getStorageKey();
+    }
+
+    @Query("""
+            select a.user.id as userId, a.id as id, a.storageKey as storageKey
+            from UserAvatar a where a.user.id in :userIds and a.removedAt is null""")
+    List<OwnerSummary> findSummaries(Collection<UUID> userIds);
 
     @Query("select a from UserAvatar a where a.id = :id and a.user.id = :userId")
     Optional<UserAvatar> findOwn(UUID id, UUID userId);

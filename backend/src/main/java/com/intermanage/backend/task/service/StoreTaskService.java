@@ -3,8 +3,12 @@ package com.intermanage.backend.task.service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -95,12 +99,17 @@ public class StoreTaskService {
     public TaskCounts counts(UUID storeId, UUID userId) {
         long waiting = assigns(userId, storeId)
                 ? tasks.countWaitingForAcceptance(storeId, creatorFilter(userId, storeId)) : 0;
-        return new TaskCounts(tasks.countOpenOfAssignee(storeId, userId), waiting);
+        return new TaskCounts(tasks.countOpenOfAssignee(storeId, userId), waiting, tasks.countOpenForStore(storeId));
     }
 
     @Transactional(readOnly = true)
     public List<TaskAssigneeResponse> assignees(UUID storeId, UUID userId) {
         return assignable(storeId, userId).stream().map(user -> mapper.toAssignee(user, storeId)).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean canAssignToStore(UUID storeId, UUID userId) {
+        return assignsToStore(userId, storeId);
     }
 
     @Transactional(readOnly = true)
@@ -115,39 +124,93 @@ public class StoreTaskService {
         return events.findOfTask(id).stream().map(mapper::toEvent).toList();
     }
 
+    /**
+     * Nowe zadanie: jednej osobie, kilku osobom (każda dostaje swoją kopię, kopie łączy grupa) albo całemu sklepowi
+     * (bez wykonawcy, wykonuje ktokolwiek ze sklepu). Odpowiedź to pierwsza kopia.
+     */
     @Transactional
     public TaskResponse create(UUID storeId, TaskRequest request, UUID userId) {
         Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie ma takiego sklepu"));
         AppUser user = users.getReferenceById(userId);
-        StoreTask task = new StoreTask(store, user, trim(request.sourceKind()), trim(request.sourceLabel()),
-                trim(request.sourceUrl()));
-        AppUser assignee = assignee(storeId, request.assigneeId(), userId);
-        task.describe(request.title().strip(), trim(request.description()), request.dueDate(), request.priority(),
-                assignee);
-        if (request.items() != null) {
-            for (TaskRequest.Item item : request.items()) {
-                task.addItem(trim(item.itm8()), trim(item.ean()), item.name().strip(), trim(item.details()));
+        List<AppUser> targets = targets(storeId, request, userId, true);
+        UUID groupId = targets.size() > 1 ? UUID.randomUUID() : null;
+        StoreTask first = null;
+        for (AppUser assignee : targets) {
+            StoreTask task = new StoreTask(store, user, trim(request.sourceKind()), trim(request.sourceLabel()),
+                    trim(request.sourceUrl()), groupId);
+            task.describe(request.title().strip(), trim(request.description()), request.dueDate(),
+                    request.priority(), assignee);
+            if (request.items() != null) {
+                for (TaskRequest.Item item : request.items()) {
+                    task.addItem(trim(item.itm8()), trim(item.ean()), item.name().strip(), trim(item.details()));
+                }
+            }
+            tasks.save(task);
+            events.save(new StoreTaskEvent(task, TaskEventKind.CREATED, user, null));
+            // Zadanie całego sklepu nie wysyła powiadomień do wszystkich: widać je na liście i na czacie.
+            if (assignee != null && !assignee.getId().equals(userId)) {
+                String body = task.getItems().isEmpty() ? task.getTitle()
+                        : task.getTitle() + " (" + task.getItems().size() + " poz.)";
+                push.notify(List.of(assignee.getId()), "Nowe zadanie", body, Map.of("url", MOBILE_URL));
+            }
+            if (first == null) {
+                first = task;
             }
         }
-        tasks.save(task);
-        events.save(new StoreTaskEvent(task, TaskEventKind.CREATED, user, null));
-        if (!assignee.getId().equals(userId)) {
-            String body = task.getItems().isEmpty() ? task.getTitle()
-                    : task.getTitle() + " (" + task.getItems().size() + " poz.)";
-            push.notify(List.of(assignee.getId()), "Nowe zadanie", body, Map.of("url", MOBILE_URL));
+        return response(first, userId);
+    }
+
+    /**
+     * Wykonawcy z żądania: {@code forStore} = jeden wpis {@code null} (cały sklep), inaczej osoby z
+     * {@code assigneeIds} i {@code assigneeId}. Przy zmianie zadania ({@code many} = false) najwyżej jedna osoba.
+     */
+    private List<AppUser> targets(UUID storeId, TaskRequest request, UUID userId, boolean many) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        if (request.assigneeIds() != null) {
+            ids.addAll(request.assigneeIds());
         }
-        return response(task, userId);
+        if (request.assigneeId() != null) {
+            ids.add(request.assigneeId());
+        }
+        if (Boolean.TRUE.equals(request.forStore())) {
+            if (!ids.isEmpty()) {
+                throw ApiException.badRequest("Zadanie zlecisz albo całemu sklepowi, albo wybranym osobom");
+            }
+            if (!assignsToStore(userId, storeId)) {
+                throw ApiException.forbidden(
+                        "Całemu sklepowi zleca właściciel, Aderon i konto z włączonym zlecaniem zadań");
+            }
+            return Collections.singletonList(null);
+        }
+        if (ids.isEmpty()) {
+            throw ApiException.badRequest("Wybierz, kto ma to zrobić");
+        }
+        if (!many && ids.size() > 1) {
+            throw ApiException.badRequest("Zlecone zadanie ma jednego wykonawcę");
+        }
+        List<AppUser> allowed = assignable(storeId, userId);
+        return ids.stream().map(id -> allowed.stream().filter(user -> user.getId().equals(id)).findFirst()
+                .orElseThrow(() -> ApiException.badRequest(
+                        "Temu kontu nie zlecisz zadania: nie ma dostępu do sklepu albo nie stoi w hierarchii niżej")))
+                .toList();
+    }
+
+    /** Całemu sklepowi zleca ten, kto może zlecać każdemu w sklepie (właściciel, Aderon, włączone zlecanie). */
+    private boolean assignsToStore(UUID userId, UUID storeId) {
+        StoreRoleService.Actor actor = ranks.actor(userId, storeId);
+        return actor.admin() || actor.user().isCanAssignTasks();
     }
 
     @Transactional
     public TaskResponse update(UUID storeId, UUID id, TaskRequest request, UUID userId) {
         StoreTask task = managed(storeId, id, userId);
         AppUser previous = task.getAssignee();
-        AppUser assignee = assignee(storeId, request.assigneeId(), userId);
+        AppUser assignee = targets(storeId, request, userId, false).getFirst();
         task.describe(request.title().strip(), trim(request.description()), request.dueDate(), request.priority(),
                 assignee);
         events.save(new StoreTaskEvent(task, TaskEventKind.EDITED, users.getReferenceById(userId), null));
-        if (!previous.getId().equals(assignee.getId()) && !assignee.getId().equals(userId)) {
+        if (assignee != null && (previous == null || !previous.getId().equals(assignee.getId()))
+                && !assignee.getId().equals(userId)) {
             push.notify(List.of(assignee.getId()), "Nowe zadanie", task.getTitle(), Map.of("url", MOBILE_URL));
         }
         return response(task, userId);
@@ -203,6 +266,35 @@ public class StoreTaskService {
         return response(task, userId);
     }
 
+    /**
+     * „Wszyscy już zrobili”: zamyka naraz otwarte kopie zlecenia kilku osobom. Może to zrobić każdy z wykonawców
+     * grupy i zlecający; zlecający dostaje jedno powiadomienie.
+     */
+    @Transactional
+    public TaskResponse doneAll(UUID storeId, UUID id, String comment, UUID userId) {
+        StoreTask task = active(storeId, id);
+        if (!groupMember(task, userId) && !manages(task, userId)) {
+            throw ApiException.forbidden("To zadanie wykonuje kto inny");
+        }
+        if (task.getGroupId() == null) {
+            throw ApiException.badRequest("To zadanie ma jednego wykonawcę");
+        }
+        AppUser user = users.getReferenceById(userId);
+        String note = trim(comment) == null ? "Wszyscy już zrobili" : trim(comment);
+        List<StoreTask> open = tasks.findOfGroups(List.of(task.getGroupId())).stream()
+                .filter(copy -> copy.getStatus() == TaskStatus.OPEN).toList();
+        if (open.isEmpty()) {
+            throw ApiException.conflict("Wszystkie kopie są już oznaczone jako wykonane");
+        }
+        open.forEach(copy -> markDone(copy, user, note, false));
+        AppUser creator = task.getCreatedBy();
+        if (creator != null && !creator.getId().equals(userId)) {
+            push.notify(List.of(creator.getId()), "Zadanie wykonane przez wszystkich", task.getTitle(),
+                    Map.of("url", MOBILE_URL));
+        }
+        return response(task, userId);
+    }
+
     @Transactional
     public TaskResponse accept(UUID storeId, UUID id, UUID userId) {
         StoreTask task = managed(storeId, id, userId);
@@ -227,7 +319,7 @@ public class StoreTaskService {
         }
         task.sendBack(trim(comment));
         events.save(new StoreTaskEvent(task, TaskEventKind.RETURNED, users.getReferenceById(userId), trim(comment)));
-        if (!task.getAssignee().getId().equals(userId)) {
+        if (task.getAssignee() != null && !task.getAssignee().getId().equals(userId)) {
             push.notify(List.of(task.getAssignee().getId()), "Zadanie do poprawy", task.getTitle(),
                     Map.of("url", MOBILE_URL));
         }
@@ -338,19 +430,23 @@ public class StoreTaskService {
     }
 
     private void markDone(StoreTask task, AppUser user, String comment) {
+        markDone(task, user, comment, true);
+    }
+
+    private void markDone(StoreTask task, AppUser user, String comment, boolean notify) {
         task.markDone(user, comment);
         events.save(new StoreTaskEvent(task, TaskEventKind.DONE, user, comment));
         AppUser creator = task.getCreatedBy();
-        if (creator != null && !creator.getId().equals(user.getId())) {
-            push.notify(List.of(creator.getId()), "Zadanie wykonane",
-                    task.getAssignee().getDisplayName() + ": " + task.getTitle(), Map.of("url", MOBILE_URL));
+        if (notify && creator != null && !creator.getId().equals(user.getId())) {
+            String who = task.getAssignee() == null ? user.getDisplayName() : task.getAssignee().getDisplayName();
+            push.notify(List.of(creator.getId()), "Zadanie wykonane", who + ": " + task.getTitle(),
+                    Map.of("url", MOBILE_URL));
         }
     }
 
-    private AppUser assignee(UUID storeId, UUID assigneeId, UUID userId) {
-        return assignable(storeId, userId).stream().filter(user -> user.getId().equals(assigneeId)).findFirst()
-                .orElseThrow(() -> ApiException.badRequest(
-                        "Temu kontu nie zlecisz zadania: nie ma dostępu do sklepu albo nie stoi w hierarchii niżej"));
+    /** Wykonawca zadania; zadanie całego sklepu wykonuje każdy z dostępem do sklepu (sprawdza je kontroler). */
+    private static boolean isAssignee(StoreTask task, UUID userId) {
+        return task.isForStore() || (task.getAssignee() != null && task.getAssignee().getId().equals(userId));
     }
 
     /**
@@ -379,14 +475,20 @@ public class StoreTaskService {
     /** Wykonawca widzi swoje zadania, zlecający te, którymi zarządza (właściciel wszystkie). */
     private StoreTask visible(UUID storeId, UUID id, UUID userId) {
         StoreTask task = active(storeId, id);
-        if (!task.getAssignee().getId().equals(userId) && !manages(task, userId)) {
+        if (!isAssignee(task, userId) && !groupMember(task, userId) && !manages(task, userId)) {
             throw ApiException.notFound("Nie ma takiego zadania");
         }
         return task;
     }
 
+    /** Wykonawca innej kopii tego samego zlecenia (widzi kopie, może oznaczyć „wszyscy już zrobili”). */
+    private boolean groupMember(StoreTask task, UUID userId) {
+        return task.getGroupId() != null && tasks.findOfGroups(List.of(task.getGroupId())).stream()
+                .anyMatch(copy -> isAssignee(copy, userId));
+    }
+
     private void requireAssigneeOrManager(StoreTask task, UUID userId) {
-        if (!task.getAssignee().getId().equals(userId) && !manages(task, userId)) {
+        if (!isAssignee(task, userId) && !manages(task, userId)) {
             throw ApiException.forbidden("To zadanie wykonuje kto inny");
         }
     }
@@ -443,6 +545,7 @@ public class StoreTaskService {
         Map<UUID, List<TaskResponse.Item>> byTask = items.findOfTasks(found.stream().map(StoreTask::getId).toList())
                 .stream().collect(Collectors.groupingBy(item -> item.getTask().getId(),
                         Collectors.mapping(mapper::toItem, Collectors.toList())));
+        Map<UUID, TaskResponse.Group> groups = groups(found);
         Map<UUID, List<StoreTaskAttachmentRepository.Summary>> filesByTask = attachments
                 .findOfTasks(found.stream().map(StoreTask::getId).toList()).stream()
                 .collect(Collectors.groupingBy(StoreTaskAttachmentRepository.Summary::getTaskId));
@@ -451,8 +554,8 @@ public class StoreTaskService {
             boolean manager = manages(task, userId, owner, assigner);
             List<TaskResponse.Attachment> files = filesByTask.getOrDefault(task.getId(), List.of()).stream()
                     .map(file -> toAttachment(file, manager, userId)).toList();
-            result.add(mapper.toResponse(task, byTask.getOrDefault(task.getId(), List.of()), files, manager,
-                    task.getAssignee().getId().equals(userId)));
+            result.add(mapper.toResponse(task, group(groups, task), byTask.getOrDefault(task.getId(), List.of()),
+                    files, manager, isAssignee(task, userId)));
         }
         return result;
     }
@@ -462,7 +565,27 @@ public class StoreTaskService {
         boolean manager = manages(task, userId);
         List<TaskResponse.Attachment> files = attachments.findOfTasks(List.of(task.getId())).stream()
                 .map(file -> toAttachment(file, manager, userId)).toList();
-        return mapper.toResponse(task, list, files, manager, task.getAssignee().getId().equals(userId));
+        return mapper.toResponse(task, group(groups(List.of(task)), task), list, files, manager,
+                isAssignee(task, userId));
+    }
+
+    private static TaskResponse.Group group(Map<UUID, TaskResponse.Group> groups, StoreTask task) {
+        return task.getGroupId() == null ? null : groups.get(task.getGroupId());
+    }
+
+    /** Postęp zleceń kilku osobom: grupa → ile kopii, ile wykonanych i kto. */
+    private Map<UUID, TaskResponse.Group> groups(List<StoreTask> found) {
+        List<UUID> groupIds = found.stream().map(StoreTask::getGroupId).filter(Objects::nonNull).distinct().toList();
+        if (groupIds.isEmpty()) {
+            return Map.of();
+        }
+        return tasks.findOfGroups(groupIds).stream().collect(Collectors.groupingBy(StoreTask::getGroupId,
+                Collectors.collectingAndThen(Collectors.toList(), copies -> new TaskResponse.Group(
+                        copies.getFirst().getGroupId(), copies.size(),
+                        (int) copies.stream().filter(copy -> copy.getStatus() != TaskStatus.OPEN).count(),
+                        copies.stream().map(copy -> new TaskResponse.GroupMember(copy.getId(),
+                                copy.getAssignee() == null ? null : mapper.toPerson(copy.getAssignee()),
+                                copy.getStatus())).toList()))));
     }
 
     private TaskResponse.Attachment toAttachment(StoreTaskAttachmentRepository.Summary file, boolean manager,

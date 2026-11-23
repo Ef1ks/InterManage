@@ -20,8 +20,12 @@ public interface TaskMapper {
     @Mapping(target = "items", source = "items")
     @Mapping(target = "itemCount", expression = "java(items.size())")
     @Mapping(target = "checkedCount", expression = "java((int) items.stream().filter(TaskResponse.Item::checked).count())")
-    TaskResponse toResponse(StoreTask task, List<TaskResponse.Item> items, List<TaskResponse.Attachment> attachments,
-            boolean canManage, boolean canComplete);
+    @Mapping(target = "forStore", expression = "java(task.isForStore())")
+    @Mapping(target = "group", source = "group")
+    @Mapping(target = "id", source = "task.id")
+    @Mapping(target = "status", source = "task.status")
+    TaskResponse toResponse(StoreTask task, TaskResponse.Group group, List<TaskResponse.Item> items,
+            List<TaskResponse.Attachment> attachments, boolean canManage, boolean canComplete);
 
     TaskResponse.Attachment toAttachment(StoreTaskAttachmentRepository.Summary summary, boolean canRemove);
 

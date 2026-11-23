@@ -16,6 +16,10 @@ type AuthState = {
   selectStore: (storeId: string) => void
   /** Karta artykułu jak w API (`Access.ARTICLE_STATS`): Magazyn, raporty sprzedaży albo wprowadzanie danych. */
   canSeeArticles: boolean
+  /** Raporty sprzedaży w wybranym sklepie (`SALES:VIEW`). */
+  canSeeReports: boolean
+  /** Sklepy konta z uprawnieniem Wyniki sklepów (`STORE_RESULTS`), w kolejności listy sklepów. */
+  resultStores: StoreSummary[]
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -107,6 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       selectStore,
       canSeeArticles: !!me && (me.owner || !!permissions.INVENTORY || !!permissions.SALES || !!permissions.DATA_ENTRY),
+      canSeeReports: !!me && (me.owner || !!permissions.SALES),
+      resultStores: me ? stores.filter((item) => me.owner || !!me.storePermissions?.[item.id]?.STORE_RESULTS) : [],
     }
   }, [me, storeId, login, logout, selectStore])
 

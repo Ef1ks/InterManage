@@ -109,6 +109,9 @@ public class PromotionReportParser {
          * wydruku), zależnie od tego, jak system ułożył nagłówek, więc numer szukamy w całym wierszu.
          */
         private static final Pattern STORE_NUMBER = Pattern.compile("sp z o o (\\d{3,})\\b");
+        /** Nagłówek bez formy prawnej ("TRYTOMA : 10025", lista z 23.11.2026): nazwa, dwukropek, numer sklepu. */
+        private static final Pattern STORE_NUMBER_AFTER_NAME = Pattern.compile(
+                "^\\s*\\p{L}[^:]*?\\s:\\s*(\\d{4,5})\\b");
         /** "(DATY KOŃCA 02/11/26 - 02/11/28)". */
         private static final Pattern END_RANGE = Pattern.compile("(\\d{2}/\\d{2}/\\d{2})\\s*-\\s*(\\d{2}/\\d{2}/\\d{2})");
         private static final Pattern DATE = Pattern.compile("\\d{2}/\\d{2}/\\d{2}");
@@ -175,7 +178,10 @@ public class PromotionReportParser {
             }
             // Numer sklepu przed datą wydruku: oba bywają w jednym wierszu, a data kończy czytanie wiersza.
             Matcher store = STORE_NUMBER.matcher(normalized);
-            if (store.find()) {
+            if (!store.find()) {
+                store = STORE_NUMBER_AFTER_NAME.matcher(text);
+            }
+            if (store.find(0)) {
                 if (storeNumber == null) {
                     storeNumber = store.group(1);
                 }

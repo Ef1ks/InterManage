@@ -6,9 +6,10 @@ import { useEffect, useMemo, useState, type ComponentRef, type ReactNode, type R
 import { Animated, Easing, Keyboard, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { CalendarIcon, HomeIcon, InboxIcon, ScanIcon } from '@/components/icons'
+import { CalendarIcon, HomeIcon, InboxIcon, MessageIcon, ScanIcon } from '@/components/icons'
 import { addDays } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
+import { useChatUnread } from '@/lib/chat'
 import { useReduceMotion } from '@/lib/motion'
 import { useMySchedule } from '@/lib/queries'
 import { useMyAnomalies } from '@/lib/requests'
@@ -26,7 +27,15 @@ const LIQUID_GLASS = Platform.OS === 'ios' && isLiquidGlassAvailable()
 
 /** Ekrany, nad którymi unosi się pasek; skaner, panel konta i logowanie mają cały ekran dla siebie. */
 function showsDock(pathname: string) {
-  return pathname === '/' || pathname === '/schedule' || pathname === '/requests' || pathname.startsWith('/article')
+  return (
+    pathname === '/' ||
+    pathname === '/schedule' ||
+    pathname === '/requests' ||
+    pathname === '/chat' ||
+    pathname === '/store-results' ||
+    pathname.startsWith('/reports') ||
+    pathname.startsWith('/article')
+  )
 }
 
 /** Ile miejsca zostawić pod treścią przewijaną, żeby ostatnia karta nie chowała się pod paskiem. */
@@ -67,6 +76,7 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
   const schedule = useMySchedule(range)
   const employee = schedule.data?.employee !== false
   const anomalies = useMyAnomalies(!!me && employee)
+  const chatUnread = useChatUnread(!!me)
 
   const visible = !!me && showsDock(pathname) && !keyboardOpen
 
@@ -110,6 +120,17 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
       },
     })
   }
+
+  items.push({
+    key: 'chat',
+    label: 'Czat',
+    icon: (color) => <MessageIcon color={color} size={22} />,
+    active: pathname === '/chat',
+    badge: chatUnread.data?.total ?? 0,
+    onPress: () => {
+      if (pathname !== '/chat') router.navigate('/chat')
+    },
+  })
 
   const activeIndex = items.findIndex((item) => item.active)
 
@@ -201,7 +222,11 @@ export function FloatingDock({ blurTarget }: { blurTarget: RefObject<ComponentRe
                 item.onPress()
               }}
               accessibilityRole="tab"
-              accessibilityLabel={item.badge ? `${item.label}, do wyjaśnienia: ${item.badge}` : item.label}
+              accessibilityLabel={
+                item.badge
+                  ? `${item.label}, ${item.key === 'chat' ? 'nieprzeczytane' : 'do wyjaśnienia'}: ${item.badge}`
+                  : item.label
+              }
               accessibilityState={{ selected: item.active }}
               style={({ pressed }) => [styles.item, pressed && { transform: [{ scale: 0.9 }] }]}
             >

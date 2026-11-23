@@ -29,7 +29,12 @@ export type TaskInput = {
   description: string | null
   dueDate: string | null
   priority: TaskPriority
-  assigneeId: string
+  /** Jeden wykonawca (zmiana zadania). */
+  assigneeId?: string | null
+  /** Kilka osób naraz: każda dostaje swoją kopię (tylko nowe zadanie). */
+  assigneeIds?: string[]
+  /** Cały sklep: wykonuje ktokolwiek z dostępem do sklepu. */
+  forStore?: boolean
   sourceKind?: string | null
   sourceLabel?: string | null
   sourceUrl?: string | null
@@ -105,6 +110,16 @@ export function useTaskAssignees(storeId: string, enabled: boolean) {
   })
 }
 
+/** Czy zalogowany zleca całemu sklepowi (właściciel, Aderon, włączone zlecanie). */
+export function useStoreAssignable(storeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['tasks', storeId, 'store-assignable'],
+    queryFn: () => api<{ allowed: boolean }>(path(storeId, '/store-assignable')),
+    enabled,
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function useTaskHistory(storeId: string, taskId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['tasks', storeId, 'history', taskId],
@@ -136,6 +151,11 @@ export function useTaskActions(storeId: string) {
     mutationFn: ({ id, comment }: { id: string; comment?: string | null }) =>
       api<StoreTask>(path(storeId, `/${id}/done`), { method: 'POST', json: { comment: comment ?? null } }),
   })
+  /** „Wszyscy już zrobili”: zamyka otwarte kopie zlecenia kilku osobom. */
+  const doneAll = useMutation({
+    mutationFn: ({ id, comment }: { id: string; comment?: string | null }) =>
+      api<StoreTask>(path(storeId, `/${id}/done-all`), { method: 'POST', json: { comment: comment ?? null } }),
+  })
   const undone = useMutation({
     mutationFn: (id: string) => api<StoreTask>(path(storeId, `/${id}/undone`), { method: 'POST' }),
   })
@@ -152,7 +172,7 @@ export function useTaskActions(storeId: string) {
   const restore = useMutation({
     mutationFn: (id: string) => api<StoreTask>(path(storeId, `/${id}/restore`), { method: 'POST' }),
   })
-  return { checkItem, done, undone, accept, sendBack, remove, restore }
+  return { checkItem, done, doneAll, undone, accept, sendBack, remove, restore }
 }
 
 /** Zadanie po terminie: termin minął, a nie jest jeszcze wykonane. */

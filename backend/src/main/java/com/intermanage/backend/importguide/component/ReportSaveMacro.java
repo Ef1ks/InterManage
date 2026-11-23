@@ -259,9 +259,24 @@ public final class ReportSaveMacro {
             periods.add(new Period(from.isBefore(earliest) ? earliest : from, gap.to()));
         }
         periods.add(new Period(current.from().isBefore(start) ? start : current.from(), current.to()));
+        // Okresy, które się stykają albo nachodzą (zaległy dzień tuż przed bieżącym okresem), to jeden wydruk; dzieli
+        // go dopiero limit Mercalys. Inaczej 21.11 i 22-23.11 szły dwoma plikami.
+        List<Period> merged = new ArrayList<>();
         for (Period period : periods) {
+            if (period.from().isAfter(period.to())) {
+                continue;
+            }
+            Period last = merged.isEmpty() ? null : merged.getLast();
+            if (last != null && !period.from().isAfter(last.to().plusDays(1))) {
+                merged.set(merged.size() - 1,
+                        new Period(last.from(), period.to().isAfter(last.to()) ? period.to() : last.to()));
+            } else {
+                merged.add(period);
+            }
+        }
+        for (Period period : merged) {
             if (!period.from().isAfter(period.to())) {
-                result.addAll(splitPeriod(period, length));
+                result.addAll(splitPeriod(period, length, kind == ImportReportKind.DOCUMENTS));
             }
         }
         return result;
@@ -294,16 +309,27 @@ public final class ReportSaveMacro {
 
     /** Okres na części najwyżej po {@code length}, od najstarszej. */
     static List<Period> splitPeriod(Period period, PartLength length) {
+        return splitPeriod(period, length, false);
+    }
+
+    /**
+     * Okres na części najwyżej po {@code length}, od najstarszej. Z {@code interlocked} kolejna część zaczyna się
+     * w dniu końca poprzedniej (data max staje się datą min), bo formularz dokumentów zostaje z datami poprzedniej
+     * części i Mercalys nie przyjmie daty min późniejszej od starej daty max; dzień wspólny import scala.
+     */
+    static List<Period> splitPeriod(Period period, PartLength length, boolean interlocked) {
         List<Period> parts = new ArrayList<>();
         LocalDate from = period.from();
-        while (!from.isAfter(period.to())) {
+        while (true) {
             LocalDate end = length.weeks() ? from.plusDays(length.count() * 7L - 1)
                     : from.plusMonths(length.count()).minusDays(1);
             LocalDate to = end.isBefore(period.to()) ? end : period.to();
             parts.add(new Period(from, to));
-            from = to.plusDays(1);
+            if (!to.isBefore(period.to())) {
+                return parts;
+            }
+            from = interlocked ? to : to.plusDays(1);
         }
-        return parts;
     }
 
     /** Ścieżka części („sprzedaz 1 z 3.xlsx”); ostatnia, najnowsza ma ścieżkę z ustawień. */
@@ -425,13 +451,20 @@ public final class ReportSaveMacro {
                     steps.add("WEBOPEN|" + w + "|mnTv_PILOTAGE_Etats"
                             + "|mnTv_VENTE_ve-e048_rapportMouvenementEnFonctionDocuments|" + from);
                 }
+                // Mercalys sprawdza daty po wyjściu z pola: kolejna część zaczyna się po końcu poprzedniej, więc data
+                // min wpisana pierwsza byłaby późniejsza niż stara data max („data min nie może być większa od daty
+                // max”). Wtedy najpierw data max (jest późniejsza od starej), potem min.
+                String first = continuing ? to : from;
+                String second = continuing ? from : to;
+                LocalDate firstDate = continuing ? period.to() : period.from();
+                LocalDate secondDate = continuing ? period.from() : period.to();
                 steps.addAll(List.of(
                         "WEBWAIT|" + w + "|" + from + "||" + PAGE_TIMEOUT_MS,
-                        "WEBKEY|" + w + "|" + from + "|^a" + typed(period.from()) + "{Tab}",
-                        "WEBVALUE|" + w + "|" + from + "|" + datePattern(period.from()) + "|" + PAGE_TIMEOUT_MS,
-                        "WEBKEY|" + w + "|" + to + "|^a" + typed(period.to()) + "{Tab}",
-                        "WEBVALUE|" + w + "|" + to + "|" + datePattern(period.to()) + "|" + PAGE_TIMEOUT_MS,
-                        "WEBVALUE|" + w + "|" + from + "|" + datePattern(period.from()) + "|" + PAGE_TIMEOUT_MS,
+                        "WEBKEY|" + w + "|" + first + "|^a" + typed(firstDate) + "{Tab}",
+                        "WEBVALUE|" + w + "|" + first + "|" + datePattern(firstDate) + "|" + PAGE_TIMEOUT_MS,
+                        "WEBKEY|" + w + "|" + second + "|^a" + typed(secondDate) + "{Tab}",
+                        "WEBVALUE|" + w + "|" + second + "|" + datePattern(secondDate) + "|" + PAGE_TIMEOUT_MS,
+                        "WEBVALUE|" + w + "|" + first + "|" + datePattern(firstDate) + "|" + PAGE_TIMEOUT_MS,
                         "WEBCLICK|" + w + "|btnB2_Valider_LnkBouton"));
                 yield steps;
             }

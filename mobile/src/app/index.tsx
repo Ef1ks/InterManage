@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native'
 
-import { ArrowRightIcon, SearchIcon } from '@/components/icons'
+import { ArrowRightIcon, ChartIcon, SearchIcon, StoreIcon } from '@/components/icons'
 import { useDockInset } from '@/components/FloatingDock'
 import { MyScheduleCard } from '@/components/MyScheduleCard'
 import { ProductChoices } from '@/components/ProductChoices'
@@ -32,7 +32,7 @@ import type { ProductListItem } from '@/lib/types'
  */
 export default function HomeScreen() {
   const t = useTheme()
-  const { me, store, canSeeArticles } = useAuth()
+  const { me, store, canSeeArticles, canSeeReports, resultStores } = useAuth()
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -68,6 +68,7 @@ export default function HomeScreen() {
   if (!canSeeArticles) {
     return (
       <ScrollView contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: dockInset }}>
+        <ReportShortcuts reports={canSeeReports} results={resultStores.length > 0} />
         {store ? <TasksCard storeId={store.id} /> : null}
         <TimeAnomaliesCard />
         <MyScheduleCard storeNumber={store?.number} />
@@ -143,6 +144,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        <ReportShortcuts reports={canSeeReports} results={resultStores.length > 0} />
         {store ? <TasksCard storeId={store.id} /> : null}
         <TimeAnomaliesCard />
         <MyScheduleCard storeNumber={store?.number} />
@@ -155,7 +157,44 @@ export default function HomeScreen() {
   )
 }
 
+/** Skróty do raportów i wyników sklepów pod wyszukiwarką; bez uprawnień ich nie ma. */
+function ReportShortcuts({ reports, results }: { reports: boolean; results: boolean }) {
+  const t = useTheme()
+  if (!reports && !results) return null
+  const tile = (label: string, icon: React.ReactNode, href: '/reports' | '/store-results') => (
+    <Pressable
+      key={href}
+      onPress={() => router.push(href)}
+      accessibilityRole="link"
+      style={({ pressed }) => [
+        styles.shortcut,
+        { backgroundColor: t.card, borderColor: t.border, opacity: pressed ? 0.8 : 1 },
+        pressed && { transform: [{ scale: 0.98 }] },
+      ]}
+    >
+      {icon}
+      <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }}>{label}</Text>
+    </Pressable>
+  )
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      {reports ? tile('Raporty', <ChartIcon color={t.chartNow} size={22} />, '/reports') : null}
+      {results ? tile('Wyniki sklepów', <StoreIcon color={t.chartNow} size={22} />, '/store-results') : null}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  shortcut: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 56,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+  },
   search: {
     flexDirection: 'row',
     alignItems: 'center',

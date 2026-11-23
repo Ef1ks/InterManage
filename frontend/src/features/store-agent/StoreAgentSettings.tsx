@@ -13,7 +13,7 @@ import { ApiError } from '@/lib/api'
 import type { StoreAgent } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-import { useAddAgent, useAgentEnabled, useRemoveAgent, useRestoreAgent, useStoreAgents } from './api'
+import { useAddAgent, useAgentEnabled, useAgentPreferred, useRemoveAgent, useRestoreAgent, useStoreAgents } from './api'
 import { setSystemNotificationsEnabled, systemNotificationsEnabled } from './use-live-events'
 
 const dateTime = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'medium' })
@@ -30,6 +30,7 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
   const remove = useRemoveAgent(storeId)
   const restore = useRestoreAgent(storeId)
   const enabled = useAgentEnabled(storeId)
+  const preferred = useAgentPreferred(storeId)
   const [name, setName] = useState('')
   const [newKey, setNewKey] = useState<{ name: string; key: string } | null>(null)
 
@@ -58,6 +59,21 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
       onError: (error) => toast.error(errorMessage(error, 'Nie udało się dodać agenta.')),
     })
   }
+
+  const setPreferred = (agent: StoreAgent, value: boolean) =>
+    preferred.mutate(
+      { id: agent.id, preferred: value },
+      {
+        onSuccess: () =>
+          toast.success(
+            value
+              ? `${agent.name} przejmie pilnowanie folderów, gdy tylko będzie online.`
+              : `${agent.name} nie jest już preferowany.`,
+            { action: { label: 'Cofnij', onClick: () => preferred.mutate({ id: agent.id, preferred: !value }) } },
+          ),
+        onError: (error) => toast.error(errorMessage(error, 'Nie udało się zapisać ustawienia.')),
+      },
+    )
 
   const removeAgent = (agent: StoreAgent) =>
     remove.mutate(agent.id, {
@@ -123,7 +139,16 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
       )}
 
       <Card className="grid gap-3 p-4">
-        <h3 className="font-medium">Agenci</h3>
+        <div className="grid gap-1">
+          <h3 className="font-medium">Agenci</h3>
+          {active.length > 1 && (
+            <p className="text-sm text-muted-foreground">
+              Pliki zapisuje każdy włączony komputer. Folderów pilnuje i dane z Mercalys aktualizuje tylko główny agent.
+              Gdy zostanie wyłączony, przejmuje to inny komputer, a preferowany odbiera tę rolę od razu, gdy tylko jest
+              online. Jako preferowany zaznacz komputer w biurze, nie kasę.
+            </p>
+          )}
+        </div>
         {active.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Brak agentów. Dodaj agenta, skopiuj klucz i uruchom program agenta na komputerze w sklepie (z „Do
@@ -146,6 +171,14 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
                     >
                       {agent.online ? 'online' : 'offline'}
                     </Badge>
+                    {agent.leader && agent.online && (
+                      <Badge
+                        className="bg-sky-200 text-sky-950 dark:bg-sky-900/70 dark:text-sky-100"
+                        title="Pilnuje folderów i aktualizuje dane z Mercalys"
+                      >
+                        główny
+                      </Badge>
+                    )}
                     {agent.lastVersion && (
                       <span className="text-xs text-muted-foreground">wersja {agent.lastVersion}</span>
                     )}
@@ -156,6 +189,15 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
                     {agent.lastSeenAt && ` · ostatni kontakt ${dateTime.format(new Date(agent.lastSeenAt))}`}
                   </p>
                 </div>
+                <label className="flex shrink-0 items-center gap-2 self-center text-xs text-muted-foreground">
+                  Preferowany
+                  <Switch
+                    aria-label={`Agent ${agent.name} preferowany na głównego`}
+                    checked={agent.preferred}
+                    disabled={preferred.isPending}
+                    onCheckedChange={(checked) => setPreferred(agent, checked)}
+                  />
+                </label>
                 <Button
                   variant="ghost"
                   size="icon-sm"

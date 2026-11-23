@@ -39,9 +39,12 @@ public class StoreEventFilter extends OncePerRequestFilter {
     private static final Pattern STORE_PATH = Pattern.compile(
             "^/api/stores/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(/.*)?$");
     private static final Set<String> CHANGES = Set.of("POST", "PUT", "PATCH", "DELETE");
-    /** Logowanie, własne konto, czytniki kart i usługi pomocnicze: to nie są zdarzenia sklepu. */
+    /**
+     * Logowanie, własne konto, czytniki kart, usługi pomocnicze i czat (rozmowy pracowników, „pisze…”, obecność):
+     * to nie są zdarzenia sklepu.
+     */
     private static final List<String> SKIPPED_PREFIXES = List.of("/api/auth/", "/api/me/", "/api/time-clock/",
-            "/api/gus/", "/api/store-agent/");
+            "/api/gus/", "/api/store-agent/", "/api/chat/");
     /** Kawałki wysyłanych plików i znaczniki odczytu: szum, a nie zmiana. */
     private static final Pattern SKIPPED = Pattern.compile(
             ".*/(chunks/\\d+|imports/uploads|seen|preview|read|pending)$");

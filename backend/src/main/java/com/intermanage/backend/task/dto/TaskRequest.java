@@ -22,7 +22,12 @@ public record TaskRequest(
         @Size(max = 4000, message = "Opis może mieć najwyżej 4000 znaków") String description,
         LocalDate dueDate,
         @NotNull(message = "Wybierz priorytet") TaskPriority priority,
-        @NotNull(message = "Wybierz, kto ma to zrobić") UUID assigneeId,
+        /** Jeden wykonawca (zmiana zadania i starsze aplikacje). */
+        UUID assigneeId,
+        /** Kilka osób naraz: każda dostaje swoją kopię (tylko przy zakładaniu). */
+        @Size(max = 100, message = "Zadanie zlecisz naraz najwyżej 100 osobom") List<UUID> assigneeIds,
+        /** Zadanie dla całego sklepu: wykonuje ktokolwiek z dostępem do sklepu. */
+        Boolean forStore,
         @Size(max = 60) String sourceKind,
         @Size(max = 200) String sourceLabel,
         // Tylko ścieżka w aplikacji: z zadania nie da się zrobić odnośnika na obcą stronę (//host, javascript:).

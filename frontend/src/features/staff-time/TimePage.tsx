@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -33,6 +33,7 @@ import { LEGEND, STATUS_STYLES, hm, range, shift, type TimeView } from '@/featur
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { useCan } from '@/features/auth/api'
 import { ApiError } from '@/lib/api'
+import { onLiveMessage } from '@/lib/live-events'
 import { addDays, formatMonth, todayIso } from '@/lib/dates'
 import type { StoreSummary, TimeCardRow, TimeCards, TimeSegment } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -69,6 +70,7 @@ function StoreTime({ store }: { store: StoreSummary }) {
   const { from, to } = range(view, date)
   const showsToday = from <= todayIso() && todayIso() <= to
   const cards = useTimeCards(department ? { storeId: store.id, departmentId: department.id, from, to } : null)
+  usePunchToasts(store.id, cards.data)
   const [dialog, setDialog] = useState<'simulator' | 'settings' | 'symfonia' | null>(null)
   const [picked, setPicked] = useState<{ row: TimeCardRow; segment: TimeSegment } | null>(null)
   const decisions = useTimeDecisions(store.id, department?.id ?? '')
@@ -461,5 +463,41 @@ function Legend({ tolerance, canDecide, view }: { tolerance: number; canDecide: 
           : 'Decyzje podejmuje kierownik działu.'}
       </p>
     </div>
+  )
+}
+
+const PUNCH_LABELS: Record<string, string> = {
+  IN: 'wejście',
+  OUT: 'wyjście',
+}
+
+/**
+ * Odbicie z kiosku na żywo (wiadomość `staff-time`): krótki toast tylko na tej stronie i tylko dla osób z kart
+ * oglądanego działu, bo imię bierzemy z kart (wiadomość niesie samo id pracownika). Odświeżenie kart robi
+ * use-live-events w układzie aplikacji.
+ */
+function usePunchToasts(storeId: string, cards: TimeCards | undefined) {
+  const names = useRef(new Map<string, string>())
+  useEffect(() => {
+    names.current = new Map((cards?.rows ?? []).map((row) => [row.employeeId, row.name]))
+  }, [cards])
+  useEffect(
+    () =>
+      onLiveMessage((messageStore, message) => {
+        if (messageStore !== storeId || message.topic !== 'staff-time') return
+        if (message.action !== 'punch' && message.action !== 'break') return
+        const name = names.current.get(String(message.employeeId))
+        if (!name) return
+        const at = typeof message.at === 'string' ? new Date(message.at) : null
+        const time =
+          at && !Number.isNaN(at.getTime())
+            ? at.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+            : ''
+        const what = message.action === 'break' ? 'przerwa' : (PUNCH_LABELS[String(message.direction)] ?? 'odbicie')
+        toast.message(`${name}: ${what}${time ? ` ${time}` : ''}`, {
+          id: `punch:${String(message.employeeId)}:${String(message.at)}`,
+        })
+      }),
+    [storeId],
   )
 }

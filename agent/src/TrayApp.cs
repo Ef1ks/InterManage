@@ -68,12 +68,16 @@ internal sealed class TrayApp : ApplicationContext
             if (ui.IsHandleCreated) ui.BeginInvoke(new Action(UpdateIcon));
         };
         // Przy starcie komputera (agent startuje z Windows): raporty Importu danych nie z dzisiaj aktualizuje makro.
-        host.Connected += () =>
+        // Tylko główny agent sklepu, więc przy agencie na kilku komputerach makro nie rusza na każdym (kasa); komputer,
+        // który przejmie rolę później, sprawdza raporty wtedy (serwer pilnuje, żeby nie aktualizowały dwa naraz).
+        void StartUpdate()
         {
-            if (startUpdateDone || !settings.UpdateOnStart) return;
+            if (startUpdateDone || !settings.UpdateOnStart || host.Config == null || !host.IsLeader) return;
             startUpdateDone = true;
             Task.Run(() => update.RunAsync(settings, false, closing.Token));
-        };
+        }
+        host.Connected += StartUpdate;
+        host.LeadershipChanged += StartUpdate;
 
         UpdateIcon();
         if (!settings.HasKey)

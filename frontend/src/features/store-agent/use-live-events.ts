@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { useCurrentUser } from '@/features/auth/api'
@@ -89,6 +89,18 @@ export function useLiveEvents() {
               announce(`Program sklepu wczytał zmianę cen${supplier}`, undefined, `price-control:${String(message.id)}`)
             }
             break
+          case 'staff-time':
+            // Odbicie z kiosku, przerwa albo decyzja: karty Czasu pracy, „W pracy teraz” i liczniki do reakcji.
+            // Powiadomienie z nazwiskiem pokazuje tylko strona Czasu pracy (TimePage).
+            void queryClient.invalidateQueries({ queryKey: ['staff-time', messageStore] })
+            break
+          case 'chat':
+            invalidateChat(queryClient, message)
+            if (message.type === 'message' && message.authorId !== userId) {
+              const mentioned = Array.isArray(message.mentioned) && message.mentioned.includes(userId)
+              notifyChat(mentioned)
+            }
+            break
           case 'athos':
             invalidate('mea')
             break
@@ -118,6 +130,34 @@ export function useLiveEvents() {
             break
         }
       }),
-    [queryClient],
+    [queryClient, userId],
   )
+}
+
+/**
+ * Czat odświeża tylko to, co się zmieniło: odczyt samą rozmowę (znaczniki „wyświetlona”), bo w czacie sklepu jedna
+ * wiadomość daje odczyt od każdego, nowa albo cofnięta wiadomość listę, licznik i rozmowę, zmiana grupy cały czat.
+ * „Pisze…” czyta sama strona czatu.
+ */
+function invalidateChat(queryClient: QueryClient, message: LiveMessage) {
+  const thread = ['chat', 'thread', String(message.conversationId)]
+  switch (message.type) {
+    case 'typing':
+      return
+    case 'read':
+      void queryClient.invalidateQueries({ queryKey: thread })
+      return
+    case 'conversation':
+      void queryClient.invalidateQueries({ queryKey: ['chat'] })
+      return
+    default:
+      void queryClient.invalidateQueries({ queryKey: thread })
+      void queryClient.invalidateQueries({ queryKey: ['chat', 'conversations'] })
+      void queryClient.invalidateQueries({ queryKey: ['chat', 'unread'] })
+  }
+}
+
+/** Nowa wiadomość z karty w tle: powiadomienie systemowe, gdy ktoś je włączył (tak jak przy agencie). */
+function notifyChat(mentioned: boolean) {
+  notify(mentioned ? 'Oznaczono Cię na czacie' : 'Nowa wiadomość na czacie', undefined, 'chat')
 }

@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -43,7 +45,8 @@ import jakarta.validation.Valid;
 /**
  * API agenta sklepu: bez logowania i bez CSRF (wyjątek w {@code SecurityConfig}, jak czytniki kart), agent
  * przedstawia się kluczem z Ustawień sklepu w nagłówku {@code Authorization: Bearer <klucz>}. Każde żądanie odświeża
- * kontakt agenta; usunięty klucz = 403.
+ * kontakt agenta i dzierżawę głównego agenta sklepu; nagłówek {@code X-Agent-Leader: true|false} w każdej odpowiedzi
+ * mówi agentowi, czy ma pilnować folderów i aktualizować dane. Usunięty klucz = 403.
  *
  * <pre>
  * POST /api/store-agent/hello              {version, machineName, user} → foldery, pilnowane foldery
@@ -58,7 +61,9 @@ import jakarta.validation.Valid;
  * POST /api/store-agent/reports/{id}/finish           202, import w tle
  * POST /api/store-agent/reports/removed    {folderKey, fileName, modified} (agent usunął wgrany raport z folderu)
  * GET  /api/store-agent/reports            ostatnie próby wgrania raportów (okno aktualizacji danych)
- * POST /api/store-agent/report-macro       {kinds} → makro aktualizacji raportów z Mercalys (pliki nie z dzisiaj)
+ * POST /api/store-agent/report-macro       {kinds, automatic} → makro aktualizacji raportów z Mercalys (pliki nie
+ *                                          z dzisiaj); 409, gdy aktualizuje inny komputer albo agent nie jest główny
+ * POST /api/store-agent/report-macro/finished   koniec aktualizacji (zdejmuje blokadę)
  * </pre>
  */
 @RestController
@@ -66,6 +71,7 @@ import jakarta.validation.Valid;
 public class StoreAgentApiController {
 
     private static final String BEARER = "Bearer ";
+    public static final String LEADER_HEADER = "X-Agent-Leader";
 
     private final StoreAgentService agents;
     private final AgentFileQueueService waiting;
@@ -188,7 +194,21 @@ public class StoreAgentApiController {
             }
             kinds.add(parsed);
         }
-        return macros.build(agent.storeId(), kinds);
+        agents.startUpdate(agent, !Boolean.FALSE.equals(request.automatic()));
+        try {
+            return macros.build(agent.storeId(), kinds);
+        } catch (RuntimeException e) {
+            agents.finishUpdate(agent);
+            throw e;
+        }
+    }
+
+    /** Koniec aktualizacji danych z Mercalys na tym komputerze (udanej albo nie). */
+    @PostMapping("/report-macro/finished")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reportMacroFinished(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization) {
+        agents.finishUpdate(agent(authorization));
     }
 
     /** Ostatnie próby wgrania raportów (okno aktualizacji czeka, aż serwer potwierdzi wgranie). */
@@ -199,7 +219,12 @@ public class StoreAgentApiController {
     }
 
     private StoreAgentService.AgentContext agent(String authorization) {
-        return agents.authenticate(authorization != null && authorization.startsWith(BEARER)
-                ? authorization.substring(BEARER.length()) : null);
+        StoreAgentService.AgentContext agent = agents.authenticate(authorization != null
+                && authorization.startsWith(BEARER) ? authorization.substring(BEARER.length()) : null);
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
+                && attributes.getResponse() != null) {
+            attributes.getResponse().setHeader(LEADER_HEADER, String.valueOf(agent.leader()));
+        }
+        return agent;
     }
 }

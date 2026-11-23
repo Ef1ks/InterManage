@@ -59,6 +59,10 @@ public class StoreAgent {
     @Column(name = "machine_user", insertable = false, updatable = false)
     private String machineUser;
 
+    /** Agent preferowany na głównego agenta sklepu (zmienia go zapytanie {@code setPreferred}). */
+    @Column(nullable = false, insertable = false, updatable = false)
+    private boolean preferred;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "deleted_by")
     private AppUser deletedBy;
@@ -125,6 +129,10 @@ public class StoreAgent {
 
     public String getMachineUser() {
         return machineUser;
+    }
+
+    public boolean isPreferred() {
+        return preferred;
     }
 
     public Instant getDeletedAt() {

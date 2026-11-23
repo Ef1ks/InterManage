@@ -1,5 +1,6 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -10,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -252,6 +254,56 @@ class StoreTaskIntegrationTests {
         mvc.perform(post(path("")).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"Coś","priority":"NORMAL","assigneeId":"%s"}""".formatted(stranger)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void taskForSeveralPeopleAndForWholeStore() throws Exception {
+        String secondId = user(store);
+        Cookie second = login(username(secondId), "haslo-pracownika");
+
+        // Kilka osób: każda dostaje swoją kopię, kopie łączy grupa z postępem.
+        String json = mvc.perform(post(path("")).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"title":"Przeczytaj regulamin","priority":"NORMAL","assigneeIds":["%s","%s"]}"""
+                                .formatted(managerId, secondId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.group.total").value(2))
+                .andExpect(jsonPath("$.group.done").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String groupId = JsonPath.read(json, "$.group.id");
+        assertThat(jdbc.queryForObject("select count(*) from store_tasks where group_id = ?::uuid", Integer.class,
+                groupId)).isEqualTo(2);
+        String managerCopy = JsonPath.<List<String>>read(mvc.perform(get(path("/mine")).cookie(manager))
+                .andReturn().getResponse().getContentAsString(), "$[?(@.group != null)].id").getFirst();
+
+        // Jedna osoba odhacza swoją, a potem oznacza „wszyscy już zrobili”: druga kopia też jest wykonana.
+        mvc.perform(post(path("/" + managerCopy + "/done")).cookie(manager).with(csrf()))
+                .andExpect(jsonPath("$.group.done").value(1));
+        String secondCopy = JsonPath.<List<String>>read(mvc.perform(get(path("/mine")).cookie(second))
+                .andReturn().getResponse().getContentAsString(), "$[?(@.group != null)].id").getFirst();
+        mvc.perform(post(path("/" + secondCopy + "/done")).cookie(second).with(csrf())).andExpect(status().isOk());
+        mvc.perform(post(path("/" + secondCopy + "/undone")).cookie(second).with(csrf())).andExpect(status().isOk());
+        mvc.perform(post(path("/" + managerCopy + "/done-all")).cookie(manager).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.group.done").value(2));
+        mvc.perform(get(path("/" + secondCopy)).cookie(second)).andExpect(jsonPath("$.status").value("DONE"));
+        mvc.perform(post(path("/" + managerCopy + "/done-all")).cookie(manager).with(csrf()))
+                .andExpect(status().isConflict());
+
+        // Cały sklep: bez wykonawcy, widzi i odhacza każdy ze sklepu; zleca tylko ten, kto może zlecać wszystkim.
+        String forStore = create("""
+                {"title":"Posprzątaj zaplecze","priority":"NORMAL","forStore":true}""");
+        mvc.perform(get(path("/mine")).cookie(second))
+                .andExpect(jsonPath("$[?(@.id == '" + forStore + "')].forStore").value(true));
+        mvc.perform(get(path("/counts")).cookie(second)).andExpect(jsonPath("$.storeOpen").value(1));
+        mvc.perform(post(path("/" + forStore + "/done")).cookie(second).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.doneBy.id").value(secondId));
+        mvc.perform(post(path("")).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Błąd","priority":"NORMAL","forStore":true,"assigneeId":"%s"}"""
+                                .formatted(managerId)))
                 .andExpect(status().isBadRequest());
     }
 

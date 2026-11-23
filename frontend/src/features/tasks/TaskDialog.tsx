@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { LinkIcon, ListPlusIcon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -8,6 +8,7 @@ import {
   Form,
   FormActions,
   FormNote,
+  MultiComboboxField,
   SegmentedField,
   SelectField,
   TextareaField,
@@ -23,6 +24,7 @@ import {
   useCreateTask,
   useTaskActions,
   useTaskAssignees,
+  useStoreAssignable,
   useTaskAttachmentActions,
   useUpdateTask,
 } from '@/features/tasks/api'
@@ -46,10 +48,18 @@ export type TaskDraft = {
 type Values = {
   title: string
   description: string
+  /** Osobom (jedna przy zmianie zadania, kilka przy nowym) albo całemu sklepowi. */
+  target: 'people' | 'store'
   assigneeId: string
+  assigneeIds: string[]
   dueDate: string
   priority: TaskPriority
 }
+
+const TARGETS = [
+  { value: 'people' as const, label: 'Osobom' },
+  { value: 'store' as const, label: 'Całemu sklepowi' },
+]
 
 const PRIORITIES = [
   { value: 'NORMAL' as const, label: 'Zwykłe' },
@@ -104,6 +114,7 @@ function TaskForm({
   onDone: () => void
 }) {
   const assignees = useTaskAssignees(storeId, true)
+  const storeAssignable = useStoreAssignable(storeId, true).data?.allowed ?? false
   const create = useCreateTask(storeId)
   const update = useUpdateTask(storeId)
   const { remove, restore } = useTaskActions(storeId)
@@ -133,14 +144,18 @@ function TaskForm({
       ? {
           title: task.title,
           description: task.description ?? '',
-          assigneeId: task.assignee.id,
+          target: task.forStore ? 'store' : 'people',
+          assigneeId: task.assignee?.id ?? '',
+          assigneeIds: [],
           dueDate: task.dueDate ?? '',
           priority: task.priority,
         }
       : {
           title: draft?.title ?? '',
           description: '',
-          assigneeId: readLastAssignee(),
+          target: 'people',
+          assigneeId: '',
+          assigneeIds: readLastAssignee() ? [readLastAssignee()] : [],
           dueDate: '',
           priority: 'NORMAL',
         },
@@ -151,11 +166,16 @@ function TaskForm({
     label: `${person.displayName} · ${person.roleName}`,
   }))
 
+  const target = useWatch({ control, name: 'target' })
+  const known = (id: string) => assigneeOptions.some((option) => option.value === id)
+
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null)
+    const forStore = values.target === 'store'
     // Zapamiętany wykonawca mógł stracić dostęp do sklepu: wtedy pole jest puste, a wybór trzeba zrobić od nowa.
-    if (!assigneeOptions.some((option) => option.value === values.assigneeId)) {
-      setError('assigneeId', { message: 'Wybierz, kto ma to zrobić' })
+    const people = task ? [values.assigneeId].filter(known) : values.assigneeIds.filter(known)
+    if (!forStore && people.length === 0) {
+      setError(task ? 'assigneeId' : 'assigneeIds', { message: 'Wybierz, kto ma to zrobić' })
       return
     }
     const input = {
@@ -163,7 +183,7 @@ function TaskForm({
       description: values.description.trim() || null,
       dueDate: values.dueDate || null,
       priority: values.priority,
-      assigneeId: values.assigneeId,
+      ...(forStore ? { forStore: true, assigneeId: null } : task ? { assigneeId: people[0] } : { assigneeIds: people }),
     }
     try {
       if (task) {
@@ -192,11 +212,16 @@ function TaskForm({
           })
         }
         try {
-          localStorage.setItem(LAST_ASSIGNEE_KEY, values.assigneeId)
+          if (!forStore && people.length === 1) localStorage.setItem(LAST_ASSIGNEE_KEY, people[0])
         } catch {
           // Bez zapamiętania następne okno zacznie od pustego wyboru.
         }
-        toast.success(`Zlecono: ${created.assignee.displayName}`, {
+        const whom = forStore
+          ? 'cały sklep'
+          : people.length > 1
+            ? `${people.length} osobom (każda ma swoją kopię)`
+            : (created.assignee?.displayName ?? '')
+        toast.success(`Zlecono: ${whom}`, {
           description: created.title,
           action: {
             label: 'Cofnij',
@@ -212,7 +237,7 @@ function TaskForm({
       }
       onDone()
     } catch (error) {
-      setFormError(applyServerErrors(error, setError, ['title', 'description', 'assigneeId', 'dueDate']))
+      setFormError(applyServerErrors(error, setError, ['title', 'description', 'assigneeId', 'assigneeIds', 'dueDate']))
     }
   })
 
@@ -225,7 +250,9 @@ function TaskForm({
         <DialogDescription>
           {task
             ? 'Pozycje i raport zostają takie, jak przy zleceniu.'
-            : 'Zadanie pojawi się na pulpicie wykonawcy i w jego telefonie.'}
+            : target === 'store'
+              ? 'Zadanie zobaczy każdy ze sklepu; wykona je ten, kto pierwszy je odhaczy.'
+              : 'Zadanie pojawi się na pulpicie wykonawcy i w jego telefonie. Kilka osób dostanie każda swoją kopię.'}
         </DialogDescription>
       </DialogHeader>
 
@@ -244,21 +271,48 @@ function TaskForm({
         error={errors.description?.message}
         {...register('description', { maxLength: { value: 4000, message: 'Najwyżej 4000 znaków' } })}
       />
-      <Controller
-        control={control}
-        name="assigneeId"
-        rules={{ validate: (value) => value !== '' || 'Wybierz, kto ma to zrobić' }}
-        render={({ field, fieldState }) => (
-          <SelectField
-            label={assignees.isPending ? 'Kto (wczytuję…)' : 'Kto ma to zrobić'}
-            options={assigneeOptions}
-            value={assigneeOptions.some((option) => option.value === field.value) ? field.value : ''}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            error={fieldState.error?.message}
-          />
-        )}
-      />
+      {(storeAssignable || task?.forStore) && (
+        <Controller
+          control={control}
+          name="target"
+          render={({ field }) => (
+            <SegmentedField label="Komu" options={TARGETS} value={field.value} onChange={field.onChange} />
+          )}
+        />
+      )}
+      {target === 'people' && task && (
+        <Controller
+          control={control}
+          name="assigneeId"
+          render={({ field, fieldState }) => (
+            <SelectField
+              label={assignees.isPending ? 'Kto (wczytuję…)' : 'Kto ma to zrobić'}
+              options={assigneeOptions}
+              value={known(field.value) ? field.value : ''}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              error={fieldState.error?.message}
+            />
+          )}
+        />
+      )}
+      {target === 'people' && !task && (
+        <Controller
+          control={control}
+          name="assigneeIds"
+          render={({ field, fieldState }) => (
+            <MultiComboboxField
+              label={assignees.isPending ? 'Kto (wczytuję…)' : 'Kto ma to zrobić'}
+              description="Możesz wybrać kilka osób: każda dostanie swoją kopię zadania."
+              options={assigneeOptions}
+              value={field.value.filter(known)}
+              onChange={field.onChange}
+              placeholder="Szukaj osoby…"
+              error={fieldState.error?.message}
+            />
+          )}
+        />
+      )}
       <div className="grid items-start gap-4 sm:grid-cols-[1fr_auto]">
         <Controller
           control={control}

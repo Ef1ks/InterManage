@@ -210,6 +210,75 @@ class StoreAgentIntegrationTests {
                 .andExpect(status().isOk());
     }
 
+    /**
+     * Agent na każdym komputerze sklepu: pilnowanie folderów i aktualizację danych robi jeden, główny agent. Rolę
+     * przejmuje inny, gdy dzierżawa wygaśnie albo główny zostanie usunięty, a preferowany odbiera ją od razu.
+     */
+    @Test
+    void oneLeaderWatchesFoldersAndPreferredTakesOver() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String kasa = addAgent(owner, storeId, "Kasa 1");
+        String biuro = addAgent(owner, storeId, "Biuro");
+        String biuroId = jdbc.queryForObject("select id::text from store_agents where store_id = ?::uuid and name = ?",
+                String.class, storeId, "Biuro");
+
+        hello(kasa).andExpect(jsonPath("$.leader").value(true))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("X-Agent-Leader", "true"));
+        hello(biuro).andExpect(jsonPath("$.leader").value(false))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("X-Agent-Leader", "false"));
+        String traceart = """
+                {"events":[{"kind":"CREATED","folderKey":"TRACEART",
+                  "fileName":"TRACEART_20261120_101500_SR1_UT1.Traite0"}]}""";
+        // Te same pliki cen z kasy z drugiego komputera: serwer o nie nie prosi.
+        events(biuro, traceart).andExpect(jsonPath("$.requests.length()").value(0));
+        events(kasa, traceart).andExpect(jsonPath("$.requests.length()").value(1));
+
+        // Aktualizacja danych: automatyczna tylko na głównym, a ręczna z menu najwyżej na jednym komputerze naraz.
+        reportMacro(biuro, null).andExpect(status().isConflict());
+        reportMacro(biuro, false).andExpect(status().isOk());
+        reportMacro(kasa, null).andExpect(status().isConflict());
+        mvc.perform(post("/api/store-agent/report-macro/finished").header(HttpHeaders.AUTHORIZATION, "Bearer " + biuro))
+                .andExpect(status().isNoContent());
+        reportMacro(kasa, null).andExpect(status().isOk());
+
+        // Preferowany odbiera rolę przy najbliższym żądaniu.
+        mvc.perform(put("/api/stores/" + storeId + "/agents/" + biuroId + "/preferred").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"preferred\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.agents[?(@.name == 'Biuro')].preferred").value(true))
+                .andExpect(jsonPath("$.agents[?(@.name == 'Kasa 1')].leader").value(true));
+        hello(biuro).andExpect(jsonPath("$.leader").value(true)).andExpect(jsonPath("$.preferred").value(true));
+        hello(kasa).andExpect(jsonPath("$.leader").value(false));
+        mvc.perform(get("/api/stores/" + storeId + "/agents/status").cookie(owner))
+                .andExpect(jsonPath("$.name").value("Biuro"));
+
+        // Wygasła dzierżawa: rolę bierze pierwszy zgłaszający się, a preferowany wraca do niej po powrocie.
+        jdbc.update("update store_agent_leaders set expires_at = now() - interval '1 minute' where store_id = ?::uuid",
+                storeId);
+        hello(kasa).andExpect(jsonPath("$.leader").value(true));
+        hello(biuro).andExpect(jsonPath("$.leader").value(true));
+
+        // Usunięty główny oddaje rolę od razu.
+        mvc.perform(delete("/api/stores/" + storeId + "/agents/" + biuroId).cookie(owner).with(csrf()))
+                .andExpect(status().isOk());
+        hello(kasa).andExpect(jsonPath("$.leader").value(true));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions events(String key, String body) throws Exception {
+        return mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions reportMacro(String key, Boolean automatic)
+            throws Exception {
+        return mvc.perform(post("/api/store-agent/report-macro").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"kinds\":[\"CADENCIER\"]" + (automatic == null ? "" : ",\"automatic\":" + automatic) + "}"));
+    }
+
     @Test
     void folderEventsGoToPriceControlTraceartAndAthos() throws Exception {
         Cookie owner = login();

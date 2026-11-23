@@ -49,3 +49,13 @@ export function marginPercent(salePriceGross: number | null, purchaseNet: number
   const net = salePriceGross / (1 + vatPercent / 100)
   return ((net - purchaseNet) / salePriceGross) * 100
 }
+
+/** Kwota w pełnych złotych, do raportów (jak `formatZloty` w przeglądarce). */
+export const zloty = (value: number | null | undefined) => (value == null ? '–' : `${grouped(Math.round(value), 0)} zł`)
+
+/** Zmiana w punktach procentowych ze znakiem: +1,2 p.p. */
+export const points = (value: number) => `${value >= 0 ? '+' : '−'}${grouped(Math.abs(value), 1)} p.p.`
+
+/** Marża % od sprzedaży brutto z sum (null bez sprzedaży). */
+export const shareOf = (part: number | null | undefined, whole: number) =>
+  part == null || whole === 0 ? null : (part / whole) * 100

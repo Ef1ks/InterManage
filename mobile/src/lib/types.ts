@@ -260,7 +260,12 @@ export type StoreTask = {
   dueDate: string | null
   priority: TaskPriority
   status: TaskStatus
-  assignee: TaskPerson
+  /** Wykonawca; `null` przy zadaniu dla całego sklepu (`forStore`). */
+  assignee: TaskPerson | null
+  /** Zadanie dla całego sklepu: wykonuje ktokolwiek z dostępem do sklepu. */
+  forStore: boolean
+  /** Zlecenie kilku osobom naraz: każda ma swoją kopię, tu postęp wszystkich. */
+  group: TaskGroup | null
   createdBy: TaskPerson | null
   createdAt: string
   sourceLabel: string | null
@@ -277,7 +282,15 @@ export type StoreTask = {
   canComplete: boolean
 }
 
-export type TaskCounts = { open: number; waiting: number }
+/** `storeOpen`: otwarte zadania całego sklepu. */
+export type TaskCounts = { open: number; waiting: number; storeOpen: number }
+
+export type TaskGroup = {
+  id: string
+  total: number
+  done: number
+  members: { taskId: string; person: TaskPerson | null; status: TaskStatus }[]
+}
 
 /** Zrzut ekranu przy zadaniu (dodany w przeglądarce). */
 export type TaskAttachment = {
@@ -289,3 +302,271 @@ export type TaskAttachment = {
   createdByName: string | null
   canRemove: boolean
 }
+
+// Raporty sprzedaży (skopiowane z frontend/src/lib/types.ts, tylko używane pola).
+
+export type SalesComparisonLevel = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'PRODUCT'
+
+export type ArticleLeafletMark = {
+  number: string | null
+  title: string | null
+  from: string
+  to: string
+  previous: boolean
+  current: boolean
+}
+
+export type SalesComparisonRow = {
+  /** Kod nomenklatury bez spacji albo ITM8; pusty = sprzedaż bez nomenklatury. */
+  code: string
+  name: string | null
+  ean: string | null
+  brand: string | null
+  previous: SalesFigures
+  current: SalesFigures
+  leaflets: ArticleLeafletMark[]
+}
+
+export type SalesComparison = {
+  previousFrom: string
+  previousTo: string
+  currentFrom: string
+  currentTo: string
+  parent: string | null
+  level: SalesComparisonLevel
+  rows: SalesComparisonRow[]
+  previousTotal: SalesFigures
+  currentTotal: SalesFigures
+}
+
+export type SalesPromotionShare = {
+  previousSaleValueGross: number
+  currentSaleValueGross: number
+  previousMarginValue: number
+  currentMarginValue: number
+  previousArticles: number
+  currentArticles: number
+}
+
+export type PeriodSummaryFigures = {
+  saleValueNet: number
+  saleValueGross: number
+  costValue: number
+  marginValue: number
+  marginPercent: number | null
+  lossValue: number
+  lossPercent: number | null
+  marginAfterLossesValue: number
+  marginAfterLossesPercent: number | null
+  sharePercent: number | null
+}
+
+export type PeriodSummaryLine = {
+  kind: 'GROUP' | 'REGION' | 'SUBTOTAL'
+  depth: number
+  /** Kod rejonu; pusty = bez nomenklatury. */
+  code: string | null
+  name: string | null
+  figures: PeriodSummaryFigures | null
+  marginBudgetPercent: number | null
+  maxLossPercent: number | null
+}
+
+export type PeriodSummary = {
+  from: string
+  to: string
+  lastSaleDate: string | null
+  documentsCoveredUntil: string | null
+  budgetsSet: boolean
+  lines: PeriodSummaryLine[]
+  total: PeriodSummaryFigures
+}
+
+export type PeriodSummaryLevel = {
+  level: SalesComparisonLevel
+  rows: { code: string; name: string | null; ean: string | null; brand: string | null; figures: PeriodSummaryFigures }[]
+}
+
+export type ProfitTargetProgress = {
+  year: number
+  from: string
+  to: string
+  target: { year: number; marginValue: number | null; marginAfterLossesValue: number | null } | null
+  marginValue: number | null
+  marginAfterLossesValue: number | null
+}
+
+export type CounterFigures = {
+  quantity: number
+  costValue: number
+  saleValueGross: number
+  saleValueNet: number
+  marginValue: number
+  marginPercent: number | null
+  sharePercent: number | null
+  lossValue: number
+}
+
+/** Wartości pozycji w kolejności `CounterReport.stores`; `null` = brak sprzedaży w sklepie. */
+export type CounterValues = (CounterFigures | null)[]
+
+export type CounterArticle = { itm8: string; name: string | null; brand: string | null; values: CounterValues }
+
+export type CounterReport = {
+  from: string
+  to: string
+  stores: { id: string; number: string; name: string; lastSaleDate: string | null }[]
+  total: CounterValues
+  regions: {
+    code: string
+    name: string | null
+    values: CounterValues
+    families: {
+      code: string
+      name: string | null
+      values: CounterValues
+      subfamilies: { code: string; name: string | null; values: CounterValues; articles: CounterArticle[] }[]
+    }[]
+  }[]
+}
+
+export type CounterStoreOption = { id: string; number: string; name: string; partner: boolean }
+
+export type StockGapKind = 'MISSING' | 'ONE_OFF' | 'RUNNING_OUT' | 'WRONG_STOCK'
+
+export type StockGapItem = {
+  kind: StockGapKind
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  cadencier: boolean
+  stock: number
+  typicalWeek: number
+  lastSale: string
+  silentDays: number
+  missedQuantity: number
+  coverDays: number | null
+  weeklyMargin: number
+  lastDeliveryDate: string | null
+  supplierName: string | null
+}
+
+export type StockGapReport = {
+  stockReportGeneratedAt: string | null
+  lastSaleDate: string | null
+  items: StockGapItem[]
+}
+
+// ---------------------------------------------------------------- czat (kopia z frontend/src/lib/types.ts)
+
+export type ChatKind = 'STORE' | 'GROUP' | 'DIRECT'
+
+export type ChatPerson = { id: string; name: string; avatarUrl: string | null }
+
+export type ChatLastMessage = {
+  authorId: string | null
+  authorName: string | null
+  /** Treść skrócona; `null` przy cofniętej albo samych plikach. */
+  preview: string | null
+  attachmentCount: number
+  retracted: boolean
+  createdAt: string
+}
+
+export type ChatConversation = {
+  id: string
+  kind: ChatKind
+  storeId: string | null
+  storeNumber: string | null
+  storeName: string | null
+  name: string | null
+  /** Druga osoba rozmowy dwóch osób. */
+  peer: ChatPerson | null
+  memberCount: number
+  lastMessage: ChatLastMessage | null
+  lastMessageAt: string | null
+  unread: number
+  /** Nieprzeczytane wiadomości, które mnie oznaczają (@osoba, @dział, @wszyscy). */
+  unreadMentions: number
+  /** Czat bieżącego sklepu (albo rozmowa z osobą z tego sklepu): na górze listy. */
+  local: boolean
+  canManage: boolean
+  /** Nazwę i logo czatu sklepu albo grupy zmienia zarządzający czatem. */
+  canEdit: boolean
+  /** Logo czatu sklepu albo grupy; `null` = ikona. */
+  logoUrl: string | null
+}
+
+export type ChatAttachment = {
+  id: string
+  kind: 'FILE' | 'IMAGE' | 'VIDEO'
+  fileName: string
+  contentType: string
+  sizeBytes: number
+}
+
+export type ChatMessage = {
+  id: string
+  authorId: string | null
+  authorName: string | null
+  authorAvatarUrl: string | null
+  /** Przy cofniętej `null` (poza moderatorem, który widzi treść na szaro). */
+  body: string | null
+  createdAt: string
+  retracted: boolean
+  retractedAt: string | null
+  retractedByName: string | null
+  attachments: ChatAttachment[]
+  /** Oznaczenia w treści, każde jako `@label`. */
+  mentions: ChatMention[]
+  /** Wiadomość oznacza mnie (osobiście, moim działem albo @wszyscy). */
+  mentionsMe: boolean
+  canRetract: boolean
+  canRestore: boolean
+}
+
+export type ChatThread = {
+  conversation: ChatConversation
+  members: ChatPerson[]
+  moderator: boolean
+  messages: ChatMessage[]
+  hasMore: boolean
+  reads: { userId: string; lastReadAt: string }[]
+  typing: ChatPerson[]
+  /** Działy członków rozmowy do oznaczenia (@dział). */
+  departments: ChatMentionDepartment[]
+  /** `@wszyscy`: w czacie całego sklepu tylko zarządzający czatem. */
+  canMentionAll: boolean
+}
+
+export type ChatMention = { kind: 'USER' | 'ALL' | 'DEPARTMENT'; id: string | null; label: string }
+
+export type ChatMentionDepartment = { id: string; name: string; memberCount: number }
+
+export type ChatWorking = {
+  userId: string
+  name: string
+  avatarUrl: string | null
+  position: string | null
+  start: string | null
+  end: string | null
+  /** Odbite wejście; `null` = jeszcze się nie odbiła albo brak dostępu do Czasu pracy (`ChatPeople.hours`). */
+  since: string | null
+  /** Odbita karta (także bez dostępu do godzin). */
+  punched: boolean
+  lastSeenAt: string | null
+  online: boolean
+}
+
+export type ChatOther = {
+  userId: string
+  name: string
+  avatarUrl: string | null
+  rankName: string | null
+  lastSeenAt: string | null
+  online: boolean
+}
+
+/** `hours`: godziny zmian i odbić tylko z dostępem do Czasu pracy. */
+export type ChatPeople = { hours: boolean; working: ChatWorking[]; others: ChatOther[] }

@@ -43,6 +43,11 @@ import com.intermanage.backend.store.service.StoreProtoSettingsService;
  * i plików nowych artykułów z ustawień plików PROTO oraz znane domyślne ścieżki. Pilnowane foldery: pliki cen z kasy
  * (TRACEART, z podfolderem BACKUP), zmiany cen CTRLPRIX w folderze plików PROTO, dziennik ATHOS i foldery raportów
  * Importu danych ({@link AgentReportService}).
+ *
+ * <p>Kilku agentów w sklepie (agent na każdym komputerze): pliki z kolejki zapisuje każdy, a pilnowanie folderów
+ * i aktualizację danych z Mercalys tylko główny agent. Główny ma dzierżawę na serwerze ({@code store_agent_leaders},
+ * {@link #LEADER_LEASE}), przedłużaną każdym jego żądaniem (czekanie na pliki co {@link #LONG_POLL_SECONDS} s);
+ * po wygaśnięciu przejmuje ją pierwszy zgłaszający się agent, a agent preferowany odbiera ją niepreferowanemu od razu.
  */
 @Service
 public class StoreAgentService {
@@ -50,6 +55,8 @@ public class StoreAgentService {
     /** Agent jest online, gdy kontakt był w tym czasie (utrzymuje go otwarte czekanie na pliki). */
     public static final Duration ONLINE_WINDOW = Duration.ofSeconds(60);
     public static final int LONG_POLL_SECONDS = 25;
+    /** Dzierżawa głównego agenta: tyle bez żadnego żądania i rolę przejmuje inny agent sklepu. */
+    public static final Duration LEADER_LEASE = ONLINE_WINDOW;
 
     public static final String TRACEART = "TRACEART";
     public static final String CTRLPRIX = "CTRLPRIX";
@@ -60,8 +67,9 @@ public class StoreAgentService {
     private static final String FOLDER_PREFIX = "folder:";
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /** Agent po kluczu: kto i w którym sklepie. */
-    public record AgentContext(UUID agentId, UUID storeId, String storeNumber, String storeName, String agentName) {
+    /** Agent po kluczu: kto i w którym sklepie; {@code leader}: główny agent sklepu (dzierżawa przy tym żądaniu). */
+    public record AgentContext(UUID agentId, UUID storeId, String storeNumber, String storeName, String agentName,
+            boolean preferred, boolean leader) {
     }
 
     private final StoreAgentRepository agents;
@@ -92,8 +100,11 @@ public class StoreAgentService {
     @Transactional(readOnly = true)
     public StoreAgentsResponse list(UUID storeId) {
         Instant now = Instant.now();
+        UUID leader = agents.findLeader(storeId).orElse(null);
         return new StoreAgentsResponse(enabled(storeId), agents.findByStore(storeId).stream()
-                .map(agent -> mapper.toResponse(agent, online(agent, now), null)).toList());
+                .map(agent -> mapper.toResponse(agent, online(agent, now),
+                        agent.getDeletedAt() == null && agent.getId().equals(leader), null))
+                .toList());
     }
 
     @Transactional
@@ -119,7 +130,22 @@ public class StoreAgentService {
                 .filter(found -> found.getDeletedAt() == null && found.getStore().getId().equals(storeId))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono agenta"));
         agent.markDeleted(users.getReferenceById(actorId));
+        agents.releaseLeader(storeId, agentId);
         live.publish(storeId, "agent", Map.of("action", "removed"));
+        return list(storeId);
+    }
+
+    /**
+     * Agent preferowany na głównego (np. komputer w biurze, nie kasa): odbiera rolę niepreferowanemu przy swoim
+     * najbliższym żądaniu. Kilku preferowanych: główny zostaje ten, który już nim jest.
+     */
+    @Transactional
+    public StoreAgentsResponse setPreferred(UUID storeId, UUID agentId, boolean preferred) {
+        StoreAgent agent = agents.findById(agentId)
+                .filter(found -> found.getDeletedAt() == null && found.getStore().getId().equals(storeId))
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono agenta"));
+        agents.setPreferred(agent.getId(), preferred);
+        live.publish(storeId, "agent", Map.of("action", "preferred"));
         return list(storeId);
     }
 
@@ -153,10 +179,16 @@ public class StoreAgentService {
     public AgentStatusResponse status(UUID storeId) {
         boolean enabled = enabled(storeId);
         Instant now = Instant.now();
-        StoreAgent best = agents.findByStore(storeId).stream()
-                .filter(agent -> agent.getDeletedAt() == null)
-                .max((a, b) -> compare(a.getLastSeenAt(), b.getLastSeenAt()))
-                .orElse(null);
+        // Główny agent (to on pilnuje folderów), bez niego agent z najświeższym kontaktem.
+        UUID leader = agents.findLeader(storeId).orElse(null);
+        List<StoreAgent> active = agents.findByStore(storeId).stream()
+                .filter(agent -> agent.getDeletedAt() == null).toList();
+        StoreAgent best = active.stream()
+                .filter(agent -> agent.getId().equals(leader) && online(agent, now))
+                .findFirst()
+                .orElseGet(() -> active.stream()
+                        .max((a, b) -> compare(a.getLastSeenAt(), b.getLastSeenAt()))
+                        .orElse(null));
         if (best == null) {
             return new AgentStatusResponse(enabled, false, false, false, null, null, null, null, List.of(),
                     List.of());
@@ -167,7 +199,10 @@ public class StoreAgentService {
                 List.copyOf(folders(storeId).keySet()), watches(storeId).stream().map(AgentApi.Watch::kind).toList());
     }
 
-    /** Agent po kluczu z nagłówka; każde żądanie odświeża kontakt. Nieznany albo usunięty klucz = 403. */
+    /**
+     * Agent po kluczu z nagłówka; każde żądanie odświeża kontakt i dzierżawę głównego agenta (albo przejmuje ją, gdy
+     * wygasła). Nieznany albo usunięty klucz = 403.
+     */
     @Transactional
     public AgentContext authenticate(String key) {
         StoreAgent agent = (key == null || key.isBlank() ? java.util.Optional.<StoreAgent>empty()
@@ -176,7 +211,9 @@ public class StoreAgentService {
                 .orElseThrow(() -> ApiException.forbidden("Nieznany klucz agenta sklepu"));
         agents.touch(agent.getId());
         Store store = agent.getStore();
-        return new AgentContext(agent.getId(), store.getId(), store.getNumber(), store.getName(), agent.getName());
+        boolean leader = !agents.claimLeader(store.getId(), agent.getId(), (int) LEADER_LEASE.toSeconds()).isEmpty();
+        return new AgentContext(agent.getId(), store.getId(), store.getNumber(), store.getName(), agent.getName(),
+                agent.isPreferred(), leader);
     }
 
     @Transactional
@@ -184,7 +221,28 @@ public class StoreAgentService {
         agents.hello(agent.agentId(), cut(request.version(), 50), cut(request.machineName(), 100),
                 cut(request.user(), 100));
         return new AgentApi.HelloResponse(agent.storeId(), agent.storeNumber(), agent.storeName(), agent.agentName(),
-                enabled(agent.storeId()), folders(agent.storeId()), watches(agent.storeId()), LONG_POLL_SECONDS);
+                enabled(agent.storeId()), folders(agent.storeId()), watches(agent.storeId()), LONG_POLL_SECONDS,
+                agent.leader(), agent.preferred());
+    }
+
+    /**
+     * Początek aktualizacji danych z Mercalys: automatyczną (start komputera, przejęcie roli) robi tylko główny agent,
+     * a każdą najwyżej jeden komputer sklepu naraz (inaczej 409, agent kończy bez okna).
+     */
+    @Transactional
+    public void startUpdate(AgentContext agent, boolean automatic) {
+        if (automatic && !agent.leader()) {
+            throw ApiException.conflict("Dane z Mercalys aktualizuje główny agent sklepu");
+        }
+        if (agents.startUpdate(agent.storeId(), agent.agentId()) == 0) {
+            throw ApiException.conflict("Dane z Mercalys aktualizuje teraz inny komputer sklepu");
+        }
+    }
+
+    /** Koniec aktualizacji danych (udanej albo nie): inny komputer może ją znów uruchomić. */
+    @Transactional
+    public void finishUpdate(AgentContext agent) {
+        agents.finishUpdate(agent.storeId(), agent.agentId());
     }
 
     /** Foldery zapisu sklepu: klucz folderu przeglądarki → ścieżka na dysku. */
@@ -257,7 +315,8 @@ public class StoreAgentService {
 
     private static StoreAgentResponse withKey(StoreAgentResponse item, String key) {
         return new StoreAgentResponse(item.id(), item.name(), item.createdAt(), item.createdBy(), item.lastSeenAt(),
-                item.lastVersion(), item.machineName(), item.machineUser(), item.online(), item.deletedAt(), key);
+                item.lastVersion(), item.machineName(), item.machineUser(), item.online(), item.preferred(),
+                item.leader(), item.deletedAt(), key);
     }
 
     private static String cut(String value, int max) {

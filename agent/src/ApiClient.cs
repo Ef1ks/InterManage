@@ -43,6 +43,9 @@ internal sealed class HelloResponse
     public Dictionary<string, string> Folders { get; set; } = new();
     public List<WatchConfig> Watches { get; set; } = new();
     public int LongPollSeconds { get; set; } = 25;
+    /// <summary>Główny agent sklepu: pilnuje folderów i aktualizuje dane z Mercalys (brak = starszy serwer, tak).</summary>
+    public bool? Leader { get; set; }
+    public bool Preferred { get; set; }
 }
 
 internal sealed class WatchConfig
@@ -155,8 +158,16 @@ internal sealed class ApiClient : IDisposable
         PropertyNameCaseInsensitive = true,
     };
 
+    private const string LeaderHeader = "X-Agent-Leader";
+
     private readonly HttpClient http;
     private readonly string server;
+
+    /// <summary>
+    /// Każda odpowiedź serwera mówi, czy ten agent jest głównym agentem sklepu (dzierżawa na serwerze, przedłużana
+    /// każdym żądaniem): tylko główny pilnuje folderów i aktualizuje dane.
+    /// </summary>
+    public event Action<bool>? LeaderSeen;
 
     static ApiClient()
     {
@@ -285,9 +296,20 @@ internal sealed class ApiClient : IDisposable
     }
 
     /// <summary>Makro aktualizacji raportów z Mercalys dla podanych raportów (np. SALES).</summary>
-    public Task<ReportMacro> ReportMacroAsync(IReadOnlyList<string> kinds, CancellationToken cancel) =>
-        SendJsonAsync<ReportMacro>(HttpMethod.Post, "/api/store-agent/report-macro", new { kinds },
+    /// <remarks>
+    /// <paramref name="automatic"/>: przy starcie komputera albo po przejęciu roli głównego agenta (serwer da je tylko
+    /// głównemu). 409 (<see cref="RejectedException"/>): dane aktualizuje już inny komputer sklepu.
+    /// </remarks>
+    public Task<ReportMacro> ReportMacroAsync(IReadOnlyList<string> kinds, bool automatic, CancellationToken cancel) =>
+        SendJsonAsync<ReportMacro>(HttpMethod.Post, "/api/store-agent/report-macro", new { kinds, automatic },
             TimeSpan.FromSeconds(60), cancel);
+
+    /// <summary>Koniec aktualizacji danych na tym komputerze: inny komputer może ją znów uruchomić.</summary>
+    public async Task ReportMacroFinishedAsync(CancellationToken cancel)
+    {
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post,
+            server + "/api/store-agent/report-macro/finished"), TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
+    }
 
     /// <summary>Ostatnie próby wgrania raportów (okno aktualizacji czeka na potwierdzenie serwera).</summary>
     public Task<List<ReportAttempt>> RecentReportsAsync(CancellationToken cancel) =>
@@ -344,6 +366,14 @@ internal sealed class ApiClient : IDisposable
         finally
         {
             request.Dispose();
+        }
+        if (response.Headers.TryGetValues(LeaderHeader, out var leader))
+        {
+            foreach (var value in leader)
+            {
+                LeaderSeen?.Invoke(string.Equals(value, "true", StringComparison.OrdinalIgnoreCase));
+                break;
+            }
         }
         if (response.IsSuccessStatusCode) return response;
         var status = (int)response.StatusCode;

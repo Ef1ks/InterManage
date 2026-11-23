@@ -58,9 +58,18 @@ public class StoreTask {
     @Column(nullable = false)
     private TaskStatus status = TaskStatus.OPEN;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "assignee_id", nullable = false)
+    /** Wykonawca; przy zadaniu dla całego sklepu ({@link #forStore}) pusty. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id")
     private AppUser assignee;
+
+    /** Zadanie dla całego sklepu: widzi je i wykonuje ktokolwiek z dostępem do sklepu. */
+    @Column(name = "for_store", nullable = false)
+    private boolean forStore;
+
+    /** Kopie jednego zlecenia kilku osobom mają ten sam identyfikator (pojedyncze zadanie: pusty). */
+    @Column(name = "group_id", updatable = false)
+    private UUID groupId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", updatable = false)
@@ -115,8 +124,10 @@ public class StoreTask {
     protected StoreTask() {
     }
 
-    public StoreTask(Store store, AppUser createdBy, String sourceKind, String sourceLabel, String sourceUrl) {
+    public StoreTask(Store store, AppUser createdBy, String sourceKind, String sourceLabel, String sourceUrl,
+            UUID groupId) {
         this.store = store;
+        this.groupId = groupId;
         this.createdBy = createdBy;
         this.sourceKind = sourceKind;
         this.sourceLabel = sourceLabel;
@@ -134,6 +145,7 @@ public class StoreTask {
         updatedAt = Instant.now();
     }
 
+    /** {@code assignee} pusty = zadanie dla całego sklepu. */
     public void describe(String title, String description, LocalDate dueDate, TaskPriority priority,
             AppUser assignee) {
         this.title = title;
@@ -141,6 +153,7 @@ public class StoreTask {
         this.dueDate = dueDate;
         this.priority = priority;
         this.assignee = assignee;
+        this.forStore = assignee == null;
     }
 
     public StoreTaskItem addItem(String itm8, String ean, String name, String details) {
@@ -220,6 +233,14 @@ public class StoreTask {
 
     public AppUser getAssignee() {
         return assignee;
+    }
+
+    public boolean isForStore() {
+        return forStore;
+    }
+
+    public UUID getGroupId() {
+        return groupId;
     }
 
     public AppUser getCreatedBy() {

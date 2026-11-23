@@ -63,6 +63,14 @@ public class StoreAgentController {
         return service.restore(storeId, agentId);
     }
 
+    /** Agent preferowany na głównego agenta sklepu (pilnuje folderów i aktualizuje dane z Mercalys). */
+    @PutMapping("/{agentId}/preferred")
+    @PreAuthorize(OWNER)
+    public StoreAgentsResponse preferred(@PathVariable UUID storeId, @PathVariable UUID agentId,
+            @RequestBody Map<String, Boolean> body) {
+        return service.setPreferred(storeId, agentId, Boolean.TRUE.equals(body.get("preferred")));
+    }
+
     /** Praca z folderami przez agenta ({@code true}) albo jak dotąd przez przeglądarkę. */
     @PutMapping("/settings")
     @PreAuthorize(OWNER)

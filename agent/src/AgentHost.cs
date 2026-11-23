@@ -19,6 +19,10 @@ internal enum AgentState
 /// <summary>
 /// Serce agenta: konfiguracja z serwera (<c>/hello</c> przy starcie i co 5 minut), zapis plików z kolejki
 /// (<see cref="FileSaver"/>), pilnowanie folderów (<see cref="FolderWatcher"/>) i stan pokazywany przy ikonie.
+///
+/// Agent może działać na każdym komputerze sklepu: pliki z kolejki zapisuje każdy, a folderów pilnuje i dane
+/// z Mercalys aktualizuje tylko główny agent (<see cref="IsLeader"/>, dzierżawa na serwerze). Gdy główny przestaje
+/// odpowiadać, rolę przejmuje inny komputer, a komputer preferowany w Ustawieniach sklepu odbiera ją od razu.
 /// </summary>
 internal sealed class AgentHost : IDisposable
 {
@@ -33,6 +37,12 @@ internal sealed class AgentHost : IDisposable
 
     /// <summary>Pierwsza konfiguracja z serwera po starcie (np. aktualizacja danych przy starcie komputera).</summary>
     public event Action? Connected;
+
+    /// <summary>Ten agent został albo przestał być głównym agentem sklepu.</summary>
+    public event Action? LeadershipChanged;
+
+    /// <summary>Główny agent sklepu: pilnuje folderów i aktualizuje dane z Mercalys.</summary>
+    public bool IsLeader { get; private set; }
 
     public ApiClient? Api { get; private set; }
     public HelloResponse? Config { get; private set; }
@@ -55,9 +65,11 @@ internal sealed class AgentHost : IDisposable
         var cts = new CancellationTokenSource();
         var reports = new ReportUploader(this);
         var folders = new FolderWatcher(this, reports);
+        var api = new ApiClient(settings.ServerUrl, key!);
+        api.LeaderSeen += SetLeader;
         lock (gate)
         {
-            Api = new ApiClient(settings.ServerUrl, key!);
+            Api = api;
             Config = null;
             running = cts;
             watcher = folders;
@@ -82,6 +94,20 @@ internal sealed class AgentHost : IDisposable
             Api = null;
             Config = null;
         }
+        SetLeader(false);
+    }
+
+    private void SetLeader(bool leader)
+    {
+        if (leader == IsLeader) return;
+        IsLeader = leader;
+        if (Api != null)
+        {
+            Log.Info(leader ? "Ten komputer jest głównym agentem sklepu: pilnuje folderów"
+                : "Główny agent sklepu działa na innym komputerze: ten tylko zapisuje pliki");
+        }
+        Refresh();
+        LeadershipChanged?.Invoke();
     }
 
     public void ScanNow() => watcher?.ScanNow();
@@ -97,6 +123,8 @@ internal sealed class AgentHost : IDisposable
             {
                 var config = await api.HelloAsync(Program.Version, cancel);
                 var first = Config == null;
+                // Starszy serwer bez dzierżawy: każdy agent pilnuje folderów jak dotąd.
+                SetLeader(config.Leader ?? true);
                 Config = config;
                 if (first)
                 {
@@ -192,7 +220,8 @@ internal sealed class AgentHost : IDisposable
         var config = Config;
         var text = config == null
             ? "Łączenie…"
-            : "Sklep " + config.StoreNumber + (config.Enabled ? ": działa" : ": połączony, sklep pracuje przez przeglądarkę");
+            : "Sklep " + config.StoreNumber + (!config.Enabled ? ": połączony, sklep pracuje przez przeglądarkę"
+                : IsLeader ? ": działa (główny agent)" : ": działa (zapasowy, foldery pilnuje inny komputer)");
         Set(AgentState.Working, text);
     }
 

@@ -126,6 +126,8 @@ public class SalesReportParser {
         private int[] index;
         private Integer declaredLines;
         private boolean footerReached;
+        /** Pierwszy wiersz stopki (do komunikatu o wierszach z artykułami pod nią). */
+        private int footerRow;
         private int totalRows;
         /**
          * Klucze wierszy pliku: miejsce w bieżącej paczce, a -1 dla wierszy z paczek już wysłanych. Ten sam ITM8, EAN
@@ -166,6 +168,9 @@ public class SalesReportParser {
             // Wiersz z liczbą wierszy kończy raport, nawet gdy tekst stoi w kolumnie ITM8.
             Integer lines = declaredLines(cells);
             if (lines != null) {
+                if (!footerReached) {
+                    footerRow = rowNumber;
+                }
                 footerReached = true;
                 declaredLines = lines;
                 return;
@@ -173,13 +178,17 @@ public class SalesReportParser {
             String itm8 = cell(cells, ITM8);
             if (itm8 == null || itm8.isBlank()) {
                 // Inne wiersze stopki (np. suma): dalej nie powinno już być wierszy z artykułami.
+                if (!footerReached) {
+                    footerRow = rowNumber;
+                }
                 footerReached = true;
                 return;
             }
             totalRows++;
             try {
                 if (footerReached) {
-                    throw new IllegalArgumentException("wiersz z artykułem pod stopką raportu");
+                    throw new IllegalArgumentException("wiersz z artykułem pod stopką raportu (stopka w wierszu "
+                            + footerRow + "; czy plik był sortowany w Excelu?)");
                 }
                 addRow(cells);
             } catch (IllegalArgumentException e) {

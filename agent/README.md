@@ -28,6 +28,17 @@ agenta**. Bez tego (albo gdy agent jest offline) wszystko działa jak dotąd, w 
 5. W Intermanage przełącz „Praca z folderami przez agenta”. Ścieżki folderów agent bierze z ustawień sklepu
    (ścieżki folderów w oknach zapisu, Ustawienia sklepu → Protokoły i zmiana cen).
 
+## Agent na kilku komputerach sklepu
+
+Agenta można uruchomić na każdym komputerze sklepu, każdy z **własnym kluczem** (jeden klucz na kilku komputerach
+daje jednego agenta). Pliki z kolejki zapisuje wtedy dowolny włączony komputer. Folderów pilnuje (ceny z kasy, zmiany
+cen, dziennik ATHOS, raporty Importu danych) i dane z Mercalys przy starcie aktualizuje tylko **główny agent**. Wybiera
+go serwer: pierwszy zgłaszający się komputer dostaje dzierżawę na 60 s, przedłużaną każdym żądaniem. Gdy główny
+przestanie odpowiadać, rolę przejmuje następny. Komputer oznaczony w Ustawieniach sklepu jako **Preferowany**
+(np. biuro, nie kasa) odbiera tę rolę od razu, gdy tylko jest online. Stan ikony mówi „główny agent” albo
+„zapasowy”. Agent sprzed 1.3 nie zna tej roli, ale serwer i tak pomija zdarzenia z folderów od agenta, który nie jest
+główny.
+
 Menu ikony: Stan, Otwórz Intermanage, Ustawienia, Sprawdź teraz (pełny przegląd folderów), Pokaż logi, Uruchamiaj
 z Windows, Zakończ.
 

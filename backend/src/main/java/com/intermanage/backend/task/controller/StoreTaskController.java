@@ -81,6 +81,14 @@ public class StoreTaskController {
         return service.assignees(storeId, principal.getId());
     }
 
+    /** Czy zalogowany zleca całemu sklepowi (właściciel, Aderon, włączone zlecanie): {@code {"allowed": true}}. */
+    @GetMapping("/store-assignable")
+    @PreAuthorize(OWNER)
+    public java.util.Map<String, Boolean> storeAssignable(@PathVariable UUID storeId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return java.util.Map.of("allowed", service.canAssignToStore(storeId, principal.getId()));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize(Access.STORE)
     public TaskResponse get(@PathVariable UUID storeId, @PathVariable UUID id,
@@ -124,6 +132,15 @@ public class StoreTaskController {
             @Valid @RequestBody(required = false) TaskSmallRequests.Comment request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return service.done(storeId, id, request == null ? null : request.comment(), principal.getId());
+    }
+
+    /** „Wszyscy już zrobili”: zamyka otwarte kopie zlecenia kilku osobom (wykonawca z grupy albo zlecający). */
+    @PostMapping("/{id}/done-all")
+    @PreAuthorize(Access.STORE)
+    public TaskResponse doneAll(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody(required = false) TaskSmallRequests.Comment request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.doneAll(storeId, id, request == null ? null : request.comment(), principal.getId());
     }
 
     @PostMapping("/{id}/undone")

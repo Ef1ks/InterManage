@@ -37,6 +37,7 @@ import { KsefPage } from '@/features/ksef/KsefPage'
 import { MeatPurchasesPage } from '@/features/meat/MeatPurchasesPage'
 import { BackupPage } from '@/features/settings/BackupPage'
 import { FeedbackPage } from '@/features/feedback/FeedbackPage'
+import { ChatPage } from '@/features/chat/ChatPage'
 import { downloadsPath } from '@/features/downloads/paths'
 import { DownloadsPage } from '@/features/downloads/DownloadsPage'
 import { HierarchyPage } from '@/features/store-roles/HierarchyPage'
@@ -235,6 +236,7 @@ const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
+      { path: '/czat', element: <ChatPage /> },
       {
         path: '/zgloszenia',
         element: (

@@ -19,6 +19,9 @@ namespace Intermanage.Agent;
 /// Na dysku sieciowym watcher potrafi przestać działać bez słowa albo zgłosić błąd (przepełniony bufor, zerwane
 /// połączenie SMB), więc po błędzie jest odtwarzany z pełnym przeglądem folderu, a niezależnie od tego co 5 minut
 /// idzie pełny przegląd (nazwy, daty, rozmiary) jako uzgodnienie stanu z serwerem.
+///
+/// Folderów pilnuje tylko główny agent sklepu (<see cref="AgentHost.IsLeader"/>): pozostałe komputery wyłączają
+/// watchery, a po przejęciu roli watchery wracają z pełnym przeglądem (serwer nie przyjmie drugi raz tego, co ma).
 /// </summary>
 internal sealed class FolderWatcher : IDisposable
 {
@@ -85,7 +88,11 @@ internal sealed class FolderWatcher : IDisposable
         {
             var config = host.Config;
             var api = host.Api;
-            if (config != null && api != null)
+            if (config != null && api != null && !host.IsLeader)
+            {
+                StopWatching();
+            }
+            else if (config != null && api != null)
             {
                 Reconfigure(config);
                 try
@@ -132,6 +139,18 @@ internal sealed class FolderWatcher : IDisposable
         try { await fullScanRequested.WaitAsync(time, cancel); } catch (OperationCanceledException) { }
     }
 
+    /// <summary>Ten komputer nie jest głównym agentem: bez watcherów i bez zaległych zdarzeń.</summary>
+    private void StopWatching()
+    {
+        if (configSignature.Length == 0 && roots.Count == 0) return;
+        DisposeWatchers();
+        roots = new List<Root>();
+        configSignature = "";
+        changed.Clear();
+        lock (outboxGate) outbox.Clear();
+        Log.Info("Pilnowanie folderów wyłączone: robi to główny agent sklepu");
+    }
+
     /// <summary>Nowa konfiguracja z serwera: watchery od nowa, gdy zmieniły się foldery.</summary>
     private void Reconfigure(HelloResponse config)
     {
@@ -161,8 +180,13 @@ internal sealed class FolderWatcher : IDisposable
         {
             if (!Directory.Exists(root.Path))
             {
-                host.DiskProblem("Folder " + root.Path + " jest niedostępny");
-                return;
+                // Folder raportu Importu danych zakładamy sami: makro Mercalys nie zapisze pliku w brakującym folderze.
+                var report = root.Watches.Any(w => w.Watch.Kind.StartsWith("IMPORT_", StringComparison.OrdinalIgnoreCase));
+                if (!report || !TryCreate(root.Path))
+                {
+                    host.DiskProblem("Folder " + root.Path + " jest niedostępny");
+                    return;
+                }
             }
             var watcher = new FileSystemWatcher(root.Path)
             {
@@ -187,6 +211,21 @@ internal sealed class FolderWatcher : IDisposable
         catch (Exception error)
         {
             host.DiskProblem("Nie udało się pilnować folderu " + root.Path + ": " + error.Message);
+        }
+    }
+
+    private static bool TryCreate(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            Log.Info("Założono folder raportu " + path);
+            return true;
+        }
+        catch (Exception error)
+        {
+            Log.Warn("Nie udało się założyć folderu " + path + ": " + error.Message);
+            return false;
         }
     }
 

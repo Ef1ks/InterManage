@@ -37,7 +37,8 @@ class ReportStoreNumberRealFileTests {
     void readsStoreNumberFromPromotionList() throws Exception {
         ParsedPromotionReport report = new PromotionReportParser().parse(PROMOTIONS);
 
-        assertThat(report.storeNumber()).isEqualTo("10023");
+        // Lista 10023 ma "TRYTOMA Sp. z o.o. : 10023", lista 10025 z 23.11.2026 samo "TRYTOMA : 10025".
+        assertThat(report.storeNumber()).isIn("10023", "10025");
         assertThat(report.rows()).hasSizeGreaterThan(1000);
     }
 

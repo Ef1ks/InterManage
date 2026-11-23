@@ -1,6 +1,7 @@
 package com.intermanage.backend.task.repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,11 +18,14 @@ public interface StoreTaskRepository extends JpaRepository<StoreTask, UUID> {
     @Query("select t from StoreTask t where t.id = :id and t.store.id = :storeId")
     Optional<StoreTask> findInStore(UUID storeId, UUID id);
 
-    /** Zadania wykonawcy: do zrobienia, czekające na przyjęcie i przyjęte od {@code acceptedSince}. */
+    /**
+     * Zadania wykonawcy i zadania całego sklepu: do zrobienia, czekające na przyjęcie i przyjęte od
+     * {@code acceptedSince}.
+     */
     @EntityGraph(attributePaths = {"assignee", "createdBy", "doneBy", "acceptedBy"})
     @Query("""
-            select t from StoreTask t
-            where t.store.id = :storeId and t.assignee.id = :userId and t.deletedAt is null
+            select t from StoreTask t left join t.assignee a
+            where t.store.id = :storeId and (a.id = :userId or t.forStore = true) and t.deletedAt is null
               and (t.status <> com.intermanage.backend.task.entity.TaskStatus.ACCEPTED or t.acceptedAt >= :acceptedSince)
             order by t.createdAt desc""")
     List<StoreTask> findOfAssignee(UUID storeId, UUID userId, Instant acceptedSince);
@@ -44,6 +48,18 @@ public interface StoreTaskRepository extends JpaRepository<StoreTask, UUID> {
             where t.store.id = :storeId and t.assignee.id = :userId and t.deletedAt is null
               and t.status = com.intermanage.backend.task.entity.TaskStatus.OPEN""")
     long countOpenOfAssignee(UUID storeId, UUID userId);
+
+    /** Otwarte zadania całego sklepu (bez wykonawcy). */
+    @Query("""
+            select count(t) from StoreTask t
+            where t.store.id = :storeId and t.forStore = true and t.deletedAt is null
+              and t.status = com.intermanage.backend.task.entity.TaskStatus.OPEN""")
+    long countOpenForStore(UUID storeId);
+
+    /** Kopie jednego zlecenia kilku osobom (bez usuniętych), z wykonawcami. */
+    @EntityGraph(attributePaths = {"assignee"})
+    @Query("select t from StoreTask t where t.groupId in :groupIds and t.deletedAt is null order by t.createdAt")
+    List<StoreTask> findOfGroups(Collection<UUID> groupIds);
 
     @Query("""
             select count(t) from StoreTask t

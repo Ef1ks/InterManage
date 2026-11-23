@@ -3,6 +3,7 @@ package com.intermanage.backend.common.component;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -79,6 +80,28 @@ public class LiveEvents {
         afterCommit(() -> send(storeId, message));
     }
 
+    /**
+     * Wysyła wiadomość wskazanym kontom, w każdym sklepie, w którym mają otwarty strumień (czat nie należy do jednego
+     * sklepu). Po zatwierdzeniu bieżącej transakcji.
+     */
+    public void publishToUsers(Collection<UUID> userIds, String topic, Map<String, ?> fields) {
+        if (userIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> users = Set.copyOf(userIds);
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("topic", topic);
+        message.putAll(fields);
+        afterCommit(() -> {
+            String data = serialize(message);
+            if (data == null) {
+                return;
+            }
+            byStore.values().forEach(set -> set.stream().filter(sub -> users.contains(sub.userId()))
+                    .forEach(sub -> deliver(set, sub, data)));
+        });
+    }
+
     /** Zamyka połączenia osoby (konto przeszło do tła albo się wylogowało); przeglądarka połączy się od nowa. */
     public void closeUser(UUID userId) {
         byStore.values().forEach(set -> set.stream().filter(sub -> sub.userId().equals(userId)).toList()
@@ -122,19 +145,29 @@ public class LiveEvents {
         if (set == null || set.isEmpty()) {
             return;
         }
-        String data;
-        try {
-            data = json.writeValueAsString(message);
-        } catch (RuntimeException e) {
-            log.warn("Nie udało się przygotować wiadomości na żywo {}", message.get("topic"), e);
+        String data = serialize(message);
+        if (data == null) {
             return;
         }
         for (Subscription sub : set) {
-            try {
-                sub.emitter().send(SseEmitter.event().data(data, MediaType.APPLICATION_JSON));
-            } catch (IOException | IllegalStateException e) {
-                set.remove(sub);
-            }
+            deliver(set, sub, data);
+        }
+    }
+
+    private String serialize(Map<String, Object> message) {
+        try {
+            return json.writeValueAsString(message);
+        } catch (RuntimeException e) {
+            log.warn("Nie udało się przygotować wiadomości na żywo {}", message.get("topic"), e);
+            return null;
+        }
+    }
+
+    private static void deliver(Set<Subscription> set, Subscription sub, String data) {
+        try {
+            sub.emitter().send(SseEmitter.event().data(data, MediaType.APPLICATION_JSON));
+        } catch (IOException | IllegalStateException e) {
+            set.remove(sub);
         }
     }
 

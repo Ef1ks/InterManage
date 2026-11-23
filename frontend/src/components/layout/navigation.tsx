@@ -14,6 +14,7 @@ import {
   HashIcon,
   MessageSquareWarningIcon,
   MegaphoneIcon,
+  MessagesSquareIcon,
   NewspaperIcon,
   PackageIcon,
   SettingsIcon,
@@ -43,6 +44,7 @@ import { stocktakePath } from '@/features/stocktake/paths'
 import { PartnerInvitationsBadge } from '@/features/store-settings/PartnerInvitationsBadge'
 import { TimeAttentionBadge } from '@/features/staff-time/TimeAttentionBadge'
 import { NewFeedbackBadge } from '@/features/feedback/FeedbackPage'
+import { ChatUnreadBadge } from '@/features/chat/ChatPage'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { TOOL_ROUTES, usePermissionCategories } from '@/features/tools/categories'
 import type { Me, PermissionCategoryInfo, ToolCategory } from '@/lib/types'
@@ -93,6 +95,25 @@ const COMPANY_SCOPE = 'Firma'
  * Zamówienia do dostawców (`ORDERS`) nie mają jeszcze modułu, więc nie stoją w menu.
  */
 const GROUPS: GroupSpec[] = [
+  {
+    key: 'chat',
+    path: '/czat',
+    label: 'Czat',
+    description: 'Czat sklepu, grupy i rozmowy z osobami z Twoich sklepów.',
+    icon: MessagesSquareIcon,
+    items: [
+      {
+        key: 'chat',
+        path: '/czat',
+        label: 'Czat',
+        description: 'Czat sklepu, grupy i rozmowy z osobami z Twoich sklepów.',
+        icon: MessagesSquareIcon,
+        // Pisze każdy z dostępem do sklepu; zarządzanie grupami to CHAT:EDIT.
+        visible: () => true,
+        badge: () => <ChatUnreadBadge />,
+      },
+    ],
+  },
   {
     key: 'store-results',
     path: TOOL_ROUTES.STORE_RESULTS.path,

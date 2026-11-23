@@ -65,6 +65,12 @@ export function useRestoreAgent(storeId: string) {
   )
 }
 
+export function useAgentPreferred(storeId: string) {
+  return useAgentMutation(storeId, ({ id, preferred }: { id: string; preferred: boolean }) =>
+    api<StoreAgents>(`/stores/${storeId}/agents/${id}/preferred`, { method: 'PUT', json: { preferred } }),
+  )
+}
+
 export function useAgentEnabled(storeId: string) {
   return useAgentMutation(storeId, (enabled: boolean) =>
     api<StoreAgents>(`/stores/${storeId}/agents/settings`, { method: 'PUT', json: { enabled } }),

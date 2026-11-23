@@ -14,6 +14,7 @@ import { SplashAnimation } from '@/components/SplashAnimation'
 import { StoreSwitcher } from '@/components/StoreSwitcher'
 import { Loading } from '@/components/ui'
 import { AuthProvider, useAuth } from '@/lib/auth'
+import { usePresenceHeartbeat } from '@/lib/chat'
 import { usePushNotifications } from '@/lib/push'
 import { useTheme } from '@/lib/theme'
 
@@ -45,6 +46,8 @@ function Navigator() {
   // Android rozmywa pod paskiem tylko ten widok, więc ekrany stoją w nim.
   const screens = useRef<ComponentRef<typeof View>>(null)
   usePushNotifications(!!me)
+  // Obecność do czatu („online”, „ostatnio …”).
+  usePresenceHeartbeat(!!me)
 
   if (me === undefined) {
     return (
@@ -105,6 +108,14 @@ function Navigator() {
             <Stack.Screen name="schedule" options={{ title: 'Mój grafik' }} />
             <Stack.Screen name="requests" options={{ title: 'Wnioski' }} />
             <Stack.Screen name="tasks" options={{ title: 'Zadania' }} />
+            <Stack.Screen name="chat/index" options={{ title: 'Czat' }} />
+            <Stack.Screen name="chat/[id]" options={{ title: 'Rozmowa' }} />
+            <Stack.Screen name="store-results" options={{ title: 'Wyniki sklepów' }} />
+            <Stack.Screen name="reports/index" options={{ title: 'Raporty' }} />
+            <Stack.Screen name="reports/comparison" options={{ title: 'Porównanie' }} />
+            <Stack.Screen name="reports/summary" options={{ title: 'Podsumowanie' }} />
+            <Stack.Screen name="reports/counter" options={{ title: 'Raport lady' }} />
+            <Stack.Screen name="reports/stock-gaps" options={{ title: 'Braki towaru' }} />
             <Stack.Screen
               name="request-new"
               options={{

@@ -10,8 +10,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
@@ -29,6 +31,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -584,6 +587,36 @@ class StaffTimeIntegrationTests {
         simulate("15:00");
         day().andExpect(jsonPath("$.rows[0].days[0].punches.length()").value(3))
                 .andExpect(jsonPath("$.rows[0].days[0].openSince").value(DAY + "T15:00:00"));
+    }
+
+    /** Odbicie z kiosku i przerwa idą od razu do strumienia na żywo sklepu (Czas pracy i pulpit bez czekania). */
+    @Test
+    void kioskPunchIsSentLiveToItsStore() throws Exception {
+        String settings = send(owner, post(staff("/time/settings/readers")), "{\"name\":\"Kiosk\"}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String token = JsonPath.read(settings, "$.readers[0].token");
+        send(owner, put(staff("/time/settings/cards/" + employee)), "{\"cardUid\":\"0AC7\"}")
+                .andExpect(status().isOk());
+        MvcResult stream = mvc.perform(get("/api/stores/" + store + "/live").cookie(owner))
+                .andExpect(request().asyncStarted()).andReturn();
+
+        reader(token, "0AC7", "2026-12-01T04:58:00Z").andExpect(status().isOk());
+        awaitContent(stream, "\"direction\":\"IN\"");
+        String exit = reader(token, "0AC7", "2026-12-01T09:00:00Z").andReturn().getResponse().getContentAsString();
+        awaitContent(stream, "\"direction\":\"OUT\"");
+        mvc.perform(post("/api/time-clock/punches/" + JsonPath.read(exit, "$.punchId") + "/break")
+                .header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        awaitContent(stream, "\"action\":\"break\"");
+        assertThat(stream.getResponse().getContentAsString()).contains("\"topic\":\"staff-time\"")
+                .contains("\"employeeId\":\"" + employee + "\"").doesNotContain("Jan ");
+    }
+
+    private void awaitContent(MvcResult stream, String text) throws Exception {
+        Instant deadline = Instant.now().plusSeconds(10);
+        while (!stream.getResponse().getContentAsString().contains(text) && Instant.now().isBefore(deadline)) {
+            Thread.sleep(50);
+        }
+        assertThat(stream.getResponse().getContentAsString()).contains(text);
     }
 
     /** Kiosk po wyjściu pyta o przerwę: jedna na dzień pracy, powrót kończy ją zwykłym odbiciem. */

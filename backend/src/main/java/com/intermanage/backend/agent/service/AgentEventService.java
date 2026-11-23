@@ -42,6 +42,7 @@ import com.intermanage.backend.product.service.PriceFileService;
  * <li>ATHOS: zmieniony {@code Histo.Log} nowszy niż ostatnio wczytany → prośba o plik;
  * <li>raporty Importu danych ({@code IMPORT_…}): {@link AgentReportService#handle}.
  * </ul>
+ * Zdarzenia przyjmujemy tylko od głównego agenta sklepu ({@link StoreAgentService}).
  */
 @Service
 public class AgentEventService {
@@ -69,6 +70,11 @@ public class AgentEventService {
     }
 
     public AgentApi.EventsResponse handle(StoreAgentService.AgentContext agent, List<AgentApi.Event> events) {
+        if (!agent.leader()) {
+            // Foldery pilnuje główny agent sklepu. Zdarzenia pozostałych (np. agent przed 1.3, który nie zna tej roli)
+            // pomijamy, żeby kilka komputerów nie wysyłało tych samych plików przez wolne łącze sklepu.
+            return new AgentApi.EventsResponse(List.of(), List.of());
+        }
         UUID storeId = agent.storeId();
         List<String> traceart = new ArrayList<>();
         List<AgentApi.Event> reportEvents = new ArrayList<>();

@@ -42,12 +42,14 @@ internal sealed class DataUpdate
 
     /// <summary>
     /// Aktualizacja raportów nie z dzisiaj; <paramref name="force"/> (menu ikony) bierze wszystkie pilnowane raporty.
-    /// Druga aktualizacja w trakcie pierwszej nic nie robi.
+    /// Druga aktualizacja w trakcie pierwszej nic nie robi. Automatyczną (<paramref name="force"/> = false) serwer daje
+    /// tylko głównemu agentowi sklepu, a każdą najwyżej jednemu komputerowi naraz (409 = aktualizuje inny komputer).
     /// </summary>
     public async Task RunAsync(AgentSettings settings, bool force, CancellationToken cancel)
     {
         if (Interlocked.Exchange(ref running, 1) == 1) return;
         UpdateForm? form = null;
+        ApiClient? locked = null;
         try
         {
             var config = await WaitForConfigAsync(cancel).ConfigureAwait(false);
@@ -73,7 +75,18 @@ internal sealed class DataUpdate
                 return;
             }
             Log.Info("Aktualizacja danych z Mercalys: " + string.Join(", ", kinds));
-            var macro = await api.ReportMacroAsync(kinds, cancel).ConfigureAwait(false);
+            ReportMacro macro;
+            try
+            {
+                macro = await api.ReportMacroAsync(kinds, !force, cancel).ConfigureAwait(false);
+            }
+            catch (RejectedException error) when (error.Status == 409)
+            {
+                Log.Info("Aktualizacja danych pominięta: " + error.Message);
+                if (force) ShowInfo(error.Message);
+                return;
+            }
+            locked = api;
             foreach (var skipped in macro.Skipped)
             {
                 Log.Warn("Aktualizacja danych: " + skipped.Title + " pominięty: " + skipped.Reason);
@@ -127,6 +140,20 @@ internal sealed class DataUpdate
         finally
         {
             Interlocked.Exchange(ref running, 0);
+            if (locked != null) _ = FinishedAsync(locked);
+        }
+    }
+
+    /// <summary>Koniec aktualizacji na serwerze (bez tego blokada wygasa sama po godzinie).</summary>
+    private static async Task FinishedAsync(ApiClient api)
+    {
+        try
+        {
+            await api.ReportMacroFinishedAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            Log.Warn("Aktualizacja danych: nie zgłoszono końca: " + error.Message);
         }
     }
 
@@ -144,11 +171,20 @@ internal sealed class DataUpdate
             DateTime newest;
             try
             {
-                newest = await Disk.Run(() => Directory.EnumerateFiles(watch.Path)
+                // Brakujący folder zakładamy (makro nie zapisze w nim raportu), a raport bez pliku jest do aktualizacji.
+                newest = await Disk.Run(() =>
+                {
+                    if (!Directory.Exists(watch.Path))
+                    {
+                        Directory.CreateDirectory(watch.Path);
+                        Log.Info("Aktualizacja danych: założono folder " + watch.Path);
+                    }
+                    return Directory.EnumerateFiles(watch.Path)
                         .Where(path => pattern.IsMatch(Path.GetFileName(path)))
                         .Select(File.GetLastWriteTime)
                         .DefaultIfEmpty(DateTime.MinValue)
-                        .Max(), TimeSpan.FromSeconds(60), cancel).ConfigureAwait(false);
+                        .Max();
+                }, TimeSpan.FromSeconds(60), cancel).ConfigureAwait(false);
             }
             catch (Exception error) when (!(error is OperationCanceledException))
             {

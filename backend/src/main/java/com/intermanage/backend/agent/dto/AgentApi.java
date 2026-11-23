@@ -23,10 +23,13 @@ public final class AgentApi {
 
     /**
      * Konfiguracja agenta: foldery zapisu (klucz folderu → ścieżka) i foldery do pilnowania. {@code enabled}: sklep
-     * wybrał pracę przez agenta (bez tego agent tylko utrzymuje kontakt).
+     * wybrał pracę przez agenta (bez tego agent tylko utrzymuje kontakt). {@code leader}: ten agent jest głównym agentem
+     * sklepu, więc pilnuje folderów i aktualizuje dane z Mercalys (każda odpowiedź API niesie to też w nagłówku
+     * {@code X-Agent-Leader}); {@code preferred}: agent preferowany, który odbiera tę rolę pozostałym.
      */
     public record HelloResponse(UUID storeId, String storeNumber, String storeName, String agentName, boolean enabled,
-            Map<String, String> folders, List<Watch> watches, int longPollSeconds) {
+            Map<String, String> folders, List<Watch> watches, int longPollSeconds, boolean leader,
+            boolean preferred) {
     }
 
     /**
@@ -99,7 +102,12 @@ public final class AgentApi {
             @NotNull Instant modified) {
     }
 
-    /** Raporty do aktualizacji z Mercalys (pliki w folderach nie są z dzisiaj); pusta lista = wszystkie z makrem. */
-    public record ReportMacroRequest(@Size(max = 20) List<@NotBlank @Size(max = 30) String> kinds) {
+    /**
+     * Raporty do aktualizacji z Mercalys (pliki w folderach nie są z dzisiaj); pusta lista = wszystkie z makrem.
+     * {@code automatic}: aktualizacja przy starcie komputera albo po przejęciu roli głównego agenta (tylko główny
+     * agent); {@code false} = pracownik wybrał ją w menu ikony. Brak (agent przed 1.3) = automatyczna.
+     */
+    public record ReportMacroRequest(@Size(max = 20) List<@NotBlank @Size(max = 30) String> kinds,
+            Boolean automatic) {
     }
 }

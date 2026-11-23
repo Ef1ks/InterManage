@@ -108,7 +108,8 @@ function TaskCard({ storeId, task, showAssignee }: { storeId: string; task: Stor
   const overdue = isOverdue(task, todayIso())
   const canCheck = (task.canComplete || task.canManage) && task.status !== 'ACCEPTED'
   const meta = [
-    showAssignee ? task.assignee.displayName : null,
+    task.forStore ? 'Cały sklep' : showAssignee ? (task.assignee?.displayName ?? null) : null,
+    task.group ? `zrobiło ${task.group.done} z ${task.group.total}` : null,
     task.dueDate ? `${overdue ? 'po terminie' : 'do'} ${shortDate(task.dueDate)}` : null,
     task.itemCount > 0 ? `${task.checkedCount} / ${task.itemCount} poz.` : null,
     task.sourceLabel ? `z: ${task.sourceLabel}` : null,

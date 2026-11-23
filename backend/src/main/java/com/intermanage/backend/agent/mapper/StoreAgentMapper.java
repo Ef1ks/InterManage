@@ -21,8 +21,10 @@ public interface StoreAgentMapper {
     @Mapping(target = "machineUser", source = "agent.machineUser")
     @Mapping(target = "deletedAt", source = "agent.deletedAt")
     @Mapping(target = "online", source = "online")
+    @Mapping(target = "preferred", source = "agent.preferred")
+    @Mapping(target = "leader", source = "leader")
     @Mapping(target = "key", source = "key")
-    StoreAgentResponse toResponse(StoreAgent agent, boolean online, String key);
+    StoreAgentResponse toResponse(StoreAgent agent, boolean online, boolean leader, String key);
 
     AgentReportFileResponse toResponse(AgentReportFile file);
 }

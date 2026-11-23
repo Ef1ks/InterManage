@@ -21,9 +21,13 @@ export type PermissionCategory =
   | 'CASH_REPORT'
   | 'STORE_LOG'
   | 'STORE_RESULTS'
+  | 'CHAT'
 
-/** Kategorie, które są narzędziem z własną stroną (DASHBOARD to tylko zawartość pulpitu). */
-export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD'>
+/**
+ * Kategorie, które są narzędziem z własną stroną (DASHBOARD to tylko zawartość pulpitu, CHAT to zarządzanie czatem,
+ * z którego korzysta każdy).
+ */
+export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD' | 'CHAT'>
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 
@@ -5006,6 +5010,10 @@ export type StoreAgent = {
   machineName: string | null
   machineUser: string | null
   online: boolean
+  /** Preferowany na głównego agenta: odbiera tę rolę agentom niepreferowanym. */
+  preferred: boolean
+  /** Główny agent sklepu: pilnuje folderów i aktualizuje dane z Mercalys (pozostali tylko zapisują pliki). */
+  leader: boolean
   deletedAt: string | null
   key: string | null
 }
@@ -5067,7 +5075,12 @@ export type StoreTask = {
   dueDate: string | null
   priority: TaskPriority
   status: TaskStatus
-  assignee: TaskPerson
+  /** Wykonawca; `null` przy zadaniu dla całego sklepu (`forStore`). */
+  assignee: TaskPerson | null
+  /** Zadanie dla całego sklepu: wykonuje ktokolwiek z dostępem do sklepu. */
+  forStore: boolean
+  /** Zlecenie kilku osobom naraz: każda ma swoją kopię, tu postęp wszystkich. */
+  group: TaskGroup | null
   createdBy: TaskPerson | null
   createdAt: string
   sourceKind: string | null
@@ -5118,7 +5131,15 @@ export type TaskEvent = { id: string; kind: TaskEventKind; userName: string | nu
 
 export type TaskAssignee = { id: string; displayName: string; roleName: string }
 
-export type TaskCounts = { open: number; waiting: number }
+/** `storeOpen`: otwarte zadania całego sklepu. */
+export type TaskCounts = { open: number; waiting: number; storeOpen: number }
+
+export type TaskGroup = {
+  id: string
+  total: number
+  done: number
+  members: { taskId: string; person: TaskPerson | null; status: TaskStatus }[]
+}
 
 /** Zgłoszenie poprawki albo błędu (przycisk w nagłówku, lista u właściciela). */
 export type FeedbackKind = 'BUG' | 'IMPROVEMENT'
@@ -5144,3 +5165,119 @@ export type FeedbackReport = {
 }
 
 export type FeedbackCounts = { fresh: number; inProgress: number; done: number; rejected: number }
+
+// ---------------------------------------------------------------- czat
+
+export type ChatKind = 'STORE' | 'GROUP' | 'DIRECT'
+
+export type ChatPerson = { id: string; name: string; avatarUrl: string | null }
+
+export type ChatLastMessage = {
+  authorId: string | null
+  authorName: string | null
+  /** Treść skrócona; `null` przy cofniętej albo samych plikach. */
+  preview: string | null
+  attachmentCount: number
+  retracted: boolean
+  createdAt: string
+}
+
+/** Po wymianie albo usunięciu logo czatu: `previousLogoId` do „Przywróć”. */
+export type ChatLogoChange = { conversation: ChatConversation; previousLogoId: string | null }
+
+export type ChatConversation = {
+  id: string
+  kind: ChatKind
+  storeId: string | null
+  storeNumber: string | null
+  storeName: string | null
+  name: string | null
+  /** Druga osoba rozmowy dwóch osób. */
+  peer: ChatPerson | null
+  memberCount: number
+  lastMessage: ChatLastMessage | null
+  lastMessageAt: string | null
+  unread: number
+  /** Nieprzeczytane wiadomości, które mnie oznaczają (@osoba, @dział, @wszyscy). */
+  unreadMentions: number
+  /** Czat bieżącego sklepu (albo rozmowa z osobą z tego sklepu): na górze listy. */
+  local: boolean
+  canManage: boolean
+  /** Nazwę i logo czatu sklepu albo grupy zmienia zarządzający czatem. */
+  canEdit: boolean
+  /** Logo czatu sklepu albo grupy; `null` = ikona. */
+  logoUrl: string | null
+}
+
+export type ChatAttachment = {
+  id: string
+  kind: 'FILE' | 'IMAGE' | 'VIDEO'
+  fileName: string
+  contentType: string
+  sizeBytes: number
+}
+
+export type ChatMessage = {
+  id: string
+  authorId: string | null
+  authorName: string | null
+  authorAvatarUrl: string | null
+  /** Przy cofniętej `null` (poza moderatorem, który widzi treść na szaro). */
+  body: string | null
+  createdAt: string
+  retracted: boolean
+  retractedAt: string | null
+  retractedByName: string | null
+  attachments: ChatAttachment[]
+  /** Oznaczenia w treści, każde jako `@label`. */
+  mentions: ChatMention[]
+  /** Wiadomość oznacza mnie (osobiście, moim działem albo @wszyscy). */
+  mentionsMe: boolean
+  canRetract: boolean
+  canRestore: boolean
+}
+
+export type ChatThread = {
+  conversation: ChatConversation
+  members: ChatPerson[]
+  moderator: boolean
+  messages: ChatMessage[]
+  hasMore: boolean
+  reads: { userId: string; lastReadAt: string }[]
+  typing: ChatPerson[]
+  /** Działy członków rozmowy do oznaczenia (@dział). */
+  departments: ChatMentionDepartment[]
+  /** `@wszyscy`: w czacie całego sklepu tylko zarządzający czatem. */
+  canMentionAll: boolean
+}
+
+export type ChatMention = { kind: 'USER' | 'ALL' | 'DEPARTMENT'; id: string | null; label: string }
+
+export type ChatMentionDepartment = { id: string; name: string; memberCount: number }
+
+export type ChatWorking = {
+  userId: string
+  name: string
+  avatarUrl: string | null
+  position: string | null
+  start: string | null
+  end: string | null
+  /** Odbite wejście; `null` = jeszcze się nie odbiła albo brak dostępu do Czasu pracy (`ChatPeople.hours`). */
+  since: string | null
+  /** Odbita karta (także bez dostępu do godzin). */
+  punched: boolean
+  lastSeenAt: string | null
+  online: boolean
+}
+
+export type ChatOther = {
+  userId: string
+  name: string
+  avatarUrl: string | null
+  rankName: string | null
+  lastSeenAt: string | null
+  online: boolean
+}
+
+/** `hours`: godziny zmian i odbić tylko z dostępem do Czasu pracy. */
+export type ChatPeople = { hours: boolean; working: ChatWorking[]; others: ChatOther[] }

@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.component.ScanFiles;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
@@ -115,6 +116,7 @@ public class StaffTimeService {
     private final AppUserRepository users;
     private final OvertimePdf overtimePdf;
     private final GusService gus;
+    private final LiveEvents live;
 
     public StaffTimeService(StaffEmployeeRepository employees, StaffDepartmentRepository departments,
             StaffDepartmentManagerRepository managers, StaffDepartmentBreakRepository breaks,
@@ -123,7 +125,8 @@ public class StaffTimeService {
             StaffTimeDecisionRepository decisions, StaffTimeDecisionFileRepository decisionFiles,
             StaffTimeReaderRepository readers, StaffNfcCardRepository cards,
             StaffEmployerDetailsRepository employers, StaffTimeStoreRulesRepository storeRules,
-            StoreRepository stores, AppUserRepository users, OvertimePdf overtimePdf, GusService gus) {
+            StoreRepository stores, AppUserRepository users, OvertimePdf overtimePdf, GusService gus,
+            LiveEvents live) {
         this.employees = employees;
         this.departments = departments;
         this.managers = managers;
@@ -143,6 +146,7 @@ public class StaffTimeService {
         this.users = users;
         this.overtimePdf = overtimePdf;
         this.gus = gus;
+        this.live = live;
     }
 
     // ---------------------------------------------------------------- widok
@@ -507,37 +511,15 @@ public class StaffTimeService {
      */
     @Transactional(readOnly = true)
     public Presence presence(UUID storeId) {
-        LocalDateTime now = LocalDateTime.now(StoreTime.ZONE);
+        Duty duty = duty(storeId);
+        LocalDateTime now = duty.now();
         LocalDate today = now.toLocalDate();
-        List<StaffScheduleEntry> shifts = entries.findInStore(storeId, today.minusDays(1), today);
-        Set<UUID> ids = new HashSet<>(punches.findEmployeeIdsInStore(storeId, instant(now.minus(MAX_SHIFT))));
-        shifts.forEach(entry -> ids.add(entry.getEmployee().getId()));
-        if (ids.isEmpty()) {
+        if (duty.working() == null) {
             return new Presence(now, 0, 0, 0, List.of(), List.of(), null, 0);
         }
-        Map<UUID, List<StaffLeave>> absences = leaves.findActive(ids).stream()
-                .collect(Collectors.groupingBy(leave -> leave.getEmployee().getId()));
-        Map<UUID, Pair> inside = new HashMap<>();
-        punches.findOfEmployees(ids, instant(now.minus(MAX_SHIFT).minus(MAX_SHIFT)), instant(now.plusMinutes(1)))
-                .stream().collect(Collectors.groupingBy(punch -> punch.getEmployee().getId()))
-                .forEach((id, list) -> {
-                    List<Pair> pairs = pairs(list);
-                    Pair last = pairs.getLast();
-                    if (last.out() == null && last.inPunch().getStore().getId().equals(storeId)
-                            && !last.in().isBefore(now.minus(MAX_SHIFT))) {
-                        inside.put(id, last);
-                    }
-                });
-
-        List<StaffScheduleEntry> working = shifts.stream()
-                .filter(entry -> leaveOn(absences.getOrDefault(entry.getEmployee().getId(), List.of()),
-                        entry.getWorkDate()) == null)
-                .toList();
-        Map<UUID, StaffScheduleEntry> nowShift = new HashMap<>();
-        working.stream().filter(entry -> {
-            TimeCard.Interval shift = shift(entry);
-            return !shift.start().isAfter(now) && shift.end().isAfter(now);
-        }).forEach(entry -> nowShift.putIfAbsent(entry.getEmployee().getId(), entry));
+        List<StaffScheduleEntry> working = duty.working();
+        Map<UUID, StaffScheduleEntry> nowShift = duty.nowShift();
+        Map<UUID, Pair> inside = duty.inside();
         long todayCount = working.stream().filter(entry -> entry.getWorkDate().equals(today))
                 .map(entry -> entry.getEmployee().getId()).distinct().count();
         List<StaffScheduleEntry> later = working.stream()
@@ -561,6 +543,72 @@ public class StaffTimeService {
                 .toList();
         return new Presence(now, inside.size(), nowShift.size(), (int) todayCount, missing, unscheduled, nextStart,
                 nextCount);
+    }
+
+    /**
+     * Kto jest teraz na zmianie w sklepie i kto odbił wejście (dla czatu: lista „w pracy”). Bez dni nieobecności
+     * z Kadr i bez powodów nieobecności, więc nie wymaga uprawnień do Czasu pracy; tylko osoby z kontem.
+     */
+    @Transactional(readOnly = true)
+    public List<OnDuty> onDuty(UUID storeId) {
+        Duty duty = duty(storeId);
+        if (duty.working() == null) {
+            return List.of();
+        }
+        Map<UUID, StaffEmployee> employees = new HashMap<>();
+        duty.nowShift().values().forEach(entry -> employees.put(entry.getEmployee().getId(), entry.getEmployee()));
+        duty.inside().forEach((id, pair) -> employees.putIfAbsent(id, pair.inPunch().getEmployee()));
+        return employees.values().stream().filter(employee -> employee.getUser() != null).map(employee -> {
+            StaffScheduleEntry entry = duty.nowShift().get(employee.getId());
+            Pair pair = duty.inside().get(employee.getId());
+            return new OnDuty(employee.getUser().getId(), employee.getDisplayName(),
+                    employee.getPosition().getName(), entry == null ? null : entry.getStart(),
+                    entry == null ? null : entry.getEnd(), pair == null ? null : pair.in());
+        }).toList();
+    }
+
+    /** Osoba na zmianie albo w pracy: {@code since} = odbite wejście (puste = jeszcze się nie odbiła). */
+    public record OnDuty(UUID userId, String name, String position, LocalTime start, LocalTime end,
+            LocalDateTime since) {
+    }
+
+    /** Stan sklepu w tej chwili: zmiany bez nieobecności, kto ma zmianę teraz, kto jest w środku. */
+    private record Duty(LocalDateTime now, List<StaffScheduleEntry> working,
+            Map<UUID, StaffScheduleEntry> nowShift, Map<UUID, Pair> inside) {
+    }
+
+    private Duty duty(UUID storeId) {
+        LocalDateTime now = LocalDateTime.now(StoreTime.ZONE);
+        LocalDate today = now.toLocalDate();
+        List<StaffScheduleEntry> shifts = entries.findInStore(storeId, today.minusDays(1), today);
+        Set<UUID> ids = new HashSet<>(punches.findEmployeeIdsInStore(storeId, instant(now.minus(MAX_SHIFT))));
+        shifts.forEach(entry -> ids.add(entry.getEmployee().getId()));
+        if (ids.isEmpty()) {
+            return new Duty(now, null, Map.of(), Map.of());
+        }
+        Map<UUID, List<StaffLeave>> absences = leaves.findActive(ids).stream()
+                .collect(Collectors.groupingBy(leave -> leave.getEmployee().getId()));
+        Map<UUID, Pair> inside = new HashMap<>();
+        punches.findOfEmployees(ids, instant(now.minus(MAX_SHIFT).minus(MAX_SHIFT)), instant(now.plusMinutes(1)))
+                .stream().collect(Collectors.groupingBy(punch -> punch.getEmployee().getId()))
+                .forEach((id, list) -> {
+                    List<Pair> pairs = pairs(list);
+                    Pair last = pairs.getLast();
+                    if (last.out() == null && last.inPunch().getStore().getId().equals(storeId)
+                            && !last.in().isBefore(now.minus(MAX_SHIFT))) {
+                        inside.put(id, last);
+                    }
+                });
+        List<StaffScheduleEntry> working = shifts.stream()
+                .filter(entry -> leaveOn(absences.getOrDefault(entry.getEmployee().getId(), List.of()),
+                        entry.getWorkDate()) == null)
+                .toList();
+        Map<UUID, StaffScheduleEntry> nowShift = new HashMap<>();
+        working.stream().filter(entry -> {
+            TimeCard.Interval shift = shift(entry);
+            return !shift.start().isAfter(now) && shift.end().isAfter(now);
+        }).forEach(entry -> nowShift.putIfAbsent(entry.getEmployee().getId(), entry));
+        return new Duty(now, working, nowShift, inside);
     }
 
     private static Presence.Person person(StaffEmployee employee, StaffScheduleEntry entry, LocalDateTime since) {
@@ -638,7 +686,10 @@ public class StaffTimeService {
                         && previous.getEndAt().equals(end))
                 .forEach(previous -> previous.markDeleted(actor));
         decisions.flush();
-        return decisions.saveAndFlush(new StaffTimeDecision(employee, day, kind, start, end, decision, note, actor));
+        StaffTimeDecision saved = decisions.saveAndFlush(new StaffTimeDecision(employee, day, kind, start, end,
+                decision, note, actor));
+        announce(employee, null, "decision", null, null);
+        return saved;
     }
 
     /**
@@ -661,6 +712,7 @@ public class StaffTimeService {
     public void removeDecision(UUID storeId, UUID decisionId, AppUserPrincipal principal) {
         StaffTimeDecision decision = decision(storeId, decisionId, principal);
         decision.markDeleted(users.getReferenceById(principal.getId()));
+        announce(decision.getEmployee(), null, "decision", null, null);
     }
 
     @Transactional
@@ -674,6 +726,7 @@ public class StaffTimeService {
             throw ApiException.conflict("Ten odcinek ma już nowszą decyzję");
         }
         decision.restore();
+        announce(decision.getEmployee(), null, "decision", null, null);
     }
 
     @Transactional(readOnly = true)
@@ -804,8 +857,10 @@ public class StaffTimeService {
                 .filter(found -> found.getStore().companyKey().equals(store.companyKey()))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono pracownika"));
         Instant at = request.at() == null ? Instant.now() : instant(request.at());
+        String direction = exitAt(employee, at) ? "OUT" : "IN";
         punches.save(new StaffTimePunch(employee, store, at, TimePunchSource.SIMULATED, null,
                 users.getReferenceById(principal.getId())));
+        announce(employee, store, "punch", direction, at);
     }
 
     /**
@@ -814,12 +869,16 @@ public class StaffTimeService {
      */
     @Transactional
     public void removePunch(UUID storeId, UUID punchId, AppUserPrincipal principal) {
-        companyPunch(storeId, punchId, principal, false).markDeleted(users.getReferenceById(principal.getId()));
+        StaffTimePunch punch = companyPunch(storeId, punchId, principal, false);
+        punch.markDeleted(users.getReferenceById(principal.getId()));
+        announce(punch.getEmployee(), punch.getStore(), "removed", null, punch.getPunchedAt());
     }
 
     @Transactional
     public void restorePunch(UUID storeId, UUID punchId, AppUserPrincipal principal) {
-        companyPunch(storeId, punchId, principal, true).restore();
+        StaffTimePunch punch = companyPunch(storeId, punchId, principal, true);
+        punch.restore();
+        announce(punch.getEmployee(), punch.getStore(), "restored", null, punch.getPunchedAt());
     }
 
     /** Odbicie z dowolnego sklepu firmy (karta pracownika pokazuje odbicia ze wszystkich jej sklepów). */
@@ -916,6 +975,36 @@ public class StaffTimeService {
         return result;
     }
 
+    /** Czy odbicie o {@code at} byłoby wyjściem: pracownik ma otwarte wejście nie starsze niż {@link #MAX_SHIFT}. */
+    private boolean exitAt(StaffEmployee employee, Instant at) {
+        return pairs(punches.findOfEmployees(List.of(employee.getId()), at.minus(MAX_SHIFT), at)).stream()
+                .anyMatch(pair -> pair.out() == null && Duration.between(pair.in(), local(at)).compareTo(MAX_SHIFT) <= 0);
+    }
+
+    /**
+     * Wiadomość na żywo {@code staff-time} (po zatwierdzeniu transakcji): Czas pracy i „W pracy teraz” na pulpicie
+     * odświeżają się od razu, a nie przy odpytywaniu co minutę. Idzie do sklepu odbicia i do sklepu pracownika (karta
+     * pokazuje odbicia ze wszystkich sklepów firmy). Bez nazwiska: strumień słyszy każdy z dostępem do sklepu, a imię
+     * strona Czasu pracy bierze ze swoich kart.
+     */
+    private void announce(StaffEmployee employee, Store punchStore, String action, String direction, Instant at) {
+        Map<String, Object> fields = new HashMap<>();
+        fields.put("action", action);
+        fields.put("employeeId", employee.getId());
+        if (direction != null) {
+            fields.put("direction", direction);
+        }
+        if (at != null) {
+            fields.put("at", at);
+        }
+        Set<UUID> targets = new HashSet<>();
+        if (punchStore != null) {
+            targets.add(punchStore.getId());
+        }
+        targets.add(employee.getStore().getId());
+        targets.forEach(storeId -> live.publish(storeId, "staff-time", fields));
+    }
+
     /** Odbicie z czytnika NFC: czytnik przedstawia się kluczem, karta wskazuje pracownika firmy. */
     @Transactional
     public ReaderResult readerPunch(String token, TimeRequests.ReaderPunch request) {
@@ -940,6 +1029,7 @@ public class StaffTimeService {
                 && Duration.between(last.out(), local(at)).compareTo(MAX_BREAK) <= 0;
         StaffTimePunch saved = punches.save(new StaffTimePunch(employee, store, at, TimePunchSource.READER, reader,
                 null));
+        announce(employee, store, "punch", exit ? "OUT" : "IN", at);
         return new ReaderResult(saved.getId(), employee.getDisplayName(), exit ? "OUT" : "IN", at,
                 exit && !hadBreak(recent, open), breakEnded, false);
     }
@@ -1009,6 +1099,7 @@ public class StaffTimeService {
                 throw ApiException.conflict("Przerwa w tym dniu już była");
             }
             punch.markBreakStart();
+            announce(employee, punch.getStore(), "break", "OUT", punch.getPunchedAt());
         }
         return new ReaderResult(punch.getId(), employee.getDisplayName(), "OUT", punch.getPunchedAt(), false, false,
                 false);

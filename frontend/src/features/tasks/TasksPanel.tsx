@@ -115,7 +115,7 @@ export function TasksPanel({ storeId, canAssign }: { storeId: string; canAssign:
   )
 }
 
-function TaskRow({ storeId, task, showAssignee }: { storeId: string; task: StoreTask; showAssignee: boolean }) {
+export function TaskRow({ storeId, task, showAssignee }: { storeId: string; task: StoreTask; showAssignee: boolean }) {
   const [open, setOpen] = useState(false)
   const today = todayIso()
   const overdue = isOverdue(task, today)
@@ -176,7 +176,18 @@ function TaskRow({ storeId, task, showAssignee }: { storeId: string; task: Store
             {task.title}
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            {showAssignee && <span>{task.assignee.displayName}</span>}
+            {task.forStore ? (
+              <span className="rounded bg-violet-200 px-1.5 font-medium text-violet-950 dark:bg-violet-900/70 dark:text-violet-100">
+                Cały sklep
+              </span>
+            ) : (
+              showAssignee && task.assignee && <span>{task.assignee.displayName}</span>
+            )}
+            {task.group && (
+              <span className="tabular-nums">
+                zrobiło {task.group.done} z {task.group.total}
+              </span>
+            )}
             {task.dueDate && (
               <span
                 className={cn(
@@ -213,6 +224,61 @@ function TaskRow({ storeId, task, showAssignee }: { storeId: string; task: Store
   )
 }
 
+/**
+ * Zlecenie kilku osobom: kto już zrobił swoją kopię, a dopóki ktoś nie zrobił, „Wszyscy już zrobili” zamyka naraz
+ * wszystkie otwarte kopie (np. gdy zrobili to razem).
+ */
+export function TaskGroupProgress({ storeId, task }: { storeId: string; task: StoreTask }) {
+  const actions = useTaskActions(storeId)
+  const group = task.group
+  if (!group) return null
+  const left = group.total - group.done
+  return (
+    <div className="grid gap-1.5 rounded-lg border bg-card px-3 py-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        Zlecone {group.total} osobom, zrobiło {group.done}
+      </p>
+      <ul className="flex flex-wrap gap-1.5">
+        {group.members.map((member) => (
+          <li
+            key={member.taskId}
+            className={cn(
+              'rounded-full px-2 text-xs leading-5 font-medium',
+              member.status === 'OPEN'
+                ? 'bg-muted text-muted-foreground'
+                : 'bg-emerald-200 text-emerald-950 dark:bg-emerald-900/70 dark:text-emerald-100',
+            )}
+          >
+            {member.status === 'OPEN' ? '' : '✓ '}
+            {member.person?.displayName ?? 'Cały sklep'}
+          </li>
+        ))}
+      </ul>
+      {left > 0 && (task.canComplete || task.canManage) && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          loading={actions.doneAll.isPending}
+          onClick={() =>
+            actions.doneAll.mutate(
+              { id: task.id },
+              {
+                onSuccess: () => toast.success('Oznaczono: wszyscy już zrobili', { description: task.title }),
+                onError: (error) => toast.error(taskErrorMessage(error, 'Nie udało się oznaczyć zadania')),
+              },
+            )
+          }
+        >
+          <CheckCircle2Icon data-icon="inline-start" />
+          Wszyscy już zrobili ({left} {left === 1 ? 'osoba' : 'osób'} jeszcze nie)
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function TaskDetails({ storeId, task, closed }: { storeId: string; task: StoreTask; closed: boolean }) {
   const actions = useTaskActions(storeId)
   const [comment, setComment] = useState('')
@@ -245,6 +311,10 @@ function TaskDetails({ storeId, task, closed }: { storeId: string; task: StoreTa
           {task.doneBy?.displayName ?? 'Wykonawca'}: {task.doneComment}
         </p>
       )}
+      {task.forStore && task.status !== 'OPEN' && task.doneBy && (
+        <p className="text-muted-foreground">Wykonał(a) za sklep: {task.doneBy.displayName}</p>
+      )}
+      {task.group && <TaskGroupProgress storeId={storeId} task={task} />}
       {task.sourceUrl && (
         <Link
           to={inStore(task.sourceUrl, storeId)}
