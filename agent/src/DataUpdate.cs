@@ -17,7 +17,7 @@ namespace Intermanage.Agent;
 /// a agent wysyła je jak zawsze. Okno <see cref="UpdateForm"/> trzyma się na wierzchu, aż serwer potwierdzi wgranie
 /// każdego zapisanego pliku.
 ///
-/// Makro wykonuje odtwarzacz (player.exe, działa w tle): agent wkłada makro do schowka i naciska lewy Alt+E, jak
+/// Makro wykonuje odtwarzacz (player.exe schowany w agencie, <see cref="PlayerHost"/>, albo osobny): agent wkłada makro do schowka i naciska lewy Alt+E, jak
 /// pracownik. Hasło Mercalys z ustawień agenta trafia do pierwszego polecenia, więc odtwarzacz sam uruchamia i loguje
 /// wyłączony Mercalys.
 /// </summary>
@@ -111,8 +111,11 @@ internal sealed class DataUpdate
             if (!await WaitForPlayerAsync(form, cancel).ConfigureAwait(false))
             {
                 Log.Warn("Aktualizacja danych: nie znaleziono działającego odtwarzacza makr");
-                form.Finish(false, "Nie działa odtwarzacz makr (AutoJob). Uruchom go i wybierz w menu ikony agenta "
-                    + "„Aktualizuj dane z Mercalys”.");
+                form.Finish(false, PlayerHost.Embedded
+                    ? "Odtwarzacz makr agenta nie wystartował (szczegóły w dzienniku agenta). Spróbuj ponownie z menu "
+                        + "ikony agenta: „Aktualizuj dane z Mercalys”."
+                    : "Nie działa odtwarzacz makr (AutoJob). Uruchom go i wybierz w menu ikony agenta "
+                        + "„Aktualizuj dane z Mercalys”.");
                 return;
             }
             form.Status("Uruchamiam makro w Mercalys…");
@@ -315,10 +318,10 @@ internal sealed class DataUpdate
         }
     }
 
-    /// <summary>Produkt z <c>;@Ahk2Exe-SetName</c> w player.ahk: plik bywa nazwany player.exe, player-v60.exe albo AutoJob.exe.</summary>
-    private const string PlayerProduct = "Intermanage Makra";
-
-    /// <summary>Nazwa działającego odtwarzacza makr albo null. Rozpoznaje go po nazwie pliku albo po opisie programu.</summary>
+    /// <summary>
+    /// Nazwa działającego odtwarzacza makr albo null. Rozpoznaje go po nazwie pliku albo po opisie programu (osobny plik
+    /// bywa nazwany player.exe, player-v60.exe albo AutoJob.exe; odtwarzacz z agenta to player.exe).
+    /// </summary>
     private static string? FindPlayer()
     {
         var session = Process.GetCurrentProcess().SessionId;
@@ -335,10 +338,10 @@ internal sealed class DataUpdate
                     {
                         return name;
                     }
-                    var path = ImagePath(process.Id);
+                    var path = PlayerHost.ImagePath(process.Id);
                     if (path == null) continue;
                     var info = FileVersionInfo.GetVersionInfo(path);
-                    if (string.Equals(info.ProductName?.Trim(), PlayerProduct, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(info.ProductName?.Trim(), PlayerHost.Product, StringComparison.OrdinalIgnoreCase))
                     {
                         return name;
                     }
@@ -350,35 +353,6 @@ internal sealed class DataUpdate
             }
         }
         return null;
-    }
-
-    private const uint QueryLimitedInformation = 0x1000;
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool QueryFullProcessImageName(IntPtr process, int flags, System.Text.StringBuilder name,
-        ref int size);
-
-    [DllImport("kernel32.dll")]
-    private static extern bool CloseHandle(IntPtr handle);
-
-    /// <summary>Ścieżka pliku procesu, także 64-bitowego z 32-bitowego agenta (MainModule tego nie umie).</summary>
-    private static string? ImagePath(int processId)
-    {
-        var handle = OpenProcess(QueryLimitedInformation, false, processId);
-        if (handle == IntPtr.Zero) return null;
-        try
-        {
-            var size = 1024;
-            var name = new System.Text.StringBuilder(size);
-            return QueryFullProcessImageName(handle, 0, name, ref size) ? name.ToString() : null;
-        }
-        finally
-        {
-            CloseHandle(handle);
-        }
     }
 
     private const byte LeftAlt = 0xA4;

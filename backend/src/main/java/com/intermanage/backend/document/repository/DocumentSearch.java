@@ -18,14 +18,18 @@ import com.intermanage.backend.document.entity.DeliveryCorrection;
 import com.intermanage.backend.document.entity.DeliveryReportClosingDelivery;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentGratis;
+import com.intermanage.backend.document.entity.DocumentGratisArticle;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentManualInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
+import com.intermanage.backend.product.entity.Product;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -255,13 +259,15 @@ public final class DocumentSearch {
 
     /**
      * Filtr gratisów z parametru API: {@code with} zarejestrowane jako gratis, {@code without} bez gratisu,
-     * {@code candidate} jeszcze nieoznaczone z pozycją GRATIS (mogą być gratisem), inaczej wszystkie.
+     * {@code candidate} jeszcze nieoznaczone z artykułem z listy gratisów sklepu na minusie (mogą być gratisem),
+     * {@code plus} z takim artykułem na plusie (coś nie tak), inaczej wszystkie.
      */
     public enum GratisFilter {
-        ALL, WITH, WITHOUT, CANDIDATE;
+        ALL, WITH, WITHOUT, CANDIDATE, ON_PLUS;
 
         public static GratisFilter of(String value) {
             return "candidate".equalsIgnoreCase(value) ? CANDIDATE
+                    : "plus".equalsIgnoreCase(value) ? ON_PLUS
                     : switch (Presence.of(value)) {
                         case WITH -> WITH;
                         case WITHOUT -> WITHOUT;
@@ -270,7 +276,10 @@ public final class DocumentSearch {
         }
     }
 
-    /** Dokumenty zarejestrowane jako gratis od dostawcy (aktywny, niecofnięty wpis), bez gratisu albo kandydaci. */
+    /**
+     * Dokumenty zarejestrowane jako gratis od dostawcy (aktywny, niecofnięty wpis), bez gratisu, kandydaci (artykuł
+     * z listy gratisów sklepu na minusie, jeszcze bez gratisu) albo z takim artykułem na plusie.
+     */
     public static Specification<Document> withGratis(GratisFilter filter) {
         return (root, query, cb) -> {
             if (filter == GratisFilter.ALL) {
@@ -282,10 +291,29 @@ public final class DocumentSearch {
             return switch (filter) {
                 case WITH -> cb.exists(subquery);
                 case WITHOUT -> cb.not(cb.exists(subquery));
-                case CANDIDATE -> cb.and(cb.isTrue(root.get("gratisCandidate")), cb.not(cb.exists(subquery)));
+                case CANDIDATE -> cb.and(cb.exists(gratisArticleLine(root, query, cb, false)),
+                        cb.not(cb.exists(subquery)));
+                case ON_PLUS -> cb.exists(gratisArticleLine(root, query, cb, true));
                 case ALL -> cb.conjunction();
             };
         };
+    }
+
+    /** Linia dokumentu z artykułem z listy gratisów sklepu, na plusie albo na minusie. */
+    private static Subquery<Integer> gratisArticleLine(Root<Document> root, CriteriaQuery<?> query,
+            CriteriaBuilder cb, boolean onPlus) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<DocumentLine> line = subquery.from(DocumentLine.class);
+        Root<DocumentGratisArticle> article = subquery.from(DocumentGratisArticle.class);
+        Join<DocumentGratisArticle, Product> product = article.join("product");
+        Expression<BigDecimal> quantity = line.get("quantity");
+        subquery.select(cb.literal(1)).where(
+                cb.equal(line.get("document"), root),
+                cb.equal(product.get("store"), root.get("store")),
+                cb.equal(product.get("itm8"), line.get("itm8")),
+                cb.isNull(article.get("removedAt")),
+                onPlus ? cb.greaterThan(quantity, BigDecimal.ZERO) : cb.lessThan(quantity, BigDecimal.ZERO));
+        return subquery;
     }
 
     /** Bez dokumentów dostawców o tych kodach; dokumenty bez wspólnego dostawcy zostają. */

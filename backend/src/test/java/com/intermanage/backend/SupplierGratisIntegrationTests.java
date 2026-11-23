@@ -29,6 +29,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -58,6 +59,9 @@ class SupplierGratisIntegrationTests {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     @Test
     void importsSupplierListAndMergesLaterReports() throws Exception {
@@ -274,8 +278,17 @@ class SupplierGratisIntegrationTests {
         String transfer = "PPP" + ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999);
         String plain = "PPP" + ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999);
         String receipt = "PZ" + ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999);
+        // Gratis wskazuje artykuł z listy sklepu (nie nazwa): na minusie przeniesienie może być gratisem.
+        insertProduct(storeId, "0000099007782", "GRATIS SPOŻYWKA MIX");
+        String gratisArticle = JsonPath.read(send(owner, post(documentsUrl(storeId, "/gratis-articles")),
+                        "{\"itm8\":\"99007782\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itm8").value("0000099007782"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        send(owner, post(documentsUrl(storeId, "/gratis-articles")), "{\"itm8\":\"0000099999999\"}")
+                .andExpect(status().isNotFound());
         uploadDocuments(owner, storeId, documentReport(storeNumber,
-                line("PPP", transfer, 2, "19", "0000099007782", "GRATIS SPOŻYWKA MIX           ", "0", "-0.01"),
+                line("PPP", transfer, 2, "19", "0000099007782", "GRATIS SPOŻYWKA MIX           ", "-1", "-0.01"),
                 line("PPP", transfer, 4, "214", "0000099037716", "MIODOWA MALINA 400G", "6", "65.94"),
                 line("PPP", plain, 1, "214", "0000099037717", "MIOD Z PASTA TRUSKAWKA 400G", "6", "65.94"),
                 line("PZ", receipt, 1, "214", "0000099037718", "MIOD WIEL JAB GRU SL 400G", "6", "65.94")))
@@ -293,14 +306,16 @@ class SupplierGratisIntegrationTests {
         mvc.perform(get(documentsUrl(storeId, "/ppp/" + transferId)).cookie(owner))
                 .andExpect(jsonPath("$.gratisAllowed").value(true))
                 .andExpect(jsonPath("$.gratisCandidate").value(true))
+                .andExpect(jsonPath("$.gratisOnPlus").value(false))
+                .andExpect(jsonPath("$.gratisItm8s[0]").value("0000099007782"))
                 .andExpect(jsonPath("$.gratis").value(nullValue()));
 
-        // Bez pozycji GRATIS też można zarejestrować; przyjęcia towaru - nie.
+        // Bez artykułu z listy gratisów też można zarejestrować; przyjęcia towaru - nie.
         registerGratis(owner, storeId, "/ppp/" + plainId, imported).andExpect(status().isOk())
                 .andExpect(jsonPath("$.gratis.supplierCode").value("214"));
         registerGratis(owner, storeId, "/pz/" + receiptId, imported).andExpect(status().isBadRequest());
 
-        // Filtry listy: oznaczone jako gratis, nie, mogące być gratisem (z pozycją GRATIS), ukryty zakres kwot (granice włącznie, w dowolnej kolejności).
+        // Filtry listy: oznaczone jako gratis, nie, mogące być gratisem (artykuł z listy na minusie), ukryty zakres kwot (granice włącznie, w dowolnej kolejności).
         mvc.perform(get(documentsUrl(storeId, "/ppp")).param("gratis", "with").cookie(owner))
                 .andExpect(jsonPath("$.matchingCount").value(1))
                 .andExpect(jsonPath("$.documents[0].id").value(plainId));
@@ -351,6 +366,41 @@ class SupplierGratisIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Obcy\"}"))
                 .andReturn().getResponse().getContentAsString(), "$.id");
         registerGratis(owner, storeId, "/ppp/" + transferId, foreign).andExpect(status().isBadRequest());
+
+        // Artykuł z listy na plusie: coś nie tak, osobny filtr.
+        String wrong = "PPP" + ThreadLocalRandom.current().nextInt(1_000_000, 9_999_999);
+        uploadDocuments(owner, storeId, documentReport(storeNumber,
+                line("PPP", wrong, 1, "19", "0000099007782", "GRATIS SPOŻYWKA MIX", "1", "0.01")))
+                .andExpect(status().isCreated());
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("gratis", "plus").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.documents[0].number").value(wrong))
+                .andExpect(jsonPath("$.documents[0].gratisOnPlus").value(true))
+                .andExpect(jsonPath("$.documents[0].gratisCandidate").value(false));
+
+        // Usunięty z listy artykuł niczego już nie oznacza; ponowne dodanie przywraca.
+        mvc.perform(delete(documentsUrl(storeId, "/gratis-articles/" + gratisArticle)).cookie(owner).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(documentsUrl(storeId, "/ppp")).param("gratis", "plus").cookie(owner))
+                .andExpect(jsonPath("$.matchingCount").value(0));
+        mvc.perform(get(documentsUrl(storeId, "/gratis-articles")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(0));
+        send(owner, post(documentsUrl(storeId, "/gratis-articles")), "{\"itm8\":\"0000099007782\"}")
+                .andExpect(status().isOk());
+        mvc.perform(get(documentsUrl(storeId, "/gratis-articles")).cookie(owner))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("GRATIS SPOŻYWKA MIX"));
+    }
+
+    private void insertProduct(String storeId, String itm8, String name) {
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 1, 1, 0, 0, 0) returning id""", String.class, storeId);
+        jdbc.update("""
+                insert into products (store_id, itm8, ean, name, active, first_seen_import_id, last_seen_import_id)
+                values (?::uuid, ?, ?, ?, true, ?::uuid, ?::uuid)""", storeId, itm8, "2000000000008", name, productImport,
+                productImport);
     }
 
     private ResultActions registerGratis(Cookie owner, String storeId, String document, String supplierId)

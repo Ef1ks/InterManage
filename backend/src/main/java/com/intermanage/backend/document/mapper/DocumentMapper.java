@@ -40,6 +40,7 @@ import com.intermanage.backend.document.entity.DocumentTransferReceivedLine;
 import com.intermanage.backend.document.entity.DocumentTransferReceipt;
 import com.intermanage.backend.document.entity.DocumentTransferTarget;
 import com.intermanage.backend.document.entity.DocumentType;
+import com.intermanage.backend.document.service.DocumentGratisArticleService;
 import com.intermanage.backend.store.mapper.StoreMapper;
 
 @Mapper(uses = StoreMapper.class)
@@ -64,10 +65,12 @@ public interface DocumentMapper {
     @Mapping(target = "manualInvoices", source = "manualInvoices")
     @Mapping(target = "reportClosing", source = "reportClosing")
     @Mapping(target = "transferTarget", source = "transferTarget")
+    @Mapping(target = "gratisCandidate", source = "gratisMarks.onMinus")
+    @Mapping(target = "gratisOnPlus", source = "gratisMarks.onPlus")
     DocumentSummary toSummary(Document document, DocumentGratis gratis, List<LinkedKsefInvoice> ksefInvoices,
             CorrectionTotals correctionTotals, LinkedDelivery correctionOf, InvoiceAmountCheck invoiceAmountCheck,
             List<ManualInvoice> manualInvoices, DocumentReportClosing reportClosing,
-            DocumentTransferTarget transferTarget);
+            DocumentTransferTarget transferTarget, DocumentGratisArticleService.Marks gratisMarks);
 
     @Mapping(target = "id", source = "closing.id")
     @Mapping(target = "periodFrom", source = "closing.periodFrom")
@@ -107,11 +110,15 @@ public interface DocumentMapper {
             expression = "java(document.getType() == com.intermanage.backend.document.entity.DocumentType.MM && document.isCorrectable())")
     @Mapping(target = "transferTarget", source = "transferTarget")
     @Mapping(target = "transferReceiptOf", source = "transferReceiptOf")
+    @Mapping(target = "gratisCandidate", source = "gratisMarks.onMinus")
+    @Mapping(target = "gratisOnPlus", source = "gratisMarks.onPlus")
+    @Mapping(target = "gratisItm8s", source = "gratisItm8s")
     DocumentResponse toResponse(Document document, List<LinkedDeliOrder> deliOrders, DocumentGratis gratis,
             List<LinkedKsefInvoice> ksefInvoices, List<DeliveryCorrectionResponse> corrections,
             CorrectedDelivery corrected, CorrectionTotals correctionTotals, LinkedDelivery correctionOf,
             InvoiceAmountCheck invoiceAmountCheck, List<ManualInvoice> manualInvoices,
-            DocumentTransferTarget transferTarget, IncomingTransferRef transferReceiptOf);
+            DocumentTransferTarget transferTarget, IncomingTransferRef transferReceiptOf,
+            DocumentGratisArticleService.Marks gratisMarks, List<String> gratisItm8s);
 
     @Mapping(target = "store", source = "targetStore")
     @Mapping(target = "createdBy", source = "createdBy.displayName")

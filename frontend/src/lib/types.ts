@@ -705,8 +705,10 @@ export type DocumentSummary = {
   lineCount: number
   purchaseValue: number
   saleValueGross: number
-  /** Któraś linia to pozycja "GRATIS..." - dokument może być gratisem. */
+  /** Artykuł z listy gratisów sklepu jest na minusie - przeniesienie może być gratisem. */
   gratisCandidate: boolean
+  /** Artykuł z listy gratisów sklepu jest na plusie - coś jest nie tak. */
+  gratisOnPlus: boolean
   /** Rejestracja jako gratis od dostawcy; wartością gratisu jest sprzedaż brutto dokumentu. */
   gratis: DocumentGratis | null
   /**
@@ -1751,6 +1753,8 @@ export type Document = DocumentSummary & {
   typeSingular: string
   /** Typ można rejestrować jako gratis (przeniesienia stanów). */
   gratisAllowed: boolean
+  /** ITM8 artykułów z listy gratisów sklepu, które są w liniach dokumentu. */
+  gratisItm8s: string[]
   /** Do dokumentu można przypiąć fakturę z KSeF (przyjęcia i korekty od dostawcy). */
   ksefLinkable: boolean
   /** Do dokumentu można wpisać fakturę spoza KSeF (przyjęcia i ich korekty). */

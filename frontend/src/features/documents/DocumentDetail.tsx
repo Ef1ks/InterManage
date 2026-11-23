@@ -110,6 +110,7 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
   const emptyCount = useMemo(() => lines.filter((line) => line.quantity === 0).length, [lines])
   // Przyjęcie PZ: kolory z oceny marży z aktualnej ceny i promocji (jak w raporcie marż poza normą).
   const hints = useDeliveryHints(storeId, document.id, document.type === 'PZ')
+  const gratisItm8s = useMemo(() => new Set(document.gratisItm8s), [document.gratisItm8s])
   // W likwidacjach czy przeniesieniach każda linia ma swojego dostawcę - pokazujemy go przy linii.
   const perLineSupplier = document.supplierName == null
 
@@ -301,63 +302,74 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
                 </TableCell>
               </TableRow>
             ) : (
-              visible.map((line) => (
-                <TableRow key={line.id} className={cn('tabular-nums', line.quantity === 0 && 'text-muted-foreground')}>
-                  <TableCell className="pl-4 text-right text-muted-foreground">{line.lineNumber}</TableCell>
-                  <TableCell className="max-w-96 py-2.5 whitespace-normal">
-                    <div className="flex flex-wrap items-center gap-2 font-medium">
-                      {line.name ?? 'Bez nazwy'}
-                      <ArticleStatsButton article={line} />
-                      <HintBadges hint={hints.byItm8.get(line.itm8)} />
-                      {line.corrected && (
-                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[0.7rem] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                          {line.originalQuantity == null ? 'Dopisane korektą' : 'Po korekcie'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {[
-                        line.brand,
-                        line.ean && `EAN ${line.ean}`,
-                        `ITM8 ${line.itm8}`,
-                        perLineSupplier && line.supplierName,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatQuantity(line.quantity)}
-                    <WasValue
-                      line={line}
-                      value={line.originalQuantity}
-                      current={line.quantity}
-                      format={formatQuantity}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">{formatPrice(line.purchasePrice)}</TableCell>
-                  <TableCell className="text-right">
-                    {formatMoney(line.purchaseValue)}
-                    <WasValue
-                      line={line}
-                      value={line.originalPurchaseValue}
-                      current={line.purchaseValue}
-                      format={formatMoney}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatPrice(line.salePriceDocument)}
-                    <CurrentPrice hint={hints.byItm8.get(line.itm8)} documentPrice={line.salePriceDocument} />
-                  </TableCell>
-                  <TableCell className="text-right">{line.vatRate != null ? `${line.vatRate}%` : ''}</TableCell>
-                  <TableCell className="pr-4 text-right">
-                    {formatPercent(line.marginPercent)}
-                    <span className="block">
-                      <HintMargin hint={hints.byItm8.get(line.itm8)} />
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))
+              visible.map((line) => {
+                const gratis = gratisItm8s.has(line.itm8) && line.quantity !== 0 ? gratisTone(line.quantity) : null
+                return (
+                  <TableRow
+                    key={line.id}
+                    className={cn('tabular-nums', line.quantity === 0 && 'text-muted-foreground', gratis?.row)}
+                  >
+                    <TableCell className="pl-4 text-right text-muted-foreground">{line.lineNumber}</TableCell>
+                    <TableCell className="max-w-96 py-2.5 whitespace-normal">
+                      <div className="flex flex-wrap items-center gap-2 font-medium">
+                        {line.name ?? 'Bez nazwy'}
+                        <ArticleStatsButton article={line} />
+                        <HintBadges hint={hints.byItm8.get(line.itm8)} />
+                        {gratis && (
+                          <span className={cn('rounded-md px-1.5 py-0.5 text-[0.7rem] font-medium', gratis.badge)}>
+                            {gratis.label}
+                          </span>
+                        )}
+                        {line.corrected && (
+                          <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[0.7rem] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                            {line.originalQuantity == null ? 'Dopisane korektą' : 'Po korekcie'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {[
+                          line.brand,
+                          line.ean && `EAN ${line.ean}`,
+                          `ITM8 ${line.itm8}`,
+                          perLineSupplier && line.supplierName,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatQuantity(line.quantity)}
+                      <WasValue
+                        line={line}
+                        value={line.originalQuantity}
+                        current={line.quantity}
+                        format={formatQuantity}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">{formatPrice(line.purchasePrice)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatMoney(line.purchaseValue)}
+                      <WasValue
+                        line={line}
+                        value={line.originalPurchaseValue}
+                        current={line.purchaseValue}
+                        format={formatMoney}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatPrice(line.salePriceDocument)}
+                      <CurrentPrice hint={hints.byItm8.get(line.itm8)} documentPrice={line.salePriceDocument} />
+                    </TableCell>
+                    <TableCell className="text-right">{line.vatRate != null ? `${line.vatRate}%` : ''}</TableCell>
+                    <TableCell className="pr-4 text-right">
+                      {formatPercent(line.marginPercent)}
+                      <span className="block">
+                        <HintMargin hint={hints.byItm8.get(line.itm8)} />
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>
@@ -370,6 +382,24 @@ function DocumentView({ storeId, document }: { storeId: string; document: Docume
 }
 
 /** Wartość dokumentu; przy przyjęciu z korektami ta po korektach, a z raportu mniejszym drukiem. */
+/**
+ * Linia z artykułem z listy gratisów sklepu: na minusie to zwykły gratis (bursztyn), na plusie coś jest nie tak
+ * (fuksja, jak ostrzeżenie nad tabelą).
+ */
+function gratisTone(quantity: number) {
+  return quantity > 0
+    ? {
+        label: 'gratis na plusie',
+        row: 'bg-fuchsia-100 hover:bg-fuchsia-200/70 dark:bg-fuchsia-500/15 dark:hover:bg-fuchsia-500/25',
+        badge: 'bg-fuchsia-300 text-fuchsia-950 dark:bg-fuchsia-500/40 dark:text-fuchsia-50',
+      }
+    : {
+        label: 'gratis',
+        row: 'bg-amber-100/70 hover:bg-amber-200/60 dark:bg-amber-500/10 dark:hover:bg-amber-500/20',
+        badge: 'bg-amber-200 text-amber-950 dark:bg-amber-500/30 dark:text-amber-100',
+      }
+}
+
 function CorrectedValue({ value, corrected }: { value: number; corrected: number | undefined }) {
   if (corrected == null || corrected === value) return <>{formatMoney(value)} zł</>
   return (

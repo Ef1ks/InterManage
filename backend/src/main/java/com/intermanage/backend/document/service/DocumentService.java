@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -110,6 +111,7 @@ public class DocumentService {
     private final DocumentManualInvoiceService manualInvoices;
     private final DeliveryReportClosingDeliveryRepository closingDeliveries;
     private final DocumentTransferTargetRepository transferTargets;
+    private final DocumentGratisArticleService gratisArticles;
 
     public DocumentService(TransactionTemplate transaction, DocumentReportParser reportParser,
             DocumentMapper documentMapper, DocumentImportRepository imports, DocumentRepository documents,
@@ -119,7 +121,8 @@ public class DocumentService {
             SupplierRepository suppliers, NomenclatureRepository nomenclatures, DeliveryNotePdf deliveryNotePdf,
             InvoiceAmountCheckService amountCheckService, DocumentManualInvoiceService manualInvoices,
             DeliveryReportClosingDeliveryRepository closingDeliveries,
-            DocumentTransferTargetRepository transferTargets) {
+            DocumentTransferTargetRepository transferTargets, DocumentGratisArticleService gratisArticles) {
+        this.gratisArticles = gratisArticles;
         this.transferTargets = transferTargets;
         this.amountCheckService = amountCheckService;
         this.closingDeliveries = closingDeliveries;
@@ -213,6 +216,7 @@ public class DocumentService {
         Map<UUID, DocumentTransferTarget> targets = type != DocumentType.MM || found.isEmpty() ? Map.of()
                 : transferTargets.findActive(found.getContent().stream().map(Document::getId).toList()).stream()
                         .collect(Collectors.toMap(target -> target.getDocument().getId(), Function.identity()));
+        Map<UUID, DocumentGratisArticleService.Marks> gratisMarks = gratisArticles.marks(storeId, found.getContent());
         return new DocumentPage(summary, imports.findNewestReportGeneratedAt(storeId).orElse(null),
                 found.getContent().stream()
                         .map(document -> documentMapper.toSummary(document, gratisByDocument.get(document.getId()),
@@ -222,7 +226,8 @@ public class DocumentService {
                                         ? documentMapper.toLinkedDelivery(deliveries.get(document.getId())) : null,
                                 amountChecks.get(document.getId()),
                                 manual.getOrDefault(document.getId(), List.of()),
-                                closings.get(document.getId()), targets.get(document.getId())))
+                                closings.get(document.getId()), targets.get(document.getId()),
+                                gratisMarks.getOrDefault(document.getId(), DocumentGratisArticleService.Marks.NONE)))
                         .toList(),
                 found.getNumber(),
                 found.hasNext(), totals.count(), totals.purchaseValue(), totals.saleValueGross());
@@ -262,7 +267,17 @@ public class DocumentService {
                         : null,
                 document.getType() != DocumentType.MM ? null
                         : transferReceipts.findActiveByDocumentIds(List.of(document.getId())).stream().findFirst()
-                                .map(documentMapper::toIncomingRef).orElse(null));
+                                .map(documentMapper::toIncomingRef).orElse(null),
+                gratisArticles.marksOf(storeId, document), gratisItm8s(storeId, document));
+    }
+
+    /** Artykuły z listy gratisów sklepu w liniach przeniesienia stanów (do wyróżnienia linii i podpowiedzi dostawcy). */
+    private List<String> gratisItm8s(UUID storeId, Document document) {
+        if (!document.getType().canBeGratis()) {
+            return List.of();
+        }
+        Set<String> listed = gratisArticles.itm8s(storeId);
+        return document.getLines().stream().map(DocumentLine::getItm8).filter(listed::contains).distinct().toList();
     }
 
     /**

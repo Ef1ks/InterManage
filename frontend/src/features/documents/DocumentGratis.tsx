@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GiftIcon, TruckIcon } from 'lucide-react'
+import { GiftIcon, TriangleAlertIcon, TruckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Form, FormActions, SegmentedField, SelectField } from '@/components/form'
@@ -23,9 +23,6 @@ import { LoadingPanel } from '@/components/LoadingPanel'
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short' })
 
-/** Pozycja-znacznik z systemu sklepu, np. "GRATIS SPOŻYWKA MIX" (jak {@code DocumentLine.isGratisItem} w backendzie). */
-const isGratisItem = (name: string | null) => name?.toUpperCase().includes('GRATIS') ?? false
-
 const GRATIS_KINDS: { value: GratisKind; label: string }[] = [
   { value: 'TRADE', label: 'Za handel / ekspozycję' },
   { value: 'LOSSES', label: 'Pokrycie strat' },
@@ -35,8 +32,33 @@ const kindLabel = (kind: GratisKind) => (kind === 'TRADE' ? 'za handel / ekspozy
 /** Pierwszy miesiąc, za który liczymy gratisy (jak {@code GratisReportService.FIRST_MONTH}). */
 export const FIRST_GRATIS_MONTH = '2026-01'
 
-/** Na liście: od kogo jest gratis albo podpowiedź, że dokument z pozycją GRATIS może nim być. */
+/** Artykuł z listy gratisów sklepu na plusie: coś jest nie tak (różowy, inny niż kandydat na gratis). */
+const GRATIS_ON_PLUS_TONE =
+  'border-fuchsia-300 bg-fuchsia-100 text-fuchsia-900 dark:border-fuchsia-500/40 dark:bg-fuchsia-500/15 dark:text-fuchsia-200'
+
+/**
+ * Na liście: od kogo jest gratis albo podpowiedź, że dokument z artykułem gratisowym na minusie może nim być, a obok
+ * ostrzeżenie, gdy taki artykuł jest na plusie.
+ */
 export function GratisBadge({ document }: { document: DocumentSummary }) {
+  return (
+    <>
+      <GratisStateBadge document={document} />
+      {document.gratisOnPlus && (
+        <Badge
+          variant="outline"
+          title="Artykuł z listy gratisów ma w tym przeniesieniu ilość na plusie - sprawdź dokument"
+          className={GRATIS_ON_PLUS_TONE}
+        >
+          <TriangleAlertIcon aria-hidden />
+          Gratis na plusie
+        </Badge>
+      )}
+    </>
+  )
+}
+
+function GratisStateBadge({ document }: { document: DocumentSummary }) {
   if (document.gratis) {
     return (
       <Badge
@@ -53,7 +75,7 @@ export function GratisBadge({ document }: { document: DocumentSummary }) {
     return (
       <Badge
         variant="outline"
-        title="W dokumencie jest pozycja GRATIS"
+        title="Artykuł z listy gratisów jest w tym przeniesieniu na minusie"
         className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
       >
         <GiftIcon aria-hidden />
@@ -89,7 +111,16 @@ export function DocumentGratisSection({ storeId, document }: { storeId: string; 
     })
 
   return (
-    <section aria-labelledby="document-gratis" className="mb-6">
+    <section aria-labelledby="document-gratis" className="mb-6 grid gap-3">
+      {document.gratisOnPlus && (
+        <div className={cn('flex items-start gap-3 rounded-xl border px-4 py-3 text-sm', GRATIS_ON_PLUS_TONE)}>
+          <TriangleAlertIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
+          <p>
+            <span className="font-semibold">Artykuł gratisowy jest na plusie.</span> Gratis wprowadza się z ilością na
+            minusie, więc ten dokument trzeba sprawdzić. Wiersze są wyróżnione w tabeli.
+          </p>
+        </div>
+      )}
       {document.gratis ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-emerald-300/70 bg-emerald-50/60 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/5">
           <GiftIcon aria-hidden className="size-5 shrink-0 text-emerald-700 dark:text-emerald-400" />
@@ -129,7 +160,7 @@ export function DocumentGratisSection({ storeId, document }: { storeId: string; 
             </h3>
             <p className="text-muted-foreground">
               {document.gratisCandidate
-                ? 'W dokumencie jest pozycja GRATIS. Jeśli to gratis, wskaż dostawcę, od którego przyszedł.'
+                ? 'Artykuł z listy gratisów jest na minusie. Jeśli to gratis, wskaż dostawcę, od którego przyszedł.'
                 : 'Jeśli towar z tego dokumentu to gratis, wskaż dostawcę, od którego przyszedł.'}
             </p>
           </div>
@@ -170,11 +201,12 @@ function registeredLine(gratis: DocumentGratis) {
   return gratis.registeredBy ? `zarejestrował(a) ${gratis.registeredBy}, ${date}` : `zarejestrowano ${date}`
 }
 
-/** Dostawca, od którego najczęściej są linie dokumentu (bez pozycji GRATIS, którą wystawia sam sklep). */
+/** Dostawca, od którego najczęściej są linie dokumentu (bez artykułów gratisowych, które wystawia sam sklep). */
 function suggestedSupplierCode(document: Document) {
+  const gratisItm8s = new Set(document.gratisItm8s)
   const counts = new Map<string, number>()
   for (const line of document.lines) {
-    if (line.supplierCode && !isGratisItem(line.name)) {
+    if (line.supplierCode && !gratisItm8s.has(line.itm8)) {
       counts.set(line.supplierCode, (counts.get(line.supplierCode) ?? 0) + 1)
     }
   }

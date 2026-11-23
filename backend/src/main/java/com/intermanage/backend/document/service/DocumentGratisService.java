@@ -4,6 +4,7 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -46,16 +47,18 @@ public class DocumentGratisService {
     private final SupplierRepository suppliers;
     private final AppUserRepository users;
     private final DocumentService documentService;
+    private final DocumentGratisArticleService gratisArticles;
 
     public DocumentGratisService(DocumentRepository documents, DocumentLineRepository documentLines,
             DocumentGratisRepository gratis, SupplierRepository suppliers, AppUserRepository users,
-            DocumentService documentService) {
+            DocumentService documentService, DocumentGratisArticleService gratisArticles) {
         this.documents = documents;
         this.documentLines = documentLines;
         this.gratis = gratis;
         this.suppliers = suppliers;
         this.users = users;
         this.documentService = documentService;
+        this.gratisArticles = gratisArticles;
     }
 
     /**
@@ -105,15 +108,16 @@ public class DocumentGratisService {
     }
 
     /**
-     * Ostatni dostawcy artykułów z dokumentu (bez pozycji GRATIS) wg przyjęć PZ, od najświeższej dostawy; baza
+     * Ostatni dostawcy artykułów z dokumentu (bez artykułów z listy gratisów sklepu) wg przyjęć PZ, od najświeższej dostawy; baza
      * rozbita na marki. Dostawca z listy sklepu dostaje {@code supplierId}, żeby dało się go od razu wybrać.
      */
     @Transactional(readOnly = true)
     public List<GratisSupplierSuggestion> supplierSuggestions(UUID storeId, String typeCode, UUID documentId) {
         Document document = document(storeId, typeCode, documentId);
+        Set<String> gratisItm8s = gratisArticles.itm8s(storeId);
         List<String> itm8s = document.getLines().stream()
-                .filter(line -> !line.isGratisItem())
                 .map(DocumentLine::getItm8)
+                .filter(itm8 -> !gratisItm8s.contains(itm8))
                 .distinct()
                 .toList();
         if (itm8s.isEmpty()) {

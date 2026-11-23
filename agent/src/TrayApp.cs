@@ -19,6 +19,8 @@ internal sealed class TrayApp : ApplicationContext
     private const string Title = "Intermanage – agent sklepu";
 
     private readonly AgentHost host = new();
+    private readonly PlayerHost player = new();
+    private readonly ToolStripMenuItem macros = new("Makra: uruchamiam odtwarzacz…") { Visible = false };
     private readonly NotifyIcon icon;
     private readonly ToolStripMenuItem status = new() { Enabled = false };
     private readonly ToolStripMenuItem activity = new() { Enabled = false, Visible = false };
@@ -44,6 +46,7 @@ internal sealed class TrayApp : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.Add(status);
         menu.Items.Add(activity);
+        menu.Items.Add(macros);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Otwórz Intermanage", null, (_, _) => Open(settings.ServerUrl));
         menu.Items.Add("Ustawienia…", null, (_, _) => ShowSettings());
@@ -78,6 +81,15 @@ internal sealed class TrayApp : ApplicationContext
         }
         host.Connected += StartUpdate;
         host.LeadershipChanged += StartUpdate;
+
+        // Odtwarzacz makr jest w agencie: własnej ikony nie ma, jego wersja i pomoc są w menu agenta.
+        macros.Visible = PlayerHost.Embedded;
+        macros.Click += (_, _) => ShowMacroHelp();
+        player.Changed += () =>
+        {
+            if (ui.IsHandleCreated) ui.BeginInvoke(new Action(() => macros.Text = "Makra (Alt+E), odtwarzacz " + player.Version));
+        };
+        player.Start();
 
         UpdateIcon();
         if (!settings.HasKey)
@@ -130,6 +142,15 @@ internal sealed class TrayApp : ApplicationContext
         UpdateIcon();
     }
 
+    private void ShowMacroHelp()
+    {
+        MessageBox.Show("Odtwarzacz makr " + (player.Version ?? "") + " działa w agencie, nie trzeba go uruchamiać.\n\n"
+            + "Alt+E: wykonuje makro skopiowane ze strony Intermanage. Makro działa raz, potem Schowek jest pusty.\n"
+            + "Esc w trakcie makra: zatrzymuje makro.\n"
+            + "Alt+R nad oknem Mercalys: tryb skanowania, klik w okno daje listę przycisków strony w Schowku, Esc anuluje.",
+            "Intermanage – makra", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     private static void Open(string url)
     {
         // Adres strony otwiera domyślna przeglądarka (bez uruchamiania powłoki ani skryptów).
@@ -178,6 +199,7 @@ internal sealed class TrayApp : ApplicationContext
         Log.Info("Zakończono agenta");
         closing.Cancel();
         host.Dispose();
+        player.Dispose();
         icon.Visible = false;
         icon.Dispose();
         ui.Dispose();

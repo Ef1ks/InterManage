@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.61.0.0
+;@Ahk2Exe-SetVersion 0.63.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.61" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.63" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -18,15 +18,43 @@ global AutostartKey := "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 global AutostartName := "IntermanageMakra"
 global SettingsKey := "HKCU\Software\Intermanage\Makra"
 global IdleTip := "Intermanage Makra " PlayerVersion
+; Odtwarzacz w agencie sklepu (od 0.63): agent wypakowuje go do swojego folderu, kładzie obok plik agent-mode,
+; uruchamia i pilnuje. Wtedy bez własnej ikony i autostartu, bo jest tylko ikona agenta. Plik, a nie parametr,
+; bo Reload (Esc w trakcie makra) nie przekazuje parametrów nowemu procesowi.
+global AgentMode := FileExist(A_ScriptDir "\agent-mode") != ""
 
-SetupTray()
-if A_IsCompiled {
-    SyncAutostart()
-    SyncClipboardPrivacy()
+if AgentMode {
+    A_IconHidden := true
+    if A_IsCompiled {
+        ; Dawny osobny odtwarzacz nie może startować z Windows obok agenta (dwa odtwarzacze = makro dwa razy).
+        try RegDelete AutostartKey, AutostartName
+        SyncClipboardPrivacy()
+    }
+} else {
+    SetupTray()
+    if A_IsCompiled {
+        SyncAutostart()
+        SyncClipboardPrivacy()
+    }
+    ; Przy starcie z Windows bez komunikatu; po ręcznym uruchomieniu trzeba wiedzieć, że program już działa.
+    if (A_Args.Length = 0 || A_Args[1] != "autostart")
+        TrayTip "Działa w tle, ikona jest przy zegarze.`nSkopiuj makro ze strony i naciśnij Alt+E.", "Intermanage Makra", 1
 }
-; Przy starcie z Windows bez komunikatu; po ręcznym uruchomieniu trzeba wiedzieć, że program już działa.
-if (A_Args.Length = 0 || A_Args[1] != "autostart")
-    TrayTip "Działa w tle, ikona jest przy zegarze.`nSkopiuj makro ze strony i naciśnij Alt+E.", "Intermanage Makra", 1
+
+; Powiadomienie przy zegarze. W agencie ikona odtwarzacza jest schowana, a bez ikony Windows nie pokaże powiadomienia,
+; więc pokazujemy ją na chwilę (i na czas makra, patrz Alt+E).
+Notify(text, title := "Intermanage Makra") {
+    if AgentMode {
+        A_IconHidden := false
+        SetTimer HideIdleIcon, -10000
+    }
+    TrayTip text, title, 1
+}
+
+HideIdleIcon() {
+    if (AgentMode && !MacroRunning)
+        A_IconHidden := true
+}
 
 ; --- Praca w tle: menu przy zegarze i start z Windows ---
 
@@ -200,10 +228,14 @@ DescribeGridRows(doc) {
     KeyWait "LAlt" ; wciśnięty Alt zmieszałby się z klawiszami makra
     KeyWait "e"
     A_IconTip := "Intermanage Makra: makro w toku, Esc zatrzymuje"
+    if AgentMode
+        A_IconHidden := false
     try PlayMacro(macro)
     finally {
         MacroRunning := false
         A_IconTip := IdleTip
+        if AgentMode
+            SetTimer HideIdleIcon, -10000
     }
 }
 
@@ -325,7 +357,7 @@ PlayMacro(rawClip) {
                     return
                 }
                 if (MsgBox(report Trim(parts[2]), "Intermanage Makra", "YesNo Icon?" AlwaysOnTop) != "Yes") {
-                    TrayTip "Makro zakończone bez tego kroku.", "Intermanage Makra", 1
+                    Notify "Makro zakończone bez tego kroku."
                     return
                 }
             case "WINOPEN":
@@ -797,7 +829,7 @@ PlayMacro(rawClip) {
     if (report != "")
         MsgBox report, "Makro zakończone", "Iconi" AlwaysOnTop
     else
-        TrayTip "Zakończono", "Makro ze schowka zostało wykonane.", 1
+        Notify "Zakończono", "Makro ze schowka zostało wykonane."
 }
 
 
@@ -1363,7 +1395,7 @@ StartMercalys(title) {
             return "Mercalys jest wyłączony. Uruchom go i spróbuj ponownie."
         RegWrite path, "REG_SZ", SettingsKey, "MercalysPath"
     }
-    TrayTip "Uruchamiam Mercalys…", "Intermanage Makra", 1
+    Notify "Uruchamiam Mercalys…"
     try Run path
     catch as error
         return "Nie udało się uruchomić Mercalys (" path "): " error.Message
@@ -1394,7 +1426,7 @@ MercalysLogin(title, password, started) {
         }
     }
     if (password = "") {
-        TrayTip "Zaloguj się w Mercalys, makro ruszy samo po zalogowaniu.", "Intermanage Makra", 1
+        Notify "Zaloguj się w Mercalys, makro ruszy samo po zalogowaniu."
         problem := WebWait(title, MercalysMenu(), "", 300000)
         if (problem != "")
             return "Nie zalogowano się w Mercalys w ciągu 5 minut."
@@ -2573,7 +2605,12 @@ WebEachRow(title, grid, column, button, nextPage, maxCount, wanted, confirm := "
     handled := Map()
     count := 0
     Accepts(row) => WantedKey(row, wanted) != ""
-    Summary(ending) => ListSummary(wanted, handled, results, count, ending)
+    ; Przed podsumowaniem czekamy jeszcze na wyniki klikniętych bonów: przy ostatnim bonie pętla kończyła się zaraz po
+    ; kliknięciu, zanim Mercalys wpisał Nr Zamów w ostatecznej postaci, więc poprawnie utworzony bon trafiał do „bez wyniku”.
+    Summary(ending) {
+        AwaitHandledResults(title, grid, column, wanted, handled, results, 15000)
+        return ListSummary(wanted, handled, results, count, ending)
+    }
     Loop {
         ReadResults(title, grid, column, wanted, results)
         if (results.Count >= wanted.Count)
@@ -2702,6 +2739,27 @@ ReadResults(title, grid, column, wanted, results) {
     }
 }
 
+; Czyta listę, aż każdy kliknięty bon ma wynik albo minie limit (strona po kliknięciu jeszcze się przeładowuje).
+AwaitHandledResults(title, grid, column, wanted, handled, results, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        ReadResults(title, grid, column, wanted, results)
+        waiting := false
+        for rowKey in handled {
+            ; handled trzyma klucz wiersza („numer / kod”), results klucz z listy WEBLIST
+            cells := StrSplit(rowKey, " / ")
+            key := ListKey(cells[1], cells.Length >= 2 ? cells[2] : "")
+            if !wanted.Has(key)
+                key := ListKey(cells[1], "")
+            if (wanted.Has(key) && !results.Has(key))
+                waiting := true
+        }
+        if (!waiting || A_TickCount >= deadline)
+            return
+        Sleep 300
+    }
+}
+
 ListSummary(wanted, handled, results, count, ending) {
     report := "Kody utworzone teraz: " count "`nBony z listy: " wanted.Count "`n"
     found := ""
@@ -2732,7 +2790,8 @@ WaitForRowResult(title, grid, column, key, timeoutMs) {
                 for item in rows {
                     if (RowKey(item.row) = key) {
                         present := true
-                        if (CellText(item.row, column) != "")
+                        value := CellText(item.row, column)
+                        if (value != "" && value != "?") ; „?” to jeszcze nie Nr Zamów (ReadResults też go pomija)
                             return true
                     }
                 }

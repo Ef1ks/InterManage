@@ -40,8 +40,11 @@ export type DocumentColumn = 'number' | 'date' | 'supplier' | 'supplierDocument'
 /** Ma / nie ma (faktury, korekt); `all` = bez filtra. */
 export type Presence = 'all' | 'with' | 'without'
 
-/** Gratisy: oznaczone, nieoznaczone albo `candidate` - nieoznaczone z pozycją GRATIS (mogą być gratisem). */
-export type GratisFilter = Presence | 'candidate'
+/**
+ * Gratisy: oznaczone, nieoznaczone, `candidate` - nieoznaczone z artykułem z listy gratisów sklepu na minusie (mogą być
+ * gratisem) albo `plus` - z takim artykułem na plusie (coś nie tak).
+ */
+export type GratisFilter = Presence | 'candidate' | 'plus'
 
 /** Kwota, po której działa ukrywanie zakresu: zakup albo sprzedaż brutto. */
 export type ValueField = 'purchase' | 'sale'
@@ -175,6 +178,40 @@ export function useDocumentGratis(storeId: string, typeCode: string, id: string)
 export type RegisterGratis = { supplierId: string; kind: GratisKind; reportMonth: string | null }
 
 /** Ostatni dostawcy artykułów z dokumentu (z przyjęć PZ), do wyboru dostawcy gratisu. */
+/** Artykuł z kartoteki sklepu, który w przeniesieniach stanów oznacza gratis. */
+export type GratisArticle = {
+  id: string
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  addedBy: string | null
+  addedAt: string
+}
+
+const gratisArticlesKey = (storeId: string) => [...documentsKey(storeId), 'gratis-articles'] as const
+
+/** Lista artykułów gratisowych sklepu (na minusie = gratis, na plusie = coś nie tak). */
+export function useGratisArticles(storeId: string) {
+  return useQuery({
+    queryKey: gratisArticlesKey(storeId),
+    queryFn: () => api<GratisArticle[]>(`${documentsPath(storeId)}/gratis-articles`),
+  })
+}
+
+/** Dodanie i usunięcie artykułu z listy; ponowne dodanie to „Przywróć”. Zmiana przelicza oznaczenia dokumentów. */
+export function useGratisArticleChanges(storeId: string) {
+  return {
+    add: useMutation({
+      mutationFn: (itm8: string) =>
+        api<GratisArticle>(`${documentsPath(storeId)}/gratis-articles`, { method: 'POST', json: { itm8 } }),
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => api<void>(`${documentsPath(storeId)}/gratis-articles/${id}`, { method: 'DELETE' }),
+    }),
+  }
+}
+
 export function useGratisSupplierSuggestions(storeId: string, typeCode: string, id: string) {
   return useQuery({
     queryKey: [...documentsKey(storeId), typeCode, id, 'gratis-suppliers'],

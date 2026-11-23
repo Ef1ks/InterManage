@@ -67,7 +67,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
      * artykułach ten z lepszego źródła, potem ostatnio zmieniany. Artykuł, którego nie było w najnowszym raporcie
      * kartoteki, ma bieżący EAN tylko z dawnego raportu, więc liczy się jak dawna para: ITM8 usunięty w systemie sklepu
      * i połączony z innym (LUNCHB CEZAR 5416963, EAN 5902166395578 to teraz multikod 99010078) nie przykrywa artykułu,
-     * do którego kod należy dziś.
+     * do którego kod należy dziś. Dawna para, którą multikody sklepu wycofały (ten ITM8 z tym EAN-em jest
+     * w {@code product_codes} z {@code current = false}), nie prowadzi do artykułu: system sklepu daje zwolniony
+     * lokalny ITM8 99… innemu towarowi (10023: 99012320 do 9.11.2026 KASZA OWSIANA 5907569005383, od 10.11 TOREBKA
+     * BROKAT 5906190102423), a kod kaszy trafiałby w torebkę.
      * {@code cadencier}: artykuł ma CENA_CAD z ostatniego raportu (0 = brak) i jest aktywny w cadencier, czyli na
      * bieżącej liście {@code cadencier_items} sklepu (po ITM8).
      * Kod z etykiety wagi sklepu (2 + cyfra 1-9, 12-13 cyfr, w cyfrach 8-12 cena albo waga) trafia w artykuł, którego
@@ -102,6 +105,10 @@ public interface DataEntryCatalogRepository extends Repository<Product, UUID> {
                 from keys k
                 join product_eans pe on ltrim(pe.ean, '0') = k.key
                 join products p on p.id = pe.product_id and p.store_id = :storeId
+                where not exists (
+                    select 1 from product_codes rc
+                    where rc.store_id = :storeId and rc.itm8 = p.itm8 and not rc.current
+                        and ltrim(rc.ean, '0') = k.key)
                 union all
                 select k.key, p.id, 3
                 from keys k

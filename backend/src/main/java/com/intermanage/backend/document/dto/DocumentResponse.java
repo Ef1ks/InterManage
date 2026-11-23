@@ -34,7 +34,12 @@ public record DocumentResponse(
         BigDecimal saleValueGross,
         /** Typ dokumentu można rejestrować jako gratis (przeniesienia stanów). */
         boolean gratisAllowed,
+        /** Artykuł z listy gratisów sklepu jest w dokumencie na minusie: przeniesienie może być gratisem. */
         boolean gratisCandidate,
+        /** Artykuł z listy gratisów sklepu jest na plusie: coś jest nie tak. */
+        boolean gratisOnPlus,
+        /** ITM8 artykułów z listy gratisów sklepu, które są w liniach dokumentu (tylko przeniesienia stanów). */
+        List<String> gratisItm8s,
         DocumentGratisResponse gratis,
         /** Do dokumentu można przypiąć fakturę z KSeF (przyjęcia i korekty od dostawcy). */
         boolean ksefLinkable,

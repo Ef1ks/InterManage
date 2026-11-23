@@ -60,15 +60,22 @@ Robi:
   i naciska lewy Alt+E, a okno trzyma, aż serwer potwierdzi wgranie każdego pliku (menu ikony: „Aktualizuj dane
   z Mercalys” robi to na żądanie dla wszystkich raportów);
 - trzyma ustawienia w `%LOCALAPPDATA%\Intermanage\Agent\settings.json`, klucz i hasło Mercalys zaszyfrowane DPAPI
-  dla bieżącego użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza).
+  dla bieżącego użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza);
+- od 1.4.0 ma w sobie odtwarzacz makr (`player.exe`, zasób w exe, `PlayerHost`): przy starcie wypakowuje go do
+  `%LOCALAPPDATA%\Intermanage\Agent\player` (tylko gdy jest inny niż w agencie, porównanie SHA-256), kładzie obok plik
+  `agent-mode`, uruchamia i co 20 s sprawdza, czy działa. Odtwarzacz z `agent-mode` nie ma własnej ikony (pokazuje ją
+  tylko w trakcie makra i przy powiadomieniu), nie dopisuje się do startu Windows i usuwa dawny wpis `IntermanageMakra`;
+  agent zamyka osobny odtwarzacz (dawny `player.exe`, `AutoJob.exe`), bo dwa wykonałyby makro dwa razy. Wersja i pomoc
+  (Alt+E, Esc, Alt+R) są w menu ikony agenta, a „Zakończ” zamyka też odtwarzacz. Agent zbudowany bez `player.exe`
+  działa jak dawniej z osobnym odtwarzaczem.
 
 Nie robi:
 
 - nie wymaga administratora (`asInvoker`), nie instaluje usługi, nie pisze do HKLM ani Program Files;
-- nie uruchamia PowerShella, cmd ani skryptów, nie pobiera ani nie uruchamia kodu, nie aktualizuje się sam
-  (nowe wersje są w Intermanage → Do pobrania);
-- nie klika w Mercalys i nie przechwytuje klawiatury ani myszy: makra wykonuje `player.exe`, a agent tylko wkłada
-  makro aktualizacji do schowka i naciska za pracownika Alt+E;
+- nie uruchamia PowerShella, cmd ani skryptów, nie pobiera kodu i nie uruchamia innego kodu niż odtwarzacz makr ze
+  swojego exe, nie aktualizuje się sam (nowe wersje są w Intermanage → Do pobrania);
+- nie klika w Mercalys sam: makra wykonuje odtwarzacz, a agent tylko wkłada makro aktualizacji do schowka i naciska
+  za pracownika Alt+E;
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
 
 ## Budowanie
@@ -76,7 +83,13 @@ Nie robi:
 Wymaga .NET SDK (8 albo nowszego); biblioteki .NET Framework 4.8 przychodzą z pakietu
 `Microsoft.NETFramework.ReferenceAssemblies`, bez Developer Packa.
 
+Najpierw odtwarzacz makr (z katalogu projektu), bo agent bierze `player.exe` do środka przy budowaniu; bez niego
+budowanie daje ostrzeżenie i agent jest bez odtwarzacza:
+
 ```powershell
+.\build-player.ps1
+# podpisz player.exe (niżej) PRZED budowaniem agenta: Smart App Control / zasady kontroli aplikacji blokują
+# niepodpisany exe wypakowany do %LOCALAPPDATA%
 cd agent
 dotnet build -c Release
 # wynik: agent\bin\Release\net48\ (IntermanageAgent.exe, IntermanageAgent.exe.config, biblioteki System.Text.Json)
@@ -86,9 +99,11 @@ Do „Do pobrania” trafia spakowany folder `bin\Release\net48`.
 
 ## Podpis Authenticode
 
-Certyfikat do podpisu kodu leży poza repozytorium. Po zbudowaniu:
+Certyfikat do podpisu kodu leży poza repozytorium. Podpisujemy oba: najpierw `player.exe` (przed budowaniem agenta,
+bo trafia do jego środka), potem po zbudowaniu agenta jego exe:
 
 ```powershell
+signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f C:\certyfikaty\intermanage-code.pfx /p <hasło> player.exe
 signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f C:\certyfikaty\intermanage-code.pfx /p <hasło> `
   agent\bin\Release\net48\IntermanageAgent.exe
 signtool verify /pa agent\bin\Release\net48\IntermanageAgent.exe

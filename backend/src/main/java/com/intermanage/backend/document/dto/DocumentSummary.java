@@ -8,7 +8,8 @@ import java.util.UUID;
 
 /**
  * Dokument na liście: nagłówek i podsumowanie linii. Dostawca pusty, gdy linie mają różnych. {@code gratisCandidate},
- * gdy któraś linia to pozycja "GRATIS..."; {@code gratis}, gdy dokument zarejestrowano jako gratis.
+ * gdy artykuł z listy gratisów sklepu jest na minusie, {@code gratisOnPlus}, gdy jest na plusie (coś nie tak);
+ * {@code gratis}, gdy dokument zarejestrowano jako gratis.
  */
 public record DocumentSummary(
         UUID id,
@@ -21,6 +22,7 @@ public record DocumentSummary(
         BigDecimal purchaseValue,
         BigDecimal saleValueGross,
         boolean gratisCandidate,
+        boolean gratisOnPlus,
         DocumentGratisResponse gratis,
         /** Faktury KSeF przyjęcia albo korekty od dostawcy: przypięte i dopasowane po numerze. */
         List<LinkedKsefInvoice> ksefInvoices,

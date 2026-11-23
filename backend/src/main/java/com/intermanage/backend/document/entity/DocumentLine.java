@@ -1,7 +1,6 @@
 package com.intermanage.backend.document.entity;
 
 import java.math.BigDecimal;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -106,11 +105,6 @@ public class DocumentLine {
     /** Linię w dokumencie wyznacza numer razem z ITM8 (zwroty prasy mają wszystkie linie z numerem 1). */
     public String lineKey() {
         return lineNumber + "/" + itm8;
-    }
-
-    /** Pozycja-znacznik gratisu z systemu sklepu, np. "GRATIS SPOŻYWKA MIX". */
-    public boolean isGratisItem() {
-        return name != null && name.toUpperCase(Locale.ROOT).contains("GRATIS");
     }
 
     /** Wartości z pliku; {@code true}, gdy któraś się zmieniła. */

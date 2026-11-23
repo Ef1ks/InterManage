@@ -55,6 +55,7 @@ const CLOSED_OPTIONS: { value: Presence; label: string }[] = [
 const GRATIS_OPTIONS: { value: GratisFilter; label: string }[] = [
   { value: 'all', label: 'Wszystkie' },
   { value: 'candidate', label: 'Może być gratisem' },
+  { value: 'plus', label: 'Gratis na plusie' },
   { value: 'with', label: 'Gratisy' },
   { value: 'without', label: 'Nieoznaczone' },
 ]
@@ -189,7 +190,10 @@ export function DocumentFilters({
                 </FilterRow>
               )}
               {gratis && (
-                <FilterRow label="Gratis" hint="Może być gratisem: jeszcze nieoznaczone, z pozycją GRATIS.">
+                <FilterRow
+                  label="Gratis"
+                  hint="Może być gratisem: jeszcze nieoznaczone, z artykułem z listy gratisów na minusie. Gratis na plusie: taki artykuł ma ilość na plusie, coś jest nie tak."
+                >
                   <SegmentedField
                     label="Gratis"
                     options={GRATIS_OPTIONS}

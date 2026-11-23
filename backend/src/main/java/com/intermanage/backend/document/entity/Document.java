@@ -99,10 +99,6 @@ public class Document {
     @Column(name = "sale_value_gross", nullable = false, precision = 16, scale = 4)
     private BigDecimal saleValueGross = BigDecimal.ZERO;
 
-    /** Któraś linia to pozycja "GRATIS..." - dokument może być gratisem od dostawcy. */
-    @Column(name = "has_gratis_line", nullable = false)
-    private boolean gratisCandidate;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "first_import_id", nullable = false, updatable = false)
     private DocumentImport firstImport;
@@ -212,7 +208,6 @@ public class Document {
         boolean oneSupplier = lines.stream().map(DocumentLine::getSupplierCode).distinct().count() == 1;
         supplierCode = oneSupplier ? lines.getFirst().getSupplierCode() : null;
         supplierName = oneSupplier ? lines.getFirst().getSupplierName() : null;
-        gratisCandidate = type.canBeGratis() && lines.stream().anyMatch(DocumentLine::isGratisItem);
     }
 
     /**
@@ -302,11 +297,6 @@ public class Document {
 
     public BigDecimal getSaleValueGross() {
         return saleValueGross;
-    }
-
-    /** Tylko przeniesienia stanów mogą być gratisem, więc pozycja GRATIS w innych typach nic nie znaczy. */
-    public boolean isGratisCandidate() {
-        return gratisCandidate && type.canBeGratis();
     }
 
     public Instant getUpdatedAt() {

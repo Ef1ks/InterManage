@@ -25,6 +25,7 @@ import { AutoInvoiceMatching } from '@/features/documents/AutoInvoiceMatching'
 import { CorrectionBadge } from '@/features/documents/DeliveryCorrections'
 import { DeliveryPeriodReport, PendingReportChanges } from '@/features/documents/DeliveryPeriodReport'
 import { GratisBadge } from '@/features/documents/DocumentGratis'
+import { GratisArticlesButton } from '@/features/documents/GratisArticles'
 import { TransferTargetBadge } from '@/features/documents/DocumentTransferTarget'
 import { DocumentFilters, useHiddenSuppliers } from '@/features/documents/DocumentFilters'
 import { DocumentRowKsef } from '@/features/documents/DocumentKsefInvoices'
@@ -147,7 +148,9 @@ export function DocumentsList({ storeId }: { storeId: string }) {
   const invoice = presenceOf(params.get('faktura'))
   const corrections = presenceOf(params.get('korekty'))
   const closed = presenceOf(params.get('raport'))
-  const gratis: GratisFilter = params.get('gratis') === 'moze' ? 'candidate' : presenceOf(params.get('gratis'))
+  const gratisParam = params.get('gratis')
+  const gratis: GratisFilter =
+    gratisParam === 'moze' ? 'candidate' : gratisParam === 'plus' ? 'plus' : presenceOf(gratisParam)
   const markedAsError = upperType === 'PZ' && params.get('bledne') === 'tak'
   const setMarkedAsError = (value: boolean) => updateParams({ bledne: value ? 'tak' : null })
   const hiddenValues = hiddenValuesOf(params, upperType)
@@ -156,7 +159,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
   const setCorrections = (value: Presence) => updateParams({ korekty: PRESENCE_PARAMS[value] })
   const setClosed = (value: Presence) => updateParams({ raport: PRESENCE_PARAMS[value] })
   const setGratis = (value: GratisFilter) =>
-    updateParams({ gratis: value === 'candidate' ? 'moze' : PRESENCE_PARAMS[value] })
+    updateParams({ gratis: value === 'candidate' ? 'moze' : value === 'plus' ? 'plus' : PRESENCE_PARAMS[value] })
   const setHiddenValues = (range: HiddenValueRange) =>
     updateParams({
       ukryj_od: range.from === null ? null : String(range.from),
@@ -309,6 +312,7 @@ export function DocumentsList({ storeId }: { storeId: string }) {
                 <AutoInvoiceMatching storeId={storeId} typeCode={upperType === 'PZ' ? 'pz' : 'wz'} />
               )}
               {upperType === 'PZ' && <DeliveryPeriodReport storeId={storeId} />}
+              {gratisFilter && <GratisArticlesButton storeId={storeId} />}
             </div>
           )}
         </div>
