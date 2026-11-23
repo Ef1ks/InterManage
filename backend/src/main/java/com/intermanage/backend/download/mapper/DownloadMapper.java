@@ -20,6 +20,7 @@ public interface DownloadMapper {
     @Mapping(target = "description", source = "download.description")
     @Mapping(target = "file", source = "file")
     @Mapping(target = "newVersion", source = "newVersion")
+    @Mapping(target = "agentPackage", source = "download.agentPackage")
     DownloadResponse toResponse(Download download, DownloadResponse.FileInfo file, boolean newVersion);
 
     @Mapping(target = "changes", source = "changes")

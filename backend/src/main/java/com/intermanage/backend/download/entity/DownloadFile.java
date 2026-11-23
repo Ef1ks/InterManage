@@ -101,4 +101,16 @@ public class DownloadFile {
     public byte[] getContent() {
         return content;
     }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public String getSha256() {
+        return sha256;
+    }
+
+    public int getSizeBytes() {
+        return sizeBytes;
+    }
 }

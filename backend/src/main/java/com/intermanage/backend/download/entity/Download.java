@@ -48,6 +48,10 @@ public class Download {
     @Column(name = "removed_at")
     private Instant removedAt;
 
+    /** Paczka agenta sklepu (ZIP z folderem agenta): jej obowiązująca wersja aktualizuje agenty w sklepach. */
+    @Column(name = "agent_package", nullable = false)
+    private boolean agentPackage;
+
     protected Download() {
     }
 
@@ -96,5 +100,14 @@ public class Download {
 
     public Instant getRemovedAt() {
         return removedAt;
+    }
+
+    public boolean isAgentPackage() {
+        return agentPackage;
+    }
+
+    public void setAgentPackage(boolean agentPackage) {
+        this.agentPackage = agentPackage;
+        this.updatedAt = Instant.now();
     }
 }

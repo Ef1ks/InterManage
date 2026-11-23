@@ -9,8 +9,10 @@ import com.intermanage.backend.download.entity.DownloadChangeKind;
 /**
  * Pozycja „Do pobrania” z obowiązującą wersją pliku ({@code file} puste = jeszcze bez pliku). {@code newVersion}:
  * zalogowane konto nie pobrało tej wersji ani nie potwierdziło, że ją ma, a wersja ma powiadomienie.
+ * {@code agentPackage}: paczka agenta sklepu, jej obowiązująca wersja aktualizuje agenty w sklepach.
  */
-public record DownloadResponse(UUID id, String title, String description, FileInfo file, boolean newVersion) {
+public record DownloadResponse(UUID id, String title, String description, FileInfo file, boolean newVersion,
+        boolean agentPackage) {
 
     public record FileInfo(UUID id, String fileName, String version, int sizeBytes, String sha256,
             Instant uploadedAt, String uploadedBy, boolean announce, List<Change> changes) {

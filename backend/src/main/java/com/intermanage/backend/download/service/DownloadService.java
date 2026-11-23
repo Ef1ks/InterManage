@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -20,6 +21,8 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.download.component.AgentPackage;
+import com.intermanage.backend.download.dto.AgentUpdateInfo;
 import com.intermanage.backend.download.dto.DownloadChangesRequest;
 import com.intermanage.backend.download.dto.DownloadRequest;
 import com.intermanage.backend.download.dto.DownloadResponse;
@@ -97,6 +100,9 @@ public class DownloadService {
         AppUser user = user(userId);
         Download download = downloads.save(new Download(request.title().strip(), blankToNull(request.description()),
                 user));
+        if (Boolean.TRUE.equals(request.agentPackage())) {
+            markAgentPackage(download, true);
+        }
         if (upload != null && !upload.isEmpty()) {
             saveFile(download, upload, version, changeList, announce, user, userId);
         }
@@ -104,7 +110,48 @@ public class DownloadService {
 
     @Transactional
     public void update(UUID id, DownloadRequest request) {
-        active(id).update(request.title().strip(), blankToNull(request.description()));
+        Download download = active(id);
+        download.update(request.title().strip(), blankToNull(request.description()));
+        if (request.agentPackage() != null && request.agentPackage() != download.isAgentPackage()) {
+            markAgentPackage(download, request.agentPackage());
+        }
+    }
+
+    /**
+     * Paczka agenta sklepu: najwyżej jedna pozycja, a jej obowiązujący plik musi być ZIP-em z agentem i mieć wersję
+     * (inaczej agenty dostałyby plik, którego nie zainstalują).
+     */
+    private void markAgentPackage(Download download, boolean agentPackage) {
+        if (agentPackage) {
+            files.findCurrent(download.getId()).ifPresent(file -> AgentPackage.check(file.getContent(),
+                    file.getVersion()));
+            downloads.findFirstByAgentPackageTrueAndRemovedAtIsNull()
+                    .filter(other -> !other.getId().equals(download.getId()))
+                    .ifPresent(other -> {
+                        other.setAgentPackage(false);
+                        // Najpierw zdjęcie z poprzedniej, potem nowa: indeks w bazie pilnuje jednej.
+                        downloads.flush();
+                    });
+        }
+        download.setAgentPackage(agentPackage);
+    }
+
+    /** Obowiązująca wersja agenta sklepu do automatycznej aktualizacji (bez paczki albo bez pliku nic). */
+    @Transactional(readOnly = true)
+    public Optional<AgentUpdateInfo> agentUpdate() {
+        return downloads.findFirstByAgentPackageTrueAndRemovedAtIsNull()
+                .flatMap(download -> files.findCurrentSummary(download.getId()))
+                .filter(file -> AgentPackage.version(file.getVersion()) != null)
+                .map(file -> new AgentUpdateInfo(AgentPackage.version(file.getVersion()), file.getSha256(),
+                        file.getSizeBytes()));
+    }
+
+    /** Plik obowiązującej paczki agenta (pobiera go agent sklepu swoim kluczem). */
+    @Transactional(readOnly = true)
+    public DownloadFile agentUpdateFile() {
+        return downloads.findFirstByAgentPackageTrueAndRemovedAtIsNull()
+                .flatMap(download -> files.findCurrent(download.getId()))
+                .orElseThrow(() -> ApiException.notFound("Nie ma paczki agenta do aktualizacji"));
     }
 
     /** Nowa wersja pliku; poprzednia dostaje znacznik zastąpienia i zostaje jako historia. */
@@ -181,6 +228,9 @@ public class DownloadService {
         String cleanVersion = blankToNull(version);
         if (cleanVersion != null && cleanVersion.length() > 40) {
             throw ApiException.badRequest("Wersja może mieć najwyżej 40 znaków");
+        }
+        if (download.isAgentPackage()) {
+            AgentPackage.check(content, cleanVersion);
         }
         List<Entry> entries = entries(changeList);
         files.findCurrent(download.getId()).ifPresent(previous -> {

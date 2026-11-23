@@ -29,6 +29,8 @@ import com.intermanage.backend.agent.repository.StoreAgentSettingsRepository;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.download.dto.AgentUpdateInfo;
+import com.intermanage.backend.download.service.DownloadService;
 import com.intermanage.backend.store.dto.ProtoSettingsResponse;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -82,10 +84,13 @@ public class StoreAgentService {
     private final LiveEvents live;
     private final AgentReportService reports;
 
+    private final DownloadService downloads;
+
     public StoreAgentService(StoreAgentRepository agents, StoreAgentSettingsRepository settings,
             StoreRepository stores, AppUserRepository users, StoreFileLocationService locations,
             StoreProtoSettingsService protoSettings, StoreAgentMapper mapper, LiveEvents live,
-            AgentReportService reports) {
+            AgentReportService reports, DownloadService downloads) {
+        this.downloads = downloads;
         this.agents = agents;
         this.settings = settings;
         this.stores = stores;
@@ -104,7 +109,7 @@ public class StoreAgentService {
         return new StoreAgentsResponse(enabled(storeId), agents.findByStore(storeId).stream()
                 .map(agent -> mapper.toResponse(agent, online(agent, now),
                         agent.getDeletedAt() == null && agent.getId().equals(leader), null))
-                .toList());
+                .toList(), downloads.agentUpdate().map(AgentUpdateInfo::version).orElse(null));
     }
 
     @Transactional
@@ -121,7 +126,8 @@ public class StoreAgentService {
                 users.getReferenceById(actorId)));
         StoreAgentsResponse current = list(storeId);
         return new StoreAgentsResponse(current.enabled(), current.agents().stream()
-                .map(item -> item.id().equals(agent.getId()) ? withKey(item, key) : item).toList());
+                .map(item -> item.id().equals(agent.getId()) ? withKey(item, key) : item).toList(),
+                current.latestVersion());
     }
 
     @Transactional
@@ -222,7 +228,7 @@ public class StoreAgentService {
                 cut(request.user(), 100));
         return new AgentApi.HelloResponse(agent.storeId(), agent.storeNumber(), agent.storeName(), agent.agentName(),
                 enabled(agent.storeId()), folders(agent.storeId()), watches(agent.storeId()), LONG_POLL_SECONDS,
-                agent.leader(), agent.preferred());
+                agent.leader(), agent.preferred(), downloads.agentUpdate().orElse(null));
     }
 
     /**

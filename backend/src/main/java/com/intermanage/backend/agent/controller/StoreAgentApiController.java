@@ -32,6 +32,8 @@ import com.intermanage.backend.agent.service.AgentFileQueueService;
 import com.intermanage.backend.agent.service.AgentReportService;
 import com.intermanage.backend.agent.service.StoreAgentService;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.download.entity.DownloadFile;
+import com.intermanage.backend.download.service.DownloadService;
 import com.intermanage.backend.importguide.dto.ReportMacroResponse;
 import com.intermanage.backend.importguide.entity.ImportReportKind;
 import com.intermanage.backend.importguide.service.ReportMacroService;
@@ -64,6 +66,7 @@ import jakarta.validation.Valid;
  * POST /api/store-agent/report-macro       {kinds, automatic} → makro aktualizacji raportów z Mercalys (pliki nie
  *                                          z dzisiaj); 409, gdy aktualizuje inny komputer albo agent nie jest główny
  * POST /api/store-agent/report-macro/finished   koniec aktualizacji (zdejmuje blokadę)
+ * GET  /api/store-agent/update/file        paczka agenta z „Do pobrania” (ZIP; wersja i SHA-256 w odpowiedzi /hello)
  * </pre>
  */
 @RestController
@@ -79,9 +82,12 @@ public class StoreAgentApiController {
     private final StoreFileQueueService queue;
     private final AgentReportService reports;
     private final ReportMacroService macros;
+    private final DownloadService downloads;
 
     public StoreAgentApiController(StoreAgentService agents, AgentFileQueueService waiting, AgentEventService events,
-            StoreFileQueueService queue, AgentReportService reports, ReportMacroService macros) {
+            StoreFileQueueService queue, AgentReportService reports, ReportMacroService macros,
+            DownloadService downloads) {
+        this.downloads = downloads;
         this.macros = macros;
         this.agents = agents;
         this.waiting = waiting;
@@ -216,6 +222,23 @@ public class StoreAgentApiController {
     public List<AgentReportFileResponse> recentReports(@RequestHeader(value = HttpHeaders.AUTHORIZATION,
             required = false) String authorization) {
         return reports.recent(agent(authorization).storeId(), 100);
+    }
+
+    /**
+     * Paczka agenta do automatycznej aktualizacji (ZIP). Agent sprawdza SHA-256 i rozmiar z /hello, a podpis exe
+     * przed instalacją. Przy wolnym łączu sklepu paczka (kilka MB) idzie kilkanaście sekund.
+     */
+    @GetMapping("/update/file")
+    public ResponseEntity<byte[]> updateFile(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization) {
+        agent(authorization);
+        DownloadFile file = downloads.agentUpdateFile();
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header("X-Sha256", file.getSha256())
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.getFileName(), StandardCharsets.UTF_8).build().toString())
+                .body(file.getContent());
     }
 
     private StoreAgentService.AgentContext agent(String authorization) {

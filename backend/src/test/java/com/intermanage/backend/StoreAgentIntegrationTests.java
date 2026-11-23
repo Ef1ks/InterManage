@@ -267,6 +267,51 @@ class StoreAgentIntegrationTests {
         hello(kasa).andExpect(jsonPath("$.leader").value(true));
     }
 
+    @Test
+    void agentGetsNewVersionFromAgentPackageInDownloads() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String key = addAgent(owner, storeId, "Komputer biuro");
+
+        // Plik bez agenta w środku i bez wersji nie może być paczką agenta.
+        mvc.perform(multipart("/api/settings/downloads").cookie(owner).with(csrf())
+                        .file(new MockMultipartFile("file", "agent.zip", "application/zip", agentZip("inny.exe")))
+                        .param("title", "Agent sklepu").param("version", "1.9.0").param("agentPackage", "true"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/settings/downloads").cookie(owner).with(csrf())
+                        .file(new MockMultipartFile("file", "agent.zip", "application/zip",
+                                agentZip("net48/IntermanageAgent.exe")))
+                        .param("title", "Agent sklepu").param("version", "nowa").param("agentPackage", "true"))
+                .andExpect(status().isBadRequest());
+
+        byte[] zip = agentZip("net48/IntermanageAgent.exe");
+        mvc.perform(multipart("/api/settings/downloads").cookie(owner).with(csrf())
+                        .file(new MockMultipartFile("file", "agent.zip", "application/zip", zip))
+                        .param("title", "Agent sklepu").param("version", "v9.1.0").param("agentPackage", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.title == 'Agent sklepu')].agentPackage").value(true));
+
+        hello(key).andExpect(jsonPath("$.update.version").value("9.1.0"))
+                .andExpect(jsonPath("$.update.sizeBytes").value(zip.length));
+        mvc.perform(get("/api/stores/" + storeId + "/agents").cookie(owner))
+                .andExpect(jsonPath("$.latestVersion").value("9.1.0"));
+        byte[] file = mvc.perform(get("/api/store-agent/update/file").header(HttpHeaders.AUTHORIZATION, "Bearer " + key))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(file).isEqualTo(zip);
+        mvc.perform(get("/api/store-agent/update/file").header(HttpHeaders.AUTHORIZATION, "Bearer ima_zly"))
+                .andExpect(status().isForbidden());
+    }
+
+    private static byte[] agentZip(String exeName) throws IOException {
+        var bytes = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipOutputStream(bytes)) {
+            entry(zip, exeName, "MZ agent");
+            entry(zip, exeName.substring(0, exeName.lastIndexOf('/') + 1) + "System.Text.Json.dll", "MZ dll");
+        }
+        return bytes.toByteArray();
+    }
+
     private org.springframework.test.web.servlet.ResultActions events(String key, String body) throws Exception {
         return mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
                 .contentType(MediaType.APPLICATION_JSON).content(body));

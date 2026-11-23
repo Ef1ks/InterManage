@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.intermanage.backend.download.dto.AgentUpdateInfo;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,10 +28,12 @@ public final class AgentApi {
      * wybrał pracę przez agenta (bez tego agent tylko utrzymuje kontakt). {@code leader}: ten agent jest głównym agentem
      * sklepu, więc pilnuje folderów i aktualizuje dane z Mercalys (każda odpowiedź API niesie to też w nagłówku
      * {@code X-Agent-Leader}); {@code preferred}: agent preferowany, który odbiera tę rolę pozostałym.
+     * {@code update}: obowiązująca wersja agenta z „Do pobrania” (brak = bez automatycznej aktualizacji); agent
+     * nowszą pobiera z {@code /update/file} i instaluje sam.
      */
     public record HelloResponse(UUID storeId, String storeNumber, String storeName, String agentName, boolean enabled,
             Map<String, String> folders, List<Watch> watches, int longPollSeconds, boolean leader,
-            boolean preferred) {
+            boolean preferred, AgentUpdateInfo update) {
     }
 
     /**

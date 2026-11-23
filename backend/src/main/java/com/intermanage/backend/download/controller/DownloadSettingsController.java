@@ -38,6 +38,7 @@ public class DownloadSettingsController {
     /**
      * Nowa pozycja: multipart {@code title}, {@code description}, opcjonalnie {@code file} z {@code version}, listą
      * zmian ({@code added}, {@code changed}, {@code fixed}: wpis w linii) i {@code announce} (baner u pracowników).
+     * {@code agentPackage}: paczka agenta sklepu (ZIP z folderem agenta i wersją), z której agenty same się aktualizują.
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<DownloadResponse> create(@RequestParam String title,
@@ -45,8 +46,9 @@ public class DownloadSettingsController {
             @RequestParam(required = false) MultipartFile file, @RequestParam(required = false) String version,
             @RequestParam(required = false) String added, @RequestParam(required = false) String changed,
             @RequestParam(required = false) String fixed, @RequestParam(defaultValue = "true") boolean announce,
+            @RequestParam(defaultValue = "false") boolean agentPackage,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        downloads.create(valid(title, description), file, version, new DownloadChangesRequest(added, changed, fixed),
+        downloads.create(valid(title, description, agentPackage), file, version, new DownloadChangesRequest(added, changed, fixed),
                 announce, principal.getId());
         return downloads.list(true, principal.getId());
     }
@@ -91,7 +93,7 @@ public class DownloadSettingsController {
         return downloads.list(true, principal.getId());
     }
 
-    private static DownloadRequest valid(String title, String description) {
+    private static DownloadRequest valid(String title, String description, boolean agentPackage) {
         if (title == null || title.isBlank()) {
             throw ApiException.badRequest("Podaj nazwę");
         }
@@ -103,6 +105,6 @@ public class DownloadSettingsController {
             throw ApiException
                     .badRequest("Opis może mieć najwyżej 2000 znaków");
         }
-        return new DownloadRequest(title, description);
+        return new DownloadRequest(title, description, agentPackage);
     }
 }

@@ -72,11 +72,35 @@ Robi:
 Nie robi:
 
 - nie wymaga administratora (`asInvoker`), nie instaluje usługi, nie pisze do HKLM ani Program Files;
-- nie uruchamia PowerShella, cmd ani skryptów, nie pobiera kodu i nie uruchamia innego kodu niż odtwarzacz makr ze
-  swojego exe, nie aktualizuje się sam (nowe wersje są w Intermanage → Do pobrania);
+- nie uruchamia PowerShella, cmd ani skryptów i nie uruchamia innego kodu niż odtwarzacz makr ze swojego exe i swoją
+  nowszą wersję z automatycznej aktualizacji (niżej), sprawdzoną sumą SHA-256 i podpisem;
 - nie klika w Mercalys sam: makra wykonuje odtwarzacz, a agent tylko wkłada makro aktualizacji do schowka i naciska
   za pracownika Alt+E;
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
+
+## Automatyczna aktualizacja (od 1.5.0)
+
+Pozycja w Intermanage → Do pobrania z włączonym przełącznikiem **Paczka agenta sklepu** to wersja, do której
+aktualizują się wszystkie agenty (najwyżej jedna taka pozycja). Plik to ZIP z zawartością `bin\Release\net48`
+(może być w jednym folderze), a wersja jak w `Intermanage.Agent.csproj` (np. `1.5.0`); serwer odrzuca paczkę bez
+`IntermanageAgent.exe` albo bez wersji. Wydanie nowej wersji = podnieś wersję w csproj, zbuduj, podpisz, spakuj i wgraj
+jako nową wersję tej pozycji.
+
+Serwer podaje wersję, SHA-256 i rozmiar paczki w każdej odpowiedzi `/hello` (co 5 min). Agent ze starszą wersją:
+
+1. pobiera paczkę z `GET /api/store-agent/update/file` do `%LOCALAPPDATA%\Intermanage\Agent\update`, sprawdza rozmiar
+   i SHA-256, rozpakowuje (tylko ścieżki wewnątrz folderu) i sprawdza wersję nowego exe;
+2. sprawdza podpis: gdy działający agent jest podpisany, nowy exe musi mieć ważny podpis Authenticode z certyfikatem
+   o tym samym podmiocie (agent zbudowany lokalnie bez podpisu ufa samej sumie SHA-256);
+3. czeka na bezczynność komputera (2 min bez myszy i klawiatury, bez aktualizacji danych z Mercalys i bez otwartych
+   Ustawień), bo zamknięcie agenta zamyka też odtwarzacz makr; menu ikony ma „Zainstaluj aktualizację teraz”;
+4. przemianowuje swoje pliki na `*.old` (działający exe też się da), kopiuje nowe, uruchamia nową wersję
+   z `--wait --updated` i kończy się; nowa czeka, aż stara zwolni mutex, i nie uruchamia aktualizacji danych od nowa;
+5. nowa wersja po minucie pracy usuwa `*.old`. Gdy nie wystartuje (błąd przy starcie), wraca do plików `*.old`,
+   zapisuje wersję w `update\rejected.txt` (już jej nie instaluje) i uruchamia poprzednią.
+
+Ustawienia sklepu → Agent sklepu pokazują przy agencie ze starszą wersją „zaktualizuje się do …”. Agent sprzed 1.5.0
+nie umie się aktualizować: trzeba go raz podmienić ręcznie.
 
 ## Budowanie
 

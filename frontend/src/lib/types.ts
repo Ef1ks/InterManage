@@ -5055,7 +5055,12 @@ export type StoreAgent = {
   key: string | null
 }
 
-export type StoreAgents = { enabled: boolean; agents: StoreAgent[] }
+export type StoreAgents = {
+  enabled: boolean
+  agents: StoreAgent[]
+  /** Wersja z paczki agenta w „Do pobrania”: agenty aktualizują się do niej same (brak = bez aktualizacji). */
+  latestVersion: string | null
+}
 
 /** Dziennik sklepu (StoreEventResponse): zmiany przez API, odrzucone próby i problemy z logów backendu. */
 export type StoreEventKind = 'ACTION' | 'FAILED' | 'SYSTEM'

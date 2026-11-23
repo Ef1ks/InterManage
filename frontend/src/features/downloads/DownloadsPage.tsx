@@ -125,6 +125,14 @@ function DownloadCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold">{download.title}</h2>
+            {download.agentPackage && (
+              <span
+                className="rounded-md bg-violet-200 px-2 py-0.5 text-xs font-semibold text-violet-950 dark:bg-violet-900/70 dark:text-violet-100"
+                title="Agenty w sklepach aktualizują się z tej pozycji same"
+              >
+                Aktualizuje agenty
+              </span>
+            )}
             {download.newVersion && (
               <span className="rounded-md bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-950 dark:bg-sky-900/70 dark:text-sky-100">
                 Nowa wersja

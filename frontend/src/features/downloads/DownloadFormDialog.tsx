@@ -32,7 +32,7 @@ type Props = {
   download?: Download
 }
 
-type Values = Omit<DownloadForm, 'file' | 'announce' | 'changesEdited'>
+type Values = Omit<DownloadForm, 'file' | 'announce' | 'changesEdited' | 'agentPackage'>
 
 export function DownloadFormDialog({ open, onOpenChange, download }: Props) {
   return (
@@ -50,6 +50,7 @@ function Body({ download, onDone }: { download?: Download; onDone: () => void })
   const [formError, setFormError] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [announce, setAnnounce] = useState(true)
+  const [agentPackage, setAgentPackage] = useState(download?.agentPackage ?? false)
   const input = useRef<HTMLInputElement>(null)
   const isNew = download === undefined
   const current = download?.file ?? null
@@ -77,7 +78,7 @@ function Body({ download, onDone }: { download?: Download; onDone: () => void })
   const onSubmit = handleSubmit((values) => {
     setFormError(null)
     const changesEdited = CHANGE_KINDS.some(({ field }) => dirtyFields[field])
-    const form: DownloadForm = { ...values, file, announce, changesEdited }
+    const form: DownloadForm = { ...values, file, announce, changesEdited, agentPackage }
     const done = {
       onSuccess: () => {
         toast.success(
@@ -141,6 +142,17 @@ function Body({ download, onDone }: { download?: Download; onDone: () => void })
         {...register('description', { maxLength: { value: 2000, message: 'Maksymalnie 2000 znaków' } })}
       />
 
+      <SwitchField
+        label="Paczka agenta sklepu"
+        description={
+          agentPackage
+            ? 'Agenty w sklepach same pobiorą tę wersję i zainstalują ją, gdy komputer będzie bezczynny. Plik: ZIP z zawartością bin\\Release\\net48, wersja jak w Intermanage.Agent.csproj (np. 1.5.0).'
+            : 'Włącz dla pozycji z agentem sklepu, żeby agenty aktualizowały się same.'
+        }
+        checked={agentPackage}
+        onCheckedChange={setAgentPackage}
+      />
+
       <div className="flex flex-col gap-3 rounded-lg border border-dashed p-3">
         <input
           ref={input}
@@ -179,10 +191,18 @@ function Body({ download, onDone }: { download?: Download; onDone: () => void })
         {file && (
           <>
             <TextField
-              label="Wersja (opcjonalnie)"
+              label={agentPackage ? 'Wersja agenta' : 'Wersja (opcjonalnie)'}
               autoComplete="off"
-              hint="Np. v37 - widać ją w powiadomieniu i przy przycisku pobierania."
-              {...register('version', { maxLength: { value: 40, message: 'Maksymalnie 40 znaków' } })}
+              hint={
+                agentPackage
+                  ? 'Jak w Intermanage.Agent.csproj, np. 1.5.0. Agenty instalują tylko wersję nowszą od swojej.'
+                  : 'Np. v37 - widać ją w powiadomieniu i przy przycisku pobierania.'
+              }
+              {...register('version', {
+                maxLength: { value: 40, message: 'Maksymalnie 40 znaków' },
+                validate: (value) =>
+                  !agentPackage || /^v?\d+\.\d+(\.\d+){0,2}$/.test(value.trim()) || 'Podaj wersję agenta, np. 1.5.0',
+              })}
               error={errors.version?.message}
             />
             <SwitchField

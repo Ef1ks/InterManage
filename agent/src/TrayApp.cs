@@ -25,6 +25,9 @@ internal sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem status = new() { Enabled = false };
     private readonly ToolStripMenuItem activity = new() { Enabled = false, Visible = false };
     private readonly ToolStripMenuItem autostart = new("Uruchamiaj z Windows") { CheckOnClick = true };
+    private readonly ToolStripMenuItem updateStatus = new() { Enabled = false, Visible = false };
+    private readonly ToolStripMenuItem installUpdate = new("Zainstaluj aktualizację teraz") { Visible = false };
+    private readonly SelfUpdate selfUpdate;
     private readonly Control ui = new();
     private readonly Icon green = Dot(Color.FromArgb(16, 185, 129));
     private readonly Icon amber = Dot(Color.FromArgb(245, 158, 11));
@@ -36,16 +39,28 @@ internal sealed class TrayApp : ApplicationContext
     /// <summary>Aktualizacja przy starcie idzie raz na uruchomienie agenta (nie po zmianie ustawień).</summary>
     private bool startUpdateDone;
 
-    public TrayApp()
+    public TrayApp(bool afterUpdate)
     {
         // Uchwyt okna od razu: przez niego zmiany stanu z wątków w tle trafiają do ikony.
         _ = ui.Handle;
         settings = AgentSettings.Load();
         update = new DataUpdate(host, ui);
+        // Po automatycznej aktualizacji (zwykle w bezczynności) agent nie uruchamia od nowa aktualizacji danych z Mercalys.
+        startUpdateDone = afterUpdate;
+        selfUpdate = new SelfUpdate(() => update.IsRunning || openSettings != null,
+            () => { if (ui.IsHandleCreated) ui.BeginInvoke(new Action(ExitThread)); });
+        selfUpdate.StatusChanged += () =>
+        {
+            if (ui.IsHandleCreated) ui.BeginInvoke(new Action(UpdateIcon));
+        };
+        host.UpdateOffered += selfUpdate.Offer;
+        selfUpdate.Start(afterUpdate);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(status);
         menu.Items.Add(activity);
+        menu.Items.Add(updateStatus);
+        menu.Items.Add(installUpdate);
         menu.Items.Add(macros);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Otwórz Intermanage", null, (_, _) => Open(settings.ServerUrl));
@@ -57,6 +72,7 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(autostart);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Zakończ", null, (_, _) => ExitThread());
+        installUpdate.Click += (_, _) => selfUpdate.InstallNow();
         autostart.Checked = AgentSettings.Autostart;
         autostart.CheckedChanged += (_, _) =>
         {
@@ -116,6 +132,9 @@ internal sealed class TrayApp : ApplicationContext
         status.Text = "Stan: " + host.StatusText;
         activity.Visible = host.LastActivity != null;
         activity.Text = "Ostatnio: " + host.LastActivity;
+        updateStatus.Visible = selfUpdate.Status != null;
+        updateStatus.Text = selfUpdate.Status ?? "";
+        installUpdate.Visible = selfUpdate.CanInstallNow;
         // Podpowiedź ikony ma limit 63 znaków.
         var tip = Title + "\n" + host.StatusText;
         icon.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
@@ -198,6 +217,7 @@ internal sealed class TrayApp : ApplicationContext
     {
         Log.Info("Zakończono agenta");
         closing.Cancel();
+        selfUpdate.Dispose();
         host.Dispose();
         player.Dispose();
         icon.Visible = false;

@@ -182,6 +182,14 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
                     {agent.lastVersion && (
                       <span className="text-xs text-muted-foreground">wersja {agent.lastVersion}</span>
                     )}
+                    {agent.lastVersion && data.latestVersion && olderVersion(agent.lastVersion, data.latestVersion) && (
+                      <Badge
+                        className="bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-100"
+                        title="Agent pobierze nową wersję sam i zainstaluje ją, gdy komputer będzie bezczynny"
+                      >
+                        zaktualizuje się do {data.latestVersion}
+                      </Badge>
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {agent.machineName ? `Komputer ${agent.machineName}` : 'Jeszcze się nie połączył'}
@@ -282,4 +290,19 @@ function NotificationsToggle() {
       />
     </div>
   )
+}
+
+/** Czy wersja agenta (np. 1.4.0) jest starsza niż wersja z paczki (np. 1.5.0). */
+function olderVersion(current: string, latest: string) {
+  const parts = (text: string) =>
+    text
+      .replace(/^v/i, '')
+      .split('.')
+      .map((part) => Number.parseInt(part, 10) || 0)
+  const a = parts(current)
+  const b = parts(latest)
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0)
+  }
+  return false
 }

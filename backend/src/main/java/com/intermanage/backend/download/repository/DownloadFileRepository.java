@@ -50,6 +50,14 @@ public interface DownloadFileRepository extends JpaRepository<DownloadFile, UUID
             order by f.createdAt desc""")
     List<Summary> findSummaries(UUID downloadId);
 
+    /** Opis obowiązującej wersji pozycji bez treści (np. paczka agenta przy każdym /hello agenta). */
+    @Query("""
+            select f.download.id as downloadId, f.id as id, f.fileName as fileName, f.version as version,
+                f.sizeBytes as sizeBytes, f.sha256 as sha256, f.createdAt as uploadedAt,
+                u.displayName as uploadedBy, f.announce as announce
+            from DownloadFile f left join f.createdBy u where f.download.id = :downloadId and f.replacedAt is null""")
+    Optional<Summary> findCurrentSummary(UUID downloadId);
+
     @Query("select f from DownloadFile f where f.download.id = :downloadId and f.replacedAt is null")
     Optional<DownloadFile> findCurrent(UUID downloadId);
 

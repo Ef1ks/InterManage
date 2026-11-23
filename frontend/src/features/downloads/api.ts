@@ -27,6 +27,8 @@ export type Download = {
   file: DownloadFileInfo | null
   /** Zalogowane konto nie pobrało tej wersji i nie potwierdziło, że ją ma. */
   newVersion: boolean
+  /** Paczka agenta sklepu: jej obowiązująca wersja aktualizuje agenty w sklepach. */
+  agentPackage: boolean
 }
 
 /** Lista zmian w formularzu: wpis w linii. */
@@ -37,6 +39,7 @@ export type DownloadForm = DownloadChangesForm & {
   description: string
   version: string
   announce: boolean
+  agentPackage: boolean
   file: File | null
   /** Bez nowego pliku: czy poprawiono listę zmian obowiązującej wersji. */
   changesEdited: boolean
@@ -107,6 +110,7 @@ export function useCreateDownload() {
       const data = fileForm(form)
       data.append('title', form.title.trim())
       if (form.description.trim()) data.append('description', form.description.trim())
+      data.append('agentPackage', String(form.agentPackage))
       return api<Download[]>('/settings/downloads', { method: 'POST', formData: data })
     },
     onSuccess: setDownloads,
@@ -120,7 +124,11 @@ export function useUpdateDownload() {
     mutationFn: async ({ id, form }: { id: string; form: DownloadForm }) => {
       let list = await api<Download[]>(`/settings/downloads/${id}`, {
         method: 'PUT',
-        json: { title: form.title.trim(), description: form.description.trim() || null },
+        json: {
+          title: form.title.trim(),
+          description: form.description.trim() || null,
+          agentPackage: form.agentPackage,
+        },
       })
       if (form.file) {
         list = await api<Download[]>(`/settings/downloads/${id}/file`, { method: 'PUT', formData: fileForm(form) })

@@ -34,6 +34,9 @@ internal sealed class DataUpdate
     private readonly Control ui;
     private int running;
 
+    /// <summary>Aktualizacja danych trwa (agent nie podmienia się wtedy na nową wersję).</summary>
+    public bool IsRunning => Volatile.Read(ref running) == 1;
+
     public DataUpdate(AgentHost host, Control ui)
     {
         this.host = host;

@@ -38,6 +38,9 @@ internal sealed class AgentHost : IDisposable
     /// <summary>Pierwsza konfiguracja z serwera po starcie (np. aktualizacja danych przy starcie komputera).</summary>
     public event Action? Connected;
 
+    /// <summary>Serwer podał obowiązującą wersję agenta (po każdym /hello, gdy jest paczka agenta).</summary>
+    public event Action<ApiClient, AgentUpdateInfo>? UpdateOffered;
+
     /// <summary>Ten agent został albo przestał być głównym agentem sklepu.</summary>
     public event Action? LeadershipChanged;
 
@@ -132,6 +135,7 @@ internal sealed class AgentHost : IDisposable
                     Connected?.Invoke();
                 }
                 ServerOk();
+                if (config.Update != null) UpdateOffered?.Invoke(api, config.Update);
                 delay = TimeSpan.FromSeconds(2);
                 await Task.Delay(HelloEvery, cancel);
             }
