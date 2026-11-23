@@ -21,6 +21,11 @@ import type {
   IncidentImport,
   IncidentOverview,
   NomenclatureOption,
+  DailySalesGrouping,
+  DailySalesLayout,
+  DailySalesLevel,
+  DailySalesMeasure,
+  DailySalesReport,
   PeriodSalesArticle,
   PeriodSalesDepth,
   PeriodSalesReport,
@@ -1399,4 +1404,48 @@ export function useSupplierTurnover(storeId: string, supplier: string | null, ra
     enabled: enabled && supplier != null,
     placeholderData: keepPreviousData,
   })
+}
+
+export function useDailySales(storeId: string, range: DateRange, grouping: DailySalesGrouping, enabled: boolean) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'daily-sales', range, grouping],
+    staleTime: REPORT_STALE_TIME,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      api<DailySalesReport>(
+        `${reportsPath(storeId)}/daily-sales?${new URLSearchParams({ from: range.from, to: range.to, grouping })}`,
+      ),
+    enabled,
+  })
+}
+
+export type DailySalesPrint = {
+  range: DateRange
+  level: DailySalesLevel
+  measure: DailySalesMeasure
+  layout: DailySalesLayout
+  grouping: DailySalesGrouping
+}
+
+const dailySalesPdfPath = (storeId: string, print: DailySalesPrint) =>
+  `${reportsPath(storeId)}/daily-sales/pdf?${new URLSearchParams({
+    from: print.range.from,
+    to: print.range.to,
+    level: print.level,
+    measure: print.measure,
+    layout: print.layout,
+    grouping: print.grouping,
+  })}`
+
+export function useDailySalesPdf(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (print: DailySalesPrint) => printFile(dailySalesPdfPath(storeId, print)),
+      meta: { invalidates: false },
+    }),
+    download: useMutation({
+      mutationFn: (print: DailySalesPrint) => downloadFile(dailySalesPdfPath(storeId, print), 'sprzedaz-dzienna.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
 }

@@ -3,6 +3,7 @@ import {
   BadgeAlertIcon,
   BadgePercentIcon,
   BeefIcon,
+  CalendarDaysIcon,
   ChevronRightIcon,
   CircleMinusIcon,
   CircleOffIcon,
@@ -61,6 +62,13 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         description:
           'Sama sprzedaż za wybrane dni: nomenklatura, marka, dostawca, od rejonu do artykułów. Z wydrukiem.',
         icon: ListTreeIcon,
+      },
+      {
+        path: salesPaths.dailySales,
+        title: 'Sprzedaż dzienna',
+        description:
+          'Tydzień albo miesiąc dzień po dniu: rejony i rodziny w wierszach, dni w kolumnach. Wydruk na jednej kartce.',
+        icon: CalendarDaysIcon,
       },
       {
         path: salesPaths.comparison,

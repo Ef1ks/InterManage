@@ -1462,6 +1462,39 @@ export type PeriodSalesReport = {
 
 export type PeriodSalesDepth = 'REGION' | 'FAMILY' | 'SUBFAMILY' | 'ARTICLE'
 
+/** Sumy pozycji w dniu albo w okresie (sprzedaż dzienna). */
+export type DailySalesFigures = {
+  quantity: number
+  saleValueGross: number
+  saleValueNet: number
+  marginValue: number
+}
+
+/** `days`: jedna pozycja na każdy dzień raportu, `null` = brak sprzedaży. Kod pusty = bez nomenklatury. */
+export type DailySalesLine = {
+  code: string
+  name: string | null
+  /** CATEGORY: kod = id kategorii albo `pozostale`. */
+  level: 'CATEGORY' | 'REGION' | 'FAMILY' | 'TOTAL'
+  days: (DailySalesFigures | null)[]
+  sum: DailySalesFigures | null
+  children: DailySalesLine[]
+}
+
+export type DailySalesReport = {
+  from: string
+  to: string
+  days: string[]
+  lastSaleDate: string | null
+  total: DailySalesLine
+  regions: DailySalesLine[]
+}
+
+export type DailySalesLevel = 'REGION' | 'FAMILY'
+export type DailySalesMeasure = 'GROSS' | 'NET' | 'MARGIN' | 'MARGIN_PERCENT' | 'QUANTITY'
+export type DailySalesLayout = 'DAYS_AS_COLUMNS' | 'DAYS_AS_ROWS'
+export type DailySalesGrouping = 'NOMENCLATURE' | 'CATEGORY'
+
 export type TopSalesReport = {
   from: string
   to: string

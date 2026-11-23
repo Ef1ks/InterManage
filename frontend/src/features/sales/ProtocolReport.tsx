@@ -393,7 +393,11 @@ function Report({
   const [withArticles, setWithArticles] = useState(true)
   const pdf = useProtocolReportPdf(storeId)
   const canEdit = useCan('SALES', 'EDIT')
-  const controlGroups = useLossControlGroups(storeId).data ?? NO_CONTROL_GROUPS
+  // Dostawcy do kontroli i rozliczenie strat dotyczą tylko likwidacji.
+  const controlEnabled = reportQuery.protocol === 'LIQUIDATION'
+  const canAssign = canEdit && controlEnabled
+  const savedControlGroups = useLossControlGroups(storeId).data ?? NO_CONTROL_GROUPS
+  const controlGroups = controlEnabled ? savedControlGroups : NO_CONTROL_GROUPS
   const controlByItm8 = useControlGroupsByItm8(controlGroups)
   const settlements = useLossControlSettlements(
     storeId,
@@ -637,17 +641,19 @@ function Report({
         </Card>
       ) : (
         <>
-          <ControlFilterBar
-            storeId={storeId}
-            groups={controlGroups}
-            active={activeControl}
-            onActive={(ids) => {
-              setActiveControl(ids)
-              setShown(PAGE)
-            }}
-            canEdit={canEdit}
-            onEdit={setEditor}
-          />
+          {controlEnabled && (
+            <ControlFilterBar
+              storeId={storeId}
+              groups={controlGroups}
+              active={activeControl}
+              onActive={(ids) => {
+                setActiveControl(ids)
+                setShown(PAGE)
+              }}
+              canEdit={canEdit}
+              onEdit={setEditor}
+            />
+          )}
           <ControlPanels
             groups={controlGroups}
             losses={controlLosses}
@@ -773,7 +779,7 @@ function Report({
                                     article={article}
                                     onChart={() => openChart(article)}
                                     controls={controlByItm8.get(article.itm8)}
-                                    assign={canEdit && <ControlGroupButton {...assignProps} itm8s={[article.itm8]} />}
+                                    assign={canAssign && <ControlGroupButton {...assignProps} itm8s={[article.itm8]} />}
                                   />
                                 </div>
                               ) : (
@@ -874,7 +880,7 @@ function Report({
                                       article={item}
                                       onChart={() => openChart(item)}
                                       controls={controlByItm8.get(item.itm8)}
-                                      assign={canEdit && <ControlGroupButton {...assignProps} itm8s={[item.itm8]} />}
+                                      assign={canAssign && <ControlGroupButton {...assignProps} itm8s={[item.itm8]} />}
                                     />
                                   </div>
                                 </div>
@@ -900,7 +906,7 @@ function Report({
                               <XIcon />
                               Odznacz wszystko
                             </Button>
-                            {canEdit && (
+                            {canAssign && (
                               <ControlGroupMenu
                                 {...assignProps}
                                 itm8s={[...new Set(selectedArticles.map((article) => article.itm8))]}

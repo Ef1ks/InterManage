@@ -380,6 +380,44 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
     List<DayRow> groupHistory(UUID storeId, String prefix, boolean unassigned, String[] codes, LocalDate from,
             LocalDate to);
 
+    /** Sprzedaż rodziny nomenklatury w jednym dniu; pusty kod = artykuły bez nomenklatury (spoza kartoteki). */
+    interface DayFamilySales {
+        LocalDate getSaleDate();
+
+        String getFamilyCode();
+
+        BigDecimal getQuantity();
+
+        BigDecimal getSaleValueGross();
+
+        BigDecimal getSaleValueNet();
+
+        BigDecimal getMarginValue();
+    }
+
+    /**
+     * Sprzedaż sklepu dzień po dniu po rodzinach nomenklatury: najpierw suma ITM8 w dniu (po EAN-ach), dopiero potem
+     * łączenie z kartoteką. Bez rejonów 90 i 91, jak pozostałe raporty sprzedaży.
+     */
+    @Query(value = """
+            with day_article as (
+                select s.sale_date, s.itm8, sum(s.quantity) as quantity,
+                       sum(s.sale_value_gross) as sale_value_gross, sum(s.sale_value_net) as sale_value_net,
+                       sum(s.margin_value) as margin_value
+                from sales s
+                where s.store_id = :storeId and s.sale_date between :from and :to
+                group by s.sale_date, s.itm8
+            )
+            select d.sale_date as sale_date, coalesce(left(p.subfamily_code, 4), '') as family_code,
+                   sum(d.quantity) as quantity, sum(d.sale_value_gross) as sale_value_gross,
+                   sum(d.sale_value_net) as sale_value_net, sum(d.margin_value) as margin_value
+            from day_article d
+            left join products p on p.store_id = :storeId and p.itm8 = d.itm8
+            where """ + COUNTED + """
+            group by 1, 2
+            """, nativeQuery = true)
+    List<DayFamilySales> sumByDayAndFamily(UUID storeId, LocalDate from, LocalDate to);
+
     /** Sprzedaż rejonu nomenklatury za okres; pusty kod = sprzedaż artykułów bez nomenklatury (spoza kartoteki). */
     interface RegionSales {
         String getRegionCode();

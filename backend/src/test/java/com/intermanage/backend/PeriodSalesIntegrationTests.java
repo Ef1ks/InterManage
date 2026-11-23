@@ -115,6 +115,54 @@ class PeriodSalesIntegrationTests {
                 .cookie(owner)).andExpect(status().isBadRequest());
     }
 
+    /** Sprzedaż dzienna z tych samych danych: rejony i rodziny dzień po dniu, suma sklepu w każdym dniu, wydruk. */
+    @Test
+    void dailySalesSplitsRegionsAndFamiliesByDay() throws Exception {
+        String daily = "/api/stores/" + store + "/reports/daily-sales?from=2026-10-05&to=2026-10-07";
+        mvc.perform(get(daily).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days", contains("2026-10-05", "2026-10-06", "2026-10-07")))
+                .andExpect(jsonPath("$.lastSaleDate").value("2026-10-07"))
+                .andExpect(jsonPath("$.regions[*].code", contains("01", "66", "")))
+                .andExpect(jsonPath("$.regions[0].days[0].saleValueGross").value(30.00))
+                .andExpect(jsonPath("$.regions[0].days[1].saleValueGross").value(10.00))
+                .andExpect(jsonPath("$.regions[0].days[2]").doesNotExist())
+                .andExpect(jsonPath("$.regions[0].sum.saleValueGross").value(40.00))
+                .andExpect(jsonPath("$.regions[0].children[*].code", contains("0101")))
+                .andExpect(jsonPath("$.regions[2].days[2].saleValueGross").value(2.00))
+                .andExpect(jsonPath("$.total.days[2].saleValueGross").value(22.00))
+                .andExpect(jsonPath("$.total.sum.saleValueGross").value(62.00));
+
+        for (String layout : new String[] {"DAYS_AS_ROWS", "DAYS_AS_COLUMNS"}) {
+            byte[] pdf = mvc.perform(get(daily.replace("daily-sales?", "daily-sales/pdf?") + "&level=FAMILY"
+                            + "&measure=MARGIN_PERCENT&layout=" + layout).cookie(owner))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                    .andReturn().getResponse().getContentAsByteArray();
+            assertEquals("%PDF", new String(pdf, 0, 4));
+        }
+        mvc.perform(get("/api/stores/" + store + "/reports/daily-sales?from=2026-01-01&to=2026-10-31")
+                .cookie(owner)).andExpect(status().isBadRequest());
+
+        // Własne kategorie sklepu: kategoria sumuje swoje rejony, reszta i sprzedaż bez nomenklatury w „Pozostałe”.
+        mvc.perform(post("/api/stores/" + store + "/reports/price-check/categories").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Świeże\",\"regionCodes\":[\"01\"]}"))
+                .andExpect(status().isCreated());
+        mvc.perform(get(daily + "&grouping=CATEGORY").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.regions[*].name", contains("Świeże", "Pozostałe")))
+                .andExpect(jsonPath("$.regions[0].level").value("CATEGORY"))
+                .andExpect(jsonPath("$.regions[0].sum.saleValueGross").value(40.00))
+                .andExpect(jsonPath("$.regions[0].children[*].code", contains("01")))
+                .andExpect(jsonPath("$.regions[1].code").value("pozostale"))
+                .andExpect(jsonPath("$.regions[1].children[*].code", contains("66", "")))
+                .andExpect(jsonPath("$.regions[1].sum.saleValueGross").value(22.00))
+                .andExpect(jsonPath("$.total.sum.saleValueGross").value(62.00));
+        mvc.perform(get(daily.replace("daily-sales?", "daily-sales/pdf?") + "&grouping=CATEGORY&level=FAMILY"
+                + "&layout=DAYS_AS_ROWS").cookie(owner)).andExpect(status().isOk());
+    }
+
     private String url(String query) {
         return "/api/stores/" + store + "/reports/period-sales?" + PERIOD + query;
     }
