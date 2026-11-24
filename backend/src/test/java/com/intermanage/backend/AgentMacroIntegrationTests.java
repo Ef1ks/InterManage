@@ -213,10 +213,10 @@ class AgentMacroIntegrationTests {
         // Agent bez wersji odtwarzacza (sprzed 1.8.0) i starszy odtwarzacz nie wezmą tego makra.
         poll(kasa, 900, false, true);
         base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("AutoJob 0.65")));
-        poll(kasa, "0.64");
-        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("AutoJob 0.66")));
         poll(kasa, "0.65");
+        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        poll(kasa, "0.66");
         // Bez zamówień nie ma czego kończyć.
         base("base-close", deliveryId).andExpect(status().isConflict());
 
@@ -234,7 +234,7 @@ class AgentMacroIntegrationTests {
                 .contains("WEBPICKRE|Mercalys|dgDetail|(?<!\\d)0*9516050082\\D+0*538(?!\\d)|30000|brak-538")
                 .contains("WEBORDERPICK|Mercalys|ibtB1_Ajouter_ImageButton1,ibtB1_Ajouter_LnkBouton|538|"
                         + "SCAPR POLSKA SP.Z.O.O.|Base;Baza|")
-                .contains("WEBERRORS|Mercalys|btnB2_Supprimer_LnkBouton|niezgodne jednost;nieistniej|30000")
+                .contains("WEBERRORS|Mercalys|btnB2_Supprimer_LnkBouton|niezgodne jednost;nieistniej;art.ju;doręczone|30000")
                 .contains("EXCELSAVE|P:\\Production\\INTERMANAGE\\EXCEL\\BON_9516050082_88110.xlsx|180000")
                 .doesNotContain("WEBORDERKNOWN")
                 .endsWith("WINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
@@ -246,12 +246,16 @@ class AgentMacroIntegrationTests {
                 case "WEBGOTO" -> parts[1];
                 case "WEBIFORDER" -> parts[2];
                 case "WEBORDERPICK" -> parts[7];
+                case "WEBIFSEEN" -> parts[3];
                 case "WEBPAGE" -> parts.length > 8 ? parts[8] : null;
                 case "WEBPICKRE" -> parts.length > 5 ? parts[5] : null;
                 default -> null;
             };
             if (target != null) {
                 assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + target);
+            }
+            if (parts[0].equals("WEBPAGE") && parts.length > 12) {
+                assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + parts[12]);
             }
         }
 
@@ -280,7 +284,7 @@ class AgentMacroIntegrationTests {
                 .andExpect(jsonPath("$.suppliers[1].note.error").isNotEmpty());
 
         // Powtórka zna zamówienie z pierwszego przebiegu.
-        poll(kasa, "0.65");
+        poll(kasa, "0.66");
         String again = JsonPath.read(base("base-receive", deliveryId).andReturn().getResponse().getContentAsString(),
                 "$.id");
         String second = JsonPath.read(agentPost(kasa, "/macro-jobs/" + again + "/start", "")
@@ -295,7 +299,7 @@ class AgentMacroIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.suppliers[1].order.enteredBy").isNotEmpty());
 
-        poll(kasa, "0.65");
+        poll(kasa, "0.66");
         String close = JsonPath.read(base("base-close", deliveryId).andExpect(status().isOk())
                 .andExpect(jsonPath("$.itemCount").value(2))
                 .andReturn().getResponse().getContentAsString(), "$.id");

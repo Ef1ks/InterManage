@@ -11,12 +11,12 @@ import java.util.regex.Pattern;
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
 
 /**
- * Makra wprowadzenia dostawy z bazy do Mercalys na komputerze sklepu (odtwarzacz od 0.65), po „Uzupełnij ITM8”:
+ * Makra wprowadzenia dostawy z bazy do Mercalys na komputerze sklepu (odtwarzacz od 0.66), po „Uzupełnij ITM8”:
  *
  * <ul>
  * <li>{@link #receive}: plik bonu każdego dostawcy (538, 88110) z Obsługi BL bazy → Integracja → zamówienie z bazy
  * tego dostawcy z datą dostawy dziś, najbliższą wcześniejszą albo późniejszą, bez niego pusty kod → pobranie → błędy (tylko
- * „Niezgodne jednostki” i „art. nieistniejący”, inne zatrzymują makro) → wyczyszczenie błędów; na końcu Obsługa BL nie
+ * „Niezgodne jednostki”, „art. nieistniejący” i „art. już doręczone”, inne zatrzymują makro) → wyczyszczenie błędów; na końcu Obsługa BL nie
  * może mieć pliku tego bonu, a każde zamówienie daje „Bon dostawy Excel” do folderu, skąd agent wysyła go na serwer;
  * <li>{@link #close}: po sprawdzeniu różnic Nr BL w nagłówku zamówień i zakończenie dostaw, jak przy fakturach
  * ({@code buildDeliveryMacro} w {@code mercalys-macro.ts}).
@@ -71,7 +71,8 @@ public final class BaseReceiveMacro {
     private static final String UNLOAD = "btnB6_Decharger_LnkBouton";
     private static final String ORIGIN = "Base;Baza";
     private static final String UNLOAD_TEXT = "pobra";
-    private static final String IMPORTED_TEXT = "Suma zaimport";
+    /** „Suma zaimportowanych zamówień” albo „0 artykuł(y) zaimportowany(e) - 450 błąd(błędy)”. */
+    private static final String IMPORTED_TEXT = "zaimportowan";
     private static final String FIX_ERRORS_TEXT = "popraw";
 
     // Wybór dostawcy pustego kodu (ac-e050).
@@ -83,7 +84,7 @@ public final class BaseReceiveMacro {
     private static final String ERRORS_PAGE = "ac-e051";
     private static final String ERRORS_DELETE = "btnB2_Supprimer_LnkBouton";
     private static final String ERRORS_BACK = "btnB1_Retour_LnkBouton";
-    private static final String ALLOWED_ERRORS = "niezgodne jednost;nieistniej";
+    private static final String ALLOWED_ERRORS = "niezgodne jednost;nieistniej;art.ju;doręczone";
     private static final String CLEAR_ERRORS_TEXT = "wyczy";
 
     // Wprowadzanie zamówień (ac-e011): wydruki, nagłówek i zakończenie.
@@ -157,6 +158,9 @@ public final class BaseReceiveMacro {
             String create = "nowy-kod-" + code;
             String read = "numer-" + code;
             String errors = "bledy-" + code;
+            String question = "pytanie-" + code;
+            String imported = "komunikat-" + code;
+            String noPanel = "bez-panelu-" + code;
             String done = "koniec-" + code;
             out.add("# Plik bonu " + bonNumber + " od dostawcy " + code);
             out.add("WEBPICKRE|" + WINDOW + "|" + GRID + "|" + fileRow(bon, code) + "|" + PAGE_TIMEOUT_MS + "|" + none);
@@ -166,9 +170,25 @@ public final class BaseReceiveMacro {
             out.add("WEBCOLLECT|" + WINDOW + "|" + BL_LINES_GRID + "|" + BL_LINE_ERROR_TEXT + "|0|" + NEXT_PAGE + "|"
                     + PAGE_LIST + "|1|" + BL_BON_COLUMN + "|" + bonNumber);
             out.add("WEBCLICK|" + WINDOW + "|" + BL_INTEGRATION);
-            // „Wystąpiły błędy (linie zazn. na czerwono)…” pojawia się tylko czasem: Tak i dalej.
-            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "|" + BL_TIMEOUT_MS + "|" + DIALOG + "|"
-                    + LINE_ERRORS_TEXT + "|Oui|" + panel);
+            // „Wystąpiły błędy (linie zazn. na czerwono)…” pojawia się tylko czasem: Tak i dalej. Czasem (też po Tak) zamiast
+            // panelu jest komunikat „0 artykuł(y) zaimportowany(e) - 450 błąd(błędy)”: Zamknij.
+            String importedAlert = "|" + ALERT_WINDOW + "|" + IMPORTED_TEXT + "|Fermer|" + imported;
+            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "|" + IMPORT_TIMEOUT_MS + "|" + DIALOG
+                    + "|" + LINE_ERRORS_TEXT + "|Oui|" + question + importedAlert);
+            out.add("WEBGOTO|" + panel);
+            out.add("LABEL|" + question);
+            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "|" + IMPORT_TIMEOUT_MS + importedAlert);
+            out.add("WEBGOTO|" + panel);
+            out.add("LABEL|" + imported);
+            // Po komunikacie: pytanie o poprawienie błędów, lista błędów, panel zamówień albo od razu Obsługa BL.
+            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "," + BL_SELECTION + "," + ERRORS_DELETE
+                    + "|" + BL_TIMEOUT_MS + "|" + DIALOG + "|" + FIX_ERRORS_TEXT + "|Oui|" + errors);
+            out.add("WEBIFSEEN|" + WINDOW + "|" + CREATE_CODE + "|" + noPanel + "|1000");
+            out.add("WEBGOTO|" + panel);
+            out.add("LABEL|" + noPanel);
+            out.add("WEBIFSEEN|" + WINDOW + "|" + BL_SELECTION + "|" + errors + "|1000");
+            out.add("WINCLOSEALL|" + PDF_WINDOW + "|" + LATE_PDF_MS);
+            out.add("WEBGOTO|" + done);
             out.add("LABEL|" + panel);
             out.add("WEBWAIT|" + WINDOW + "|" + CREATE_CODE + "||" + BL_TIMEOUT_MS);
             out.add("WEBORDERPICK|" + WINDOW + "|" + ARROW_IMAGE + "," + ARROW_LINK + "|" + code + "|"

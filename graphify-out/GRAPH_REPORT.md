@@ -1,9 +1,9 @@
 # Graph Report - intermanage  (2026-11-24)
 
 ## Corpus Check
-- 2613 files · ~1,848,341 words
+- 2613 files · ~1,848,587 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 51 file(s) not represented in the graph (top: (none) 14, .bin 9, .css 4)
+- Unclassified: 52 file(s) not represented in the graph (top: (none) 14, .bin 9, .css 4)
 
 ## Summary
 - 25057 nodes · 101483 edges · 591 communities (428 shown, 163 thin omitted)
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `dae70d3b`
+- Built from commit: `11d46392`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2365,6 +2365,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Product` be split into smaller, more focused modules?**
   _Cohesion score 0.012215807410404445 - nodes in this community are weakly interconnected._
 - **Why does `Document` connect `Document` to `Product`, `DocumentResponse`, `jakarta.persistence.Entity`, `ProductionCardService`, `DataEntryController.java`, `DeliveryReportService`, `KsefInvoiceSearch`, `DocumentLine`, `DocumentManualInvoice`, `.conflict`, `DocumentLineRow`, `uuid`, `Nomenclature`, `com.lowagie.text.pdf.BaseFont`, `DeliOrderDocument`, `ReviewedReport`, `BakeryCheckService`, `DeliveryNotePdf`, `jakarta.persistence.EntityManager`, `AppUser`, `List`, `DocumentPrintPdf`, `AppUserRepository`?**
-  _High betweenness centrality (0.213) - this node is a cross-community bridge._
+  _High betweenness centrality (0.211) - this node is a cross-community bridge._
 - **Should `DocumentResponse` be split into smaller, more focused modules?**
   _Cohesion score 0.02912507339988256 - nodes in this community are weakly interconnected._

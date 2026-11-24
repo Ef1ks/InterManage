@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.65.0.0
+;@Ahk2Exe-SetVersion 0.66.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.65" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.66" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -571,13 +571,22 @@ PlayMacro(rawClip) {
                 ; elementem. Sam WEBWAIT na Powrót przechodził od razu, bo Powrót ma też strona sprzed integracji.
                 ; Opcjonalnie |okno komunikatu|tekst (kilka po średniku)|przycisk|etykieta: gdy zamiast strony pojawi się taki
                 ; komunikat (np. „brak PZ bezpośrednich do integracji”), zamyka go przyciskiem i przeskakuje do LABEL|etykieta.
-                dialog := parts.Length >= 9 ? {title: Trim(parts[6]), expected: Trim(parts[7]), button: Trim(parts[8])} : ""
+                ; Od 0.66 takich czwórek może być kilka (różne komunikaty, każdy z własną etykietą; ich tekst idzie do podsumowania),
+                ; a zamiast jednego elementu kilka po przecinku (wystarczy jeden widoczny).
+                dialogs := []
+                Loop Max(0, (parts.Length - 5) // 4) {
+                    first := 2 + A_Index * 4
+                    dialogs.Push({title: Trim(parts[first]), expected: Trim(parts[first + 1]), button: Trim(parts[first + 2]), label: Trim(parts[first + 3]), shown: ""})
+                }
+                hit := ""
                 problem := parts.Length < 4 ? "Linia WEBPAGE wymaga okna, adresu i elementu."
-                    : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000, dialog)
+                    : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000, dialogs, &hit)
                 if (problem = "DIALOG") {
-                    target := LabelLine(lines, Trim(parts[9]), index)
+                    if (dialogs.Length > 1 && hit.shown != "")
+                        report .= "Komunikat Mercalys: " hit.shown "`n"
+                    target := LabelLine(lines, hit.label, index)
                     if (target = 0) {
-                        MacroBox report "Brak linii LABEL|" Trim(parts[9]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" hit.label " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
@@ -899,7 +908,10 @@ PlayMacro(rawClip) {
                     MacroBox report "Linia WEBALERT wymaga okna, tekstu i przycisku.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
-                problem := WebAlert(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 60000)
+                shown := ""
+                problem := WebAlert(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 60000, &shown)
+                if (shown != "")
+                    report .= "Komunikat Mercalys: " shown "`n"
                 if (problem != "") {
                     MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -2081,20 +2093,28 @@ WebWait(title, element, text, timeoutMs) {
     }
 }
 
-; Czeka na wczytaną stronę, której adres zawiera fragment, z widocznym elementem.
-WebPage(title, address, element, timeoutMs, dialog := "") {
+; Czeka na wczytaną stronę, której adres zawiera fragment, z widocznym elementem (albo jednym z kilku po przecinku).
+; Komunikat z listy dialogs zamyka i zwraca "DIALOG" (hit = który). Komunikaty idą pierwsze: strona pod komunikatem też jest wczytana.
+WebPage(title, address, element, timeoutMs, dialogs, &hit := "") {
     deadline := A_TickCount + timeoutMs
     Loop {
-        for hwnd in WinGetList(title) {
-            for item in FindElements(HtmlDocuments(hwnd), element) {
-                if (PageLoaded(item.doc) && InStr(WebProp(item.doc, "URL"), address) && IsShown(item.element))
-                    return ""
+        for dialog in dialogs {
+            shown := ""
+            problem := CloseAlert(dialog.title, dialog.expected, dialog.button, &shown)
+            if (problem != "") {
+                dialog.shown := shown
+                hit := dialog
+                return problem
             }
         }
-        if IsObject(dialog) {
-            problem := CloseAlert(dialog.title, dialog.expected, dialog.button)
-            if (problem != "")
-                return problem
+        for hwnd in WinGetList(title) {
+            docs := HtmlDocuments(hwnd)
+            for name in StrSplit(element, ",", " ") {
+                for item in FindElements(docs, name) {
+                    if (PageLoaded(item.doc) && InStr(WebProp(item.doc, "URL"), address) && IsShown(item.element))
+                        return ""
+                }
+            }
         }
         if (A_TickCount >= deadline)
             return "Nie pojawiła się strona `"" address "`" z elementem `"" element "`"."
@@ -2104,7 +2124,7 @@ WebPage(title, address, element, timeoutMs, dialog := "") {
 
 ; Komunikat zamiast oczekiwanej strony: okno z przyciskiem i tekstem (w treści albo w adresie, np. BoiteAlerte.aspx?Msg=brak+PZ…).
 ; Zamyka je i zwraca "DIALOG"; bez takiego okna "".
-CloseAlert(title, expected, button) {
+CloseAlert(title, expected, button, &shown := "") {
     for hwnd in WinGetList(title) {
         for item in FindElements(HtmlDocuments(hwnd), button) {
             if !PageLoaded(item.doc)
@@ -2118,6 +2138,7 @@ CloseAlert(title, expected, button) {
                     matched := true
             if !matched
                 continue
+            shown := RegExReplace(Trim(text), "\s+", " ")
             try WinActivate hwnd
             ClickWithoutWaiting(item.doc, item.element)
             return WinWaitClose("ahk_id " hwnd, , 10) ? "DIALOG" : "Okno komunikatu `"" expected "`" się nie zamknęło."
@@ -3102,10 +3123,10 @@ CellText(row, column) {
 ; a każdy krok sprawdzamy po skutku. Nierozpoznana lista zatrzymuje makro z opisem wierszy, zanim cokolwiek się zapisze.
 
 ; Czeka na okno komunikatu z tekstem i je zamyka. "" albo opis problemu.
-WebAlert(title, expected, button, timeoutMs) {
+WebAlert(title, expected, button, timeoutMs, &shown := "") {
     deadline := A_TickCount + timeoutMs
     Loop {
-        problem := CloseAlert(title, expected, button)
+        problem := CloseAlert(title, expected, button, &shown)
         if (problem = "DIALOG")
             return ""
         if (problem != "")
