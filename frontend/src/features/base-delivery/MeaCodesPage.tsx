@@ -8,6 +8,9 @@ import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { useAgentComputers } from '@/features/agent-macros/api'
+import { RemoteMacroButton, RemoteMacroStatus, useRemoteMacro } from '@/features/agent-macros/RemoteMacro'
+import { useCan } from '@/features/auth/api'
 import { buildMeaMacro } from '@/features/data-entry/mercalys-macro'
 import { formatDocumentDate } from '@/features/documents/format'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -16,6 +19,7 @@ import type { MeaOverview, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { useMeaChange, useMeaOverview } from './api'
+import { meaResult } from './mea-result'
 import { basePath } from './paths'
 
 /**
@@ -47,6 +51,9 @@ const dateTime = (iso: string) =>
 function StoreMeaCodes({ store }: { store: StoreSummary }) {
   const overview = useMeaOverview(store.id)
   const change = useMeaChange(store.id)
+  const canRunRemotely = useCan('DATA_ENTRY', 'EDIT')
+  const { data: computers = [] } = useAgentComputers(store.id, canRunRemotely)
+  const remote = useRemoteMacro(store.id)
   // Zaznaczone kody; nowe kody z kolejnego dokumentu są zaznaczone od razu (lista to zwykle wszystko do wpisania).
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set())
   const pending = useMemo(() => overview.data?.pending ?? [], [overview.data])
@@ -82,6 +89,27 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
     })
   }
 
+  /** Wpisuje kody na komputerze sklepu; zaznaczone zostają te, których pliki Mercalys zintegrował. */
+  const runRemotely = async (agentId?: string) => {
+    const codes = chosen
+    const result = await remote.run({ macro: 'mea-codes', codes, agentId })
+    if (!result || result.status === 'CANCELLED' || result.status === 'NO_COMPUTER') return
+    const { entered, missing } = meaResult(codes, result)
+    setUnchecked((current) => new Set([...current, ...codes.filter((code) => !entered.includes(code))]))
+    if (result.status === 'DONE') {
+      toast.success(`Wpisano kody MEA: ${entered.length} z ${codes.length}`, {
+        description:
+          missing.length > 0
+            ? `Bez plików do przetworzenia w Mercalys (odznaczone): ${missing.join(', ')}`
+            : 'Sprawdź wynik i kliknij „Potwierdź wpisanie”.',
+      })
+    } else {
+      toast.error('Makro nie wpisało wszystkich kodów MEA', {
+        description: `Wpisane w całości: ${entered.length} z ${codes.length}, pozostałe są odznaczone.`,
+      })
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -100,7 +128,7 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
         title="Jak wpisać kody MEA"
         steps={[
           'Lista pokazuje kody MEA z wgranych dokumentów z bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
-          'Wpisz kody w Mercalys: „Makro do Mercalys” kopiuje makro, a Alt+E integruje w Liście Cadencier każdy plik z zaznaczonymi kodami. Można też skopiować same kody.',
+          'Wpisz kody w Mercalys: „Wpisz na wolnym komputerze” robi to na komputerze sklepu, a „Makro do Mercalys” kopiuje makro, które Alt+E uruchamia tutaj. Makro integruje w Liście Cadencier każdy plik z zaznaczonymi kodami.',
           'Kliknij „Potwierdź wpisanie”: kody znikają z listy i nie wrócą przy kolejnych dostawach. Pomyłkę cofniesz w historii.',
         ]}
       />
@@ -111,7 +139,16 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
           <span className="rounded bg-amber-200 px-1.5 text-sm font-semibold text-amber-950 tabular-nums dark:bg-amber-900 dark:text-amber-50">
             {pending.length}
           </span>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {canRunRemotely && computers.length > 0 && (
+              <RemoteMacroButton
+                computers={computers}
+                label="Wpisz na wolnym komputerze"
+                busy={remote.busy}
+                disabled={chosen.length === 0 || remote.busy}
+                onRun={(agentId) => void runRemotely(agentId)}
+              />
+            )}
             {chosen.length > 0 && (
               <CopyButton value={chosen.join('\n')} label={`Kopiuj zaznaczone kody (${chosen.length})`} />
             )}
@@ -121,12 +158,22 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
                 Makro do Mercalys
               </Button>
             )}
-            <Button onClick={confirm} loading={change.isPending} disabled={chosen.length === 0}>
+            <Button
+              onClick={confirm}
+              loading={change.isPending}
+              disabled={chosen.length === 0 || remote.busy}
+              title={remote.busy ? 'Poczekaj na koniec makra' : undefined}
+            >
               <CheckIcon />
               Potwierdź wpisanie ({chosen.length})
             </Button>
           </div>
         </header>
+        {remote.job && (
+          <div className="px-3 pt-3">
+            <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />
+          </div>
+        )}
         {overview.isPending ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">Wczytywanie…</p>
         ) : pending.length === 0 ? (

@@ -170,6 +170,47 @@ class AgentMacroIntegrationTests {
     }
 
     @Test
+    void meaCodesFromPendingListGoToComputer() throws Exception {
+        uploadDelivery();
+        String kasa = addAgent("Kasa");
+        poll(kasa, 900, false, true);
+
+        // Kod spoza listy do wpisania (także z poleceniem makra w treści) nie przejdzie.
+        meaCodes("[\"52817\",\"99999\"]").andExpect(status().isBadRequest());
+        meaCodes("[\"52817|x\"]").andExpect(status().isBadRequest());
+        meaCodes("[]").andExpect(status().isBadRequest());
+
+        String job = JsonPath.read(meaCodes("[\"52817\"]").andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind").value("MEA_CODES"))
+                .andExpect(jsonPath("$.itemCount").value(1))
+                .andExpect(jsonPath("$.computer").value("Kasa"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String macro = JsonPath.read(agentPost(kasa, "/macro-jobs/" + job + "/start", "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collectsCodes").value(false))
+                .andExpect(jsonPath("$.timeoutMinutes").value(360))
+                .andReturn().getResponse().getContentAsString(), "$.macro");
+        assertThat(macro).startsWith("# Kody MEA: 1\r\nWINOPEN|Mercalys ahk_exe Mercalys.exe\r\n")
+                .contains("WEBKEY|Mercalys|txtZ1_LibelleCadencier_TxtBox|^a52817{Enter}")
+                .contains("WEBIFROW|Mercalys|txtZ1_LibelleCadencier_TxtBox|dgDetail|ibtC11_Traitement|1|52817|mea-52817|30000")
+                .endsWith("LABEL|mea-52817\r\nWINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
+        agentPost(kasa, "/macro-jobs/" + job + "/finish",
+                "{\"ok\":true,\"message\":\"52817: obsłużone pliki: 2 (0 wierszy)\"}").andExpect(status().isNoContent());
+        mvc.perform(get(base() + "/" + job).cookie(owner))
+                .andExpect(jsonPath("$.status").value("DONE"))
+                .andExpect(jsonPath("$.message").value("52817: obsłużone pliki: 2 (0 wierszy)"));
+
+        // Makro niczego nie potwierdza: kod zostaje na liście do „Potwierdź wpisanie”.
+        mvc.perform(get("/api/stores/" + storeId + "/mea-codes").cookie(owner))
+                .andExpect(jsonPath("$.pending[0].code").value("52817"));
+    }
+
+    private ResultActions meaCodes(String codes) throws Exception {
+        return mvc.perform(post(base() + "/mea-codes").cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"codes\":" + codes + "}"));
+    }
+
+    @Test
     void chosenComputerOnlyAndCancelBeforeStart() throws Exception {
         String deliveryId = uploadDelivery();
         String kasa = addAgent("Kasa");
@@ -247,7 +288,7 @@ class AgentMacroIntegrationTests {
     private List<Object> line(String itm8, String name, String pack, String ean, String price, String region) {
         BigDecimal net = new BigDecimal(pack).multiply(new BigDecimal(price));
         return Arrays.asList(new BigDecimal(storeNumber), "2026-11-02", "09516050082", "42799515", itm8, name, "",
-                pack, "NIE", "2027-03-31", BigDecimal.ZERO, ean, "----------", "538", null, "10023304",
+                pack, "NIE", "2027-03-31", BigDecimal.ZERO, ean, "----------", "538", "52817", "10023304",
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, new BigDecimal(price), new BigDecimal("4.99"),
                 new BigDecimal("23"), BigDecimal.ZERO, net, net, null, region, "01", "01", BigDecimal.ONE, "U",
                 "22030001", "-----", "N", "00538");

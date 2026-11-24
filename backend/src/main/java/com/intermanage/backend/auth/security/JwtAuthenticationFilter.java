@@ -28,7 +28,7 @@ import jakarta.servlet.http.HttpServletResponse;
  * Ważny, ale starszy token jest wymieniany na nowy ({@link JwtService#refreshIfDue}), więc aktywny użytkownik
  * nie zostaje wylogowany w trakcie pracy; razem z nim odnawiają się konta zalogowane w tle ({@link BackgroundAccounts}).
  * Konto otwarte przed godziną blokady po pracy ({@link WorkdayLock}) albo bez żądań dłużej niż blokada po bezczynności
- * ({@link IdleLock}) trafia do tła i wraca dopiero po PIN-ie.
+ * ({@link IdleLock}) trafia do tła i wraca dopiero po PIN-ie, o ile jego właściciel tego nie wyłączył ({@link AutoLogout}).
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -45,14 +45,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final BackgroundAccounts backgroundAccounts;
     private final WorkdayLock workdayLock;
     private final IdleLock idleLock;
+    private final AutoLogout autoLogout;
     private final SecurityContextHolderStrategy contextHolder = SecurityContextHolder.getContextHolderStrategy();
 
     public JwtAuthenticationFilter(JwtService jwtService, BackgroundAccounts backgroundAccounts,
-            WorkdayLock workdayLock, IdleLock idleLock) {
+            WorkdayLock workdayLock, IdleLock idleLock, AutoLogout autoLogout) {
         this.jwtService = jwtService;
         this.backgroundAccounts = backgroundAccounts;
         this.workdayLock = workdayLock;
         this.idleLock = idleLock;
+        this.autoLogout = autoLogout;
     }
 
     @Override
@@ -68,16 +70,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         jwtService.decode(token).ifPresent(jwt -> backgroundAccounts.principalOf(jwt).map(found -> found.forStore(storeId))
                 .ifPresent(principal -> {
             Instant now = Instant.now();
-            if (bearer == null && !logout && (workdayLock.due(jwt, now) || idleLock.due(jwt, now))) {
-                if (workdayLock.protects(principal.getId())) {
+            boolean workdayDue = workdayLock.due(jwt, now);
+            boolean renewed = false;
+            if (bearer == null && !logout && (workdayDue || idleLock.mayBeDue(jwt, now))) {
+                AutoLogout.Rules rules = autoLogout.rules(principal.getId());
+                if ((workdayDue && rules.workday()) || idleLock.due(jwt, rules.idle(), now)) {
                     // Po pracy albo po bezczynności: konto idzie do tła, żądanie zostaje bez logowania (401, strona logowania z PIN-em).
                     backgroundAccounts.moveToBackground(request, response, principal, JwtService.rememberMe(jwt));
                     return;
                 }
-                // Konto bez PIN-u: blokada nic by nie dała, nowy token, żeby nie sprawdzać tego przy każdym żądaniu.
+                // Konto bez blokady po pracy: nowy token, żeby nie sprawdzać ustawień przy każdym żądaniu.
                 // Strumień na żywo tokenu nie wymienia (zrobi to najbliższe zwykłe żądanie).
-                if (!live) {
+                if (workdayDue && !live) {
                     jwtService.writeTokenCookie(response, principal, JwtService.rememberMe(jwt));
+                    renewed = true;
                 }
             }
             SecurityContext context = contextHolder.createEmptyContext();
@@ -86,7 +92,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             contextHolder.setContext(context);
             // Przy wylogowaniu nie odnawiamy, bo nowe ciasteczko przykryłoby to czyszczące.
             if (!logout && !live
-                    && jwtService.refreshIfDue(response, jwt, principal, bearer != null) && bearer == null) {
+                    && (renewed || jwtService.refreshIfDue(response, jwt, principal, bearer != null))
+                    && bearer == null) {
                 backgroundAccounts.refresh(request, response, principal.getId());
             }
         }));

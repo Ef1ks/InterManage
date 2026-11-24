@@ -100,6 +100,16 @@ export type SwitchAccount = {
   pinLength: number | null
 }
 
+/** Własne automatyczne wylogowywanie (Moje konto). */
+export type AutoLogout = {
+  enabled: boolean
+  /** Po ilu minutach bez ruchu. */
+  minutes: number | null
+  /** Także o `workdayLockAt` (GG:MM); `null` = aplikacja nie ma tej godziny. */
+  workdayLock: boolean
+  workdayLockAt: string | null
+}
+
 /** PIN do przełączania na to konto (Moje konto). */
 export type PinSettings = {
   hasPin: boolean
@@ -4061,6 +4071,46 @@ export type MeaLeafletInfo = {
   deliveryForm: string | null
 }
 
+/** Plan cadencier i pliki TOP rejonu sklepu (Import danych). */
+export type CadTopOverview = {
+  /** Sklep ma klucz API portalu (Moduł MEA). */
+  configured: boolean
+  /** Rejon logistyczny z portalu, np. swadzim; pusty = portal nie pokazał jeszcze plików. */
+  region: string | null
+  rows: CadTopRow[]
+  plans: CadPlan[]
+  warnings: string[]
+}
+
+export type CadTopRow = {
+  nrCad: string
+  startsOn: string | null
+  /** Pusty = ostatni numer w planie. */
+  endsOn: string | null
+  status: 'PAST' | 'CURRENT' | 'UPCOMING' | 'NOT_PLANNED'
+  /** Pusty = portal nie ma jeszcze pliku. */
+  file: {
+    fileName: string
+    publishedAt: string
+    downloadedAt: string
+    articleCount: number
+    btopCount: number
+    bCount: number
+    aCount: number
+    newCount: number
+  } | null
+}
+
+export type CadPlan = {
+  year: number
+  fileName: string
+  entryCount: number
+  modifiedAt: string | null
+  uploadedAt: string
+  uploadedBy: string | null
+  fromPortal: boolean
+}
+
 /** Opis gazetki (wspólny dla sklepów): pobrany w tle z portalu (`fromPortal`) albo wgrany ręcznie. */
 export type MeaLeafletSummary = {
   id: string
@@ -5339,7 +5389,7 @@ export type AgentComputer = {
 /** Makro zlecone na wolnym komputerze sklepu. */
 export type AgentMacroJob = {
   id: string
-  kind: 'ITM8_COLLECT' | 'ITM8_APPLY'
+  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES'
   title: string
   status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
   computer: string | null

@@ -46,6 +46,7 @@ import {
 } from '@/features/imports/api'
 import { ImportSourcesDialog } from '@/features/imports/ImportSourcesDialog'
 import { AgentReportFiles, agentNote } from '@/features/imports/AgentReportFiles'
+import { CadTopsCard } from '@/features/imports/CadTopsCard'
 import {
   DAILY_REPORTS,
   MACRO_REPORTS,
@@ -637,6 +638,8 @@ function StoreImports({ store }: { store: StoreSummary }) {
           )}
         </ReportCard>
       </div>
+
+      <CadTopsCard storeId={store.id} canImport={canImport} />
 
       {agentKinds.length > 0 && agentFiles.data && <AgentReportFiles files={agentFiles.data} />}
 

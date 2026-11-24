@@ -66,7 +66,7 @@ internal sealed class MacroForm : Form
         ClientSize = new Size(560, 340);
         head.Text = "MAKRO ROZPOCZNIE SIĘ ZA";
         text.Text = offer.Title + "\nZlecone przez: " + offer.RequestedBy
-            + "\nRuch myszy albo klawiatury też anuluje. Makro przejdzie wtedy na inny komputer.";
+            + "\nMakro przejmie mysz i klawiaturę. Po anulowaniu przejdzie na inny komputer.";
         Controls.Add(text);
         Controls.Add(count);
         Controls.Add(head);

@@ -117,17 +117,41 @@ internal sealed class AgentSettings
 
     public static bool Autostart
     {
+        get => AutostartPath != null;
+        set => AutostartPath = value ? System.Windows.Forms.Application.ExecutablePath : null;
+    }
+
+    /// <summary>Program uruchamiany z Windows (null = autostart wyłączony).</summary>
+    public static string? AutostartPath
+    {
         get
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, false);
-            return key?.GetValue(RunValue) is string;
+            return (key?.GetValue(RunValue) as string)?.Trim().Trim('"');
         }
         set
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey, true);
             if (key == null) return;
-            if (value) key.SetValue(RunValue, "\"" + System.Windows.Forms.Application.ExecutablePath + "\"");
+            if (value != null) key.SetValue(RunValue, "\"" + value + "\"");
             else key.DeleteValue(RunValue, false);
+        }
+    }
+
+    /// <summary>Włączony autostart wskazuje wersję, którą właśnie uruchomiono (nowy folder wersji albo powrót).</summary>
+    public static void MoveAutostartHere()
+    {
+        try
+        {
+            var own = System.Windows.Forms.Application.ExecutablePath;
+            var current = AutostartPath;
+            if (current == null || string.Equals(current, own, StringComparison.OrdinalIgnoreCase)) return;
+            AutostartPath = own;
+            Log.Info("Autostart: " + own + " zamiast " + current);
+        }
+        catch (Exception error)
+        {
+            Log.Warn("Autostart: " + error.Message);
         }
     }
 

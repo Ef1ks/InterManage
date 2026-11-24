@@ -24,7 +24,7 @@ function lockPeriod(now: Date) {
 }
 
 /**
- * Konto otwarte przed 17:00 backend odkłada po 17:00 do tła (wraca po PIN-ie). Bez kliknięć nie idzie żadne
+ * Konto otwarte przed 17:00 backend odkłada po 17:00 do tła (wraca po PIN-ie), o ile nie wyłączono tego w Moim koncie. Bez kliknięć nie idzie żadne
  * żądanie, więc o 17:00 sami pytamy o konto: odpowiedź 401 przenosi na logowanie z listą kont w tle.
  */
 export function useWorkdayLock() {

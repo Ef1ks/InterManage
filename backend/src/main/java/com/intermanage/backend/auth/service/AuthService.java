@@ -13,7 +13,7 @@ import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.mapper.UserMapper;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
-import com.intermanage.backend.auth.security.IdleLock;
+import com.intermanage.backend.auth.security.AutoLogout;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.store.dto.StoreSummary;
 import com.intermanage.backend.store.service.StoreService;
@@ -33,11 +33,11 @@ public class AuthService {
     private final StoreSidebarService sidebarService;
     private final UserBackgroundService backgroundService;
     private final UserAvatarService avatarService;
-    private final IdleLock idleLock;
+    private final AutoLogout autoLogout;
 
     public AuthService(AppUserRepository users, PasswordEncoder passwordEncoder, ActivationService activationService,
             UserMapper userMapper, StoreService storeService, StoreSidebarService sidebarService,
-            UserBackgroundService backgroundService, UserAvatarService avatarService, IdleLock idleLock) {
+            UserBackgroundService backgroundService, UserAvatarService avatarService, AutoLogout autoLogout) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.activationService = activationService;
@@ -46,7 +46,7 @@ public class AuthService {
         this.sidebarService = sidebarService;
         this.backgroundService = backgroundService;
         this.avatarService = avatarService;
-        this.idleLock = idleLock;
+        this.autoLogout = autoLogout;
     }
 
     /** Zużywa link aktywacyjny i zwraca principal do zalogowania (z obowiązkiem ustawienia hasła). */
@@ -82,7 +82,7 @@ public class AuthService {
         List<StoreSummary> stores = storeService.accessibleStores(user);
         return userMapper.toMeResponse(user, stores,
                 sidebarService.orders(stores.stream().map(StoreSummary::id).toList()), backgroundService.current(userId),
-                avatarService.current(userId), idleLock.minutesFor(userId));
+                avatarService.current(userId), autoLogout.idleMinutes(userId));
     }
 
     /** Zmienia własne hasło i zwraca nowy principal, dla którego trzeba wystawić nowy token. */

@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.LatinText;
 import com.intermanage.backend.common.component.Margin;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.common.exception.ApiException;
@@ -540,8 +541,9 @@ public class DataEntryService {
         Supplier chosen = request.supplierId() == null ? null : suppliers.findById(request.supplierId())
                 .filter(candidate -> candidate.getStore().getId().equals(storeId))
                 .orElseThrow(() -> ApiException.badRequest("Nie znaleziono dostawcy w tym sklepie"));
-        String number = invoice != null && chosen == null ? invoice.invoiceNumber()
-                : blankToNull(request.invoiceNumber());
+        // Szkic w przeglądarce i plik z dysku mogą mieć jeszcze numer z cyrylicą.
+        String number = LatinText.of(invoice != null && chosen == null ? invoice.invoiceNumber()
+                : blankToNull(request.invoiceNumber()));
         String nip = chosen != null ? blankToNull(digits(chosen.getNip()))
                 : invoice != null ? invoice.sellerNip() : blankToNull(digits(request.sellerNip()));
         Supplier supplier = chosen != null ? chosen : nip == null ? null : suppliers.findByStore(storeId).stream()
@@ -564,7 +566,7 @@ public class DataEntryService {
         String supplierLabel = ProductFile.supplierPart(supplierName);
         String fileName = number != null
                 ? String.join("_", store.getNumber(), supplierPart != null ? supplierPart : "", supplierLabel,
-                        InvoiceXml.latin(number.strip()))
+                        number.strip())
                 : store.getNumber() + (supplierLabel.isEmpty() ? "" : "_" + supplierLabel) + "_wprowadzanie_"
                         + now.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         fileName = fileName.replaceAll("[\\\\/:*?\"<>|()\\p{Cntrl}\\s]+", "_").replaceAll("_+", "_") + ".xml";

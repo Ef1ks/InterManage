@@ -5,5 +5,7 @@ public enum AgentMacroKind {
     /** Dostawa z bazy: kody ITM8 z błędem „ITM nie istnieje” z Obsługi BL bazy (wynik = lista kodów). */
     ITM8_COLLECT,
     /** Dostawa z bazy: nowe kody ITM8 na kartach artykułów. */
-    ITM8_APPLY
+    ITM8_APPLY,
+    /** Kody MEA: integracja plików cadencier z tymi kodami. */
+    MEA_CODES
 }

@@ -18,6 +18,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.intermanage.backend.common.component.LatinText;
+
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -234,7 +236,7 @@ public class KsefInvoiceReader {
             throw new InvalidInvoiceException("To nie jest faktura KSeF (" + root.name() + ")", null);
         }
         return root.child("Fa").children("DaneFaKorygowanej").stream()
-                .map(corrected -> new CorrectedInvoice(corrected.text("NrFaKorygowanej"),
+                .map(corrected -> new CorrectedInvoice(LatinText.of(corrected.text("NrFaKorygowanej")),
                         corrected.date("DataWystFaKorygowanej"), corrected.text("NrKSeFFaKorygowanej")))
                 .filter(corrected -> corrected.number() != null || corrected.ksefNumber() != null)
                 .toList();

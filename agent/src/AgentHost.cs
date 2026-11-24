@@ -115,6 +115,52 @@ internal sealed class AgentHost : IDisposable
 
     public void ScanNow() => watcher?.ScanNow();
 
+    // --- Zamykanie dla nowej wersji: trwające zapisy i wysyłki kończą się, nowe już nie zaczynają ---
+
+    private readonly object workGate = new();
+    private int working;
+    private bool draining;
+
+    /// <summary>Zapis albo wysyłka, których nowa wersja nie może przerwać; null = agent się zamyka, nie zaczynać.</summary>
+    public IDisposable? BeginWork()
+    {
+        lock (workGate)
+        {
+            if (draining) return null;
+            working++;
+            return new Work(this);
+        }
+    }
+
+    /// <summary>Koniec nowych zapisów; czeka na trwające, najwyżej <paramref name="limit"/>.</summary>
+    public async Task DrainAsync(TimeSpan limit)
+    {
+        lock (workGate) draining = true;
+        var until = DateTime.UtcNow + limit;
+        while (DateTime.UtcNow < until)
+        {
+            lock (workGate)
+            {
+                if (working == 0) return;
+            }
+            await Task.Delay(200).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class Work : IDisposable
+    {
+        private AgentHost? host;
+
+        public Work(AgentHost host) => this.host = host;
+
+        public void Dispose()
+        {
+            var ended = Interlocked.Exchange(ref host, null);
+            if (ended == null) return;
+            lock (ended.workGate) ended.working--;
+        }
+    }
+
     private async Task HelloLoopAsync(CancellationToken cancel)
     {
         var delay = TimeSpan.FromSeconds(2);

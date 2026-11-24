@@ -25,7 +25,7 @@ internal sealed class DataUpdate
     private const string ImportPrefix = "IMPORT_";
     private static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(10);
     /// <summary>Tyle bez żadnej zmiany (zapis pliku, wgrywanie) i okno kończy z listą tego, czego nie doczekało.</summary>
-    private static readonly TimeSpan GiveUpAfter = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan GiveUpAfter = TimeSpan.FromMinutes(90);
     private static readonly TimeSpan WaitForConfig = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan WaitForPlayer = TimeSpan.FromMinutes(3);
     /// <summary>Tyle czekamy na część folderów, która nie odpowiada; potem aktualizacja idzie bez nich.</summary>
@@ -151,6 +151,7 @@ internal sealed class DataUpdate
                 return true;
             }
             form.Status("Uruchamiam makro w Mercalys…");
+            MercalysPath.Ensure();
             var text = MacroRunner.WithPassword(macro.Macro, macro.OpenLine, settings.MercalysPassword);
             OnUi(() =>
             {
@@ -183,7 +184,7 @@ internal sealed class DataUpdate
         }
     }
 
-    /// <summary>Koniec aktualizacji na serwerze (bez tego blokada wygasa sama po godzinie).</summary>
+    /// <summary>Koniec aktualizacji na serwerze (bez tego blokada wygasa sama po 4 godzinach).</summary>
     private static async Task FinishedAsync(ApiClient api)
     {
         try
@@ -328,8 +329,8 @@ internal sealed class DataUpdate
             {
                 var missing = files.Where(f => states[f.FileName.ToLowerInvariant()] != "IMPORTED")
                     .Select(f => f.Title + " (" + f.FileName + ")").ToList();
-                Log.Warn("Aktualizacja danych: bez zmian od godziny, brak: " + string.Join(", ", missing));
-                form.Finish(false, "Od godziny nic się nie zmieniło. Nie wgrano:\n" + string.Join("\n", missing)
+                Log.Warn("Aktualizacja danych: bez zmian od 90 minut, brak: " + string.Join(", ", missing));
+                form.Finish(false, "Od 90 minut nic się nie zmieniło. Nie wgrano:\n" + string.Join("\n", missing)
                     + "\n\nSprawdź Mercalys (część sprzedaży bez sprzedaży nie ma pliku).");
                 return;
             }

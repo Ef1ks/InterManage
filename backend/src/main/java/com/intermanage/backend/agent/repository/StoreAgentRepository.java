@@ -77,7 +77,7 @@ public interface StoreAgentRepository extends JpaRepository<StoreAgent, UUID> {
 
     /**
      * Początek aktualizacji danych z Mercalys: tylko gdy żaden inny agent sklepu jej nie prowadzi (blokada wygasa po
-     * godzinie, gdy agent nie zgłosił końca). 0 = aktualizuje inny komputer.
+     * 4 godzinach, gdy agent nie zgłosił końca; sam Excel dokumentów ma godzinę). 0 = aktualizuje inny komputer.
      */
     @Modifying
     @Query(nativeQuery = true, value = """
@@ -85,7 +85,7 @@ public interface StoreAgentRepository extends JpaRepository<StoreAgent, UUID> {
             set update_agent_id = :agentId, update_started_at = now()
             where store_id = :storeId
               and (update_agent_id is null or update_agent_id = :agentId
-                   or update_started_at < now() - interval '1 hour')""")
+                   or update_started_at < now() - interval '4 hours')""")
     int startUpdate(UUID storeId, UUID agentId);
 
     @Modifying

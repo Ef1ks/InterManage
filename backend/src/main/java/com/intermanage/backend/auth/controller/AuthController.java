@@ -19,10 +19,10 @@ import com.intermanage.backend.auth.dto.MobileLoginRequest;
 import com.intermanage.backend.auth.dto.MobileLoginResponse;
 import com.intermanage.backend.auth.dto.SetUpPasswordRequest;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.AutoLogout;
 import com.intermanage.backend.auth.security.BackgroundAccounts;
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.auth.security.PasswordLogin;
-import com.intermanage.backend.auth.security.WorkdayLock;
 import com.intermanage.backend.auth.service.AccountSwitchService;
 import com.intermanage.backend.auth.service.AuthService;
 
@@ -43,16 +43,16 @@ public class AuthController {
     private final JwtService jwtService;
     private final AccountSwitchService accountSwitch;
     private final BackgroundAccounts backgroundAccounts;
-    private final WorkdayLock workdayLock;
+    private final AutoLogout autoLogout;
 
     public AuthController(AuthService authService, PasswordLogin passwordLogin, JwtService jwtService,
-            AccountSwitchService accountSwitch, BackgroundAccounts backgroundAccounts, WorkdayLock workdayLock) {
+            AccountSwitchService accountSwitch, BackgroundAccounts backgroundAccounts, AutoLogout autoLogout) {
         this.authService = authService;
         this.passwordLogin = passwordLogin;
         this.jwtService = jwtService;
         this.accountSwitch = accountSwitch;
         this.backgroundAccounts = backgroundAccounts;
-        this.workdayLock = workdayLock;
+        this.autoLogout = autoLogout;
     }
 
     /** Ustawia ciasteczko XSRF-TOKEN; frontend woła to przed pierwszym żądaniem modyfikującym. */
@@ -107,7 +107,7 @@ public class AuthController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void lock(@AuthenticationPrincipal AppUserPrincipal principal, HttpServletRequest httpRequest,
             HttpServletResponse response) {
-        if (JwtService.bearerToken(httpRequest) != null || !workdayLock.protects(principal.getId())) {
+        if (JwtService.bearerToken(httpRequest) != null || !autoLogout.rules(principal.getId()).pinProtected()) {
             return;
         }
         backgroundAccounts.moveToBackground(httpRequest, response, principal, jwtService.rememberMe(httpRequest));

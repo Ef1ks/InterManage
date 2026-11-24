@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -14,6 +15,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox server = new() { Dock = DockStyle.Fill };
     private readonly TextBox key = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
     private readonly TextBox mercalysPassword = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = true };
+    private readonly TextBox mercalysPath = new() { Dock = DockStyle.Fill };
+    private readonly Button browse = new() { Text = "Wybierz…", AutoSize = true, Dock = DockStyle.Right };
     private readonly CheckBox updateOnStart = new()
     {
         Text = "Przy starcie komputera aktualizuj dane z Mercalys (pliki raportów nie z dzisiaj)",
@@ -33,14 +36,17 @@ internal sealed class SettingsForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 340);
+        ClientSize = new Size(560, 420);
         Font = new Font("Segoe UI", 9f);
 
         server.Text = settings.ServerUrl;
         key.Text = "";
+        // Nieznane położenie agent od razu szuka (działający Mercalys, domyślne miejsce na N:, skrót).
+        mercalysPath.Text = MercalysPath.Ensure() ?? MercalysPath.Saved ?? "";
+        browse.Click += (_, _) => Browse();
         updateOnStart.Checked = settings.UpdateOnStart;
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 8 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 10 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label { Text = "Adres serwera", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
@@ -70,16 +76,42 @@ internal sealed class SettingsForm : Form
             Height = 36,
             ForeColor = SystemColors.GrayText,
         }, 1, 4);
-        layout.Controls.Add(updateOnStart, 1, 5);
-        layout.Controls.Add(result, 1, 6);
+        layout.Controls.Add(new Label { Text = "Program Mercalys", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
+        var program = new Panel { Dock = DockStyle.Fill, Height = 28 };
+        program.Controls.Add(mercalysPath);
+        program.Controls.Add(browse);
+        layout.Controls.Add(program, 1, 5);
+        layout.Controls.Add(new Label
+        {
+            Text = "Skrót, którym uruchamiasz Mercalys, albo Mercalys.exe: makro włączy nim wyłączony program.",
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            Height = 36,
+            ForeColor = SystemColors.GrayText,
+        }, 1, 6);
+        layout.Controls.Add(updateOnStart, 1, 7);
+        layout.Controls.Add(result, 1, 8);
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(save);
-        layout.Controls.Add(buttons, 1, 7);
+        layout.Controls.Add(buttons, 1, 9);
         Controls.Add(layout);
         AcceptButton = save;
         CancelButton = cancel;
         save.Click += async (_, _) => await SaveAsync();
+    }
+
+    private void Browse()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Wskaż skrót Mercalys albo Mercalys.exe",
+            Filter = "Program albo skrót (*.lnk;*.exe)|*.lnk;*.exe",
+            // Sam skrót, a nie program, na który wskazuje: skrót ma jego parametry i folder roboczy.
+            DereferenceLinks = false,
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+        };
+        if (dialog.ShowDialog(this) == DialogResult.OK) mercalysPath.Text = dialog.FileName;
     }
 
     private async System.Threading.Tasks.Task SaveAsync()
@@ -96,6 +128,15 @@ internal sealed class SettingsForm : Form
             ShowResult("Hasło Mercalys: najwyżej 20 znaków i bez znaku |.", true);
             return;
         }
+        var program = mercalysPath.Text.Trim().Trim('"');
+        var changed = program.Length > 0 && program != MercalysPath.Saved;
+        if (changed && !File.Exists(program))
+        {
+            ShowResult("Nie ma takiego pliku: " + program, true);
+            return;
+        }
+        // Położenie Mercalys nie zależy od serwera, więc zostaje zapisane także bez połączenia.
+        if (changed) MercalysPath.Save(program);
         var newKey = key.Text.Trim();
         var testKey = newKey.Length > 0 ? newKey : settings.Key;
         if (string.IsNullOrEmpty(testKey))

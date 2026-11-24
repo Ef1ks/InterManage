@@ -156,13 +156,14 @@ class KsefIntegrationTests {
                 .andExpect(jsonPath("$.internalIds[0].internalId").value(ownId));
 
         // Faktura bez IDWew, ze swoim IDWew, z cudzym IDWew i korekta od dostawcy mediów.
+        // Numer korekty ma w KSeF cyrylickie „К” (U+041A), a w aplikacji łacińskie, jak w programie sklepu.
         OffsetDateTime stored1 = OffsetDateTime.of(2026, 10, 20, 8, 0, 0, 0, ZoneOffset.UTC);
         when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
                 false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
                         invoice("FV/1/2026", "1111111111", "MLECZARNIA", stored1, "Vat", null),
                         invoice("FV/2/2026", "1111111111", "MLECZARNIA", stored1.plusMinutes(1), "Vat", ownId),
                         invoice("FV/3/2026", "1111111111", "MLECZARNIA", stored1.plusMinutes(2), "Vat", otherId),
-                        invoice("KOR/4/2026", MEDIA_NIP, "ENERGIA SA", stored1.plusMinutes(3), "Kor", null))));
+                        invoice("КOR/4/2026", MEDIA_NIP, "ENERGIA SA", stored1.plusMinutes(3), "Kor", null))));
         syncAndWait(owner, storeId)
                 .andExpect(jsonPath("$.syncOk").value(true))
                 .andExpect(jsonPath("$.syncMessage").value("Pobrano 4 faktury"));

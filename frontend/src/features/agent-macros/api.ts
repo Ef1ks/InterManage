@@ -27,6 +27,7 @@ export function useAgentComputers(storeId: string, enabled: boolean) {
 export type MacroRequest =
   | { macro: 'itm8-collect'; deliveryId: string; agentId?: string }
   | { macro: 'itm8-apply'; deliveryId: string; codes: string[]; agentId?: string }
+  | { macro: 'mea-codes'; codes: string[]; agentId?: string }
 
 export const isActive = (job: AgentMacroJob) => job.status === 'OFFERED' || job.status === 'RUNNING'
 

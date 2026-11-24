@@ -8,6 +8,7 @@ import { mercalysOpenLine } from '@/lib/mercalys-login'
 import { importProgress, uploadReport } from './report-upload'
 import type {
   AgentReportFile,
+  CadTopOverview,
   DocumentImport,
   EanChange,
   ImportGuide,
@@ -298,4 +299,37 @@ export async function copyReportMacro(storeId: string, kinds: readonly ImportRep
     )
   }
   return result
+}
+
+const cadTopsKey = (storeId: string) => ['stores', storeId, 'imports', 'cadencier-tops'] as const
+const cadTopsPath = (storeId: string) => `/stores/${storeId}/imports/cadencier-tops`
+
+/** Plan cadencier i pliki TOP rejonu sklepu. */
+export function useCadTops(storeId: string) {
+  return useQuery({
+    queryKey: cadTopsKey(storeId),
+    queryFn: () => api<CadTopOverview>(cadTopsPath(storeId)),
+  })
+}
+
+/** Sprawdzenie portalu od razu (w tle robi to zadanie co godzinę). */
+export function useSyncCadTops(storeId: string) {
+  return useMutation({
+    mutationFn: () =>
+      api<{ downloadedTops: number; downloadedPlans: number; overview: CadTopOverview }>(
+        `${cadTopsPath(storeId)}/sync`,
+        { method: 'POST' },
+      ),
+  })
+}
+
+/** Plan wgrany ręcznie, gdy portal zmienił nazwę pliku; wspólny dla wszystkich sklepów. */
+export function useUploadCadPlan(storeId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return api<CadTopOverview>(`${cadTopsPath(storeId)}/plan`, { method: 'POST', formData })
+    },
+  })
 }

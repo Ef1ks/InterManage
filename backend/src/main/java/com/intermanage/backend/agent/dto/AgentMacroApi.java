@@ -49,6 +49,11 @@ public final class AgentMacroApi {
             UUID agentId) {
     }
 
+    /** Kody MEA z listy „Do wpisania” sklepu. */
+    public record MeaCodesRequest(@NotNull @Size(min = 1, max = 200, message = "Zaznacz od 1 do 200 kodów MEA")
+    List<@NotNull String> codes, UUID agentId) {
+    }
+
     public record Job(UUID id, String kind, String title, String status, String computer, String requestedBy,
             Instant createdAt, Instant offeredAt, Instant startedAt, Instant finishedAt, int countdownSeconds,
             List<String> declined, String message, List<String> codes, int itemCount) {

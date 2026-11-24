@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { meQueryKey, useMe } from '@/features/auth/api'
 import { api } from '@/lib/api'
+import type { Me } from '@/lib/types'
 
 /** Ostatni ruch użytkownika, wspólny dla wszystkich kart aplikacji w tej przeglądarce. */
 const STORAGE_KEY = 'intermanage.lastActivity'
@@ -31,6 +32,8 @@ function writeLastActivity(at: number) {
 /**
  * Blokada po bezczynności: po `idleLockMinutes` bez ruchu myszy, klawiatury i dotyku (w żadnej karcie aplikacji)
  * konto idzie do tła (`POST /api/auth/lock`) i strona przechodzi na logowanie z listą kont, gdzie wraca się PIN-em.
+ * Czas ustawia każdy na swoim koncie (Moje konto, `null` = bez wylogowywania), a karta przed wylogowaniem sprawdza, czy
+ * w międzyczasie (w innej karcie albo na innym komputerze) nie zmieniono go ani nie przełączono konta.
  * Odświeżanie danych w tle nie liczy się jako ruch. Po uśpieniu komputera timer sprawdza czas od razu po powrocie
  * (zegar, nie liczba ticków), a backend i tak odkłada konto, z którego długo nic nie przyszło.
  */
@@ -38,6 +41,7 @@ export function useIdleLock() {
   const queryClient = useQueryClient()
   const { data: me } = useMe()
   const minutes = me?.idleLockMinutes ?? null
+  const userId = me?.id
 
   useEffect(() => {
     if (!minutes) return
@@ -55,18 +59,30 @@ export function useIdleLock() {
       }
     }
 
+    const lock = async () => {
+      try {
+        const current = await api<Me>('/auth/me')
+        if (current.idleLockMinutes !== minutes) {
+          if (current.id !== userId) queryClient.clear()
+          queryClient.setQueryData(meQueryKey, current)
+          locking = false
+          return
+        }
+        await api('/auth/lock', { method: 'POST' })
+      } catch {
+        // Sesja już wygasła albo nie ma połączenia: ekran i tak się blokuje.
+      }
+      // Jak przy 401: dane konta znikają z pamięci, RequireAuth przenosi na logowanie z kontami w tle.
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] })
+      queryClient.setQueryData(meQueryKey, null)
+    }
+
     const check = () => {
       if (locking) return
       const last = Math.max(lastActivity, readLastActivity())
       if (Date.now() - last < limitMs) return
       locking = true
-      void api('/auth/lock', { method: 'POST' })
-        .catch(() => undefined)
-        .finally(() => {
-          // Jak przy 401: dane konta znikają z pamięci, RequireAuth przenosi na logowanie z kontami w tle.
-          queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meQueryKey[0] })
-          queryClient.setQueryData(meQueryKey, null)
-        })
+      void lock()
     }
 
     for (const event of EVENTS) window.addEventListener(event, onActivity, { passive: true, capture: true })
@@ -80,5 +96,5 @@ export function useIdleLock() {
       document.removeEventListener('visibilitychange', onVisible)
       window.clearInterval(timer)
     }
-  }, [minutes, queryClient])
+  }, [minutes, userId, queryClient])
 }

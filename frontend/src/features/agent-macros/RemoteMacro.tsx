@@ -141,7 +141,7 @@ export function RemoteMacroStatus({ job, onCancel }: { job: AgentMacroJob; onCan
         {isActive(job) && job.declined.length > 0 && (
           <p>Wcześniej anulowane albo bez odpowiedzi: {job.declined.join(', ')}</p>
         )}
-        {failed && job.message && (
+        {(failed || (done && job.kind === 'MEA_CODES')) && job.message && (
           <p className="max-h-32 overflow-auto break-words whitespace-pre-line">{job.message}</p>
         )}
       </div>

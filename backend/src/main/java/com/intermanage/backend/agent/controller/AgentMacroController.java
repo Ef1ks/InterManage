@@ -27,6 +27,7 @@ import jakarta.validation.Valid;
  * GET  /api/stores/{storeId}/agent-macros/computers         komputery z agentem: czy mogą wykonać makro
  * POST /api/stores/{storeId}/agent-macros/itm8-collect      {deliveryId, agentId?} zbierz brakujące ITM8 bonu
  * POST /api/stores/{storeId}/agent-macros/itm8-apply        {deliveryId, codes, agentId?} uzupełnij ITM8
+ * POST /api/stores/{storeId}/agent-macros/mea-codes         {codes, agentId?} wpisz kody MEA (z listy do wpisania)
  * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
  * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
  * </pre>
@@ -66,6 +67,14 @@ public class AgentMacroController {
             @Valid @RequestBody AgentMacroApi.Itm8ApplyRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return macros.itm8Apply(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/mea-codes")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job meaCodes(@PathVariable UUID storeId,
+            @Valid @RequestBody AgentMacroApi.MeaCodesRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return macros.meaCodes(storeId, request, principal.getId());
     }
 
     @GetMapping("/{id}")

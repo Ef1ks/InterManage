@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Media;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,7 +14,8 @@ namespace Intermanage.Agent;
 /// <summary>
 /// Makra zlecone z przeglądarki na wolnym komputerze sklepu (od 1.7.0). Agent co kilka sekund zgłasza stan komputera
 /// (bezczynność, blokada ekranu, odtwarzacz, trwające makro), a serwer proponuje makro najdłużej nieużywanemu. Wtedy
-/// okno odlicza; „Anuluj” albo ruch myszy czy klawiatury oddaje zlecenie kolejnemu komputerowi.
+/// okno odlicza; „Anuluj” oddaje zlecenie kolejnemu komputerowi. Ruch myszy nie anuluje: drgająca mysz albo sięganie
+/// po przycisk zamykały okno od razu (07 w 10023, 24.11.2026), a komputer w użyciu dostaje dłuższe odliczanie.
 ///
 /// Makro składa serwer, wykonuje je odtwarzacz (schowek i lewy Alt+E, jak przy aktualizacji danych). Wynik i zebrane
 /// kody odtwarzacz zapisuje w pliku, na który wskazuje pierwsza linia makra (<c>#RESULT|id</c>, od 0.64; starszy
@@ -30,6 +32,9 @@ internal sealed class RemoteMacros : IDisposable
     /// <summary>Tyle bez procesu odtwarzacza w trakcie makra = ktoś go zamknął.</summary>
     private static readonly TimeSpan PlayerGone = TimeSpan.FromSeconds(20);
     private static readonly Version NeededPlayer = new(0, 64);
+    /// <summary>Odliczanie na komputerze, na którym ktoś ostatnio pracował (serwer czeka na start 30 s).</summary>
+    private const int BusyCountdownSeconds = 15;
+    private const int InUseSeconds = 120;
 
     /// <summary>Folder wyników; ten sam składa odtwarzacz (player.ahk, WriteRemote).</summary>
     private static string ResultFolder => Path.Combine(AgentSettings.Folder, "makra");
@@ -142,6 +147,7 @@ internal sealed class RemoteMacros : IDisposable
             {
                 var created = new MacroForm(offer);
                 created.Show();
+                SystemSounds.Exclamation.Play();
                 return created;
             });
             if (!await CountdownAsync(form, offer.CountdownSeconds, cancel).ConfigureAwait(false))
@@ -188,10 +194,10 @@ internal sealed class RemoteMacros : IDisposable
         }
     }
 
-    /// <summary>Odliczanie; false = anulowane („Anuluj”, ruch myszy albo klawiatury, zablokowany ekran).</summary>
+    /// <summary>Odliczanie; false = anulowane („Anuluj” albo zablokowany ekran).</summary>
     private async Task<bool> CountdownAsync(MacroForm form, int seconds, CancellationToken cancel)
     {
-        var input = MacroRunner.LastInput();
+        if (MacroRunner.IdleSeconds() < InUseSeconds) seconds = Math.Max(seconds, BusyCountdownSeconds);
         var end = DateTime.UtcNow.AddSeconds(Math.Max(1, Math.Min(seconds, 20)));
         while (true)
         {
@@ -199,7 +205,7 @@ internal sealed class RemoteMacros : IDisposable
             if (left <= TimeSpan.Zero) return true;
             form.Countdown((int)Math.Ceiling(left.TotalSeconds));
             await Task.Delay(100, cancel).ConfigureAwait(false);
-            if (form.Cancelled || MacroRunner.LastInput() != input || Locked) return false;
+            if (form.Cancelled || Locked) return false;
         }
     }
 
@@ -209,9 +215,10 @@ internal sealed class RemoteMacros : IDisposable
         var file = Path.Combine(ResultFolder, key + ".txt");
         Directory.CreateDirectory(ResultFolder);
         CleanUp();
+        MercalysPath.Ensure();
         // Treść z hasłem Mercalys tylko przez schowek, nigdy w pliku.
-        var text = "#RESULT|" + key + "\r\n"
-            + MacroRunner.WithPassword(start.Macro, start.OpenLine, settings().MercalysPassword);
+        var password = settings().MercalysPassword;
+        var text = "#RESULT|" + key + "\r\n" + MacroRunner.WithPassword(start.Macro, start.OpenLine, password);
         OnUi(() =>
         {
             Clipboard.SetDataObject(text, true, 10, 100);
@@ -247,7 +254,9 @@ internal sealed class RemoteMacros : IDisposable
             if (read != null && read.State != "RUNNING")
             {
                 TryDelete(file);
-                return new Result(read.State == "OK", read.Text, read.Codes);
+                // Błąd cytuje linię makra, a w pierwszej jest hasło Mercalys: nie wysyłamy go na serwer.
+                var message = string.IsNullOrEmpty(password) ? read.Text : read.Text.Replace("|" + password, "|***");
+                return new Result(read.State == "OK", message, read.Codes);
             }
             if (DateTime.UtcNow - playerCheck > TimeSpan.FromSeconds(5))
             {

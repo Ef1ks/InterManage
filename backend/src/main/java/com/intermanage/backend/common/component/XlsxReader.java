@@ -4,9 +4,12 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.DoubleConsumer;
@@ -56,13 +59,65 @@ public class XlsxReader {
             InvalidWorkbookException {
         try (ZipFile zip = new ZipFile(file.toFile())) {
             Map<String, String> relationships = readRelationships(zip);
-            String sheetPath = firstSheetPath(zip, relationships);
+            String sheetPath = sheetPaths(zip, relationships).values().iterator().next();
             List<String> sharedStrings = readSharedStrings(zip, relationships);
             readSheet(zip, sheetPath, sharedStrings, handler, progress);
         } catch (ZipException e) {
             throw new InvalidWorkbookException("Plik nie jest skoroszytem .xlsx", e);
         } catch (XMLStreamException e) {
             throw new InvalidWorkbookException("Uszkodzona zawartość skoroszytu", e);
+        }
+    }
+
+    /** Nazwy arkuszy w kolejności skoroszytu, także ukrytych. */
+    public List<String> sheetNames(Path file) throws IOException, InvalidWorkbookException {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            return List.copyOf(sheetPaths(zip, readRelationships(zip)).keySet());
+        } catch (ZipException e) {
+            throw new InvalidWorkbookException("Plik nie jest skoroszytem .xlsx", e);
+        } catch (XMLStreamException e) {
+            throw new InvalidWorkbookException("Uszkodzona zawartość skoroszytu", e);
+        }
+    }
+
+    /** Jak {@link #readFirstSheet(Path, RowHandler)}, ale arkusz o tej nazwie ({@link #sheetNames}). */
+    public void readSheet(Path file, String name, RowHandler handler) throws IOException, InvalidWorkbookException {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            Map<String, String> relationships = readRelationships(zip);
+            String path = sheetPaths(zip, relationships).get(name);
+            if (path == null) {
+                throw new InvalidWorkbookException("Skoroszyt nie ma arkusza " + name, null);
+            }
+            readSheet(zip, path, readSharedStrings(zip, relationships), handler, null);
+        } catch (ZipException e) {
+            throw new InvalidWorkbookException("Plik nie jest skoroszytem .xlsx", e);
+        } catch (XMLStreamException e) {
+            throw new InvalidWorkbookException("Uszkodzona zawartość skoroszytu", e);
+        }
+    }
+
+    /** Chwila zapisu skoroszytu z jego właściwości ({@code dcterms:modified}); {@code null}, gdy plik jej nie ma. */
+    public Instant modifiedAt(Path file) throws IOException, InvalidWorkbookException {
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            if (zip.getEntry("docProps/core.xml") == null) {
+                return null;
+            }
+            XMLStreamReader xml = open(zip, "docProps/core.xml");
+            try {
+                while (xml.hasNext()) {
+                    if (xml.next() == XMLStreamConstants.START_ELEMENT && xml.getLocalName().equals("modified")) {
+                        return Instant.parse(xml.getElementText().strip());
+                    }
+                }
+            } finally {
+                xml.close();
+            }
+            return null;
+        } catch (ZipException e) {
+            throw new InvalidWorkbookException("Plik nie jest skoroszytem .xlsx", e);
+        } catch (XMLStreamException | DateTimeParseException e) {
+            // Właściwości pliku są tylko dodatkiem do treści.
+            return null;
         }
     }
 
@@ -86,23 +141,29 @@ public class XlsxReader {
         return result;
     }
 
-    private static String firstSheetPath(ZipFile zip, Map<String, String> relationships) throws IOException,
+    /** Arkusze w kolejności skoroszytu: nazwa -> ścieżka w archiwum. */
+    private static Map<String, String> sheetPaths(ZipFile zip, Map<String, String> relationships) throws IOException,
             XMLStreamException, InvalidWorkbookException {
+        Map<String, String> result = new LinkedHashMap<>();
         XMLStreamReader xml = open(zip, "xl/workbook.xml");
         try {
             while (xml.hasNext()) {
                 if (xml.next() == XMLStreamConstants.START_ELEMENT && xml.getLocalName().equals("sheet")) {
                     String path = relationships.get(xml.getAttributeValue(REL_NS, "id"));
-                    if (path == null) {
+                    if (path != null) {
+                        result.putIfAbsent(String.valueOf(xml.getAttributeValue(null, "name")), path);
+                    } else if (result.isEmpty()) {
                         break;
                     }
-                    return path;
                 }
             }
         } finally {
             xml.close();
         }
-        throw new InvalidWorkbookException("Skoroszyt nie zawiera arkuszy", null);
+        if (result.isEmpty()) {
+            throw new InvalidWorkbookException("Skoroszyt nie zawiera arkuszy", null);
+        }
+        return result;
     }
 
     private static List<String> readSharedStrings(ZipFile zip, Map<String, String> relationships) throws IOException,

@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.auth.dto.AutoLogoutRequest;
+import com.intermanage.backend.auth.dto.AutoLogoutResponse;
 import com.intermanage.backend.auth.dto.LoginRequest;
 import com.intermanage.backend.auth.dto.MeResponse;
 import com.intermanage.backend.auth.dto.PinRequiredRequest;
@@ -94,5 +96,16 @@ public class AccountSwitchController {
     public PinSettingsResponse setPinRequired(@AuthenticationPrincipal AppUserPrincipal principal,
             @Valid @RequestBody PinRequiredRequest body) {
         return accountSwitch.setPinRequired(principal.getId(), body.required());
+    }
+
+    @GetMapping("/auto-logout")
+    public AutoLogoutResponse autoLogout(@AuthenticationPrincipal AppUserPrincipal principal) {
+        return accountSwitch.autoLogout(principal.getId());
+    }
+
+    @PutMapping("/auto-logout")
+    public AutoLogoutResponse changeAutoLogout(@AuthenticationPrincipal AppUserPrincipal principal,
+            @Valid @RequestBody AutoLogoutRequest body) {
+        return accountSwitch.changeAutoLogout(principal.getId(), body);
     }
 }

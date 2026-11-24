@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import com.intermanage.backend.common.component.LatinText;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
 import com.intermanage.backend.document.entity.DocumentType;
@@ -145,7 +146,7 @@ public final class KsefInvoiceSearch {
                         hasDocument(root, query, cb, nip));
                 all.add(filter.entered() == Entered.ENTERED ? entered : cb.not(entered));
             }
-            for (String word : DocumentSearch.words(filter.query())) {
+            for (String word : DocumentSearch.words(LatinText.of(filter.query()))) {
                 String contains = "%" + word + "%";
                 all.add(cb.or(
                         cb.like(plain(cb, root.get("invoiceNumber")), contains),

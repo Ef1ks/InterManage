@@ -281,6 +281,68 @@ class AccountSwitchIntegrationTests {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void everyoneSetsOwnAutoLogout() throws Exception {
+        String anna = createAccount("Anna Ustawia");
+        Cookie token = login(anna);
+        mvc.perform(get("/api/auth/auto-logout").cookie(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.minutes").value(10))
+                .andExpect(jsonPath("$.workdayLock").value(true))
+                .andExpect(jsonPath("$.workdayLockAt").value("17:00"));
+        mvc.perform(autoLogout("{\"enabled\":true,\"minutes\":4,\"workdayLock\":true}").cookie(token))
+                .andExpect(status().isBadRequest());
+        mvc.perform(autoLogout("{\"enabled\":true,\"minutes\":481,\"workdayLock\":true}").cookie(token))
+                .andExpect(status().isBadRequest());
+
+        // Dłuższy czas: 12 minut bez żądań nie wylogowuje, 35 minut tak.
+        mvc.perform(autoLogout("{\"enabled\":true,\"minutes\":30,\"workdayLock\":false}").cookie(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.minutes").value(30));
+        mvc.perform(get("/api/auth/me").cookie(token)).andExpect(jsonPath("$.idleLockMinutes").value(30));
+        mvc.perform(get("/api/auth/me").cookie(silent(anna, 12))).andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").cookie(silent(anna, 35))).andExpect(status().isUnauthorized());
+
+        // Wyłączone samo wylogowanie po pracy: konto otwarte przedwczoraj działa dalej z nowym czasem otwarcia.
+        Cookie openedLongAgo = new Cookie(JwtService.COOKIE_NAME, jwtService.issue(principal(anna), false,
+                Instant.now().minus(Duration.ofDays(2)), Instant.now().minus(Duration.ofMinutes(5))).getTokenValue());
+        MvcResult kept = mvc.perform(get("/api/auth/me").cookie(openedLongAgo)).andExpect(status().isOk()).andReturn();
+        assertThat(kept.getResponse().getCookies()).filteredOn(c -> c.getName().equals(JwtService.COOKIE_NAME))
+                .singleElement()
+                .satisfies(c -> assertThat(JwtService.unlockedAt(jwtService.decode(c.getValue()).orElseThrow()))
+                        .isAfter(Instant.now().minus(Duration.ofMinutes(1))));
+
+        // Krótszy czas niż domyślny.
+        mvc.perform(autoLogout("{\"enabled\":true,\"minutes\":5,\"workdayLock\":true}").cookie(token))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").cookie(silent(anna, 7))).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/auth/me").cookie(openedLongAgo)).andExpect(status().isUnauthorized());
+
+        // Wyłączone: ani po bezczynności, ani po pracy, a wybrany czas zostaje na później.
+        mvc.perform(autoLogout("{\"enabled\":false,\"workdayLock\":true}").cookie(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.minutes").value(5));
+        mvc.perform(get("/api/auth/me").cookie(token)).andExpect(jsonPath("$.idleLockMinutes").isEmpty());
+        mvc.perform(get("/api/auth/me").cookie(silent(anna, 300))).andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").cookie(openedLongAgo)).andExpect(status().isOk());
+
+        // Ustawienie jednej osoby nie zmienia innej.
+        Cookie jan = login(createAccount("Jan Domyślny"));
+        mvc.perform(get("/api/auth/me").cookie(jan)).andExpect(jsonPath("$.idleLockMinutes").value(10));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder autoLogout(String body) {
+        return put("/api/auth/auto-logout").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
+    }
+
+    /** Konto otwarte teraz, z którego od tylu minut nic nie przyszło. */
+    private Cookie silent(String username, int minutes) {
+        return new Cookie(JwtService.COOKIE_NAME, jwtService.issue(principal(username), false, Instant.now(),
+                Instant.now().minus(Duration.ofMinutes(minutes))).getTokenValue());
+    }
+
     private AppUserPrincipal principal(String username) {
         return AppUserPrincipal.from(users.findWithRoleById(UUID.fromString(id(username))).orElseThrow());
     }

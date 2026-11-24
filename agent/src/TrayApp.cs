@@ -27,7 +27,12 @@ internal sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem autostart = new("Uruchamiaj z Windows") { CheckOnClick = true };
     private readonly ToolStripMenuItem updateStatus = new() { Enabled = false, Visible = false };
     private readonly ToolStripMenuItem showUpdate = new("Pokaż pobraną aktualizację") { Visible = false };
+    private readonly ToolStripMenuItem runNewer = new() { Visible = false, Font = new Font(SystemFonts.MenuFont, FontStyle.Bold) };
     private readonly SelfUpdate selfUpdate = new();
+    private readonly VersionWatch versions = new();
+    private readonly IDisposable exitRequest;
+    /// <summary>Tyle najwyżej czeka zamykany agent na trwający zapis albo wysyłkę (makro kończy zawsze).</summary>
+    private static readonly TimeSpan DrainLimit = TimeSpan.FromMinutes(10);
     private readonly Control ui = new();
     private readonly Icon green = Dot(Color.FromArgb(16, 185, 129));
     private readonly Icon amber = Dot(Color.FromArgb(245, 158, 11));
@@ -60,6 +65,7 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(activity);
         menu.Items.Add(updateStatus);
         menu.Items.Add(showUpdate);
+        menu.Items.Add(runNewer);
         menu.Items.Add(macros);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Otwórz Intermanage", null, (_, _) => Open(settings.ServerUrl));
@@ -72,10 +78,20 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Zakończ", null, (_, _) => ExitThread());
         showUpdate.Click += (_, _) => selfUpdate.ShowReadyFile();
+        runNewer.Click += (_, _) => versions.Launch();
+        versions.Changed += () =>
+        {
+            if (ui.IsHandleCreated) ui.BeginInvoke(new Action(UpdateIcon));
+        };
+        versions.Start();
+        exitRequest = Handover.Listen(() => Task.Run(ExitForNewVersionAsync));
         autostart.Checked = AgentSettings.Autostart;
         autostart.CheckedChanged += (_, _) =>
         {
-            try { AgentSettings.Autostart = autostart.Checked; }
+            try
+            {
+                AgentSettings.AutostartPath = autostart.Checked ? versions.NewerPath ?? Application.ExecutablePath : null;
+            }
             catch (Exception error) { Log.Error("Autostart", error); }
         };
 
@@ -144,12 +160,38 @@ internal sealed class TrayApp : ApplicationContext
         status.Text = "Stan: " + host.StatusText;
         activity.Visible = host.LastActivity != null;
         activity.Text = "Ostatnio: " + host.LastActivity;
-        updateStatus.Visible = selfUpdate.Status != null;
-        updateStatus.Text = selfUpdate.Status ?? "";
-        showUpdate.Visible = selfUpdate.ReadyFile != null;
+        // Rozpakowana nowa wersja zastępuje podpowiedź o rozpakowaniu, chyba że pobrano jeszcze nowszą.
+        var newer = versions.NewerVersion;
+        var toUnpack = newer == null
+            || (selfUpdate.ReadyVersion != null && SelfUpdate.IsNewer(selfUpdate.ReadyVersion, newer));
+        updateStatus.Text = newer != null && !toUnpack
+            ? "Wersja " + newer + " wystartuje przy następnym logowaniu do Windows"
+            : selfUpdate.Status ?? "";
+        updateStatus.Visible = updateStatus.Text.Length > 0;
+        showUpdate.Visible = toUnpack && selfUpdate.ReadyFile != null;
+        runNewer.Visible = newer != null;
+        runNewer.Text = "Uruchom nową wersję " + newer;
         // Podpowiedź ikony ma limit 63 znaków.
         var tip = Title + "\n" + host.StatusText;
         icon.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
+    }
+
+    /// <summary>Nowa wersja prosi o miejsce: kończymy makro oraz trwający zapis i zamykamy się.</summary>
+    private async Task ExitForNewVersionAsync()
+    {
+        try
+        {
+            Log.Info("Uruchomiono inną wersję agenta: kończę pracę");
+            // Zajęta bramka = żadne nowe makro już nie ruszy.
+            await MacroRunner.Gate.WaitAsync(closing.Token).ConfigureAwait(false);
+            await host.DrainAsync(DrainLimit).ConfigureAwait(false);
+            ui.BeginInvoke(new Action(ExitThread));
+        }
+        catch (Exception error) when (error is OperationCanceledException || error is ObjectDisposedException
+            || error is InvalidOperationException)
+        {
+            // Agent i tak się właśnie zamyka.
+        }
     }
 
     private SettingsForm? openSettings;
@@ -239,6 +281,8 @@ internal sealed class TrayApp : ApplicationContext
         Log.Info("Zakończono agenta");
         closing.Cancel();
         remoteMacros.Dispose();
+        exitRequest.Dispose();
+        versions.Dispose();
         selfUpdate.Dispose();
         host.Dispose();
         player.Dispose();

@@ -12,8 +12,8 @@ namespace Intermanage.Agent;
 /// Pobieranie nowej wersji agenta (od 1.6.0). Serwer w każdej odpowiedzi /hello podaje wersję paczki agenta
 /// z „Do pobrania” (pozycja oznaczona jako paczka agenta). Agent ze starszą wersją pobiera paczkę (ZIP) do folderu
 /// obok siebie i pokazuje w menu ikony, że czeka nowa wersja. <b>Rozpakowania i uruchomienia nie robi agent, tylko
-/// człowiek</b>: rozpakowuje ZIP w folderze agenta (na dysku sieciowym raz na sklep, bo wszystkie komputery startują
-/// z tego samego folderu).
+/// człowiek</b>: „Wyodrębnij wszystkie” przy pobranej paczce (na dysku sieciowym raz na sklep), a dalej prowadzi
+/// <see cref="VersionWatch"/>.
 ///
 /// Agent celowo nie rozpakowuje ani nie uruchamia żadnego programu: program ochronny komputerów sklepu (SentinelOne)
 /// traktuje „rozpakuj exe i uruchom go” jak atak i zablokował tak agenta 1.5.0 (10023, 23.11.2026). Samo pobranie pliku
@@ -23,8 +23,7 @@ internal sealed class SelfUpdate : IDisposable
 {
     private static readonly TimeSpan CheckEvery = TimeSpan.FromMinutes(5);
 
-    /// <summary>Folder na pobraną paczkę, obok agenta (dostępny dla człowieka, jedna paczka na sklep na dysku sieciowym).</summary>
-    private static string Folder => Path.Combine(AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'), "aktualizacja");
+    private static string Folder => VersionFolders.UpdateFolder;
 
     private readonly object gate = new();
     private int working;
@@ -86,7 +85,7 @@ internal sealed class SelfUpdate : IDisposable
             ReadyVersion = version;
             ReadyFile = file;
         }
-        SetStatus("Nowa wersja " + version + " pobrana – rozpakuj paczkę w folderze agenta");
+        SetStatus("Nowa wersja " + version + " pobrana – kliknij „Pokaż pobraną aktualizację” i wyodrębnij paczkę");
     }
 
     /// <summary>Otwiera Eksplorator z zaznaczoną pobraną paczką (menu ikony „Pokaż pobraną aktualizację”).</summary>

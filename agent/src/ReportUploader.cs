@@ -58,7 +58,8 @@ internal sealed class ReportUploader
             var api = host.Api;
             try
             {
-                if (api != null) await UploadAsync(api, item, cancel).ConfigureAwait(false);
+                using var work = host.BeginWork();
+                if (api != null && work != null) await UploadAsync(api, item, cancel).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {

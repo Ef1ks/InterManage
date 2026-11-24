@@ -75,7 +75,10 @@ Robi:
 - wykonuje **makra zlecone z przeglądarki** (od 1.7.0, na razie „Zbierz brakujące ITM8” i „Uzupełnij ITM8” z dostawy
   z bazy): co 3 s zgłasza serwerowi, ile sekund nikt nie ruszał myszy i klawiatury, czy ekran jest zablokowany, czy
   działa AutoJob (od 0.64) i czy trwa makro. Serwer wybiera najdłużej nieużywany komputer, a agent pokazuje „Makro
-  rozpocznie się za 5…” z „Anuluj”; kliknięcie, ruch myszy albo klawiatury oddaje makro kolejnemu komputerowi. Treść
+  rozpocznie się za 5…” (15 s, gdy ktoś ruszał komputer w ostatnich 2 min) z „Anuluj”, które oddaje makro kolejnemu
+  komputerowi (ruch myszy nie anuluje od 1.7.2). Wyłączony Mercalys makro uruchamia z położenia w ustawieniach agenta
+  („Program Mercalys”), a nieznane agent bierze z działającego Mercalys,
+  z `N:\AvisoConfig\UTILITAIRES\ClientLourd\Mercalys.exe` (od 1.7.3) albo ze skrótu na pulpicie. Treść
   składa serwer, agent wkłada ją do schowka i naciska Alt+E, a wynik odtwarzacz zapisuje w
   `%LOCALAPPDATA%\Intermanage\Agent\makra` (plik znika po odesłaniu). Komputer z zablokowanym ekranem makra nie dostanie.
 
@@ -97,12 +100,22 @@ albo bez wersji.
 
 Serwer podaje wersję, SHA-256 i rozmiar paczki w każdej odpowiedzi `/hello` (co 5 min). Agent ze starszą wersją
 **tylko pobiera** paczkę (ZIP) do folderu `aktualizacja` obok siebie (na dysku sieciowym pierwszy komputer pobiera,
-reszta widzi gotowy plik), sprawdza rozmiar i SHA-256 i pokazuje przy ikonie „Nowa wersja … pobrana – rozpakuj paczkę
-w folderze agenta”. W menu ikony „Pokaż pobraną aktualizację” otwiera ZIP w Eksploratorze.
+reszta widzi gotowy plik), sprawdza rozmiar i SHA-256 i pokazuje przy ikonie „Nowa wersja … pobrana”. W menu ikony
+„Pokaż pobraną aktualizację” otwiera ZIP w Eksploratorze.
 
-**Rozpakowania i uruchomienia agent nie robi** — to człowiek rozpakowuje ZIP w folderze agenta, nadpisując pliki.
-Na dysku sieciowym (np. `P:\Production\INTERMANAGE\Agent`, z którego startuje wiele komputerów) to jedna podmiana na
-sklep, a komputery wezmą nową wersję przy następnym uruchomieniu.
+**Rozpakowania i uruchomienia agent nie robi**, tylko człowiek, raz na sklep (od 1.7.5 bez zamykania agentów):
+
+1. „Wyodrębnij wszystkie” przy ZIP-ie. Powstaje folder `agent-1.7.6` (w `aktualizacja` albo w folderze agenta; nazwa
+   `1.7.6` też działa), więc żaden plik działającego agenta nie jest nadpisywany.
+2. Agent na każdym komputerze w ciągu ok. 2 minut zauważa nowszą wersję (`VersionWatch`, wersja z pliku exe, po dwóch
+   takich samych sprawdzeniach, żeby nie wziąć rozpakowywanego folderu), przestawia swój autostart i pokazuje w menu
+   ikony „Uruchom nową wersję”. Bez kliknięcia nowa wersja rusza przy następnym logowaniu do Windows.
+3. Uruchomiona nowa wersja (menu albo dwuklik) prosi działającą o zamknięcie (`Handover`); stara kończy makro oraz
+   trwający zapis i wysyłkę (do 10 min), a nowa startuje sama i ustawia autostart na siebie.
+
+Powrót: usuń folder nowej wersji i uruchom starą (autostart wskazujący usunięty plik działający agent sam cofa na
+siebie). Starego folderu nie usuwaj, dopóki któryś komputer z niego działa. Agenci do 1.7.4 nie znają prośby
+o zamknięcie: na nich trzeba ostatni raz kliknąć „Zakończ”.
 
 Agent celowo nie rozpakowuje ani nie uruchamia żadnego programu: program ochronny komputerów sklepu (SentinelOne)
 traktuje „rozpakuj exe i uruchom go” jak atak i zablokował tak agenta 1.5.0 razem z jego odtwarzaczem makr (10023,

@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useChangePassword, useCurrentUser } from '@/features/auth/api'
+import { AutoLogoutSettings } from '@/features/auth/AutoLogoutSettings'
 import { AvatarSettings } from '@/features/auth/AvatarSettings'
 import { BackgroundSettings } from '@/features/auth/BackgroundSettings'
 import { PinSettings } from '@/features/auth/PinSettings'
@@ -111,6 +112,7 @@ export function AccountPage() {
 
         <BackgroundSettings />
         <PinSettings />
+        <AutoLogoutSettings />
       </div>
     </>
   )

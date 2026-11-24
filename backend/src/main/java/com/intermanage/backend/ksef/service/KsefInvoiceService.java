@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.LatinText;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentKsefInvoice;
@@ -392,7 +393,7 @@ public class KsefInvoiceService {
             return Optional.empty();
         }
         Set<String> own = ownInternalIds(storeId);
-        return invoices.findBySellerAndNumber(nip, sellerNip, normalized(invoiceNumber.strip())).stream()
+        return invoices.findBySellerAndNumber(nip, sellerNip, normalized(LatinText.of(invoiceNumber.strip()))).stream()
                 .filter(invoice -> KsefInvoiceSearch.visibleInStore(invoice, own)).findFirst()
                 .map(invoice -> summaries(storeId, List.of(invoice)).getFirst());
     }

@@ -25,8 +25,11 @@ import com.intermanage.backend.agent.repository.AgentMacroJobRepository;
 import com.intermanage.backend.agent.repository.StoreAgentRepository;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.basedelivery.component.Itm8Macro;
+import com.intermanage.backend.basedelivery.component.MeaCodeMacro;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
+import com.intermanage.backend.basedelivery.dto.MeaOverview;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
+import com.intermanage.backend.basedelivery.service.MeaCodeService;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
@@ -54,6 +57,8 @@ public class AgentMacroService {
     /** Agent bez zgłoszenia tyle czasu w trakcie makra = komputer przestał odpowiadać. */
     public static final Duration LOST_AFTER = Duration.ofMinutes(2);
     public static final Duration RUN_TIMEOUT = Duration.ofHours(2);
+    /** Kody MEA: kilkadziesiąt kodów po 1-3 pliki, integracja jednego trwa do kilku minut. */
+    public static final Duration MEA_RUN_TIMEOUT = Duration.ofHours(6);
 
     private final AgentMacroJobRepository jobs;
     private final StoreAgentRepository agents;
@@ -61,16 +66,19 @@ public class AgentMacroService {
     private final StoreRepository stores;
     private final AppUserRepository users;
     private final BaseDeliveryService deliveries;
+    private final MeaCodeService meaCodes;
     private final LiveEvents live;
 
     public AgentMacroService(AgentMacroJobRepository jobs, StoreAgentRepository agents, AgentMachineStates states,
-            StoreRepository stores, AppUserRepository users, BaseDeliveryService deliveries, LiveEvents live) {
+            StoreRepository stores, AppUserRepository users, BaseDeliveryService deliveries, MeaCodeService meaCodes,
+            LiveEvents live) {
         this.jobs = jobs;
         this.agents = agents;
         this.states = states;
         this.stores = stores;
         this.users = users;
         this.deliveries = deliveries;
+        this.meaCodes = meaCodes;
         this.live = live;
     }
 
@@ -102,6 +110,26 @@ public class AgentMacroService {
         return create(storeId, AgentMacroKind.ITM8_APPLY, "Uzupełnij ITM8 · bon " + delivery.number() + " ("
                 + plan.items().size() + " poz.)", Itm8Macro.apply(plan.items()), plan.items().size(),
                 request.agentId(), userId);
+    }
+
+    /**
+     * Wpisanie kodów MEA w Mercalys. Tylko kody z listy „Do wpisania” sklepu, w jej kolejności; samo wpisanie niczego
+     * nie potwierdza, bo kod bez pliku w Mercalys musi zostać na liście.
+     */
+    @Transactional
+    public AgentMacroApi.Job meaCodes(UUID storeId, AgentMacroApi.MeaCodesRequest request, UUID userId) {
+        Set<String> chosen = new LinkedHashSet<>();
+        request.codes().forEach(code -> chosen.add(code.strip()));
+        List<String> codes = meaCodes.overview(storeId).pending().stream().map(MeaOverview.PendingCode::code)
+                .filter(chosen::contains).toList();
+        List<String> unknown = chosen.stream()
+                .filter(code -> !codes.contains(code) || !MeaCodeMacro.isCode(code)).toList();
+        if (!unknown.isEmpty()) {
+            throw ApiException.badRequest("Tych kodów nie ma na liście do wpisania: " + String.join(", ", unknown)
+                    + ". Odśwież stronę.");
+        }
+        return create(storeId, AgentMacroKind.MEA_CODES, "Wpisz kody MEA (" + codes.size() + ")",
+                MeaCodeMacro.build(codes), codes.size(), request.agentId(), userId);
     }
 
     @Transactional
@@ -191,7 +219,11 @@ public class AgentMacroService {
         job.start(Instant.now());
         announce(job);
         return new AgentMacroApi.Start(job.getMacro(), ReportSaveMacro.OPEN_LINE, job.getKind().name(),
-                job.getKind() == AgentMacroKind.ITM8_COLLECT, (int) RUN_TIMEOUT.toMinutes());
+                job.getKind() == AgentMacroKind.ITM8_COLLECT, (int) runTimeout(job).toMinutes());
+    }
+
+    private static Duration runTimeout(AgentMacroJob job) {
+        return job.getKind() == AgentMacroKind.MEA_CODES ? MEA_RUN_TIMEOUT : RUN_TIMEOUT;
     }
 
     /** Wynik makra z odtwarzacza (zebrane kody przy „Zbierz brakujące ITM8”). */
@@ -242,7 +274,7 @@ public class AgentMacroService {
                 }
             } else if (job.getStatus() == AgentMacroStatus.RUNNING) {
                 boolean lost = state.map(found -> found.reportedAt().plus(LOST_AFTER).isBefore(now)).orElse(true);
-                if (lost || job.getStartedAt().plus(RUN_TIMEOUT).isBefore(now)) {
+                if (lost || job.getStartedAt().plus(runTimeout(job)).isBefore(now)) {
                     job.finish(AgentMacroStatus.FAILED, "Komputer przestał odpowiadać w trakcie makra. Sprawdź w "
                             + "Mercalys, co zostało zrobione.", List.of(), now);
                     announce(job);

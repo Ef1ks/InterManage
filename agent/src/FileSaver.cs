@@ -44,11 +44,19 @@ internal sealed class FileSaver
                 host.ServerOk();
                 serverDelay = TimeSpan.FromSeconds(1);
                 var diskProblem = false;
+                // Agent zamyka się dla nowej wersji: przydział plików wygaśnie sam i weźmie je nowa wersja.
+                using var work = host.BeginWork();
+                if (work == null)
+                {
+                    await Delay(TimeSpan.FromSeconds(2), cancel);
+                    continue;
+                }
                 foreach (var file in batch.Files)
                 {
                     if (cancel.IsCancellationRequested) break;
                     if (!await SaveAsync(api, config, file, cancel)) diskProblem = true;
                 }
+                work.Dispose();
                 if (diskProblem)
                 {
                     // Dysk niedostępny: przerwa narasta do 5 minut (agent przestaje wtedy czekać na pliki, więc po

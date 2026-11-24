@@ -15,7 +15,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
-/** PIN konta do przełączania kont w przeglądarce i to, czy przejście na konto go wymaga. */
+/** PIN konta do przełączania kont w przeglądarce, to, czy przejście na konto go wymaga, i automatyczne wylogowywanie. */
 @Entity
 @Table(name = "user_switch_settings")
 public class UserSwitchSettings {
@@ -37,6 +37,18 @@ public class UserSwitchSettings {
 
     @Column(name = "pin_required", nullable = false)
     private boolean pinRequired = true;
+
+    /** Czy konto jest wylogowywane samo (po bezczynności i po pracy). */
+    @Column(name = "auto_logout", nullable = false)
+    private boolean autoLogout = true;
+
+    /** Po ilu minutach bez ruchu; puste = domyślny czas aplikacji. */
+    @Column(name = "idle_lock_minutes")
+    private Integer idleLockMinutes;
+
+    /** Czy także po godzinie końca pracy. */
+    @Column(name = "workday_lock", nullable = false)
+    private boolean workdayLock = true;
 
     @Column(name = "failed_attempts", nullable = false)
     private int failedAttempts;
@@ -89,6 +101,27 @@ public class UserSwitchSettings {
 
     public void setPinRequired(boolean pinRequired) {
         this.pinRequired = pinRequired;
+    }
+
+    public boolean isAutoLogout() {
+        return autoLogout;
+    }
+
+    public Integer getIdleLockMinutes() {
+        return idleLockMinutes;
+    }
+
+    public boolean isWorkdayLock() {
+        return workdayLock;
+    }
+
+    /** Puste minuty zostawiają dotychczasowy czas. */
+    public void changeAutoLogout(boolean enabled, Integer minutes, boolean workdayLock) {
+        this.autoLogout = enabled;
+        if (minutes != null) {
+            this.idleLockMinutes = minutes;
+        }
+        this.workdayLock = workdayLock;
     }
 
     public int getFailedAttempts() {

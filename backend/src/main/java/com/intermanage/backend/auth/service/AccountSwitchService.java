@@ -1,5 +1,6 @@
 package com.intermanage.backend.auth.service;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -9,6 +10,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.auth.dto.AutoLogoutRequest;
+import com.intermanage.backend.auth.dto.AutoLogoutResponse;
 import com.intermanage.backend.auth.dto.MeResponse;
 import com.intermanage.backend.auth.dto.PinSettingsResponse;
 import com.intermanage.backend.auth.dto.SwitchAccountRequest;
@@ -19,9 +22,11 @@ import com.intermanage.backend.auth.entity.UserSwitchSettings;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.auth.repository.UserSwitchSettingsRepository;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.AutoLogout;
 import com.intermanage.backend.auth.security.BackgroundAccounts;
 import com.intermanage.backend.auth.security.BackgroundAccounts.Account;
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.auth.security.WorkdayLock;
 import com.intermanage.backend.common.exception.ApiException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,10 +50,12 @@ public class AccountSwitchService {
     private final UserSwitchSettingsRepository settings;
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final AutoLogout autoLogout;
+    private final WorkdayLock workdayLock;
 
     public AccountSwitchService(BackgroundAccounts backgroundAccounts, JwtService jwtService, AuthService authService,
             UserAvatarService avatarService, UserSwitchSettingsRepository settings, AppUserRepository users,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, AutoLogout autoLogout, WorkdayLock workdayLock) {
         this.backgroundAccounts = backgroundAccounts;
         this.jwtService = jwtService;
         this.authService = authService;
@@ -56,6 +63,8 @@ public class AccountSwitchService {
         this.settings = settings;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
+        this.autoLogout = autoLogout;
+        this.workdayLock = workdayLock;
     }
 
     /** Konta w tle; wygasłe i wylogowane (blokada, zmiana hasła) znikają też z ciasteczka. */
@@ -161,6 +170,25 @@ public class AccountSwitchService {
         UserSwitchSettings own = settingsOf(loadUser(userId));
         own.setPinRequired(required);
         return new PinSettingsResponse(own.hasPin(), required);
+    }
+
+    @Transactional(readOnly = true)
+    public AutoLogoutResponse autoLogout(UUID userId) {
+        return toAutoLogout(settings.findOfUser(userId).orElse(null));
+    }
+
+    /** Własne automatyczne wylogowywanie, od razu na każdym komputerze, na którym konto jest zalogowane. */
+    @Transactional
+    public AutoLogoutResponse changeAutoLogout(UUID userId, AutoLogoutRequest request) {
+        UserSwitchSettings own = settingsOf(loadUser(userId));
+        own.changeAutoLogout(request.enabled(), request.minutes(), request.workdayLock());
+        return toAutoLogout(own);
+    }
+
+    private AutoLogoutResponse toAutoLogout(UserSwitchSettings own) {
+        LocalTime lockAt = workdayLock.lockAt();
+        return new AutoLogoutResponse(own == null || own.isAutoLogout(), autoLogout.chosenMinutes(own),
+                own == null || own.isWorkdayLock(), lockAt == null ? null : lockAt.toString());
     }
 
     private void verify(UUID userId, SwitchAccountRequest unlock) {

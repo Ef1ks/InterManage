@@ -31,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.LatinText;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.common.exception.InvalidReportException;
 import com.intermanage.backend.deliorder.repository.DeliOrderDocumentRepository;
@@ -320,7 +321,7 @@ public class DocumentService {
     public DocumentResponse editSupplierDocumentNumber(UUID storeId, String typeCode, UUID id, String number,
             UUID userId) {
         Document document = editableDelivery(storeId, typeCode, id);
-        String trimmed = number == null || number.isBlank() ? null : number.strip();
+        String trimmed = number == null || number.isBlank() ? null : LatinText.of(number.strip());
         if (Objects.equals(trimmed, document.getReportSupplierDocumentNumber())) {
             document.restoreReportSupplierDocumentNumber();
         } else {

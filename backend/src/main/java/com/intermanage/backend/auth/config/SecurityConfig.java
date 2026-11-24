@@ -27,6 +27,7 @@ import com.intermanage.backend.activity.component.StoreEventBuffer;
 import com.intermanage.backend.activity.component.StoreEventFilter;
 import com.intermanage.backend.auth.security.AppUserDetailsService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.auth.security.AutoLogout;
 import com.intermanage.backend.auth.security.BackgroundAccounts;
 import com.intermanage.backend.auth.security.IdleLock;
 import com.intermanage.backend.auth.security.JwtAuthenticationFilter;
@@ -49,7 +50,7 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
             BackgroundAccounts backgroundAccounts, WorkdayLock workdayLock, IdleLock idleLock,
-            RequestLimits requestLimits, StoreEventBuffer storeEvents) throws Exception {
+            AutoLogout autoLogout, RequestLimits requestLimits, StoreEventBuffer storeEvents) throws Exception {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Czytniki kart NFC nie mają sesji ani ciasteczek: przedstawiają się kluczem (TimeClockController).
@@ -94,7 +95,8 @@ public class SecurityConfig {
                         .accessDeniedHandler(new ProblemAccessDeniedHandler()))
                 // Limity zapytań przed CSRF i JWT, żeby żądania ponad limit nie sięgały do bazy.
                 .addFilterBefore(new RateLimitFilter(requestLimits), CsrfFilter.class)
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts, workdayLock, idleLock),
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService, backgroundAccounts, workdayLock, idleLock,
+                                autoLogout),
                         AnonymousAuthenticationFilter.class)
                 // Dziennik sklepu: po JWT, żeby znać osobę, i przed autoryzacją, żeby widzieć też odmowy.
                 .addFilterAfter(new StoreEventFilter(storeEvents), JwtAuthenticationFilter.class);

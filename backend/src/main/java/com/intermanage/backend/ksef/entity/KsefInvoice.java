@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.hibernate.annotations.UuidGenerator;
 
+import com.intermanage.backend.common.component.LatinText;
 import com.intermanage.backend.ksef.dto.KsefInvoiceMetadata;
 
 import jakarta.persistence.CollectionTable;
@@ -180,7 +181,7 @@ public class KsefInvoice {
     }
 
     private void apply(KsefInvoiceMetadata metadata) {
-        invoiceNumber = metadata.invoiceNumber();
+        invoiceNumber = LatinText.of(metadata.invoiceNumber());
         issueDate = metadata.issueDate();
         invoicingDate = metadata.invoicingDate().toInstant();
         permanentStorageDate = metadata.permanentStorageDate().toInstant();

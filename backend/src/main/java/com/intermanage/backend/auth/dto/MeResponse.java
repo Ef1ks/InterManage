@@ -28,7 +28,7 @@ public record MeResponse(
         AvatarResponse avatar,
         /**
          * Po tylu minutach bez ruchu myszy i klawiatury przeglądarka blokuje konto ({@code POST /api/auth/lock}),
-         * {@code null} = konto bez blokady (PIN wyłączony przez właściciela konta albo blokada wyłączona).
+         * {@code null} = konto bez blokady (właściciel konta wyłączył automatyczne wylogowywanie albo PIN).
          */
         Integer idleLockMinutes,
         /** Konto zleca zadania (właściciel albo włączone przez niego zlecanie). */

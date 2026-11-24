@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
 import { useAppSelector } from '@/store'
 import type {
+  AutoLogout,
   AvatarChange,
   BackgroundChange,
   Me,
@@ -107,6 +108,7 @@ export function useLogout() {
 
 export const switchAccountsQueryKey = ['switch-accounts'] as const
 export const pinSettingsQueryKey = ['pin-settings'] as const
+export const autoLogoutQueryKey = ['auto-logout'] as const
 
 /** Konta zalogowane w tle w tej przeglądarce (działa też na stronie logowania). */
 export function useSwitchAccounts() {
@@ -179,7 +181,11 @@ function usePinMutation<T>(mutationFn: (value: T) => Promise<PinSettings>) {
   return useMutation({
     mutationFn,
     meta: { invalidates: false },
-    onSuccess: (settings) => queryClient.setQueryData(pinSettingsQueryKey, settings),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(pinSettingsQueryKey, settings)
+      // Konto bez wymogu PIN-u nie jest wylogowywane samo, więc zmienia się też `idleLockMinutes`.
+      return queryClient.invalidateQueries({ queryKey: meQueryKey })
+    },
   })
 }
 
@@ -193,6 +199,24 @@ export function useSetPinRequired() {
   return usePinMutation((required: boolean) =>
     api<PinSettings>('/auth/pin/required', { method: 'PUT', json: { required } }),
   )
+}
+
+export function useAutoLogout() {
+  return useQuery({ queryKey: autoLogoutQueryKey, queryFn: () => api<AutoLogout>('/auth/auto-logout') })
+}
+
+/** Zapisuje się od razu po zmianie; czas wylogowania (`idleLockMinutes` zalogowanego) pobiera się od nowa. */
+export function useSetAutoLogout() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ enabled, minutes, workdayLock }: AutoLogout) =>
+      api<AutoLogout>('/auth/auto-logout', { method: 'PUT', json: { enabled, minutes, workdayLock } }),
+    meta: { invalidates: false },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(autoLogoutQueryKey, settings)
+      return queryClient.invalidateQueries({ queryKey: meQueryKey })
+    },
+  })
 }
 
 /** Link z maila: zużywa token i loguje pracownika (z obowiązkiem ustawienia hasła). */
