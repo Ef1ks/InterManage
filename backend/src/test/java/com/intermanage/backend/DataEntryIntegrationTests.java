@@ -1272,7 +1272,7 @@ class DataEntryIntegrationTests {
                 .andExpect(jsonPath("$.defaultFolder").value(true))
                 .andExpect(jsonPath("$.hiddenProtocols.length()").value(0))
                 // Folder nowych artykułów też ma domyślną ścieżkę aplikacji.
-                .andExpect(jsonPath("$.productFileFolderPath").value("H:\\GCOM\\Aviso\\BLdirect\\CAD_BEZP"));
+                .andExpect(jsonPath("$.productFileFolderPath").value("H:\\GCOM\\INTERMANAGE\\CAD_BEZP"));
 
         // Plik nowych i zmienionych artykułów (CADBEZP): stary Excel, nazwa z dostawcy i numeru faktury.
         byte[] products = mvc.perform(post(url("/export/product-file")).cookie(owner).with(csrf())

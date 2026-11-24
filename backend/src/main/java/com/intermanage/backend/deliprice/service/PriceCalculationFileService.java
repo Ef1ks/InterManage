@@ -52,7 +52,7 @@ public class PriceCalculationFileService {
     }
 
     /** Plik jednego dostawcy; front wysyła kalkulacje po grupach z {@link #lines}. */
-    @Transactional(readOnly = true)
+    @Transactional
     public DataEntryService.ExportFile file(UUID storeId, List<UUID> calculationIds) {
         Set<UUID> ids = new HashSet<>(calculationIds);
         List<PriceCalculation> selected = PriceCalculationService.sorted(calculations.findActiveWithItems(storeId))

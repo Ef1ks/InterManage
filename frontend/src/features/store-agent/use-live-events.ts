@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
+import { retryMacro } from '@/features/agent-macros/api'
 import { useCurrentUser } from '@/features/auth/api'
 import { useCurrentStore } from '@/features/stores/current-store'
+import { ApiError } from '@/lib/api'
 import { connectLive, onLiveMessage, type LiveMessage } from '@/lib/live-events'
 
 import { agentsKey, useAgentStatus } from './api'
@@ -101,6 +103,11 @@ export function useLiveEvents() {
               notifyChat(mentioned)
             }
             break
+          case 'agent-macro':
+            if (message.kind === 'PRODUCT_FILES' && message.userId === userId) {
+              notifyProductFiles(messageStore, message)
+            }
+            break
           case 'athos':
             invalidate('mea')
             break
@@ -154,6 +161,43 @@ function invalidateChat(queryClient: QueryClient, message: LiveMessage) {
       void queryClient.invalidateQueries({ queryKey: thread })
       void queryClient.invalidateQueries({ queryKey: ['chat', 'conversations'] })
       void queryClient.invalidateQueries({ queryKey: ['chat', 'unread'] })
+  }
+}
+
+/**
+ * Makro, które po zapisie pliku nowych artykułów zleca sam serwer: nie ma swojego okna, więc wynik jest w powiadomieniu
+ * osoby, która zapisała plik. Nieudane da się ponowić.
+ */
+function notifyProductFiles(storeId: string, message: LiveMessage) {
+  const id = `agent-macro:${String(message.id)}`
+  const description = typeof message.message === 'string' && message.message ? message.message : undefined
+  if (message.status === 'NO_SUPPLIER') {
+    toast.warning('Nowe artykuły trzeba wczytać ręcznie', {
+      id,
+      description: 'Dokument nie ma numeru dostawcy z programu sklepu.',
+      duration: 20_000,
+    })
+  } else if (message.status === 'RUNNING') {
+    toast.message('Komputer sklepu wczytuje nowe artykuły', { id })
+  } else if (message.status === 'DONE') {
+    toast.success('Nowe artykuły wczytane na komputerze sklepu', { id, description })
+    notify('Nowe artykuły wczytane na komputerze sklepu', description, id)
+  } else if (message.status === 'FAILED' || message.status === 'NO_COMPUTER') {
+    const title = 'Nowe artykuły nie wczytały się na komputerze sklepu'
+    toast.error(title, {
+      id,
+      description,
+      duration: 60_000,
+      action: {
+        label: 'Spróbuj ponownie',
+        onClick: () => {
+          retryMacro(storeId, String(message.id)).catch((error: unknown) =>
+            toast.error(error instanceof ApiError ? error.message : 'Brak połączenia z serwerem'),
+          )
+        },
+      },
+    })
+    notify(title, description, id)
   }
 }
 

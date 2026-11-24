@@ -26,7 +26,7 @@ public final class DefaultFolders {
     static {
         Map<String, String> paths = new LinkedHashMap<>();
         paths.put(PROTO, "N:\\AVISOCONFIG\\BACKUP");
-        paths.put(PRODUCT_FILE, "H:\\GCOM\\Aviso\\BLdirect\\CAD_BEZP");
+        paths.put(PRODUCT_FILE, "H:\\GCOM\\INTERMANAGE\\CAD_BEZP");
         paths.put("data-entry-xml", "H:\\GCOM\\Aviso\\BLdirect");
         paths.put("data-entry-lst", "N:\\ALOA\\LST\\IMPORT");
         paths.put("leaflet-pro", "N:\\ALOA\\PRO\\IMPORT");

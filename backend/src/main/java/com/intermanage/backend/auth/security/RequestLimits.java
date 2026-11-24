@@ -1,8 +1,10 @@
 package com.intermanage.backend.auth.security;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +15,8 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * Limity zapytań do API z jednego adresu (za Cloudflare i nginx adres klienta podaje {@code X-Forwarded-For}).
- * Logowanie, PIN i hasło mają ciasny limit, czytniki kart własny, a reszta API szeroki, bo komputery jednego sklepu
+ * Logowanie, PIN i hasło mają ciasny limit, czytniki kart własny, agent sklepu własny na każdy klucz (wiele sklepów
+ * może wychodzić przez jeden adres), a reszta API szeroki, bo komputery jednego sklepu
  * wychodzą do internetu z tego samego adresu. Do tego nieudane logowania liczone po loginie: po
  * {@code app.rate-limit.login-failures} w oknie login jest blokowany do końca okna, także z innego adresu.
  */
@@ -66,9 +69,10 @@ public class RequestLimits {
         if (path.startsWith("/api/time-clock/")) {
             return limiter.acquire("clock:" + ip, timeClockPerMinute, MINUTE);
         }
-        // Agent sklepu: jak czytniki kart (czekanie na pliki to jedno długie żądanie, zdarzenia idą paczkami).
+        // Agent sklepu: limit czytników kart na klucz, a na adres szeroki (najpierw, żeby zmyślone klucze go nie omijały).
         if (path.startsWith("/api/store-agent/")) {
-            return limiter.acquire("agent:" + ip, timeClockPerMinute, MINUTE);
+            Duration wait = limiter.acquire("agents:" + ip, apiPerMinute, MINUTE);
+            return wait.isZero() ? limiter.acquire("agent:" + agentKey(request, ip), timeClockPerMinute, MINUTE) : wait;
         }
         return limiter.acquire("api:" + ip, apiPerMinute, MINUTE);
     }
@@ -97,6 +101,13 @@ public class RequestLimits {
                     || path.equals("/api/auth/password");
             default -> false;
         };
+    }
+
+    /** Skrót klucza z nagłówka, żeby sam klucz nie leżał w licznikach; bez klucza adres. */
+    private static String agentKey(HttpServletRequest request, String ip) {
+        String authorization = request.getHeader("Authorization");
+        return authorization == null || authorization.isBlank() ? ip
+                : UUID.nameUUIDFromBytes(authorization.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     private static String loginKey(String username) {

@@ -16,6 +16,8 @@ public record ProductImportJobResponse(UUID id, String fileName, Status status, 
     }
 
     public enum Phase {
+        /** Czeka, aż skończą się importy innych sklepów. */
+        WAITING,
         /** Czytanie i sprawdzanie pliku. */
         READING,
         /** Scalanie z kartoteką paczkami. */

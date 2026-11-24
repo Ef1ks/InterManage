@@ -100,6 +100,7 @@ internal sealed class FolderWatcher : IDisposable
                     if (DateTime.UtcNow >= nextFullScan && DateTime.UtcNow >= nextDiskTry)
                     {
                         var ok = await FullScanAsync(cancel);
+                        await CleanProductFilesAsync(config, cancel);
                         nextFullScan = DateTime.UtcNow + FullScanEvery;
                         if (ok)
                         {
@@ -313,6 +314,42 @@ internal sealed class FolderWatcher : IDisposable
         if (ok) host.DiskOk();
         host.Scanned();
         return ok;
+    }
+
+    /// <summary>
+    /// Folder nowych artykułów czyści się codziennie: pliki z poprzednich dni (tylko nasze, po nazwie) główny agent
+    /// usuwa. Ich treść zostaje w kolejce plików na serwerze.
+    /// </summary>
+    private static async Task CleanProductFilesAsync(HelloResponse config, CancellationToken cancel)
+    {
+        if (!config.Enabled || !config.Folders.TryGetValue(FileSaver.ProductFileKey, out var folder)
+            || string.IsNullOrWhiteSpace(folder)) return;
+        try
+        {
+            await Disk.Run(() =>
+            {
+                var directory = new DirectoryInfo(folder.Trim());
+                if (!directory.Exists) return 0;
+                foreach (var file in directory.GetFiles("CADBEZP*.xls"))
+                {
+                    if (file.LastWriteTime.Date >= DateTime.Today) continue;
+                    try
+                    {
+                        file.Delete();
+                        Log.Info("Usunięto wczorajszy plik nowych artykułów " + file.Name);
+                    }
+                    catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+                    {
+                        Log.Warn("Nie usunięto pliku " + file.Name + ": " + error.Message);
+                    }
+                }
+                return 0;
+            }, TimeSpan.FromSeconds(60), cancel);
+        }
+        catch (Exception error) when (!(error is OperationCanceledException && cancel.IsCancellationRequested))
+        {
+            Log.Warn("Czyszczenie folderu nowych artykułów: " + error.Message);
+        }
     }
 
     private static List<FileInfo> List(Root root)

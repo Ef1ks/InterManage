@@ -31,6 +31,7 @@ import com.intermanage.backend.agent.mapper.StoreAgentMapper;
 import com.intermanage.backend.agent.repository.AgentReportFileRepository;
 import com.intermanage.backend.agent.repository.StoreAgentSettingsRepository;
 import com.intermanage.backend.common.component.ChunkedUploads;
+import com.intermanage.backend.common.component.ImportSlots;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
@@ -91,6 +92,7 @@ public class AgentReportService {
     private final StoreFileLocationService locations;
     private final ImportHistoryService history;
     private final ChunkedUploads uploads;
+    private final ImportSlots slots;
     private final LiveEvents live;
     private final StoreAgentMapper mapper;
     private final TransactionTemplate transaction;
@@ -118,7 +120,8 @@ public class AgentReportService {
             StoreFileLocationService locations, ImportHistoryService history, ChunkedUploads uploads,
             LiveEvents live, StoreAgentMapper mapper, TransactionTemplate transaction, ProductImportService products,
             ProductCodeImportService productCodes, PromotionImportService promotions, SalesImportService sales,
-            DocumentService documents, CadencierService cadencier) {
+            DocumentService documents, CadencierService cadencier, ImportSlots slots) {
+        this.slots = slots;
         this.files = files;
         this.settings = settings;
         this.locations = locations;
@@ -520,8 +523,19 @@ public class AgentReportService {
 
     /** Ten sam import co wgranie z przeglądarki, bez konta (wgrał agent). */
     private void importFile(UUID storeId, ImportReportKind kind, MultipartFile file) {
+        if (kind == ImportReportKind.PRODUCTS) {
+            // Kartoteka bierze miejsce sama ({@code ProductImportJobs}); drugie tutaj by się z nim zakleszczyło.
+            waitForProducts(storeId, products.startImport(storeId, file, null));
+            return;
+        }
+        slots.call(kind + " sklepu " + storeId, () -> { }, () -> {
+            importNow(storeId, kind, file);
+            return null;
+        });
+    }
+
+    private void importNow(UUID storeId, ImportReportKind kind, MultipartFile file) {
         switch (kind) {
-            case PRODUCTS -> waitForProducts(storeId, products.startImport(storeId, file, null));
             case PRODUCT_CODES -> productCodes.importReport(storeId, file, null);
             case PROMOTIONS -> promotions.importReport(storeId, file, null);
             case SALES -> sales.importReport(storeId, file, null);

@@ -45,6 +45,28 @@ class RequestLimitsTests {
         assertThat(limits.acquire(request("POST", "/api/time-clock/punches", "3.3.3.3"))).isPositive();
     }
 
+    /** Komputery wielu sklepów za jednym adresem: limit liczy się na klucz agenta, a na adres tylko szeroki. */
+    @Test
+    void storeAgentsAreLimitedPerKey() {
+        for (int i = 0; i < 5; i++) {
+            assertThat(limits.acquire(agent("ima_a"))).isZero();
+        }
+        assertThat(limits.acquire(agent("ima_a"))).isPositive();
+        for (int i = 0; i < 4; i++) {
+            assertThat(limits.acquire(agent("ima_b"))).isZero();
+        }
+        // Adres ma 10 na minutę, więc kolejny (nawet zmyślony) klucz już nie przejdzie.
+        assertThat(limits.acquire(agent("ima_c"))).isPositive();
+        clock.advance(Duration.ofSeconds(61));
+        assertThat(limits.acquire(agent("ima_a"))).isZero();
+    }
+
+    private static MockHttpServletRequest agent(String key) {
+        MockHttpServletRequest request = request("POST", "/api/store-agent/macro-jobs/wait", "4.4.4.4");
+        request.addHeader("Authorization", "Bearer " + key);
+        return request;
+    }
+
     @Test
     void loginIsBlockedAfterFailuresUntilWindowEnds() {
         limits.loginFailed("Anna");

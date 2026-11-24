@@ -9,17 +9,18 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.agent.component.AgentMachineStates;
+import com.intermanage.backend.agent.component.ProductFileMacro;
 import com.intermanage.backend.agent.dto.AgentMacroApi;
 import com.intermanage.backend.agent.entity.AgentMacroJob;
 import com.intermanage.backend.agent.entity.AgentMacroKind;
@@ -74,6 +75,14 @@ public class AgentMacroService {
     private static final Pattern ORDER_CODE = Pattern.compile("(\\d{1,10})=(\\d{1,20})");
     private static final Pattern CLOSED_CODE = Pattern.compile("zamkniete=(\\d{1,20})");
 
+    /** Makro zaproponowane komputerowi (budzi agenta, który na nie czeka). */
+    public record MacroOffered(UUID agentId) {
+    }
+
+    /** Makro sklepu się skończyło (wynik, błąd, anulowanie, brak komputera): może ruszyć następne. */
+    public record MacroEnded(UUID storeId) {
+    }
+
     private final AgentMacroJobRepository jobs;
     private final StoreAgentRepository agents;
     private final AgentMachineStates states;
@@ -83,10 +92,12 @@ public class AgentMacroService {
     private final MeaCodeService meaCodes;
     private final BaseReceivingService receiving;
     private final LiveEvents live;
+    private final ApplicationEventPublisher events;
 
     public AgentMacroService(AgentMacroJobRepository jobs, StoreAgentRepository agents, AgentMachineStates states,
             StoreRepository stores, AppUserRepository users, BaseDeliveryService deliveries, MeaCodeService meaCodes,
-            BaseReceivingService receiving, LiveEvents live) {
+            BaseReceivingService receiving, LiveEvents live, ApplicationEventPublisher events) {
+        this.events = events;
         this.receiving = receiving;
         this.jobs = jobs;
         this.agents = agents;
@@ -169,6 +180,23 @@ public class AgentMacroService {
                 delivery.number(), orders.size(), request.agentId(), userId);
     }
 
+    /** Pliki nowych artykułów zapisane przez agenta ({@link ProductFileMacroService}). */
+    @Transactional
+    public AgentMacroApi.Job productFiles(UUID storeId, List<ProductFileMacro.File> files, UUID userId) {
+        String first = files.getFirst().path();
+        return create(storeId, AgentMacroKind.PRODUCT_FILES, "Wczytaj nowe artykuły · " + (files.size() == 1
+                ? "dostawca " + files.getFirst().supplierCode() + ", " + first.substring(first.lastIndexOf('\\') + 1)
+                : "pliki: " + files.size()),
+                ProductFileMacro.build(files), null, files.size(), null, userId);
+    }
+
+    /** Czy którykolwiek komputer sklepu zgłosił odtwarzacz w wersji co najmniej {@code 0.<minor>}. */
+    @Transactional(readOnly = true)
+    public boolean anyPlayer(UUID storeId, int minor) {
+        return agents.findByStore(storeId).stream().filter(agent -> agent.getDeletedAt() == null)
+                .anyMatch(agent -> states.get(agent.getId()).filter(state -> state.playerAtLeast(minor)).isPresent());
+    }
+
     @Transactional
     public AgentMacroApi.Job get(UUID storeId, UUID id) {
         sweep(storeId, Instant.now());
@@ -212,17 +240,30 @@ public class AgentMacroService {
 
     // --- Agent ---
 
-    /**
-     * Zgłoszenie stanu komputera (co kilka sekund) i odpowiedź: makro zaproponowane temu komputerowi albo nic. Przy
-     * okazji porządkuje trwające makro sklepu (brak odpowiedzi komputera, zgubiony komputer w trakcie makra).
-     */
+    /** Zgłoszenie stanu co kilka sekund (agent sprzed 1.9.0). */
     @Transactional
     public AgentMacroApi.PollResponse poll(StoreAgentService.AgentContext agent, AgentMacroApi.Poll request) {
+        return report(agent, request, AgentMachineStates.FRESH);
+    }
+
+    /**
+     * Zgłoszenie stanu komputera i odpowiedź: makro zaproponowane temu komputerowi albo nic. Przy okazji porządkuje
+     * trwające makro sklepu (brak odpowiedzi komputera, zgubiony komputer w trakcie makra).
+     */
+    @Transactional
+    public AgentMacroApi.PollResponse report(StoreAgentService.AgentContext agent, AgentMacroApi.Poll request,
+            Duration validFor) {
         Instant now = Instant.now();
         states.report(agent.agentId(), request.idleSeconds() == null ? 0 : request.idleSeconds(),
                 Boolean.TRUE.equals(request.locked()), Boolean.TRUE.equals(request.playerRunning()),
-                Boolean.TRUE.equals(request.busy()), request.playerVersion(), now);
+                Boolean.TRUE.equals(request.busy()), request.playerVersion(), now, validFor);
         sweep(agent.storeId(), now);
+        return offered(agent);
+    }
+
+    /** Makro zaproponowane temu komputerowi albo nic. */
+    @Transactional
+    public AgentMacroApi.PollResponse offered(StoreAgentService.AgentContext agent) {
         AgentMacroJob offered = jobs.findActiveForUpdate(agent.storeId()).stream()
                 .filter(job -> job.getStatus() == AgentMacroStatus.OFFERED && agent.agentId().equals(job.getAgentId()))
                 .findFirst().orElse(null);
@@ -257,7 +298,8 @@ public class AgentMacroService {
         announce(job);
         return new AgentMacroApi.Start(job.getMacro(), ReportSaveMacro.OPEN_LINE, job.getKind().name(),
                 job.getKind() == AgentMacroKind.ITM8_COLLECT, (int) runTimeout(job).toMinutes(),
-                uploads(job));
+                uploads(job), job.getKind() == AgentMacroKind.PRODUCT_FILES
+                        ? ProductFileMacro.files(job.getMacro()) : List.of());
     }
 
     private static List<AgentMacroApi.Upload> uploads(AgentMacroJob job) {
@@ -342,16 +384,14 @@ public class AgentMacroService {
      */
     private void sweep(UUID storeId, Instant now) {
         for (AgentMacroJob job : jobs.findActiveForUpdate(storeId)) {
-            Optional<AgentMachineStates.State> state = Optional.ofNullable(job.getAgentId()).flatMap(states::get);
             if (job.getStatus() == AgentMacroStatus.OFFERED) {
-                boolean silent = state.map(found -> !found.fresh(now)).orElse(true);
-                if (silent || job.getOfferedAt().plus(OFFER_TIMEOUT).isBefore(now)) {
+                if (states.silent(job.getAgentId(), now) || job.getOfferedAt().plus(OFFER_TIMEOUT).isBefore(now)) {
                     job.decline(job.getAgentId());
                     offerNext(job, now);
                     announce(job);
                 }
             } else if (job.getStatus() == AgentMacroStatus.RUNNING) {
-                boolean lost = state.map(found -> found.reportedAt().plus(LOST_AFTER).isBefore(now)).orElse(true);
+                boolean lost = states.lastSeen(job.getAgentId()).plus(LOST_AFTER).isBefore(now);
                 if (lost || job.getStartedAt().plus(runTimeout(job)).isBefore(now)) {
                     job.finish(AgentMacroStatus.FAILED, "Komputer przestał odpowiadać w trakcie makra. Sprawdź w "
                             + "Mercalys, co zostało zrobione.", List.of(), now);
@@ -380,12 +420,13 @@ public class AgentMacroService {
             }
         }
         StoreAgent best = candidates.keySet().stream()
-                .min(Comparator.<StoreAgent, Boolean>comparing(agent -> !free(candidates.get(agent)))
-                        .thenComparing(agent -> -candidates.get(agent).idleSeconds())
+                .min(Comparator.<StoreAgent, Boolean>comparing(agent -> !free(candidates.get(agent), now))
+                        .thenComparing(agent -> -candidates.get(agent).idleAt(now))
                         .thenComparing(agent -> !agent.isPreferred()))
                 .orElse(null);
         if (best != null) {
             job.offer(best.getId(), now);
+            events.publishEvent(new MacroOffered(best.getId()));
             return;
         }
         List<String> declined = job.getDeclinedAgentIds().stream().map(id -> agents.findById(id)
@@ -403,8 +444,8 @@ public class AgentMacroService {
         job.finish(AgentMacroStatus.NO_COMPUTER, message.toString(), List.of(), now);
     }
 
-    private static boolean free(AgentMachineStates.State state) {
-        return state.idleSeconds() >= FREE_AFTER.toSeconds();
+    private static boolean free(AgentMachineStates.State state, Instant now) {
+        return state.idleAt(now) >= FREE_AFTER.toSeconds();
     }
 
     /** Powód, dla którego komputer nie może teraz wykonać makra, albo {@code null}. */
@@ -417,6 +458,9 @@ public class AgentMacroService {
         }
         if (kind != null && BASE_KINDS.contains(kind) && !state.playerAtLeast(BASE_PLAYER_MINOR)) {
             return "potrzebny agent 1.8.0 i odtwarzacz makr AutoJob 0.67 albo nowsze";
+        }
+        if (kind == AgentMacroKind.PRODUCT_FILES && !state.playerAtLeast(ProductFileMacro.PLAYER_MINOR)) {
+            return "potrzebny odtwarzacz makr AutoJob 0." + ProductFileMacro.PLAYER_MINOR + " albo nowszy";
         }
         if (state.locked()) {
             return "ekran zablokowany";
@@ -432,7 +476,8 @@ public class AgentMacroService {
         String reason = unavailable(state, now, null);
         boolean online = StoreAgentService.online(agent, now);
         return new AgentMacroApi.Computer(agent.getId(), agent.getName(), agent.getMachineName(), online,
-                reason == null, reason == null && free(state), state == null ? null : state.idleSeconds(), reason);
+                reason == null, reason == null && free(state, now), state == null ? null : state.idleAt(now),
+                reason);
     }
 
     private static String label(StoreAgent agent) {
@@ -444,8 +489,19 @@ public class AgentMacroService {
     }
 
     private void announce(AgentMacroJob job) {
-        live.publish(job.getStore().getId(), "agent-macro", Map.of("id", job.getId(), "status",
-                job.getStatus().name()));
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("id", job.getId());
+        fields.put("status", job.getStatus().name());
+        fields.put("kind", job.getKind().name());
+        // Powiadomienie o makrze zleconym przez serwer dostaje osoba, która zapisała plik.
+        fields.put("userId", job.getCreatedBy().getId());
+        if (job.getKind() == AgentMacroKind.PRODUCT_FILES && job.getResultMessage() != null) {
+            fields.put("message", job.getResultMessage());
+        }
+        live.publish(job.getStore().getId(), "agent-macro", fields);
+        if (job.getStatus() != AgentMacroStatus.OFFERED && job.getStatus() != AgentMacroStatus.RUNNING) {
+            events.publishEvent(new MacroEnded(job.getStore().getId()));
+        }
     }
 
     private AgentMacroApi.Job response(AgentMacroJob job) {

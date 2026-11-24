@@ -11,7 +11,11 @@ dysku sieciowego (`N:\…`), więc agent przejmuje styk z folderami sklepu:
 - **wgrywa raporty Importu danych** (od wersji 1.1): pilnuje folderu każdego codziennego raportu (folder z ustawień
   importu, bez niego folder ścieżki zapisu makra „Zapis z Mercalys”), nowy plik wysyła w kawałkach, a serwer wgrywa go
   tym samym importem co „Odśwież dane”; wgrany raport usuwa z folderu następnego dnia (tylko plik z tą samą datą
-  zmiany, nowszy raport pod tą samą nazwą zostaje).
+  zmiany, nowszy raport pod tą samą nazwą zostaje);
+- **wczytuje pliki nowych artykułów** (od wersji 1.10): po zapisie pliku w folderze nowych artykułów (zakłada go sam,
+  gdy go nie ma) serwer zleca makro wolnemu komputerowi sklepu, a agent przed startem sprawdza, czy plik jest
+  w folderze. Plik wrzucony ręcznie makra nie uruchamia. Pliki `CADBEZP*.xls` z poprzednich dni główny agent usuwa
+  z tego folderu codziennie (treść zostaje na serwerze).
 
 Agent działa tylko w sklepie, który w Intermanage wybrał **Ustawienia sklepu → Agent sklepu → Praca z folderami przez
 agenta**. Bez tego (albo gdy agent jest offline) wszystko działa jak dotąd, w przeglądarce.
@@ -73,7 +77,7 @@ Robi:
   odtwarzaczem.
 
 - wykonuje **makra zlecone z przeglądarki** (od 1.7.0, na razie „Zbierz brakujące ITM8” i „Uzupełnij ITM8” z dostawy
-  z bazy): co 3 s zgłasza serwerowi, ile sekund nikt nie ruszał myszy i klawiatury, czy ekran jest zablokowany, czy
+  z bazy): czeka na makro jednym długim żądaniem (od 1.9.0; wcześniej pytał co 3 s) i zgłasza serwerowi, ile sekund nikt nie ruszał myszy i klawiatury, czy ekran jest zablokowany, czy
   działa AutoJob (od 0.64) i czy trwa makro. Serwer wybiera najdłużej nieużywany komputer, a agent pokazuje „Makro
   rozpocznie się za 5…” (15 s, gdy ktoś ruszał komputer w ostatnich 2 min) z „Anuluj”, które oddaje makro kolejnemu
   komputerowi (ruch myszy nie anuluje od 1.7.2). Wyłączony Mercalys makro uruchamia z położenia w ustawieniach agenta
@@ -167,6 +171,9 @@ w `Intermanage.Agent.csproj` (`Version`, `FileVersion`, `AssemblyVersion`); serw
 - `POST /hello` przy starcie i co 5 min: foldery zapisu (klucz folderu → ścieżka) i foldery do pilnowania;
 - `GET /file-queue/wait?timeout=25` w pętli: pliki przydzielone temu agentowi (przydział ważny 2 min), potem
   `GET /file-queue/{id}/file`, zapis i `POST /file-queue/{id}/saved` albo `/failed`;
+- `POST /macro-jobs/wait` w pętli (od 1.9.0): stan komputera i czekanie na makro do 25 s (do 55 s, gdy ekran jest
+  zablokowany, nie ma AutoJob albo trwa makro); zmianę stanu agent sprawdza u siebie co 2 s i zgłasza nowym żądaniem,
+  które zastępuje poprzednie. Starszy agent pyta `POST /macro-jobs/poll` co 3 s;
 - `POST /events` z paczką zdarzeń (najpóźniej sekundę po wykryciu, co 5 min pełny przegląd), w odpowiedzi pliki,
   o które serwer prosi: TRACEART → `POST /price-files`, `Histo.Log` → `POST /athos-history`.
 

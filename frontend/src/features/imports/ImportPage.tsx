@@ -817,6 +817,7 @@ function ReportUpload<T>({
 const IMPORT_PHASES: Record<ImportProgress['phase'], string> = {
   UPLOADING: 'Wysyłanie pliku',
   PROCESSING: 'Odczyt i zapis na serwerze',
+  WAITING: 'Czeka na koniec innych importów',
   READING: 'Odczyt pliku',
   SAVING: 'Zapis do kartoteki',
   FINISHING: 'Kończenie importu',
@@ -849,7 +850,7 @@ function ImportProgressBar({ storeId, kind }: { storeId: string; kind: ImportRep
   const elapsed = useElapsedSeconds(processing ? job.since : undefined)
   if (!job) return null
   const steps = kind === 'PRODUCTS' ? PRODUCT_STEPS : REPORT_STEPS
-  const step = steps.indexOf(job.phase) + 1
+  const step = steps.indexOf(job.phase === 'WAITING' ? 'READING' : job.phase) + 1
   return (
     <div className="grid gap-1.5 text-sm">
       <div className="flex items-baseline justify-between gap-3">

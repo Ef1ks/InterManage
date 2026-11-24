@@ -39,6 +39,13 @@ public final class ProductFile {
                 .mapToObj(i -> row(rows.get(i), i == 0 ? (Object) BigDecimal.ZERO : XlsWriter.EMPTY_TEXT)).toList();
     }
 
+    /** {@code EAN;procent VAT} artykułów z EAN-em i stawką, dla makra wczytującego plik. */
+    public static List<String> articles(List<ProductFileRequest.Row> rows) {
+        return rows.stream().filter(row -> ean(row.ean()) != null && row.vatPercent() != null)
+                .map(row -> ean(row.ean()) + ";" + row.vatPercent().stripTrailingZeros().toPlainString())
+                .distinct().toList();
+    }
+
     private static List<Object> row(ProductFileRequest.Row row, Object segment) {
         String subfamily = row.subfamilyCode() != null ? row.subfamilyCode().strip() : "";
         BigDecimal purchase = money(row.purchasePrice());

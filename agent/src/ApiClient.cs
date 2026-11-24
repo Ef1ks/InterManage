@@ -160,6 +160,8 @@ internal sealed class MacroStart
     public int TimeoutMinutes { get; set; } = 120;
     /// <summary>Pliki zapisane przez makro, które agent wysyła po nim (bony dostawy z bazy).</summary>
     public List<MacroUpload> Uploads { get; set; } = new();
+    /// <summary>Pliki, które przed startem makra muszą leżeć w folderze (pliki nowych artykułów).</summary>
+    public List<string> RequiredFiles { get; set; } = new();
 }
 
 internal sealed class MacroUpload
@@ -224,7 +226,7 @@ internal sealed class ApiClient : IDisposable
             DefaultProxyCredentials = CredentialCache.DefaultCredentials,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
             AllowAutoRedirect = false,
-            // Domyślne 2 połączenia zajmuje czekanie na pliki i wysyłka raportu, a stan komputera musi iść co kilka sekund.
+            // Domyślne 2 połączenia zajmuje czekanie na pliki i wysyłka raportu, a czekają jeszcze makra.
             MaxConnectionsPerServer = 8,
         };
         http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
@@ -377,11 +379,16 @@ internal sealed class ApiClient : IDisposable
         }, TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
     }
 
-    /// <summary>Stan komputera co kilka sekund; w odpowiedzi makro zlecone z przeglądarki dla tego komputera.</summary>
-    public Task<MacroPoll> MacroPollAsync(int idleSeconds, bool locked, bool playerRunning, string? playerVersion,
-        bool busy, CancellationToken cancel) =>
-        SendJsonAsync<MacroPoll>(HttpMethod.Post, "/api/store-agent/macro-jobs/poll",
-            new { idleSeconds, locked, playerRunning, busy, playerVersion }, TimeSpan.FromSeconds(15), cancel);
+    /// <summary>
+    /// Stan komputera i czekanie na makro zlecone z przeglądarki (long polling): serwer odpowiada, gdy ten komputer
+    /// dostanie makro, albo po <paramref name="timeout"/> sekundach. <paramref name="handled"/> = makro już odliczane
+    /// albo wykonywane, serwer nie przyśle go drugi raz.
+    /// </summary>
+    public Task<MacroPoll> MacroWaitAsync(int idleSeconds, bool locked, bool playerRunning, string? playerVersion,
+        bool busy, string? handled, int timeout, CancellationToken cancel) =>
+        SendJsonAsync<MacroPoll>(HttpMethod.Post, "/api/store-agent/macro-jobs/wait",
+            new { idleSeconds, locked, playerRunning, busy, playerVersion, handled, timeout },
+            TimeSpan.FromSeconds(timeout + 20), cancel);
 
     /// <summary>Plik zapisany przez makro, spakowany gzipem.</summary>
     public async Task MacroFileAsync(string id, string key, string name, byte[] content, CancellationToken cancel)

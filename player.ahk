@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.67.0.0
+;@Ahk2Exe-SetVersion 0.68.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.67" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.68" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -313,6 +313,7 @@ PlayMacro(rawClip) {
     orders := Map() ; dostawca -> numer zamówienia dostawy z bazy (WEBORDERREAD, WEBORDERKNOWN)
     pickedOrder := "" ; zamówienie przeniesione do wybranych przez ostatni WEBORDERPICK
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
+    vatCodes := Map() ; WEBVATCODE: EAN bez zer wiodących -> kod stawki VAT w Mercalys
     handledRows := Map() ; WEBIFROW: ile wierszy obsłużono pod daną etykietą (np. pliki jednego kodu MEA)
     global MacroCollected
     collected := MacroCollected ; WEBCOLLECT: kody ze wszystkich list tego makra (np. pliki bonu od 538 i 88110)
@@ -1030,6 +1031,37 @@ PlayMacro(rawClip) {
                 }
                 wanted[ListKey(parts[4], parts[3])] := {number: Trim(parts[4]), code: Trim(parts[3])}
                 results[ListKey(parts[4], parts[3])] := Trim(parts[2])
+            case "STOP":
+                ; STOP|komunikat (od 0.68): kończy makro błędem, np. po komunikacie programu, który wymaga człowieka
+                MacroBox report (parts.Length >= 2 ? Trim(parts[2]) : "Makro zatrzymane.") "`n`nMakro zatrzymane na linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                return
+            case "WEBVATCODE":
+                ; WEBVATCODE|EAN|kod stawki (od 0.68): stawka artykułu dla WEBFIXCN; pusta linia bez EAN-u czyści listę
+                if (parts.Length < 3)
+                    vatCodes := Map()
+                else
+                    vatCodes[LTrim(Trim(parts[2]), "0")] := Trim(parts[3])
+            case "WEBFIXCN":
+                ; WEBFIXCN|okno|adres listy|element listy|nagłówek kolumny|dobra wartość|adres karty|pole EAN|pole CN|kod CN|pole VAT|
+                ; zatwierdzenie|okno pytania|tekst pytania|odpowiedź|powrót (od 0.68): na liście artykułów każdy wiersz, którego
+                ; kolumna ma inną wartość niż dobra (Ano. inne niż N), otwiera dwuklikiem, wpisuje kod CN z Enterem i kod stawki
+                ; z WEBVATCODE, sprawdza oba pola, zatwierdza i wraca na listę, aż błędów nie ma. Artykuł spoza listy stawek
+                ; albo z błędem także po poprawce zatrzymuje makro.
+                if (parts.Length < 16) {
+                    MacroBox report "Linia WEBFIXCN wymaga wszystkich pól.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                step := {title: Trim(parts[2]), grid: "*", list: Trim(parts[3]), listElement: Trim(parts[4]), header: Trim(parts[5]), good: Trim(parts[6]),
+                    card: Trim(parts[7]), ean: Trim(parts[8]), cn: Trim(parts[9]), cnCode: Trim(parts[10]), vat: Trim(parts[11]),
+                    save: Trim(parts[12]), dialog: Trim(parts[13]), dialogText: Trim(parts[14]), dialogButton: Trim(parts[15]), back: Trim(parts[16])}
+                fixedCount := 0
+                problem := WebFixCn(step, vatCodes, &fixedCount)
+                if (fixedCount > 0)
+                    report .= "Poprawione artykuły z błędem: " fixedCount "`n"
+                if (problem != "") {
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
             case "WEBSHOW":
                 ; WEBSHOW|fragment tytułu okna|elementy po przecinku: tylko pokazuje ich HTML (do Schowka), niczego nie klika
                 if (parts.Length >= 3)
@@ -2450,15 +2482,7 @@ WebDoubleClickRow(title, grid, text, timeoutMs) {
                         continue
                     try WinActivate hwnd
                     try {
-                        ; Mercalys: klik zaznacza wiersz (setSelectedLigne), dwuklik to __doPostBack z atrybutu ondblclick wiersza.
-                        ; Kod z atrybutu uruchamiamy wprost; bez niego zdarzenie idzie do pierwszej komórki i wypływa do wiersza.
-                        dbl := ""
-                        if RegExMatch(WebProp(row, "outerHTML"), "i)ondblclick=`"([^`"]+)`"", &match)
-                            dbl := StrReplace(StrReplace(StrReplace(match[1], "&quot;", "`""), "&#39;", "'"), "&amp;", "&")
-                        window := doc.parentWindow
-                        window.__macroTarget := row
-                        window.setTimeout("var t = window.__macroTarget; t.click(); "
-                            . (dbl != "" ? dbl : "t.cells[0].fireEvent('ondblclick');"), 0, "JScript")
+                        DoubleClickRow(doc, row)
                         return ""
                     }
                 }
@@ -2468,6 +2492,18 @@ WebDoubleClickRow(title, grid, text, timeoutMs) {
             return "Nie ma wiersza z `"" text "`" w oknie `"" title "`"."
         Sleep 100
     }
+}
+
+; Mercalys: klik zaznacza wiersz (setSelectedLigne), dwuklik to __doPostBack z atrybutu ondblclick wiersza.
+; Kod z atrybutu uruchamiamy wprost; bez niego zdarzenie idzie do pierwszej komórki i wypływa do wiersza.
+DoubleClickRow(doc, row) {
+    dbl := ""
+    if RegExMatch(WebProp(row, "outerHTML"), "i)ondblclick=`"([^`"]+)`"", &match)
+        dbl := StrReplace(StrReplace(StrReplace(match[1], "&quot;", "`""), "&#39;", "'"), "&amp;", "&")
+    window := doc.parentWindow
+    window.__macroTarget := row
+    window.setTimeout("var t = window.__macroTarget; t.click(); "
+        . (dbl != "" ? dbl : "t.cells[0].fireEvent('ondblclick');"), 0, "JScript")
 }
 
 ; Najgłębszy widoczny element z tekstem (bez wielkości liter). Jedno pole wyboru obok napisu (w nim, w jego rodzicu
@@ -3517,6 +3553,198 @@ WebErrors(title, element, allowed, timeoutMs, &summary) {
         return "Lista błędów pobrania ma inne błędy niż dozwolone (" count " z " texts.Length "), sprawdź je w Mercalys:" bad
     summary := "Błędy pobrania (tylko dozwolone): " texts.Length
     return ""
+}
+
+; --- Cadencier bezpośredni: artykuły z błędem na liście (od 0.68) ---
+; Siatki listy (ca-e013) nie znamy ze skanu, więc kolumnę znajdujemy po nagłówku, a nierozpoznana lista zatrzymuje makro
+; z opisem wierszy, zanim cokolwiek się zmieni.
+
+WebFixCn(step, vatCodes, &fixedCount) {
+    fixed := Map()
+    Loop 2000 {
+        found := ""
+        problem := FindAnomaly(step, &found)
+        if (problem != "")
+            return problem
+        if !IsObject(found)
+            return ""
+        DoubleClickRow(found.doc, found.row)
+        problem := WebPage(step.title, step.card, step.ean, 30000, [])
+        if (problem != "")
+            return "Artykuł z błędem (" found.text ") się nie otworzył. " problem
+        ean := ""
+        problem := WebValue(step.title, step.ean, "^\s*\d+\s*$", 10000, &ean)
+        if (problem != "")
+            return "Artykuł z błędem (" found.text ") nie ma EAN-u. " problem
+        key := LTrim(Trim(ean), "0")
+        if fixed.Has(key)
+            return "Artykuł " ean " dalej ma błąd po wpisaniu kodu CN i VAT. Popraw go w Mercalys."
+        if !vatCodes.Has(key)
+            return "Artykuł " ean " z błędem nie jest z tego pliku (albo plik nie ma jego stawki VAT). Popraw go w Mercalys."
+        problem := FillCnCard(step, vatCodes[key])
+        if (problem != "")
+            return "Artykuł " ean ": " problem
+        fixed[key] := true
+        fixedCount += 1
+    }
+    return "Za dużo artykułów z błędem."
+}
+
+; Kod CN z Enterem (Mercalys sprawdza go i potrafi przeładować kartę), potem stawka; zatwierdza dopiero przy obu wartościach.
+FillCnCard(step, vatCode) {
+    problem := WebKey(step.title, step.cn, "^a" step.cnCode "{Enter}", 10000)
+    if (problem != "")
+        return problem
+    Sleep 1500
+    OptionalDialog("okno dialogowe strony", "stawk;CN", "Fermer", 500)
+    problem := WebPage(step.title, step.card, step.vat, 30000, [])
+    if (problem = "")
+        problem := WebValue(step.title, step.cn, "^\s*" step.cnCode "\s*$", 5000)
+    if (problem = "")
+        problem := WebKey(step.title, step.vat, "^a" vatCode "{Tab}", 10000)
+    if (problem != "")
+        return problem
+    Sleep 800
+    OptionalDialog("okno dialogowe strony", "stawk;CN", "Fermer", 500)
+    problem := WebValue(step.title, step.vat, "^\s*0*" vatCode "\s*$", 5000)
+    if (problem = "")
+        problem := WebValue(step.title, step.cn, "^\s*" step.cnCode "\s*$", 5000)
+    if (problem = "")
+        problem := WebClick(step.title, step.save, 10000)
+    if (problem = "")
+        problem := ConfirmDialog(step.dialog, step.dialogText, step.dialogButton, 30000)
+    if (problem != "")
+        return problem
+    Sleep 1000
+    if (WebPage(step.title, step.list, step.listElement, 10000, []) = "")
+        return ""
+    ; Karta została na ekranie po zapisie: wraca się przyciskiem.
+    if (WebPage(step.title, step.card, step.back, 500, []) = "") {
+        problem := WebClick(step.title, step.back, 5000)
+        if (problem != "")
+            return problem
+    }
+    return WebPage(step.title, step.list, step.listElement, 30000, [])
+}
+
+; Pierwszy wiersz z błędem na wszystkich stronach listy (found = "" bez błędów).
+FindAnomaly(step, &found) {
+    found := ""
+    if PagerAvailable(step.title, "pgrDetail_ibtPremier") {
+        problem := TurnPage(step, "pgrDetail_ibtPremier")
+        if (problem != "")
+            return problem
+    }
+    Loop 200 {
+        problem := PageAnomaly(step, &found)
+        if (problem != "" || IsObject(found))
+            return problem
+        if !PagerAvailable(step.title, "pgrDetail_ibtSuivant")
+            return ""
+        problem := TurnPage(step, "pgrDetail_ibtSuivant")
+        if (problem != "")
+            return problem
+    }
+    return "Lista artykułów ma za dużo stron."
+}
+
+; Strona listy: kolumna po nagłówku, wiersze danych stabilne w dwóch odczytach.
+PageAnomaly(step, &found) {
+    deadline := A_TickCount + 30000
+    previous := ""
+    reason := "Nie pojawiła się lista artykułów (" step.list ")."
+    Loop {
+        for doc in PagesWith(step.title, step.listElement) {
+            if !InStr(WebProp(doc, "URL"), step.list)
+                continue
+            rows := []
+            for item in GridRows(doc, "*") {
+                if IsShown(item.row)
+                    rows.Push(item.row)
+            }
+            if (rows.Length = 0) {
+                for row in LeafRows(doc) {
+                    if RegExMatch(RowText(row), "(?<!\d)\d{8,13}(?!\d)")
+                        rows.Push(row)
+                }
+            }
+            signature := rows.Length
+            for row in rows
+                signature .= "|" RowText(row)
+            if (rows.Length = 0) {
+                reason := "Lista artykułów jest pusta albo ma nieznaną budowę." DescribeLeafRows(doc)
+                continue
+            }
+            if (signature != previous) {
+                previous := signature
+                reason := "Lista artykułów się zmienia."
+                continue
+            }
+            column := -1
+            width := 0
+            HeaderColumn(doc, step.header, &column, &width)
+            if (column < 0) {
+                reason := "Na liście artykułów nie ma kolumny `"" step.header "`"." DescribeLeafRows(doc)
+                continue
+            }
+            bad := ""
+            for row in rows {
+                cells := 0
+                try cells := row.cells.length
+                value := CellText(row, column)
+                ; Krótka litera w każdym wierszu: inna szerokość albo długi tekst = zła kolumna, niczego nie klikamy.
+                if (cells != width || value = "" || value = "?" || StrLen(value) > 3) {
+                    return "Kolumna `"" step.header "`" listy artykułów ma nieoczekiwaną wartość `"" value "`" (nagłówek " width " kolumn, wiersz " cells ")." DescribeLeafRows(doc)
+                }
+                if (StrUpper(value) != StrUpper(step.good) && !IsObject(bad))
+                    bad := {doc: doc, row: row, text: RowText(row)}
+            }
+            found := bad
+            return ""
+        }
+        if (A_TickCount >= deadline)
+            return reason
+        Sleep 500
+    }
+}
+
+; Numer kolumny z nagłówkiem (z kropką albo bez) i liczba kolumn nagłówka.
+HeaderColumn(doc, header, &column, &width) {
+    wanted := StrUpper(RTrim(header, "."))
+    try {
+        found := doc.getElementsByTagName("tr")
+        Loop found.length {
+            cells := found.item(A_Index - 1).cells
+            Loop cells.length {
+                text := ""
+                try text := Trim(StrReplace(cells.item(A_Index - 1).innerText, Chr(160), " "))
+                if (StrUpper(RTrim(text, ". ")) = wanted) {
+                    column := A_Index - 1
+                    width := cells.length
+                    return
+                }
+            }
+        }
+    }
+}
+
+; Początek listy do opisu błędu (komórki oddzielone kreską), żeby było widać budowę nieznanej tabeli.
+DescribeLeafRows(doc) {
+    out := ""
+    count := 0
+    for row in LeafRows(doc) {
+        count += 1
+        if (count > 4)
+            break
+        text := ""
+        try {
+            cells := row.cells
+            Loop cells.length
+                text .= (A_Index > 1 ? " ¦ " : "") Trim(RegExReplace(StrReplace(cells.item(A_Index - 1).innerText, Chr(160), " "), "\s+", " "))
+        }
+        out .= "`n" SubStr(text, 1, 300)
+    }
+    return out = "" ? "" : "`nWiersze:" out
 }
 
 WebShow(title, buttons) {

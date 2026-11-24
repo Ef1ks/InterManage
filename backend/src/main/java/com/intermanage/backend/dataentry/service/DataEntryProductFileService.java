@@ -1,7 +1,11 @@
 package com.intermanage.backend.dataentry.service;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,11 +26,15 @@ import com.intermanage.backend.dataentry.component.ProductFile;
 import com.intermanage.backend.dataentry.dto.ProductDraftRequest;
 import com.intermanage.backend.dataentry.dto.ProductDraftResult;
 import com.intermanage.backend.dataentry.dto.ProductFileRequest;
+import com.intermanage.backend.dataentry.entity.ProductFileExport;
+import com.intermanage.backend.dataentry.repository.ProductFileExportRepository;
 import com.intermanage.backend.product.entity.ProductDraft;
 import com.intermanage.backend.product.repository.ProductDraftRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
+import com.intermanage.backend.supplier.entity.MercalysSupplierCreation;
 import com.intermanage.backend.supplier.entity.Supplier;
+import com.intermanage.backend.supplier.repository.MercalysSupplierCreationRepository;
 import com.intermanage.backend.supplier.repository.SupplierRepository;
 
 /**
@@ -38,14 +46,23 @@ import com.intermanage.backend.supplier.repository.SupplierRepository;
 @Service
 public class DataEntryProductFileService {
 
+    /** Nazwa dostawcy w kartotece jest ucięta do 30 znaków (bez końcowych spacji bywa krótsza). */
+    private static final int CATALOG_NAME_CUT = 28;
+
     private final XlsWriter xlsWriter;
     private final SupplierRepository suppliers;
     private final ProductDraftRepository drafts;
     private final StoreRepository stores;
     private final AppUserRepository users;
 
+    private final ProductFileExportRepository exports;
+    private final MercalysSupplierCreationRepository creations;
+
     public DataEntryProductFileService(XlsWriter xlsWriter, SupplierRepository suppliers,
-            ProductDraftRepository drafts, StoreRepository stores, AppUserRepository users) {
+            ProductDraftRepository drafts, StoreRepository stores, AppUserRepository users,
+            ProductFileExportRepository exports, MercalysSupplierCreationRepository creations) {
+        this.exports = exports;
+        this.creations = creations;
         this.xlsWriter = xlsWriter;
         this.suppliers = suppliers;
         this.drafts = drafts;
@@ -53,11 +70,65 @@ public class DataEntryProductFileService {
         this.users = users;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public DataEntryService.ExportFile file(UUID storeId, ProductFileRequest request) {
         byte[] content = xlsWriter.write("Arkusz1", ProductFile.HEADERS, ProductFile.rows(request.rows()));
-        return new DataEntryService.ExportFile(
-                ProductFile.fileName(supplierName(storeId, request), request.invoiceNumber()), content);
+        String fileName = ProductFile.fileName(supplierName(storeId, request), request.invoiceNumber());
+        exports.save(new ProductFileExport(storeId, fileName, sha256(content), supplierCode(storeId, request),
+                ProductFile.articles(request.rows())));
+        return new DataEntryService.ExportFile(fileName, content);
+    }
+
+    /** Wydany plik po treści i nazwie: makro potrzebuje jego dostawcy i stawek VAT, których sam plik nie ma. */
+    @Transactional(readOnly = true)
+    public Optional<ProductFileExport> exported(UUID storeId, String fileName, byte[] content) {
+        return exports.findFirstByStoreIdAndContentSha256AndFileNameOrderByCreatedAtDesc(storeId, sha256(content),
+                fileName);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductFileExport> exported(Collection<UUID> ids) {
+        return exports.findAllById(ids);
+    }
+
+    /**
+     * Numer dostawcy w programie sklepu: z listy dostawców, a dostawca założony niedawno w Mercalys makrem (jeszcze nie
+     * ma go na wgranej liście) ma numer ze swojej ostatniej rezerwacji. Plik kalkulatora zna tylko nazwę z kartoteki,
+     * uciętą do 30 znaków: liczy się tylko jednoznaczny dostawca.
+     */
+    private String supplierCode(UUID storeId, ProductFileRequest request) {
+        Optional<Supplier> supplier = supplier(storeId, request);
+        if (supplier.isPresent() && supplier.get().getCode() != null) {
+            return supplier.get().getCode();
+        }
+        String nip = DataEntryLinkService.digits(supplier.map(Supplier::getNip).orElse(request.sellerNip()));
+        if (!nip.isEmpty()) {
+            return creations.findFirstByStoreIdAndNipAndDeletedAtIsNullOrderByCreatedAtDesc(storeId, nip)
+                    .map(MercalysSupplierCreation::getCode).orElse(null);
+        }
+        if (supplier.isPresent()) {
+            return null;
+        }
+        String name = DataEntryLinkService.code(request.sellerName());
+        if (name.isEmpty()) {
+            return null;
+        }
+        List<String> codes = suppliers.findByStore(storeId).stream()
+                .filter(found -> found.getCode() != null)
+                .filter(found -> {
+                    String known = DataEntryLinkService.code(found.getName());
+                    return known.equals(name) || (name.length() >= CATALOG_NAME_CUT && known.startsWith(name));
+                })
+                .map(Supplier::getCode).distinct().toList();
+        return codes.size() == 1 ? codes.getFirst() : null;
+    }
+
+    private static String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /**

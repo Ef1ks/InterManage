@@ -168,6 +168,49 @@ public interface StoreFileQueueRepository extends JpaRepository<StoreFileQueueIt
             where id in (:ids) and saved_at is null and claimed_by_agent_id = :agentId""")
     int release(List<UUID> ids, UUID agentId);
 
+    /** Plik do wczytania makrem, bez treści. */
+    interface MacroFile {
+        UUID getId();
+
+        String getFileName();
+
+        UUID getCreatedBy();
+
+        UUID getExportId();
+    }
+
+    /** Plik zapisany przez agenta czeka na makro, które go wczyta. */
+    @Modifying
+    @Query(nativeQuery = true, value = """
+            update store_file_queue
+            set macro_requested_at = now(), macro_job_id = null, product_file_export_id = :exportId
+            where id = :id""")
+    int requestMacro(UUID id, UUID exportId);
+
+    /** Pliki sklepu czekające na makro, z blokadą: dwa wyzwalacze naraz nie wezmą tych samych. */
+    @Query(nativeQuery = true, value = """
+            select q.id as id, q.file_name as fileName, q.created_by as createdBy,
+                q.product_file_export_id as exportId
+            from store_file_queue q
+            where q.store_id = :storeId and q.macro_requested_at > now() - make_interval(mins => :minutes)
+              and q.macro_job_id is null and q.created_by is not null
+            order by q.macro_requested_at, q.id
+            for update skip locked""")
+    List<MacroFile> lockWaitingForMacro(UUID storeId, int minutes);
+
+    @Query(nativeQuery = true, value = """
+            select q.id as id, q.file_name as fileName, q.created_by as createdBy,
+                q.product_file_export_id as exportId
+            from store_file_queue q
+            where q.macro_job_id = :jobId
+            order by q.macro_requested_at, q.id
+            for update""")
+    List<MacroFile> findMacroFiles(UUID jobId);
+
+    @Modifying
+    @Query(nativeQuery = true, value = "update store_file_queue set macro_job_id = :jobId where id in (:ids)")
+    int assignMacro(List<UUID> ids, UUID jobId);
+
     @Query("""
             select q from StoreFileQueueItem q
             where q.id in :ids order by q.createdAt, q.id""")

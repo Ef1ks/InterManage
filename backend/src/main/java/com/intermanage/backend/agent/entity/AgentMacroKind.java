@@ -11,5 +11,7 @@ public enum AgentMacroKind {
     /** Dostawa z bazy: pliki bonu z Obsługi BL do zamówień i bony Excel do „Znajdź różnice”. */
     BASE_RECEIVE,
     /** Dostawa z bazy: Nr BL w nagłówkach zamówień i zakończenie dostaw. */
-    BASE_CLOSE
+    BASE_CLOSE,
+    /** Pliki nowych i zmienionych artykułów, które agent właśnie zapisał w folderze sklepu (zleca je serwer). */
+    PRODUCT_FILES
 }

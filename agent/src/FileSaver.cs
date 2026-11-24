@@ -20,6 +20,7 @@ internal sealed class FileSaver
     private static readonly Regex Reserved = new(@"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private const string TempSuffix = ".intermanage-tmp";
+    internal const string ProductFileKey = "data-entry-product-file";
 
     private readonly AgentHost host;
 
@@ -101,7 +102,10 @@ internal sealed class FileSaver
         }
         try
         {
-            var folderReady = await Disk.Run(() => Directory.Exists(folder!), DiskTimeout, cancel);
+            // Folder nowych artykułów jest nasz (programy sklepu go nie zakładają), pozostałe należą do programu sklepu.
+            var own = file.FolderKey == ProductFileKey;
+            var folderReady = await Disk.Run(() => Directory.Exists(folder!) || (own && TryCreate(folder!)),
+                DiskTimeout, cancel);
             if (!folderReady)
             {
                 var message = "Folder " + folder + " jest niedostępny (dysk sieciowy odłączony?)";
@@ -161,6 +165,21 @@ internal sealed class FileSaver
             Log.Error("Zapis " + file.FileName, error);
             await ReportFailed(api, file, message, cancel);
             return !(error is DirectoryNotFoundException);
+        }
+    }
+
+    private static bool TryCreate(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Log.Info("Założono folder " + folder);
+            return true;
+        }
+        catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+        {
+            Log.Warn("Nie udało się założyć folderu " + folder + ": " + error.Message);
+            return false;
         }
     }
 

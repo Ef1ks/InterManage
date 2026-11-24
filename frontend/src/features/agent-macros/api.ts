@@ -56,5 +56,9 @@ export async function runMacro(
   return job
 }
 
+/** Ponowne wczytanie plików nowych artykułów z makra, które nie doszło do końca. */
+export const retryMacro = (storeId: string, id: string) =>
+  api<AgentMacroJob>(`${path(storeId)}/${id}/retry`, { method: 'POST' })
+
 export const cancelMacro = (storeId: string, id: string) =>
   api<AgentMacroJob>(`${path(storeId)}/${id}/cancel`, { method: 'POST' })

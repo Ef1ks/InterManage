@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+import com.intermanage.backend.common.component.ImportSlots;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.product.dto.ProductImportJobResponse;
 import com.intermanage.backend.product.dto.ProductImportJobResponse.Phase;
@@ -22,7 +23,7 @@ import com.intermanage.backend.product.dto.ProductImportResponse;
  * Importy kartoteki w tle. Raport dużego sklepu (150-200 tys. artykułów, pierwszy import zakłada wszystkie) scala się
  * kilka minut, a Cloudflare Tunnel zrywa żądanie po 100 s, więc wgranie od razu zwraca zadanie, a przeglądarka pyta
  * o jego stan. Zadania są w pamięci (jeden backend): po restarcie przepadają, a transakcja przerwanego importu się
- * wycofuje, więc raport trzeba wgrać ponownie.
+ * wycofuje, więc raport trzeba wgrać ponownie. Naraz idzie tyle importów, ile miejsc ({@link ImportSlots}).
  */
 @Component
 public class ProductImportJobs {
@@ -33,6 +34,11 @@ public class ProductImportJobs {
     private static final Duration KEEP_FINISHED = Duration.ofHours(1);
 
     private final Map<UUID, Job> jobs = new ConcurrentHashMap<>();
+    private final ImportSlots slots;
+
+    public ProductImportJobs(ImportSlots slots) {
+        this.slots = slots;
+    }
 
     /** Postęp importu podawany przez wątek importu, czytany przy pytaniu o stan. */
     public interface Progress {
@@ -77,7 +83,8 @@ public class ProductImportJobs {
 
     private void run(Job job, Runnable cleanup, Function<Progress, ProductImportResponse> work) {
         try {
-            job.finish(work.apply(job), null);
+            job.finish(slots.call(job.fileName + " sklepu " + job.storeId, () -> job.phase = Phase.READING,
+                    () -> work.apply(job)), null);
         } catch (ApiException e) {
             job.finish(null, e);
         } catch (RuntimeException | Error e) {
@@ -104,7 +111,7 @@ public class ProductImportJobs {
         private volatile ProductImportResponse result;
         private volatile ApiException error;
         private volatile Instant finishedAt;
-        private volatile Phase phase = Phase.READING;
+        private volatile Phase phase = Phase.WAITING;
         private volatile int percent;
         private volatile int processedRows;
         private volatile int totalRows;

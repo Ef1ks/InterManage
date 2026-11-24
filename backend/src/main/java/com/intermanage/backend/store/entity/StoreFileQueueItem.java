@@ -128,6 +128,10 @@ public class StoreFileQueueItem {
         return folderLabel;
     }
 
+    public AppUser getCreatedBy() {
+        return createdBy;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

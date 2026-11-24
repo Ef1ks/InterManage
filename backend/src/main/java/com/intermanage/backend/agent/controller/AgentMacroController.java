@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.agent.dto.AgentMacroApi;
 import com.intermanage.backend.agent.service.AgentMacroService;
+import com.intermanage.backend.agent.service.ProductFileMacroService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ import jakarta.validation.Valid;
  * POST /api/stores/{storeId}/agent-macros/base-close        {deliveryId, agentId?} Nr BL i zakończenie dostaw bonu
  * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
  * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
+ * POST /api/stores/{storeId}/agent-macros/{id}/retry        ponownie wczytuje pliki nowych artykułów tego makra
  * </pre>
  */
 @RestController
@@ -45,8 +47,11 @@ public class AgentMacroController {
 
     private final AgentMacroService macros;
 
-    public AgentMacroController(AgentMacroService macros) {
+    private final ProductFileMacroService productFiles;
+
+    public AgentMacroController(AgentMacroService macros, ProductFileMacroService productFiles) {
         this.macros = macros;
+        this.productFiles = productFiles;
     }
 
     @GetMapping("/computers")
@@ -106,5 +111,12 @@ public class AgentMacroController {
     public AgentMacroApi.Job cancel(@PathVariable UUID storeId, @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return macros.cancel(storeId, id, principal.getId());
+    }
+
+    @PostMapping("/{id}/retry")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job retry(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return productFiles.retry(storeId, id, principal.getId());
     }
 }

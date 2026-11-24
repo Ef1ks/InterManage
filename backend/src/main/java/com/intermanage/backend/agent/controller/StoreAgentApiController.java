@@ -31,6 +31,7 @@ import com.intermanage.backend.agent.dto.AgentReportFileResponse;
 import com.intermanage.backend.agent.service.AgentEventService;
 import com.intermanage.backend.agent.service.AgentFileQueueService;
 import com.intermanage.backend.agent.service.AgentMacroService;
+import com.intermanage.backend.agent.service.AgentMacroWaitService;
 import com.intermanage.backend.agent.service.AgentReportService;
 import com.intermanage.backend.agent.service.StoreAgentService;
 import com.intermanage.backend.common.exception.ApiException;
@@ -70,7 +71,8 @@ import jakarta.validation.Valid;
  * POST /api/store-agent/report-macro/finished   koniec aktualizacji (zdejmuje blokadę)
  * GET  /api/store-agent/update/file        paczka agenta z „Do pobrania” (ZIP; wersja i SHA-256 w odpowiedzi /hello)
  * POST /api/store-agent/macro-jobs/poll    {idleSeconds, locked, playerRunning, busy, playerVersion} co kilka sekund → {offer}
- *                                          (makro zlecone z przeglądarki, zaproponowane temu komputerowi)
+ *                                          (makro zlecone z przeglądarki, zaproponowane temu komputerowi; agent przed 1.9.0)
+ * POST /api/store-agent/macro-jobs/wait    to samo + {handled, timeout}: long polling, odpowiedź, gdy komputer dostanie makro
  * POST /api/store-agent/macro-jobs/{id}/decline   pracownik anulował odliczanie: zlecenie idzie do kolejnego komputera
  * POST /api/store-agent/macro-jobs/{id}/start     koniec odliczania → treść makra (409: anulowane albo przekazane)
  * POST /api/store-agent/macro-jobs/{id}/files     multipart key, file (także .gz): plik zapisany przez makro, z listy
@@ -93,10 +95,12 @@ public class StoreAgentApiController {
     private final ReportMacroService macros;
     private final DownloadService downloads;
     private final AgentMacroService macroJobs;
+    private final AgentMacroWaitService macroWait;
 
     public StoreAgentApiController(StoreAgentService agents, AgentFileQueueService waiting, AgentEventService events,
             StoreFileQueueService queue, AgentReportService reports, ReportMacroService macros,
-            DownloadService downloads, AgentMacroService macroJobs) {
+            DownloadService downloads, AgentMacroService macroJobs, AgentMacroWaitService macroWait) {
+        this.macroWait = macroWait;
         this.macroJobs = macroJobs;
         this.downloads = downloads;
         this.macros = macros;
@@ -256,6 +260,12 @@ public class StoreAgentApiController {
     public AgentMacroApi.PollResponse pollMacros(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
     String authorization, @Valid @RequestBody AgentMacroApi.Poll request) {
         return macroJobs.poll(agent(authorization), request);
+    }
+
+    @PostMapping("/macro-jobs/wait")
+    public DeferredResult<AgentMacroApi.PollResponse> awaitMacro(@RequestHeader(value = HttpHeaders.AUTHORIZATION,
+            required = false) String authorization, @Valid @RequestBody AgentMacroApi.Wait request) {
+        return macroWait.await(agent(authorization), request);
     }
 
     @PostMapping("/macro-jobs/{id}/decline")

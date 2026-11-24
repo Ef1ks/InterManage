@@ -50,6 +50,10 @@ public class StoreFileQueueService {
     public record FileQueued(UUID storeId, UUID id) {
     }
 
+    /** Agent zapisał plik w folderze sklepu i to potwierdził. */
+    public record FileSavedByAgent(UUID storeId, UUID id, String folderKey) {
+    }
+
     /**
      * Stan pliku: {@code state} = WAITING (czeka), CLAIMED (ktoś go zapisuje), SAVED, FAILED (ostatni zapis się nie
      * udał), REMOVED.
@@ -202,6 +206,7 @@ public class StoreFileQueueService {
             throw ApiException.conflict("Ten plik nie jest przydzielony temu agentowi");
         }
         publish(storeId, "saved", id, item.getFileName(), null, null, Map.of("by", "agent"));
+        events.publishEvent(new FileSavedByAgent(storeId, id, item.getFolderKey()));
     }
 
     @Transactional

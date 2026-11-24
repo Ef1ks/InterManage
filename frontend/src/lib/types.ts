@@ -474,7 +474,7 @@ export type ProductImportJob = {
   id: string
   fileName: string
   status: 'RUNNING' | 'DONE' | 'FAILED'
-  phase: 'READING' | 'SAVING' | 'FINISHING'
+  phase: 'WAITING' | 'READING' | 'SAVING' | 'FINISHING'
   percent: number
   processedRows: number
   totalRows: number
@@ -5462,7 +5462,7 @@ export type AgentComputer = {
 /** Makro zlecone na wolnym komputerze sklepu. */
 export type AgentMacroJob = {
   id: string
-  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES' | 'BASE_RECEIVE' | 'BASE_CLOSE'
+  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES' | 'BASE_RECEIVE' | 'BASE_CLOSE' | 'PRODUCT_FILES'
   title: string
   status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
   computer: string | null

@@ -450,7 +450,7 @@ class StoreAgentIntegrationTests {
                 .andExpect(jsonPath("$[?(@.key == 'deli-order-proto')].path").value("N:\\AVISOCONFIG\\BACKUP"));
         String key = addAgent(owner, first, "Biuro");
         hello(key).andExpect(jsonPath("$.folders['data-entry-xml']").value("P:\\XML"))
-                .andExpect(jsonPath("$.folders['data-entry-product-file']").value("H:\\GCOM\\Aviso\\BLdirect\\CAD_BEZP"))
+                .andExpect(jsonPath("$.folders['data-entry-product-file']").value("H:\\GCOM\\INTERMANAGE\\CAD_BEZP"))
                 .andExpect(jsonPath("$.watches[?(@.kind == 'ATHOS')].path").value("N:\\ATHOS2000"));
         // Przywrócenie domyślnej: pusta ścieżka.
         mvc.perform(put("/api/stores/" + first + "/file-locations").cookie(owner).with(csrf())

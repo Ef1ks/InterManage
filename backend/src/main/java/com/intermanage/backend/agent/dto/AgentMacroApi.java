@@ -20,6 +20,18 @@ public final class AgentMacroApi {
             @Size(max = 20) String playerVersion) {
     }
 
+    /**
+     * Czekanie na makro (od agenta 1.9.0): stan komputera, {@code handled} = makro, które agent już odlicza albo
+     * wykonuje, {@code timeout} w sekundach.
+     */
+    public record Wait(Integer idleSeconds, Boolean locked, Boolean playerRunning, Boolean busy,
+            @Size(max = 20) String playerVersion, UUID handled, Integer timeout) {
+
+        public Poll state() {
+            return new Poll(idleSeconds, locked, playerRunning, busy, playerVersion);
+        }
+    }
+
     /** Makro zaproponowane temu komputerowi albo {@code null}. */
     public record PollResponse(Offer offer) {
     }
@@ -27,9 +39,12 @@ public final class AgentMacroApi {
     public record Offer(UUID id, String title, String requestedBy, int countdownSeconds) {
     }
 
-    /** Treść makra po odliczaniu; {@code openLine}: pierwsze polecenie, do którego agent dokłada hasło Mercalys. */
+    /**
+     * Treść makra po odliczaniu; {@code openLine}: pierwsze polecenie, do którego agent dokłada hasło Mercalys;
+     * {@code requiredFiles}: pliki, które przed startem muszą leżeć w folderze (sprawdza agent od 1.10.0).
+     */
     public record Start(String macro, String openLine, String kind, boolean collectsCodes, int timeoutMinutes,
-            List<Upload> uploads) {
+            List<Upload> uploads, List<String> requiredFiles) {
     }
 
     /** Plik zapisany przez makro, który agent wysyła po nim ({@code POST .../macro-jobs/{id}/files}). */

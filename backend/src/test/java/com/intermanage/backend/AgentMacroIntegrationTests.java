@@ -1,16 +1,22 @@
 package com.intermanage.backend;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -25,9 +31,13 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
+import com.intermanage.backend.agent.component.AgentMachineStates;
+import com.intermanage.backend.agent.service.AgentMacroWaitService;
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.common.component.XlsWriter;
 import com.jayway.jsonpath.JsonPath;
@@ -42,7 +52,9 @@ import jakarta.servlet.http.Cookie;
 @SpringBootTest(properties = {
         "app.bootstrap.owner-username=wlasciciel",
         "app.bootstrap.owner-password=haslo-wlasciciela",
-        "app.ksef.sync-enabled=false"
+        "app.ksef.sync-enabled=false",
+        "app.agent.product-file-macro.enabled=true",
+        "app.agent.product-file-macro.delay=PT0.2S"
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, RecordingAccountMailer.Config.class})
@@ -59,6 +71,12 @@ class AgentMacroIntegrationTests {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    AgentMacroWaitService macroWait;
+
+    @Autowired
+    AgentMachineStates states;
 
     @Autowired
     XlsWriter xlsWriter;
@@ -319,6 +337,136 @@ class AgentMacroIntegrationTests {
                 .andExpect(jsonPath("$.suppliers[1].order.closedAt").value(org.hamcrest.Matchers.nullValue()));
     }
 
+    /** Plik nowych artykułów zapisany przez agenta sam zleca makro; w trakcie innego makra czeka na jego koniec. */
+    @Test
+    void productFileSavedByAgentStartsMacro() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/stores/" + storeId + "/agents/settings").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+                .andExpect(status().isOk());
+        String kasa = addAgent("Kasa");
+        jdbc.update("""
+                insert into suppliers (id, store_id, code, name, nip) values (gen_random_uuid(), ?::uuid, '0152',
+                    'GOBARTO', '5252344078')""", storeId);
+        // Odtwarzacz bez potrzebnych poleceń: sklep wczytuje pliki jak dotąd.
+        poll(kasa, "0.67");
+        saveFile(kasa, "data-entry-product-file", "0");
+        poll(kasa, "0.68");
+        // Inny plik (protokół) ani plik, którego nie wydał serwer, makra nie uruchamia.
+        saveFile(kasa, "deli-order-proto", "PROTO1.Traite0", new byte[] {1, 2, 3});
+        saveFile(kasa, "data-entry-product-file", "CADBEZP-OBCY.xls", new byte[] {1, 2, 3});
+        Thread.sleep(600);
+        assertThat(productJobs()).isEmpty();
+
+        saveFile(kasa, "data-entry-product-file", "1");
+        saveFile(kasa, "data-entry-product-file", "2");
+        String job = awaitProductJob(0);
+        mvc.perform(get(base() + "/" + job).cookie(owner))
+                .andExpect(jsonPath("$.kind").value("PRODUCT_FILES"))
+                .andExpect(jsonPath("$.status").value("OFFERED"))
+                .andExpect(jsonPath("$.computer").value("Kasa"));
+        String started = agentPost(kasa, "/macro-jobs/" + job + "/start", "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.requiredFiles[0]")
+                        .value("H:\\GCOM\\INTERMANAGE\\CAD_BEZP\\CADBEZP-GOBARTO-1.xls"))
+                .andReturn().getResponse().getContentAsString();
+        String macro = JsonPath.read(started, "$.macro");
+        assertThat(macro).contains("WINOPEN|Mercalys ahk_exe Mercalys.exe\r\n")
+                .contains("WEBKEY|Mercalys|lstZ4_Fournisseur_TxtBox|^a152{Enter}\r\n")
+                .contains("WEBVALUE|Mercalys|chkZ7_CadComplet_CheckBox1|^nie$|")
+                .contains("FILEOPEN|H:\\GCOM\\INTERMANAGE\\CAD_BEZP\\CADBEZP-GOBARTO-1.xls|")
+                .contains("WEBVATCODE\r\nWEBVATCODE|5900344046236|6\r\nWEBFIXCN|Mercalys|ca-e013|")
+                .endsWith("WINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
+        // Każdy przeskok ma swoją etykietę niżej w makrze.
+        List<String> lines = macro.lines().toList();
+        for (int i = 0; i < lines.size(); i++) {
+            String[] parts = lines.get(i).split("\\|");
+            for (int label = 8; parts[0].equals("WEBPAGE") && label < parts.length; label += 4) {
+                assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + parts[label]);
+            }
+        }
+        // Działające makro się nie powtarza, a plik zapisany w jego trakcie czeka.
+        mvc.perform(post(base() + "/" + job + "/retry").cookie(owner).with(csrf())).andExpect(status().isConflict());
+        saveFile(kasa, "data-entry-product-file", "3");
+        Thread.sleep(600);
+        int before = productJobs().size();
+        agentPost(kasa, "/macro-jobs/" + job + "/finish", "{\"ok\":true,\"message\":\"\"}")
+                .andExpect(status().isNoContent());
+        String next = awaitProductJob(before);
+        // Odmowa jedynego komputera: ponowić da się z przeglądarki, te same pliki.
+        agentPost(kasa, "/macro-jobs/" + next + "/decline", "{}").andExpect(status().isNoContent());
+        mvc.perform(get(base() + "/" + next).cookie(owner)).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        mvc.perform(post(base() + "/" + next + "/retry").cookie(employee("{\"DATA_ENTRY\":\"VIEW\"}")).with(csrf()))
+                .andExpect(status().isForbidden());
+        poll(kasa, "0.68");
+        String again = JsonPath.read(mvc.perform(post(base() + "/" + next + "/retry").cookie(owner).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OFFERED"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        agentPost(kasa, "/macro-jobs/" + again + "/start", "").andExpect(status().isOk());
+        agentPost(kasa, "/macro-jobs/" + again + "/finish", "{\"ok\":true,\"message\":\"\"}")
+                .andExpect(status().isNoContent());
+        // Każdy plik trafił do makra, a pierwsze makro (pliki ma już następne) nie da się ponowić.
+        mvc.perform(post(base() + "/" + next + "/retry").cookie(owner).with(csrf())).andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("""
+                select count(*) from store_file_queue where store_id = ?::uuid
+                  and macro_requested_at is not null and macro_job_id is null""", Integer.class, storeId))
+                .isZero();
+    }
+
+    /** Dostawca spoza wgranej listy, założony w Mercalys makrem: numer z ostatniej rezerwacji po NIP-ie. */
+    @Test
+    void newSupplierUsesReservedNumber() throws Exception {
+        jdbc.update("""
+                insert into mercalys_supplier_creations (id, store_id, nip, code, name, created_at)
+                values (gen_random_uuid(), ?::uuid, '5252344078', '293', 'NOWY', now())""", storeId);
+        mvc.perform(post("/api/stores/" + storeId + "/data-entry/export/product-file").cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(productFile("1"))).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select supplier_code from product_file_exports where store_id = ?::uuid",
+                String.class, storeId)).isEqualTo("293");
+    }
+
+    private static String productFile(String invoice) {
+        return """
+                {"supplierId":null,"sellerNip":"5252344078","sellerName":"GOBARTO","invoiceNumber":"%s",
+                 "rows":[{"ean":"5900344046236","name":"PASTELLA LOSOS TWAROZEK 80G","brand":"LISNER","unit":"kg",
+                   "netContent":0.08,"purchasePrice":2.25,"vatPercent":5,"salePrice":3.99,"subfamilyCode":"216103",
+                   "cn":"645645"}]}""".formatted(invoice);
+    }
+
+    /** Plik wydany przez serwer (dostawca po NIP-ie sprzedawcy), zapisany przez agenta. */
+    private void saveFile(String key, String folderKey, String invoice) throws Exception {
+        byte[] content = mvc.perform(post("/api/stores/" + storeId + "/data-entry/export/product-file").cookie(owner)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(productFile(invoice)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        saveFile(key, folderKey, "CADBEZP-GOBARTO-" + invoice + ".xls", content);
+    }
+
+    private void saveFile(String key, String folderKey, String fileName, byte[] content) throws Exception {
+        String id = JsonPath.read(mvc.perform(multipart("/api/stores/" + storeId + "/file-queue").cookie(owner)
+                        .with(csrf())
+                        .file(new MockMultipartFile("file", fileName, null, content))
+                        .param("folderKey", folderKey).param("folderLabel", "Plik").param("fileName", fileName))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.id");
+        MvcResult wait = mvc.perform(get("/api/store-agent/file-queue/wait?timeout=5")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + key)).andReturn();
+        if (wait.getRequest().isAsyncStarted()) {
+            wait.getAsyncResult(5_000);
+        }
+        agentPost(key, "/file-queue/" + id + "/saved", "").andExpect(status().isNoContent());
+    }
+
+    private List<String> productJobs() {
+        return jdbc.queryForList("""
+                select id::text from agent_macro_jobs where store_id = ?::uuid and kind = 'PRODUCT_FILES'
+                order by created_at""", String.class, storeId);
+    }
+
+    private String awaitProductJob(int index) throws Exception {
+        for (int i = 0; i < 50 && productJobs().size() <= index; i++) {
+            Thread.sleep(100);
+        }
+        return productJobs().get(index);
+    }
+
     private byte[] note() {
         return xlsWriter.write("Arkusz1", List.of("SCAPR POLSKA SP.Z.O.O."), List.of(
                 List.of("Dostawca 538"), List.of("Numer dostawy: 11233"), List.of("Data : 24/11/2026 13:21:00"),
@@ -343,6 +491,72 @@ class AgentMacroIntegrationTests {
     private ResultActions meaCodes(String codes) throws Exception {
         return mvc.perform(post(base() + "/mea-codes").cookie(owner).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"codes\":" + codes + "}"));
+    }
+
+    /** Czekanie na makro (agent od 1.9.0): odpowiedź w chwili zlecenia, jedno żądanie na komputer, bez powtórki. */
+    @Test
+    void waitingComputerGetsMacroAtOnce() throws Exception {
+        String deliveryId = uploadDelivery();
+        String kasa = addAgent("Kasa");
+        UUID kasaId = jdbc.queryForObject("select id from store_agents where store_id = ?::uuid and name = 'Kasa'",
+                UUID.class, storeId);
+        MvcResult first = await(kasa, "null");
+        assertThat(macroWait.waiting(kasaId)).isTrue();
+        // Kolejne żądanie (zmiana stanu) zastępuje poprzednie.
+        MvcResult second = await(kasa, "null");
+        assertThat(first.getAsyncResult(5_000).toString()).contains("offer=null");
+
+        String job = JsonPath.read(collect(deliveryId).andExpect(jsonPath("$.computer").value("Kasa"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        assertThat(second.getAsyncResult(5_000).toString()).contains(job);
+        mvc.perform(asyncDispatch(second)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.offer.id").value(job))
+                .andExpect(jsonPath("$.offer.countdownSeconds").value(5));
+
+        // Makra, które agent już odlicza, nie dostaje drugi raz; bez tego tak (np. po zerwanym połączeniu).
+        MvcResult counting = await(kasa, "\"" + job + "\"");
+        assertThatThrownBy(() -> counting.getAsyncResult(300)).isInstanceOf(IllegalStateException.class);
+        assertThat(await(kasa, "null").getAsyncResult(5_000).toString()).contains(job);
+        agentPost(kasa, "/macro-jobs/" + job + "/start", "").andExpect(status().isOk());
+
+        // Zły klucz nie czeka.
+        mvc.perform(post("/api/store-agent/macro-jobs/wait").header(HttpHeaders.AUTHORIZATION, "Bearer ima_x")
+                .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isForbidden());
+    }
+
+    /** Restart serwera (pusty stan komputerów) w trakcie makra: makro zostaje, aż komputer milczy 2 minuty. */
+    @Test
+    void serverRestartDoesNotFailRunningMacro() throws Exception {
+        String deliveryId = uploadDelivery();
+        String kasa = addAgent("Kasa");
+        poll(kasa, 900, false, true);
+        String job = JsonPath.read(collect(deliveryId).andExpect(jsonPath("$.computer").value("Kasa"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+
+        Instant started = (Instant) ReflectionTestUtils.getField(states, "startedAt");
+        Map<?, ?> known = (Map<?, ?>) ReflectionTestUtils.getField(states, "states");
+        try {
+            // Restart w trakcie odliczania: komputer dalej może zacząć.
+            known.clear();
+            ReflectionTestUtils.setField(states, "startedAt", Instant.now());
+            mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("OFFERED"));
+            agentPost(kasa, "/macro-jobs/" + job + "/start", "").andExpect(status().isOk());
+
+            // Restart w trakcie makra.
+            mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("RUNNING"));
+            ReflectionTestUtils.setField(states, "startedAt", Instant.now().minus(Duration.ofMinutes(1)));
+            mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("RUNNING"));
+            ReflectionTestUtils.setField(states, "startedAt", Instant.now().minus(Duration.ofMinutes(3)));
+            mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("FAILED"));
+        } finally {
+            ReflectionTestUtils.setField(states, "startedAt", started);
+        }
+    }
+
+    private MvcResult await(String key, String handled) throws Exception {
+        return agentPost(key, "/macro-jobs/wait", ("{\"idleSeconds\":900,\"locked\":false,\"playerRunning\":true,"
+                + "\"busy\":false,\"playerVersion\":\"0.67\",\"handled\":%s,\"timeout\":25}").formatted(handled))
+                .andExpect(request().asyncStarted()).andReturn();
     }
 
     @Test

@@ -12,9 +12,10 @@ using Microsoft.Win32;
 namespace Intermanage.Agent;
 
 /// <summary>
-/// Makra zlecone z przeglądarki na wolnym komputerze sklepu (od 1.7.0). Agent co kilka sekund zgłasza stan komputera
-/// (bezczynność, blokada ekranu, odtwarzacz, trwające makro), a serwer proponuje makro najdłużej nieużywanemu. Wtedy
-/// okno odlicza; „Anuluj” oddaje zlecenie kolejnemu komputerowi. Ruch myszy nie anuluje: drgająca mysz albo sięganie
+/// Makra zlecone z przeglądarki na wolnym komputerze sklepu (od 1.7.0). Agent zgłasza stan komputera (bezczynność,
+/// blokada ekranu, odtwarzacz, trwające makro) i czeka na makro jednym długim żądaniem (od 1.9.0; wcześniej pytał co
+/// 3 s): serwer odpowiada od razu, gdy wybierze ten komputer, a zmianę stanu agent zgłasza nowym żądaniem. Serwer
+/// proponuje makro najdłużej nieużywanemu. Wtedy okno odlicza; „Anuluj” oddaje zlecenie kolejnemu komputerowi. Ruch myszy nie anuluje: drgająca mysz albo sięganie
 /// po przycisk zamykały okno od razu (07 w 10023, 24.11.2026), a komputer w użyciu dostaje dłuższe odliczanie.
 ///
 /// Makro składa serwer, wykonuje je odtwarzacz (schowek i lewy Alt+E, jak przy aktualizacji danych). Wynik i zebrane
@@ -23,8 +24,14 @@ namespace Intermanage.Agent;
 /// </summary>
 internal sealed class RemoteMacros : IDisposable
 {
-    private static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan PollAfterError = TimeSpan.FromSeconds(20);
+    /// <summary>Tyle trwa czekanie na makro; komputer, który go teraz nie wykona (blokada, brak AutoJob), czeka dłużej.</summary>
+    private const int WaitSeconds = 25;
+    private const int UnavailableWaitSeconds = 55;
+    /// <summary>Zmiany stanu sprawdzamy na komputerze, bez pytania serwera.</summary>
+    private static readonly TimeSpan StateCheckEvery = TimeSpan.FromSeconds(2);
+    /// <summary>Odpowiedź bez makra szybciej niż w tyle: serwer nie czekał, więc następne żądanie idzie z przerwą.</summary>
+    private static readonly TimeSpan ShortestWait = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan WaitAfterError = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan PlayerCheckEvery = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan PlayerSearchEvery = TimeSpan.FromSeconds(30);
     /// <summary>Tyle odtwarzacz ma na podjęcie makra po Alt+E.</summary>
@@ -86,23 +93,26 @@ internal sealed class RemoteMacros : IDisposable
     {
         while (!cancel.IsCancellationRequested)
         {
-            var wait = PollEvery;
+            var wait = ShortestWait;
             try
             {
                 var api = host.Api;
                 if (api != null && host.Config != null)
                 {
-                    CheckPlayer();
-                    // Makro zlecone albo aktualizacja danych zajmuje bramkę.
-                    var busy = MacroRunner.Gate.CurrentCount == 0;
-                    var answer = await api.MacroPollAsync(MacroRunner.IdleSeconds(), Locked, playerReady, playerVersion,
-                        busy, cancel)
-                        .ConfigureAwait(false);
+                    var asked = DateTime.UtcNow;
+                    var state = ReadState();
+                    var (answer, changed) = await WaitAsync(api, state, cancel).ConfigureAwait(false);
                     problemLogged = false;
-                    var offer = answer.Offer;
+                    var offer = answer?.Offer;
                     if (offer != null && Interlocked.CompareExchange(ref current, offer.Id, null) == null)
                     {
                         _ = Task.Run(() => HandleAsync(api, offer, cancel));
+                        // Bramkę zajmuje dopiero odliczanie: bez przerwy kolejne żądanie zgłosiłoby jeszcze wolny komputer.
+                        wait = TimeSpan.FromMilliseconds(500);
+                    }
+                    else if (changed || DateTime.UtcNow - asked >= ShortestWait)
+                    {
+                        wait = TimeSpan.Zero;
                     }
                 }
             }
@@ -115,10 +125,76 @@ internal sealed class RemoteMacros : IDisposable
                 // Stan połączenia pokazuje pętla /hello; tu tylko jeden wpis na przerwę (albo serwer bez makr).
                 if (!problemLogged) Log.Warn("Makra z przeglądarki: " + error.Message);
                 problemLogged = true;
-                wait = PollAfterError;
+                wait = WaitAfterError;
             }
             try { await Task.Delay(wait, cancel).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private sealed class MachineState
+    {
+        public bool Locked;
+        public bool Busy;
+        public bool PlayerReady;
+        public string? PlayerVersion;
+        public int IdleSeconds;
+
+        public bool CanRun => PlayerReady && !Locked && !Busy;
+
+        /// <summary>
+        /// Zmiana, którą serwer ma znać od razu. Rosnącą bezczynność liczy sam, więc liczy się tylko ruch przy
+        /// komputerze, który zgłosiliśmy jako wolny (albo stał się wolny w trakcie czekania).
+        /// </summary>
+        public bool DiffersFrom(MachineState reported, int waitedSeconds) => Locked != reported.Locked
+            || Busy != reported.Busy || PlayerReady != reported.PlayerReady || PlayerVersion != reported.PlayerVersion
+            || (IdleSeconds < InUseSeconds && reported.IdleSeconds + waitedSeconds >= InUseSeconds);
+    }
+
+    private MachineState ReadState()
+    {
+        CheckPlayer();
+        return new MachineState
+        {
+            Locked = Locked,
+            // Makro zlecone albo aktualizacja danych zajmuje bramkę.
+            Busy = MacroRunner.Gate.CurrentCount == 0,
+            PlayerReady = playerReady,
+            PlayerVersion = playerVersion,
+            IdleSeconds = MacroRunner.IdleSeconds(),
+        };
+    }
+
+    /// <summary>Czeka na makro albo na zmianę stanu komputera (wtedy przerywa żądanie, a kolejne zgłosi nowy stan).</summary>
+    private async Task<(MacroPoll? Answer, bool Changed)> WaitAsync(ApiClient api, MachineState state,
+        CancellationToken cancel)
+    {
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        var request = api.MacroWaitAsync(state.IdleSeconds, state.Locked, state.PlayerReady, state.PlayerVersion,
+            state.Busy, Volatile.Read(ref current), state.CanRun ? WaitSeconds : UnavailableWaitSeconds, stop.Token);
+        var started = DateTime.UtcNow;
+        try
+        {
+            while (!request.IsCompleted)
+            {
+                await Task.WhenAny(request, Task.Delay(StateCheckEvery, cancel)).ConfigureAwait(false);
+                if (request.IsCompleted || cancel.IsCancellationRequested) break;
+                if (!ReadState().DiffersFrom(state, (int)(DateTime.UtcNow - started).TotalSeconds)) continue;
+                stop.Cancel();
+                try
+                {
+                    return (await request.ConfigureAwait(false), true); // odpowiedź zdążyła przyjść
+                }
+                catch (Exception) when (!cancel.IsCancellationRequested)
+                {
+                    return (null, true); // przerwane przez nas, to nie błąd połączenia
+                }
+            }
+            return (await request.ConfigureAwait(false), false);
+        }
+        finally
+        {
+            stop.Cancel();
         }
     }
 
@@ -164,7 +240,8 @@ internal sealed class RemoteMacros : IDisposable
             started = true;
             form.Running(offer.Title);
             var startedAt = DateTime.UtcNow;
-            var result = await PlayAsync(offer.Id, start, cancel).ConfigureAwait(false);
+            var result = await MissingFilesAsync(start, cancel).ConfigureAwait(false)
+                ?? await PlayAsync(offer.Id, start, cancel).ConfigureAwait(false);
             result = await SendFilesAsync(api, offer.Id, start, startedAt, result, cancel).ConfigureAwait(false);
             Log.Info("Makro z przeglądarki: " + (result.Ok ? "zakończone" : "błąd: " + result.Message));
             form.Finish(result.Ok, result.Message);
@@ -212,6 +289,33 @@ internal sealed class RemoteMacros : IDisposable
             await Task.Delay(100, cancel).ConfigureAwait(false);
             if (form.Cancelled || Locked) return false;
         }
+    }
+
+    /// <summary>
+    /// Pliki, które makro ma wczytać (zapisał je przed chwilą agent): bez nich makro nie rusza, żeby nie klikało po
+    /// programie z pustym folderem. Dysk sieciowy innego komputera bywa pokazywany z opóźnieniem, stąd kilka prób.
+    /// </summary>
+    private static async Task<Result?> MissingFilesAsync(MacroStart start, CancellationToken cancel)
+    {
+        var required = start.RequiredFiles ?? new List<string>();
+        if (required.Count == 0) return null;
+        var missing = required;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            if (attempt > 0) await Task.Delay(TimeSpan.FromSeconds(2), cancel).ConfigureAwait(false);
+            try
+            {
+                missing = await Disk.Run(() => required.Where(path => !File.Exists(path)).ToList(),
+                    TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                return new Result(false, "Folder z plikami nowych artykułów nie odpowiada na tym komputerze");
+            }
+            if (missing.Count == 0) return null;
+        }
+        return new Result(false, "W folderze nie ma plików do wczytania: "
+            + string.Join(", ", missing.Select(Path.GetFileName)));
     }
 
     private async Task<Result> PlayAsync(string id, MacroStart start, CancellationToken cancel)
