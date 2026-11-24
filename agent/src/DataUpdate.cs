@@ -28,10 +28,16 @@ internal sealed class DataUpdate
     private static readonly TimeSpan GiveUpAfter = TimeSpan.FromMinutes(60);
     private static readonly TimeSpan WaitForConfig = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan WaitForPlayer = TimeSpan.FromMinutes(3);
+    /// <summary>Tyle czekamy na część folderów, która nie odpowiada; potem aktualizacja idzie bez nich.</summary>
+    private static readonly TimeSpan WaitForFolders = TimeSpan.FromMinutes(10);
 
     private readonly AgentHost host;
     private readonly Control ui;
     private int running;
+    /// <summary>Od kiedy część folderów raportów nie odpowiada (pozostałe już tak).</summary>
+    private DateTime? partlyUnreadableSince;
+    /// <summary>Foldery, o których niedostępności dziennik już mówi (ponawianie co minutę).</summary>
+    private readonly HashSet<string> unreadable = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Aktualizacja danych trwa (agent nie podmienia się wtedy na nową wersję).</summary>
     public bool IsRunning => Volatile.Read(ref running) == 1;
@@ -47,9 +53,13 @@ internal sealed class DataUpdate
     /// Druga aktualizacja w trakcie pierwszej nic nie robi. Automatyczną (<paramref name="force"/> = false) serwer daje
     /// tylko głównemu agentowi sklepu, a każdą najwyżej jednemu komputerowi naraz (409 = aktualizuje inny komputer).
     /// </summary>
-    public async Task RunAsync(AgentSettings settings, bool force, CancellationToken cancel)
+    /// <returns>
+    /// <c>false</c>: nie doszło do niej, bo serwer albo dysk z folderami raportów nie odpowiada (automatyczną trzeba
+    /// ponowić), <c>true</c>: zakończona albo niepotrzebna.
+    /// </returns>
+    public async Task<bool> RunAsync(AgentSettings settings, bool force, CancellationToken cancel)
     {
-        if (Interlocked.Exchange(ref running, 1) == 1) return;
+        if (Interlocked.Exchange(ref running, 1) == 1) return false;
         UpdateForm? form = null;
         ApiClient? locked = null;
         var gate = false;
@@ -60,22 +70,31 @@ internal sealed class DataUpdate
             if (config == null || api == null)
             {
                 Log.Warn("Aktualizacja danych: brak połączenia z serwerem");
-                return;
+                if (force) ShowInfo("Brak połączenia z serwerem Intermanage.");
+                return false;
             }
             var watches = config.Watches
                 .Where(w => w.Kind.StartsWith(ImportPrefix, StringComparison.OrdinalIgnoreCase)).ToList();
             if (watches.Count == 0)
             {
                 if (force) ShowInfo("Sklep nie ma raportów Importu danych pilnowanych przez agenta.");
-                return;
+                return true;
             }
-            var kinds = force
-                ? watches.Select(w => w.Kind.Substring(ImportPrefix.Length)).ToList()
-                : await StaleReportsAsync(watches, cancel).ConfigureAwait(false);
-            if (kinds.Count == 0)
+            List<string> kinds;
+            if (force)
             {
-                Log.Info("Aktualizacja danych: pliki raportów są z dzisiaj");
-                return;
+                kinds = watches.Select(w => w.Kind.Substring(ImportPrefix.Length)).ToList();
+            }
+            else
+            {
+                (kinds, var failedFolders) = await StaleReportsAsync(watches, cancel).ConfigureAwait(false);
+                if (!FoldersReady(failedFolders, watches.Count)) return false;
+                if (kinds.Count == 0)
+                {
+                    Log.Info(failedFolders == 0 ? "Aktualizacja danych: pliki raportów są z dzisiaj"
+                        : "Aktualizacja danych: pliki w dostępnych folderach są z dzisiaj");
+                    return true;
+                }
             }
             // Makro zlecone z przeglądarki na tym komputerze kończy się przed aktualizacją.
             await MacroRunner.Gate.WaitAsync(cancel).ConfigureAwait(false);
@@ -90,7 +109,14 @@ internal sealed class DataUpdate
             {
                 Log.Info("Aktualizacja danych pominięta: " + error.Message);
                 if (force) ShowInfo(error.Message);
-                return;
+                // Rola głównego przeszła w międzyczasie na inny komputer: gdy wróci, sprawdzamy raporty jeszcze raz.
+                return host.IsLeader;
+            }
+            catch (ServerUnavailableException error)
+            {
+                Log.Warn("Aktualizacja danych: serwer nie dał makra: " + error.Message);
+                if (force) ShowInfo("Serwer Intermanage nie odpowiada: " + error.Message);
+                return false;
             }
             locked = api;
             foreach (var skipped in macro.Skipped)
@@ -101,7 +127,7 @@ internal sealed class DataUpdate
             {
                 ShowInfo("Raporty do aktualizacji nie mają ustawień makra w Imporcie danych:\n"
                     + string.Join("\n", macro.Skipped.Select(s => s.Title + ": " + s.Reason)));
-                return;
+                return true;
             }
 
             form = OnUi(() =>
@@ -122,7 +148,7 @@ internal sealed class DataUpdate
                         + "ikony agenta: „Aktualizuj dane z Mercalys”."
                     : "Nie działa odtwarzacz makr (AutoJob). Uruchom go i wybierz w menu ikony agenta "
                         + "„Aktualizuj dane z Mercalys”.");
-                return;
+                return true;
             }
             form.Status("Uruchamiam makro w Mercalys…");
             var text = MacroRunner.WithPassword(macro.Macro, macro.OpenLine, settings.MercalysPassword);
@@ -137,14 +163,17 @@ internal sealed class DataUpdate
             form.Status("Mercalys zapisuje raporty. Nie używaj komputera, aż okno potwierdzi wgranie danych.");
 
             await WatchAsync(api, macro.Files, start, form, cancel).ConfigureAwait(false);
+            return true;
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {
+            return true;
         }
         catch (Exception error)
         {
             Log.Error("Aktualizacja danych", error);
             form?.Finish(false, "Aktualizacja przerwana: " + error.Message);
+            return true;
         }
         finally
         {
@@ -168,12 +197,31 @@ internal sealed class DataUpdate
     }
 
     /// <summary>
+    /// Czy da się zacząć mimo folderów, które nie odpowiadają: przy wszystkich nie (dysk sieciowy niedostępny, makro
+    /// nie miałoby gdzie zapisać raportów), a na część czekamy <see cref="WaitForFolders"/>, żeby jeden zły folder
+    /// w ustawieniach nie zatrzymał reszty.
+    /// </summary>
+    private bool FoldersReady(int failed, int all)
+    {
+        if (failed == 0 || failed == all)
+        {
+            partlyUnreadableSince = null;
+            return failed == 0;
+        }
+        partlyUnreadableSince ??= DateTime.UtcNow;
+        return DateTime.UtcNow - partlyUnreadableSince >= WaitForFolders;
+    }
+
+    /// <summary>
     /// Raporty, których plik nie jest z dzisiaj (albo go nie ma): plik zapisywany przez makro, a bez ścieżki makra
     /// najnowszy pasujący plik w folderze. Raport zapisany ręcznie pod inną nazwą nie zwalnia z aktualizacji.
+    /// Do tego liczba folderów, których nie dało się odczytać (o ich raportach nic nie wiadomo).
     /// </summary>
-    private static async Task<List<string>> StaleReportsAsync(List<WatchConfig> watches, CancellationToken cancel)
+    private async Task<(List<string> Stale, int Failed)> StaleReportsAsync(List<WatchConfig> watches,
+        CancellationToken cancel)
     {
         var stale = new List<string>();
+        var failed = 0;
         foreach (var watch in watches)
         {
             var source = string.IsNullOrEmpty(watch.FreshPattern) ? watch.Pattern : watch.FreshPattern!;
@@ -198,12 +246,17 @@ internal sealed class DataUpdate
             }
             catch (Exception error) when (!(error is OperationCanceledException))
             {
-                Log.Warn("Aktualizacja danych: nie odczytano folderu " + watch.Path + ": " + error.Message);
+                failed++;
+                if (unreadable.Add(watch.Path))
+                {
+                    Log.Warn("Aktualizacja danych: nie odczytano folderu " + watch.Path + ": " + error.Message);
+                }
                 continue;
             }
+            unreadable.Remove(watch.Path);
             if (newest < DateTime.Today) stale.Add(watch.Kind.Substring(ImportPrefix.Length));
         }
-        return stale;
+        return (stale, failed);
     }
 
     /// <summary>

@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795494011.9880424,
-    "seen": 1795494088.7073147,
-    "ast_hash": "d3c44ab653735f3dd868cedf94c0cc2a",
+    "mtime": 1795500980.6211045,
+    "seen": 1795501048.604029,
+    "ast_hash": "7f35c98ea40072c47fabd3abe90f6cb3",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -13290,9 +13290,9 @@
     "semantic_hash": ""
   },
   "agent/Intermanage.Agent.csproj": {
-    "mtime": 1795493778.934517,
-    "seen": 1795494088.3532264,
-    "ast_hash": "a433f26d4c1b714cf27a2a4d88596a22",
+    "mtime": 1795500980.6191041,
+    "seen": 1795501048.2571156,
+    "ast_hash": "4cb52d73fb69b9b29b5b67ad09ab67a7",
     "semantic_hash": ""
   },
   "agent/src/AgentHost.cs": {
@@ -13344,9 +13344,9 @@
     "semantic_hash": ""
   },
   "agent/src/TrayApp.cs": {
-    "mtime": 1795493778.9355228,
-    "seen": 1795494088.3542266,
-    "ast_hash": "39562c232b02e6fc9dc2c8b8a62831c3",
+    "mtime": 1795500980.6191041,
+    "seen": 1795501048.2591157,
+    "ast_hash": "40aef95e91990f9cf66e5ffc13d1b8d1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/component/AgentPresenceJob.java": {
@@ -13500,9 +13500,9 @@
     "semantic_hash": ""
   },
   "agent/README.md": {
-    "mtime": 1795494011.986043,
-    "seen": 1795494088.7073147,
-    "ast_hash": "4d369c8b292ba9420e6879019bd76f3f",
+    "mtime": 1795500980.6191041,
+    "seen": 1795501048.604029,
+    "ast_hash": "2c565aece4910720205564f79a30e43d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/CompressedUploads.java": {
@@ -13980,9 +13980,9 @@
     "semantic_hash": ""
   },
   "agent/src/DataUpdate.cs": {
-    "mtime": 1795493778.9355228,
-    "seen": 1795494088.3532264,
-    "ast_hash": "8cec8203b66ed905d57a7be5ad7fe339",
+    "mtime": 1795500980.6181042,
+    "seen": 1795501048.2581155,
+    "ast_hash": "9939cebcfd02407050d99f77bc49d0ac",
     "semantic_hash": ""
   },
   "agent/src/UpdateForm.cs": {
@@ -13992,9 +13992,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/component/ReportSaveMacro.java": {
-    "mtime": 1795414006.034366,
-    "seen": 1795414161.3536668,
-    "ast_hash": "a46b04531335efed8f727aeb4e118183",
+    "mtime": 1795500754.7357254,
+    "seen": 1795500846.2234302,
+    "ast_hash": "fdf51b397cb0983b8a85ce7e2f817626",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/dto/ReportMacroResponse.java": {
@@ -14010,9 +14010,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ReportSaveMacroTests.java": {
-    "mtime": 1795414068.8177154,
-    "seen": 1795414161.4883158,
-    "ast_hash": "8f90ada4464efbbf5a195594ca390882",
+    "mtime": 1795500754.7600574,
+    "seen": 1795500846.355549,
+    "ast_hash": "1abd3f242e375039e59ca55aeb1281c8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/feedback/controller/FeedbackController.java": {

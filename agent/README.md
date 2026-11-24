@@ -58,7 +58,8 @@ Robi:
   któryś nie jest z dzisiaj, pokazuje na wierzchu okno „AKTUALIZACJA DANYCH – POCZEKAJ DO POTWIERDZENIA”, pobiera
   z serwera makro zapisu raportów z Mercalys (to samo co „Zaktualizuj wszystkie pliki”), wkłada je do schowka
   i naciska lewy Alt+E, a okno trzyma, aż serwer potwierdzi wgranie każdego pliku (menu ikony: „Aktualizuj dane
-  z Mercalys” robi to na żądanie dla wszystkich raportów);
+  z Mercalys” robi to na żądanie dla wszystkich raportów). Gdy serwer albo dysk z folderami raportów nie odpowiada,
+  próbuje co minutę, aż wróci (od 1.7.1; na część folderów czeka 10 min, potem aktualizuje pozostałe);
 - trzyma ustawienia w `%LOCALAPPDATA%\Intermanage\Agent\settings.json`, klucz i hasło Mercalys zaszyfrowane DPAPI
   dla bieżącego użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza);
 - ma przy sobie odtwarzacz makr (`player\player.exe` obok agenta, z plikiem `player\agent-mode`, `PlayerHost`):

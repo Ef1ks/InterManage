@@ -37,7 +37,7 @@ public final class ReportSaveMacro {
     private static final int LONG_EXCEL_WAIT_MS = 1_800_000;
     private static final int EMPTY_RESULT_WAIT_MS = 20_000;
     private static final int STATISTIC_TIMEOUT_MS = 600_000;
-    private static final int TABLE_TIMEOUT_MS = 300_000;
+    private static final int TABLE_TIMEOUT_MS = 1_800_000;
     private static final int DOCUMENTS_OVERLAP_DAYS = 2;
 
     /** Raporty z makrem, w kolejności odświeżania. */
@@ -128,8 +128,7 @@ public final class ReportSaveMacro {
                 lines.addAll(steps);
                 String path = partPath(settings.path().strip(), part + 1, parts.size());
                 files.add(new SavedFile(kind, path, path.substring(path.lastIndexOf('\\') + 1)));
-                int wait = kind == ImportReportKind.SALES || kind == ImportReportKind.DOCUMENTS
-                        ? LONG_EXCEL_WAIT_MS : EXCEL_WAIT_MS;
+                int wait = kind == ImportReportKind.CADENCIER ? EXCEL_WAIT_MS : LONG_EXCEL_WAIT_MS;
                 lines.add((kind == ImportReportKind.PROMOTIONS ? "PDFSAVE|" : "EXCELSAVE|") + path + "|" + wait);
                 if (kind == ImportReportKind.SALES) {
                     lines.add("LABEL|" + emptyLabel);

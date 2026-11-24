@@ -37,8 +37,10 @@ internal sealed class TrayApp : ApplicationContext
     private readonly DataUpdate update;
     private readonly RemoteMacros remoteMacros;
     private readonly CancellationTokenSource closing = new();
-    /// <summary>Aktualizacja przy starcie idzie raz na uruchomienie agenta (nie po zmianie ustawień).</summary>
-    private bool startUpdateDone;
+    /// <summary>Aktualizacja przy starcie idzie raz na uruchomienie agenta (nie po zmianie ustawień); 1 = trwa albo była.</summary>
+    private int startUpdateDone;
+    /// <summary>Serwer albo dysk z raportami nie odpowiada: aktualizacja przy starcie próbuje znowu po tym czasie.</summary>
+    private static readonly TimeSpan StartUpdateRetry = TimeSpan.FromMinutes(1);
 
     public TrayApp()
     {
@@ -86,11 +88,18 @@ internal sealed class TrayApp : ApplicationContext
         // Przy starcie komputera (agent startuje z Windows): raporty Importu danych nie z dzisiaj aktualizuje makro.
         // Tylko główny agent sklepu, więc przy agencie na kilku komputerach makro nie rusza na każdym (kasa); komputer,
         // który przejmie rolę później, sprawdza raporty wtedy (serwer pilnuje, żeby nie aktualizowały dwa naraz).
+        // Gdy serwer albo dysk sieciowy nie odpowiada, próbuje co minutę, aż wróci.
         void StartUpdate()
         {
-            if (startUpdateDone || !settings.UpdateOnStart || host.Config == null || !host.IsLeader) return;
-            startUpdateDone = true;
-            Task.Run(() => update.RunAsync(settings, false, closing.Token));
+            if (!settings.UpdateOnStart || host.Config == null || !host.IsLeader) return;
+            if (Interlocked.Exchange(ref startUpdateDone, 1) == 1) return;
+            Task.Run(async () =>
+            {
+                if (await update.RunAsync(settings, false, closing.Token)) return;
+                await Task.Delay(StartUpdateRetry, closing.Token);
+                Interlocked.Exchange(ref startUpdateDone, 0);
+                StartUpdate();
+            });
         }
         host.Connected += StartUpdate;
         host.LeadershipChanged += StartUpdate;
