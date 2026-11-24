@@ -105,7 +105,11 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.addedCount").value(2))
                 .andExpect(jsonPath("$.removedCount").value(0));
 
+        // Aktualny cadencier: cena zakupu i sprzedaży artykułu BASE_ITEM.
+        insertTop(storeId, BASE_ITEM, "5900000000102", "2.99", "3.99");
         mvc.perform(get(url(storeId)).cookie(owner))
+                .andExpect(jsonPath("$.cadencierNumber").value("700"))
+                .andExpect(jsonPath("$.cadencierFrom").value("2000-01-03"))
                 .andExpect(jsonPath("$.cadencierCount").value(2))
                 .andExpect(jsonPath("$.minMarginPercent").value(nullValue()))
                 .andExpect(jsonPath("$.deliveries.length()").value(1))
@@ -113,16 +117,18 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[0].belowMinimumCount").value(0))
                 .andExpect(jsonPath("$.deliveries[0].linesPurchaseValue").value(54.0))
                 .andExpect(jsonPath("$.deliveries[0].excessValue").value(0))
-                // tylko artykuł z ceną z bazy: (3,80 - 2,99) * 5
-                .andExpect(jsonPath("$.deliveries[0].baseDifferenceValue").value(4.05))
+                // tylko artykuł z ceną zakupu z cadencier: (3,80 - 2,99) * 5
+                .andExpect(jsonPath("$.deliveries[0].cadencierDifferenceValue").value(4.05))
                 .andExpect(jsonPath("$.deliveries[0].lines.length()").value(2))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].itm8").value(CADENCIER_ITEM))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].marginPercent").value(5.15))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].targetPurchasePrice").value(nullValue()))
+                // artykułu nie ma w pliku TOP: zostaje CENA_CAD z kartoteki
                 .andExpect(jsonPath("$.deliveries[0].lines[0].cadencierPrice").value(4.49))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].cadencierPurchasePrice").value(nullValue()))
                 .andExpect(jsonPath("$.deliveries[0].lines[1].itm8").value(BASE_ITEM))
-                .andExpect(jsonPath("$.deliveries[0].lines[1].basePrice").value(2.99))
-                .andExpect(jsonPath("$.deliveries[0].lines[1].baseDocumentId").value(baseDelivery));
+                .andExpect(jsonPath("$.deliveries[0].lines[1].cadencierPrice").value(3.99))
+                .andExpect(jsonPath("$.deliveries[0].lines[1].cadencierPurchasePrice").value(2.99));
 
         mvc.perform(put(url(storeId) + "/settings").cookie(owner).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"minMarginPercent\":120}"))
@@ -210,6 +216,7 @@ class PriceCheckIntegrationTests {
         String baseDelivery = insertDocument(storeId, documentImport, "PZ", "200050", today.minusDays(20), "538");
         insertLine(baseDelivery, 1, "0000000000999", "538", "10", "30.00", "37.00");
         jdbc.update("update document_lines set ean = '5900000000101' where document_id = ?::uuid", baseDelivery);
+        insertTop(storeId, "0000000000999", "5900000000101", "3.00", "3.99");
         // Dostawca spoza bazy przywozi ten sam towar pod swoim ITM8 (99...); EAN z zerem wiodącym (GTIN-14).
         String delivery = insertDocument(storeId, documentImport, "PZ", "200100", today.minusDays(5), "200");
         insertLine(delivery, 1, "0000099000101", "200", "10", "35.00", "37.00");
@@ -233,9 +240,8 @@ class PriceCheckIntegrationTests {
                 .andExpect(jsonPath("$.deliveries[0].lines.length()").value(1))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].itm8").value("0000099000101"))
                 .andExpect(jsonPath("$.deliveries[0].lines[0].cadencierItm8").value(CADENCIER_ITEM))
-                // cena z bazy po EAN-ie, bo baza miała towar pod innym ITM8
-                .andExpect(jsonPath("$.deliveries[0].lines[0].basePrice").value(3.0))
-                .andExpect(jsonPath("$.deliveries[0].lines[0].baseDocumentId").value(baseDelivery));
+                // cena z cadencier po EAN-ie, bo plik TOP ma towar pod innym ITM8
+                .andExpect(jsonPath("$.deliveries[0].lines[0].cadencierPurchasePrice").value(3.0));
 
         // Incydent zamówienia do bazy 11 dni przed przyjęciem: za dawno, przyjęcie zostaje do weryfikacji.
         uploadIncidents(storeId, owner, storeNumber + "_" + yymmdd(today.minusDays(16)) + "_W_NS_INCYDENTY.xlsx",
@@ -329,6 +335,29 @@ class PriceCheckIntegrationTests {
         mvc.perform(get(url(storeId)).cookie(owner))
                 .andExpect(jsonPath("$.deliveries.length()").value(1))
                 .andExpect(jsonPath("$.deliveries[0].id").value(other));
+    }
+
+    /** Plik TOP z jednym artykułem, obowiązujący sklep dziś (własny rejon, plan sprzed lat). */
+    private void insertTop(String storeId, String itm8, String ean, String purchasePrice, String salePrice) {
+        String region = "t" + storeId;
+        jdbc.update("""
+                insert into cad_plans (year, file_name, sha256, entry_count) values (2000, 'plan.xlsx', 'test', 1)
+                on conflict (year) where replaced_at is null do nothing""");
+        jdbc.update("""
+                insert into cad_plan_entries (plan_id, lp, nr_cad, starts_on)
+                select p.id, 1, '700', date '2000-01-03' from cad_plans p
+                where p.year = 2000 and p.replaced_at is null
+                  and not exists (select 1 from cad_plan_entries e where e.plan_id = p.id)""");
+        jdbc.update("insert into cad_store_regions (store_id, region, updated_at) values (?::uuid, ?, now())",
+                storeId, region);
+        jdbc.update("""
+                with f as (
+                    insert into cad_top_files (region, nr_cad, file_name, source_path, source_updated_at, sha256,
+                        article_count, downloaded_at)
+                    values (?, '700', 'top.xlsx', 'top.xlsx', '2000-01-01', 'test', 1, now()) returning id)
+                insert into cad_top_articles (file_id, itm8, ean, name, purchase_price, sale_price, is_new)
+                select f.id, ?, ?, 'ARTYKUŁ', ?, ?, false from f""",
+                region, itm8, ean, new BigDecimal(purchasePrice), new BigDecimal(salePrice));
     }
 
     private static String url(String storeId) {

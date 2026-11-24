@@ -21,7 +21,6 @@ import { useCan } from '@/features/auth/api'
 import {
   bonNumber,
   countFormat,
-  documentPaths,
   formatDocumentDate,
   formatMoney,
   formatPercent,
@@ -36,6 +35,7 @@ import {
   ALL_CATEGORIES,
   ALL_SUPPLIERS,
   articlesWord,
+  CadencierDifference,
   type CategoryKey,
   CategoryTabs,
   FILTER_PARAMS,
@@ -64,16 +64,16 @@ import { cn } from '@/lib/utils'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { LoadingPanel } from '@/components/LoadingPanel'
 
-type PriceFilter = 'all' | 'below-minimum' | 'above-base'
+type PriceFilter = 'all' | 'below-minimum' | 'above-cadencier'
 const PRICE_FILTERS: { value: PriceFilter; label: string }[] = [
   { value: 'all', label: 'Wszystkie' },
   { value: 'below-minimum', label: 'Poniżej minimum' },
-  { value: 'above-base', label: 'Drożej niż baza' },
+  { value: 'above-cadencier', label: 'Drożej niż cadencier' },
 ]
 const PRICE_PARAMS: Record<PriceFilter, string | null> = {
   all: null,
   'below-minimum': 'ponizej-minimum',
-  'above-base': 'drozej-niz-baza',
+  'above-cadencier': 'drozej-niz-cadencier',
 }
 
 /** Weryfikacja albo przyjęcia usprawiedliwione incydentem zamówienia do bazy (`?widok=incydenty`). */
@@ -128,7 +128,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
       (supplier === ALL_SUPPLIERS || supplierKey(delivery) === supplier) &&
       (!from || delivery.review != null || delivery.documentDate.slice(0, 10) >= from) &&
       (priceFilter !== 'below-minimum' || delivery.belowMinimumCount > 0) &&
-      (priceFilter !== 'above-base' || delivery.baseDifferenceValue > 0) &&
+      (priceFilter !== 'above-cadencier' || delivery.cadencierDifferenceValue > 0) &&
       (!query ||
         matchesSearch(
           [
@@ -163,11 +163,11 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
         linesPurchaseValue: lines.reduce((sum, line) => sum + line.purchaseValue, 0),
         belowMinimumCount: lines.filter((line) => line.belowMinimum).length,
         excessValue: lines.reduce((sum, line) => sum + line.excessValue, 0),
-        baseDifferenceValue: lines.reduce(
+        cadencierDifferenceValue: lines.reduce(
           (sum, line) =>
-            line.basePrice == null
+            line.cadencierPurchasePrice == null
               ? sum
-              : sum + Math.round((line.purchasePrice - line.basePrice) * line.quantity * 100) / 100,
+              : sum + Math.round((line.purchasePrice - line.cadencierPurchasePrice) * line.quantity * 100) / 100,
           0,
         ),
       }
@@ -356,7 +356,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
                 const group = shown.filter((delivery) => filterOf(delivery) === status)
                 if (group.length === 0) return null
                 const style = STATUS_STYLES[status]
-                const excess = group.reduce((sum, delivery) => sum + delivery.baseDifferenceValue, 0)
+                const excess = group.reduce((sum, delivery) => sum + delivery.cadencierDifferenceValue, 0)
                 return (
                   <section key={status} aria-label={style.label}>
                     <h3 className="mb-2 flex flex-wrap items-baseline gap-x-2 px-1 text-sm">
@@ -364,7 +364,7 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
                       <span className="font-semibold">{style.label}</span>
                       <span className="text-muted-foreground tabular-nums">
                         {group.length} {group.length === 1 ? 'przyjęcie' : 'przyjęć'}
-                        {excess > 0 && ` · drożej niż baza o ${formatMoney(excess)} zł`}
+                        {excess > 0 && ` · drożej niż cadencier o ${formatMoney(excess)} zł`}
                       </span>
                     </h3>
                     <Card className="gap-0 divide-y py-0">
@@ -396,10 +396,10 @@ export function PriceCheckReport({ storeId }: { storeId: string }) {
                                 value={`${formatMoney(delivery.linesPurchaseValue)} zł`}
                                 tone="neutral"
                               />
-                              {delivery.baseDifferenceValue > 0 && (
+                              {delivery.cadencierDifferenceValue > 0 && (
                                 <MoneyPill
-                                  label="drożej niż baza"
-                                  value={`${formatMoney(delivery.baseDifferenceValue)} zł`}
+                                  label="drożej niż cadencier"
+                                  value={`${formatMoney(delivery.cadencierDifferenceValue)} zł`}
                                   tone="loss"
                                 />
                               )}
@@ -501,6 +501,17 @@ function ReportNotices({ report }: { report: Report }) {
         </span>
         <ReportFreshness generatedAt={report.cadencierGeneratedAt ?? report.cadencierImportedAt} />
       </p>
+      {report.cadencierNumber ? (
+        <p className="text-muted-foreground tabular-nums">
+          Ceny z cadencier {report.cadencierNumber}
+          {report.cadencierFrom && `, obowiązuje od ${formatDocumentDate(report.cadencierFrom)}`}
+        </p>
+      ) : (
+        <p className="flex items-start gap-2 text-amber-700 dark:text-amber-400">
+          <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+          Brak obowiązującego cadencier, więc raport nie zna jego cen. Sprawdź plan i pliki TOP w Imporcie danych.
+        </p>
+      )}
       {documentsBehind && (
         <p className="flex items-start gap-2 text-amber-700 dark:text-amber-400">
           <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
@@ -550,8 +561,8 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
             </TableHead>
             <TableHead className="text-right">Marża</TableHead>
             <TableHead className="text-right">
-              Cena z bazy
-              <span className="block text-xs font-normal text-muted-foreground">ostatnia dostawa, do roku</span>
+              Cena z cadencier
+              <span className="block text-xs font-normal text-muted-foreground">aktualna, zakup netto</span>
             </TableHead>
             {hasMinimum && (
               <>
@@ -607,7 +618,7 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
                 {formatPrice(line.salePriceGross) || '–'}
                 {line.cadencierPrice != null && line.cadencierPrice !== line.salePriceGross && (
                   <span className="block text-xs text-muted-foreground">
-                    CENA_CAD {formatPrice(line.cadencierPrice)}
+                    cadencier {formatPrice(line.cadencierPrice)}
                   </span>
                 )}
               </TableCell>
@@ -615,23 +626,15 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
                 {formatPercent(line.marginPercent) || '–'}
               </TableCell>
               <TableCell className="text-right">
-                {line.basePrice == null ? (
-                  <span className="text-xs text-muted-foreground">brak w bazie od roku</span>
+                {line.cadencierPurchasePrice == null ? (
+                  <span className="text-xs text-muted-foreground">brak ceny</span>
                 ) : (
                   <>
-                    {formatPrice(line.basePrice)}
-                    <BaseDifference purchasePrice={line.purchasePrice} basePrice={line.basePrice} />
-                    <span className="block text-xs text-muted-foreground">
-                      {line.baseDocumentId && line.baseDocumentNumber ? (
-                        <Link
-                          to={documentPaths.document('PZ', line.baseDocumentId)}
-                          className="underline-offset-4 hover:underline"
-                        >
-                          bon {bonNumber(line.baseDocumentNumber)}
-                        </Link>
-                      ) : null}
-                      {line.baseDate && `, ${formatDocumentDate(line.baseDate)}`}
-                    </span>
+                    <span className="block">{formatPrice(line.cadencierPurchasePrice)}</span>
+                    <CadencierDifference
+                      purchasePrice={line.purchasePrice}
+                      cadencierPrice={line.cadencierPurchasePrice}
+                    />
                   </>
                 )}
               </TableCell>
@@ -648,28 +651,5 @@ function LinesTable({ delivery, hasMinimum }: { delivery: PriceCheckDelivery; ha
         </TableBody>
       </Table>
     </div>
-  )
-}
-
-/** O ile cena zakupu od dostawcy różni się od ostatniej ceny z bazy (za sztukę i w %). */
-function BaseDifference({ purchasePrice, basePrice }: { purchasePrice: number; basePrice: number }) {
-  const difference = purchasePrice - basePrice
-  if (Math.abs(difference) < 0.005) {
-    return <span className="mt-0.5 block text-xs text-muted-foreground">tyle samo</span>
-  }
-  const percent = basePrice > 0 ? (difference / basePrice) * 100 : null
-  return (
-    <span
-      className={cn(
-        'mt-0.5 inline-block rounded px-1.5 text-xs font-medium',
-        difference > 0
-          ? 'bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300'
-          : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
-      )}
-    >
-      {difference > 0 ? 'drożej o ' : 'taniej o '}
-      {formatPrice(Math.abs(difference))} zł
-      {percent != null && ` (${formatPercent(Math.abs(Math.round(percent * 10) / 10))})`}
-    </span>
   )
 }

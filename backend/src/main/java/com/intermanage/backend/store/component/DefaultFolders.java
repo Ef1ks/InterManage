@@ -15,6 +15,8 @@ public final class DefaultFolders {
 
     public static final String PROTO = "deli-order-proto";
     public static final String PRODUCT_FILE = "data-entry-product-file";
+    /** Bony dostawy z bazy zapisywane z Mercalys makrem (agent wysyła je do „Znajdź różnice”). */
+    public static final String BASE_NOTES = "base-delivery-notes";
 
     /** Klucz bez sklepu → domyślna ścieżka, w kolejności strony „Ścieżki folderów”. */
     public static final Map<String, String> PATHS;
@@ -30,6 +32,7 @@ public final class DefaultFolders {
         paths.put("leaflet-pro", "N:\\ALOA\\PRO\\IMPORT");
         paths.put("base-delivery-note-file", "N:\\ALOA\\LIVR\\IMPORT");
         paths.put("base-delivery-plu", "N:\\AVISOCONFIG\\BACKUP");
+        paths.put(BASE_NOTES, "P:\\Production\\INTERMANAGE\\EXCEL");
         paths.put("mea-comrnis", "N:\\comrnis");
         paths.put("price-files", "N:\\AVISOCONFIG\\BACKUP");
         paths.put("mea-athos", "N:\\ATHOS2000");

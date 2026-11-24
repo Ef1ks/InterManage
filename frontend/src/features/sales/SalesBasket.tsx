@@ -65,8 +65,10 @@ type SupplierOption = {
   price: number | null
   lastDate: string | null
   deliveries: number
-  /** Baza z cadencier bez dostawy w ostatnim roku: cena z kartoteki. */
-  fromCatalog: boolean
+  /** Baza z cadencier bez dostawy w ostatnim roku (cena z cadencier, a bez niej z kartoteki). */
+  withoutDelivery: boolean
+  /** Numer cadencier, z którego jest cena bazy; bez niego cena z ostatniej dostawy albo z kartoteki. */
+  cadencier: string | null
 }
 
 const daysAgo = (days: number) => {
@@ -136,8 +138,15 @@ function BasketArticleFacts({
         </Fact>
         <Fact label="Cadencier">
           {article.cadencier ? 'tak' : 'nie'}
-          {article.cadencierPrice != null && article.cadencierPrice > 0 && (
-            <Hint>cena {formatMoney(article.cadencierPrice)} zł</Hint>
+          {article.cadencierCurrent?.salePrice != null ? (
+            <Hint>
+              sprzedaż {formatMoney(article.cadencierCurrent.salePrice)} zł
+              {article.cadencierCurrent.purchasePrice != null &&
+                ` · zakup ${formatMoney(article.cadencierCurrent.purchasePrice)} zł`}
+            </Hint>
+          ) : (
+            article.cadencierPrice != null &&
+            article.cadencierPrice > 0 && <Hint>cena {formatMoney(article.cadencierPrice)} zł</Hint>
           )}
         </Fact>
       </dl>
@@ -163,7 +172,7 @@ function Hint({ children }: { children: ReactNode }) {
   return <span className="block text-xs font-normal text-muted-foreground">{children}</span>
 }
 
-/** Okno „Dodaj do koszyka”: dostawcy artykułu z ostatniego roku z ceną zakupu z ostatniej dostawy od każdego z nich. */
+/** Okno „Dodaj do koszyka”: dostawcy artykułu z ostatniego roku z ceną zakupu z ostatniej dostawy od każdego z nich (baza: z cadencier). */
 export function AddToBasketDialog({
   storeId,
   article,
@@ -232,7 +241,8 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
         price: delivery.purchasePrice,
         lastDate: delivery.documentDate,
         deliveries: 1,
-        fromCatalog: false,
+        withoutDelivery: false,
+        cadencier: null,
       })
     }
     const list = [...byKey.values()]
@@ -248,8 +258,17 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
         price: catalog?.purchasePrice ?? null,
         lastDate: null,
         deliveries: 0,
-        fromCatalog: true,
+        withoutDelivery: true,
+        cadencier: null,
       })
+    }
+    // Baza sprzedaje po cenie z obowiązującego cadencier, ostatnia dostawa mogła mieć inną.
+    const current = catalog?.cadencierCurrent
+    if (current?.purchasePrice != null) {
+      for (const option of list.filter((item) => item.base)) {
+        option.price = current.purchasePrice
+        option.cadencier = current.nrCad
+      }
     }
     return list.sort((a, b) => {
       if (cadencier && a.base !== b.base) return a.base ? -1 : 1
@@ -354,8 +373,8 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
                       )}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {option.fromCatalog
-                        ? 'bez dostawy w ostatnim roku, cena zakupu z kartoteki'
+                      {option.withoutDelivery
+                        ? `bez dostawy w ostatnim roku${option.cadencier ? '' : ', cena zakupu z kartoteki'}`
                         : `ostatnia dostawa ${formatDocumentDate(option.lastDate!)} · dostaw w roku: ${option.deliveries}`}
                     </span>
                   </span>
@@ -365,7 +384,9 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
                     ) : (
                       <>
                         <span className="block font-medium">{formatMoney(option.price)} zł</span>
-                        <span className="block text-xs text-muted-foreground">netto</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {option.cadencier ? `z cadencier ${option.cadencier}, netto` : 'netto'}
+                        </span>
                       </>
                     )}
                   </span>

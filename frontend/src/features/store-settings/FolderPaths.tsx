@@ -68,6 +68,11 @@ const INFO: Record<string, FolderInfo> = {
     description: 'Lista kodów do sprawdzenia wagi z „Dostawy z bazy”.',
     source: 'location',
   },
+  'base-delivery-notes': {
+    label: 'Bony dostawy z Mercalys',
+    description: 'Tu makro „Wprowadź dostawę” zapisuje bony dostawy z bazy, które agent wysyła do porównania.',
+    source: 'location',
+  },
   'mea-comrnis': {
     label: 'Zamówienia MEA do ATHOS',
     description: 'Folder, z którego ATHOS bierze zamówienia MEA.',

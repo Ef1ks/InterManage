@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,11 +27,14 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliverySummary;
 import com.intermanage.backend.basedelivery.dto.BasePortalDocument;
+import com.intermanage.backend.basedelivery.dto.BaseReceivingOrderRequest;
+import com.intermanage.backend.basedelivery.dto.BaseReceivingResponse;
 import com.intermanage.backend.basedelivery.dto.MeaConfirmRequest;
 import com.intermanage.backend.basedelivery.dto.MeaOverview;
 import com.intermanage.backend.basedelivery.dto.TemporaryNoteResponse;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryPortalService;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
+import com.intermanage.backend.basedelivery.service.BaseReceivingService;
 import com.intermanage.backend.basedelivery.service.MeaCodeService;
 import com.intermanage.backend.document.service.DocumentService;
 
@@ -49,9 +53,11 @@ public class BaseDeliveryController {
     private final BaseDeliveryService deliveries;
     private final MeaCodeService meaCodes;
     private final BaseDeliveryPortalService portal;
+    private final BaseReceivingService receiving;
 
     public BaseDeliveryController(BaseDeliveryService deliveries, MeaCodeService meaCodes,
-            BaseDeliveryPortalService portal) {
+            BaseDeliveryPortalService portal, BaseReceivingService receiving) {
+        this.receiving = receiving;
         this.deliveries = deliveries;
         this.meaCodes = meaCodes;
         this.portal = portal;
@@ -100,6 +106,22 @@ public class BaseDeliveryController {
     @PreAuthorize(ACCESS)
     public BaseDeliveryResponse get(@PathVariable UUID storeId, @PathVariable UUID id) {
         return deliveries.get(storeId, id);
+    }
+
+    /** Wprowadzenie bonu do Mercalys: numery zamówień i tymczasowe bony dostawy z makra. */
+    @GetMapping("/base-deliveries/{id}/receiving")
+    @PreAuthorize(ACCESS)
+    public BaseReceivingResponse receiving(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return receiving.get(storeId, id);
+    }
+
+    /** Numer zamówienia wpisany ręcznie; makra zleca {@code DATA_ENTRY:EDIT}, więc numer też. */
+    @PutMapping("/base-deliveries/{id}/receiving/order")
+    @PreAuthorize("hasAuthority('DATA_ENTRY:EDIT') and @storeAccess.canAccess(authentication, #storeId)")
+    public BaseReceivingResponse enterOrder(@PathVariable UUID storeId, @PathVariable UUID id,
+            @Valid @RequestBody BaseReceivingOrderRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return receiving.enterOrder(storeId, id, request, principal.getId());
     }
 
     @GetMapping("/base-deliveries/{id}/short-dates/pdf")

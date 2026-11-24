@@ -15,6 +15,7 @@ import {
   FilterXIcon,
   LayersIcon,
   ListChecksIcon,
+  MonitorPlayIcon,
   PackageCheckIcon,
   Redo2Icon,
   SettingsIcon,
@@ -131,6 +132,7 @@ import { PortalDeliveryDialog } from './PortalDeliveryDialog'
 import { DifferencesDialog } from './DifferencesDialog'
 import { meaPath } from './paths'
 import { Itm8MacroDialog } from './Itm8MacroDialog'
+import { ReceiveDialog } from './ReceiveDialog'
 import { ShortDatesDialog } from './ShortDatesDialog'
 
 /**
@@ -302,6 +304,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const [shortDatesOpen, setShortDatesOpen] = useState(false)
   const [itm8MacroOpen, setItm8MacroOpen] = useState(false)
   const [differencesOpen, setDifferencesOpen] = useState(false)
+  const [receiveOpen, setReceiveOpen] = useState(false)
   const [protocolOpen, setProtocolOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
@@ -847,7 +850,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         steps={[
           '„Wczytaj”: dokument z portalu, z dysku albo wgrany wcześniej. Artykuły wszystkich nośników trafią do tabeli z ilościami w sztukach; „Nośniki” je zawęża. Linie, które nie przyjechały, mają ilość 0.',
           'Sprawdź kaucje (czerwona komórka = inna kaucja w dokumencie niż w kartotece; blokuje zmianę cen i protokół) i ujemne marże na cenach cadencier.',
-          '„Wytwórz”: nowe i zmienione artykuły, zmiana cen, protokół, plik dostawy, raport krótkich terminów i makro ITM8.',
+          '„Wytwórz”: nowe i zmienione artykuły, zmiana cen, protokół, plik dostawy, raport krótkich terminów i makra: ITM8, a potem „Wprowadź dostawę” (bon do zamówień w Mercalys, różnice i zakończenie).',
           '„Weryfikuj”: warzywa albo mięso pakowane z całego dokumentu (bez tych w promocji) idą do wprowadzania danych z ceną sugerowaną z bazy. Tam zaznacz (Ctrl+A), „Ustaw ceny sugerowane”, „Zmień ceny” i „Etykiety”.',
           'Filtr w nagłówku każdej kolumny działa jak w Excelu; Ctrl+Z cofa.',
         ]}
@@ -998,6 +1001,13 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
                   disabled={!delivery}
                   hint="Do schowka, Alt+E: kody ITM8 artykułom z dokumentu w Mercalys"
                   onClick={() => setItm8MacroOpen(true)}
+                />
+                <ActionItem
+                  icon={<MonitorPlayIcon />}
+                  label="Wprowadź dostawę"
+                  disabled={!delivery || view !== 'carriers'}
+                  hint="Na komputerze sklepu: bon do zamówień w Mercalys, różnice, Nr BL i zakończenie dostawy"
+                  onClick={() => setReceiveOpen(true)}
                 />
               </DropdownMenuGroup>
             </ActionMenu>
@@ -1341,6 +1351,15 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         delivery={delivery}
         open={itm8MacroOpen}
         onOpenChange={setItm8MacroOpen}
+      />
+      <ReceiveDialog
+        key={`receive-${delivery?.id}`}
+        storeId={store.id}
+        delivery={delivery}
+        rows={rows}
+        missingCarriers={delivery ? Math.max(0, delivery.carriers.length - draft.carriers.length) : 0}
+        open={receiveOpen}
+        onOpenChange={setReceiveOpen}
       />
       <DifferencesDialog storeId={store.id} rows={rows} open={differencesOpen} onOpenChange={setDifferencesOpen} />
       <ProtocolDialog

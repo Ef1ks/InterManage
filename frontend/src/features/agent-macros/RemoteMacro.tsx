@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils'
 
 import { cancelMacro, isActive, type MacroRequest, runMacro } from './api'
 
+/** Makra, których podsumowanie warto pokazać także po udanym przebiegu. */
+const SHOWN_RESULTS: AgentMacroJob['kind'][] = ['MEA_CODES', 'BASE_RECEIVE', 'BASE_CLOSE']
+
 /** Stan zlecenia makra w oknie: jedno naraz, wynik zostaje do następnego zlecenia. */
 export function useRemoteMacro(storeId: string) {
   const [job, setJob] = useState<AgentMacroJob | null>(null)
@@ -141,7 +144,7 @@ export function RemoteMacroStatus({ job, onCancel }: { job: AgentMacroJob; onCan
         {isActive(job) && job.declined.length > 0 && (
           <p>Wcześniej anulowane albo bez odpowiedzi: {job.declined.join(', ')}</p>
         )}
-        {(failed || (done && job.kind === 'MEA_CODES')) && job.message && (
+        {(failed || (done && SHOWN_RESULTS.includes(job.kind))) && job.message && (
           <p className="max-h-32 overflow-auto break-words whitespace-pre-line">{job.message}</p>
         )}
       </div>

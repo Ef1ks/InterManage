@@ -38,12 +38,16 @@ export function NavGroupPage() {
   )
 }
 
-/** Narzędzia w kolejności z menu, po sekcjach; grupa bez sekcji to jedna siatka bez nagłówka. */
+/**
+ * Narzędzia po sekcjach w kolejności pierwszego wystąpienia; grupa bez sekcji to jedna siatka bez nagłówka. Sekcja jest
+ * zawsze jedna, nawet gdy jej narzędzia nie stoją w menu obok siebie: tytuł to klucz w React, a powtórzony klucz
+ * zostawiał stare sekcje na stronie następnej grupy.
+ */
 function sections(items: NavItem[]) {
   const result: { title?: string; items: NavItem[] }[] = []
   for (const item of items) {
-    const last = result.at(-1)
-    if (last && last.title === item.section) last.items.push(item)
+    const section = result.find(({ title }) => title === item.section)
+    if (section) section.items.push(item)
     else result.push({ title: item.section, items: [item] })
   }
   return result

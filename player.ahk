@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.64.0.0
+;@Ahk2Exe-SetVersion 0.65.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.64" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.65" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -310,6 +310,8 @@ PlayMacro(rawClip) {
     ; EXCELSAVE: skoroszyty otwarte przed makrem nie są „nowe”, więc makro nie zapisze cudzego pliku
     excelSeen := InStr(rawClip, "EXCELSAVE") ? ExcelSnapshot() : Map()
     pdfSeen := InStr(rawClip, "PDFSAVE") ? PdfSnapshot() : Map() ; to samo dla okien PDF
+    orders := Map() ; dostawca -> numer zamówienia dostawy z bazy (WEBORDERREAD, WEBORDERKNOWN)
+    pickedOrder := "" ; zamówienie przeniesione do wybranych przez ostatni WEBORDERPICK
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
     handledRows := Map() ; WEBIFROW: ile wierszy obsłużono pod daną etykietą (np. pliki jednego kodu MEA)
     global MacroCollected
@@ -868,6 +870,152 @@ PlayMacro(rawClip) {
                     MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
+            case "WEBGOTO":
+                ; WEBGOTO|etykieta (od 0.65): przeskok do LABEL|etykieta niżej w makrze
+                target := parts.Length >= 2 ? LabelLine(lines, Trim(parts[2]), index) : 0
+                if (target = 0) {
+                    MacroBox report "Brak linii LABEL dla: " line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                index := target
+                continue
+            case "WEBNOROW":
+                ; WEBNOROW|okno|siatka|wyrażenie regularne|komunikat|limit w ms (od 0.65): zatrzymuje makro z komunikatem, gdy
+                ; lista ma wiersz pasujący do wyrażenia (np. po integracji został plik naszego bonu)
+                if (parts.Length < 5) {
+                    MacroBox report "Linia WEBNOROW wymaga okna, siatki, wyrażenia i komunikatu.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                missing := false
+                problem := WebPickRowMatching(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 30000, &missing)
+                if (problem = "" || !missing) {
+                    MacroBox report (problem = "" ? Trim(parts[5]) : problem) "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBALERT":
+                ; WEBALERT|okno|tekst (kilka po średniku)|przycisk|limit w ms (od 0.65): czeka na okno komunikatu z tym tekstem (w treści
+                ; albo w adresie) i zamyka je przyciskiem; bez okna w limicie makro staje
+                if (parts.Length < 4) {
+                    MacroBox report "Linia WEBALERT wymaga okna, tekstu i przycisku.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                problem := WebAlert(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 60000)
+                if (problem != "") {
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBORDERKNOWN":
+                ; WEBORDERKNOWN|dostawca|numer (od 0.65): zamówienie dostawy znane z wcześniejszego przebiegu (plik bonu już wszedł)
+                if (parts.Length >= 3 && RegExMatch(Trim(parts[3]), "^\d+$")) {
+                    orders[Trim(parts[2])] := Trim(parts[3])
+                    vars["ORDER" Trim(parts[2])] := Trim(parts[3])
+                }
+            case "WEBORDERPICK":
+                ; WEBORDERPICK|okno|przyciski strzałki po przecinku|dostawca|nazwa|pochodzenie (kilka po średniku)|dziś RRRRMMDD|etykieta|limit w ms
+                ; (od 0.65): na liście zamówień oczekujących wybiera zamówienie dostawcy o tym pochodzeniu z datą dostawy dziś, a bez niego
+                ; z najbliższą wcześniejszą, potem najbliższą późniejszą, przenosi je strzałką do wybranych i sprawdza, że stoi tam samo. Bez takiego zamówienia
+                ; przeskakuje do LABEL|etykieta. Lista, której nie umie odczytać, zatrzymuje makro (pusty kod tworzymy tylko na pewno).
+                if (parts.Length < 8) {
+                    MacroBox report "Linia WEBORDERPICK wymaga okna, przycisków, dostawcy, nazwy, pochodzenia, daty i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                order := ""
+                note := ""
+                problem := WebOrderPick(Trim(parts[2]), StrSplit(Trim(parts[3]), ","), Trim(parts[4]), Trim(parts[5]), Trim(parts[6]), Trim(parts[7]),
+                    parts.Length >= 9 ? Integer(Trim(parts[9])) : 30000, &order, &note)
+                if (note != "")
+                    report .= note "`n"
+                if (problem = "NONE") {
+                    target := LabelLine(lines, Trim(parts[8]), index)
+                    if (target = 0) {
+                        MacroBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+                if (problem != "") {
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                pickedOrder := order
+            case "WEBORDERREAD":
+                ; WEBORDERREAD|okno|przycisk strzałki|dostawca|nazwa|limit w ms (od 0.65): w wybranych zamówieniach musi być dokładnie jedno,
+                ; tego dostawcy (wybrane wcześniej albo utworzone pustym kodem); jego numer idzie do wyniku (dostawca=numer)
+                ; i do kolejnych linii jako %ORDER<dostawca>%.
+                if (parts.Length < 5) {
+                    MacroBox report "Linia WEBORDERREAD wymaga okna, przycisku, dostawcy i nazwy.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                order := ""
+                problem := WebOrderRead(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), pickedOrder,
+                    parts.Length >= 6 ? Integer(Trim(parts[6])) : 30000, &order)
+                if (problem != "") {
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                orders[Trim(parts[4])] := order
+                vars["ORDER" Trim(parts[4])] := order
+                MacroCollected.codes.Push(Trim(parts[4]) "=" order)
+                report .= "Dostawca " Trim(parts[4]) ": " (pickedOrder = "" ? "utworzone puste zamówienie " : "zamówienie ") order "`n"
+                pickedOrder := ""
+            case "WEBIFORDER":
+                ; WEBIFORDER|dostawca|etykieta (od 0.65): bez zamówienia tego dostawcy przeskakuje do LABEL|etykieta
+                if (parts.Length < 3) {
+                    MacroBox report "Linia WEBIFORDER wymaga dostawcy i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                if !orders.Has(Trim(parts[2])) {
+                    target := LabelLine(lines, Trim(parts[3]), index)
+                    if (target = 0) {
+                        MacroBox report "Brak linii LABEL|" Trim(parts[3]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        return
+                    }
+                    index := target
+                    continue
+                }
+            case "WEBORDERS":
+                ; WEBORDERS|komunikat (od 0.65): zatrzymuje makro z komunikatem, gdy nie ma żadnego zamówienia
+                if (orders.Count = 0) {
+                    MacroBox report (parts.Length >= 2 ? Trim(parts[2]) : "Nie ma żadnego zamówienia."), "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBORDERROW":
+                ; WEBORDERROW|okno|siatka|kolumna numeru|dostawca|nazwa|pierwsza strona|następna strona|limit w ms (od 0.65): zaznacza na liście
+                ; zamówienie tego dostawcy (strona po stronie) i sprawdza, że wiersz jest tego dostawcy
+                supplierKey := parts.Length >= 8 ? Trim(parts[5]) : ""
+                if (parts.Length < 8 || !orders.Has(supplierKey)) {
+                    MacroBox report "Linia WEBORDERROW wymaga wszystkich pól i numeru zamówienia dostawcy.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                step := {title: Trim(parts[2]), grid: Trim(parts[3]), numberColumn: Integer(Trim(parts[4])), firstPage: Trim(parts[7]), nextPage: Trim(parts[8])}
+                problem := WebOrderRow(step, orders[supplierKey], supplierKey, Trim(parts[6]), parts.Length >= 9 ? Integer(Trim(parts[9])) : 10000)
+                if (problem != "") {
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+            case "WEBERRORS":
+                ; WEBERRORS|okno|element strony|dozwolone (fragmenty po średniku)|limit w ms (od 0.65): każdy wiersz listy błędów musi mieć
+                ; któryś z fragmentów (bez wielkości liter); inny błąd zatrzymuje makro i trafia do opisu
+                if (parts.Length < 4) {
+                    MacroBox report "Linia WEBERRORS wymaga okna, elementu i dozwolonych błędów.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                summary := ""
+                problem := WebErrors(Trim(parts[2]), Trim(parts[3]), StrSplit(Trim(parts[4]), ";"), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000, &summary)
+                if (problem != "") {
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                report .= summary "`n"
+            case "WEBRESULT":
+                ; WEBRESULT|numer zamówienia|dostawca|Nr BL (od 0.65): para dla WEBHEADERS i WEBCLOSE bez wcześniejszego WEBROWS
+                if (parts.Length < 4) {
+                    MacroBox report "Linia WEBRESULT wymaga numeru zamówienia, dostawcy i Nr BL.", "Błąd makra", "Icon!" AlwaysOnTop
+                    return
+                }
+                wanted[ListKey(parts[4], parts[3])] := {number: Trim(parts[4]), code: Trim(parts[3])}
+                results[ListKey(parts[4], parts[3])] := Trim(parts[2])
             case "WEBSHOW":
                 ; WEBSHOW|fragment tytułu okna|elementy po przecinku: tylko pokazuje ich HTML (do Schowka), niczego nie klika
                 if (parts.Length >= 3)
@@ -1593,7 +1741,8 @@ WebCloseRows(step, wanted, results) {
     names := ""
     for key, item in wanted
         names .= results[key] " " item.number "`n"
-    if (MsgBox("Zamknąć dostawy: " wanted.Count "?`nTego nie da się cofnąć.`n`n" names, "Zamknięcie dostaw", "YesNo Icon? Default2" AlwaysOnTop) != "Yes")
+    ; Makro z przeglądarki zatwierdził już zlecający, a przy komputerze nikt by okna nie zamknął.
+    if (RemoteId = "" && MsgBox("Zamknąć dostawy: " wanted.Count "?`nTego nie da się cofnąć.`n`n" names, "Zamknięcie dostaw", "YesNo Icon? Default2" AlwaysOnTop) != "Yes")
         return {finished: true, closed: 0, text: "Zamknięcia pominięte na życzenie."}
     closed := ""
     skipped := ""
@@ -1620,6 +1769,8 @@ WebCloseRows(step, wanted, results) {
         if (problem != "")
             return Done("ZATRZYMANE przy " order ": " problem, false)
         closed .= order " " item.number "`n"
+        if (RemoteId != "")
+            MacroCollected.codes.Push("zamkniete=" order)
         count += 1
     }
     return Done(skipped = "" ? "Wszystkie dostawy z listy są zamknięte." : "Sprawdź pominięte dostawy.", skipped = "")
@@ -2944,6 +3095,369 @@ CellText(row, column) {
             return Trim(StrReplace(cells.item(column).innerText, Chr(160), " "))
     }
     return "?"
+}
+
+; --- Dostawa z bazy: zamówienia oczekujące i wybrane (od 0.65) ---
+; Budowy obu list nie znamy ze skanu (Alt+R pokazuje tylko przyciski i pola), więc wiersze rozpoznajemy po treści,
+; a każdy krok sprawdzamy po skutku. Nierozpoznana lista zatrzymuje makro z opisem wierszy, zanim cokolwiek się zapisze.
+
+; Czeka na okno komunikatu z tekstem i je zamyka. "" albo opis problemu.
+WebAlert(title, expected, button, timeoutMs) {
+    deadline := A_TickCount + timeoutMs
+    Loop {
+        problem := CloseAlert(title, expected, button)
+        if (problem = "DIALOG")
+            return ""
+        if (problem != "")
+            return problem
+        if (A_TickCount >= deadline)
+            return "Nie pojawiło się okno komunikatu `"" expected "`"."
+        Sleep 100
+    }
+}
+
+; Nazwa do porównania: same wielkie litery łacińskie i cyfry.
+NameKey(text) => RegExReplace(StrUpper(text), "[^A-Z0-9]")
+
+; Nazwa dostawcy w wierszu (lista może ją uciąć, więc wystarczy początek).
+HasSupplierName(text, name) => NameKey(name) != "" && InStr(NameKey(text), SubStr(NameKey(name), 1, 10))
+
+; Wiersze tabel bez wierszy w środku, z co najmniej czterema komórkami.
+LeafRows(doc) {
+    rows := []
+    try {
+        found := doc.getElementsByTagName("tr")
+        Loop found.length {
+            row := found.item(A_Index - 1)
+            nested := 1
+            cells := 0
+            try nested := row.getElementsByTagName("tr").length
+            try cells := row.cells.length
+            if (nested = 0 && cells >= 4 && IsShown(row))
+                rows.Push(row)
+        }
+    }
+    return rows
+}
+
+; Data DD/MM/RRRR albo DD/MM/RR jako RRRRMMDD; "" bez daty.
+DateKey(text) {
+    if !RegExMatch(text, "(?<!\d)(\d{2})[/.\-](\d{2})[/.\-](\d{4}|\d{2})(?!\d)", &found)
+        return ""
+    return (StrLen(found[3]) = 2 ? "20" found[3] : found[3]) found[2] found[1]
+}
+
+; Położenie kolumn z nagłówka listy (numer zamówienia, data dostawy); -1 = nie ma.
+OrderColumns(rows) {
+    best := {number: -1, date: -1, count: 0}
+    for row in rows {
+        number := -1
+        date := -1
+        cells := row.cells
+        Loop cells.length {
+            text := CellText(row, A_Index - 1)
+            if (number < 0 && RegExMatch(text, "i)^(nr|numer)\.?\s*(zam|kod)"))
+                number := A_Index - 1
+            if (date < 0 && RegExMatch(text, "i)^data\s*dost"))
+                date := A_Index - 1
+        }
+        if (number >= 0 || date >= 0)
+            best := {number: number, date: date, count: cells.length}
+        if (number >= 0 && date >= 0)
+            return best
+    }
+    return best
+}
+
+; Czy wiersz stoi na liście wybranych: po id pojemnika listy, bez niego po położeniu tabeli pod strzałką (strzałka w dół).
+InChosenList(row, arrow) {
+    table := ""
+    node := row
+    Loop 30 {
+        node := WebProp(node, "parentElement")
+        if !IsObject(node)
+            break
+        if (!IsObject(table) && WebProp(node, "tagName") = "TABLE")
+            table := node
+        id := WebProp(node, "id")
+        if InStr(id, "CdeSelection")
+            return true
+        if InStr(id, "CdeEnAtt")
+            return false
+    }
+    try return (IsObject(table) ? table : row).getBoundingClientRect().top > arrow.getBoundingClientRect().top
+    return false
+}
+
+; Strona z listami zamówień: {doc, hwnd, waiting, chosen, rows}; "" = strona jeszcze się nie wczytała.
+OrderPage(title, arrowId, code, name) {
+    try return ReadOrderPage(title, arrowId, code, name) ; strona w trakcie przeładowania odmawia odczytu
+    return ""
+}
+
+ReadOrderPage(title, arrowId, code, name) {
+    for hwnd in WinGetList(title) {
+        for item in FindElements(HtmlDocuments(hwnd), arrowId) {
+            if !(PageLoaded(item.doc) && IsShown(item.element))
+                continue
+            page := {doc: item.doc, hwnd: hwnd, waiting: [], chosen: [], rows: LeafRows(item.doc)}
+            grid := Map() ; wiersze z setSelectedLigne: numer do sprawdzenia zaznaczenia
+            for entry in GridRows(item.doc, "*")
+                grid[WebProp(entry.row, "sourceIndex")] := entry
+            columns := OrderColumns(page.rows)
+            for row in page.rows {
+                info := OrderInfo(row, columns, code)
+                info.named := HasSupplierName(info.text, name)
+                if (info.number = "" || (info.date = "" && !info.named))
+                    continue
+                info.entry := grid.Get(WebProp(row, "sourceIndex"), "")
+                (InChosenList(row, item.element) ? page.chosen : page.waiting).Push(info)
+            }
+            return page
+        }
+    }
+    return ""
+}
+
+OrderInfo(row, columns, code) {
+    texts := []
+    cells := row.cells
+    Loop cells.length
+        texts.Push(CellText(row, A_Index - 1))
+    sameLayout := columns.count = texts.Length
+    number := ""
+    if (sameLayout && columns.number >= 0 && RegExMatch(texts[columns.number + 1], "^0*(\d{2,10})$", &found))
+        number := found[1]
+    if (number = "") {
+        ; Bez nagłówka: pierwsza komórka z samym numerem, która nie jest kodem dostawcy.
+        for text in texts {
+            if (RegExMatch(text, "^\d{4,10}$") && LTrim(text, "0") != LTrim(code, "0")) {
+                number := LTrim(text, "0")
+                break
+            }
+        }
+    }
+    date := sameLayout && columns.date >= 0 ? DateKey(texts[columns.date + 1]) : ""
+    if (date = "" && !(sameLayout && columns.date >= 0)) {
+        ; Bez nagłówka najpóźniejsza data wiersza: dostawa jest po utworzeniu i przesłaniu zamówienia.
+        for text in texts {
+            key := DateKey(text)
+            if (key != "" && (date = "" || Integer(key) > Integer(date)))
+                date := key
+        }
+    }
+    return {row: row, texts: texts, text: RowText(row), number: number, date: date}
+}
+
+HasOrigin(info, origins) {
+    for text in info.texts {
+        for origin in StrSplit(origins, ";") {
+            if (Trim(origin) != "" && text = Trim(origin))
+                return true
+        }
+    }
+    return false
+}
+
+; Opis wierszy strony do wyniku, gdy listy nie da się odczytać: tabela, kliknięcie i treść.
+DescribeOrderRows(page) {
+    if !IsObject(page)
+        return ""
+    text := "`nWiersze strony:"
+    for row in page.rows {
+        if (A_Index > 14 || StrLen(text) > 2200)
+            break
+        id := ""
+        node := row
+        Loop 12 {
+            node := WebProp(node, "parentElement")
+            if !IsObject(node)
+                break
+            id := WebProp(node, "id")
+            if (id != "")
+                break
+        }
+        click := RegExMatch(WebProp(row, "outerHTML"), "i)onclick=`"?([^`">]{1,60})", &found) ? found[1] : ""
+        text .= "`n[" id "] {" click "} " SubStr(RowText(row), 1, 110)
+    }
+    return text
+}
+
+DescribeOrders(list) {
+    text := ""
+    for info in list
+        text .= (A_Index = 1 ? "" : ", ") info.number " (" info.date ")"
+    return text
+}
+
+; "" = zamówienie przeniesione do wybranych, "NONE" = dostawca nie ma takiego zamówienia, inaczej opis problemu.
+WebOrderPick(title, arrows, code, name, origins, today, timeoutMs, &order, &note) {
+    deadline := A_TickCount + timeoutMs
+    page := ""
+    Loop {
+        page := OrderPage(title, Trim(arrows[1]), code, name)
+        if (IsObject(page) && page.waiting.Length + page.chosen.Length > 0)
+            break
+        if (A_TickCount >= deadline)
+            return "Nie widzę żadnego zamówienia na liście oczekujących. Wybierz zamówienie albo utwórz kod ręcznie." DescribeOrderRows(page)
+        Sleep 300
+    }
+    Sleep 1000 ; lista mogła się dopiero dopełniać
+    page := OrderPage(title, Trim(arrows[1]), code, name)
+    if !IsObject(page)
+        return "Lista zamówień zniknęła w trakcie odczytu."
+    if (page.chosen.Length > 0)
+        return "W wybranych zamówieniach już coś jest: " DescribeOrders(page.chosen) ". Zdejmij je i uruchom makro ponownie." DescribeOrderRows(page)
+    best := ""
+    later := "" ; najbliższe późniejsze: tylko, gdy nie ma żadnego do dziś
+    for info in page.waiting {
+        if !(info.named && HasOrigin(info, origins))
+            continue
+        if (info.date = "")
+            return "Zamówienie " info.number " dostawcy " code " nie ma czytelnej daty dostawy: " info.text DescribeOrderRows(page)
+        if (Integer(info.date) > Integer(today)) {
+            if (!IsObject(later) || Integer(info.date) < Integer(later.date))
+                later := info
+            continue
+        }
+        if (!IsObject(best) || Integer(info.date) > Integer(best.date))
+            best := info
+    }
+    if !IsObject(best)
+        best := later
+    if !IsObject(best) {
+        note := "Dostawca " code ": brak zamówienia z bazy (zamówień na liście: " page.waiting.Length ")"
+        return "NONE"
+    }
+    order := best.number
+    note := "Dostawca " code ": wybrane zamówienie " order ", data dostawy " best.date
+    try WinActivate page.hwnd
+    if IsObject(best.entry) {
+        ClickWithoutWaiting(page.doc, best.row)
+        problem := WaitForSelection(page.doc, best.entry.grid, best.entry, A_TickCount + 8000)
+        if (problem != "")
+            return problem
+    } else {
+        target := best.row
+        try target := best.row.cells.item(0)
+        ClickWithoutWaiting(page.doc, target)
+        Sleep 1500
+    }
+    for arrow in arrows {
+        problem := WebClick(title, Trim(arrow), 5000)
+        if (problem != "")
+            continue
+        moveDeadline := A_TickCount + 15000
+        Loop {
+            Sleep 400
+            page := OrderPage(title, Trim(arrows[1]), code, name)
+            if (IsObject(page) && page.chosen.Length > 0)
+                return page.chosen.Length = 1 && page.chosen[1].number = order ? ""
+                    : "Do wybranych trafiło inne zamówienie (" DescribeOrders(page.chosen) ") zamiast " order ". Zdejmij je z wybranych." DescribeOrderRows(page)
+            if (A_TickCount >= moveDeadline)
+                break
+        }
+    }
+    return "Zamówienie " order " nie przeszło do wybranych." DescribeOrderRows(page)
+}
+
+; Jedyne wybrane zamówienie, tego dostawcy (i to samo, które przenieśliśmy). "" = numer w order.
+WebOrderRead(title, arrow, code, name, expected, timeoutMs, &order) {
+    deadline := A_TickCount + timeoutMs
+    page := ""
+    Loop {
+        page := OrderPage(title, arrow, code, name)
+        if (IsObject(page) && page.chosen.Length > 0) {
+            Sleep 700
+            page := OrderPage(title, arrow, code, name)
+            if (IsObject(page) && page.chosen.Length > 0)
+                break
+        }
+        if (A_TickCount >= deadline)
+            return "Nie ma zamówienia w wybranych." DescribeOrderRows(page)
+        Sleep 300
+    }
+    if (page.chosen.Length != 1)
+        return "W wybranych jest kilka zamówień: " DescribeOrders(page.chosen) "." DescribeOrderRows(page)
+    info := page.chosen[1]
+    if !info.named
+        return "Wybrane zamówienie " info.number " nie jest dostawcy " code " (" name "): " info.text
+    if (expected != "" && info.number != expected)
+        return "W wybranych jest zamówienie " info.number " zamiast " expected "."
+    order := info.number
+    return ""
+}
+
+; Zaznacza zamówienie na liście Wprowadzania zamówień i sprawdza dostawcę w jego wierszu.
+WebOrderRow(step, order, code, name, timeoutMs) {
+    problem := ShowOrderRow(step, order)
+    if (problem != "")
+        return problem
+    for hwnd in WinGetList(step.title) {
+        for doc in HtmlDocuments(hwnd) {
+            for item in GridRows(doc, step.grid) {
+                if (ListKey(CellText(item.row, step.numberColumn), "") != ListKey(order, ""))
+                    continue
+                supplier := HasSupplierName(RowText(item.row), name)
+                cells := item.row.cells
+                Loop cells.length
+                    supplier := supplier || LTrim(CellText(item.row, A_Index - 1), "0") = code
+                if !supplier
+                    return "Zamówienie " order " na liście nie jest dostawcy " code ": " RowText(item.row)
+                return WebPickRow(step.title, step.grid, step.numberColumn, order, timeoutMs)
+            }
+        }
+    }
+    return "Nie ma zamówienia " order " na liście zamówień oczekujących na dostawę."
+}
+
+; Lista błędów pobrania: "" = każdy wiersz to dozwolony błąd, inaczej opis z niedozwolonymi.
+WebErrors(title, element, allowed, timeoutMs, &summary) {
+    deadline := A_TickCount + timeoutMs
+    previous := -1
+    Loop {
+        texts := []
+        for hwnd in WinGetList(title) {
+            for item in FindElements(HtmlDocuments(hwnd), element) {
+                if !(PageLoaded(item.doc) && IsShown(item.element))
+                    continue
+                for entry in GridRows(item.doc, "*")
+                    texts.Push(RowText(entry.row))
+                if (texts.Length = 0) {
+                    ; Siatka bez setSelectedLigne: wiersze danych mają kod (od 5 cyfr), nagłówek nie.
+                    for row in LeafRows(item.doc) {
+                        if RegExMatch(RowText(row), "(?<!\d)\d{5,13}(?!\d)")
+                            texts.Push(RowText(row))
+                    }
+                }
+            }
+            if (texts.Length > 0)
+                break
+        }
+        ; Dwa takie same odczyty: lista już się nie dopełnia.
+        if (texts.Length > 0 && texts.Length = previous)
+            break
+        previous := texts.Length
+        if (A_TickCount >= deadline)
+            return "Nie udało się odczytać listy błędów pobrania. Sprawdź ją w Mercalys."
+        Sleep 500
+    }
+    bad := ""
+    count := 0
+    for text in texts {
+        matched := false
+        for piece in allowed
+            matched := matched || (Trim(piece) != "" && InStr(text, Trim(piece)))
+        if !matched {
+            count += 1
+            if (count <= 10)
+                bad .= "`n" text
+        }
+    }
+    if (count > 0)
+        return "Lista błędów pobrania ma inne błędy niż dozwolone (" count " z " texts.Length "), sprawdź je w Mercalys:" bad
+    summary := "Błędy pobrania (tylko dozwolone): " texts.Length
+    return ""
 }
 
 WebShow(title, buttons) {

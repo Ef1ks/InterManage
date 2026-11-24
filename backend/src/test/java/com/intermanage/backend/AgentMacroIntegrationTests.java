@@ -205,6 +205,135 @@ class AgentMacroIntegrationTests {
                 .andExpect(jsonPath("$.pending[0].code").value("52817"));
     }
 
+    @Test
+    void baseDeliveryIsReceivedComparedAndClosed() throws Exception {
+        String deliveryId = uploadDelivery();
+        String kasa = addAgent("Kasa");
+        String receiving = "/api/stores/" + storeId + "/base-deliveries/" + deliveryId + "/receiving";
+        // Agent bez wersji odtwarzacza (sprzed 1.8.0) i starszy odtwarzacz nie wezmą tego makra.
+        poll(kasa, 900, false, true);
+        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("AutoJob 0.65")));
+        poll(kasa, "0.64");
+        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        poll(kasa, "0.65");
+        // Bez zamówień nie ma czego kończyć.
+        base("base-close", deliveryId).andExpect(status().isConflict());
+
+        String job = JsonPath.read(base("base-receive", deliveryId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OFFERED"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String start = agentPost(kasa, "/macro-jobs/" + job + "/start", "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.uploads[0].key").value("538"))
+                .andExpect(jsonPath("$.uploads[0].path")
+                        .value("P:\\Production\\INTERMANAGE\\EXCEL\\BON_9516050082_538.xlsx"))
+                .andExpect(jsonPath("$.uploads[1].key").value("88110"))
+                .andReturn().getResponse().getContentAsString();
+        String macro = JsonPath.read(start, "$.macro");
+        assertThat(macro).contains("WINOPEN|Mercalys ahk_exe Mercalys.exe\r\n")
+                .contains("WEBPICKRE|Mercalys|dgDetail|(?<!\\d)0*9516050082\\D+0*538(?!\\d)|30000|brak-538")
+                .contains("WEBORDERPICK|Mercalys|ibtB1_Ajouter_ImageButton1,ibtB1_Ajouter_LnkBouton|538|"
+                        + "SCAPR POLSKA SP.Z.O.O.|Base;Baza|")
+                .contains("WEBERRORS|Mercalys|btnB2_Supprimer_LnkBouton|niezgodne jednost;nieistniej|30000")
+                .contains("EXCELSAVE|P:\\Production\\INTERMANAGE\\EXCEL\\BON_9516050082_88110.xlsx|180000")
+                .doesNotContain("WEBORDERKNOWN")
+                .endsWith("WINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
+        // Każdy przeskok ma swoją etykietę niżej w makrze.
+        List<String> lines = macro.lines().toList();
+        for (int i = 0; i < lines.size(); i++) {
+            String[] parts = lines.get(i).split("\\|");
+            String target = switch (parts[0]) {
+                case "WEBGOTO" -> parts[1];
+                case "WEBIFORDER" -> parts[2];
+                case "WEBORDERPICK" -> parts[7];
+                case "WEBPAGE" -> parts.length > 8 ? parts[8] : null;
+                case "WEBPICKRE" -> parts.length > 5 ? parts[5] : null;
+                default -> null;
+            };
+            if (target != null) {
+                assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + target);
+            }
+        }
+
+        // Bon tylko z listy startu; nieczytelny plik zostaje z opisem błędu.
+        mvc.perform(multipart("/api/store-agent/macro-jobs/" + job + "/files")
+                        .file(new MockMultipartFile("file", "x.xlsx", null, new byte[] {1})).param("key", "77")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + kasa)).andExpect(status().isBadRequest());
+        mvc.perform(multipart("/api/store-agent/macro-jobs/" + job + "/files")
+                        .file(new MockMultipartFile("file", "BON_9516050082_538.xls", null, note()))
+                        .param("key", "538").header(HttpHeaders.AUTHORIZATION, "Bearer " + kasa))
+                .andExpect(status().isNoContent());
+        mvc.perform(multipart("/api/store-agent/macro-jobs/" + job + "/files")
+                        .file(new MockMultipartFile("file", "BON_9516050082_88110.xlsx", null, new byte[] {1, 2, 3}))
+                        .param("key", "88110").header(HttpHeaders.AUTHORIZATION, "Bearer " + kasa))
+                .andExpect(status().isNoContent());
+        // Makro padło po pierwszym dostawcy: jego numer i tak zostaje.
+        agentPost(kasa, "/macro-jobs/" + job + "/finish",
+                "{\"ok\":false,\"message\":\"Błąd\",\"codes\":[\"538=11233\",\"61652855\"]}")
+                .andExpect(status().isNoContent());
+        mvc.perform(get(receiving).cookie(owner)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.suppliers[0].order.orderNumber").value("11233"))
+                .andExpect(jsonPath("$.suppliers[0].note.content.number").value("11233"))
+                .andExpect(jsonPath("$.suppliers[0].note.content.lines[0].quantity").value(12))
+                .andExpect(jsonPath("$.suppliers[1].order").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.suppliers[1].note.content").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.suppliers[1].note.error").isNotEmpty());
+
+        // Powtórka zna zamówienie z pierwszego przebiegu.
+        poll(kasa, "0.65");
+        String again = JsonPath.read(base("base-receive", deliveryId).andReturn().getResponse().getContentAsString(),
+                "$.id");
+        String second = JsonPath.read(agentPost(kasa, "/macro-jobs/" + again + "/start", "")
+                .andReturn().getResponse().getContentAsString(), "$.macro");
+        assertThat(second).contains("WEBORDERKNOWN|538|11233\r\n");
+        agentPost(kasa, "/macro-jobs/" + again + "/finish", "{\"ok\":true,\"message\":\"\",\"codes\":[]}")
+                .andExpect(status().isNoContent());
+        // Numer drugiego dostawcy wpisany ręcznie.
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(receiving + "/order")
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"supplierCode\":\"88110\",\"orderNumber\":\"11240\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.suppliers[1].order.enteredBy").isNotEmpty());
+
+        poll(kasa, "0.65");
+        String close = JsonPath.read(base("base-close", deliveryId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.itemCount").value(2))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String closeMacro = JsonPath.read(agentPost(kasa, "/macro-jobs/" + close + "/start", "")
+                .andReturn().getResponse().getContentAsString(), "$.macro");
+        assertThat(closeMacro).contains("WEBRESULT|11233|538|09516050082\r\n")
+                .contains("WEBRESULT|11240|88110|09516050082\r\n")
+                .contains("WEBHEADERS|Mercalys|dgDetail|1|12|")
+                .contains("WEBCLOSE|Mercalys|dgDetail|1|12|");
+        agentPost(kasa, "/macro-jobs/" + close + "/finish",
+                "{\"ok\":false,\"message\":\"Błąd\",\"codes\":[\"zamkniete=11233\"]}")
+                .andExpect(status().isNoContent());
+        mvc.perform(get(receiving).cookie(owner))
+                .andExpect(jsonPath("$.suppliers[0].order.closedAt").isNotEmpty())
+                .andExpect(jsonPath("$.suppliers[1].order.closedAt").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    private byte[] note() {
+        return xlsWriter.write("Arkusz1", List.of("SCAPR POLSKA SP.Z.O.O."), List.of(
+                List.of("Dostawca 538"), List.of("Numer dostawy: 11233"), List.of("Data : 24/11/2026 13:21:00"),
+                Arrays.<Object>asList("Kod ITM8", "EAN Prio", "Referencja dostawcy", "Nazwa artykulu", "VAT",
+                        "Ilosc dost.", "Jednostk. cena zakupu", "Jednostkowa C.S.", "Wartosc zakupu netto", "Marza %"),
+                Arrays.<Object>asList("0000061652855", "5900497047708", "61652855", "7 UP 0.5L PET",
+                        new BigDecimal("23"), new BigDecimal("12"), new BigDecimal("3.19"), new BigDecimal("4.99"),
+                        new BigDecimal("38.28"), new BigDecimal("20")),
+                List.of("Ilosc linii: 000001")));
+    }
+
+    private ResultActions base(String macro, String deliveryId) throws Exception {
+        return mvc.perform(post(base() + "/" + macro).cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"deliveryId\":\"" + deliveryId + "\"}"));
+    }
+
+    private void poll(String key, String playerVersion) throws Exception {
+        agentPost(key, "/macro-jobs/poll", ("{\"idleSeconds\":900,\"locked\":false,\"playerRunning\":true,"
+                + "\"busy\":false,\"playerVersion\":\"%s\"}").formatted(playerVersion)).andExpect(status().isOk());
+    }
+
     private ResultActions meaCodes(String codes) throws Exception {
         return mvc.perform(post(base() + "/mea-codes").cookie(owner).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"codes\":" + codes + "}"));

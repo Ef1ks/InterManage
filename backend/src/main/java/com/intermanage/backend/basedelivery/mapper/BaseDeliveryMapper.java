@@ -8,9 +8,13 @@ import org.mapstruct.Mapping;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryLineResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
 import com.intermanage.backend.basedelivery.dto.BaseDeliverySummary;
+import com.intermanage.backend.basedelivery.dto.BaseReceivingResponse;
 import com.intermanage.backend.basedelivery.dto.MeaOverview;
+import com.intermanage.backend.basedelivery.dto.TemporaryNoteResponse;
 import com.intermanage.backend.basedelivery.entity.BaseDelivery;
 import com.intermanage.backend.basedelivery.entity.BaseDeliveryLine;
+import com.intermanage.backend.basedelivery.entity.BaseDeliveryNote;
+import com.intermanage.backend.basedelivery.entity.BaseDeliveryOrder;
 import com.intermanage.backend.basedelivery.entity.MeaCode;
 import com.intermanage.backend.basedelivery.entity.MeaConfirmation;
 import com.intermanage.backend.dataentry.dto.CatalogProduct;
@@ -43,6 +47,13 @@ public interface BaseDeliveryMapper {
     @Mapping(target = "confirmedBy", source = "confirmedBy.displayName")
     @Mapping(target = "deletedBy", source = "deletedBy.displayName")
     MeaOverview.Confirmation toConfirmation(MeaConfirmation confirmation);
+
+    @Mapping(target = "enteredBy", source = "enteredBy.displayName")
+    BaseReceivingResponse.Order toReceivingOrder(BaseDeliveryOrder order);
+
+    @Mapping(target = "fileName", source = "note.fileName")
+    @Mapping(target = "content", source = "content")
+    BaseReceivingResponse.Note toReceivingNote(BaseDeliveryNote note, TemporaryNoteResponse content, String error);
 
     default String code(MeaCode code) {
         return code.getCode();

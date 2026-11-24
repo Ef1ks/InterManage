@@ -1,0 +1,852 @@
+po wykonaniu uzupełnienia itm8 wracamy do tego wsamego miejsca co tam i ta sama logike klikamy w dostawy z listy
+wchodzimy w dostawe i klikamy Integracja na dole 
+
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Achat/ac-e080.aspx?source=ac_e034
+input image | id=pgrDetail_ibtSuivant | name=pgrDetail_ibtSuivant | value= | tekst= | opis=
+input image | id=pgrDetail_ibtDernier | name=pgrDetail_ibtDernier | value= | tekst= | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_FicheArticle_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Integration_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+select select-one | id=pgrDetail_ddlGoTo | name=pgrDetail_ddlGoTo | value=1 | pozycje=1=1; 2=2; 3=3; 4=4; 5=5; 6=6; 7=7; 8=8; 9=9; 10=10; 11=11; 12=12; 13=13; 14=14; 15=15; 16=16; 17=17; 18=18; 19=19; 20=20; 21=21; 22=22; 23=23; 
+input text | id=txtZ1_CodeITM_TxtBox | name=txtZ1_CodeITM:TxtBox | value= | max=13
+input text | id=txnZ9_Quantite_TxtBox | name=txnZ9_Quantite:TxtBox | value=0,000 | max=9
+input text | id=txmZ12_PrixAchat_TxtBox | name=txmZ12_PrixAchat:TxtBox | value=0,00 | max=10
+
+
+po kliknieciu sprawadzamy czy nie mamy pytania 
+
+
+Odtwarzacz w wersji 0.64
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Wyst%c4%85pi%c5%82y+b%c5%82edy+(linie+zazn.+na+czerwono).+Te+linie+nie+zostan%c4%85+pobrane+do+zam%26oacute%3bwienia.+Czy+chcesz+kontynuowa%c4%87%3f&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+klikamy Tak 
+
+jestemy w panelu 
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Achat/ac-e080.aspx?source=ac_e034
+input image | id=ibtB1_Ajouter_ImageButton1 | name=ibtB1_Ajouter:ImageButton1 | value= | tekst= | opis=
+input image | id=ibtB2_Retirer_ImageButton1 | name=ibtB2_Retirer:ImageButton1 | value= | tekst= | opis=
+a  | id=ibtB1_Ajouter_LnkBouton | name= | value= | tekst= | opis=
+a  | id=ibtB2_Retirer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_ZoomFrs_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB5_CreationCde_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Decharger_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=lstZ2_CdeEnAtt_TxtBox | name=lstZ2_CdeEnAtt:TxtBox | value= | max=11
+input text | id=lstZ3_CdeSelection_TxtBox | name=lstZ3_CdeSelection:TxtBox | value= | max=11
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:01 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+wybieramy dla dostawy 538 dostawce z nazwa z modulu Dostawcy czyli SCAPR POLSKA SP.Z.O.O. i wybieramy plik z Pochodz. Base i Data dost. najbliżej daty dzisiejszej - daty robienia dostawy, jeżeli nie ma to wybieramy najblizsza date w dol,
+
+jeżeli zadnej dostawy z Base dla scapru nie ma to klikamy na dole Tworzenie kodu
+
+
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/webaviso/ecrans/achat/ac-e050.aspx
+input image | id=pgrDetail_ibtSuivant | name=pgrDetail_ibtSuivant | value= | tekst= | opis=
+input image | id=pgrDetail_ibtDernier | name=pgrDetail_ibtDernier | value= | tekst= | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+select select-one | id=pgrDetail_ddlGoTo | name=pgrDetail_ddlGoTo | value=1 | pozycje=1=1; 2=2; 3=3; 4=4; 5=5; 6=6; 7=7; 8=8; 9=9; 10=10; 11=11; 12=12; 13=13; 
+input text | id=txeZ1_Code_TxtBox | name=txeZ1_Code:TxtBox | value=0 | max=8
+input text | id=txtZ2_MotDirecteur_TxtBox | name=txtZ2_MotDirecteur:TxtBox | value= | max=8
+input text | id=txtZ3_RaisonSociale_TxtBox | name=txtZ3_RaisonSociale:TxtBox | value= | max=30
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:07 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+w Kod wpisujemy kod 538 lub 88110 -> enter -> program znajdzie dostawce i go zaznaczy potem klikamy Zatwierdz
+
+Odtwarzacz w wersji 0.64
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Czy+na+pewno+chcesz+storzy%c4%87+puste%2c+niemodyfikowlne+zam%26oacute%3bwienie%3f&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+
+klikamy tak i zamowienei od razu trafi do Wybrane zamówienia czyli nie musimy robic wyboru tak jak poniżej wytlumaczylem, 
+
+
+
+
+
+
+
+wybor oznacza klikniecie strzałki w dol nie wiem jak ona w kodzie wygląda 
+
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/webaviso/ecrans/achat/ac-e080.aspx
+input image | id=ibtB1_Ajouter_ImageButton1 | name=ibtB1_Ajouter:ImageButton1 | value= | tekst= | opis=
+input image | id=ibtB2_Retirer_ImageButton1 | name=ibtB2_Retirer:ImageButton1 | value= | tekst= | opis=
+a  | id=ibtB1_Ajouter_LnkBouton | name= | value= | tekst= | opis=
+a  | id=ibtB2_Retirer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_ZoomFrs_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB5_CreationCde_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Decharger_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=lstZ2_CdeEnAtt_TxtBox | name=lstZ2_CdeEnAtt:TxtBox | value= | max=11
+input text | id=lstZ3_CdeSelection_TxtBox | name=lstZ3_CdeSelection:TxtBox | value= | max=11
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:05 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+klikamy zatwierdz i mamy pytanie 
+Odtwarzacz w wersji 0.64
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Czy+chcia%c5%82by%c5%9b+pobra%c4%87&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+klikamy tak
+
+Odtwarzacz w wersji 0.64
+Okno:  — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteAlerte.aspx?Msg=Suma+zaimportowanych+zam%26oacute%3bwie%c5%84
+a  | id=Fermer | name= | value= | tekst=Zamknij | opis=
+
+
+klikamy Zamknij
+
+
+potem mamy 
+Odtwarzacz w wersji 0.64
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Czy+chcesz+teraz+poprawi%c4%87+b%c5%82%c4%99dy%3f&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+klikamy Tak 
+otwiera nam się pdf, zamykamy, otwiera kolejny - zamykamy , otwiera się kolejny - zamykamy 
+
+jezeli nie ma bledow to nie wyskakuje drugie pytanie czy chcemy poprawic bledy i nie wyskakuje tez trzeci PDF - i tez nie ma tego panelu z lista bledow tylko od razu w obsludze
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/webaviso/ecrans/achat/ac-e051_1.aspx?Source=ace050&livraisonbase=1
+a  | id= | name= | value= | tekst=Kod artykułu | opis=
+a  | id= | name= | value= | tekst=Kod ITM8 | opis=
+a  | id= | name= | value= | tekst=Nazwa | opis=
+a  | id= | name= | value= | tekst=EAN Prio | opis=
+a  | id= | name= | value= | tekst=Rodzaj błedu | opis=
+a  | id= | name= | value= | tekst=Ilość pobrana | opis=
+a  | id= | name= | value= | tekst=Pochodz. | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_TraiterAnomalie_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB5_FicheITM_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_Imprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:11 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+jeżeli nie ma bledow innych niż Niezgodne Jednostki i art..nieistniejący jak na screenie to klikamy Powrot 
+
+Odtwarzacz w wersji 0.64
+Okno: :: MERCALYS - Les Mousquetaires :: — okno dialogowe strony sieci Web
+Klasa: Internet Explorer_TridentDlgFrame
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Utilitaires/BoiteConfirmation.aspx?Msg=Czy+chcesz+wyczyscic+wszystkie+zalegaj%c4%85ce+b%c5%82%c4%99dy%3f&defaut=0
+a  | id=Oui | name= | value= | tekst=Tak | opis=
+a  | id=Non | name= | value= | tekst=Nie | opis=
+
+
+klikamy Tak i czekamy 2/3 sekundy i przechodzimy znowu do obsługi BL i sprawdzamy czy cos zostało, jeżeli mamy plik z naszym nr dostawy to powtarzamy czynności dla odpowiedniego dostawcy   w nazwie tu mamy 88110 wiec to będzie 88110
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Achat/ac-e080.aspx?source=ac_e034
+input image | id=ibtB1_Ajouter_ImageButton1 | name=ibtB1_Ajouter:ImageButton1 | value= | tekst= | opis=
+input image | id=ibtB2_Retirer_ImageButton1 | name=ibtB2_Retirer:ImageButton1 | value= | tekst= | opis=
+a  | id=ibtB1_Ajouter_LnkBouton | name= | value= | tekst= | opis=
+a  | id=ibtB2_Retirer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_ZoomFrs_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB5_CreationCde_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Decharger_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=lstZ2_CdeEnAtt_TxtBox | name=lstZ2_CdeEnAtt:TxtBox | value= | max=11
+input text | id=lstZ3_CdeSelection_TxtBox | name=lstZ3_CdeSelection:TxtBox | value= | max=11
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:14 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+nie ma tu 88110 dostawcy wiec tworzymy kod dla przykładu
+
+
+
+jeżeli w obsłudze już nie ma zadnej dostawy z naszym nr to idziemy dalej
+
+wchodzimy jak w zamykaniu faktur -zakup zamówienie wprowadzenie zamów kryetrium 3, nr Zam bierzemy z miejsca w którym strzalka wybieraliśmy dostawe lub tworzyliysmy kod 
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteCmd | name= | value= | tekst=Wprowadzanie Zamów. | opis=
+a  | id=mnTv_ACHAT_ac-e045_ChargementCommande | name= | value= | tekst=Załadowanie zamówienia | opis=
+a  | id=mnTv_ACHAT_ac-e046_DechargementCommandes | name= | value= | tekst=Przesył z kolektotra zamówień | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e052_SaisieCommandeRapide | name= | value= | tekst=Szybkie wprowadzanie zamówień | opis=
+a  | id=mnTv_ACHAT_ac-etat047_BordereauDeSaisieAvecCodesABarres | name= | value= | tekst=Formularz wpisu | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Achat/ac-e050.aspx?source=ac_e034
+input image | id=ibtB1_Ajouter_ImageButton1 | name=ibtB1_Ajouter:ImageButton1 | value= | tekst= | opis=
+input image | id=ibtB2_Retirer_ImageButton1 | name=ibtB2_Retirer:ImageButton1 | value= | tekst= | opis=
+a  | id=ibtB1_Ajouter_LnkBouton | name= | value= | tekst= | opis=
+a  | id=ibtB2_Retirer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_ZoomFrs_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB5_CreationCde_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Decharger_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=lstZ2_CdeEnAtt_TxtBox | name=lstZ2_CdeEnAtt:TxtBox | value= | max=11
+input text | id=lstZ3_CdeSelection_TxtBox | name=lstZ3_CdeSelection:TxtBox | value= | max=11
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:17 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+tu mamy z nr zam 11233
+
+wybieramy odpowiednie pliki dostawy klikamy drukowanie, 
+
+otwiera nam się wybor
+
+Odtwarzacz w wersji 0.64
+Okno: Mercalys
+Klasa: WindowsForms10.Window.8.app.0.38248fc_r8_ad1
+Program: Mercalys.exe
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/topA.aspx?source=initAviso
+input image | id=ImageButtonNeFaitRien | name=ImageButtonNeFaitRien | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Strona
+a  | id=mnTp_FAVORIS | name= | value= | tekst=Ulubione | opis=
+a  | id=mnTp_ARTICLE | name= | value= | tekst=Artykuł | opis=
+a  | id=mnTp_ACHAT | name= | value= | tekst=Zakup | opis=
+a  | id=mnTp_REAPPRO | name= | value= | tekst=Reappro | opis=
+a  | id=mnTp_STOCK | name= | value= | tekst=St.Mag. | opis=
+a  | id=mnTp_TARIF | name= | value= | tekst=Taryfa | opis=
+a  | id=mnTp_VENTE | name= | value= | tekst=Sprzed. | opis=
+a  | id=mnTp_CADENCIER | name= | value= | tekst=Cadencier | opis=
+a  | id=mnTp_PILOTAGE | name= | value= | tekst=Pilotaż | opis=
+a  | id=mnTp_MAINTENANCE | name= | value= | tekst=Obsługa | opis=
+a  | id=mnTp_OUTIL | name= | value= | tekst=Narz. | opis=
+a  | id=mnTp_? | name= | value= | tekst=? | opis=
+a  | id=LinkButtonFermer | name= | value= | tekst= | opis=
+a  | id=LinkButtonLang | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=France
+a  | id= | name= | value= | tekst= | opis=Portugal
+a  | id= | name= | value= | tekst= | opis=Pologne
+a  | id= | name= | value= | tekst= | opis=Belgique(nl)
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst= | opis=Documentation
+a  | id= | name= | value= | tekst= | opis=imprimer
+a  | id= | name= | value= | tekst= | opis=minimiser
+a  | id= | name= | value= | tekst= | opis=Zamknij
+
+Strona: http://aviso/WebAviso/Ecrans/NoyauApplicatif/modele.aspx?onglet=mnTp_ACHAT
+a  | id=mnTv_ACHAT_Commande | name= | value= | tekst=Zamówienie | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteCmd | name= | value= | tekst=Wprowadzanie Zamów. | opis=
+a  | id=mnTv_ACHAT_ac-e045_ChargementCommande | name= | value= | tekst=Załadowanie zamówienia | opis=
+a  | id=mnTv_ACHAT_ac-e046_DechargementCommandes | name= | value= | tekst=Przesył z kolektotra zamówień | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e052_SaisieCommandeRapide | name= | value= | tekst=Szybkie wprowadzanie zamówień | opis=
+a  | id=mnTv_ACHAT_ac-etat047_BordereauDeSaisieAvecCodesABarres | name= | value= | tekst=Formularz wpisu | opis=
+a  | id=mnTv_ACHAT_Livraison | name= | value= | tekst=Dostawa | opis=
+a  | id=mnTv_ACHAT_ac-e034_BlEuropa | name= | value= | tekst=Obsluga BL Bazy | opis=
+a  | id=mnTv_ACHAT_ac-e047_ChargementLivraisons | name= | value= | tekst=Załadowanie dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e050_DechargementLivraisons | name= | value= | tekst=Przesył dostaw | opis=
+a  | id=mnTv_ACHAT_ac-e054_GestionDesAnomalies | name= | value= | tekst=Zarządzanie błędami | opis=
+a  | id=mnTv_ACHAT_ac-e011_SaisieCommandeCompleteLivraison | name= | value= | tekst=Wprowadzanie Dostawy | opis=
+a  | id=mnTv_ACHAT_ac-e097_SelectionEtatValorisationLivraison | name= | value= | tekst=Wykaz waloryzacji oczekiwanych zamówień | opis=
+a  | id=mnTv_ACHAT_ControleFacture | name= | value= | tekst=Kontrola faktur | opis=
+a  | id=mnTv_ACHAT_CommandesOperations | name= | value= | tekst=Zamówienia operacji | opis=
+a  | id=mnTv_ACHAT_BlFournisseursDirects | name= | value= | tekst=PZ dostawców bezpośr | opis=
+a  | id=mnTv_ACHAT_DepannageCommande | name= | value= | tekst=Awaryjny przesył zamów. | opis=
+
+Strona: http://aviso/WebAviso/Ecrans/Achat/ac-e011.aspx?menu=1
+input checkbox | id=chkP1_BonValo_CheckBox1 | name=chkP1_BonValo:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkP2_Entete_CheckBox1 | name=chkP2_Entete:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkP3_Ecart_CheckBox1 | name=chkP3_Ecart:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkP4_DetailBox_CheckBox1 | name=chkP4_DetailBox:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+input checkbox | id=chkZ5_SelectedAll_CheckBox1 | name=chkZ5_SelectedAll:CheckBox1 | value=on | tekst= | opis= | zaznaczone=nie
+a  | id=lkbL1_Impression_LinkAviso | name=LFM | value= | tekst=Wydruk | opis=
+a  | id=lkbL3_ListeLivraisons_LinkAviso | name=LFM | value= | tekst=Lista dostaw w oczekiwaniu | opis=
+a  | id=lkbL2_BonValorise_LinkAviso | name=LFM | value= | tekst=Bon Wartościowy | opis=
+a  | id=lkbL5_Prov_LinkAviso | name=LFM | value= | tekst=Tymczasowy dowód dostawy | opis=
+a  | id=lkbL7_BLExcel_LinkAviso | name=LFM | value= | tekst=Bon dostawy Excel | opis=
+a  | id=btnP1_Valider_LnkBouton | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Nr kodu | opis=
+a  | id= | name= | value= | tekst=Pochodz | opis=
+a  | id= | name= | value= | tekst=M/S | opis=
+a  | id= | name= | value= | tekst=Dostawca | opis=
+a  | id= | name= | value= | tekst=Status Zamów. | opis=
+a  | id= | name= | value= | tekst=Utworzenie | opis=
+a  | id= | name= | value= | tekst=Przesył | opis=
+a  | id= | name= | value= | tekst=Dostawa | opis=
+a  | id= | name= | value= | tekst=colis | opis=
+a  | id= | name= | value= | tekst=Wartość netto | opis=
+a  | id= | name= | value= | tekst=Nr Zamów.Amont | opis=
+a  | id= | name= | value= | tekst=Ident. zamów. | opis=
+a  | id= | name= | value= | tekst=Etyk.Odbioru | opis=
+a  | id= | name= | value= | tekst=Nr BL | opis=
+a  | id= | name= | value= | tekst=brak | opis=
+a  | id= | name= | value= | tekst=Zamknij | opis=
+a  | id= | name= | value= | tekst=Kod operacji | opis=
+a  | id= | name= | value= | tekst=Data początk.OP | opis=
+a  | id= | name= | value= | tekst=Data końca OP | opis=
+a  | id=btnB1_Retour_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB6_Supprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB2_EtiquetteReception_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB8_Selection_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB3_Cloturer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB10_Passation_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB5_Zoom_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB4_CreationCommande_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB9_Imprimer_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB11_Entete_LnkBouton | name= | value= | tekst= | opis=
+a  | id=btnB12_ClotureEnMasseLivraison_LnkBouton | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_LastControl | name= | value= | tekst= | opis=
+a  | id=GestionaireClavier1_ChangeFocus | name= | value= | tekst= | opis=
+input text | id=lstZ1_Critere_TxtBox | name=lstZ1_Critere:TxtBox | value=3 | max=1
+input text | id=lstZ4_NumCommande_TxtBox | name=lstZ4_NumCommande:TxtBox | value= | max=10
+
+Strona: http://aviso/WebAvisoReappro/Accueil.mvc
+a  | id= | name= | value= | tekst= | opis=
+a  | id= | name= | value= | tekst=Start | opis=
+a  | id= | name= | value= | tekst=Tydzień 48 | opis=
+a  | id= | name= | value= | tekst=Wtorek 24/11/2026  13:21 | opis=
+a  | id=HelpLink | name= | value= | tekst=Aide | opis=
+a  | id=btn-toggle-menu | name= | value= | tekst= | opis=Zminimalizować/Zmaksymalizow. menu
+a  | id= | name= | value= | tekst=Propozycja zamówienia | opis=Propozycje zamówień do zatwierdzenia
+a  | id= | name= | value= | tekst=Pilotaż reappro | opis=Pilotaż reappro
+a  | id= | name= | value= | tekst=Parametry standardowe | opis=Parametry standardowe
+a  | id= | name= | value= | tekst=Parametry eksperta | opis=Parametry eksperta
+a  | id= | name= | value= | tekst=Wpis zadań użytkownika | opis=Wpis zadań użytkownika
+a  | id= | name= | value= | tekst=+ Info | opis=  W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 1 tyg. bez ruchów mag. Sprzedany wcześniej   W reapro 
+a  | id= | name= | value= | tekst=+ Info | opis=Z 30 tyg. bez ruchów mag.  Również z art. nieaktywn. Również art. z datą us.log. W reapro Również w zarz. stanem
+a  | id= | name= | value= | tekst=+ Info | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+a  | id= | name= | value= | tekst=+ Szczegóły | opis=
+
+
+klikamy Bon dostawy excel GENERUJE NAm się excel i zapisujemy go do P:\Production\INTERMANAGE\EXCEL
+
+i jeżeli mamy drugi bon to robimy drugi,
+
+Agent wgrywa raport na serwer prosto do znajdz roznice i pokazuje nam ostateczny efekt jeżeli wszystko jest ok to klikamy Zatwierdz, zatwierdz oznacza wpisanie w nagłówek nr Bl
+
+i potem zakończ w ten sam sposób co dostawy 
+
+
+

@@ -28,6 +28,8 @@ import jakarta.validation.Valid;
  * POST /api/stores/{storeId}/agent-macros/itm8-collect      {deliveryId, agentId?} zbierz brakujące ITM8 bonu
  * POST /api/stores/{storeId}/agent-macros/itm8-apply        {deliveryId, codes, agentId?} uzupełnij ITM8
  * POST /api/stores/{storeId}/agent-macros/mea-codes         {codes, agentId?} wpisz kody MEA (z listy do wpisania)
+ * POST /api/stores/{storeId}/agent-macros/base-receive      {deliveryId, agentId?} wprowadź dostawę z bazy do Mercalys
+ * POST /api/stores/{storeId}/agent-macros/base-close        {deliveryId, agentId?} Nr BL i zakończenie dostaw bonu
  * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
  * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
  * </pre>
@@ -75,6 +77,22 @@ public class AgentMacroController {
             @Valid @RequestBody AgentMacroApi.MeaCodesRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return macros.meaCodes(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/base-receive")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job baseReceive(@PathVariable UUID storeId,
+            @Valid @RequestBody AgentMacroApi.BaseDeliveryRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return macros.baseReceive(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/base-close")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job baseClose(@PathVariable UUID storeId,
+            @Valid @RequestBody AgentMacroApi.BaseDeliveryRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return macros.baseClose(storeId, request, principal.getId());
     }
 
     @GetMapping("/{id}")

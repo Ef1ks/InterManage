@@ -38,6 +38,8 @@ import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleLeafletMark;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.ArticleRowsPage;
+import com.intermanage.backend.cadtop.dto.CadPrices;
+import com.intermanage.backend.cadtop.service.CadPriceService;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse.Level;
 import com.intermanage.backend.sales.dto.SalesComparisonResponse;
@@ -84,11 +86,14 @@ public class SalesReportService {
     private final CounterReportService counterReports;
     private final MeaDocumentRepository meaDocuments;
     private final ArticleMergeRepository merges;
+    private final CadPriceService cadPrices;
 
     public SalesReportService(SaleRepository sales, SalesImportRepository imports, ProductRepository products,
             NomenclatureRepository nomenclatures, SalesMapper salesMapper, NomenclatureMapper nomenclatureMapper,
             DocumentLineRepository documentLines, CadencierImportRepository cadencier,
-            CounterReportService counterReports, MeaDocumentRepository meaDocuments, ArticleMergeRepository merges) {
+            CounterReportService counterReports, MeaDocumentRepository meaDocuments, ArticleMergeRepository merges,
+            CadPriceService cadPrices) {
+        this.cadPrices = cadPrices;
         this.meaDocuments = meaDocuments;
         this.merges = merges;
         this.cadencier = cadencier;
@@ -360,8 +365,10 @@ public class SalesReportService {
         SalesArticleResponse.Merged mergedInto = merges.findMain(storeId, product.getItm8())
                 .map(merge -> merged(storeId, merge.getMainItm8(), merge.getEan()))
                 .orElse(null);
-        return salesMapper.toArticle(product, path, vatPercent,
-                cadencier.isInCadencier(storeId, product.getItm8()), merged, mergedInto);
+        boolean inCadencier = cadencier.isInCadencier(storeId, product.getItm8());
+        CadPrices.Price cadencierCurrent = !inCadencier ? null
+                : cadPrices.current(storeId, List.of(product.getItm8())).of(product.getItm8());
+        return salesMapper.toArticle(product, path, vatPercent, inCadencier, cadencierCurrent, merged, mergedInto);
     }
 
     private SalesArticleResponse.Merged merged(UUID storeId, String itm8, String ean) {

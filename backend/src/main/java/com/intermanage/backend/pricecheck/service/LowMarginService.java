@@ -337,8 +337,8 @@ public class LowMarginService {
         if (outsideBase != null && outsideBase.incidentDate() == null) {
             anomalies.add(Anomaly.OUTSIDE_BASE);
             loss = loss.max(outsideBase.excessValue());
-            if (outsideBase.basePrice() != null) {
-                loss = loss.max(outsideBase.purchasePrice().subtract(outsideBase.basePrice())
+            if (outsideBase.cadencierPurchasePrice() != null) {
+                loss = loss.max(outsideBase.purchasePrice().subtract(outsideBase.cadencierPurchasePrice())
                         .multiply(outsideBase.quantity()).setScale(2, RoundingMode.HALF_UP));
             }
         }

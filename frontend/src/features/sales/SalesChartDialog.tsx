@@ -31,7 +31,14 @@ import {
 import { type DateRange, formatRange } from '@/features/sales/periods'
 import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
 import { marginOf, marginShare } from '@/lib/margin'
-import type { ArticleDelivery, MergedArticle, SalesArticle, SalesFigures, SalesHistory } from '@/lib/types'
+import type {
+  ArticleDelivery,
+  CadencierPrice,
+  MergedArticle,
+  SalesArticle,
+  SalesFigures,
+  SalesHistory,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LoadingPanel } from '@/components/LoadingPanel'
 import {
@@ -822,7 +829,12 @@ function ArticleFacts({
   return (
     <div className="grid gap-3">
       <MergedNote article={article} />
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-5">
+      <div
+        className={cn(
+          'grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border',
+          article.cadencierCurrent ? 'sm:grid-cols-3' : 'sm:grid-cols-5',
+        )}
+      >
         <Fact label="Stan">
           <span className={cn(article.stock != null && article.stock < 0 && 'text-destructive')}>
             {article.stock == null ? '—' : formatQuantity(article.stock)}
@@ -855,14 +867,16 @@ function ArticleFacts({
           ) : (
             `${formatMoney(article.salePrice)} zł`
           )}
-          {article.cadencierPrice != null && article.cadencierPrice > 0 && (
-            <span
-              className="block text-xs font-normal text-blue-700 dark:text-blue-300"
-              title="CENA_CAD: cena sprzedaży narzucona przez centralę, z ostatniego raportu kartoteki"
-            >
-              CENA_CAD {formatMoney(article.cadencierPrice)} zł
-            </span>
-          )}
+          {article.cadencierPrice != null &&
+            article.cadencierPrice > 0 &&
+            article.cadencierPrice !== article.cadencierCurrent?.salePrice && (
+              <span
+                className="block text-xs font-normal text-blue-700 dark:text-blue-300"
+                title="CENA_CAD: cena sprzedaży narzucona przez centralę, z ostatniego raportu kartoteki"
+              >
+                CENA_CAD {formatMoney(article.cadencierPrice)} zł
+              </span>
+            )}
         </Fact>
         <Fact label={lastPurchases.length > 0 ? 'Ostatnie zakupy' : 'Cena zakupu'}>
           {purchasePrice == null ? '—' : `${formatPrice(purchasePrice)} zł`}
@@ -905,6 +919,7 @@ function ArticleFacts({
             </span>
           )}
         </Fact>
+        {article.cadencierCurrent && <CadencierFact price={article.cadencierCurrent} />}
       </div>
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
         {supplier && (
@@ -942,6 +957,23 @@ function ArticleFacts({
       </dl>
       <ReportFreshness generatedAt={article.reportGeneratedAt} className="justify-self-start" />
     </div>
+  )
+}
+
+/** Aktualna cena artykułu w cadencier: sprzedaż brutto i zakup netto z obowiązującego numeru. */
+function CadencierFact({ price }: { price: CadencierPrice }) {
+  return (
+    <Fact label="Cena w cadencier">
+      <span className="text-blue-700 dark:text-blue-300">
+        {price.salePrice == null ? '—' : `${formatMoney(price.salePrice)} zł`}
+      </span>
+      <span className="mt-0.5 block text-xs font-normal text-foreground tabular-nums">
+        {price.purchasePrice == null ? 'bez ceny zakupu' : `zakup ${formatPrice(price.purchasePrice)} zł netto`}
+      </span>
+      <span className="block text-xs font-normal text-muted-foreground">
+        cadencier {price.nrCad} od {shortDate.format(parseIsoDate(price.from))}
+      </span>
+    </Fact>
   )
 }
 

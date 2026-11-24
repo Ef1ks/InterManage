@@ -73,6 +73,13 @@ export type SalesArticle = {
   nomenclaturePath: NomenclatureOption[]
   cadencier: boolean
   cadencierPrice: number | null
+  /** Dzisiejsze ceny artykułu aktywnego w cadencier (plik TOP): zakup netto, sprzedaż brutto. */
+  cadencierCurrent: {
+    nrCad: string
+    from: string
+    purchasePrice: number | null
+    salePrice: number | null
+  } | null
   promoPrice: number | null
   promoFrom: string | null
   promoTo: string | null

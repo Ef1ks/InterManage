@@ -30,6 +30,7 @@ public final class StoreEventCatalog {
             Map.entry("ksef", "ksef"), Map.entry("suppliers", "suppliers"),
             Map.entry("meat-deliveries", "purchases"), Map.entry("bakery-checks", "purchases"),
             Map.entry("base-deliveries", "purchases"), Map.entry("mea-codes", "purchases"),
+            Map.entry("cadencier-priorities", "purchases"),
             Map.entry("mea", "promotions"), Map.entry("leaflets", "promotions"),
             Map.entry("promotion-setup", "promotions"),
             Map.entry("reports", "reports"), Map.entry("article-links", "reports"),

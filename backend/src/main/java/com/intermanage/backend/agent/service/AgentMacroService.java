@@ -11,9 +11,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.agent.component.AgentMachineStates;
 import com.intermanage.backend.agent.dto.AgentMacroApi;
@@ -24,11 +27,13 @@ import com.intermanage.backend.agent.entity.StoreAgent;
 import com.intermanage.backend.agent.repository.AgentMacroJobRepository;
 import com.intermanage.backend.agent.repository.StoreAgentRepository;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.basedelivery.component.BaseReceiveMacro;
 import com.intermanage.backend.basedelivery.component.Itm8Macro;
 import com.intermanage.backend.basedelivery.component.MeaCodeMacro;
 import com.intermanage.backend.basedelivery.dto.BaseDeliveryResponse;
 import com.intermanage.backend.basedelivery.dto.MeaOverview;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
+import com.intermanage.backend.basedelivery.service.BaseReceivingService;
 import com.intermanage.backend.basedelivery.service.MeaCodeService;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.exception.ApiException;
@@ -60,6 +65,13 @@ public class AgentMacroService {
     /** Kody MEA: kilkadziesiąt kodów po 1-3 pliki, integracja jednego trwa do kilku minut. */
     public static final Duration MEA_RUN_TIMEOUT = Duration.ofHours(6);
 
+    /** Makra dostawy z bazy: polecenia odtwarzacza od 0.65 i wysyłka bonów przez agenta od 1.8.0. */
+    private static final Set<AgentMacroKind> BASE_KINDS = Set.of(AgentMacroKind.BASE_RECEIVE,
+            AgentMacroKind.BASE_CLOSE);
+    private static final int BASE_PLAYER_MINOR = 65;
+    private static final Pattern ORDER_CODE = Pattern.compile("(\\d{1,10})=(\\d{1,20})");
+    private static final Pattern CLOSED_CODE = Pattern.compile("zamkniete=(\\d{1,20})");
+
     private final AgentMacroJobRepository jobs;
     private final StoreAgentRepository agents;
     private final AgentMachineStates states;
@@ -67,11 +79,13 @@ public class AgentMacroService {
     private final AppUserRepository users;
     private final BaseDeliveryService deliveries;
     private final MeaCodeService meaCodes;
+    private final BaseReceivingService receiving;
     private final LiveEvents live;
 
     public AgentMacroService(AgentMacroJobRepository jobs, StoreAgentRepository agents, AgentMachineStates states,
             StoreRepository stores, AppUserRepository users, BaseDeliveryService deliveries, MeaCodeService meaCodes,
-            LiveEvents live) {
+            BaseReceivingService receiving, LiveEvents live) {
+        this.receiving = receiving;
         this.jobs = jobs;
         this.agents = agents;
         this.states = states;
@@ -97,7 +111,7 @@ public class AgentMacroService {
         BaseDeliveryResponse delivery = deliveries.get(storeId, request.deliveryId());
         List<String> suppliers = Itm8Macro.fileSuppliers(delivery);
         return create(storeId, AgentMacroKind.ITM8_COLLECT, "Zbierz brakujące ITM8 · bon " + delivery.number(),
-                Itm8Macro.collect(delivery.number(), suppliers), 0, request.agentId(), userId);
+                Itm8Macro.collect(delivery.number(), suppliers), delivery.number(), 0, request.agentId(), userId);
     }
 
     @Transactional
@@ -108,8 +122,8 @@ public class AgentMacroService {
             throw ApiException.badRequest("Żaden z kodów nie pasuje do linii dokumentu z EAN-em");
         }
         return create(storeId, AgentMacroKind.ITM8_APPLY, "Uzupełnij ITM8 · bon " + delivery.number() + " ("
-                + plan.items().size() + " poz.)", Itm8Macro.apply(plan.items()), plan.items().size(),
-                request.agentId(), userId);
+                + plan.items().size() + " poz.)", Itm8Macro.apply(plan.items()), delivery.number(),
+                plan.items().size(), request.agentId(), userId);
     }
 
     /**
@@ -129,7 +143,28 @@ public class AgentMacroService {
                     + ". Odśwież stronę.");
         }
         return create(storeId, AgentMacroKind.MEA_CODES, "Wpisz kody MEA (" + codes.size() + ")",
-                MeaCodeMacro.build(codes), codes.size(), request.agentId(), userId);
+                MeaCodeMacro.build(codes), null, codes.size(), request.agentId(), userId);
+    }
+
+    /** Pliki bonu z Obsługi BL bazy do zamówień w Mercalys i bony Excel do „Znajdź różnice”. */
+    @Transactional
+    public AgentMacroApi.Job baseReceive(UUID storeId, AgentMacroApi.BaseDeliveryRequest request, UUID userId) {
+        BaseDeliveryResponse delivery = deliveries.get(storeId, request.deliveryId());
+        return create(storeId, AgentMacroKind.BASE_RECEIVE, "Wprowadź dostawę z bazy · bon " + delivery.number(),
+                receiving.receiveMacro(storeId, delivery), delivery.number(), 0, request.agentId(), userId);
+    }
+
+    /** Nr BL w nagłówkach zamówień bonu i zakończenie dostaw, po sprawdzeniu różnic przez zlecającego. */
+    @Transactional
+    public AgentMacroApi.Job baseClose(UUID storeId, AgentMacroApi.BaseDeliveryRequest request, UUID userId) {
+        BaseDeliveryResponse delivery = deliveries.get(storeId, request.deliveryId());
+        List<BaseReceiveMacro.Order> orders = receiving.ordersToClose(storeId, delivery.number());
+        if (orders.isEmpty()) {
+            throw ApiException.conflict("Bon " + delivery.number() + " nie ma zamówień do zakończenia");
+        }
+        return create(storeId, AgentMacroKind.BASE_CLOSE, "Zakończ dostawę z bazy · bon " + delivery.number(),
+                BaseReceiveMacro.close(delivery.number(), orders), delivery.number(), orders.size(),
+                request.agentId(), userId);
     }
 
     @Transactional
@@ -153,8 +188,8 @@ public class AgentMacroService {
         return response(job);
     }
 
-    private AgentMacroApi.Job create(UUID storeId, AgentMacroKind kind, String title, String macro, int itemCount,
-            UUID targetAgentId, UUID userId) {
+    private AgentMacroApi.Job create(UUID storeId, AgentMacroKind kind, String title, String macro,
+            String reference, int itemCount, UUID targetAgentId, UUID userId) {
         Instant now = Instant.now();
         sweep(storeId, now);
         if (!jobs.findActiveForUpdate(storeId).isEmpty()) {
@@ -165,8 +200,8 @@ public class AgentMacroService {
                 .isEmpty()) {
             throw ApiException.notFound("Nie znaleziono komputera sklepu");
         }
-        AgentMacroJob job = new AgentMacroJob(stores.getReferenceById(storeId), kind, title, macro, itemCount,
-                targetAgentId, users.getReferenceById(userId));
+        AgentMacroJob job = new AgentMacroJob(stores.getReferenceById(storeId), kind, title, macro, reference,
+                itemCount, targetAgentId, users.getReferenceById(userId));
         offerNext(job, now);
         jobs.saveAndFlush(job);
         announce(job);
@@ -184,7 +219,7 @@ public class AgentMacroService {
         Instant now = Instant.now();
         states.report(agent.agentId(), request.idleSeconds() == null ? 0 : request.idleSeconds(),
                 Boolean.TRUE.equals(request.locked()), Boolean.TRUE.equals(request.playerRunning()),
-                Boolean.TRUE.equals(request.busy()), now);
+                Boolean.TRUE.equals(request.busy()), request.playerVersion(), now);
         sweep(agent.storeId(), now);
         AgentMacroJob offered = jobs.findActiveForUpdate(agent.storeId()).stream()
                 .filter(job -> job.getStatus() == AgentMacroStatus.OFFERED && agent.agentId().equals(job.getAgentId()))
@@ -219,7 +254,49 @@ public class AgentMacroService {
         job.start(Instant.now());
         announce(job);
         return new AgentMacroApi.Start(job.getMacro(), ReportSaveMacro.OPEN_LINE, job.getKind().name(),
-                job.getKind() == AgentMacroKind.ITM8_COLLECT, (int) runTimeout(job).toMinutes());
+                job.getKind() == AgentMacroKind.ITM8_COLLECT, (int) runTimeout(job).toMinutes(),
+                uploads(job));
+    }
+
+    private static List<AgentMacroApi.Upload> uploads(AgentMacroJob job) {
+        return job.getKind() != AgentMacroKind.BASE_RECEIVE ? List.of()
+                : BaseReceiveMacro.noteFiles(job.getMacro()).stream()
+                        .map(file -> new AgentMacroApi.Upload(file.supplierCode(), file.path())).toList();
+    }
+
+    /** Plik zapisany przez makro (bon dostawy z bazy), tylko z listy z jego startu. */
+    @Transactional
+    public void file(StoreAgentService.AgentContext agent, UUID id, String key, MultipartFile file) {
+        AgentMacroJob job = running(agent, id);
+        if (uploads(job).stream().noneMatch(upload -> upload.key().equals(key))) {
+            throw ApiException.badRequest("Makro nie zapisuje takiego pliku");
+        }
+        receiving.saveNote(agent.storeId(), job.getReference(), key, file);
+    }
+
+    private AgentMacroJob running(StoreAgentService.AgentContext agent, UUID id) {
+        return jobs.findByIdAndStoreId(id, agent.storeId())
+                .filter(found -> found.getStatus() == AgentMacroStatus.RUNNING
+                        && agent.agentId().equals(found.getAgentId()))
+                .orElseThrow(() -> ApiException.conflict("To makro nie działa na tym komputerze"));
+    }
+
+    /** Numery zamówień i zakończone dostawy z wyniku makra (także nieudanego: to, co zdążyło zrobić). */
+    private List<String> baseResult(AgentMacroJob job, List<String> codes) {
+        UUID storeId = job.getStore().getId();
+        List<String> saved = new ArrayList<>();
+        for (String code : codes) {
+            Matcher order = ORDER_CODE.matcher(code == null ? "" : code.strip());
+            Matcher closed = CLOSED_CODE.matcher(code == null ? "" : code.strip());
+            if (job.getKind() == AgentMacroKind.BASE_RECEIVE && order.matches()) {
+                receiving.orderRead(storeId, job.getReference(), order.group(1), order.group(2));
+                saved.add(order.group());
+            } else if (job.getKind() == AgentMacroKind.BASE_CLOSE && closed.matches()) {
+                receiving.closed(storeId, job.getReference(), closed.group(1));
+                saved.add(closed.group());
+            }
+        }
+        return saved;
     }
 
     private static Duration runTimeout(AgentMacroJob job) {
@@ -229,12 +306,11 @@ public class AgentMacroService {
     /** Wynik makra z odtwarzacza (zebrane kody przy „Zbierz brakujące ITM8”). */
     @Transactional
     public void finish(StoreAgentService.AgentContext agent, UUID id, AgentMacroApi.Finish request) {
-        AgentMacroJob job = jobs.findByIdAndStoreId(id, agent.storeId())
-                .filter(found -> found.getStatus() == AgentMacroStatus.RUNNING
-                        && agent.agentId().equals(found.getAgentId()))
-                .orElseThrow(() -> ApiException.conflict("To makro nie działa na tym komputerze"));
+        AgentMacroJob job = running(agent, id);
         Set<String> codes = new LinkedHashSet<>();
-        if (request.codes() != null) {
+        if (BASE_KINDS.contains(job.getKind())) {
+            codes.addAll(baseResult(job, request.codes() == null ? List.of() : request.codes()));
+        } else if (request.codes() != null) {
             request.codes().forEach(code -> {
                 String digits = code == null ? "" : code.replaceAll("\\D", "").replaceFirst("^0+", "");
                 if (!digits.isEmpty() && digits.length() <= 13) {
@@ -294,7 +370,7 @@ public class AgentMacroService {
                 continue;
             }
             AgentMachineStates.State state = states.get(agent.getId()).orElse(null);
-            String reason = unavailable(state, now);
+            String reason = unavailable(state, now, job.getKind());
             if (reason == null) {
                 candidates.put(agent, state);
             } else {
@@ -330,12 +406,15 @@ public class AgentMacroService {
     }
 
     /** Powód, dla którego komputer nie może teraz wykonać makra, albo {@code null}. */
-    private static String unavailable(AgentMachineStates.State state, Instant now) {
+    private static String unavailable(AgentMachineStates.State state, Instant now, AgentMacroKind kind) {
         if (state == null || !state.fresh(now)) {
             return "agent nie odpowiada (wyłączony komputer albo stara wersja agenta)";
         }
         if (!state.playerRunning()) {
             return "nie działa odtwarzacz makr AutoJob w wersji 0.64 albo nowszej";
+        }
+        if (kind != null && BASE_KINDS.contains(kind) && !state.playerAtLeast(BASE_PLAYER_MINOR)) {
+            return "potrzebny agent 1.8.0 i odtwarzacz makr AutoJob 0.65 albo nowsze";
         }
         if (state.locked()) {
             return "ekran zablokowany";
@@ -348,7 +427,7 @@ public class AgentMacroService {
 
     private AgentMacroApi.Computer computer(StoreAgent agent, Instant now) {
         AgentMachineStates.State state = states.get(agent.getId()).orElse(null);
-        String reason = unavailable(state, now);
+        String reason = unavailable(state, now, null);
         boolean online = StoreAgentService.online(agent, now);
         return new AgentMacroApi.Computer(agent.getId(), agent.getName(), agent.getMachineName(), online,
                 reason == null, reason == null && free(state), state == null ? null : state.idleSeconds(), reason);

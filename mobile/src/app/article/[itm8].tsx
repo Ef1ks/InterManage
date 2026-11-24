@@ -200,9 +200,15 @@ function ArticleSummary({
         />
         <Tile label="Marża" value={percent(margin)} hint="od sprzedaży brutto" />
         <Tile label="Rotacja" value={quantity(article.rotation)} hint="tygodniowo" />
-        {article.cadencierPrice != null && article.cadencierPrice > 0 && (
+        {article.cadencierCurrent ? (
+          <Tile
+            label="Cena w cadencier"
+            value={money(article.cadencierCurrent.salePrice)}
+            hint={`zakup ${money(article.cadencierCurrent.purchasePrice)} · nr ${article.cadencierCurrent.nrCad}`}
+          />
+        ) : article.cadencierPrice != null && article.cadencierPrice > 0 ? (
           <Tile label="Cena cadencier" value={money(article.cadencierPrice)} />
-        )}
+        ) : null}
       </View>
 
       <Card>

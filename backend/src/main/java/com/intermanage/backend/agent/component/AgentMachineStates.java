@@ -20,7 +20,18 @@ public class AgentMachineStates {
     /** Stan starszy niż tyle = agent nie czeka na makra (wyłączony, stara wersja, brak sieci). */
     public static final Duration FRESH = Duration.ofSeconds(20);
 
-    public record State(int idleSeconds, boolean locked, boolean playerRunning, boolean busy, Instant reportedAt) {
+    /** @param playerVersion wersja odtwarzacza, np. {@code 0.65} ({@code null} = agent sprzed 1.8.0) */
+    public record State(int idleSeconds, boolean locked, boolean playerRunning, boolean busy, String playerVersion,
+            Instant reportedAt) {
+
+        /** Odtwarzacz w wersji co najmniej {@code 0.<minor>}. */
+        public boolean playerAtLeast(int minor) {
+            if (playerVersion == null || !playerVersion.matches("\\d{1,4}\\.\\d{1,5}(\\..*)?")) {
+                return false;
+            }
+            String[] parts = playerVersion.split("\\.");
+            return Integer.parseInt(parts[0]) > 0 || Integer.parseInt(parts[1]) >= minor;
+        }
 
         public boolean fresh(Instant now) {
             return reportedAt.isAfter(now.minus(FRESH));
@@ -30,8 +41,8 @@ public class AgentMachineStates {
     private final Map<UUID, State> states = new ConcurrentHashMap<>();
 
     public void report(UUID agentId, int idleSeconds, boolean locked, boolean playerRunning, boolean busy,
-            Instant now) {
-        states.put(agentId, new State(Math.max(0, idleSeconds), locked, playerRunning, busy, now));
+            String playerVersion, Instant now) {
+        states.put(agentId, new State(Math.max(0, idleSeconds), locked, playerRunning, busy, playerVersion, now));
     }
 
     public Optional<State> get(UUID agentId) {

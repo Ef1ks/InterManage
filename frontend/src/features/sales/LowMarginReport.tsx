@@ -21,7 +21,7 @@ import { InvoicePrintButton } from '@/features/ksef/InvoicePrintButton'
 import { emptyRow, withScannedProduct } from '@/features/data-entry/rows'
 import { useLowMarginBon, useLowMargins, useSetLowMarginGaps } from '@/features/sales/api'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
-import { MoneyPill } from '@/features/sales/price-review'
+import { CadencierDifference, MoneyPill } from '@/features/sales/price-review'
 import { ReportExclusions } from '@/features/sales/ReportExclusions'
 import { ReviewedReportPage } from '@/features/sales/ReviewedReportPage'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
@@ -387,7 +387,8 @@ function LinesTable({ storeId, delivery }: { storeId: string; delivery: LowMargi
                 <span className="block text-xs font-normal text-muted-foreground">najniższa cena</span>
               </TableHead>
               <TableHead className="text-right">
-                Baza<span className="block text-xs font-normal text-muted-foreground">ostatnia cena z bazy</span>
+                Cadencier
+                <span className="block text-xs font-normal text-muted-foreground">aktualna cena zakupu netto</span>
               </TableHead>
               <TableHead className="pr-4 text-right">
                 Możliwa strata<span className="block text-xs font-normal text-muted-foreground">zł</span>
@@ -569,13 +570,13 @@ function LineRow({ line }: { line: DeliveryReviewLine }) {
       <TableCell className="text-right whitespace-normal">
         {base ? (
           <>
-            {base.basePrice != null ? (
-              <span className="font-medium">{formatPrice(base.basePrice)}</span>
+            {base.cadencierPurchasePrice != null ? (
+              <>
+                <span className="block font-medium">{formatPrice(base.cadencierPurchasePrice)}</span>
+                <CadencierDifference purchasePrice={line.purchasePrice} cadencierPrice={base.cadencierPurchasePrice} />
+              </>
             ) : (
-              <span className="text-xs text-muted-foreground">brak w bazie od roku</span>
-            )}
-            {base.baseDate && (
-              <span className="block text-xs text-muted-foreground">{formatDocumentDate(base.baseDate)}</span>
+              <span className="text-xs text-muted-foreground">brak ceny</span>
             )}
             {base.incidentDate && (
               <span

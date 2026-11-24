@@ -16,7 +16,8 @@ public final class AgentMacroApi {
     // --- Agent ---
 
     /** Stan komputera przy czekaniu na makra. */
-    public record Poll(Integer idleSeconds, Boolean locked, Boolean playerRunning, Boolean busy) {
+    public record Poll(Integer idleSeconds, Boolean locked, Boolean playerRunning, Boolean busy,
+            @Size(max = 20) String playerVersion) {
     }
 
     /** Makro zaproponowane temu komputerowi albo {@code null}. */
@@ -27,7 +28,12 @@ public final class AgentMacroApi {
     }
 
     /** Treść makra po odliczaniu; {@code openLine}: pierwsze polecenie, do którego agent dokłada hasło Mercalys. */
-    public record Start(String macro, String openLine, String kind, boolean collectsCodes, int timeoutMinutes) {
+    public record Start(String macro, String openLine, String kind, boolean collectsCodes, int timeoutMinutes,
+            List<Upload> uploads) {
+    }
+
+    /** Plik zapisany przez makro, który agent wysyła po nim ({@code POST .../macro-jobs/{id}/files}). */
+    public record Upload(String key, String path) {
     }
 
     public record Decline(@Size(max = 500) String reason) {
@@ -52,6 +58,10 @@ public final class AgentMacroApi {
     /** Kody MEA z listy „Do wpisania” sklepu. */
     public record MeaCodesRequest(@NotNull @Size(min = 1, max = 200, message = "Zaznacz od 1 do 200 kodów MEA")
     List<@NotNull String> codes, UUID agentId) {
+    }
+
+    /** Bon dostawy z bazy („Wprowadź dostawę” i „Zatwierdź”). */
+    public record BaseDeliveryRequest(@NotNull UUID deliveryId, UUID agentId) {
     }
 
     public record Job(UUID id, String kind, String title, String status, String computer, String requestedBy,

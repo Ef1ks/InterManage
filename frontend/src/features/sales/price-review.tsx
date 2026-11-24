@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
-import { bonNumber, documentPaths, formatDocumentDate } from '@/features/documents/format'
+import { bonNumber, documentPaths, formatDocumentDate, formatPercent, formatPrice } from '@/features/documents/format'
 import { usePriceReviewActions, type ReviewedReport } from '@/features/sales/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
@@ -458,7 +458,36 @@ function StatusBadge({ status }: { status: PriceCheckStatus | null }) {
   )
 }
 
-/** Kwota w pigułce: czerwona, gdy oznacza stratę sklepu (drożej niż baza, poniżej minimum, przepłacone). */
+/** O ile cena zakupu od dostawcy różni się od aktualnej ceny zakupu z cadencier (za sztukę i w %). */
+export function CadencierDifference({
+  purchasePrice,
+  cadencierPrice,
+}: {
+  purchasePrice: number
+  cadencierPrice: number
+}) {
+  const difference = purchasePrice - cadencierPrice
+  if (Math.abs(difference) < 0.005) {
+    return <span className="mt-0.5 block text-xs text-muted-foreground">tyle samo</span>
+  }
+  const percent = cadencierPrice > 0 ? (difference / cadencierPrice) * 100 : null
+  return (
+    <span
+      className={cn(
+        'mt-0.5 inline-block rounded px-1.5 text-xs font-medium',
+        difference > 0
+          ? 'bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300'
+          : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
+      )}
+    >
+      {difference > 0 ? 'drożej o ' : 'taniej o '}
+      {formatPrice(Math.abs(difference))} zł
+      {percent != null && ` (${formatPercent(Math.abs(Math.round(percent * 10) / 10))})`}
+    </span>
+  )
+}
+
+/** Kwota w pigułce: czerwona, gdy oznacza stratę sklepu (drożej niż cadencier, poniżej minimum, przepłacone). */
 export function MoneyPill({ label, value, tone }: { label: string; value: string; tone: 'loss' | 'neutral' }) {
   return (
     <span

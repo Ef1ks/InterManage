@@ -81,6 +81,8 @@ Robi:
   z `N:\AvisoConfig\UTILITAIRES\ClientLourd\Mercalys.exe` (od 1.7.3) albo ze skrótu na pulpicie. Treść
   składa serwer, agent wkłada ją do schowka i naciska Alt+E, a wynik odtwarzacz zapisuje w
   `%LOCALAPPDATA%\Intermanage\Agent\makra` (plik znika po odesłaniu). Komputer z zablokowanym ekranem makra nie dostanie.
+  Od 1.8.0 po makrze „Wprowadź dostawę” agent wysyła też bony dostawy zapisane przez to makro w folderze z ustawień
+  sklepu (domyślnie `P:\Production\INTERMANAGE\EXCEL`; potrzebny AutoJob 0.65).
 
 Nie robi:
 

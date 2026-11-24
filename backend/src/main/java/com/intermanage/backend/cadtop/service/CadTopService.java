@@ -17,7 +17,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -117,7 +116,7 @@ public class CadTopService {
         boolean configured = mea.configuredStores().contains(storeId);
         String region = regions.findById(storeId).map(CadStoreRegion::getRegion).orElse(null);
         List<CadPlan> active = plans.findActive();
-        CadSchedule schedule = schedule(active);
+        CadSchedule schedule = CadPriceService.schedule(active);
         LocalDate today = LocalDate.now(StoreTime.ZONE);
         Map<String, CadTopFile> byNumber = region == null ? Map.of()
                 : files.findByRegionAndReplacedAtIsNull(region).stream()
@@ -125,28 +124,6 @@ public class CadTopService {
         return new CadTopOverview(configured, region, rows(schedule, byNumber, today),
                 active.stream().map(CadTopService::plan).toList(),
                 warnings(configured, region, schedule, byNumber, active, today));
-    }
-
-    /**
-     * Plik TOP obowiązujący sklep danego dnia: najpóźniejszy numer z planu, który już wszedł i ma plik. Pusty bez planu,
-     * rejonu albo pliku.
-     */
-    @Transactional(readOnly = true)
-    public Optional<CadTopFile> fileOn(UUID storeId, LocalDate day) {
-        return regions.findById(storeId).flatMap(region -> {
-            Map<String, CadTopFile> byNumber = files.findByRegionAndReplacedAtIsNull(region.getRegion()).stream()
-                    .collect(Collectors.toMap(CadTopFile::getNrCad, Function.identity()));
-            return schedule(plans.findActive()).entries().stream()
-                    .filter(entry -> !entry.startsOn().isAfter(day) && byNumber.containsKey(entry.nrCad()))
-                    .reduce((first, second) -> second)
-                    .map(entry -> byNumber.get(entry.nrCad()));
-        });
-    }
-
-    private static CadSchedule schedule(List<CadPlan> active) {
-        return CadSchedule.of(active.stream().map(plan -> new CadSchedule.Plan(plan.getYear(),
-                plan.getEntries().stream().map(entry -> new CadSchedule.PlanEntry(entry.getNrCad(),
-                        entry.getStartsOn(), entry.getComment())).toList())).toList());
     }
 
     private List<CadTopOverview.Row> rows(CadSchedule schedule, Map<String, CadTopFile> byNumber, LocalDate today) {
@@ -300,7 +277,7 @@ public class CadTopService {
         int year = today.getYear();
         int downloaded = 0;
         for (int checked : new int[] {year + 1, year}) {
-            Integer coveringYear = transaction.execute(status -> schedule(plans.findActive()).currentOn(today)
+            Integer coveringYear = transaction.execute(status -> CadPriceService.schedule(plans.findActive()).currentOn(today)
                     .map(CadSchedule.Entry::planYear).orElse(null));
             Duration interval = coveringYear == null ? PLAN_RETRY_INTERVAL : PLAN_CHECK_INTERVAL;
             if (checked == year && coveringYear != null && coveringYear > year) {

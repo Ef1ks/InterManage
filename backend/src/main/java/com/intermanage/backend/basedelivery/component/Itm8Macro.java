@@ -276,7 +276,7 @@ public final class Itm8Macro {
     }
 
     /** ITM8 i kody bez znaków spoza cyfr i bez zer wiodących. */
-    static String key(String code) {
+    public static String key(String code) {
         return code == null ? "" : code.replaceAll("\\D", "").replaceFirst("^0+", "");
     }
 }

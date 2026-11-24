@@ -64,7 +64,7 @@ import com.intermanage.backend.store.repository.StoreRepository;
 public class BaseDeliveryService {
 
     private static final Logger log = LoggerFactory.getLogger(BaseDeliveryService.class);
-    private static final long MAX_FILE_BYTES = 20L * 1024 * 1024;
+    static final long MAX_FILE_BYTES = 20L * 1024 * 1024;
     private static final int ITM8_LENGTH = 13;
     /** Tyle kodów {@link DataEntryService#lookup} przyjmuje w jednym wywołaniu. */
     private static final int LOOKUP_BATCH = 500;
@@ -330,6 +330,20 @@ public class BaseDeliveryService {
         return note.withLines(note.lines().stream()
                 .map(line -> line.withCatalogEans(List.copyOf(eans.getOrDefault(catalogItm8(line.itm8()), Set.of()))))
                 .toList());
+    }
+
+    /** Bon albo opis, dlaczego nie da się go odczytać. */
+    public record NoteRead(TemporaryNoteResponse note, String error) {
+    }
+
+    /** Jak {@link #readTemporaryNote}, ale nieczytelny plik (z makra) nie jest błędem żądania. */
+    @Transactional(readOnly = true)
+    public NoteRead tryReadTemporaryNote(UUID storeId, MultipartFile file) {
+        try {
+            return new NoteRead(readTemporaryNote(storeId, file), null);
+        } catch (ApiException e) {
+            return new NoteRead(null, e.getMessage());
+        }
     }
 
     private static void addEan(Map<String, Set<String>> eans, String itm8, String ean) {

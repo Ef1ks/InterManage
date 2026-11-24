@@ -17,6 +17,7 @@ import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
+import com.intermanage.backend.cadtop.dto.CadPrices;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
 import com.intermanage.backend.sales.dto.SalesImportResponse;
 import com.intermanage.backend.sales.dto.ZeroStockReport;
@@ -35,11 +36,14 @@ public interface SalesMapper {
     @Mapping(target = "itm8", source = "product.itm8")
     @Mapping(target = "ean", source = "product.ean")
     @Mapping(target = "name", source = "product.name")
+    @Mapping(target = "salePrice", source = "product.salePrice")
+    @Mapping(target = "purchasePrice", source = "product.purchasePrice")
     @Mapping(target = "promoPrice", expression = "java(activePromo(product) ? product.getPromoPrice() : null)")
     @Mapping(target = "promoFrom", expression = "java(activePromo(product) ? product.getPromoFrom() : null)")
     @Mapping(target = "promoTo", expression = "java(activePromo(product) ? product.getPromoTo() : null)")
     SalesArticleResponse toArticle(Product product, List<NomenclatureOption> path, BigDecimal vatPercent,
-            boolean cadencier, List<SalesArticleResponse.Merged> mergedArticles, SalesArticleResponse.Merged mergedInto);
+            boolean cadencier, CadPrices.Price cadencierCurrent, List<SalesArticleResponse.Merged> mergedArticles,
+            SalesArticleResponse.Merged mergedInto);
 
     /** Promocja z kasy trwa dziś (Europe/Warsaw). */
     default boolean activePromo(Product product) {

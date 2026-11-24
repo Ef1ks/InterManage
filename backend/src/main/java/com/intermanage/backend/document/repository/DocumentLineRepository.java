@@ -63,41 +63,6 @@ public interface DocumentLineRepository extends JpaRepository<DocumentLine, UUID
     @Query("select l from DocumentLine l join fetch l.document where l.id in :ids")
     List<DocumentLine> findWithDocument(Collection<UUID> ids);
 
-    /** Cena zakupu artykułu w linii przyjęcia od dostawcy. */
-    interface SupplierPrice {
-        String getItm8();
-
-        String getEan();
-
-        UUID getDocumentId();
-
-        String getDocumentNumber();
-
-        LocalDateTime getDocumentDate();
-
-        BigDecimal getPurchasePrice();
-    }
-
-    /**
-     * Ceny zakupu z linii przyjęć PZ od dostawców (kod z linii) z dokumentów z datą w [from, to), od najstarszego
-     * (weryfikacja cen: ostatnia cena z bazy przed dostawą od innego dostawcy). Tylko artykuły o podanych ITM8 albo
-     * EAN-ach ({@code eans} bez zer wiodących), bo dostaw z bazy z roku są dziesiątki tysięcy.
-     */
-    @Query(value = """
-            select l.itm8 as itm8, l.ean as ean, d.id as document_id, d.number as document_number,
-                   d.document_date as document_date, l.purchase_price as purchase_price
-            from document_lines l
-            join documents d on d.id = l.document_id and d.error_marked_at is null
-            where d.store_id = :storeId and d.type = 'PZ' and l.supplier_code in (:supplierCodes)
-              and l.purchase_price > 0 and l.quantity > 0
-              and d.document_date >= :from and d.document_date < :to
-              and (l.itm8 = any(cast(:itm8s as varchar[]))
-                   or ltrim(btrim(l.ean), '0') = any(cast(:eans as varchar[])))
-            order by d.document_date, d.number, l.line_number
-            """, nativeQuery = true)
-    List<SupplierPrice> findSupplierPrices(UUID storeId, Collection<String> supplierCodes, LocalDateTime from,
-            LocalDateTime to, String[] itm8s, String[] eans);
-
     /** Dostawa artykułu: przyjęcie PZ z sumą jego linii (ilość, wartość zakupu netto). */
     interface ArticleDelivery {
         UUID getDocumentId();

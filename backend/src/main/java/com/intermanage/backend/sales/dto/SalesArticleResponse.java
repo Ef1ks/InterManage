@@ -5,13 +5,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.intermanage.backend.cadtop.dto.CadPrices;
 import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 
 /**
  * Artykuł z kartoteki sklepu w raporcie sprzedaży: dane, ceny, stan i rotacja z ostatniego raportu kartoteki, w którym
  * był ({@code reportGeneratedAt}), oraz jego rejon, rodzina i podrodzina ({@code nomenclaturePath}, od rejonu).
  * {@code vatPercent}: z kodu stawki z kartoteki, bez niego z ostatniego dokumentu artykułu; pusty, gdy nieznany.
- * {@code cadencierPrice}: CENA_CAD z ostatniego raportu kartoteki. {@code promoPrice}, {@code promoFrom}, {@code promoTo}:
+ * {@code cadencierPrice}: CENA_CAD z ostatniego raportu kartoteki; {@code cadencierCurrent}: dzisiejsze ceny artykułu
+ * aktywnego w cadencier z pliku TOP (zakup netto, sprzedaż brutto). {@code promoPrice}, {@code promoFrom}, {@code promoTo}:
  * trwająca dziś promocja z kasy (pliki TRACEART), {@code salePrice} jest wtedy ceną regularną; poza promocją puste.
  * {@code mergedArticles}: artykuły usunięte z kartoteki, których EAN przeszedł na ten artykuł, więc ich sprzedaż
  * i dokumenty liczą się na tej karcie; {@code mergedInto}: artykuł, z którym połączono ten (gdy sam jest usunięty).
@@ -34,6 +36,7 @@ public record SalesArticleResponse(
         List<NomenclatureOption> nomenclaturePath,
         boolean cadencier,
         BigDecimal cadencierPrice,
+        CadPrices.Price cadencierCurrent,
         BigDecimal promoPrice,
         LocalDate promoFrom,
         LocalDate promoTo,

@@ -1553,6 +1553,57 @@ export type MergedArticle = {
   ean: string
 }
 
+/** Ceny artykułu w obowiązującym cadencier: zakup netto i sprzedaż brutto sztuki, numer i dzień jego wejścia. */
+export type CadencierPrice = {
+  nrCad: string
+  from: string
+  purchasePrice: number | null
+  salePrice: number | null
+}
+
+/** Karta sklepu i ITM8 z cadencier z tym samym EAN-em, który ma być na niej priorytetowy. */
+export type CadPriorityItem = {
+  topItm8: string
+  topEan: string | null
+  topName: string
+  topBrand: string | null
+  topMark: string | null
+  topPurchasePrice: number | null
+  topSalePrice: number | null
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  supplier: string | null
+  stock: number | null
+  salePrice: number | null
+  purchasePrice: number | null
+  active: boolean
+  match: 'MAIN_EAN' | 'MULTI_CODE' | 'SCALE_CODE'
+  /** ITM8 z cadencier był kiedyś w kartotece sklepu. */
+  topKnown: boolean
+  /** Inne ITM8 z cadencier z tym EAN-em (paletowy, inny rozmiar). */
+  alternatives: { itm8: string; name: string; purchasePrice: number | null }[]
+  /** FAILED: zlecono, ale nowszy raport kartoteki dalej ma inny ITM8. */
+  status: 'TODO' | 'WAITING' | 'FAILED'
+  run: { id: string; macro: boolean; createdAt: string; createdBy: string | null } | null
+}
+
+export type CadPriorityReport = {
+  nrCad: string | null
+  from: string | null
+  catalogGeneratedAt: string | null
+  topCount: number
+  setCount: number
+  variantCount: number
+  absentCount: number
+  macroReady: boolean
+  items: CadPriorityItem[]
+}
+
+export type CadPriorityRunResult = { macro: string | null; runIds: string[]; report: CadPriorityReport }
+
 /** Artykuł z kartoteki: ceny, stan i rotacja z ostatniego raportu kartoteki, w którym był. */
 export type SalesArticle = {
   itm8: string
@@ -1577,6 +1628,8 @@ export type SalesArticle = {
   cadencier: boolean
   /** CENA_CAD z ostatniego raportu kartoteki (cena narzucona przez centralę). */
   cadencierPrice: number | null
+  /** Dzisiejsze ceny artykułu aktywnego w cadencier (plik TOP); puste, gdy artykułu w nim nie ma. */
+  cadencierCurrent: CadencierPrice | null
   /** Trwająca dziś promocja z kasy; `salePrice` jest wtedy ceną regularną. */
   promoPrice: number | null
   promoFrom: string | null
@@ -2602,11 +2655,10 @@ export type PriceCheckLine = {
   belowMinimum: boolean
   targetPurchasePrice: number | null
   excessValue: number
+  /** Dzisiejsza cena sprzedaży brutto z cadencier (spoza pliku TOP: CENA_CAD z kartoteki). */
   cadencierPrice: number | null
-  basePrice: number | null
-  baseDate: string | null
-  baseDocumentId: string | null
-  baseDocumentNumber: string | null
+  /** Dzisiejsza cena zakupu netto z cadencier. */
+  cadencierPurchasePrice: number | null
   /** Dzień incydentu zamówienia do bazy (do 10 dni przed przyjęciem), który usprawiedliwia zakup u innego dostawcy. */
   incidentDate: string | null
   incidentReason: string | null
@@ -2629,7 +2681,8 @@ export type PriceCheckDelivery = {
   linesPurchaseValue: number
   belowMinimumCount: number
   excessValue: number
-  baseDifferenceValue: number
+  /** O ile drożej niż aktualna cena zakupu z cadencier (tylko linie z tą ceną). */
+  cadencierDifferenceValue: number
   review: PriceCheckReview | null
   history: PriceCheckReview[]
   lines: PriceCheckLine[]
@@ -2644,6 +2697,9 @@ export type PriceCheckReport = {
   cadencierCount: number
   cadencierGeneratedAt: string | null
   cadencierImportedAt: string | null
+  /** Obowiązujący numer cadencier, z którego są ceny, i dzień jego wejścia; puste bez pliku TOP. */
+  cadencierNumber: string | null
+  cadencierFrom: string | null
   documentsCoveredUntil: string | null
   documentsReportGeneratedAt: string | null
   incidentDays: number
@@ -3895,6 +3951,23 @@ export type TemporaryNoteLine = {
   /** Wszystkie EAN-y artykułu z kartoteki sklepu (bieżący, multikody, dawne pary). */
   catalogEans: string[]
 }
+
+/** Dostawca pliku bonu z bazy: zamówienie w Mercalys i tymczasowy bon dostawy przysłany po makrze. */
+export type BaseReceivingSupplier = {
+  code: string
+  name: string
+  /** `null`: plik dostawcy jeszcze nie wszedł (albo bon go nie ma). */
+  order: {
+    orderNumber: string
+    createdAt: string
+    /** Kto wpisał numer ręcznie; `null` = odczytało makro. */
+    enteredBy: string | null
+    closedAt: string | null
+  } | null
+  note: { fileName: string; uploadedAt: string; content: TemporaryNote | null; error: string | null } | null
+}
+
+export type BaseReceiving = { bonNumber: string; suppliers: BaseReceivingSupplier[] }
 
 /** Rodzaj opakowania z kaucją w pliku z bazy: NIE, PLA (PET), PUS (puszka), SZK (szkło). */
 export type BaseDeposit = 'NIE' | 'PLA' | 'PUS' | 'SZK'
@@ -5389,7 +5462,7 @@ export type AgentComputer = {
 /** Makro zlecone na wolnym komputerze sklepu. */
 export type AgentMacroJob = {
   id: string
-  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES'
+  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES' | 'BASE_RECEIVE' | 'BASE_CLOSE'
   title: string
   status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
   computer: string | null
@@ -5402,7 +5475,7 @@ export type AgentMacroJob = {
   /** Komputery, na których ktoś anulował odliczanie albo które nie odpowiedziały. */
   declined: string[]
   message: string | null
-  /** Kody ITM8 zebrane przez „Zbierz brakujące ITM8”. */
+  /** Kody ITM8 zebrane przez „Zbierz brakujące ITM8”, a przy dostawie z bazy `dostawca=nr zamówienia`. */
   codes: string[]
   itemCount: number
 }

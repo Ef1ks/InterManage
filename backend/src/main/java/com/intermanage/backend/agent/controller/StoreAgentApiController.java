@@ -69,10 +69,12 @@ import jakarta.validation.Valid;
  *                                          z dzisiaj); 409, gdy aktualizuje inny komputer albo agent nie jest główny
  * POST /api/store-agent/report-macro/finished   koniec aktualizacji (zdejmuje blokadę)
  * GET  /api/store-agent/update/file        paczka agenta z „Do pobrania” (ZIP; wersja i SHA-256 w odpowiedzi /hello)
- * POST /api/store-agent/macro-jobs/poll    {idleSeconds, locked, playerRunning, busy} co kilka sekund → {offer}
+ * POST /api/store-agent/macro-jobs/poll    {idleSeconds, locked, playerRunning, busy, playerVersion} co kilka sekund → {offer}
  *                                          (makro zlecone z przeglądarki, zaproponowane temu komputerowi)
  * POST /api/store-agent/macro-jobs/{id}/decline   pracownik anulował odliczanie: zlecenie idzie do kolejnego komputera
  * POST /api/store-agent/macro-jobs/{id}/start     koniec odliczania → treść makra (409: anulowane albo przekazane)
+ * POST /api/store-agent/macro-jobs/{id}/files     multipart key, file (także .gz): plik zapisany przez makro, z listy
+ *                                          {@code uploads} startu, przed wynikiem
  * POST /api/store-agent/macro-jobs/{id}/finish    {ok, message, codes} wynik odtwarzacza
  * </pre>
  */
@@ -267,6 +269,13 @@ public class StoreAgentApiController {
     public AgentMacroApi.Start startMacro(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
     String authorization, @PathVariable UUID id) {
         return macroJobs.start(agent(authorization), id);
+    }
+
+    @PostMapping(value = "/macro-jobs/{id}/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void macroFile(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @PathVariable UUID id, @RequestParam("key") String key, @RequestParam("file") MultipartFile file) {
+        macroJobs.file(agent(authorization), id, key, file);
     }
 
     @PostMapping("/macro-jobs/{id}/finish")

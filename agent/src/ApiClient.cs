@@ -158,6 +158,14 @@ internal sealed class MacroStart
     public string Macro { get; set; } = "";
     public string OpenLine { get; set; } = "";
     public int TimeoutMinutes { get; set; } = 120;
+    /// <summary>Pliki zapisane przez makro, które agent wysyła po nim (bony dostawy z bazy).</summary>
+    public List<MacroUpload> Uploads { get; set; } = new();
+}
+
+internal sealed class MacroUpload
+{
+    public string Key { get; set; } = "";
+    public string Path { get; set; } = "";
 }
 
 /// <summary>Próba wgrania raportu przez agenta (stan z serwera).</summary>
@@ -370,10 +378,25 @@ internal sealed class ApiClient : IDisposable
     }
 
     /// <summary>Stan komputera co kilka sekund; w odpowiedzi makro zlecone z przeglądarki dla tego komputera.</summary>
-    public Task<MacroPoll> MacroPollAsync(int idleSeconds, bool locked, bool playerRunning, bool busy,
-        CancellationToken cancel) =>
+    public Task<MacroPoll> MacroPollAsync(int idleSeconds, bool locked, bool playerRunning, string? playerVersion,
+        bool busy, CancellationToken cancel) =>
         SendJsonAsync<MacroPoll>(HttpMethod.Post, "/api/store-agent/macro-jobs/poll",
-            new { idleSeconds, locked, playerRunning, busy }, TimeSpan.FromSeconds(15), cancel);
+            new { idleSeconds, locked, playerRunning, busy, playerVersion }, TimeSpan.FromSeconds(15), cancel);
+
+    /// <summary>Plik zapisany przez makro, spakowany gzipem.</summary>
+    public async Task MacroFileAsync(string id, string key, string name, byte[] content, CancellationToken cancel)
+    {
+        using var form = new MultipartFormDataContent();
+        var part = new ByteArrayContent(Gzip(content));
+        part.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        form.Add(part, "file", name + ".gz");
+        form.Add(new StringContent(key), "key");
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post,
+            server + "/api/store-agent/macro-jobs/" + Uri.EscapeDataString(id) + "/files")
+        {
+            Content = form,
+        }, TimeSpan.FromMinutes(2), cancel).ConfigureAwait(false);
+    }
 
     /// <summary>Pracownik anulował odliczanie: zlecenie idzie do kolejnego komputera.</summary>
     public async Task MacroDeclineAsync(string id, CancellationToken cancel)

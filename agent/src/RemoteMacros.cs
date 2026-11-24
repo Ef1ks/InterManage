@@ -44,6 +44,7 @@ internal sealed class RemoteMacros : IDisposable
     private readonly Func<AgentSettings> settings;
     private volatile bool sessionLocked;
     private volatile bool playerReady;
+    private volatile string? playerVersion;
     private DateTime playerCheckedAt = DateTime.MinValue;
     private string? current;
     private bool problemLogged;
@@ -94,7 +95,8 @@ internal sealed class RemoteMacros : IDisposable
                     CheckPlayer();
                     // Makro zlecone albo aktualizacja danych zajmuje bramkę.
                     var busy = MacroRunner.Gate.CurrentCount == 0;
-                    var answer = await api.MacroPollAsync(MacroRunner.IdleSeconds(), Locked, playerReady, busy, cancel)
+                    var answer = await api.MacroPollAsync(MacroRunner.IdleSeconds(), Locked, playerReady, playerVersion,
+                        busy, cancel)
                         .ConfigureAwait(false);
                     problemLogged = false;
                     var offer = answer.Offer;
@@ -127,6 +129,7 @@ internal sealed class RemoteMacros : IDisposable
         playerCheckedAt = DateTime.UtcNow;
         var version = MacroRunner.FindPlayer()?.Version;
         playerReady = version != null && version >= NeededPlayer;
+        playerVersion = version == null ? null : version.Major + "." + version.Minor;
     }
 
     private async Task HandleAsync(ApiClient api, MacroOffer offer, CancellationToken cancel)
@@ -160,7 +163,9 @@ internal sealed class RemoteMacros : IDisposable
             var start = await api.MacroStartAsync(offer.Id, cancel).ConfigureAwait(false);
             started = true;
             form.Running(offer.Title);
+            var startedAt = DateTime.UtcNow;
             var result = await PlayAsync(offer.Id, start, cancel).ConfigureAwait(false);
+            result = await SendFilesAsync(api, offer.Id, start, startedAt, result, cancel).ConfigureAwait(false);
             Log.Info("Makro z przeglądarki: " + (result.Ok ? "zakończone" : "błąd: " + result.Message));
             form.Finish(result.Ok, result.Message);
             await FinishAsync(api, offer.Id, result, cancel).ConfigureAwait(false);
@@ -273,6 +278,63 @@ internal sealed class RemoteMacros : IDisposable
                 return new Result(false, "Makro nie skończyło się w wyznaczonym czasie. Sprawdź komputer w sklepie.");
             }
         }
+    }
+
+    /// <summary>
+    /// Pliki zapisane przez makro (bony dostawy z bazy), tylko z folderów z ustawień sklepu i tylko zapisane w trakcie
+    /// tego makra. Idą przed wynikiem, bo po nim zlecenie jest zakończone; także po błędzie makra (pierwszy bon mógł
+    /// się już zapisać).
+    /// </summary>
+    private async Task<Result> SendFilesAsync(ApiClient api, string id, MacroStart start, DateTime startedAt,
+        Result result, CancellationToken cancel)
+    {
+        var problems = new List<string>();
+        foreach (var upload in start.Uploads ?? new List<MacroUpload>())
+        {
+            var name = "";
+            try
+            {
+                name = Path.GetFileName(upload.Path);
+                var folder = (Path.GetDirectoryName(upload.Path) ?? "").TrimEnd('\\');
+                var known = host.Config?.Folders.Values.Any(value =>
+                    string.Equals(value.Trim().TrimEnd('\\'), folder, StringComparison.OrdinalIgnoreCase)) == true;
+                if (!known || !name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+                {
+                    problems.Add("Plik " + name + " jest spoza folderów sklepu");
+                    continue;
+                }
+                var fresh = await Disk.Run(() => File.Exists(upload.Path)
+                    && File.GetLastWriteTimeUtc(upload.Path) >= startedAt.AddMinutes(-2), TimeSpan.FromSeconds(30),
+                    cancel).ConfigureAwait(false);
+                if (!fresh) continue; // bon bez tego dostawcy albo makro padło wcześniej
+                var content = await Disk.ReadWhenReady(upload.Path, cancel).ConfigureAwait(false);
+                if (content == null)
+                {
+                    problems.Add("Nie udało się odczytać pliku " + name);
+                    continue;
+                }
+                for (var attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        await api.MacroFileAsync(id, upload.Key, name, content, cancel).ConfigureAwait(false);
+                        Log.Info("Wysłano plik makra " + name + " (" + content.Length / 1024 + " KB)");
+                        break;
+                    }
+                    catch (ServerUnavailableException) when (attempt < 4)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(5 * attempt), cancel).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (Exception error) when (!(error is OperationCanceledException && cancel.IsCancellationRequested))
+            {
+                Log.Warn("Plik makra " + name + ": " + error.Message);
+                problems.Add("Nie wysłano pliku " + name + ": " + error.Message);
+            }
+        }
+        if (problems.Count == 0) return result;
+        return new Result(false, (result.Message + "\n" + string.Join("\n", problems)).Trim(), result.Codes);
     }
 
     /// <summary>Wynik na serwer; przy braku połączenia ponawiamy, odrzucony (409) nie ma sensu.</summary>

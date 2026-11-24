@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -39,8 +40,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.intermanage.backend.auth.security.JwtService;
-import com.intermanage.backend.cadtop.entity.CadTopFile;
-import com.intermanage.backend.cadtop.service.CadTopService;
+import com.intermanage.backend.cadtop.service.CadPriceService;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.mea.component.MurphysoftClient;
@@ -75,7 +75,7 @@ class CadTopIntegrationTests {
     JsonMapper json;
 
     @Autowired
-    CadTopService service;
+    CadPriceService prices;
 
     @MockitoBean
     MurphysoftClient client;
@@ -132,9 +132,10 @@ class CadTopIntegrationTests {
                 .andExpect(jsonPath("$.overview.rows[?(@.nrCad == '901')].file.bcount").doesNotExist())
                 .andExpect(jsonPath("$.overview.rows[?(@.nrCad == '901')].file.bCount", hasItem(1)));
         // Nowszy plik (901) jeszcze nie obowiązuje.
-        assertThat(service.fileOn(UUID.fromString(storeId), today)).map(CadTopFile::getNrCad).contains("900_1");
-        assertThat(service.fileOn(UUID.fromString(storeId), today.plusDays(5))).map(CadTopFile::getNrCad)
-                .contains("901");
+        assertThat(prices.currentOn(UUID.fromString(storeId), today)).map(current -> current.file().getNrCad())
+                .contains("900_1");
+        assertThat(prices.currentOn(UUID.fromString(storeId), today.plusDays(5)))
+                .map(current -> current.file().getNrCad()).contains("901");
         assertThat(jdbc.queryForMap("""
                 select a.itm8, a.ean, a.name, a.purchase_price, a.sale_price, a.pack, a.vat_percent, a.top_mark,
                        a.subfamily_code, a.is_new, a.margin_percent, a.network_rotation
@@ -165,7 +166,7 @@ class CadTopIntegrationTests {
         tops(file("cad900", "261001", "2026-10-01 10:00:00"));
 
         sync().andExpect(jsonPath("$.overview.warnings", hasItem(containsString("Brak planu cadencier na dziś"))));
-        assertThat(service.fileOn(UUID.fromString(storeId), today)).isEmpty();
+        assertThat(prices.currentOn(UUID.fromString(storeId), today)).isEmpty();
 
         upload(plan(List.of(entry("900", today.minusDays(3)), entry("901", today.plusDays(2)))))
                 .andExpect(status().isOk())
@@ -175,6 +176,142 @@ class CadTopIntegrationTests {
         // Ten sam plan drugi raz.
         upload(plan(List.of(entry("900", today.minusDays(3)), entry("901", today.plusDays(2)))))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void articleActiveInCadencierShowsItsCurrentPrice() throws Exception {
+        portalFile("htmldownload/261001_" + region + ".xlsx", top("900", "00000453", "", ""));
+        tops(file("cad900", "261001", "2026-10-01 10:00:00"));
+        upload(plan(List.of(entry("900", today.minusDays(3)), entry("901", today.plusDays(2)))))
+                .andExpect(status().isOk());
+        sync();
+        String productImport = jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,
+                    unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', 3, 3, 0, 0, 0) returning id""", String.class, storeId);
+        String cadencierImport = jdbc.queryForObject("""
+                insert into cadencier_imports (store_id, file_name, total_rows) values (?::uuid, 'cad.xlsx', 2)
+                returning id""", String.class, storeId);
+        // Ten sam ITM8, ten sam EAN pod lokalnym ITM8 i artykuł spoza listy cadencier sklepu.
+        product("0000000000453", "5900000000001", productImport);
+        product("0000099000001", "5900983014894", productImport);
+        product("0000099000002", "5900983014894", productImport);
+        for (String itm8 : List.of("0000000000453", "0000099000001")) {
+            jdbc.update("insert into cadencier_items (store_id, itm8, import_id) values (?::uuid, ?, ?::uuid)",
+                    storeId, itm8, cadencierImport);
+        }
+
+        for (String itm8 : List.of("0000000000453", "0000099000001")) {
+            article(itm8).andExpect(jsonPath("$.cadencier").value(true))
+                    .andExpect(jsonPath("$.purchasePrice").value(1.0))
+                    .andExpect(jsonPath("$.cadencierCurrent.nrCad").value("900"))
+                    .andExpect(jsonPath("$.cadencierCurrent.from").value(today.minusDays(3).toString()))
+                    .andExpect(jsonPath("$.cadencierCurrent.purchasePrice").value(5.45))
+                    .andExpect(jsonPath("$.cadencierCurrent.salePrice").value(6.49));
+        }
+        article("0000099000002").andExpect(jsonPath("$.cadencier").value(false))
+                .andExpect(jsonPath("$.cadencierCurrent").value(nullValue()));
+
+        // Cadencier obowiązuje w całej sieci: sklep bez rejonu ma plik najliczniejszego rejonu.
+        jdbc.update("delete from cad_store_regions");
+        jdbc.update("insert into cad_store_regions (store_id, region, updated_at) values (?::uuid, ?, now())",
+                createStore(), region);
+        article("0000000000453").andExpect(jsonPath("$.cadencierCurrent.nrCad").value("900"));
+    }
+
+    @Test
+    void listsCardsWhoseCadencierItm8IsNotPriority() throws Exception {
+        List<List<Object>> rows = List.of(
+                topRow("900", "00000453", "5900000000453"), topRow("900", "00000600", "5900000000600"),
+                topRow("900", "00000601", "5900000000600"), topRow("900", "00000700", "5900000000700"),
+                topRow("900", "00000701", "5900000000700"), topRow("900", "00000800", "2485390000003"),
+                topRow("900", "00000900", "5900000000900"));
+        portalFile("htmldownload/261001_" + region + ".xlsx", write(TOP_HEADER, rows));
+        tops(file("cad900", "261001", "2026-10-01 10:00:00"));
+        upload(plan(List.of(entry("900", today.minusDays(3)), entry("901", today.plusDays(2)))))
+                .andExpect(status().isOk());
+        sync();
+        String oldImport = productImport(today.minusDays(1) + " 07:00");
+        String productImport = productImport(today + " 00:00");
+        // Ustawiony; lokalny ITM8 z dwoma ITM8 z cadencier; karta z innym ITM8 z cadencier; kod wagi; poza raportem.
+        product("0000000000453", "5900000000453", productImport);
+        product("0000099000600", "5900000000600", productImport);
+        product("0000000000600", "5900000000600", oldImport);
+        product("0000000000700", "5900000000700", productImport);
+        product("0000099000800", "2485390000000", productImport);
+        product("0000099000900", "5900000000900", oldImport);
+
+        String url = "/api/stores/" + storeId + "/cadencier-priorities";
+        mvc.perform(get(url).cookie(owner)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.nrCad").value("900"))
+                .andExpect(jsonPath("$.topCount").value(7))
+                .andExpect(jsonPath("$.setCount").value(2))
+                .andExpect(jsonPath("$.variantCount").value(1))
+                .andExpect(jsonPath("$.absentCount").value(1))
+                .andExpect(jsonPath("$.macroReady").value(false))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.items[0].itm8").value("0000099000600"))
+                .andExpect(jsonPath("$.items[0].topItm8").value("0000000000600"))
+                .andExpect(jsonPath("$.items[0].topKnown").value(true))
+                .andExpect(jsonPath("$.items[0].match").value("MAIN_EAN"))
+                .andExpect(jsonPath("$.items[0].status").value("TODO"))
+                .andExpect(jsonPath("$.items[0].alternatives[0].itm8").value("0000000000601"))
+                .andExpect(jsonPath("$.items[1].itm8").value("0000099000800"))
+                .andExpect(jsonPath("$.items[1].match").value("SCALE_CODE"));
+
+        String body = "{\"items\":[{\"itm8\":\"0000099000600\",\"topItm8\":\"0000000000601\"}]}";
+        mvc.perform(post(url + "/macro").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isConflict());
+        mvc.perform(post(url + "/runs").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body.replace("0000000000601", "0000000000453"))).andExpect(status().isConflict());
+        String result = mvc.perform(post(url + "/runs").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.report.items[0].status").value("WAITING"))
+                .andExpect(jsonPath("$.report.items[0].topItm8").value("0000000000601"))
+                .andExpect(jsonPath("$.report.items[0].run.macro").value(false))
+                .andReturn().getResponse().getContentAsString();
+        String ids = "{\"ids\":[\"" + JsonPath.read(result, "$.runIds[0]") + "\"]}";
+        mvc.perform(post(url + "/runs/undo").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(ids)).andExpect(jsonPath("$.items[0].status").value("TODO"));
+        mvc.perform(post(url + "/runs/restore").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(ids)).andExpect(jsonPath("$.items[0].status").value("WAITING"));
+
+        // Nowszy raport kartoteki dalej z lokalnym ITM8: nieustawione; z ITM8 z cadencier: znika z listy.
+        String nextImport = productImport(today.plusDays(1) + " 07:00");
+        jdbc.update("update products set last_seen_import_id = ?::uuid where last_seen_import_id = ?::uuid",
+                nextImport, productImport);
+        mvc.perform(get(url).cookie(owner)).andExpect(jsonPath("$.items[0].status").value("FAILED"));
+        jdbc.update("update products set itm8 = '0000000000601' where store_id = ?::uuid and itm8 = '0000099000600'",
+                storeId);
+        mvc.perform(get(url).cookie(owner)).andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].itm8").value("0000099000800"));
+    }
+
+    private String productImport(String generatedAt) {
+        return jdbc.queryForObject("""
+                insert into product_imports (store_id, file_name, report_generated_at, total_rows, created_count,
+                    updated_count, unchanged_count, missing_count)
+                values (?::uuid, 'test.xlsx', ?::timestamp, 3, 3, 0, 0, 0) returning id""", String.class, storeId,
+                generatedAt);
+    }
+
+    private static List<Object> topRow(String number, String itm8, String ean) {
+        return Arrays.asList(number, itm8, ean, "SERNIK", "DELECTA", "538", "E", "5.45", "6.49", "6", "8", "B",
+                "01 10 06", "1", "", "0.08", "1.13");
+    }
+
+    private void product(String itm8, String ean, String importId) {
+        jdbc.update("""
+                insert into products (store_id, itm8, ean, name, unit, net_content, purchase_price, sale_price, active,
+                    first_seen_import_id, last_seen_import_id)
+                values (?::uuid, ?, ?, 'SERNIK', 'szt.', 1, 1, 7.49, true, ?::uuid, ?::uuid)""",
+                storeId, itm8, ean, importId, importId);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions article(String itm8) throws Exception {
+        return mvc.perform(get("/api/stores/" + storeId + "/reports/articles/" + itm8).cookie(owner))
+                .andExpect(status().isOk());
     }
 
     @Test

@@ -7,5 +7,9 @@ public enum AgentMacroKind {
     /** Dostawa z bazy: nowe kody ITM8 na kartach artykułów. */
     ITM8_APPLY,
     /** Kody MEA: integracja plików cadencier z tymi kodami. */
-    MEA_CODES
+    MEA_CODES,
+    /** Dostawa z bazy: pliki bonu z Obsługi BL do zamówień i bony Excel do „Znajdź różnice”. */
+    BASE_RECEIVE,
+    /** Dostawa z bazy: Nr BL w nagłówkach zamówień i zakończenie dostaw. */
+    BASE_CLOSE
 }

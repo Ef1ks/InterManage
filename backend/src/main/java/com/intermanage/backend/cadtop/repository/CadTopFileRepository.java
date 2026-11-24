@@ -60,4 +60,52 @@ public interface CadTopFileRepository extends JpaRepository<CadTopFile, UUID> {
             from cad_top_articles a where a.file_id in (:fileIds) group by a.file_id
             """, nativeQuery = true)
     List<Counts> countMarks(Collection<UUID> fileIds);
+
+    interface ArticlePrice {
+        String getItm8();
+
+        BigDecimal getPurchasePrice();
+
+        BigDecimal getSalePrice();
+    }
+
+    /**
+     * Ceny z pliku TOP dla artykułów sklepu: po ITM8, potem po EAN-ie z kartoteki i listy cadencier, na końcu po
+     * obowiązującym multikodzie (EAN bez zer wiodących od 8 cyfr, krótsze to kody wewnętrzne), a kod wagi po pierwszych
+     * 12 cyfrach, bo plik TOP ma cyfrę kontrolną, a kartoteka zwykle zero. Dawnych par z
+     * {@code product_eans} celowo nie ma: EAN mógł przejść na inny towar. Z dwóch artykułów TOP o tym samym EAN-ie
+     * (zwykły i paletowy) zostaje droższy, czyli zwykły.
+     */
+    @Query(value = """
+            with wanted as (
+                select distinct x.itm8 from unnest(cast(:itm8s as varchar[])) as x(itm8)
+            ), codes as (
+                select p.itm8, p.ean, 1 as priority from wanted w
+                join products p on p.store_id = :storeId and p.itm8 = w.itm8
+                union all
+                select c.itm8, c.ean, 1 from wanted w
+                join cadencier_items c on c.store_id = :storeId and c.itm8 = w.itm8
+                union all
+                select pc.itm8, pc.ean, 2 from wanted w
+                join product_codes pc on pc.store_id = :storeId and pc.itm8 = w.itm8 and pc.current
+            ), eans as (
+                select itm8, ltrim(btrim(ean), '0') as ean, priority from codes where ean is not null
+            ), matches as (
+                select w.itm8, a.purchase_price, a.sale_price, 0 as priority from wanted w
+                join cad_top_articles a on a.file_id = :fileId and a.itm8 = w.itm8
+                union all
+                select e.itm8, a.purchase_price, a.sale_price, e.priority from eans e
+                join cad_top_articles a on a.file_id = :fileId and a.ean = lpad(e.ean, 13, '0')
+                where length(e.ean) between 8 and 13
+                union all
+                select e.itm8, a.purchase_price, a.sale_price, 3 from eans e
+                cross join generate_series(0, 9) as check_digit
+                join cad_top_articles a on a.file_id = :fileId and a.ean = left(e.ean, 12) || check_digit
+                where e.ean ~ '^2[1-9][0-9]{5}00000[0-9]$'
+            )
+            select distinct on (m.itm8) m.itm8 as itm8, m.purchase_price as "purchasePrice",
+                   m.sale_price as "salePrice"
+            from matches m order by m.itm8, m.priority, m.purchase_price desc nulls last
+            """, nativeQuery = true)
+    List<ArticlePrice> findPrices(UUID storeId, UUID fileId, String[] itm8s);
 }

@@ -12,6 +12,7 @@ import {
   DatabaseIcon,
   DownloadIcon,
   HashIcon,
+  ListChecksIcon,
   MessageSquareWarningIcon,
   MegaphoneIcon,
   MessagesSquareIcon,
@@ -30,6 +31,7 @@ import {
 import { hasPermission } from '@/features/auth/api'
 import { bakeryPath } from '@/features/bakery-check/paths'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { cadPriorityPath } from '@/features/cad-priority/paths'
 import { meaOnlinePath } from '@/features/mea/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
@@ -160,6 +162,15 @@ const GROUPS: GroupSpec[] = [
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
       { category: 'MEAT_PURCHASES', section: PURCHASE_CHECKS },
+      {
+        key: 'cad-priority',
+        section: PURCHASE_CHECKS,
+        path: cadPriorityPath,
+        label: 'ITM8 z cadencier',
+        description: 'Artykuły z cadencier, których ITM8 nie jest priorytetowy w kartotece sklepu.',
+        icon: ListChecksIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+      },
       { category: 'SUPPLIERS', section: SUPPLIER_LIST },
     ],
   },
@@ -322,6 +333,15 @@ const GROUPS: GroupSpec[] = [
           hasPermission(me, 'DELI_ORDERS', 'EDIT'),
         badge: (me) => canEditDocuments(me) && <PartnerInvitationsBadge />,
       },
+      {
+        key: 'roles',
+        section: STORE_SCOPE,
+        path: '/ustawienia/hierarchia',
+        label: 'Hierarchia i rangi',
+        description: 'Kto jest pod kim w sklepie i co wolno każdej randze.',
+        icon: ShieldIcon,
+        visible: (me) => me.owner || hasPermission(me, 'STAFF'),
+      },
       { category: 'STORE_LOG', section: STORE_SCOPE },
       {
         key: 'stores',
@@ -340,15 +360,6 @@ const GROUPS: GroupSpec[] = [
         description: 'Zaproszenia, sklepy i rangi kont w sklepach.',
         icon: UserCogIcon,
         visible: (me) => me.owner,
-      },
-      {
-        key: 'roles',
-        section: STORE_SCOPE,
-        path: '/ustawienia/hierarchia',
-        label: 'Hierarchia i rangi',
-        description: 'Kto jest pod kim w sklepie i co wolno każdej randze.',
-        icon: ShieldIcon,
-        visible: (me) => me.owner || hasPermission(me, 'STAFF'),
       },
       {
         key: 'backup',

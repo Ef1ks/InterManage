@@ -22,6 +22,8 @@ import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.cadtop.dto.CadPrices;
+import com.intermanage.backend.cadtop.service.CadPriceService;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.exception.ApiException;
@@ -32,8 +34,6 @@ import com.intermanage.backend.document.entity.Document;
 import com.intermanage.backend.document.entity.DocumentLine;
 import com.intermanage.backend.document.entity.DocumentType;
 import com.intermanage.backend.document.repository.DocumentImportRepository;
-import com.intermanage.backend.document.repository.DocumentLineRepository;
-import com.intermanage.backend.document.repository.DocumentLineRepository.SupplierPrice;
 import com.intermanage.backend.document.repository.DocumentRepository;
 import com.intermanage.backend.document.service.DeliveryCorrectionService;
 import com.intermanage.backend.pricecheck.component.ExcludedSuppliers;
@@ -69,7 +69,8 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * spoza bazy przywozi ten sam towar pod własnym ITM8. Przyjęcie ze statusem wyjaśniania zostaje w raporcie bez
  * względu na datę. Przyjęcie, w którym każdy taki artykuł był najwyżej {@value #INCIDENT_DAYS} dni wcześniej
  * w incydencie zamówienia do bazy (baza go nie dowiozła), trafia do osobnej kategorii. Minimalna marża z ustawień nie decyduje o wejściu do raportu, tylko
- * oznacza linie z marżą na bonie (po korektach, % od sprzedaży brutto) poniżej niej i liczy, o ile za drogo. Raport
+ * oznacza linie z marżą na bonie (po korektach, % od sprzedaży brutto) poniżej niej i liczy, o ile za drogo. Cenę
+ * zakupu porównujemy z aktualną ceną zakupu z cadencier (plik TOP obowiązujący dziś). Raport
  * liczy się w locie, więc korekta przypięta do przyjęcia od razu go zmienia, a status wyjaśniania z dostawcą zostaje
  * przy przyjęciu.
  */
@@ -80,8 +81,6 @@ public class PriceCheckService {
     public static final List<String> BASE_SUPPLIER_CODES = List.of("538", "88110");
     /** Raport obejmuje przyjęcia z tylu ostatnich dni (z dzisiejszym). */
     public static final int PERIOD_DAYS = 30;
-    /** Cenę z bazy bierzemy z dostaw najwyżej tyle dni przed przyjęciem. */
-    static final int BASE_LOOKBACK_DAYS = 365;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     /** Przyjęcie od innego dostawcy do tylu dni po incydencie zamówienia do bazy jest usprawiedliwione. */
     public static final int INCIDENT_DAYS = 10;
@@ -92,7 +91,7 @@ public class PriceCheckService {
             Map.of(PriceCheckStatus.REPORTED, 1, PriceCheckStatus.RESOLVED, 2);
 
     private final DocumentRepository documents;
-    private final DocumentLineRepository documentLines;
+    private final CadPriceService cadPriceService;
     private final DocumentImportRepository documentImports;
     private final DeliveryCorrectionService corrections;
     private final ProductRepository products;
@@ -107,7 +106,7 @@ public class PriceCheckService {
     private final ExcludedSuppliers excludedSuppliers;
     private final ReportExclusionService exclusions;
 
-    public PriceCheckService(DocumentRepository documents, DocumentLineRepository documentLines,
+    public PriceCheckService(DocumentRepository documents, CadPriceService cadPriceService,
             DocumentImportRepository documentImports, DeliveryCorrectionService corrections,
             ProductRepository products, CadencierImportRepository cadencierImports,
             IncidentImportRepository incidents, PriceCheckSettingsRepository settings, PriceCheckReviewRepository reviews, StoreRepository stores,
@@ -115,7 +114,7 @@ public class PriceCheckService {
             ExcludedSuppliers excludedSuppliers, ReportExclusionService exclusions) {
         this.exclusions = exclusions;
         this.documents = documents;
-        this.documentLines = documentLines;
+        this.cadPriceService = cadPriceService;
         this.documentImports = documentImports;
         this.corrections = corrections;
         this.products = products;
@@ -168,9 +167,9 @@ public class PriceCheckService {
                     sum(lines, Line::purchaseValue),
                     (int) lines.stream().filter(Line::belowMinimum).count(),
                     sum(lines, Line::excessValue),
-                    sum(lines.stream().filter(line -> line.basePrice() != null).toList(),
-                            line -> line.purchasePrice().subtract(line.basePrice()).multiply(line.quantity())
-                                    .setScale(2, RoundingMode.HALF_UP)),
+                    sum(lines.stream().filter(line -> line.cadencierPurchasePrice() != null).toList(),
+                            line -> line.purchasePrice().subtract(line.cadencierPurchasePrice())
+                                    .multiply(line.quantity()).setScale(2, RoundingMode.HALF_UP)),
                     historyResponses.isEmpty() ? null : historyResponses.getFirst(), historyResponses, lines));
         }
         result.sort(Comparator.<Delivery>comparingInt(delivery -> delivery.review() == null ? 0
@@ -181,6 +180,7 @@ public class PriceCheckService {
         return new PriceCheckReport(from, to, PERIOD_DAYS, minMargin, BASE_SUPPLIER_CODES, computed.cadencierSize(),
                 cadencierImport != null ? cadencierImport.getReportGeneratedAt() : null,
                 cadencierImport != null ? cadencierImport.getImportedAt() : null,
+                computed.cadPrices().nrCad(), computed.cadPrices().from(),
                 documentImports.findLastPeriodTo(storeId).orElse(null),
                 documentImports.findNewestReportGeneratedAt(storeId).orElse(null),
                 INCIDENT_DAYS, incidents.findLastIncidentDate(storeId).orElse(null),
@@ -202,7 +202,7 @@ public class PriceCheckService {
     /** Przyjęcia z liniami raportu, ich korekty i linie po korektach. */
     private record Computed(List<Document> deliveries, Map<UUID, List<Document>> correctionsByDelivery,
             Map<UUID, CorrectedDelivery> correctedByDelivery, Map<UUID, List<Line>> linesByDelivery,
-            int cadencierSize) {
+            int cadencierSize, CadPrices cadPrices) {
     }
 
     private Computed compute(UUID storeId, LocalDateTime start, LocalDateTime end, Set<UUID> reviewed,
@@ -238,7 +238,6 @@ public class PriceCheckService {
         Map<UUID, List<Document>> correctionsByDelivery = new HashMap<>();
         Map<UUID, CorrectedDelivery> correctedByDelivery = new HashMap<>();
         Set<String> itm8Keys = new HashSet<>();
-        Set<String> eanKeys = new HashSet<>();
         for (Document delivery : deliveries) {
             List<Document> ofDelivery = links.getOrDefault(delivery.getId(), List.of()).stream()
                     .map(link -> correctionDocuments.get(link.getCorrection().getId()))
@@ -251,33 +250,25 @@ public class PriceCheckService {
                 if (cadencierItm8 != null) {
                     itm8Keys.add(cadencierItm8);
                     itm8Keys.add(line.itm8());
-                    String eanKey = eanKey(line.ean());
-                    if (eanKey != null) {
-                        eanKeys.add(eanKey);
-                    }
                 }
             }
         }
-        // Ceny z bazy i CENA_CAD tylko artykułów z raportu.
-        String[] itm8Array = itm8Keys.toArray(String[]::new);
-        Map<String, BigDecimal> cadencierPrices = itm8Keys.isEmpty() ? Map.of()
-                : products.findCadencierPrices(storeId, itm8Array).stream()
+        // Ceny cadencier tylko artykułów z raportu; CENA_CAD z kartoteki zastępuje brak artykułu w pliku TOP.
+        Map<String, BigDecimal> catalogPrices = itm8Keys.isEmpty() ? Map.of()
+                : products.findCadencierPrices(storeId, itm8Keys.toArray(String[]::new)).stream()
                         .collect(Collectors.toMap(CadencierPrice::getItm8, CadencierPrice::getCadencierPrice));
-        BasePrices basePrices = BasePrices.of(itm8Keys.isEmpty() ? List.of()
-                : documentLines.findSupplierPrices(storeId, BASE_SUPPLIER_CODES,
-                        oldest.toLocalDate().atStartOfDay().minusDays(BASE_LOOKBACK_DAYS), end, itm8Array,
-                        eanKeys.toArray(String[]::new)));
+        CadPrices cadPrices = cadPriceService.current(storeId, itm8Keys);
 
         Map<UUID, List<Line>> linesByDelivery = new HashMap<>();
         for (Document delivery : deliveries) {
             List<Line> lines = flaggedLines(delivery, correctedByDelivery.get(delivery.getId()), minMargin, cadencier,
-                    cadencierPrices, basePrices, incidentIndex, excluded, nomenclatures);
+                    catalogPrices, cadPrices, incidentIndex, excluded, nomenclatures);
             if (!lines.isEmpty()) {
                 linesByDelivery.put(delivery.getId(), lines);
             }
         }
         return new Computed(deliveries, correctionsByDelivery, correctedByDelivery, linesByDelivery,
-                cadencier.size());
+                cadencier.size(), cadPrices);
     }
 
     /** Szybki odsiew przed liczeniem korekt: czy w raporcie przyjęcia jest artykuł z cadencier od innego dostawcy. */
@@ -367,33 +358,6 @@ public class PriceCheckService {
         }
     }
 
-    /** Ceny z bazy po ITM8 i po EAN-ie (baza też bywa pod innym ITM8 niż w cadencier), od najstarszej. */
-    private record BasePrices(Map<String, List<SupplierPrice>> byItm8, Map<String, List<SupplierPrice>> byEan) {
-
-        static BasePrices of(List<SupplierPrice> prices) {
-            Map<String, List<SupplierPrice>> byItm8 = new HashMap<>();
-            Map<String, List<SupplierPrice>> byEan = new HashMap<>();
-            for (SupplierPrice price : prices) {
-                byItm8.computeIfAbsent(price.getItm8(), key -> new ArrayList<>()).add(price);
-                String key = eanKey(price.getEan());
-                if (key != null) {
-                    byEan.computeIfAbsent(key, k -> new ArrayList<>()).add(price);
-                }
-            }
-            return new BasePrices(byItm8, byEan);
-        }
-
-        /** Najpierw dostawy artykułu z cadencier (po ITM8), a bez nich dostawy towaru o tym samym EAN-ie. */
-        SupplierPrice last(String itm8, String ean, Document delivery) {
-            SupplierPrice byCode = lastBasePrice(byItm8.get(itm8), delivery);
-            if (byCode != null) {
-                return byCode;
-            }
-            String key = eanKey(ean);
-            return key == null ? null : lastBasePrice(byEan.get(key), delivery);
-        }
-    }
-
     private static String supplierOf(DocumentLine line, Document delivery) {
         return line.getSupplierCode() != null ? line.getSupplierCode() : delivery.getSupplierCode();
     }
@@ -404,7 +368,7 @@ public class PriceCheckService {
      * pomijane. Najpierw linie z marżą poniżej minimum, od największej nadwyżki.
      */
     private static List<Line> flaggedLines(Document delivery, CorrectedDelivery corrected, BigDecimal minMargin,
-            Cadencier cadencier, Map<String, BigDecimal> cadencierPrices, BasePrices basePrices,
+            Cadencier cadencier, Map<String, BigDecimal> catalogPrices, CadPrices cadPrices,
             Incidents incidents, Set<String> excluded, List<String> nomenclatures) {
         Map<String, String> supplierByItm8 = new HashMap<>();
         for (DocumentLine line : delivery.getLines()) {
@@ -442,18 +406,16 @@ public class PriceCheckService {
                     ? line.purchasePrice().subtract(targetPurchasePrice).multiply(quantity)
                             .setScale(2, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
-            SupplierPrice base = basePrices.last(cadencierItm8, line.ean(), delivery);
-            BigDecimal cadencierPrice = cadencierPrices.get(cadencierItm8);
+            CadPrices.Price cadPrice = cadPrices.of(cadencierItm8);
+            BigDecimal cadencierPrice = cadPrice != null && cadPrice.salePrice() != null ? cadPrice.salePrice()
+                    : catalogPrices.getOrDefault(cadencierItm8, catalogPrices.get(line.itm8()));
             IncidentItem incident = incidents.before(cadencierItm8, line.itm8(), line.ean(),
                     delivery.getDocumentDate().toLocalDate());
             lines.add(new Line(line.itm8(), cadencierItm8.equals(line.itm8()) ? null : cadencierItm8, line.ean(),
                     line.name(), line.brand(), regionOf(line.nomenclatureCode()), supplier, quantity,
                     line.purchasePrice(), purchaseValue, line.salePriceDocument(), salePriceNet, marginPercent,
                     belowMinimum, targetPurchasePrice, excessValue,
-                    cadencierPrice != null ? cadencierPrice : cadencierPrices.get(line.itm8()),
-                    base != null ? base.getPurchasePrice() : null,
-                    base != null ? base.getDocumentDate() : null, base != null ? base.getDocumentId() : null,
-                    base != null ? base.getDocumentNumber() : null,
+                    cadencierPrice, cadPrice != null ? cadPrice.purchasePrice() : null,
                     incident != null ? incident.getIncidentDate() : null,
                     incident != null ? incident.getReason() : null,
                     incident != null ? incident.getComment() : null, line.corrected()));
@@ -462,24 +424,6 @@ public class PriceCheckService {
                 .thenComparing(Line::excessValue, Comparator.reverseOrder())
                 .thenComparing(Line::purchaseValue, Comparator.reverseOrder()));
         return lines;
-    }
-
-    /** Ostatnia cena z bazy z dnia przyjęcia albo wcześniej, najwyżej {@link #BASE_LOOKBACK_DAYS} dni wstecz. */
-    private static SupplierPrice lastBasePrice(List<SupplierPrice> prices, Document delivery) {
-        if (prices == null) {
-            return null;
-        }
-        LocalDateTime day = delivery.getDocumentDate().toLocalDate().plusDays(1).atStartOfDay();
-        LocalDateTime oldest = day.minusDays(BASE_LOOKBACK_DAYS + 1L);
-        for (SupplierPrice price : prices.reversed()) {
-            if (price.getDocumentDate().isBefore(oldest)) {
-                return null;
-            }
-            if (price.getDocumentDate().isBefore(day)) {
-                return price;
-            }
-        }
-        return null;
     }
 
     private static <T> BigDecimal sum(List<T> items, Function<T, BigDecimal> value) {

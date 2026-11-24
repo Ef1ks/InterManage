@@ -50,6 +50,10 @@ public class AgentMacroJob {
     @Column(nullable = false, updatable = false)
     private String macro;
 
+    /** Czego dotyczy makro (np. numer bonu z bazy), żeby wynik trafił we właściwe miejsce. */
+    @Column(length = 60, updatable = false)
+    private String reference;
+
     @Column(name = "item_count", nullable = false, updatable = false)
     private int itemCount;
 
@@ -97,8 +101,9 @@ public class AgentMacroJob {
     protected AgentMacroJob() {
     }
 
-    public AgentMacroJob(Store store, AgentMacroKind kind, String title, String macro, int itemCount,
-            UUID targetAgentId, AppUser createdBy) {
+    public AgentMacroJob(Store store, AgentMacroKind kind, String title, String macro, String reference,
+            int itemCount, UUID targetAgentId, AppUser createdBy) {
+        this.reference = reference;
         this.store = store;
         this.kind = kind;
         this.title = title.length() > 200 ? title.substring(0, 200) : title;
@@ -165,6 +170,10 @@ public class AgentMacroJob {
 
     public String getMacro() {
         return macro;
+    }
+
+    public String getReference() {
+        return reference;
     }
 
     public int getItemCount() {

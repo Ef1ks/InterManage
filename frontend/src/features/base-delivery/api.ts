@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { BaseDelivery, BaseDeliverySummary, BasePortalDocument, MeaOverview, TemporaryNote } from '@/lib/types'
+import type {
+  BaseDelivery,
+  BaseDeliverySummary,
+  BasePortalDocument,
+  BaseReceiving,
+  MeaOverview,
+  TemporaryNote,
+} from '@/lib/types'
 
 const path = (storeId: string) => `/stores/${storeId}/base-deliveries`
 const listKey = (storeId: string) => ['stores', storeId, 'base-deliveries'] as const
@@ -65,6 +72,26 @@ export function useReadTemporaryNote(storeId: string) {
       formData.append('file', file)
       return api<TemporaryNote>(`${path(storeId)}/temporary-notes`, { method: 'POST', formData })
     },
+    meta: { invalidates: false },
+  })
+}
+
+/** Wprowadzenie bonu do Mercalys: numery zamówień i tymczasowe bony dostawy z makra. */
+export function useBaseReceiving(storeId: string, id: string | null) {
+  return useQuery({
+    queryKey: [...listKey(storeId), id, 'receiving'],
+    queryFn: () => api<BaseReceiving>(`${path(storeId)}/${id}/receiving`),
+    enabled: id !== null,
+  })
+}
+
+/** Numer zamówienia wpisany ręcznie (dostawę wprowadził człowiek). */
+export function useEnterBaseOrder(storeId: string, id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (order: { supplierCode: string; orderNumber: string }) =>
+      api<BaseReceiving>(`${path(storeId)}/${id}/receiving/order`, { method: 'PUT', json: order }),
+    onSuccess: (data) => queryClient.setQueryData([...listKey(storeId), id, 'receiving'], data),
     meta: { invalidates: false },
   })
 }

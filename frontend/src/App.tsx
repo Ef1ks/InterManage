@@ -15,6 +15,8 @@ import { ProtocolEntryPage } from '@/features/protocol-entry/ProtocolEntryPage'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
 import { MeaCodesPage } from '@/features/base-delivery/MeaCodesPage'
 import { basePath, meaPath } from '@/features/base-delivery/paths'
+import { CadPriorityPage } from '@/features/cad-priority/CadPriorityPage'
+import { cadPriorityPath } from '@/features/cad-priority/paths'
 import { MeaDocumentPage } from '@/features/mea/MeaDocumentPage'
 import { MeaPage } from '@/features/mea/MeaPage'
 import { meaOnlinePath } from '@/features/mea/paths'
@@ -131,6 +133,15 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <BaseDeliveryPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // ITM8 z cadencier do ustawienia jako priorytetowe, uprawnienie jak wprowadzanie danych.
+        path: cadPriorityPath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <CadPriorityPage />
           </RequireAuth>
         ),
       },
