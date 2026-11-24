@@ -235,6 +235,7 @@ class AgentMacroIntegrationTests {
                 .contains("WEBORDERPICK|Mercalys|ibtB1_Ajouter_ImageButton1,ibtB1_Ajouter_LnkBouton|538|"
                         + "SCAPR POLSKA SP.Z.O.O.|Base;Baza|")
                 .contains("WEBERRORS|Mercalys|btnB2_Supprimer_LnkBouton|niezgodne jednost;nieistniej;art.ju;doręczone|30000")
+                .contains("|Les Mousquetaires|Te linie nie;integracj|Oui|pytanie-88110|")
                 .contains("EXCELSAVE|P:\\Production\\INTERMANAGE\\EXCEL\\BON_9516050082_88110.xlsx|180000")
                 .doesNotContain("WEBORDERKNOWN")
                 .endsWith("WINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
@@ -254,8 +255,8 @@ class AgentMacroIntegrationTests {
             if (target != null) {
                 assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + target);
             }
-            if (parts[0].equals("WEBPAGE") && parts.length > 12) {
-                assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + parts[12]);
+            for (int label = 12; parts[0].equals("WEBPAGE") && label < parts.length; label += 4) {
+                assertThat(lines.subList(i + 1, lines.size())).contains("LABEL|" + parts[label]);
             }
         }
 

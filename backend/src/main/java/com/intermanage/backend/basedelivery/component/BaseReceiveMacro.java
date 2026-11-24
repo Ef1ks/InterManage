@@ -62,7 +62,8 @@ public final class BaseReceiveMacro {
     private static final String NEXT_PAGE = "pgrDetail_ibtSuivant";
     private static final String FIRST_PAGE = "pgrDetail_ibtPremier";
     private static final String PAGE_LIST = "pgrDetail_ddlGoTo";
-    private static final String LINE_ERRORS_TEXT = "Te linie nie";
+    /** „Wystąpiły błędy… Te linie nie zostaną pobrane…” albo, bez błędów, „Chcesz uruchomic integracje art. z PZ”. */
+    private static final String INTEGRATION_TEXT = "Te linie nie;integracj";
 
     // Przesył dostaw: zamówienia oczekujące i wybrane.
     private static final String ARROW_IMAGE = "ibtB1_Ajouter_ImageButton1";
@@ -70,9 +71,12 @@ public final class BaseReceiveMacro {
     private static final String CREATE_CODE = "btnB5_CreationCde_LnkBouton";
     private static final String UNLOAD = "btnB6_Decharger_LnkBouton";
     private static final String ORIGIN = "Base;Baza";
-    private static final String UNLOAD_TEXT = "pobra";
-    /** „Suma zaimportowanych zamówień” albo „0 artykuł(y) zaimportowany(e) - 450 błąd(błędy)”. */
-    private static final String IMPORTED_TEXT = "zaimportowan";
+    /** „Czy chciałbyś pobrać”, a czasem też „Te linie nie zostaną pobrane…” albo pytanie o integrację. */
+    private static final String UNLOAD_TEXT = "pobra;integracj";
+    /** Najwięcej pytań po Zatwierdź, zanim przyjdzie komunikat z liczbą zaimportowanych. */
+    private static final int UNLOAD_QUESTIONS = 3;
+    /** Każdy komunikat z samym Zamknij, po adresie okna: liczby i treść („0 artykuł(y) zaimportowany(e) - …”) są różne. */
+    private static final String ANY_ALERT = "BoiteAlerte";
     private static final String FIX_ERRORS_TEXT = "popraw";
 
     // Wybór dostawcy pustego kodu (ac-e050).
@@ -159,8 +163,10 @@ public final class BaseReceiveMacro {
             String read = "numer-" + code;
             String errors = "bledy-" + code;
             String question = "pytanie-" + code;
+            String secondQuestion = "drugie-pytanie-" + code;
             String imported = "komunikat-" + code;
             String noPanel = "bez-panelu-" + code;
+            String unloaded = "pobrane-" + code;
             String done = "koniec-" + code;
             out.add("# Plik bonu " + bonNumber + " od dostawcy " + code);
             out.add("WEBPICKRE|" + WINDOW + "|" + GRID + "|" + fileRow(bon, code) + "|" + PAGE_TIMEOUT_MS + "|" + none);
@@ -170,13 +176,17 @@ public final class BaseReceiveMacro {
             out.add("WEBCOLLECT|" + WINDOW + "|" + BL_LINES_GRID + "|" + BL_LINE_ERROR_TEXT + "|0|" + NEXT_PAGE + "|"
                     + PAGE_LIST + "|1|" + BL_BON_COLUMN + "|" + bonNumber);
             out.add("WEBCLICK|" + WINDOW + "|" + BL_INTEGRATION);
-            // „Wystąpiły błędy (linie zazn. na czerwono)…” pojawia się tylko czasem: Tak i dalej. Czasem (też po Tak) zamiast
-            // panelu jest komunikat „0 artykuł(y) zaimportowany(e) - 450 błąd(błędy)”: Zamknij.
-            String importedAlert = "|" + ALERT_WINDOW + "|" + IMPORTED_TEXT + "|Fermer|" + imported;
+            // Pytanie o błędne linie albo o uruchomienie integracji (czasem jedno po drugim): Tak i dalej. Zamiast panelu może
+            // też przyjść komunikat „0 artykuł(y) zaimportowany(e) - 450 błąd(błędy)”: Zamknij.
+            String importedAlert = "|" + ALERT_WINDOW + "|" + ANY_ALERT + "|Fermer|" + imported;
             out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "|" + IMPORT_TIMEOUT_MS + "|" + DIALOG
-                    + "|" + LINE_ERRORS_TEXT + "|Oui|" + question + importedAlert);
+                    + "|" + INTEGRATION_TEXT + "|Oui|" + question + importedAlert);
             out.add("WEBGOTO|" + panel);
             out.add("LABEL|" + question);
+            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "|" + IMPORT_TIMEOUT_MS + "|" + DIALOG
+                    + "|" + INTEGRATION_TEXT + "|Oui|" + secondQuestion + importedAlert);
+            out.add("WEBGOTO|" + panel);
+            out.add("LABEL|" + secondQuestion);
             out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + CREATE_CODE + "|" + IMPORT_TIMEOUT_MS + importedAlert);
             out.add("WEBGOTO|" + panel);
             out.add("LABEL|" + imported);
@@ -211,12 +221,23 @@ public final class BaseReceiveMacro {
             out.add("WEBORDERREAD|" + WINDOW + "|" + ARROW_IMAGE + "|" + code + "|" + supplier.macroName() + "|"
                     + PAGE_TIMEOUT_MS);
             out.add("WEBCLICK|" + WINDOW + "|" + UNLOAD);
-            out.add("WEBWAIT|" + DIALOG + "|Oui|" + UNLOAD_TEXT + "|" + PAGE_TIMEOUT_MS);
-            out.add("WEBCLICK|" + DIALOG + "|Oui");
-            out.add("WEBALERT|" + ALERT_WINDOW + "|" + IMPORTED_TEXT + "|Fermer|" + IMPORT_TIMEOUT_MS);
+            // Po Zatwierdź pytania (Tak), a po chwili komunikat: „Suma zaimportowanych zamówień” albo „0 artykuł(y)
+            // zaimportowany(e) - 450 błąd(błędy)” (Zamknij). Pytanie o poprawienie błędów przychodzi dopiero po nim.
+            for (int number = 1; number <= UNLOAD_QUESTIONS; number++) {
+                String next = "po-pytaniu-" + number + "-" + code;
+                out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + BL_SELECTION + "," + ERRORS_DELETE + "|"
+                        + IMPORT_TIMEOUT_MS + "|" + DIALOG + "|" + UNLOAD_TEXT + "|Oui|" + next + "|" + ALERT_WINDOW + "|"
+                        + ANY_ALERT + "|Fermer|" + unloaded + "|" + DIALOG + "|" + FIX_ERRORS_TEXT + "|Oui|"
+                        + errors);
+                out.add("WEBGOTO|" + unloaded);
+                out.add("LABEL|" + next);
+            }
+            out.add("WEBALERT|" + ALERT_WINDOW + "|" + ANY_ALERT + "|Fermer|" + IMPORT_TIMEOUT_MS);
+            out.add("LABEL|" + unloaded);
             // Bez błędów od razu Obsługa BL i dwa PDF-y; z błędami pytanie o poprawienie i lista błędów.
-            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + BL_SELECTION + "|" + IMPORT_TIMEOUT_MS + "|" + DIALOG
-                    + "|" + FIX_ERRORS_TEXT + "|Oui|" + errors);
+            out.add("WEBPAGE|" + WINDOW + "|" + ANY_PAGE + "|" + BL_SELECTION + "," + ERRORS_DELETE + "|"
+                    + IMPORT_TIMEOUT_MS + "|" + DIALOG + "|" + FIX_ERRORS_TEXT + "|Oui|" + errors);
+            out.add("WEBIFSEEN|" + WINDOW + "|" + BL_SELECTION + "|" + errors + "|1000");
             out.add("WINCLOSEALL|" + PDF_WINDOW + "|" + PDF_TIMEOUT_MS);
             out.add("WEBGOTO|" + done);
             out.add("LABEL|" + errors);

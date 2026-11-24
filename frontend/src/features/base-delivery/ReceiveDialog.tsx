@@ -328,7 +328,7 @@ function SupplierRow({ storeId, deliveryId, supplier, canEdit }: SupplierRowProp
                 : 'bg-muted text-muted-foreground',
           )}
         >
-          {order?.closedAt ? `zakończona ${time(order.closedAt)}` : order ? 'wprowadzona' : 'bez pliku'}
+          {order?.closedAt ? `zakończona ${time(order.closedAt)}` : order ? 'wprowadzona' : 'nie wprowadzona'}
         </span>
         {order?.enteredBy && <span className="ml-2 text-xs text-muted-foreground">nr wpisał(a) {order.enteredBy}</span>}
       </td>

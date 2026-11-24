@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795531007.9629107,
-    "seen": 1795531157.2793813,
-    "ast_hash": "df0fb328db0fce009bf9a6264cd9a328",
+    "mtime": 1795532110.58104,
+    "seen": 1795532241.223097,
+    "ast_hash": "74bcb548f6481caf66179650c849bb4c",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -14592,9 +14592,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/AgentMacroIntegrationTests.java": {
-    "mtime": 1795531007.9599104,
-    "seen": 1795531157.150081,
-    "ast_hash": "1e670af01895f69fcc7e577f45de7f55",
+    "mtime": 1795532110.5820456,
+    "seen": 1795532241.090255,
+    "ast_hash": "178c1203fb1bae1a2104486498dd3634",
     "semantic_hash": ""
   },
   "frontend/src/features/agent-macros/RemoteMacro.tsx": {
@@ -14868,9 +14868,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/component/BaseReceiveMacro.java": {
-    "mtime": 1795531007.9579053,
-    "seen": 1795531156.9484575,
-    "ast_hash": "da33ad61d1a8cda758e39d5d6ed57da6",
+    "mtime": 1795532110.5795293,
+    "seen": 1795532240.8732,
+    "ast_hash": "4d5ef0e765440b849486334de367d07e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/dto/BaseReceivingOrderRequest.java": {
@@ -14922,9 +14922,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/ReceiveDialog.tsx": {
-    "mtime": 1795524093.7310839,
-    "seen": 1795524265.2530234,
-    "ast_hash": "32c3b7bc44e58b0fe19c1882cdae5d66",
+    "mtime": 1795531792.2431643,
+    "seen": 1795531940.2555342,
+    "ast_hash": "a04de2390f2ded587c375a8da91c6096",
     "semantic_hash": ""
   },
   "backend/po wykonaniu uzupe\u0142nienia itm8 wrac.txt": {
