@@ -5323,3 +5323,36 @@ export type ChatOther = {
 
 /** `hours`: godziny zmian i odbić tylko z dostępem do Czasu pracy. */
 export type ChatPeople = { hours: boolean; working: ChatWorking[]; others: ChatOther[] }
+
+/** Komputer sklepu z agentem: czy może teraz wykonać makro (`reason` = dlaczego nie), `free` = nikt na nim nie pracuje. */
+export type AgentComputer = {
+  id: string
+  name: string
+  machineName: string | null
+  online: boolean
+  available: boolean
+  free: boolean
+  idleSeconds: number | null
+  reason: string | null
+}
+
+/** Makro zlecone na wolnym komputerze sklepu. */
+export type AgentMacroJob = {
+  id: string
+  kind: 'ITM8_COLLECT' | 'ITM8_APPLY'
+  title: string
+  status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
+  computer: string | null
+  requestedBy: string
+  createdAt: string
+  offeredAt: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  countdownSeconds: number
+  /** Komputery, na których ktoś anulował odliczanie albo które nie odpowiedziały. */
+  declined: string[]
+  message: string | null
+  /** Kody ITM8 zebrane przez „Zbierz brakujące ITM8”. */
+  codes: string[]
+  itemCount: number
+}

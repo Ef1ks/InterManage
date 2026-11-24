@@ -258,9 +258,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1795445261.6715798,
-    "seen": 1795445417.9694278,
-    "ast_hash": "ffd5f542d729f19d4ea2e78135b2a359",
+    "mtime": 1795493875.8243375,
+    "seen": 1795494088.6735373,
+    "ast_hash": "93d3caf37edb7b86d3bb158c048a1d62",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795431652.031885,
-    "seen": 1795431716.4166925,
-    "ast_hash": "732fe1c148539d57acbd3a5d14e50462",
+    "mtime": 1795494011.9880424,
+    "seen": 1795494088.7073147,
+    "ast_hash": "d3c44ab653735f3dd868cedf94c0cc2a",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -6318,9 +6318,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/BaseDeliveryPage.tsx": {
-    "mtime": 1795118555.398,
-    "seen": 1795118745.6104147,
-    "ast_hash": "0057e4f26f19ffd8a056f784dc4aeb80",
+    "mtime": 1795493875.8243375,
+    "seen": 1795494088.6150372,
+    "ast_hash": "54a29df1faa4e94ae02e9027983d6843",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/CarrierDialog.tsx": {
@@ -6492,9 +6492,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/Itm8MacroDialog.tsx": {
-    "mtime": 1795097470.2210667,
-    "seen": 1795097582.566973,
-    "ast_hash": "114126b94987d7b8f9f54bc5b914028e",
+    "mtime": 1795493875.8253407,
+    "seen": 1795494088.6160707,
+    "ast_hash": "52ec14cb10cfda8bc3faa3728e34cdba",
     "semantic_hash": ""
   },
   "frontend/src/features/base-delivery/itm8-macro.ts": {
@@ -9456,9 +9456,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/controller/DownloadSettingsController.java": {
-    "mtime": 1795444906.3748727,
-    "seen": 1795445417.7075965,
-    "ast_hash": "ebc2ea1d465578329d78429091e19e0c",
+    "mtime": 1795447368.820964,
+    "seen": 1795448238.3658931,
+    "ast_hash": "775256db48a2f689304b3533fc4b2c1c",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/dto/DownloadRequest.java": {
@@ -9504,9 +9504,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/service/DownloadService.java": {
-    "mtime": 1795444906.3748727,
-    "seen": 1795445417.7085965,
-    "ast_hash": "cb078270bdcfbcbc847a2084d5ac2794",
+    "mtime": 1795447368.820964,
+    "seen": 1795448238.369023,
+    "ast_hash": "8dad99f6ad08e6f93941897566869c36",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/DownloadIntegrationTests.java": {
@@ -9528,9 +9528,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/api.ts": {
-    "mtime": 1795445261.67258,
-    "seen": 1795445417.9294884,
-    "ast_hash": "f8b21f10165ddc5e34ac2fef016704af",
+    "mtime": 1795447368.8219638,
+    "seen": 1795448238.5691671,
+    "ast_hash": "1ec4aaf2dd10a80a72181ba532edafb3",
     "semantic_hash": ""
   },
   "frontend/src/features/downloads/format.ts": {
@@ -13290,9 +13290,9 @@
     "semantic_hash": ""
   },
   "agent/Intermanage.Agent.csproj": {
-    "mtime": 1795445100.2022338,
-    "seen": 1795445417.6020627,
-    "ast_hash": "13bca3a29300b9c7d5f3509b83467ba9",
+    "mtime": 1795493778.934517,
+    "seen": 1795494088.3532264,
+    "ast_hash": "a433f26d4c1b714cf27a2a4d88596a22",
     "semantic_hash": ""
   },
   "agent/src/AgentHost.cs": {
@@ -13302,15 +13302,15 @@
     "semantic_hash": ""
   },
   "agent/src/AgentSettings.cs": {
-    "mtime": 1795286534.2258885,
-    "seen": 1795287010.9127743,
-    "ast_hash": "fb800d6d330cdf949c4be2c80777d196",
+    "mtime": 1795449422.7406268,
+    "seen": 1795449611.3412943,
+    "ast_hash": "fb0285a0e5f4b85595ecd98670907d20",
     "semantic_hash": ""
   },
   "agent/src/ApiClient.cs": {
-    "mtime": 1795444993.7038472,
-    "seen": 1795445417.6020627,
-    "ast_hash": "8ef0e02ee1a05141f71a657f379397e3",
+    "mtime": 1795493778.934517,
+    "seen": 1795494088.3532264,
+    "ast_hash": "bd5ecb60b62de95ef2570a03dc99e808",
     "semantic_hash": ""
   },
   "agent/src/FileSaver.cs": {
@@ -13332,9 +13332,9 @@
     "semantic_hash": ""
   },
   "agent/src/Program.cs": {
-    "mtime": 1795445094.7710793,
-    "seen": 1795445417.6030602,
-    "ast_hash": "2431833fa3ae3dbf25c9c7ba47970fe4",
+    "mtime": 1795449422.7406268,
+    "seen": 1795449611.342293,
+    "ast_hash": "62e0bc2f2af896abeedad5f2f6d1c97a",
     "semantic_hash": ""
   },
   "agent/src/SettingsForm.cs": {
@@ -13344,9 +13344,9 @@
     "semantic_hash": ""
   },
   "agent/src/TrayApp.cs": {
-    "mtime": 1795445094.7720788,
-    "seen": 1795445417.6030602,
-    "ast_hash": "a73b1be057a2bd4c7f911082ffdf67fb",
+    "mtime": 1795493778.9355228,
+    "seen": 1795494088.3542266,
+    "ast_hash": "39562c232b02e6fc9dc2c8b8a62831c3",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/component/AgentPresenceJob.java": {
@@ -13362,9 +13362,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/StoreAgentApiController.java": {
-    "mtime": 1795444935.689828,
-    "seen": 1795445417.6070857,
-    "ast_hash": "7cf59be00f561c7a876e18daa0180ca3",
+    "mtime": 1795451130.4332044,
+    "seen": 1795494088.3585289,
+    "ast_hash": "014257b50665f11cdcf374b18e49283d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/StoreAgentController.java": {
@@ -13452,9 +13452,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/StoreAgentIntegrationTests.java": {
-    "mtime": 1795445182.6525087,
-    "seen": 1795445417.8841848,
-    "ast_hash": "c464f47f87099eb05120bc0d16397595",
+    "mtime": 1795447368.8219638,
+    "seen": 1795448238.5230508,
+    "ast_hash": "4fc62de68c1a1f8abb4ea388911f0d89",
     "semantic_hash": ""
   },
   "frontend/src/features/store-agent/AgentStatusDot.tsx": {
@@ -13500,9 +13500,9 @@
     "semantic_hash": ""
   },
   "agent/README.md": {
-    "mtime": 1795431645.5352108,
-    "seen": 1795431716.4166925,
-    "ast_hash": "d9a364cd0088f3dc1103888a5db6ecb6",
+    "mtime": 1795494011.986043,
+    "seen": 1795494088.7073147,
+    "ast_hash": "4d369c8b292ba9420e6879019bd76f3f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/CompressedUploads.java": {
@@ -13980,9 +13980,9 @@
     "semantic_hash": ""
   },
   "agent/src/DataUpdate.cs": {
-    "mtime": 1795444993.702846,
-    "seen": 1795445417.6020627,
-    "ast_hash": "a83ac46a5e198ba9128d6ac392a009a4",
+    "mtime": 1795493778.9355228,
+    "seen": 1795494088.3532264,
+    "ast_hash": "8cec8203b66ed905d57a7be5ad7fe339",
     "semantic_hash": ""
   },
   "agent/src/UpdateForm.cs": {
@@ -14496,15 +14496,15 @@
     "semantic_hash": ""
   },
   "agent/src/PlayerHost.cs": {
-    "mtime": 1795431546.765024,
-    "seen": 1795431716.0752144,
-    "ast_hash": "cf422409aa09828f9c8733dbffd418b8",
+    "mtime": 1795448097.6477518,
+    "seen": 1795448238.2545521,
+    "ast_hash": "3c3acc015f72e5afab7eab0383155d3f",
     "semantic_hash": ""
   },
   "agent/src/SelfUpdate.cs": {
-    "mtime": 1795445094.7710793,
-    "seen": 1795445417.6030602,
-    "ast_hash": "b7fe349bacd410b96cc6de58df6c401a",
+    "mtime": 1795449395.877804,
+    "seen": 1795449611.342293,
+    "ast_hash": "3ba42c986007fe97cc24931537a36aa5",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/download/component/AgentPackage.java": {
@@ -14517,6 +14517,96 @@
     "mtime": 1795444882.4526846,
     "seen": 1795445417.7075965,
     "ast_hash": "286db187ea1d898ba46610b7607bfa30",
+    "semantic_hash": ""
+  },
+  "agent/src/MacroForm.cs": {
+    "mtime": 1795493749.0714867,
+    "seen": 1795494088.3542266,
+    "ast_hash": "7ebfb54859b288dd300d55014196cd3c",
+    "semantic_hash": ""
+  },
+  "agent/src/MacroRunner.cs": {
+    "mtime": 1795494011.986043,
+    "seen": 1795494088.3542266,
+    "ast_hash": "f2e6eba114a868dc9c2bdc2ad28f9d04",
+    "semantic_hash": ""
+  },
+  "agent/src/RemoteMacros.cs": {
+    "mtime": 1795494011.986043,
+    "seen": 1795494088.3542266,
+    "ast_hash": "3940d9f1ed4fd642d675613f045f58a2",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/component/AgentMachineStates.java": {
+    "mtime": 1795451039.3100204,
+    "seen": 1795494088.3567321,
+    "ast_hash": "f7309e167da11a64035edc2f9facefaa",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/controller/AgentMacroController.java": {
+    "mtime": 1795451144.0245712,
+    "seen": 1795494088.3567321,
+    "ast_hash": "35ed3fbbc758415df64c9f4e26bbaec1",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/dto/AgentMacroApi.java": {
+    "mtime": 1795451096.3962564,
+    "seen": 1795494088.3585289,
+    "ast_hash": "d71816bd728238cdf473bbe462622795",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/entity/AgentMacroJob.java": {
+    "mtime": 1795451013.500604,
+    "seen": 1795494088.3595357,
+    "ast_hash": "8a1fc7546d2ceb8ae647c8e79fe9abd0",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/entity/AgentMacroKind.java": {
+    "mtime": 1795451013.4684472,
+    "seen": 1795494088.3595357,
+    "ast_hash": "e00dd69602520d2f31a62295c1958af1",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/entity/AgentMacroStatus.java": {
+    "mtime": 1795451013.4271538,
+    "seen": 1795494088.3595357,
+    "ast_hash": "0ab5064676c8fbffeeed7fa630d96660",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/repository/AgentMacroJobRepository.java": {
+    "mtime": 1795451020.0946672,
+    "seen": 1795494088.3595357,
+    "ast_hash": "96cb5f88d29721b7cea43213c776e5c7",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/agent/service/AgentMacroService.java": {
+    "mtime": 1795493875.822654,
+    "seen": 1795494088.3605356,
+    "ast_hash": "98c766a72a5721a4b1cf353a7d796eba",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/basedelivery/component/Itm8Macro.java": {
+    "mtime": 1795450957.9982247,
+    "seen": 1795494088.3858578,
+    "ast_hash": "a78b742810f9d75eed76e9072ce411ce",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/AgentMacroIntegrationTests.java": {
+    "mtime": 1795493530.5409503,
+    "seen": 1795494088.5836406,
+    "ast_hash": "931688444120dc225e2248bc8ee86d12",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/agent-macros/RemoteMacro.tsx": {
+    "mtime": 1795493876.55769,
+    "seen": 1795494088.6099913,
+    "ast_hash": "0f4fee0ebcbf2e12b0b3c7185ab1040d",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/agent-macros/api.ts": {
+    "mtime": 1795493875.3024209,
+    "seen": 1795494088.6099913,
+    "ast_hash": "0dea5275d69142c99c20d4ec4546a9c1",
     "semantic_hash": ""
   }
 }

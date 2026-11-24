@@ -12,6 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useAgentComputers } from '@/features/agent-macros/api'
+import { RemoteMacroButton, RemoteMacroStatus, useRemoteMacro } from '@/features/agent-macros/RemoteMacro'
+import { useCan } from '@/features/auth/api'
 import { buildItm8Macro, buildMissingItm8Macro } from '@/features/data-entry/mercalys-macro'
 import { formatDocumentDate } from '@/features/documents/format'
 import type { BaseDelivery } from '@/lib/types'
@@ -19,6 +22,7 @@ import type { BaseDelivery } from '@/lib/types'
 import { DELETE_AFTER_YEARS, deleteDateOf, parseItm8List, planMacro, type SkipReason } from './itm8-macro'
 
 type Props = {
+  storeId: string
   delivery: BaseDelivery | null
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -33,9 +37,14 @@ const money = (value: number) => value.toFixed(2).replace('.', ',')
 
 /**
  * „Uzupełnij ITM8”: kody z błędem „ITM nie istnieje” (zebrane makrem z Mercalys albo wklejone) parują się z liniami
- * dokumentu z bazy, okno pokazuje, co makro wpisze, a makro dla odtwarzacza (Alt+E) trafia do schowka.
+ * dokumentu z bazy, okno pokazuje, co makro wpisze, a makro dla odtwarzacza (Alt+E) trafia do schowka. Oba makra można
+ * też zlecić na wolnym komputerze sklepu (agent sklepu, `features/agent-macros`): zebrane kody same trafiają do pola.
  */
-export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
+export function Itm8MacroDialog({ storeId, delivery, open, onOpenChange }: Props) {
+  const canRunRemotely = useCan('DATA_ENTRY', 'EDIT')
+  const { data: computers = [] } = useAgentComputers(storeId, open && canRunRemotely)
+  const remote = useRemoteMacro(storeId)
+  const remoteReady = canRunRemotely && computers.length > 0 && delivery !== null
   const [text, setText] = useState('')
   const codes = parseItm8List(text)
   const plan = delivery && codes.length > 0 ? planMacro(delivery, codes) : null
@@ -61,6 +70,36 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
       description: `Wciśnij Alt+E (odtwarzacz od wersji 0.45). Makro przejdzie pliki bonu od ${[...new Set(suppliers)].join(' i ')}, a kody z błędem „ITM nie istnieje” trafią do schowka. Potem kliknij „Wklej ze schowka”.`,
       duration: 10_000,
     })
+  }
+
+  const collectRemotely = async (agentId?: string) => {
+    if (!delivery) return
+    const result = await remote.run({ macro: 'itm8-collect', deliveryId: delivery.id, agentId })
+    if (result?.status === 'DONE') {
+      setText(result.codes.join('\n'))
+      if (result.codes.length > 0) {
+        toast.success(`Zebrane kody ITM8: ${result.codes.length}`, { description: `Bon ${delivery.number}` })
+      } else {
+        toast.success('Bon nie ma brakujących kodów ITM8', { description: `Bon ${delivery.number}` })
+      }
+    } else if (result && result.status !== 'CANCELLED') {
+      toast.error('Nie zebrano kodów ITM8', { description: result.message ?? undefined })
+    }
+  }
+
+  const applyRemotely = async (agentId?: string) => {
+    if (!delivery) return
+    const result = await remote.run({
+      macro: 'itm8-apply',
+      deliveryId: delivery.id,
+      codes: items.map((item) => item.itm8),
+      agentId,
+    })
+    if (result?.status === 'DONE') {
+      toast.success(`Uzupełniono kody ITM8: ${result.itemCount}`, { description: `Bon ${delivery.number}` })
+    } else if (result && result.status !== 'CANCELLED') {
+      toast.error('Makro nie uzupełniło wszystkich kodów ITM8', { description: result.message ?? undefined })
+    }
   }
 
   const paste = async () => {
@@ -95,6 +134,8 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
+        {remote.job && <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />}
+
         <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
           <div className="grid content-start gap-5">
             <section className="grid gap-2">
@@ -102,6 +143,15 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
               <p className="text-sm text-muted-foreground">
                 Makro otworzy bon w Obsłudze BL bazy i skopiuje kody z błędem „ITM nie istnieje”.
               </p>
+              {remoteReady && (
+                <RemoteMacroButton
+                  computers={computers}
+                  label="Zbierz na wolnym komputerze"
+                  busy={remote.busy && remote.job?.kind !== 'ITM8_APPLY'}
+                  disabled={remote.busy}
+                  onRun={collectRemotely}
+                />
+              )}
               <Button variant="outline" className="justify-self-start" disabled={!delivery?.number} onClick={collect}>
                 <ScanSearchIcon />
                 Kopiuj makro zbierające
@@ -218,7 +268,22 @@ export function Itm8MacroDialog({ delivery, open, onOpenChange }: Props) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Anuluj
           </Button>
-          <Button size="xl" disabled={items.length === 0} onClick={submit}>
+          {remoteReady && (
+            <RemoteMacroButton
+              size="xl"
+              computers={computers}
+              label="Wykonaj na wolnym komputerze"
+              busy={remote.busy && remote.job?.kind === 'ITM8_APPLY'}
+              disabled={items.length === 0 || remote.busy}
+              onRun={applyRemotely}
+            />
+          )}
+          <Button
+            size="xl"
+            variant={remoteReady ? 'outline' : 'default'}
+            disabled={items.length === 0}
+            onClick={submit}
+          >
             <ClipboardCopyIcon />
             Kopiuj makro{items.length > 0 && ` (${items.length})`}
           </Button>

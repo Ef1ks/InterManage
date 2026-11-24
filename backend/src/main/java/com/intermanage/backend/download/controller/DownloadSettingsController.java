@@ -60,15 +60,19 @@ public class DownloadSettingsController {
         return downloads.list(true, principal.getId());
     }
 
-    /** Nowa wersja pliku (multipart {@code file}, opcjonalnie wersja, lista zmian i {@code announce}). */
+    /**
+     * Nowa wersja pliku (multipart {@code file}, opcjonalnie wersja, lista zmian i {@code announce}). {@code agentPackage}
+     * zmienia oznaczenie paczki agenta razem z plikiem, więc sprawdzany jest nowy plik, nie dotychczasowy.
+     */
     @PutMapping(path = "/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<DownloadResponse> replaceFile(@PathVariable UUID id, @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) String version, @RequestParam(required = false) String added,
             @RequestParam(required = false) String changed, @RequestParam(required = false) String fixed,
             @RequestParam(defaultValue = "true") boolean announce,
+            @RequestParam(required = false) Boolean agentPackage,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         downloads.replaceFile(id, file, version, new DownloadChangesRequest(added, changed, fixed), announce,
-                principal.getId());
+                agentPackage, principal.getId());
         return downloads.list(true, principal.getId());
     }
 

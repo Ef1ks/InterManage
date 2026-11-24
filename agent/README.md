@@ -61,13 +61,22 @@ Robi:
   z Mercalys” robi to na żądanie dla wszystkich raportów);
 - trzyma ustawienia w `%LOCALAPPDATA%\Intermanage\Agent\settings.json`, klucz i hasło Mercalys zaszyfrowane DPAPI
   dla bieżącego użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza);
-- od 1.4.0 ma w sobie odtwarzacz makr (`player.exe`, zasób w exe, `PlayerHost`): przy starcie wypakowuje go do
-  `%LOCALAPPDATA%\Intermanage\Agent\player` (tylko gdy jest inny niż w agencie, porównanie SHA-256), kładzie obok plik
-  `agent-mode`, uruchamia i co 20 s sprawdza, czy działa. Odtwarzacz z `agent-mode` nie ma własnej ikony (pokazuje ją
-  tylko w trakcie makra i przy powiadomieniu), nie dopisuje się do startu Windows i usuwa dawny wpis `IntermanageMakra`;
-  agent zamyka osobny odtwarzacz (dawny `player.exe`, `AutoJob.exe`), bo dwa wykonałyby makro dwa razy. Wersja i pomoc
-  (Alt+E, Esc, Alt+R) są w menu ikony agenta, a „Zakończ” zamyka też odtwarzacz. Agent zbudowany bez `player.exe`
-  działa jak dawniej z osobnym odtwarzaczem.
+- ma przy sobie odtwarzacz makr (`player\player.exe` obok agenta, z plikiem `player\agent-mode`, `PlayerHost`):
+  uruchamia go z folderu agenta i co 20 s sprawdza, czy działa. Odtwarzacz z `agent-mode` nie ma własnej ikony
+  (pokazuje ją tylko w trakcie makra i przy powiadomieniu), nie dopisuje się do startu Windows i usuwa dawny wpis
+  `IntermanageMakra`; agent zamyka osobny odtwarzacz (dawny `player.exe`, `AutoJob.exe`), bo dwa wykonałyby makro dwa
+  razy. Wersja i pomoc (Alt+E, Esc, Alt+R) są w menu ikony agenta, a „Zakończ” zamyka też odtwarzacz. Do 1.5.0
+  odtwarzacz był wypakowywany do `%LOCALAPPDATA%`, ale komputery sklepu nie pozwalają uruchamiać programów z AppData
+  („Odmowa dostępu”), więc od 1.5.1 leży w folderze agenta; gdy Windows i tak go zablokuje, agent zapisuje to raz
+  w dzienniku, nie ponawia i pokazuje w menu ikony. Agent bez `player\player.exe` działa jak dawniej z osobnym
+  odtwarzaczem.
+
+- wykonuje **makra zlecone z przeglądarki** (od 1.7.0, na razie „Zbierz brakujące ITM8” i „Uzupełnij ITM8” z dostawy
+  z bazy): co 3 s zgłasza serwerowi, ile sekund nikt nie ruszał myszy i klawiatury, czy ekran jest zablokowany, czy
+  działa AutoJob (od 0.64) i czy trwa makro. Serwer wybiera najdłużej nieużywany komputer, a agent pokazuje „Makro
+  rozpocznie się za 5…” z „Anuluj”; kliknięcie, ruch myszy albo klawiatury oddaje makro kolejnemu komputerowi. Treść
+  składa serwer, agent wkłada ją do schowka i naciska Alt+E, a wynik odtwarzacz zapisuje w
+  `%LOCALAPPDATA%\Intermanage\Agent\makra` (plik znika po odesłaniu). Komputer z zablokowanym ekranem makra nie dostanie.
 
 Nie robi:
 
@@ -78,31 +87,30 @@ Nie robi:
   za pracownika Alt+E;
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
 
-## Automatyczna aktualizacja (od 1.5.0)
+## Pobieranie nowej wersji (od 1.6.0)
 
-Pozycja w Intermanage → Do pobrania z włączonym przełącznikiem **Paczka agenta sklepu** to wersja, do której
-aktualizują się wszystkie agenty (najwyżej jedna taka pozycja). Plik to ZIP z zawartością `bin\Release\net48`
-(może być w jednym folderze), a wersja jak w `Intermanage.Agent.csproj` (np. `1.5.0`); serwer odrzuca paczkę bez
-`IntermanageAgent.exe` albo bez wersji. Wydanie nowej wersji = podnieś wersję w csproj, zbuduj, podpisz, spakuj i wgraj
-jako nową wersję tej pozycji.
+Pozycja w Intermanage → Do pobrania z włączonym przełącznikiem **Paczka agenta sklepu** to wersja, do której pobierają
+się wszystkie agenty (najwyżej jedna taka pozycja). Plik to ZIP z zawartością `bin\Release\net48` (może być w jednym
+folderze), a wersja jak w `Intermanage.Agent.csproj` (np. `1.6.0`); serwer odrzuca paczkę bez `IntermanageAgent.exe`
+albo bez wersji.
 
-Serwer podaje wersję, SHA-256 i rozmiar paczki w każdej odpowiedzi `/hello` (co 5 min). Agent ze starszą wersją:
+Serwer podaje wersję, SHA-256 i rozmiar paczki w każdej odpowiedzi `/hello` (co 5 min). Agent ze starszą wersją
+**tylko pobiera** paczkę (ZIP) do folderu `aktualizacja` obok siebie (na dysku sieciowym pierwszy komputer pobiera,
+reszta widzi gotowy plik), sprawdza rozmiar i SHA-256 i pokazuje przy ikonie „Nowa wersja … pobrana – rozpakuj paczkę
+w folderze agenta”. W menu ikony „Pokaż pobraną aktualizację” otwiera ZIP w Eksploratorze.
 
-1. pobiera paczkę z `GET /api/store-agent/update/file` do `%LOCALAPPDATA%\Intermanage\Agent\update`, sprawdza rozmiar
-   i SHA-256, rozpakowuje (tylko ścieżki wewnątrz folderu) i sprawdza wersję nowego exe;
-2. sprawdza podpis: gdy działający agent jest podpisany, nowy exe musi mieć ważny podpis Authenticode z certyfikatem
-   o tym samym podmiocie (agent zbudowany lokalnie bez podpisu ufa samej sumie SHA-256);
-3. czeka na bezczynność komputera (2 min bez myszy i klawiatury, bez aktualizacji danych z Mercalys i bez otwartych
-   Ustawień), bo zamknięcie agenta zamyka też odtwarzacz makr; menu ikony ma „Zainstaluj aktualizację teraz”;
-4. przemianowuje swoje pliki na `*.old` (działający exe też się da), kopiuje nowe, uruchamia nową wersję
-   z `--wait --updated` i kończy się; nowa czeka, aż stara zwolni mutex, i nie uruchamia aktualizacji danych od nowa;
-5. nowa wersja po minucie pracy usuwa `*.old`. Gdy nie wystartuje (błąd przy starcie), wraca do plików `*.old`,
-   zapisuje wersję w `update\rejected.txt` (już jej nie instaluje) i uruchamia poprzednią.
+**Rozpakowania i uruchomienia agent nie robi** — to człowiek rozpakowuje ZIP w folderze agenta, nadpisując pliki.
+Na dysku sieciowym (np. `P:\Production\INTERMANAGE\Agent`, z którego startuje wiele komputerów) to jedna podmiana na
+sklep, a komputery wezmą nową wersję przy następnym uruchomieniu.
 
-Ustawienia sklepu → Agent sklepu pokazują przy agencie ze starszą wersją „zaktualizuje się do …”. Agent sprzed 1.5.0
-nie umie się aktualizować: trzeba go raz podmienić ręcznie.
+Agent celowo nie rozpakowuje ani nie uruchamia żadnego programu: program ochronny komputerów sklepu (SentinelOne)
+traktuje „rozpakuj exe i uruchom go” jak atak i zablokował tak agenta 1.5.0 razem z jego odtwarzaczem makr (10023,
+23.11.2026). Samo pobranie pliku przez HTTPS i zapis do folderu jest dla niego zwykłą pracą agenta. **Z tego samego
+powodu paczka nie zawiera odtwarzacza makr** (niepodpisany `player.exe` z AutoHotkey jest kasowany przez SentinelOne):
+odtwarzacz AutoJob zostaje osobny, pobierany z „Do pobrania” przez przeglądarkę i uruchamiany ręcznie, a agent bez
+`player\player.exe` obok siebie go nie zamyka.
 
-## Budowanie
+## Budowanie## Budowanie
 
 Wymaga .NET SDK (8 albo nowszego); biblioteki .NET Framework 4.8 przychodzą z pakietu
 `Microsoft.NETFramework.ReferenceAssemblies`, bez Developer Packa.

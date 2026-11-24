@@ -301,6 +301,22 @@ class StoreAgentIntegrationTests {
         assertThat(file).isEqualTo(zip);
         mvc.perform(get("/api/store-agent/update/file").header(HttpHeaders.AUTHORIZATION, "Bearer ima_zly"))
                 .andExpect(status().isForbidden());
+
+        // Istniejąca pozycja z innym plikiem: oznaczenie razem z nowym plikiem sprawdza nowy plik, nie stary.
+        String body = mvc.perform(multipart("/api/settings/downloads").cookie(owner).with(csrf())
+                        .file(new MockMultipartFile("file", "stary.txt", "text/plain", "stary".getBytes()))
+                        .param("title", "Agent 2"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(body, "$[?(@.title == 'Agent 2')].id");
+        mvc.perform(multipart("/api/settings/downloads/" + ids.getFirst() + "/file").cookie(owner).with(csrf())
+                        .file(new MockMultipartFile("file", "agent.zip", "application/zip", zip))
+                        .param("version", "9.2.0").param("agentPackage", "true")
+                        .with(request -> {
+                            request.setMethod("PUT");
+                            return request;
+                        }))
+                .andExpect(status().isOk());
+        hello(key).andExpect(jsonPath("$.update.version").value("9.2.0"));
     }
 
     private static byte[] agentZip(String exeName) throws IOException {

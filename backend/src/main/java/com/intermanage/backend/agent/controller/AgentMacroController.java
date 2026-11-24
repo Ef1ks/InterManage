@@ -1,0 +1,83 @@
+package com.intermanage.backend.agent.controller;
+
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.intermanage.backend.agent.dto.AgentMacroApi;
+import com.intermanage.backend.agent.service.AgentMacroService;
+import com.intermanage.backend.auth.security.AppUserPrincipal;
+
+import jakarta.validation.Valid;
+
+/**
+ * Makra Mercalys na wolnym komputerze sklepu (agent sklepu), zlecane z przeglądarki, także z innego sklepu.
+ * Zlecić może osoba z {@code DATA_ENTRY:EDIT} w tym sklepie (właściciel i Aderon zawsze); stan i komputery widzi
+ * {@code DATA_ENTRY:VIEW}.
+ *
+ * <pre>
+ * GET  /api/stores/{storeId}/agent-macros/computers         komputery z agentem: czy mogą wykonać makro
+ * POST /api/stores/{storeId}/agent-macros/itm8-collect      {deliveryId, agentId?} zbierz brakujące ITM8 bonu
+ * POST /api/stores/{storeId}/agent-macros/itm8-apply        {deliveryId, codes, agentId?} uzupełnij ITM8
+ * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
+ * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
+ * </pre>
+ */
+@RestController
+@RequestMapping("/api/stores/{storeId}/agent-macros")
+public class AgentMacroController {
+
+    private static final String VIEW =
+            "hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
+    private static final String EDIT =
+            "hasAuthority('DATA_ENTRY:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
+
+    private final AgentMacroService macros;
+
+    public AgentMacroController(AgentMacroService macros) {
+        this.macros = macros;
+    }
+
+    @GetMapping("/computers")
+    @PreAuthorize(VIEW)
+    public List<AgentMacroApi.Computer> computers(@PathVariable UUID storeId) {
+        return macros.computers(storeId);
+    }
+
+    @PostMapping("/itm8-collect")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job itm8Collect(@PathVariable UUID storeId,
+            @Valid @RequestBody AgentMacroApi.Itm8CollectRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return macros.itm8Collect(storeId, request, principal.getId());
+    }
+
+    @PostMapping("/itm8-apply")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job itm8Apply(@PathVariable UUID storeId,
+            @Valid @RequestBody AgentMacroApi.Itm8ApplyRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return macros.itm8Apply(storeId, request, principal.getId());
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize(VIEW)
+    public AgentMacroApi.Job get(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return macros.get(storeId, id);
+    }
+
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job cancel(@PathVariable UUID storeId, @PathVariable UUID id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return macros.cancel(storeId, id, principal.getId());
+    }
+}

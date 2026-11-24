@@ -138,6 +138,28 @@ internal sealed class MacroFile
     public string FileName { get; set; } = "";
 }
 
+/// <summary>Odpowiedź na zgłoszenie stanu komputera: makro zaproponowane temu komputerowi albo nic.</summary>
+internal sealed class MacroPoll
+{
+    public MacroOffer? Offer { get; set; }
+}
+
+internal sealed class MacroOffer
+{
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string RequestedBy { get; set; } = "";
+    public int CountdownSeconds { get; set; } = 5;
+}
+
+/// <summary>Treść zleconego makra (składa je serwer); agent dokłada do pierwszego polecenia hasło Mercalys.</summary>
+internal sealed class MacroStart
+{
+    public string Macro { get; set; } = "";
+    public string OpenLine { get; set; } = "";
+    public int TimeoutMinutes { get; set; } = 120;
+}
+
 /// <summary>Próba wgrania raportu przez agenta (stan z serwera).</summary>
 internal sealed class ReportAttempt
 {
@@ -194,6 +216,8 @@ internal sealed class ApiClient : IDisposable
             DefaultProxyCredentials = CredentialCache.DefaultCredentials,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
             AllowAutoRedirect = false,
+            // Domyślne 2 połączenia zajmuje czekanie na pliki i wysyłka raportu, a stan komputera musi iść co kilka sekund.
+            MaxConnectionsPerServer = 8,
         };
         http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", key);
@@ -342,6 +366,42 @@ internal sealed class ApiClient : IDisposable
         using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post, server + "/api/store-agent/reports/removed")
         {
             Content = JsonContent(new { folderKey, fileName, modified }),
+        }, TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
+    }
+
+    /// <summary>Stan komputera co kilka sekund; w odpowiedzi makro zlecone z przeglądarki dla tego komputera.</summary>
+    public Task<MacroPoll> MacroPollAsync(int idleSeconds, bool locked, bool playerRunning, bool busy,
+        CancellationToken cancel) =>
+        SendJsonAsync<MacroPoll>(HttpMethod.Post, "/api/store-agent/macro-jobs/poll",
+            new { idleSeconds, locked, playerRunning, busy }, TimeSpan.FromSeconds(15), cancel);
+
+    /// <summary>Pracownik anulował odliczanie: zlecenie idzie do kolejnego komputera.</summary>
+    public async Task MacroDeclineAsync(string id, CancellationToken cancel)
+    {
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post,
+            server + "/api/store-agent/macro-jobs/" + Uri.EscapeDataString(id) + "/decline")
+        {
+            Content = JsonContent(new { reason = (string?)null }),
+        }, TimeSpan.FromSeconds(15), cancel).ConfigureAwait(false);
+    }
+
+    /// <summary>Koniec odliczania; 409 (<see cref="RejectedException"/>), gdy zlecenie już nie należy do tego komputera.</summary>
+    public Task<MacroStart> MacroStartAsync(string id, CancellationToken cancel) =>
+        SendJsonAsync<MacroStart>(HttpMethod.Post,
+            "/api/store-agent/macro-jobs/" + Uri.EscapeDataString(id) + "/start", null, TimeSpan.FromSeconds(20), cancel);
+
+    public async Task MacroFinishAsync(string id, bool ok, string message, IReadOnlyList<string> codes,
+        CancellationToken cancel)
+    {
+        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post,
+            server + "/api/store-agent/macro-jobs/" + Uri.EscapeDataString(id) + "/finish")
+        {
+            Content = JsonContent(new
+            {
+                ok,
+                message = message.Length > 3900 ? message.Substring(0, 3900) : message,
+                codes,
+            }),
         }, TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
     }
 

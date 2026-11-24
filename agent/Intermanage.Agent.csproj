@@ -19,9 +19,9 @@
     <Deterministic>true</Deterministic>
 
     <!-- Zasoby wersji pliku exe (Właściwości → Szczegóły w Eksploratorze). -->
-    <Version>1.5.0</Version>
-    <FileVersion>1.5.0.0</FileVersion>
-    <AssemblyVersion>1.5.0.0</AssemblyVersion>
+    <Version>1.7.0</Version>
+    <FileVersion>1.7.0.0</FileVersion>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
     <Company>Intermanage</Company>
     <Product>Intermanage – agent sklepu</Product>
     <AssemblyTitle>Intermanage – agent sklepu</AssemblyTitle>
@@ -43,17 +43,9 @@
   </ItemGroup>
 
   <!--
-    Odtwarzacz makr w agencie (PlayerHost): player.exe z katalogu projektu (build-player.ps1 kompiluje player.ahk i kopiuje
-    na player.exe), więc przed budowaniem agenta zbuduj odtwarzacz. Bez pliku agent buduje się bez odtwarzacza.
+    Odtwarzacz makr NIE jest w paczce agenta: program ochronny sklepów (SentinelOne) kasuje niepodpisany player.exe
+    z AutoHotkey (10023, 23.11.2026), więc AutoJob zostaje osobny (z „Do pobrania” przez przeglądarkę). PlayerHost
+    umie uruchomić player\player.exe obok agenta, gdyby kiedyś wrócił (podpisany), ale build go nie dołącza.
   -->
-  <PropertyGroup>
-    <PlayerExe>$(MSBuildThisFileDirectory)..\player.exe</PlayerExe>
-  </PropertyGroup>
-  <ItemGroup Condition="Exists('$(PlayerExe)')">
-    <EmbeddedResource Include="$(PlayerExe)" LogicalName="Intermanage.Agent.player.exe" Link="player.exe" />
-  </ItemGroup>
-  <Target Name="WarnMissingPlayer" BeforeTargets="Build" Condition="!Exists('$(PlayerExe)')">
-    <Warning Text="Brak player.exe w katalogu projektu: agent nie będzie miał odtwarzacza makr (uruchom build-player.ps1)." />
-  </Target>
 
 </Project>

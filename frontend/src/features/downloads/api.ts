@@ -122,16 +122,19 @@ export function useUpdateDownload() {
   const setDownloads = useSetDownloads()
   return useMutation({
     mutationFn: async ({ id, form }: { id: string; form: DownloadForm }) => {
+      // Z nowym plikiem oznaczenie paczki agenta idzie razem z plikiem (serwer sprawdza nowy, nie dotychczasowy plik).
       let list = await api<Download[]>(`/settings/downloads/${id}`, {
         method: 'PUT',
         json: {
           title: form.title.trim(),
           description: form.description.trim() || null,
-          agentPackage: form.agentPackage,
+          agentPackage: form.file ? null : form.agentPackage,
         },
       })
       if (form.file) {
-        list = await api<Download[]>(`/settings/downloads/${id}/file`, { method: 'PUT', formData: fileForm(form) })
+        const data = fileForm(form)
+        data.append('agentPackage', String(form.agentPackage))
+        list = await api<Download[]>(`/settings/downloads/${id}/file`, { method: 'PUT', formData: data })
       } else if (form.changesEdited) {
         list = await api<Download[]>(`/settings/downloads/${id}/changes`, {
           method: 'PUT',

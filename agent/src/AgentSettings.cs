@@ -130,4 +130,5 @@ internal sealed class AgentSettings
             else key.DeleteValue(RunValue, false);
         }
     }
+
 }

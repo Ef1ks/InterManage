@@ -3,16 +3,21 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.63.0.0
+;@Ahk2Exe-SetVersion 0.64.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.63" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.64" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
+; Makro zlecone przez agenta sklepu (od 0.64): pierwsza linia #RESULT|<id> i wynik w pliku <id>.txt w folderze agenta.
+; Makro podaje sam identyfikator, nie ścieżkę, więc tekst ze Schowka nie wskaże cudzego pliku.
+global RemoteId := ""
+global RemoteFinished := false
+global MacroCollected := {codes: [], seen: Map()} ; kody z WEBCOLLECT bieżącego makra, do wyniku
 global ScanMode := false ; Alt+R: następny klik skanuje okno zamiast w nie trafić
 global AutostartKey := "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 global AutostartName := "IntermanageMakra"
@@ -230,8 +235,20 @@ DescribeGridRows(doc) {
     A_IconTip := "Intermanage Makra: makro w toku, Esc zatrzymuje"
     if AgentMode
         A_IconHidden := false
-    try PlayMacro(macro)
-    finally {
+    global RemoteId := RegExMatch(macro, "im)^#RESULT\|([0-9a-f]{32})\s*$", &remote) ? remote[1] : ""
+    global RemoteFinished := false
+    global MacroCollected := {codes: [], seen: Map()}
+    if (RemoteId != "")
+        WriteRemote("RUNNING", "")
+    try {
+        PlayMacro(macro)
+        FinishRemote("OK", "")
+    } catch as problem {
+        if (RemoteId = "")
+            throw problem
+        FinishRemote("ERROR", problem.Message)
+    } finally {
+        RemoteId := ""
         MacroRunning := false
         A_IconTip := IdleTip
         if AgentMode
@@ -242,10 +259,46 @@ DescribeGridRows(doc) {
 ; Stop awaryjny: okno wstrzymuje makro, a ponowne uruchomienie programu je kończy, nawet gdy czeka na stronę.
 #HotIf MacroRunning
 Esc:: {
+    FinishRemote("ERROR", "Makro zatrzymane klawiszem Esc na komputerze. Sprawdź w Mercalys, co zostało zrobione.")
     MsgBox "Makro zatrzymane. Sprawdź w Mercalys, co zostało zrobione.", "Makro zatrzymane", "Icon!" AlwaysOnTop
     Reload
 }
 #HotIf
+
+; Okno makra. Makro zlecone przez agenta nie pokazuje okien (nikt by ich nie zamknął, a odtwarzacz czekałby w nieskończoność):
+; treść idzie do pliku wyniku, a pokazuje ją agent i przeglądarka zlecającego.
+MacroBox(text, title := "", options := "") {
+    if (RemoteId != "") {
+        FinishRemote(title = "Makro zakończone" ? "OK" : "ERROR", text)
+        return
+    }
+    MsgBox text, title, options
+}
+
+; Wynik makra zleconego przez agenta, tylko pierwszy (błąd nie może zostać nadpisany końcem makra).
+FinishRemote(state, text) {
+    global RemoteFinished
+    if (RemoteId = "" || RemoteFinished)
+        return
+    RemoteFinished := true
+    WriteRemote(state, text)
+}
+
+; Plik wyniku: 1. linia stan (RUNNING, OK, ERROR), 2. zebrane kody po przecinku, dalej opis. Zapis przez plik tymczasowy,
+; żeby agent nie przeczytał połowy.
+WriteRemote(state, text) {
+    list := ""
+    for code in MacroCollected.codes
+        list .= (A_Index = 1 ? "" : ",") code
+    folder := EnvGet("LOCALAPPDATA") "\Intermanage\Agent\makra"
+    try {
+        DirCreate folder
+        temp := folder "\" RemoteId ".tmp"
+        try FileDelete temp
+        FileAppend state "`n" list "`n" text, temp, "UTF-8-RAW"
+        FileMove temp, folder "\" RemoteId ".txt", 1
+    }
+}
 
 PlayMacro(rawClip) {
     lines := StrSplit(rawClip, "`n", "`r")
@@ -259,7 +312,8 @@ PlayMacro(rawClip) {
     pdfSeen := InStr(rawClip, "PDFSAVE") ? PdfSnapshot() : Map() ; to samo dla okien PDF
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
     handledRows := Map() ; WEBIFROW: ile wierszy obsłużono pod daną etykietą (np. pliki jednego kodu MEA)
-    collected := {codes: [], seen: Map()} ; WEBCOLLECT: kody ze wszystkich list tego makra (np. pliki bonu od 538 i 88110)
+    global MacroCollected
+    collected := MacroCollected ; WEBCOLLECT: kody ze wszystkich list tego makra (np. pliki bonu od 538 i 88110)
     collectRuns := 0
 
     index := 0
@@ -301,28 +355,28 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 3 ? "Linia " cmd " wymaga tytułu okna i elementu."
                     : WebClick(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Integer(Trim(parts[4])) : 10000, cmd = "WEBCHECK")
                 if (problem != "") {
-                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBROW":
                 ; WEBROW|fragment tytułu okna|siatka|numer kolumny od 0|limit w ms: zaznacza pierwszy wiersz z pustą kolumną
                 if (parts.Length < 4) {
-                    MsgBox "Linia WEBROW wymaga okna, siatki i kolumny.", "Błąd makra", "Icon!"
+                    MacroBox "Linia WEBROW wymaga okna, siatki i kolumny.", "Błąd makra", "Icon!"
                     return
                 }
                 problem := WebSelectRow(Trim(parts[2]), Trim(parts[3]), Integer(Trim(parts[4])), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
                 if (problem = "BRAK") {
-                    MsgBox "Na tej stronie listy nie ma już wierszy do obsłużenia.", "Makro zakończone", "Iconi"
+                    MacroBox "Na tej stronie listy nie ma już wierszy do obsłużenia.", "Makro zakończone", "Iconi"
                     return
                 }
                 if (problem != "") {
-                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBLIST":
                 ; WEBLIST|kod dostawcy (może być pusty)|numer dokumentu: bon, który WEBROWS ma obsłużyć; reszta linii to numer, bo może mieć |
                 if (parts.Length < 3) {
-                    MsgBox "Linia WEBLIST wymaga kodu dostawcy i numeru.`n`n" line, "Błąd makra", "Icon!"
+                    MacroBox "Linia WEBLIST wymaga kodu dostawcy i numeru.`n`n" line, "Błąd makra", "Icon!"
                     return
                 }
                 parts.RemoveAt(1)
@@ -335,11 +389,11 @@ PlayMacro(rawClip) {
                 ; WEBROWS|okno|siatka|kolumna od 0|przycisk|następna strona|najwyżej ile wierszy|okno potwierdzenia|oczekiwany tekst|przycisk potwierdzenia:
                 ; wiersz z listy WEBLIST i pustą kolumną dostaje kliknięcie przycisku; trzy ostatnie pola są opcjonalne
                 if (parts.Length < 7) {
-                    MsgBox "Linia WEBROWS wymaga okna, siatki, kolumny, przycisku, następnej strony i limitu.", "Błąd makra", "Icon!"
+                    MacroBox "Linia WEBROWS wymaga okna, siatki, kolumny, przycisku, następnej strony i limitu.", "Błąd makra", "Icon!"
                     return
                 }
                 if (wanted.Count = 0) {
-                    MsgBox "Makro nie ma listy bonów (linie WEBLIST), więc niczego nie kliknie.", "Błąd makra", "Icon!"
+                    MacroBox "Makro nie ma listy bonów (linie WEBLIST), więc niczego nie kliknie.", "Błąd makra", "Icon!"
                     return
                 }
                 confirm := parts.Length >= 10 ? {title: Trim(parts[8]), expected: Trim(parts[9]), button: Trim(parts[10])} : ""
@@ -347,13 +401,13 @@ PlayMacro(rawClip) {
                 report .= summary "`n"
                 ; Kolejne etapy tylko, gdy każdy bon z listy ma numer: reszta makra potrzebuje wszystkich par.
                 if (results.Count < wanted.Count) {
-                    MsgBox report, "Makro zakończone", "Iconi" AlwaysOnTop
+                    MacroBox report, "Makro zakończone", "Iconi" AlwaysOnTop
                     return
                 }
             case "ASK":
                 ; ASK|pytanie: Tak idzie dalej, Nie kończy makro bez błędu, np. pracownik sprawdza dokument przed zamknięciem
                 if (parts.Length < 2) {
-                    MsgBox "Linia ASK wymaga pytania.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox "Linia ASK wymaga pytania.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 if (MsgBox(report Trim(parts[2]), "Intermanage Makra", "YesNo Icon?" AlwaysOnTop) != "Yes") {
@@ -367,7 +421,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 2 ? "Linia WINOPEN wymaga okna."
                     : WinOpen(Trim(parts[2]), parts.Length >= 3 ? parts[3] : "")
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WINCLOSEALL":
@@ -395,7 +449,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 2 ? "Linia EXCELSAVE wymaga ścieżki pliku."
                     : ExcelSave(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 120000, excelSeen)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 report .= "Zapisano: " Trim(parts[2]) "`n"
@@ -405,7 +459,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 2 ? "Linia PDFSAVE wymaga ścieżki pliku."
                     : PdfSave(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 300000, pdfSeen)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 report .= "Zapisano: " Trim(parts[2]) "`n"
@@ -413,7 +467,7 @@ PlayMacro(rawClip) {
                 ; WEBENSURE|okno|element|przycisk: klika przycisk tylko, gdy elementu nie widać, np. zakładka menu pod innym ekranem
                 problem := parts.Length < 4 ? "Linia WEBENSURE wymaga okna, elementu i przycisku." : WebEnsure(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]))
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBOPEN":
@@ -422,13 +476,13 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 4 ? "Linia WEBOPEN wymaga okna, rozwinięcia i pozycji."
                     : WebOpen(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Trim(parts[5]) : "")
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBHEADERS":
                 ; WEBHEADERS|okno|siatka|kolumna numeru|kolumna identyfikacji|przycisk nagłówka|pole|zapis|okno pytania|tekst pytania|odpowiedź|pierwsza strona|następna strona
                 if (parts.Length < 11 || results.Count = 0) {
-                    MsgBox report "Linia WEBHEADERS wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
+                    MacroBox report "Linia WEBHEADERS wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
                     return
                 }
                 step := {title: Trim(parts[2]), grid: Trim(parts[3]), numberColumn: Integer(Trim(parts[4])), fieldColumn: Integer(Trim(parts[5])),
@@ -437,7 +491,7 @@ PlayMacro(rawClip) {
                 summary := WebHeaders(step, wanted, results)
                 report .= "`n" summary.text "`n"
                 if !summary.finished {
-                    MsgBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    MacroBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBPICK":
@@ -445,7 +499,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 5 ? "Linia WEBPICK wymaga okna, siatki, kolumny i tekstu."
                     : WebPickRow(Trim(parts[2]), Trim(parts[3]), Integer(Trim(parts[4])), Trim(parts[5]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 10000)
                 if (problem != "") {
-                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBPICKRE":
@@ -459,14 +513,14 @@ PlayMacro(rawClip) {
                     report .= "Brak pliku: " Trim(parts[6]) "`n"
                     target := LabelLine(lines, Trim(parts[6]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
                     continue
                 }
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBCOLLECT":
@@ -476,7 +530,7 @@ PlayMacro(rawClip) {
                 ; Opcjonalnie |kolumna numeru bonu|numer bonu: każdy wiersz listy musi być z tego bonu, inaczej makro staje
                 ; (otwarty zły plik). Kody z kolejnych WEBCOLLECT w jednym makrze sumują się w Schowku.
                 if (parts.Length < 6) {
-                    MsgBox report "Linia WEBCOLLECT wymaga okna, siatki, tekstu, kolumny i następnej strony.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBCOLLECT wymaga okna, siatki, tekstu, kolumny i następnej strony.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 summary := WebCollect(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Trim(parts[6]), parts.Length >= 7 ? Trim(parts[7]) : "",
@@ -484,14 +538,14 @@ PlayMacro(rawClip) {
                     parts.Length >= 10 ? Trim(parts[9]) : "", parts.Length >= 10 ? Trim(parts[10]) : "")
                 collectRuns += 1
                 if (summary.problem != "") {
-                    MsgBox report summary.problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report summary.problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 report .= summary.text "`n"
             case "WEBCOLLECTED":
                 ; WEBCOLLECTED|komunikat: zatrzymuje makro z komunikatem, gdy żaden WEBCOLLECT się nie wykonał (np. nie było pliku bonu)
                 if (collectRuns = 0) {
-                    MsgBox report (parts.Length >= 2 ? Trim(parts[2]) : "Nie zebrano żadnej listy."), "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    MacroBox report (parts.Length >= 2 ? Trim(parts[2]) : "Nie zebrano żadnej listy."), "Makro zatrzymane", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBSET":
@@ -499,7 +553,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 4 ? "Linia WEBSET wymaga okna, pola i wartości."
                     : WebSetValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
                 if (problem != "") {
-                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBWAIT":
@@ -507,7 +561,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 3 ? "Linia WEBWAIT wymaga okna i elementu."
                     : WebWait(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Trim(parts[4]) : "", parts.Length >= 5 ? Integer(Trim(parts[5])) : 15000)
                 if (problem != "") {
-                    MsgBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBPAGE":
@@ -521,14 +575,14 @@ PlayMacro(rawClip) {
                 if (problem = "DIALOG") {
                     target := LabelLine(lines, Trim(parts[9]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[9]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[9]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
                     continue
                 }
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBDIALOG":
@@ -537,7 +591,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 4 ? "Linia WEBDIALOG wymaga okna, tekstu i przycisku."
                     : OptionalDialog(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 3000)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBVALUE":
@@ -545,20 +599,20 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 4 ? "Linia WEBVALUE wymaga okna, pola i wyrażenia."
                     : WebValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 5000)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBREAD":
                 ; WEBREAD|okno|pole|nazwa|wyrażenie regularne|limit w ms: czeka, aż pole ma pasującą wartość, i zapamiętuje ją;
                 ; kolejne linie dostają ją w miejscu %nazwa%. Np. numer klawisza wagi przepisywany do kodu PLU i komentarza.
                 if (parts.Length < 5) {
-                    MsgBox report "Linia WEBREAD wymaga okna, pola, nazwy i wyrażenia.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBREAD wymaga okna, pola, nazwy i wyrażenia.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 value := ""
                 problem := WebValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[5]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 10000, &value)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 vars[Trim(parts[4])] := value
@@ -568,7 +622,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 4 ? "Linia WEBDBLROW wymaga okna, siatki i tekstu."
                     : WebDoubleClickRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBKEY":
@@ -576,13 +630,13 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 4 ? "Linia WEBKEY wymaga okna, pola i klawiszy."
                     : WebKey(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 10000)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!"
                     return
                 }
             case "WEBCLOSE":
                 ; WEBCLOSE|okno|siatka|kolumna numeru|kolumna identyfikacji|przycisk zamknięcia|okno pytania|tekst pytania|odpowiedź|pole wydruku|zatwierdzenie|pierwsza strona|następna strona
                 if (parts.Length < 11 || results.Count = 0) {
-                    MsgBox report "Linia WEBCLOSE wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
+                    MacroBox report "Linia WEBCLOSE wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
                     return
                 }
                 step := {title: Trim(parts[2]), grid: Trim(parts[3]), numberColumn: Integer(Trim(parts[4])), fieldColumn: Integer(Trim(parts[5])),
@@ -593,13 +647,13 @@ PlayMacro(rawClip) {
                 closedCount += summary.closed
                 report .= "`n" summary.text "`n"
                 if !summary.finished {
-                    MsgBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
+                    MacroBox report, "Makro zatrzymane", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBMARK":
                 ; WEBMARK|okno|element strony: oznacza bieżącą stronę, żeby WEBIFROW brał pod uwagę dopiero stronę po przeładowaniu
                 if (parts.Length < 3 || !MarkPage(Trim(parts[2]), Trim(parts[3]))) {
-                    MsgBox report "Nie ma strony z elementem do oznaczenia.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Nie ma strony z elementem do oznaczenia.`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "LABEL":
@@ -610,7 +664,7 @@ PlayMacro(rawClip) {
                 ; jest, idzie dalej, a id jego przycisku jest w kolejnych liniach jako %ROW%; gdy lista ma mniej wierszy albo
                 ; żadnego, przeskakuje do LABEL|etykieta.
                 if (parts.Length < 8) {
-                    MsgBox report "Linia WEBIFROW wymaga okna, strony, siatki, przycisku, numeru, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBIFROW wymaga okna, strony, siatki, przycisku, numeru, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 rowButton := ""
@@ -628,14 +682,14 @@ PlayMacro(rawClip) {
                     report .= Trim(parts[7]) ": obsłużone pliki: " handledRows.Get(rowLabel, 0) " (" seen ")`n"
                     target := LabelLine(lines, Trim(parts[8]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[8]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
                     continue
                 }
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBIFVALUE":
@@ -643,13 +697,13 @@ PlayMacro(rawClip) {
                 ; Pasuje: idzie dalej; nie pasuje (albo pola nie ma): przeskakuje do LABEL|etykieta. Np. wypełniony panel
                 ; istniejącej operacji promocji, którą trzeba najpierw usunąć.
                 if (parts.Length < 5) {
-                    MsgBox report "Linia WEBIFVALUE wymaga okna, pola, wyrażenia i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBIFVALUE wymaga okna, pola, wyrażenia i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 if (WebValue(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 3000) != "") {
                     target := LabelLine(lines, Trim(parts[5]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
@@ -660,7 +714,7 @@ PlayMacro(rawClip) {
                 ; dopisuje opis do podsumowania i przeskakuje do LABEL|etykieta. Np. pusty wynik statystyki sprzedaży
                 ; (AfficheResultat bez przycisku Excel): ta część okresu nie ma pliku, makro bierze następną.
                 if (parts.Length < 4) {
-                    MsgBox report "Linia WEBIFSEEN wymaga okna, elementu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBIFSEEN wymaga okna, elementu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 if (WebWait(Trim(parts[2]), Trim(parts[3]), "", parts.Length >= 5 ? Integer(Trim(parts[5])) : 3000) != "") {
@@ -668,7 +722,7 @@ PlayMacro(rawClip) {
                         report .= Trim(parts[6]) "`n"
                     target := LabelLine(lines, Trim(parts[4]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[4]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[4]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
@@ -680,14 +734,14 @@ PlayMacro(rawClip) {
                 ; wczyta istniejącą kartę (pole sprawdzane niepuste). Pierwszy kod bez karty zostaje w polu i makro idzie dalej;
                 ; wszystkie zajęte zatrzymują makro. Np. nowy dostawca w Mercalys, gdy lista w aplikacji jest nieaktualna.
                 if (parts.Length < 7) {
-                    MsgBox report "Linia WEBFREECODE wymaga okna, przycisku, pola kodu, pola sprawdzanego, kodu i liczby prób.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBFREECODE wymaga okna, przycisku, pola kodu, pola sprawdzanego, kodu i liczby prób.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 found := ""
                 problem := WebFreeCode(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), Trim(parts[5]), Integer(Trim(parts[6])),
                     Integer(Trim(parts[7])), parts.Length >= 8 ? Integer(Trim(parts[8])) : 3000, &found)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 ; Bez wpisu do podsumowania: na końcu zwykłe „Zakończono”, jak przy innych makrach.
@@ -699,33 +753,33 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 2 ? "Linia FILEOPEN wymaga ścieżki pliku."
                     : FileOpenDialog(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 30000)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "PDFCLOSE":
                 ; PDFCLOSE|limit w ms: czeka na nowe okno PDF (niewidoczne przy starcie makra albo przy ostatnim FILEOPEN) i je zamyka
                 problem := PdfCloseNew(parts.Length >= 2 ? Integer(Trim(parts[2])) : 120000, pdfSeen)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "IFDIALOG":
                 ; IFDIALOG|okno|tekst (kilka po średniku)|przycisk|etykieta|limit w ms: jak WEBDIALOG, ale gdy okno z tym tekstem
                 ; się nie pojawi, przeskakuje do LABEL|etykieta. Np. „Niektóre przesłane artykuły są w stanie błędu” po imporcie.
                 if (parts.Length < 5) {
-                    MsgBox report "Linia IFDIALOG wymaga okna, tekstu, przycisku i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia IFDIALOG wymaga okna, tekstu, przycisku i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 clicked := false
                 problem := OptionalDialog(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 3000, &clicked)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 if !clicked {
                     target := LabelLine(lines, Trim(parts[5]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
@@ -735,13 +789,13 @@ PlayMacro(rawClip) {
                 ; WEBIFDBLROW|okno|siatka albo *|tekst|etykieta|limit w ms: jak WEBDBLROW, ale bez wiersza z tym tekstem
                 ; przeskakuje do LABEL|etykieta. Np. kolejny błąd „marża ujemna” na liście błędów importu.
                 if (parts.Length < 5) {
-                    MsgBox report "Linia WEBIFDBLROW wymaga okna, siatki, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBIFDBLROW wymaga okna, siatki, tekstu i etykiety.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 if (WebDoubleClickRow(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 6 ? Integer(Trim(parts[6])) : 3000) != "") {
                     target := LabelLine(lines, Trim(parts[5]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[5]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
@@ -753,7 +807,7 @@ PlayMacro(rawClip) {
                 problem := parts.Length < 3 ? "Linia WEBTEXTCLICK wymaga okna i tekstu."
                     : WebTextClick(Trim(parts[2]), Trim(parts[3]), parts.Length >= 4 ? Integer(Trim(parts[4])) : 10000)
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBROWBUTTON":
@@ -762,7 +816,7 @@ PlayMacro(rawClip) {
                 ; pasuje. Bez takiego wiersza przechodzi kolejne strony (najwyżej „ile stron”), a potem dopisuje opis do
                 ; podsumowania i przeskakuje do LABEL|etykieta. Np. plik zmiany cen w historii pobierania danych.
                 if (parts.Length < 7) {
-                    MsgBox report "Linia WEBROWBUTTON wymaga okna, siatki, wyrażenia, przycisku, etykiety i opisu.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBROWBUTTON wymaga okna, siatki, wyrażenia, przycisku, etykiety i opisu.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 seenRows := ""
@@ -773,14 +827,14 @@ PlayMacro(rawClip) {
                     report .= "Nie znaleziono: " Trim(parts[7]) (seenRows != "" ? "`n" seenRows : "") "`n"
                     target := LabelLine(lines, Trim(parts[6]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
                     continue
                 }
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 report .= "Obsłużono: " Trim(parts[7]) "`n"
@@ -792,7 +846,7 @@ PlayMacro(rawClip) {
                 ; do niego pasuje (artykuły w promocji zostają w tabeli). `page` (od 0.60) = jak `all`, ale wyrażenie sprawdza
                 ; tekst całej strony (np. „Suma wyboru” równa „Suma linii”), bo zaznaczenie wiersza widać tylko kolorem.
                 if (parts.Length < 4) {
-                    MsgBox report "Linia WEBGRIDWAIT wymaga okna, elementu i warunku.", "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report "Linia WEBGRIDWAIT wymaga okna, elementu i warunku.", "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
                 problem := WebGridWait(Trim(parts[2]), Trim(parts[3]), StrLower(Trim(parts[4])), parts.Length >= 5 ? Trim(parts[5]) : "",
@@ -802,7 +856,7 @@ PlayMacro(rawClip) {
                         report .= Trim(parts[7]) "`n"
                     target := LabelLine(lines, Trim(parts[6]), index)
                     if (target = 0) {
-                        MsgBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
+                        MacroBox report "Brak linii LABEL|" Trim(parts[6]) " po linii " index ".", "Błąd makra", "Icon!" AlwaysOnTop
                         return
                     }
                     index := target
@@ -811,23 +865,23 @@ PlayMacro(rawClip) {
                 if (problem = "EMPTY")
                     problem := "Tabela jest pusta."
                 if (problem != "") {
-                    MsgBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
+                    MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
             case "WEBSHOW":
                 ; WEBSHOW|fragment tytułu okna|elementy po przecinku: tylko pokazuje ich HTML (do Schowka), niczego nie klika
                 if (parts.Length >= 3)
-                    MsgBox WebShow(Trim(parts[2]), Trim(parts[3])), "HTML elementów (skopiowano do Schowka)"
+                    MacroBox WebShow(Trim(parts[2]), Trim(parts[3])), "HTML elementów (skopiowano do Schowka)"
                 return
             default:
-                MsgBox "Nieznane polecenie: " cmd "`n`nMakro zatrzymane na linii " index ".`nByć może ten odtwarzacz jest za stary.", "Błąd makra", "Icon!"
+                MacroBox "Nieznane polecenie: " cmd "`n`nMakro zatrzymane na linii " index ".`nByć może ten odtwarzacz jest za stary.", "Błąd makra", "Icon!"
                 return
         }
         Sleep 50
     }
     
     if (report != "")
-        MsgBox report, "Makro zakończone", "Iconi" AlwaysOnTop
+        MacroBox report, "Makro zakończone", "Iconi" AlwaysOnTop
     else
         Notify "Zakończono", "Makro ze schowka zostało wykonane."
 }
@@ -1388,6 +1442,8 @@ RememberMercalysPath(hwnd) {
 StartMercalys(title) {
     path := RegRead(SettingsKey, "MercalysPath", "")
     if (path = "" || !FileExist(path)) {
+        if (RemoteId != "")
+            return "Mercalys jest na tym komputerze wyłączony, a odtwarzacz nie zna jeszcze jego położenia. Uruchom tam Mercalys."
         MsgBox "Mercalys jest wyłączony, a odtwarzacz nie zna jeszcze jego położenia.`n`n"
             . "W następnym oknie wskaż Mercalys.exe albo skrót, którym go uruchamiasz. Wystarczy raz.", "Intermanage Makra", "Iconi" AlwaysOnTop
         path := FileSelect(3, , "Wskaż Mercalys.exe albo jego skrót", "Program albo skrót (*.exe; *.lnk)")

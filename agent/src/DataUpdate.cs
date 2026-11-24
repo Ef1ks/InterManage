@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,6 +52,7 @@ internal sealed class DataUpdate
         if (Interlocked.Exchange(ref running, 1) == 1) return;
         UpdateForm? form = null;
         ApiClient? locked = null;
+        var gate = false;
         try
         {
             var config = await WaitForConfigAsync(cancel).ConfigureAwait(false);
@@ -77,6 +77,9 @@ internal sealed class DataUpdate
                 Log.Info("Aktualizacja danych: pliki raportów są z dzisiaj");
                 return;
             }
+            // Makro zlecone z przeglądarki na tym komputerze kończy się przed aktualizacją.
+            await MacroRunner.Gate.WaitAsync(cancel).ConfigureAwait(false);
+            gate = true;
             Log.Info("Aktualizacja danych z Mercalys: " + string.Join(", ", kinds));
             ReportMacro macro;
             try
@@ -122,14 +125,14 @@ internal sealed class DataUpdate
                 return;
             }
             form.Status("Uruchamiam makro w Mercalys…");
-            var text = WithPassword(macro, settings.MercalysPassword);
+            var text = MacroRunner.WithPassword(macro.Macro, macro.OpenLine, settings.MercalysPassword);
             OnUi(() =>
             {
                 Clipboard.SetText(text);
                 return true;
             });
             await Task.Delay(500, cancel).ConfigureAwait(false);
-            PressAltE();
+            MacroRunner.PressAltE();
             Log.Info("Aktualizacja danych: makro uruchomione (" + macro.Files.Count + " plików)");
             form.Status("Mercalys zapisuje raporty. Nie używaj komputera, aż okno potwierdzi wgranie danych.");
 
@@ -145,6 +148,7 @@ internal sealed class DataUpdate
         }
         finally
         {
+            if (gate) MacroRunner.Gate.Release();
             Interlocked.Exchange(ref running, 0);
             if (locked != null) _ = FinishedAsync(locked);
         }
@@ -200,13 +204,6 @@ internal sealed class DataUpdate
             if (newest < DateTime.Today) stale.Add(watch.Kind.Substring(ImportPrefix.Length));
         }
         return stale;
-    }
-
-    /// <summary>Hasło Mercalys w pierwszym poleceniu makra (odtwarzacz od 0.54 sam uruchamia i loguje Mercalys).</summary>
-    private static string WithPassword(ReportMacro macro, string? password)
-    {
-        if (string.IsNullOrEmpty(password) || password!.Contains("|") || password.Length > 20) return macro.Macro;
-        return macro.Macro.Replace(macro.OpenLine + "\r\n", macro.OpenLine + "|" + password + "\r\n");
     }
 
     /// <summary>
@@ -303,7 +300,7 @@ internal sealed class DataUpdate
         var logged = false;
         while (true)
         {
-            var player = FindPlayer();
+            var player = MacroRunner.FindPlayer()?.Name;
             if (player != null)
             {
                 Log.Info("Aktualizacja danych: odtwarzacz makr " + player);
@@ -319,59 +316,6 @@ internal sealed class DataUpdate
             form.Status("Czekam na odtwarzacz makr (AutoJob), jeszcze " + Math.Ceiling(left.TotalSeconds) + " s…");
             await Task.Delay(2000, cancel).ConfigureAwait(false);
         }
-    }
-
-    /// <summary>
-    /// Nazwa działającego odtwarzacza makr albo null. Rozpoznaje go po nazwie pliku albo po opisie programu (osobny plik
-    /// bywa nazwany player.exe, player-v60.exe albo AutoJob.exe; odtwarzacz z agenta to player.exe).
-    /// </summary>
-    private static string? FindPlayer()
-    {
-        var session = Process.GetCurrentProcess().SessionId;
-        foreach (var process in Process.GetProcesses())
-        {
-            using (process)
-            {
-                try
-                {
-                    if (process.SessionId != session) continue;
-                    var name = process.ProcessName;
-                    if (name.StartsWith("player", StringComparison.OrdinalIgnoreCase)
-                        || name.StartsWith("autojob", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return name;
-                    }
-                    var path = PlayerHost.ImagePath(process.Id);
-                    if (path == null) continue;
-                    var info = FileVersionInfo.GetVersionInfo(path);
-                    if (string.Equals(info.ProductName?.Trim(), PlayerHost.Product, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return name;
-                    }
-                }
-                catch (Exception)
-                {
-                    // Proces mógł się zakończyć albo nie mamy do niego dostępu.
-                }
-            }
-        }
-        return null;
-    }
-
-    private const byte LeftAlt = 0xA4;
-    private const byte KeyE = 0x45;
-    private const uint KeyUp = 0x0002;
-
-    [DllImport("user32.dll")]
-    private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
-
-    /// <summary>Lewy Alt+E jak pracownik: odtwarzacz wykonuje makro ze schowka po puszczeniu Alta.</summary>
-    private static void PressAltE()
-    {
-        keybd_event(LeftAlt, 0, 0, UIntPtr.Zero);
-        keybd_event(KeyE, 0, 0, UIntPtr.Zero);
-        keybd_event(KeyE, 0, KeyUp, UIntPtr.Zero);
-        keybd_event(LeftAlt, 0, KeyUp, UIntPtr.Zero);
     }
 
     private T OnUi<T>(Func<T> action) => (T)ui.Invoke(action);

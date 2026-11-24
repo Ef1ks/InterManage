@@ -1,0 +1,56 @@
+package com.intermanage.backend.agent.dto;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+/** Makra na komputerach sklepu: żądania i odpowiedzi agenta i przeglądarki. */
+public final class AgentMacroApi {
+
+    private AgentMacroApi() {
+    }
+
+    // --- Agent ---
+
+    /** Stan komputera przy czekaniu na makra. */
+    public record Poll(Integer idleSeconds, Boolean locked, Boolean playerRunning, Boolean busy) {
+    }
+
+    /** Makro zaproponowane temu komputerowi albo {@code null}. */
+    public record PollResponse(Offer offer) {
+    }
+
+    public record Offer(UUID id, String title, String requestedBy, int countdownSeconds) {
+    }
+
+    /** Treść makra po odliczaniu; {@code openLine}: pierwsze polecenie, do którego agent dokłada hasło Mercalys. */
+    public record Start(String macro, String openLine, String kind, boolean collectsCodes, int timeoutMinutes) {
+    }
+
+    public record Decline(@Size(max = 500) String reason) {
+    }
+
+    public record Finish(@NotNull Boolean ok, @Size(max = 4000) String message, @Size(max = 5000) List<String> codes) {
+    }
+
+    // --- Przeglądarka ---
+
+    public record Computer(UUID id, String name, String machineName, boolean online, boolean available, boolean free,
+            Integer idleSeconds, String reason) {
+    }
+
+    public record Itm8CollectRequest(@NotNull UUID deliveryId, UUID agentId) {
+    }
+
+    public record Itm8ApplyRequest(@NotNull UUID deliveryId, @NotNull @Size(min = 1, max = 2000) List<String> codes,
+            UUID agentId) {
+    }
+
+    public record Job(UUID id, String kind, String title, String status, String computer, String requestedBy,
+            Instant createdAt, Instant offeredAt, Instant startedAt, Instant finishedAt, int countdownSeconds,
+            List<String> declined, String message, List<String> codes, int itemCount) {
+    }
+}

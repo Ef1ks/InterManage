@@ -26,8 +26,8 @@ internal sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem activity = new() { Enabled = false, Visible = false };
     private readonly ToolStripMenuItem autostart = new("Uruchamiaj z Windows") { CheckOnClick = true };
     private readonly ToolStripMenuItem updateStatus = new() { Enabled = false, Visible = false };
-    private readonly ToolStripMenuItem installUpdate = new("Zainstaluj aktualizację teraz") { Visible = false };
-    private readonly SelfUpdate selfUpdate;
+    private readonly ToolStripMenuItem showUpdate = new("Pokaż pobraną aktualizację") { Visible = false };
+    private readonly SelfUpdate selfUpdate = new();
     private readonly Control ui = new();
     private readonly Icon green = Dot(Color.FromArgb(16, 185, 129));
     private readonly Icon amber = Dot(Color.FromArgb(245, 158, 11));
@@ -35,32 +35,29 @@ internal sealed class TrayApp : ApplicationContext
     private readonly Icon gray = Dot(Color.FromArgb(148, 163, 184));
     private AgentSettings settings;
     private readonly DataUpdate update;
+    private readonly RemoteMacros remoteMacros;
     private readonly CancellationTokenSource closing = new();
     /// <summary>Aktualizacja przy starcie idzie raz na uruchomienie agenta (nie po zmianie ustawień).</summary>
     private bool startUpdateDone;
 
-    public TrayApp(bool afterUpdate)
+    public TrayApp()
     {
         // Uchwyt okna od razu: przez niego zmiany stanu z wątków w tle trafiają do ikony.
         _ = ui.Handle;
         settings = AgentSettings.Load();
         update = new DataUpdate(host, ui);
-        // Po automatycznej aktualizacji (zwykle w bezczynności) agent nie uruchamia od nowa aktualizacji danych z Mercalys.
-        startUpdateDone = afterUpdate;
-        selfUpdate = new SelfUpdate(() => update.IsRunning || openSettings != null,
-            () => { if (ui.IsHandleCreated) ui.BeginInvoke(new Action(ExitThread)); });
+        remoteMacros = new RemoteMacros(host, ui, () => settings);
         selfUpdate.StatusChanged += () =>
         {
             if (ui.IsHandleCreated) ui.BeginInvoke(new Action(UpdateIcon));
         };
         host.UpdateOffered += selfUpdate.Offer;
-        selfUpdate.Start(afterUpdate);
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(status);
         menu.Items.Add(activity);
         menu.Items.Add(updateStatus);
-        menu.Items.Add(installUpdate);
+        menu.Items.Add(showUpdate);
         menu.Items.Add(macros);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Otwórz Intermanage", null, (_, _) => Open(settings.ServerUrl));
@@ -72,7 +69,7 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(autostart);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Zakończ", null, (_, _) => ExitThread());
-        installUpdate.Click += (_, _) => selfUpdate.InstallNow();
+        showUpdate.Click += (_, _) => selfUpdate.ShowReadyFile();
         autostart.Checked = AgentSettings.Autostart;
         autostart.CheckedChanged += (_, _) =>
         {
@@ -103,9 +100,15 @@ internal sealed class TrayApp : ApplicationContext
         macros.Click += (_, _) => ShowMacroHelp();
         player.Changed += () =>
         {
-            if (ui.IsHandleCreated) ui.BeginInvoke(new Action(() => macros.Text = "Makra (Alt+E), odtwarzacz " + player.Version));
+            if (ui.IsHandleCreated)
+            {
+                ui.BeginInvoke(new Action(() => macros.Text = player.Blocked != null
+                    ? "Makra: Windows zablokował odtwarzacz"
+                    : "Makra (Alt+E), odtwarzacz " + player.Version));
+            }
         };
         player.Start();
+        remoteMacros.Start(closing.Token);
 
         UpdateIcon();
         if (!settings.HasKey)
@@ -134,7 +137,7 @@ internal sealed class TrayApp : ApplicationContext
         activity.Text = "Ostatnio: " + host.LastActivity;
         updateStatus.Visible = selfUpdate.Status != null;
         updateStatus.Text = selfUpdate.Status ?? "";
-        installUpdate.Visible = selfUpdate.CanInstallNow;
+        showUpdate.Visible = selfUpdate.ReadyFile != null;
         // Podpowiedź ikony ma limit 63 znaków.
         var tip = Title + "\n" + host.StatusText;
         icon.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
@@ -163,6 +166,15 @@ internal sealed class TrayApp : ApplicationContext
 
     private void ShowMacroHelp()
     {
+        if (player.Blocked != null)
+        {
+            MessageBox.Show("Windows nie pozwolił uruchomić odtwarzacza makr (" + player.Blocked + ").\n\n"
+                + "Komputer pozwala uruchamiać programy tylko z wybranych folderów. Odtwarzacz leży w folderze agenta:\n"
+                + Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "player", "player.exe")
+                + "\n\nPoproś informatyka o zgodę na ten plik albo przenieś cały folder agenta do dozwolonego folderu.",
+                "Intermanage – makra", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
         MessageBox.Show("Odtwarzacz makr " + (player.Version ?? "") + " działa w agencie, nie trzeba go uruchamiać.\n\n"
             + "Alt+E: wykonuje makro skopiowane ze strony Intermanage. Makro działa raz, potem Schowek jest pusty.\n"
             + "Esc w trakcie makra: zatrzymuje makro.\n"
@@ -217,6 +229,7 @@ internal sealed class TrayApp : ApplicationContext
     {
         Log.Info("Zakończono agenta");
         closing.Cancel();
+        remoteMacros.Dispose();
         selfUpdate.Dispose();
         host.Dispose();
         player.Dispose();

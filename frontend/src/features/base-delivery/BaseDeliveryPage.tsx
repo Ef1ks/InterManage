@@ -1335,7 +1335,13 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         onConfirm={chooseCarriers}
       />
       <ShortDatesDialog storeId={store.id} delivery={delivery} open={shortDatesOpen} onOpenChange={setShortDatesOpen} />
-      <Itm8MacroDialog delivery={delivery} open={itm8MacroOpen} onOpenChange={setItm8MacroOpen} />
+      <Itm8MacroDialog
+        key={delivery?.id}
+        storeId={store.id}
+        delivery={delivery}
+        open={itm8MacroOpen}
+        onOpenChange={setItm8MacroOpen}
+      />
       <DifferencesDialog storeId={store.id} rows={rows} open={differencesOpen} onOpenChange={setDifferencesOpen} />
       <ProtocolDialog
         storeId={store.id}

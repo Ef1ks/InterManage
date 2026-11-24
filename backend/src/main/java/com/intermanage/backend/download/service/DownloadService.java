@@ -101,7 +101,7 @@ public class DownloadService {
         Download download = downloads.save(new Download(request.title().strip(), blankToNull(request.description()),
                 user));
         if (Boolean.TRUE.equals(request.agentPackage())) {
-            markAgentPackage(download, true);
+            markAgentPackage(download, true, false);
         }
         if (upload != null && !upload.isEmpty()) {
             saveFile(download, upload, version, changeList, announce, user, userId);
@@ -113,7 +113,7 @@ public class DownloadService {
         Download download = active(id);
         download.update(request.title().strip(), blankToNull(request.description()));
         if (request.agentPackage() != null && request.agentPackage() != download.isAgentPackage()) {
-            markAgentPackage(download, request.agentPackage());
+            markAgentPackage(download, request.agentPackage(), true);
         }
     }
 
@@ -121,10 +121,12 @@ public class DownloadService {
      * Paczka agenta sklepu: najwyżej jedna pozycja, a jej obowiązujący plik musi być ZIP-em z agentem i mieć wersję
      * (inaczej agenty dostałyby plik, którego nie zainstalują).
      */
-    private void markAgentPackage(Download download, boolean agentPackage) {
+    private void markAgentPackage(Download download, boolean agentPackage, boolean checkCurrentFile) {
         if (agentPackage) {
-            files.findCurrent(download.getId()).ifPresent(file -> AgentPackage.check(file.getContent(),
-                    file.getVersion()));
+            if (checkCurrentFile) {
+                files.findCurrent(download.getId()).ifPresent(file -> AgentPackage.check(file.getContent(),
+                        file.getVersion()));
+            }
             downloads.findFirstByAgentPackageTrueAndRemovedAtIsNull()
                     .filter(other -> !other.getId().equals(download.getId()))
                     .ifPresent(other -> {
@@ -157,11 +159,16 @@ public class DownloadService {
     /** Nowa wersja pliku; poprzednia dostaje znacznik zastąpienia i zostaje jako historia. */
     @Transactional
     public void replaceFile(UUID id, MultipartFile upload, String version, DownloadChangesRequest changeList,
-            boolean announce, UUID userId) {
+            boolean announce, Boolean agentPackage, UUID userId) {
         if (upload == null || upload.isEmpty()) {
             throw ApiException.badRequest("Wybierz plik");
         }
-        saveFile(active(id), upload, version, changeList, announce, user(userId), userId);
+        Download download = active(id);
+        if (agentPackage != null && agentPackage != download.isAgentPackage()) {
+            // Oznaczenie razem z nowym plikiem: sprawdza go saveFile, a nie dotychczasowy plik pozycji.
+            markAgentPackage(download, agentPackage, false);
+        }
+        saveFile(download, upload, version, changeList, announce, user(userId), userId);
     }
 
     /** Poprawia listę zmian obowiązującej wersji: poprzednie wpisy dostają znacznik, nowe ją zastępują. */

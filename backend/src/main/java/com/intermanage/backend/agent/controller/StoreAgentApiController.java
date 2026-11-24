@@ -26,9 +26,11 @@ import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.agent.dto.AgentApi;
+import com.intermanage.backend.agent.dto.AgentMacroApi;
 import com.intermanage.backend.agent.dto.AgentReportFileResponse;
 import com.intermanage.backend.agent.service.AgentEventService;
 import com.intermanage.backend.agent.service.AgentFileQueueService;
+import com.intermanage.backend.agent.service.AgentMacroService;
 import com.intermanage.backend.agent.service.AgentReportService;
 import com.intermanage.backend.agent.service.StoreAgentService;
 import com.intermanage.backend.common.exception.ApiException;
@@ -67,6 +69,11 @@ import jakarta.validation.Valid;
  *                                          z dzisiaj); 409, gdy aktualizuje inny komputer albo agent nie jest główny
  * POST /api/store-agent/report-macro/finished   koniec aktualizacji (zdejmuje blokadę)
  * GET  /api/store-agent/update/file        paczka agenta z „Do pobrania” (ZIP; wersja i SHA-256 w odpowiedzi /hello)
+ * POST /api/store-agent/macro-jobs/poll    {idleSeconds, locked, playerRunning, busy} co kilka sekund → {offer}
+ *                                          (makro zlecone z przeglądarki, zaproponowane temu komputerowi)
+ * POST /api/store-agent/macro-jobs/{id}/decline   pracownik anulował odliczanie: zlecenie idzie do kolejnego komputera
+ * POST /api/store-agent/macro-jobs/{id}/start     koniec odliczania → treść makra (409: anulowane albo przekazane)
+ * POST /api/store-agent/macro-jobs/{id}/finish    {ok, message, codes} wynik odtwarzacza
  * </pre>
  */
 @RestController
@@ -83,10 +90,12 @@ public class StoreAgentApiController {
     private final AgentReportService reports;
     private final ReportMacroService macros;
     private final DownloadService downloads;
+    private final AgentMacroService macroJobs;
 
     public StoreAgentApiController(StoreAgentService agents, AgentFileQueueService waiting, AgentEventService events,
             StoreFileQueueService queue, AgentReportService reports, ReportMacroService macros,
-            DownloadService downloads) {
+            DownloadService downloads, AgentMacroService macroJobs) {
+        this.macroJobs = macroJobs;
         this.downloads = downloads;
         this.macros = macros;
         this.agents = agents;
@@ -239,6 +248,32 @@ public class StoreAgentApiController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(file.getFileName(), StandardCharsets.UTF_8).build().toString())
                 .body(file.getContent());
+    }
+
+    @PostMapping("/macro-jobs/poll")
+    public AgentMacroApi.PollResponse pollMacros(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @Valid @RequestBody AgentMacroApi.Poll request) {
+        return macroJobs.poll(agent(authorization), request);
+    }
+
+    @PostMapping("/macro-jobs/{id}/decline")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void declineMacro(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @PathVariable UUID id, @Valid @RequestBody(required = false) AgentMacroApi.Decline request) {
+        macroJobs.decline(agent(authorization), id);
+    }
+
+    @PostMapping("/macro-jobs/{id}/start")
+    public AgentMacroApi.Start startMacro(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
+    String authorization, @PathVariable UUID id) {
+        return macroJobs.start(agent(authorization), id);
+    }
+
+    @PostMapping("/macro-jobs/{id}/finish")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void finishMacro(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @PathVariable UUID id, @Valid @RequestBody AgentMacroApi.Finish request) {
+        macroJobs.finish(agent(authorization), id, request);
     }
 
     private StoreAgentService.AgentContext agent(String authorization) {
