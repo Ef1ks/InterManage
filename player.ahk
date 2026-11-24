@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.66.0.0
+;@Ahk2Exe-SetVersion 0.67.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.66" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.67" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global MacroRunning := false ; Esc działa tylko w trakcie makra
@@ -483,13 +483,15 @@ PlayMacro(rawClip) {
                 }
             case "WEBHEADERS":
                 ; WEBHEADERS|okno|siatka|kolumna numeru|kolumna identyfikacji|przycisk nagłówka|pole|zapis|okno pytania|tekst pytania|odpowiedź|pierwsza strona|następna strona
+                ; Od 0.67 opcjonalnie |pole daty|data DDMMRR|wyrażenie regularne daty: przy wpisywaniu nagłówka ustawia też datę (spodziewana dostawa).
                 if (parts.Length < 11 || results.Count = 0) {
                     MacroBox report "Linia WEBHEADERS wymaga wszystkich pól i wyników wcześniejszego WEBROWS.", "Błąd makra", "Icon!"
                     return
                 }
                 step := {title: Trim(parts[2]), grid: Trim(parts[3]), numberColumn: Integer(Trim(parts[4])), fieldColumn: Integer(Trim(parts[5])),
                     open: Trim(parts[6]), field: Trim(parts[7]), save: Trim(parts[8]), dialog: Trim(parts[9]), dialogText: Trim(parts[10]), dialogButton: Trim(parts[11]),
-                    firstPage: parts.Length >= 13 ? Trim(parts[12]) : "", nextPage: parts.Length >= 13 ? Trim(parts[13]) : ""}
+                    firstPage: parts.Length >= 13 ? Trim(parts[12]) : "", nextPage: parts.Length >= 13 ? Trim(parts[13]) : "",
+                    dateField: parts.Length >= 16 ? Trim(parts[14]) : "", date: parts.Length >= 16 ? Trim(parts[15]) : "", datePattern: parts.Length >= 16 ? Trim(parts[16]) : ""}
                 summary := WebHeaders(step, wanted, results)
                 report .= "`n" summary.text "`n"
                 if !summary.finished {
@@ -1695,8 +1697,9 @@ WebHeaders(step, wanted, results) {
     written := ""
     existing := ""
     others := ""
+    missing := ""
     Done(ending, finished) => {finished: finished, text: "Nagłówki wpisane: " (written = "" ? "brak`n" : "`n" written)
-        . (existing != "" ? "Już były: `n" existing : "") . (others != "" ? "INNA identyfikacja, nie zmieniono:`n" others : "") . ending}
+        . (existing != "" ? "Już były: `n" existing : "") . (missing != "" ? "Nie ma na liście (już zakończone?):`n" missing : "") . (others != "" ? "INNA identyfikacja, nie zmieniono:`n" others : "") . ending}
     for key, item in wanted {
         order := results[key]
         problem := WebWait(step.title, step.open, "", 30000)
@@ -1705,8 +1708,13 @@ WebHeaders(step, wanted, results) {
         if (problem != "")
             return Done("ZATRZYMANE przy " order ": " problem, false)
         current := GridCell(step, order, step.fieldColumn)
-        if (current = "?")
-            return Done("ZATRZYMANE: nie ma dostawy " order " na liście.", false)
+        if (current = "?") {
+            ; Powtórka zdalnego makra po przerwaniu: zakończonej już dostawy nie ma na liście, pozostałe idą dalej.
+            if (RemoteId = "")
+                return Done("ZATRZYMANE: nie ma dostawy " order " na liście.", false)
+            missing .= order "`n"
+            continue
+        }
         if (ListKey(current, "") = ListKey(item.number, "")) {
             existing .= order " " item.number "`n"
             continue
@@ -1725,7 +1733,22 @@ WebHeaders(step, wanted, results) {
             return Done("ZATRZYMANE przy " order ": po zapisie lista pokazuje `"" current "`" zamiast " item.number ".", false)
         written .= order " " item.number "`n"
     }
-    return Done(others = "" ? "Wszystkie nagłówki są wpisane." : "Sprawdź dostawy z inną identyfikacją.", others = "")
+    return Done(others = "" ? (missing = "" ? "Wszystkie nagłówki są wpisane." : "Pozostałe nagłówki są wpisane.") : "Sprawdź dostawy z inną identyfikacją.", others = "")
+}
+
+; Data w nagłówku: prawdziwe klawisze i Tab, bo pole Mercalys formatuje wpis; po nim strona ma dalej pokazywać to zamówienie.
+WriteHeaderDate(step, order) {
+    if (WebValue(step.title, step.dateField, step.datePattern, 0) = "")
+        return ""
+    ; Klawisze bywają zgubione, gdy okno dopiero staje się aktywne; powtórka jest bezpieczna, bo zaczyna od zaznaczenia całego pola.
+    Loop 3 {
+        problem := WebKey(step.title, step.dateField, "^a" step.date "{Tab}", 10000)
+        if (problem = "")
+            problem := WebValue(step.title, step.dateField, step.datePattern, 3000)
+        if (problem = "")
+            return WebWait(step.title, step.field, order, 30000)
+    }
+    return problem
 }
 
 WriteHeader(step, order, number) {
@@ -1734,6 +1757,8 @@ WriteHeader(step, order, number) {
         problem := WebClick(step.title, step.open, 10000)
     if (problem = "")
         problem := WebWait(step.title, step.field, order, 30000)
+    if (problem = "" && step.dateField != "")
+        problem := WriteHeaderDate(step, order)
     if (problem = "")
         problem := WebSetValue(step.title, step.field, number, 10000)
     if (problem = "")
@@ -1788,21 +1813,23 @@ WebCloseRows(step, wanted, results) {
     return Done(skipped = "" ? "Wszystkie dostawy z listy są zamknięte." : "Sprawdź pominięte dostawy.", skipped = "")
 }
 
+; Zamknięcie dostawy z bazy (kilkaset pozycji) trwa w Mercalys dużo dłużej niż faktury: panel z wydrukiem przychodził po ponad
+; 30 s, dlatego limity są długie. Krótka dostawa i tak idzie od razu dalej.
 CloseRow(step, order) {
     problem := WebPickRow(step.title, step.grid, step.numberColumn, order, 10000)
     marked := problem = "" && MarkPage(step.title, step.tick)
     if (problem = "")
         problem := WebClick(step.title, step.close, 10000)
     if (problem = "")
-        problem := WebWait(step.dialog, step.dialogButton, step.dialogText, 30000)
+        problem := WebWait(step.dialog, step.dialogButton, step.dialogText, 120000)
     if (problem = "")
         problem := WebClick(step.dialog, step.dialogButton, 10000)
     if (problem = "")
-        problem := TickAfterReload(step.title, step.tick, 30000, marked)
+        problem := TickAfterReload(step.title, step.tick, 600000, marked)
     if (problem = "")
         problem := WebClick(step.title, step.save, 10000)
     if (problem = "")
-        problem := WaitForRowGone(step, order, 60000)
+        problem := WaitForRowGone(step, order, 600000)
     return problem
 }
 
@@ -3462,6 +3489,17 @@ WebErrors(title, element, allowed, timeoutMs, &summary) {
         if (A_TickCount >= deadline)
             return "Nie udało się odczytać listy błędów pobrania. Sprawdź ją w Mercalys."
         Sleep 500
+    }
+    ; Kolejne strony listy (od 0.67): Mercalys pokazuje po 20 błędów, a wyczyszczenie usuwa wszystkie.
+    step := {title: title, grid: "*"}
+    Loop 100 {
+        if !PagerAvailable(title, "pgrDetail_ibtSuivant")
+            break
+        problem := TurnPage(step, "pgrDetail_ibtSuivant")
+        if (problem != "")
+            return "Lista błędów pobrania: " problem " Sprawdź ją w Mercalys."
+        for item in VisibleGridRows(title, "*", 10000)
+            texts.Push(RowText(item.row))
     }
     bad := ""
     count := 0

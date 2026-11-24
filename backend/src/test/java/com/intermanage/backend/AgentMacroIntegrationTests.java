@@ -213,10 +213,10 @@ class AgentMacroIntegrationTests {
         // Agent bez wersji odtwarzacza (sprzed 1.8.0) i starszy odtwarzacz nie wezmą tego makra.
         poll(kasa, 900, false, true);
         base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("AutoJob 0.66")));
-        poll(kasa, "0.65");
-        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("AutoJob 0.67")));
         poll(kasa, "0.66");
+        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        poll(kasa, "0.67");
         // Bez zamówień nie ma czego kończyć.
         base("base-close", deliveryId).andExpect(status().isConflict());
 
@@ -285,7 +285,7 @@ class AgentMacroIntegrationTests {
                 .andExpect(jsonPath("$.suppliers[1].note.error").isNotEmpty());
 
         // Powtórka zna zamówienie z pierwszego przebiegu.
-        poll(kasa, "0.66");
+        poll(kasa, "0.67");
         String again = JsonPath.read(base("base-receive", deliveryId).andReturn().getResponse().getContentAsString(),
                 "$.id");
         String second = JsonPath.read(agentPost(kasa, "/macro-jobs/" + again + "/start", "")
@@ -300,7 +300,7 @@ class AgentMacroIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.suppliers[1].order.enteredBy").isNotEmpty());
 
-        poll(kasa, "0.66");
+        poll(kasa, "0.67");
         String close = JsonPath.read(base("base-close", deliveryId).andExpect(status().isOk())
                 .andExpect(jsonPath("$.itemCount").value(2))
                 .andReturn().getResponse().getContentAsString(), "$.id");
@@ -309,6 +309,7 @@ class AgentMacroIntegrationTests {
         assertThat(closeMacro).contains("WEBRESULT|11233|538|09516050082\r\n")
                 .contains("WEBRESULT|11240|88110|09516050082\r\n")
                 .contains("WEBHEADERS|Mercalys|dgDetail|1|12|")
+                .contains("|txtZ13_dateLivrEstimee_TxtBox|")
                 .contains("WEBCLOSE|Mercalys|dgDetail|1|12|");
         agentPost(kasa, "/macro-jobs/" + close + "/finish",
                 "{\"ok\":false,\"message\":\"Błąd\",\"codes\":[\"zamkniete=11233\"]}")

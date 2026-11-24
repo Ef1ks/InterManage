@@ -11,14 +11,14 @@ import java.util.regex.Pattern;
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
 
 /**
- * Makra wprowadzenia dostawy z bazy do Mercalys na komputerze sklepu (odtwarzacz od 0.66), po „Uzupełnij ITM8”:
+ * Makra wprowadzenia dostawy z bazy do Mercalys na komputerze sklepu (odtwarzacz od 0.67), po „Uzupełnij ITM8”:
  *
  * <ul>
  * <li>{@link #receive}: plik bonu każdego dostawcy (538, 88110) z Obsługi BL bazy → Integracja → zamówienie z bazy
  * tego dostawcy z datą dostawy dziś, najbliższą wcześniejszą albo późniejszą, bez niego pusty kod → pobranie → błędy (tylko
  * „Niezgodne jednostki”, „art. nieistniejący” i „art. już doręczone”, inne zatrzymują makro) → wyczyszczenie błędów; na końcu Obsługa BL nie
  * może mieć pliku tego bonu, a każde zamówienie daje „Bon dostawy Excel” do folderu, skąd agent wysyła go na serwer;
- * <li>{@link #close}: po sprawdzeniu różnic Nr BL w nagłówku zamówień i zakończenie dostaw, jak przy fakturach
+ * <li>{@link #close}: po sprawdzeniu różnic Nr BL i dzisiejsza data dostawy w nagłówku zamówień i zakończenie dostaw, jak przy fakturach
  * ({@code buildDeliveryMacro} w {@code mercalys-macro.ts}).
  * </ul>
  *
@@ -99,6 +99,8 @@ public final class BaseReceiveMacro {
     private static final int IDENTIFICATION_COLUMN = 12;
     private static final String HEADER = "btnB11_Entete_LnkBouton";
     private static final String HEADER_FIELD = "txtZ16_IdentificationCde_TxtBox";
+    /** Spodziewana data dostawy. */
+    private static final String HEADER_DATE_FIELD = "txtZ13_dateLivrEstimee_TxtBox";
     private static final String HEADER_SAVE = "btnB4_Valider_LnkBouton";
     private static final String HEADER_TEXT = "zachowa";
     private static final String CLOSE = "btnB3_Cloturer_LnkBouton";
@@ -275,8 +277,8 @@ public final class BaseReceiveMacro {
         return String.join("\r\n", out) + "\r\n";
     }
 
-    /** Nr BL w nagłówku zamówień i zakończenie dostaw (zatwierdza je zlecający w przeglądarce). */
-    public static String close(String bonNumber, List<Order> orders) {
+    /** Nr BL i dzisiejsza data dostawy w nagłówku zamówień i zakończenie dostaw (zatwierdza je zlecający w przeglądarce). */
+    public static String close(String bonNumber, List<Order> orders, LocalDate today) {
         List<String> out = new ArrayList<>();
         out.add("# Zakończ dostawę z bazy: bon " + bonNumber);
         out.add(ReportSaveMacro.OPEN_LINE);
@@ -285,7 +287,8 @@ public final class BaseReceiveMacro {
         out.addAll(openOrders());
         out.add("WEBHEADERS|" + WINDOW + "|" + GRID + "|" + NUMBER_COLUMN + "|" + IDENTIFICATION_COLUMN + "|" + HEADER
                 + "|" + HEADER_FIELD + "|" + HEADER_SAVE + "|" + DIALOG + "|" + HEADER_TEXT + "|Oui|" + FIRST_PAGE + "|"
-                + NEXT_PAGE);
+                + NEXT_PAGE + "|" + HEADER_DATE_FIELD + "|" + Itm8Macro.mercalysDate(today) + "|"
+                + Itm8Macro.datePattern(today));
         out.add("WEBCLOSE|" + WINDOW + "|" + GRID + "|" + NUMBER_COLUMN + "|" + IDENTIFICATION_COLUMN + "|" + CLOSE
                 + "|" + DIALOG + "|" + CLOSE_TEXT + "|Oui|" + CLOSE_PRINT + "|" + CLOSE_APPROVE + "|" + FIRST_PAGE + "|"
                 + NEXT_PAGE);

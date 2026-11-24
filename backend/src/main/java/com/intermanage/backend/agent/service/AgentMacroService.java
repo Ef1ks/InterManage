@@ -2,6 +2,7 @@ package com.intermanage.backend.agent.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -36,6 +37,7 @@ import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
 import com.intermanage.backend.basedelivery.service.BaseReceivingService;
 import com.intermanage.backend.basedelivery.service.MeaCodeService;
 import com.intermanage.backend.common.component.LiveEvents;
+import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -65,10 +67,10 @@ public class AgentMacroService {
     /** Kody MEA: kilkadziesiąt kodów po 1-3 pliki, integracja jednego trwa do kilku minut. */
     public static final Duration MEA_RUN_TIMEOUT = Duration.ofHours(6);
 
-    /** Makra dostawy z bazy: polecenia odtwarzacza od 0.66 i wysyłka bonów przez agenta od 1.8.0. */
+    /** Makra dostawy z bazy: polecenia odtwarzacza od 0.67 i wysyłka bonów przez agenta od 1.8.0. */
     private static final Set<AgentMacroKind> BASE_KINDS = Set.of(AgentMacroKind.BASE_RECEIVE,
             AgentMacroKind.BASE_CLOSE);
-    private static final int BASE_PLAYER_MINOR = 66;
+    private static final int BASE_PLAYER_MINOR = 67;
     private static final Pattern ORDER_CODE = Pattern.compile("(\\d{1,10})=(\\d{1,20})");
     private static final Pattern CLOSED_CODE = Pattern.compile("zamkniete=(\\d{1,20})");
 
@@ -163,8 +165,8 @@ public class AgentMacroService {
             throw ApiException.conflict("Bon " + delivery.number() + " nie ma zamówień do zakończenia");
         }
         return create(storeId, AgentMacroKind.BASE_CLOSE, "Zakończ dostawę z bazy · bon " + delivery.number(),
-                BaseReceiveMacro.close(delivery.number(), orders), delivery.number(), orders.size(),
-                request.agentId(), userId);
+                BaseReceiveMacro.close(delivery.number(), orders, LocalDate.now(StoreTime.ZONE)),
+                delivery.number(), orders.size(), request.agentId(), userId);
     }
 
     @Transactional
@@ -414,7 +416,7 @@ public class AgentMacroService {
             return "nie działa odtwarzacz makr AutoJob w wersji 0.64 albo nowszej";
         }
         if (kind != null && BASE_KINDS.contains(kind) && !state.playerAtLeast(BASE_PLAYER_MINOR)) {
-            return "potrzebny agent 1.8.0 i odtwarzacz makr AutoJob 0.66 albo nowsze";
+            return "potrzebny agent 1.8.0 i odtwarzacz makr AutoJob 0.67 albo nowsze";
         }
         if (state.locked()) {
             return "ekran zablokowany";
