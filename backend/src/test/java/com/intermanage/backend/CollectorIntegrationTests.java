@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -22,6 +23,7 @@ import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.InflaterInputStream;
 
@@ -147,6 +149,14 @@ class CollectorIntegrationTests {
         code(codes, BUTTER, "0000080053828");
         // Multikod masła jest głównym EAN-em chleba: skan prowadzi do chleba.
         code(codes, BUTTER, "5900000000002");
+        // Czteropak (główny kod, opakowanie 1), puszka 0,25 i kod sześciu sztuk zapisany jako 0,166.
+        pack(codes, BREAD, "5900000000002", "1");
+        pack(codes, BREAD, "5903538900765", "0.250");
+        pack(codes, BREAD, "5903538900772", "0.166");
+        pack(codes, BREAD, "5903538900789", "6");
+        pack(codes, HAM, "2436010000000", "1");
+        pack(codes, HAM, "2436010000109", "0.100");
+        jdbc.update("update product_codes set sale_unit = 'kg' where store_id = ?::uuid and itm8 = ?", storeId, HAM);
         String promotions = jdbc.queryForObject("""
                 insert into promotion_imports (store_id, file_name, total_rows) values (?::uuid, 'Taryfy.pdf', 1)
                 returning id""", String.class, storeId);
@@ -185,6 +195,15 @@ class CollectorIntegrationTests {
         assertThat(file.byEan(5900000000002L)).containsExactly("CHLEB ŻYTNI 500G");
         assertThat(file.byEan(2436010000000L)).containsExactly("SZYNKA KRUCHA");
         assertThat(file.byEan(5900000000017L)).isEmpty();
+        // Wielopak: najdrobniejszy kod sztuki (1/6); kod na kg (etykieta 100 g) nie jest sztuką wielopaku.
+        assertThat(file.article("CHLEB ŻYTNI 500G")).containsEntry("multipack", "6");
+        assertThat(file.article("MASŁO EXTRA 200G")).containsEntry("multipack", "");
+        assertThat(file.article("SZYNKA KRUCHA")).containsEntry("multipack", "");
+        assertThat(file.ratio(5900000000002L)).isEqualTo("1/1");
+        assertThat(file.ratio(5903538900765L)).isEqualTo("1/4");
+        assertThat(file.ratio(5903538900772L)).isEqualTo("1/6");
+        assertThat(file.ratio(5903538900789L)).isEqualTo("6/1");
+        assertThat(file.ratio(5900000000001L)).isEqualTo("1/1");
         assertThat(file.byItm8(6893790L)).containsExactly("MASŁO EXTRA 200G");
 
         mvc.perform(post("/api/collector/synced").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
@@ -196,6 +215,77 @@ class CollectorIntegrationTests {
         productImport(LocalDateTime.now().toString().substring(0, 19).replace('T', ' '));
         assertThat(lines(statusOf(key).andReturn().getResponse()).get("catalog")).isNotEqualTo(version);
         mvc.perform(get(url("")).cookie(owner)).andExpect(jsonPath("$[0].catalogCurrent").value(false));
+    }
+
+    @Test
+    void listFromCollectorBecomesProtocol() throws Exception {
+        String report = productImport("2026-11-02 06:00:00");
+        product(BREAD, "5903538901205", "PIWO LOMZA 4X0,5L", report, report);
+        product(BUTTER, "5900000000001", "MASLO EXTRA 200G", report, report);
+        jdbc.update("update products set vat_code = 1, purchase_price = 10, sale_price = 16.49, brand = 'LOMZA' "
+                + "where store_id = ?::uuid and itm8 = ?", storeId, BREAD);
+        String key = newCollector();
+        String id = UUID.randomUUID().toString();
+        // 8 puszek = 2 czteropaki, do tego 3 czteropaki i masło.
+        String lines = BREAD + "\t5903538900765\t5903538901205\tPIWO LOMZA 4X0,5L\tLOMZA\t8\t2\t1\n"
+                + BREAD + "\t5903538901205\t5903538901205\tPIWO LOMZA 4X0,5L\tLOMZA\t3\t3\t2\n"
+                + BUTTER + "\t5900000000001\t5900000000001\tMASLO EXTRA 200G\t\t1.5\t1.5\t3\n";
+        sendList(key, id, lines).andExpect(status().isOk());
+        // Urwane potwierdzenie: ta sama lista drugi raz niczego nie dubluje.
+        sendList(key, id, lines).andExpect(status().isOk());
+        sendList(key, UUID.randomUUID().toString(), "zepsute").andExpect(status().isBadRequest());
+        sendList("imk_zly", UUID.randomUUID().toString(), lines).andExpect(status().isForbidden());
+
+        String base = "/api/stores/" + storeId + "/collector-lists";
+        mvc.perform(get(base).cookie(owner)).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(id)).andExpect(jsonPath("$[0].lineCount").value(3))
+                .andExpect(jsonPath("$[0].collectorName").value("Kolektor"))
+                .andExpect(jsonPath("$[0].startedAt").value("2026-11-25T08:15:00"));
+        mvc.perform(get(base + "/count").cookie(owner)).andExpect(jsonPath("$.waiting").value(1));
+        mvc.perform(get(base + "/details?ids=" + id).cookie(owner))
+                .andExpect(jsonPath("$.rows.length()").value(2))
+                .andExpect(jsonPath("$.rows[0].quantity").value(5))
+                .andExpect(jsonPath("$.rows[0].ean").value("5903538901205"))
+                .andExpect(jsonPath("$.rows[0].scans.length()").value(2))
+                .andExpect(jsonPath("$.rows[0].saleValue").value(82.45))
+                // (16,49 / 1,23 - 10) / 16,49
+                .andExpect(jsonPath("$.rows[0].marginPercent").value(20.66))
+                .andExpect(jsonPath("$.rows[1].quantity").value(1.5))
+                .andExpect(jsonPath("$.rows[1].scans.length()").value(0))
+                .andExpect(jsonPath("$.totalQuantity").value(6.5));
+
+        String body = "{\"ids\":[\"" + id + "\"]}";
+        MockHttpServletResponse file = mvc.perform(post(base + "/protocols/LIQUIDATION").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        assertThat(file.getContentAsString()).isEqualTo("5903538901205000005000\r\n5900000000001000001500\r\n");
+        assertThat(file.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("PROTO1_");
+        // Sam plik jeszcze niczego nie oznacza: dopiero potwierdzony zapis.
+        mvc.perform(get(base + "/count").cookie(owner)).andExpect(jsonPath("$.waiting").value(1));
+        String protocolId = JsonPath.read(mvc.perform(post(base + "/protocols/LIQUIDATION/saved").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[\"" + id + "\"],\"fileName\":\"PROTO1_x.Traite0\"}"))
+                .andExpect(jsonPath("$[0].protocols[0].kind").value("LIQUIDATION"))
+                .andReturn().getResponse().getContentAsString(), "$[0].protocols[0].id");
+        mvc.perform(get(base + "/count").cookie(owner)).andExpect(jsonPath("$.waiting").value(0));
+
+        assertThat(mvc.perform(get(base + "/export/pdf?ids=" + id).cookie(owner)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray()).startsWith("%PDF".getBytes(StandardCharsets.US_ASCII));
+        assertThat(mvc.perform(get(base + "/export/xlsx?ids=" + id).cookie(owner)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray()).startsWith("PK".getBytes(StandardCharsets.US_ASCII));
+
+        mvc.perform(delete(base + "/" + id + "/protocols/" + protocolId).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$[0].protocols.length()").value(0));
+        mvc.perform(delete(base + "/" + id).cookie(owner).with(csrf())).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get(base + "/details?ids=" + id).cookie(owner)).andExpect(status().isNotFound());
+        mvc.perform(post(base + "/" + id + "/restore").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    private ResultActions sendList(String key, String id, String lines) throws Exception {
+        return mvc.perform(post("/api/collector/lists").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED).content("id=" + id + "&started=20261125081500&lines="
+                        + URLEncoder.encode(lines, StandardCharsets.UTF_8)));
     }
 
     @Test
@@ -294,6 +384,13 @@ class CollectorIntegrationTests {
                 values (?::uuid, ?, ?, false, ?::uuid, ?::uuid)""", storeId, itm8, ean, importId, importId);
     }
 
+    private void pack(String importId, String itm8, String ean, String pack) {
+        jdbc.update("""
+                insert into product_codes (store_id, itm8, ean, prio, sale_pack, first_import_id, last_import_id)
+                values (?::uuid, ?, ?, ?, ?::numeric, ?::uuid, ?::uuid)""", storeId, itm8, ean, pack.equals("1"), pack,
+                importId, importId);
+    }
+
     /** Czyta plik tak jak program kolektora (Catalog.cs). */
     private static final class Reader {
         final int size;
@@ -302,6 +399,8 @@ class CollectorIntegrationTests {
         final List<String> search = new ArrayList<>();
         private final long[] eans;
         private final int[] eanRows;
+        private final int[] numerators;
+        private final int[] denominators;
         private final long[] itm8s;
         private final int[] itm8Rows;
 
@@ -327,6 +426,8 @@ class CollectorIntegrationTests {
             assertThat(search).hasSize(count);
             eans = longs(in, eanCount);
             eanRows = ints(in, eanCount);
+            numerators = ints(in, eanCount);
+            denominators = ints(in, eanCount);
             itm8s = longs(in, count);
             itm8Rows = ints(in, count);
             bytes(in, nameBytes);
@@ -342,6 +443,15 @@ class CollectorIntegrationTests {
                 result.put(CollectorCatalogFile.FIELDS.get(i), row.get(i));
             }
             return result;
+        }
+
+        String ratio(long ean) {
+            for (int i = 0; i < eans.length; i++) {
+                if (eans[i] == ean) {
+                    return numerators[i] + "/" + denominators[i];
+                }
+            }
+            return "";
         }
 
         List<String> byEan(long ean) {

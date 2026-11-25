@@ -118,7 +118,7 @@ public class StoreCollectorService {
         StoreCollector collector = (digits.length() == PAIR_CODE_DIGITS
                 ? collectors.findByPairCodeForUpdate(hash(digits)) : java.util.Optional.<StoreCollector>empty())
                 .orElseThrow(() -> ApiException.forbidden(
-                        "Kod jest zły albo wygasł. Nowy kod jest w Ustawieniach sklepu, Kolektory."));
+                        "Kod jest zły albo wygasł. Nowy kod jest w Intermanage: Kolektory, Urządzenia."));
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         String key = "imk_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);

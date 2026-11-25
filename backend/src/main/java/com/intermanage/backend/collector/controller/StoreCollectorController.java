@@ -19,7 +19,7 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.collector.dto.StoreCollectorResponse;
 import com.intermanage.backend.collector.service.StoreCollectorService;
 
-/** Kolektory w Ustawieniach sklepu: kod parowania daje dostęp do kartoteki, więc lista i zmiany to {@code INVENTORY:EDIT}. */
+/** Kolektory sklepu: kod parowania daje dostęp do kartoteki, więc lista i zmiany to {@code INVENTORY:EDIT}. */
 @RestController
 @RequestMapping("/api/stores/{storeId}/collectors")
 @PreAuthorize("hasAuthority('INVENTORY:EDIT') and " + Access.STORE)

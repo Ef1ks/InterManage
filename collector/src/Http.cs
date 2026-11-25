@@ -65,9 +65,11 @@ namespace Intermanage.Collector
     internal class Http : IDisposable
     {
         private const int IdleLimit = 60000;
-        private readonly Socket socket;
+        private const int ConnectLimit = 15000;
+        private Socket socket;
         private readonly Timer watchdog;
         private volatile int lastActivity = Environment.TickCount;
+        private volatile int limit = ConnectLimit;
         private volatile bool timedOut;
         private Stream stream;
 
@@ -78,25 +80,18 @@ namespace Intermanage.Collector
             {
                 throw new HttpException(0, "Adres serwera musi zaczynać się od https://");
             }
-            IPAddress address;
-            try
-            {
-                address = IPv4(server.Host);
-            }
-            catch (SocketException)
-            {
-                throw new HttpException(0, "Brak sieci");
-            }
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            List<IPAddress> addresses = Network.Addresses(server.Host);
             // Na Windows CE gniazdo nie ma limitu czasu, więc bezczynne połączenie zamyka zegar.
-            watchdog = new Timer(new TimerCallback(CloseWhenIdle), null, 5000, 5000);
+            watchdog = new Timer(new TimerCallback(CloseWhenIdle), null, 2000, 2000);
             try
             {
-                socket.Connect(new IPEndPoint(address, server.Port));
+                IPAddress address = Connect(addresses, server.Port);
+                limit = IdleLimit;
                 stream = new NetworkStream(socket, false);
                 if (server.Scheme == "https")
                 {
-                    stream = Secure(stream, server.Host);
+                    stream = Secure(stream, server.Host, address);
+                    Network.Remember(address, addresses);
                 }
             }
             catch (Exception error)
@@ -104,6 +99,31 @@ namespace Intermanage.Collector
                 Dispose();
                 throw Describe(error);
             }
+        }
+
+        private IPAddress Connect(List<IPAddress> addresses, int port)
+        {
+            Exception last = null;
+            foreach (IPAddress address in addresses)
+            {
+                timedOut = false;
+                lastActivity = Environment.TickCount;
+                socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                try
+                {
+                    socket.Connect(new IPEndPoint(address, port));
+                    lastActivity = Environment.TickCount;
+                    return address;
+                }
+                catch (Exception error)
+                {
+                    last = error;
+                    Log.Write("Łączenie z " + address + ": " + Network.Text(error) + (timedOut ? " (limit czasu)" : ""));
+                    socket.Close();
+                }
+            }
+            throw new HttpException(0, Network.OwnAddress().Length == 0 ? "Podstawka nie daje sieci"
+                : "Brak połączenia z serwerem" + (timedOut ? "" : " (" + Network.Text(last) + ")"));
         }
 
         public static HttpResponse Send(string method, string path, string form, out Http connection)
@@ -165,6 +185,26 @@ namespace Intermanage.Collector
             }
         }
 
+        /// <summary>Tekst do formularza; Uri.EscapeDataString ma limit długości, a lista bywa długa.</summary>
+        public static string Encode(string text)
+        {
+            StringBuilder result = new StringBuilder();
+            foreach (byte value in Encoding.UTF8.GetBytes(text))
+            {
+                bool plain = (value >= '0' && value <= '9') || (value >= 'A' && value <= 'Z')
+                    || (value >= 'a' && value <= 'z') || value == '-' || value == '.' || value == '_';
+                if (plain)
+                {
+                    result.Append((char)value);
+                }
+                else
+                {
+                    result.Append('%').Append(value.ToString("X2"));
+                }
+            }
+            return result.ToString();
+        }
+
         public HttpException Describe(Exception error)
         {
             HttpException known = error as HttpException;
@@ -196,44 +236,58 @@ namespace Intermanage.Collector
             }
         }
 
-        private static IPAddress IPv4(string host)
-        {
-            foreach (IPAddress address in Dns.GetHostEntry(host).AddressList)
-            {
-                if (address.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    return address;
-                }
-            }
-            throw new HttpException(0, "Brak sieci");
-        }
-
         private void CloseWhenIdle(object state)
         {
-            if (Environment.TickCount - lastActivity > IdleLimit)
+            Socket open = socket;
+            if (open != null && !timedOut && Environment.TickCount - lastActivity > limit)
             {
                 timedOut = true;
-                socket.Close();
+                open.Close();
             }
         }
 
-        private Stream Secure(Stream plain, string host)
+        private Stream Secure(Stream plain, string host, IPAddress address)
         {
             Client client = new Client(host);
+            Trace trace = new Trace(plain);
             try
             {
-                TlsClientProtocol protocol = new TlsClientProtocol(plain, new SecureRandom());
+                TlsClientProtocol protocol = new TlsClientProtocol(trace, new SecureRandom());
                 protocol.Connect(client);
+                trace.Stop();
                 return protocol.Stream;
             }
-            catch (Exception)
+            catch (Exception error)
             {
                 if (client.Rejected != null)
                 {
                     throw new HttpException(0, "Niezaufane połączenie: " + client.Rejected);
                 }
-                throw;
+                trace.WriteTo("Szyfrowanie z " + host + " (" + address + "), etap " + client.Stage + ": " + error);
+                string reason = trace.PlainAnswer
+                    ? "Sieć nie przepuszcza połączenia (odpowiedź bez szyfrowania)"
+                    : "Szyfrowanie: " + error.GetType().Name + " " + error.Message;
+                throw new HttpException(0, reason + "\r\n" + address + ", etap " + client.Stage + ", " + trace.Short
+                    + "\r\n" + Place(error));
             }
+        }
+
+        /// <summary>Skąd błąd: nazwy trzech ostatnich metod ze śladu wywołań.</summary>
+        private static string Place(Exception error)
+        {
+            StringBuilder result = new StringBuilder();
+            string trace = error.StackTrace;
+            string[] lines = trace == null ? new string[0] : trace.Split('\n');
+            for (int i = 0; i < lines.Length && i < 3; i++)
+            {
+                int end = lines[i].IndexOf('(');
+                int dot = end < 0 ? -1 : lines[i].LastIndexOf('.', end);
+                if (dot >= 0)
+                {
+                    result.Append(result.Length > 0 ? " < " : "").Append(lines[i].Substring(dot + 1, end - dot - 1).Trim());
+                }
+            }
+            return result.ToString();
         }
 
         private HttpResponse ReadResponse()
@@ -477,6 +531,9 @@ namespace Intermanage.Collector
         private class Client : DefaultTlsClient, TlsAuthentication
         {
             public string Rejected;
+
+            /// <summary>Dokąd doszło uzgadnianie: 0 początek, 1 odpowiedź serwera, 2 certyfikat, 3 sprawdzony.</summary>
+            public int Stage;
             private readonly string host;
 
             public Client(string host)
@@ -509,6 +566,12 @@ namespace Intermanage.Collector
                 return extensions;
             }
 
+            public override void NotifySelectedCipherSuite(int selectedCipherSuite)
+            {
+                Stage = 1;
+                base.NotifySelectedCipherSuite(selectedCipherSuite);
+            }
+
             public override TlsAuthentication GetAuthentication()
             {
                 return this;
@@ -516,6 +579,7 @@ namespace Intermanage.Collector
 
             public void NotifyServerCertificate(Certificate serverCertificate)
             {
+                Stage = 2;
                 ArrayList chain = new ArrayList();
                 foreach (Org.BouncyCastle.Asn1.X509.X509CertificateStructure item
                     in serverCertificate.GetCertificateList())
@@ -536,6 +600,7 @@ namespace Intermanage.Collector
                     Rejected = problem;
                     throw new TlsFatalAlert(AlertDescription.bad_certificate);
                 }
+                Stage = 3;
             }
 
             public TlsCredentials GetClientCredentials(CertificateRequest certificateRequest)

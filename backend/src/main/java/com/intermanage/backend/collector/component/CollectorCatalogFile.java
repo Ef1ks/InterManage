@@ -1,6 +1,9 @@
 package com.intermanage.backend.collector.component;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -21,7 +24,7 @@ import java.util.stream.Collectors;
  * szuka. Little endian:
  *
  * <pre>
- * 8 bajtów  IMKATAL1
+ * 8 bajtów  IMKATAL2
  * int32     długość nagłówka, potem nagłówek UTF-8 (klucz=wartość w liniach)
  * int32 × 5 liczba artykułów n, bajty wierszy, bajty tekstu do szukania, liczba EAN-ów e, bajty nomenklatury
  * int32 × (n + 1)  początki wierszy
@@ -29,22 +32,66 @@ import java.util.stream.Collectors;
  * teksty do szukania ASCII (nazwa i marka wielkimi literami bez polskich znaków, zakończone LF;
  *                  numer linii = numer artykułu)
  * int64 × e EAN-y rosnąco (bez zer wiodących)   int32 × e numery artykułów
+ * int32 × e licznik i int32 × e mianownik przelicznika: ile jednostek głównego kodu to sztuka tego kodu (puszka 1/4)
  * int64 × n ITM8 rosnąco                        int32 × n numery artykułów
  * nomenklatura UTF-8: kod, tabulator, nazwa, LF
  * </pre>
  */
 public final class CollectorCatalogFile {
 
-    public static final String MAGIC = "IMKATAL1";
+    public static final String MAGIC = "IMKATAL2";
 
     /** Kolejność pól wiersza; to samo w {@code Catalog.cs}. */
     public static final List<String> FIELDS = List.of("itm8", "ean", "name", "brand", "subfamily", "salePrice",
             "promoPrice", "promoFrom", "promoTo", "promoRegular", "stock", "rotation", "caseSize", "unit", "netContent",
-            "cadencierPrice", "active", "cadencier", "supplier", "lastDelivery", "eans");
+            "cadencierPrice", "active", "cadencier", "supplier", "lastDelivery", "eans", "multipack");
 
-    /** Artykuł: wartości pól w kolejności {@link #FIELDS}, kody od najpewniejszych (główny, multikody, dawne pary). */
+    /**
+     * Artykuł: wartości pól w kolejności {@link #FIELDS}, kody od najpewniejszych (główny, multikody, dawne pary) i
+     * opakowania sprzedaży multikodów (EAN jako liczba → opakowanie).
+     */
     public record Article(List<String> fields, String itm8, String name, String brand, String mainEan,
-            Collection<String> codes, Collection<String> formerCodes) {
+            Collection<String> codes, Collection<String> formerCodes, Map<Long, BigDecimal> packs) {
+    }
+
+    /** Przelicznik: ilość głównego kodu = wpisana ilość × numerator / denominator. */
+    public record Ratio(int numerator, int denominator) {
+
+        static final Ratio ONE = new Ratio(1, 1);
+        /** Opakowanie w raporcie ma 3 miejsca, ucięte (1/6 = 0,166), więc ułamki 1/n rozpoznajemy z taką dokładnością. */
+        private static final BigDecimal TOLERANCE = new BigDecimal("0.001");
+        private static final int MAX_PIECES = 48;
+
+        /** Z opakowań zeskanowanego i głównego kodu; nieznane albo równe = 1. */
+        /** Kod to jedna sztuka wielopaku: 1/4 z czteropaka. */
+        public boolean isPiece() {
+            return numerator == 1 && denominator > 1 && denominator <= MAX_PIECES;
+        }
+
+        public static Ratio of(BigDecimal scanned, BigDecimal main) {
+            if (scanned == null || scanned.signum() <= 0 || main == null || main.signum() <= 0
+                    || scanned.compareTo(main) == 0) {
+                return ONE;
+            }
+            BigInteger[] a = fraction(scanned);
+            BigInteger[] b = fraction(main);
+            BigInteger numerator = a[0].multiply(b[1]);
+            BigInteger denominator = a[1].multiply(b[0]);
+            BigInteger divisor = numerator.gcd(denominator);
+            return new Ratio(numerator.divide(divisor).intValueExact(), denominator.divide(divisor).intValueExact());
+        }
+
+        private static BigInteger[] fraction(BigDecimal pack) {
+            if (pack.compareTo(BigDecimal.ONE) < 0) {
+                int pieces = BigDecimal.ONE.divide(pack, 0, RoundingMode.HALF_UP).intValue();
+                BigDecimal exact = BigDecimal.ONE.divide(BigDecimal.valueOf(pieces), 9, RoundingMode.HALF_UP);
+                if (pieces <= MAX_PIECES && exact.subtract(pack).abs().compareTo(TOLERANCE) < 0) {
+                    return new BigInteger[] {BigInteger.ONE, BigInteger.valueOf(pieces)};
+                }
+            }
+            return new BigInteger[] {pack.setScale(3, RoundingMode.HALF_UP).movePointRight(3).toBigIntegerExact(),
+                BigInteger.valueOf(1000)};
+        }
     }
 
     private CollectorCatalogFile() {
@@ -83,7 +130,7 @@ public final class CollectorCatalogFile {
                 .collect(Collectors.joining()).getBytes(StandardCharsets.UTF_8);
 
         long size = 8L + 4 + headerBytes.length + 20 + 4L * (count + 1) + rows.size() + search.size()
-                + 12L * eans.size() + 12L * count + names.length;
+                + 20L * eans.size() + 12L * count + names.length;
         ByteBuffer out = ByteBuffer.allocate(Math.toIntExact(size)).order(ByteOrder.LITTLE_ENDIAN);
         out.put(MAGIC.getBytes(StandardCharsets.US_ASCII));
         out.putInt(headerBytes.length).put(headerBytes);
@@ -93,6 +140,12 @@ public final class CollectorCatalogFile {
         }
         out.put(rows.toByteArray()).put(search.toByteArray());
         putIndex(out, eans);
+        for (long[] entry : eans) {
+            out.putInt((int) entry[2]);
+        }
+        for (long[] entry : eans) {
+            out.putInt((int) entry[3]);
+        }
         putIndex(out, itm8s);
         out.put(names);
         return out.array();
@@ -124,7 +177,11 @@ public final class CollectorCatalogFile {
             }
         }
         List<long[]> result = new ArrayList<>(owners.size());
-        owners.forEach((key, indexes) -> indexes.forEach(index -> result.add(new long[] {key, index})));
+        owners.forEach((key, indexes) -> indexes.forEach(index -> {
+            Article article = articles.get(index);
+            Ratio ratio = Ratio.of(article.packs().get(key), article.packs().get(number(article.mainEan())));
+            result.add(new long[] {key, index, ratio.numerator(), ratio.denominator()});
+        }));
         sort(result);
         return result;
     }

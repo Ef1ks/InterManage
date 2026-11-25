@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.http.ContentDisposition;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.collector.component.CollectorProgram;
 import com.intermanage.backend.collector.service.CollectorCatalogService;
+import com.intermanage.backend.collector.service.CollectorListService;
 import com.intermanage.backend.collector.service.StoreCollectorService;
 import com.intermanage.backend.collector.service.StoreCollectorService.CollectorContext;
 import com.intermanage.backend.common.component.StoreTime;
@@ -36,6 +38,7 @@ import com.intermanage.backend.common.exception.ApiException;
  * GET  /api/collector/status   → time, catalog (wersja danych), store, storeName, name
  * GET  /api/collector/catalog  → plik kartoteki spakowany zlib; nagłówki X-Catalog-Version, X-Catalog-Size, X-Catalog-Sha256
  * POST /api/collector/synced   version (formularz): kolektor zapisał dane tej wersji
+ * POST /api/collector/lists    id, started, lines (formularz): lista z Protokołów; ta sama drugi raz jest pomijana
  * GET  /api/collector/program  → version, files i przy każdym pliku .size i .sha256 (nowa wersja programu)
  * GET  /api/collector/program/{plik}?version=  plik tej wersji (409, gdy serwer ma już inną)
  * GET  /api/collector/setup    instalator, bez klucza (pobiera się go na komputerze, zanim kolektor jest połączony)
@@ -55,9 +58,11 @@ public class CollectorApiController {
     private final StoreCollectorService collectors;
     private final CollectorCatalogService catalog;
     private final CollectorProgram program;
+    private final CollectorListService lists;
 
     public CollectorApiController(StoreCollectorService collectors, CollectorCatalogService catalog,
-            CollectorProgram program) {
+            CollectorProgram program, CollectorListService lists) {
+        this.lists = lists;
         this.program = program;
         this.collectors = collectors;
         this.catalog = catalog;
@@ -105,6 +110,16 @@ public class CollectorApiController {
             @RequestParam String version) {
         CollectorContext collector = collector(authorization, programVersion);
         collectors.synced(collector, version);
+        return text(describe(collector));
+    }
+
+    @PostMapping("/lists")
+    public ResponseEntity<String> list(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestHeader(value = VERSION_HEADER, required = false) String programVersion,
+            @RequestParam UUID id, @RequestParam(required = false) String started, @RequestParam String lines) {
+        CollectorContext collector = collector(authorization, programVersion);
+        lists.receive(collector, id, started, lines);
         return text(describe(collector));
     }
 

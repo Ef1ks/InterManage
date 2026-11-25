@@ -18,6 +18,7 @@ import {
   MessagesSquareIcon,
   NewspaperIcon,
   PackageIcon,
+  ScanBarcodeIcon,
   SettingsIcon,
   ShieldIcon,
   StoreIcon,
@@ -34,6 +35,8 @@ import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { cadPriorityPath } from '@/features/cad-priority/paths'
 import { meaOnlinePath } from '@/features/mea/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
+import { CollectorListsBadge } from '@/features/collectors/CollectorListsBadge'
+import { collectorPaths } from '@/features/collectors/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
 import { downloadsPath } from '@/features/downloads/paths'
@@ -290,6 +293,32 @@ const GROUPS: GroupSpec[] = [
     ],
   },
   {
+    key: 'collectors',
+    path: collectorPaths.group,
+    label: 'Kolektory',
+    description: 'Listy zeskanowane na kolektorach, protokoły z nich i urządzenia sklepu.',
+    icon: ScanBarcodeIcon,
+    items: [
+      {
+        key: 'collector-lists',
+        path: collectorPaths.lists,
+        label: 'Dane z kolektorów',
+        description: 'Listy po włożeniu kolektora na podstawkę: protokół, Excel, PDF i wydruk.',
+        icon: ClipboardListIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+        badge: () => <CollectorListsBadge />,
+      },
+      {
+        key: 'collector-devices',
+        path: collectorPaths.devices,
+        label: 'Urządzenia',
+        description: 'Instalator, kod do połączenia i stan danych na kolektorach.',
+        icon: ScanBarcodeIcon,
+        visible: (me) => hasPermission(me, 'INVENTORY', 'EDIT'),
+      },
+    ],
+  },
+  {
     key: 'store',
     path: '/zespol',
     label: 'Zespół',
@@ -325,13 +354,12 @@ const GROUPS: GroupSpec[] = [
         label: 'Ustawienia sklepu',
         description: 'Budżet rejonów, marże, ceny dostawców, sklepy zaprzyjaźnione, protokoły i zmiana cen.',
         icon: SettingsIcon,
-        // Budżet i marże (sprzedaż), sklepy zaprzyjaźnione (dokumenty), pliki PROTO (też wprowadzanie danych i garmaż), kolektory (magazyn), agent.
+        // Budżet i marże (sprzedaż), sklepy zaprzyjaźnione (dokumenty), pliki PROTO (też wprowadzanie danych i garmaż), agent.
         visible: (me) =>
           canEditDocuments(me) ||
           hasPermission(me, 'SALES', 'EDIT') ||
           hasPermission(me, 'DATA_ENTRY', 'EDIT') ||
           hasPermission(me, 'DELI_ORDERS', 'EDIT') ||
-          hasPermission(me, 'INVENTORY', 'EDIT') ||
           hasPermission(me, 'STORE_AGENT'),
         badge: (me) => canEditDocuments(me) && <PartnerInvitationsBadge />,
       },

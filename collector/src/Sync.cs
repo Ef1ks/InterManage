@@ -17,6 +17,11 @@ namespace Intermanage.Collector
     {
         private const int CheckEvery = 5 * 60 * 1000;
         private const int RetryEvery = 30 * 1000;
+        /// <summary>Zaraz po postawieniu na podstawce sieć dopiero wstaje, więc ponawia częściej.</summary>
+        private const int FirstRetryEvery = 8 * 1000;
+        private const int FirstRetries = 2 * 60 * 1000;
+        /// <summary>Próba bez żadnego postępu: zawieszona (np. po uśpieniu kolektora).</summary>
+        private const int StuckAfter = 3 * 60 * 1000;
         private const int Step = 2000;
         /// <summary>Tyle na podstawce bez połączenia i wersja na próbie wraca do poprzedniej.</summary>
         private const int TrialLimit = 15 * 60 * 1000;
@@ -33,6 +38,10 @@ namespace Intermanage.Collector
         /// <summary>Klucz przestał działać: kolektor trzeba połączyć nowym kodem.</summary>
         public event EventHandler Unpaired;
 
+        /// <summary>Lista protokołu została zamknięta albo wysłana.</summary>
+        public event EventHandler ListsChanged;
+
+        private readonly ProtocolStore protocols;
         private readonly AutoResetEvent wake = new AutoResetEvent(false);
         private volatile bool requested;
         private volatile bool stopping;
@@ -42,6 +51,9 @@ namespace Intermanage.Collector
         private volatile string readyVersion = "";
         private bool onTrial;
         private int cradleSince;
+        private volatile int worker;
+        private volatile int busySince;
+        private volatile bool busy;
 
         /// <summary>Opis trwającej pracy albo ostatniego błędu; pusty, gdy wszystko jest w porządku.</summary>
         public string Status { get { return status; } }
@@ -62,14 +74,38 @@ namespace Intermanage.Collector
             get { return Path.Combine(Settings.Folder, "katalog.new"); }
         }
 
+        public Sync(ProtocolStore protocols)
+        {
+            this.protocols = protocols;
+        }
+
         public void Start(string currentVersion)
         {
             version = currentVersion;
             onTrial = Updater.Managed && Versions.Read(Settings.Folder).OnTrial;
+            StartWorker();
+        }
+
+        private void StartWorker()
+        {
+            worker++;
+            busy = false;
             Thread thread = new Thread(new ThreadStart(Run));
             thread.IsBackground = true;
             thread.Priority = ThreadPriority.BelowNormal;
             thread.Start();
+        }
+
+        /// <summary>Wołane z zegara okna: zawieszoną próbę zostawia i zaczyna od nowa w nowym wątku.</summary>
+        public void RestartWhenStuck()
+        {
+            if (busy && !stopping && Environment.TickCount - busySince > StuckAfter)
+            {
+                Log.Write("Pobieranie nie odpowiada, zaczynam od nowa");
+                Set("", -1);
+                requested = true;
+                StartWorker();
+            }
         }
 
         public void Stop()
@@ -124,9 +160,11 @@ namespace Intermanage.Collector
 
         private void Run()
         {
+            int me = worker;
             int nextAt = Environment.TickCount;
+            int checkedAt = Environment.TickCount - RetryEvery;
             bool wasOnCradle = false;
-            while (!stopping)
+            while (!stopping && me == worker)
             {
                 bool onCradle = Native.OnCradle;
                 if (!onCradle || !wasOnCradle)
@@ -134,13 +172,26 @@ namespace Intermanage.Collector
                     cradleSince = Environment.TickCount;
                 }
                 bool due = onCradle && (!wasOnCradle || Environment.TickCount - nextAt >= 0);
+                due = due || (onCradle && Environment.TickCount - checkedAt > RetryEvery && protocols.Ready);
                 wasOnCradle = onCradle;
                 if (Settings.Paired && (requested || due))
                 {
                     bool manual = requested;
                     requested = false;
+                    busySince = Environment.TickCount;
+                    checkedAt = Environment.TickCount;
+                    busy = true;
                     bool done = Check(manual);
-                    nextAt = Environment.TickCount + (done ? CheckEvery : RetryEvery);
+                    if (me != worker)
+                    {
+                        return;
+                    }
+                    busy = false;
+                    bool early = Environment.TickCount - cradleSince < FirstRetries;
+                    // Lista uzupełniana na podstawce pójdzie chwilę po ostatnim skanie.
+                    bool lists = protocols.Count > 0 || ProtocolStore.Waiting.Length > 0;
+                    nextAt = Environment.TickCount
+                        + (done && !lists ? CheckEvery : early || done ? FirstRetryEvery : RetryEvery);
                 }
                 if (onTrial && onCradle && Environment.TickCount - cradleSince > TrialLimit && Updater.GiveUp())
                 {
@@ -163,6 +214,7 @@ namespace Intermanage.Collector
                 Dictionary<string, string> answer = Http.Text("GET", "/api/collector/status", null);
                 SetClock(answer);
                 Contacted();
+                SendLists();
                 // Najpierw program: dane w nowym układzie przeczyta dopiero nowa wersja.
                 string program = Pairs.Get(answer, "program");
                 if (readyVersion != program && Updater.Wanted(program))
@@ -256,6 +308,26 @@ namespace Intermanage.Collector
             Http.Text("POST", "/api/collector/synced", "version=" + downloaded);
         }
 
+        /// <summary>Na podstawce: zamyka bieżącą listę i wysyła wszystkie zamknięte.</summary>
+        private void SendLists()
+        {
+            bool changed = false;
+            if (Native.OnCradle && protocols.Count > 0)
+            {
+                changed = protocols.Close();
+            }
+            foreach (string file in ProtocolStore.Waiting)
+            {
+                Set("Wysyłam listę…", -1);
+                protocols.Send(file);
+                changed = true;
+            }
+            if (changed)
+            {
+                Raise(ListsChanged);
+            }
+        }
+
         private void ShowProgramProgress(int done)
         {
             Set("Pobieram nową wersję…", done);
@@ -293,6 +365,7 @@ namespace Intermanage.Collector
             }
             status = text;
             percent = progress;
+            busySince = Environment.TickCount;
             Raise(Changed);
         }
 

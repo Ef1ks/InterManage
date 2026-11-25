@@ -80,18 +80,25 @@ public interface CollectorCatalogRepository extends Repository<Product, UUID> {
         String getItm8();
 
         String getEan();
+
+        /** Opakowanie sprzedaży kodu (puszka z czteropaka: 0,25); w dawnych parach nieznane. */
+        BigDecimal getPack();
+
+        /** Jednostka sprzedaży kodu, np. Szt albo kg. */
+        String getUnit();
     }
 
     /** Obowiązujące multikody artykułów najnowszego raportu. */
     @Query(nativeQuery = true, value = """
-            select c.itm8, c.ean from product_codes c
+            select c.itm8, c.ean, c.sale_pack as pack, c.sale_unit as unit from product_codes c
             join products p on p.store_id = c.store_id and p.itm8 = c.itm8 and p.last_seen_import_id = :importId
             where c.store_id = :storeId and c.current""")
     List<Code> findCodes(UUID storeId, UUID importId);
 
     /** Dawne pary ITM8 + EAN artykułów najnowszego raportu (kod działa, gdy nie ma go dziś inny artykuł). */
     @Query(nativeQuery = true, value = """
-            select p.itm8, e.ean from product_eans e
+            select p.itm8, e.ean, cast(null as numeric) as pack,
+                   cast(null as varchar) as unit from product_eans e
             join products p on p.id = e.product_id
             where p.store_id = :storeId and p.last_seen_import_id = :importId""")
     List<Code> findFormerCodes(UUID storeId, UUID importId);

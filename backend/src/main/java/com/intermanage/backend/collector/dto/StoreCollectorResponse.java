@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Kolektor w Ustawieniach sklepu. {@code pairCode} jest tylko w odpowiedzi, która go utworzyła (w bazie jest skrót);
+ * Kolektor sklepu (Kolektory, Urządzenia). {@code pairCode} jest tylko w odpowiedzi, która go utworzyła (w bazie jest skrót);
  * {@code catalogCurrent}: kolektor ma dane z ostatnich importów sklepu,
  * {@code newVersion}: nowsza wersja programu, którą pobierze na podstawce (brak = ma najnowszą).
  */

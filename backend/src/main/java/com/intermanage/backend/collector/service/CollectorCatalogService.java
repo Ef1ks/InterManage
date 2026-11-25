@@ -110,7 +110,21 @@ public class CollectorCatalogService {
         LocalDateTime reportAt = imports.findById(importId).map(ProductImport::getReportGeneratedAt).orElse(null);
         LocalDate today = LocalDate.now(StoreTime.ZONE);
 
-        Map<String, Set<String>> codes = grouped(catalog.findCodes(storeId, importId));
+        List<CollectorCatalogRepository.Code> multiCodes = catalog.findCodes(storeId, importId);
+        Map<String, Set<String>> codes = grouped(multiCodes);
+        Map<String, Map<Long, BigDecimal>> packs = new HashMap<>();
+        Map<String, Set<Long>> pieceCodes = new HashMap<>();
+        for (CollectorCatalogRepository.Code code : multiCodes) {
+            if (code.getPack() != null) {
+                packs.computeIfAbsent(code.getItm8(), ignored -> new HashMap<>())
+                        .put(CollectorCatalogFile.number(code.getEan()), code.getPack());
+                // Kod na kg to etykieta wagi (0,1 = 100 g), a nie sztuka z wielopaku.
+                if (!"kg".equalsIgnoreCase(code.getUnit())) {
+                    pieceCodes.computeIfAbsent(code.getItm8(), ignored -> new LinkedHashSet<>())
+                            .add(CollectorCatalogFile.number(code.getEan()));
+                }
+            }
+        }
         Map<String, Set<String>> formerCodes = grouped(catalog.findFormerCodes(storeId, importId));
         Map<String, CollectorCatalogRepository.Promo> promos = promotions(storeId, today);
         Map<String, DocumentLineRepository.LastDelivery> deliveries = lines
@@ -122,8 +136,11 @@ public class CollectorCatalogService {
             Collection<String> current = codes.getOrDefault(row.getItm8(), Set.of());
             Collection<String> former = formerCodes.getOrDefault(row.getItm8(), Set.of());
             articles.add(new CollectorCatalogFile.Article(
-                    fields(row, promos.get(row.getItm8()), deliveries.get(row.getItm8()), current, today),
-                    row.getItm8(), row.getName(), brand(row), row.getEan(), current, former));
+                    fields(row, promos.get(row.getItm8()), deliveries.get(row.getItm8()), current, today,
+                            multipack(row, packs.getOrDefault(row.getItm8(), Map.of()),
+                                    pieceCodes.getOrDefault(row.getItm8(), Set.of()))),
+                    row.getItm8(), row.getName(), brand(row), row.getEan(), current, former,
+                    packs.getOrDefault(row.getItm8(), Map.of())));
         }
 
         Map<String, String> header = new LinkedHashMap<>();
@@ -141,7 +158,7 @@ public class CollectorCatalogService {
     }
 
     private static List<String> fields(CollectorCatalogRepository.Article row, CollectorCatalogRepository.Promo listed,
-            DocumentLineRepository.LastDelivery delivery, Collection<String> codes, LocalDate today) {
+            DocumentLineRepository.LastDelivery delivery, Collection<String> codes, LocalDate today, int multipack) {
         // Promocja z kasy jest nowsza niż lista promocji; bez niej trwająca albo najbliższa z listy.
         boolean till = row.getPromoPrice() != null && row.getPromoTo() != null && !row.getPromoTo().isBefore(today);
         BigDecimal promoPrice = till ? row.getPromoPrice() : listed == null ? null : listed.getPromoPrice();
@@ -158,7 +175,25 @@ public class CollectorCatalogService {
                 number(row.getCaseSize()), text(row.getUnit()), number(row.getNetContent()),
                 number(row.getCadencierPrice()), Boolean.FALSE.equals(row.getActive()) ? "0" : "1",
                 Boolean.TRUE.equals(row.getCadencier()) ? "1" : "0", supplier,
-                delivery == null ? "" : day(delivery.getDocumentDate().toLocalDate()), eans);
+                delivery == null ? "" : day(delivery.getDocumentDate().toLocalDate()), eans,
+                multipack > 1 ? String.valueOf(multipack) : "");
+    }
+
+    /**
+     * Ile sztuk ma wielopak artykułu (0,25 → 4, 0,166 → 6): główny kod to wielopak, a inny kod jego sztuka. 0 = artykuł
+     * bez takiego kodu. Przy kilku bierze najdrobniejszy.
+     */
+    private static int multipack(CollectorCatalogRepository.Article row, Map<Long, BigDecimal> packs,
+            Set<Long> pieceCodes) {
+        BigDecimal main = packs.get(CollectorCatalogFile.number(row.getEan()));
+        int result = 0;
+        for (Long code : pieceCodes) {
+            CollectorCatalogFile.Ratio ratio = CollectorCatalogFile.Ratio.of(packs.get(code), main);
+            if (ratio.isPiece()) {
+                result = Math.max(result, ratio.denominator());
+            }
+        }
+        return result;
     }
 
     /** Promocja z listy: trwająca dziś, a bez niej najbliższa przyszła. */

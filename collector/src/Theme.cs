@@ -42,6 +42,19 @@ namespace Intermanage.Collector
             return value.Length == 0 ? "–" : value.Replace('.', ',');
         }
 
+        /// <summary>Ilość do pola: „1.23” → „1,23”, brak = puste pole.</summary>
+        public static string QuantityText(string value)
+        {
+            return value.Replace('.', ',');
+        }
+
+        /// <summary>Przelicznik opakowania: 1/4 → „0,25”, 1/6 → „1/6”, 6/1 → „6”.</summary>
+        public static string Ratio(int numerator, int denominator)
+        {
+            decimal value = (decimal)numerator / denominator;
+            return decimal.Round(value, 3) == value ? Quantity(ProtocolLine.Number(value)) : numerator + "/" + denominator;
+        }
+
         public static string Day(DateTime day)
         {
             return day == DateTime.MinValue ? "–" : day.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);

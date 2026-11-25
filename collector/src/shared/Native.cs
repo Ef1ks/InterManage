@@ -34,6 +34,9 @@ namespace Intermanage.Collector
         private static extern bool ShowWindow(IntPtr window, int command);
 
         [DllImport("coredll.dll")]
+        private static extern bool MoveWindow(IntPtr window, int x, int y, int width, int height, bool repaint);
+
+        [DllImport("coredll.dll")]
         private static extern bool SetForegroundWindow(IntPtr window);
 
         [DllImport("coredll.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -121,6 +124,15 @@ namespace Intermanage.Collector
                     return -1;
                 }
                 return status[2];
+            }
+        }
+
+        /// <summary>Okno na cały ekran, także w miejscu schowanego paska zadań.</summary>
+        public static void FillScreen(IntPtr window, int width, int height)
+        {
+            if (OnDevice)
+            {
+                MoveWindow(window, 0, 0, width, height, true);
             }
         }
 

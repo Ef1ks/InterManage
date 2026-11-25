@@ -21,7 +21,7 @@ const errorMessage = (error: unknown, fallback: string) => (error instanceof Api
 type ShownCode = { id: string; code: string; expiresAt: string; pairedBefore: string | null }
 
 /**
- * Kolektory sklepu (Ustawienia sklepu, `INVENTORY:EDIT`): dodanie daje jednorazowy kod do wpisania na kolektorze,
+ * Urządzenia sklepu (Kolektory, `INVENTORY:EDIT`): dodanie daje jednorazowy kod do wpisania na kolektorze,
  * lista mówi, czy kolektor ma aktualne dane. Kod znika, gdy kolektor się nim połączy.
  */
 export function CollectorSettings({ storeId }: { storeId: string }) {

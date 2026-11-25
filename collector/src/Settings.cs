@@ -7,7 +7,7 @@ namespace Intermanage.Collector
 {
     /// <summary>
     /// Ustawienia obok programu (ustawienia.txt). Klucz kolektora daje sam odczyt kartoteki jednego sklepu i da się go
-    /// wyłączyć w Ustawieniach sklepu, więc leży zwykłym tekstem.
+    /// wyłączyć w Intermanage, więc leży zwykłym tekstem.
     /// </summary>
     internal static class Settings
     {
@@ -41,6 +41,20 @@ namespace Intermanage.Collector
             get { return Value("key", ""); }
         }
 
+        /// <summary>Adresy IP, pod którymi ostatnio odpowiadał serwer (na czas, gdy DNS na podstawce nie działa).</summary>
+        public static string Addresses
+        {
+            get { return Value("addresses", ""); }
+            set
+            {
+                if (Value("addresses", "") != value)
+                {
+                    values["addresses"] = value;
+                    Save();
+                }
+            }
+        }
+
         public static bool Paired
         {
             get { return Key.Length > 0; }
@@ -69,7 +83,7 @@ namespace Intermanage.Collector
             Save();
         }
 
-        /// <summary>Klucz przestał działać (kolektor usunięty w Ustawieniach sklepu): potrzebny nowy kod.</summary>
+        /// <summary>Klucz przestał działać (kolektor usunięty w Intermanage): potrzebny nowy kod.</summary>
         public static void Unpair()
         {
             values.Remove("key");

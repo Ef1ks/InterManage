@@ -9,7 +9,7 @@ namespace Intermanage.Collector
     /// <summary>Artykuł z kartoteki; pola w kolejności jak w CollectorCatalogFile na serwerze.</summary>
     internal class Article
     {
-        private const int FieldCount = 21;
+        private const int FieldCount = 22;
         private readonly string[] fields;
 
         public Article(string row)
@@ -44,6 +44,9 @@ namespace Intermanage.Collector
         public DateTime LastDelivery { get { return Day(fields[19]); } }
         public string OtherEans { get { return fields[20]; } }
 
+        /// <summary>Ile sztuk ma wielopak (główny kod to wielopak, inny kod jego sztuka); 0 = nie dotyczy.</summary>
+        public int Multipack { get { return fields[21].Length == 0 ? 0 : int.Parse(fields[21]); } }
+
         public bool HasPromotion
         {
             get { return PromoPrice.Length > 0 && PromoTo != DateTime.MinValue; }
@@ -67,6 +70,25 @@ namespace Intermanage.Collector
         }
     }
 
+    /// <summary>
+    /// Trafienie szukania: artykuł, zeskanowany kod i przelicznik na główny kod (puszka z czteropaka 1/4). Kod z etykiety
+    /// wagi (z ceną albo wagą na końcu) jest w ScaleCode, pusty = zwykły kod.
+    /// </summary>
+    internal class Match
+    {
+        public readonly int Index;
+        public readonly string Code;
+        public int Numerator = 1;
+        public int Denominator = 1;
+        public string ScaleCode = "";
+
+        public Match(int index, string code)
+        {
+            Index = index;
+            Code = code;
+        }
+    }
+
     internal class InvalidDataFileException : Exception
     {
         public InvalidDataFileException()
@@ -83,7 +105,7 @@ namespace Intermanage.Collector
     internal class Catalog : IDisposable
     {
         public const int ResultLimit = 200;
-        private const string Magic = "IMKATAL1";
+        private const string Magic = "IMKATAL2";
         private const int ChunkSize = 65536;
 
         private readonly FileStream file;
@@ -97,6 +119,8 @@ namespace Intermanage.Collector
         private readonly long search;
         private readonly long eanKeys;
         private readonly long eanRows;
+        private readonly long eanNumerators;
+        private readonly long eanDenominators;
         private readonly long itm8Keys;
         private readonly long itm8Rows;
         private readonly byte[] number = new byte[8];
@@ -121,7 +145,9 @@ namespace Intermanage.Collector
                 search = rows + rowsSize;
                 eanKeys = search + searchSize;
                 eanRows = eanKeys + 8L * eanCount;
-                itm8Keys = eanRows + 4L * eanCount;
+                eanNumerators = eanRows + 4L * eanCount;
+                eanDenominators = eanNumerators + 4L * eanCount;
+                itm8Keys = eanDenominators + 4L * eanCount;
                 itm8Rows = itm8Keys + 8L * count;
                 long names = itm8Rows + 4L * count;
                 if (file.Length != names + namesSize)
@@ -173,23 +199,32 @@ namespace Intermanage.Collector
         /// Artykuły pasujące do wpisanego albo zeskanowanego tekstu: kod z cyfr (EAN, ITM8, kod z etykiety wagi),
         /// a bez trafienia i dla innego tekstu nazwa z marką (każde słowo jako fragment).
         /// </summary>
-        public List<int> Find(string text)
+        public List<Match> Find(string text)
         {
             string query = text.Trim();
-            List<int> found = new List<int>();
+            List<Match> found = new List<Match>();
             if (IsDigits(query) && query.Length <= 18)
             {
                 long code = long.Parse(query);
-                Append(found, eanKeys, eanRows, eanCount, code, code);
+                Append(found, eanKeys, eanRows, eanCount, code, code, query);
                 if (found.Count == 0 && query.Length <= 13)
                 {
-                    Append(found, itm8Keys, itm8Rows, count, code, code);
+                    // ITM8 nie jest kodem do protokołu: pozycja dostaje główny EAN.
+                    Append(found, itm8Keys, itm8Rows, count, code, code, "");
                 }
-                if (found.Count == 0 && IsScaleCode(query))
+                string digits = query.TrimStart('0');
+                if (found.Count == 0 && StartsLikeScale(digits) && digits.Length >= 7 && digits.Length <= 13)
                 {
-                    // Kod z etykiety wagi: pierwsze 7 cyfr to artykuł, reszta to cena albo waga.
-                    long article = long.Parse(query.Substring(0, 7)) * 1000000;
-                    Append(found, eanKeys, eanRows, eanCount, article, article + 999999);
+                    // Kod z etykiety wagi, także wpisany bez końca: pierwsze 7 cyfr to artykuł, reszta to cena albo waga.
+                    long article = long.Parse(digits.Substring(0, 7)) * 1000000;
+                    Append(found, eanKeys, eanRows, eanCount, article, article + 999999, "");
+                }
+                if (StartsLikeScale(digits) && digits.Length >= 12 && digits.Length <= 13 && ScaleValue(digits) > 0)
+                {
+                    foreach (Match match in found)
+                    {
+                        match.ScaleCode = digits;
+                    }
                 }
                 if (found.Count > 0)
                 {
@@ -216,13 +251,24 @@ namespace Intermanage.Collector
             return text.Length > 0;
         }
 
-        private static bool IsScaleCode(string code)
+        private static bool StartsLikeScale(string digits)
         {
-            return (code.Length == 12 || code.Length == 13) && code[0] == '2' && code[1] >= '1';
+            return digits.Length > 1 && digits[0] == '2' && digits[1] >= '1';
+        }
+
+        private static int ScaleValue(string code)
+        {
+            return int.Parse(code.Substring(7, 5));
+        }
+
+        /// <summary>Koniec kodu to cena w groszach: tylko 24 i tylko, gdy przełącznik nie mówi, że to waga.</summary>
+        private static bool ScalePrice(string code, bool weightIn24)
+        {
+            return code[1] == '4' && !weightIn24;
         }
 
         /// <summary>Numery artykułów z indeksu, których klucz jest w przedziale [from, to].</summary>
-        private void Append(List<int> found, long keys, long indexes, int size, long from, long to)
+        private void Append(List<Match> found, long keys, long indexes, int size, long from, long to, string code)
         {
             int low = 0;
             int high = size;
@@ -242,11 +288,55 @@ namespace Intermanage.Collector
             {
                 file.Seek(indexes + 4L * i, SeekOrigin.Begin);
                 int index = Int();
-                if (!found.Contains(index))
+                bool known = false;
+                foreach (Match match in found)
                 {
-                    found.Add(index);
+                    known = known || match.Index == index;
                 }
+                if (known)
+                {
+                    continue;
+                }
+                Match added = new Match(index, code);
+                if (keys == eanKeys && code.Length > 0)
+                {
+                    file.Seek(eanNumerators + 4L * i, SeekOrigin.Begin);
+                    added.Numerator = Math.Max(1, Int());
+                    file.Seek(eanDenominators + 4L * i, SeekOrigin.Begin);
+                    added.Denominator = Math.Max(1, Int());
+                }
+                found.Add(added);
             }
+        }
+
+        /// <summary>
+        /// Ilość z etykiety wagi w kg, jak we wprowadzaniu danych: przy 24 cena z etykiety przez cenę kilograma (z
+        /// weightIn24 waga), przy 21-23 i 25-29 waga w gramach. Pusta, gdy artykuł nie ma ceny.
+        /// </summary>
+        public static string ScaleQuantity(string code, Article article, bool weightIn24)
+        {
+            int value = ScaleValue(code);
+            if (!ScalePrice(code, weightIn24))
+            {
+                return ProtocolLine.Number(value / 1000m);
+            }
+            string price = article.PriceOn(DateTime.Today);
+            if (price.Length == 0)
+            {
+                return "";
+            }
+            decimal kilogram = decimal.Parse(price, CultureInfo.InvariantCulture);
+            return kilogram <= 0 ? "" : ProtocolLine.Number(decimal.Round(value / 100m / kilogram, 3));
+        }
+
+        /// <summary>Co mówi etykieta: „Etykieta 49,20 zł = 1,23 kg” albo „Etykieta 5 kg”.</summary>
+        public static string ScaleNote(string code, Article article, bool weightIn24)
+        {
+            string quantity = ScaleQuantity(code, article, weightIn24);
+            string weight = quantity.Length == 0 ? "brak ceny kg" : Theme.Quantity(quantity) + " kg";
+            return ScalePrice(code, weightIn24)
+                ? "Etykieta " + Theme.Money(ProtocolLine.Number(ScaleValue(code) / 100m)) + " = " + weight
+                : "Etykieta " + weight;
         }
 
         private long Key(long keys, int position)
@@ -257,9 +347,9 @@ namespace Intermanage.Collector
         }
 
         /// <summary>Szuka w tekstach nazw po kolei; linia = artykuł.</summary>
-        private List<int> FindText(string query)
+        private List<Match> FindText(string query)
         {
-            List<int> found = new List<int>();
+            List<Match> found = new List<Match>();
             List<byte[]> words = new List<byte[]>();
             foreach (string word in Plain(query).Split(' '))
             {
@@ -297,7 +387,7 @@ namespace Intermanage.Collector
                     }
                     if (Matches(buffer, start, i, patterns))
                     {
-                        found.Add(line);
+                        found.Add(new Match(line, ""));
                         if (found.Count >= ResultLimit)
                         {
                             return found;

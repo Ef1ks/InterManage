@@ -10,6 +10,9 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
 import { BakeryCheckPage } from '@/features/bakery-check/BakeryCheckPage'
 import { bakeryPath } from '@/features/bakery-check/paths'
+import { CollectorDevicesPage } from '@/features/collectors/CollectorDevicesPage'
+import { CollectorListsPage } from '@/features/collectors/CollectorListsPage'
+import { collectorPaths } from '@/features/collectors/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { ProtocolEntryPage } from '@/features/protocol-entry/ProtocolEntryPage'
 import { BaseDeliveryPage } from '@/features/base-delivery/BaseDeliveryPage'
@@ -154,6 +157,23 @@ const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
+      {
+        path: collectorPaths.lists,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <CollectorListsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: collectorPaths.devices,
+        element: (
+          <RequireAuth permission={{ category: 'INVENTORY', level: 'EDIT' }}>
+            <CollectorDevicesPage />
+          </RequireAuth>
+        ),
+      },
+      { path: '/ustawienia-sklepu/kolektory', element: <Navigate to={collectorPaths.devices} replace /> },
       {
         path: meaPath,
         element: (

@@ -5264,6 +5264,44 @@ export type StoreCollector = {
   deletedAt: string | null
 }
 
+/** Lista zeskanowana na kolektorze (CollectorListResponse); bez protokołów = czeka na wybór. */
+export type CollectorList = {
+  id: string
+  collectorName: string
+  startedAt: string | null
+  receivedAt: string
+  lineCount: number
+  protocols: {
+    id: string
+    kind: ProtocolKind
+    fileName: string
+    createdAt: string
+    createdBy: string | null
+  }[]
+}
+
+/** Zawartość wybranych list razem (CollectorListDetails). */
+export type CollectorListDetails = {
+  lists: CollectorList[]
+  rows: {
+    itm8: string
+    ean: string
+    name: string
+    brand: string | null
+    purchasePrice: number | null
+    salePrice: number | null
+    saleValue: number | null
+    marginPercent: number | null
+    quantity: number
+    /** Z czego powstała ilość, gdy skanowano inny kod niż główny (np. 8 puszek = 2 czteropaki). */
+    scans: { code: string; entered: number; quantity: number }[]
+    known: boolean
+  }[]
+  totalQuantity: number
+  totalPurchaseValue: number
+  totalSaleValue: number
+}
+
 export type AgentFeatureKey =
   | 'FILE_SAVING'
   | 'PRICE_FILES'

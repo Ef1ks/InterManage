@@ -3,7 +3,8 @@
 #   .\build.ps1 -TestVersion 1.0.9   # do obj\test, bez plikow dla serwera (proba aktualizacji ze starszej wersji)
 #   .\build.ps1 -BouncyCastle    # najpierw przebudowuje lib\BouncyCastle.dll ze zrodel
 #
-# Kompilator C# jest z dotnet SDK. Biblioteki referencyjne Compact Framework (ref\, poza gitem) bierze z instalatora
+# Kompilator C# to csc z .NET Framework 4 (jest w kazdym Windowsie), celowo nie Roslyn z dotnet SDK: .NET Compact
+# Framework na kolektorze zle wykonywal jego kod (TLS konczyl sie unexpected_message po certyfikacie). Biblioteki referencyjne Compact Framework (ref\, poza gitem) bierze z instalatora
 # Microsoftu NETCFSetupv2.msi: skrypt pobiera go raz i sprawdza podpis.
 
 param(
@@ -22,7 +23,7 @@ $dist = Join-Path $root 'dist'
 $work = Join-Path $root 'obj'
 
 # Wersja programu: wyzsza niz na kolektorach = kolektory pobiora ja po wdrozeniu. Zmiana w src = nowa wersja.
-$version = '1.1.0'
+$version = '1.3.0'
 
 if ($TestVersion) {
     $version = $TestVersion
@@ -39,14 +40,13 @@ function New-Folder([string]$path) {
     New-Item -ItemType Directory -Force $path | Out-Null
 }
 
-$sdk = (& dotnet --list-sdks | Select-Object -Last 1) -replace '^(\S+) \[(.+)\]$', '$2\$1'
-$csc = Join-Path $sdk 'Roslyn\bincore\csc.dll'
+$csc = Join-Path $env:windir 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { throw "Brak kompilatora C#: $csc" }
 
 function Invoke-Csc([string[]]$lines, [string]$name) {
     $rsp = Join-Path $work "$name.rsp"
     $lines | Out-File $rsp -Encoding utf8
-    & dotnet $csc -noconfig -nologo -preferreduilang:en-US "@$rsp"
+    & $csc /noconfig /nologo "@$rsp"
     if ($LASTEXITCODE -ne 0) { throw "Blad kompilacji: $name" }
 }
 
@@ -98,7 +98,10 @@ if ($BouncyCastle -or -not (Test-Path $bcDll)) {
         if ($patched -eq $text) { throw "Nie znalazlem licznika w $file" }
         [IO.File]::WriteAllText($path, $patched)
     }
-    Invoke-Csc (@('-nostdlib', '-langversion:3', '-optimize+', '-target:library', '-warn:0', '-highentropyva-',
+    # "throw e" gubi slad wywolan, a bez niego nie widac na kolektorze, gdzie powstal blad.
+    $path = Join-Path $sources 'crypto\tls\TlsProtocol.cs'
+    [IO.File]::WriteAllText($path, [IO.File]::ReadAllText($path).Replace('throw e;', 'throw;'))
+    Invoke-Csc (@('-nostdlib', '-langversion:3', '-optimize+', '-target:library', '-warn:0', 
             '-define:NETCF_2_0;NETCF', "-out:`"$bcDll`"") + $references[0..1] + $files) 'BouncyCastle'
 }
 
@@ -130,7 +133,7 @@ function Get-Sources([string]$folder) {
 
 $src = Join-Path $root 'src'
 $common = @(Get-Sources (Join-Path $src 'shared')) + "`"$(Join-Path $work 'BuildInfo.cs')`""
-$options = '-nostdlib', '-langversion:3', '-optimize+', '-target:winexe', '-warn:4', '-highentropyva-', '-filealign:512'
+$options = '-nostdlib', '-langversion:3', '-optimize+', '-target:winexe', '-warn:4', '-filealign:512'
 $program = Join-Path $dist 'Kolektor.exe'
 $launcher = Join-Path $dist 'Intermanage.exe'
 $setup = Join-Path $dist 'IntermanageSetup.exe'

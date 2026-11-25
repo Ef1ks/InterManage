@@ -68,6 +68,7 @@ export function useLiveEvents() {
   const userId = me?.id
   // O pracy agenta dowiadują się osoby, które z niej korzystają, a nie każdy z dostępem do sklepu.
   const hearsAgent = hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'IMPORTS') || hasPermission(me, 'STORE_AGENT')
+  const hearsCollectors = hasPermission(me, 'DATA_ENTRY')
   useAgentStatus(storeId)
 
   useEffect(() => {
@@ -89,6 +90,17 @@ export function useLiveEvents() {
                 text(message.error),
                 `file-queue:${String(message.id)}`,
                 'error',
+              )
+            }
+            break
+          case 'collector-lists':
+            invalidate('collector-lists')
+            if (message.action === 'received' && hearsCollectors) {
+              announce(
+                `Dane z kolektora: ${text(message.collector) ?? ''}`,
+                `Pozycji: ${String(message.lines)}. Wybierz protokół w Kolektory, Dane z kolektorów.`,
+                `collector-list:${String(message.id)}`,
+                'success',
               )
             }
             break
@@ -156,7 +168,7 @@ export function useLiveEvents() {
             break
         }
       }),
-    [queryClient, userId, hearsAgent],
+    [queryClient, userId, hearsAgent, hearsCollectors],
   )
 }
 

@@ -18,7 +18,8 @@ Powstają: `Kolektor.exe` (program, `src`), `Intermanage.exe` (program startowy,
 **Nowa wersja:** podnieś `$version` w `build.ps1`, zbuduj i wdróż razem z plikami w `backend/src/main/resources/collector`.
 Po wdrożeniu kolektory wszystkich sklepów pobiorą ją same na podstawce. Bez podniesienia numeru kolektory nic nie pobiorą.
 
-Wystarczy dotnet SDK (bez Visual Studio 2008). Biblioteki referencyjne Compact Framework (`ref\`, poza gitem) skrypt
+Kompilator to csc z .NET Framework 4 (w każdym Windowsie), celowo nie Roslyn z dotnet SDK: podejrzewamy, że .NET CF źle
+wykonuje jego kod (na MC3190 TLS kończył się `unexpected_message` zaraz po certyfikacie serwera). Biblioteki referencyjne Compact Framework (`ref\`, poza gitem) skrypt
 bierze z instalatora Microsoftu, którego podpis sprawdza.
 
 Na Windowsie z kontrolą aplikacji niepodpisany exe się nie uruchomi. Program da się sprawdzić w kontenerze z Mono
@@ -27,14 +28,15 @@ z linią `server=http://127.0.0.1:8090` (zwykłe http tylko na tym samym kompute
 
 ## Instalacja na kolektorze
 
-1. Na komputerze: Ustawienia sklepu → Kolektory → Pobierz instalator. Skopiuj `IntermanageSetup.exe` na kolektor
+1. Na komputerze: Kolektory → Urządzenia → Pobierz instalator. Skopiuj `IntermanageSetup.exe` na kolektor
    (połączenie z komputerem, karta) i uruchom. Przeglądarka kolektora go nie pobierze: Windows CE 6.0 nie połączy się
    przez https, a http Cloudflare przekierowuje na https.
 2. „Zainstaluj”, potem „Uruchom”. Gdy kolektor zgłosi brak .NET Compact Framework, zainstaluj najpierw
    `NETCFv35.wce.armv4.cab`.
-3. Na podstawce: w przeglądarce Ustawienia sklepu → Kolektory → Dodaj kolektor, kod z 8 cyfr wpisz na kolektorze.
+3. Na podstawce: w przeglądarce Kolektory → Urządzenia → Dodaj kolektor, kod z 8 cyfr wpisz na kolektorze.
 4. Zostaw na podstawce, aż pasek na dole pokaże „Dane aktualne”.
-5. Skaner: DataWedge w tle (wpisuje kod jak klawiatura). Enter po kodzie nie jest wymagany.
+5. Skaner włącza sam program przez sterownik Motoroli (`Scanner.cs`, SCNAPI32.dll), gdy jest na wierzchu. Bez sterownika
+   uruchamia ScanWedge z kolektora (wpisuje kod jak klawiatura, Enter nie jest wymagany). Stan: Menu → O programie.
 
 Instalator wgrywa program do `\Application\Intermanage` (pamięć flash, zostaje po zimnym restarcie), zakłada skrót na
 pulpicie i w `\Application\Startup` (start z systemem). Ponowne uruchomienie naprawia program, ustawienia i dane zostają.
@@ -45,6 +47,14 @@ pulpicie i w `\Application\Startup` (start z systemem). Ponowne uruchomienie nap
 \Application\Intermanage\wersja.txt           bieżąca, poprzednia, próba, zła
 \Application\Intermanage\ustawienia.txt, katalog.dat, dziennik.txt
 ```
+
+## Praca
+
+- **1 Skanowanie:** karta artykułu. **2 Protokoły:** skan, ilość, Enter; lista wysyła się na podstawce po 15 s bez pracy
+  i pojawia się w Intermanage (Kolektory → Dane z kolektorów), gdzie wybiera się protokół.
+- **Lewy dolny róg:** „24: zł” / „24: kg” (koniec kodu 24 to cena albo waga) i kosz listy (z potwierdzeniem, po
+  wyczyszczeniu w tym miejscu jest przywracanie).
+- Artykuł z kodem sztuki i wielopaku (0,25 = 4-pak, 0,1666 = 6-pak) pyta, co liczysz; na protokół idzie główny kod.
 
 ## Jak to działa
 
@@ -57,6 +67,8 @@ pulpicie i w `\Application\Startup` (start z systemem). Ponowne uruchomienie nap
   `MAGIC`. Kolektor nie wczytuje pliku do pamięci, tylko czyta go przez indeksy.
 - **Pobieranie** (`Sync.cs`): po postawieniu na podstawce i co 5 minut pyta o wersję danych; plik (zlib) pobiera tylko
   nowy, sprawdza SHA-256 i dopiero wtedy podmienia.
+- **Sieć** (`Network.cs`, Menu → Stan sieci): DNS z limitem czasu, a gdy nie działa (bywa po powrocie na podstawkę),
+  zapamiętane adresy serwera; tożsamość i tak sprawdza certyfikat. Próba bez postępu przez 3 minuty zaczyna się od nowa.
 - **Aktualizacje** (`Updater.cs`, `shared/Versions.cs`): `status` mówi, jaka wersja jest na serwerze; nowsza pobiera się
   przed danymi (SHA-256, plik bez zmian jest kopiowany z bieżącej wersji) i uruchamia po minucie bez pracy na podstawce
   albo z Menu. Jest na próbie do pierwszego połączenia z serwerem: gdy nie da się jej uruchomić, 3 starty nie wystarczą
