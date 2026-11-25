@@ -40,6 +40,7 @@ public final class CadPriorityMacro {
     /** Komunikat o kodach CN pokazuje się razem z wczytaną kartą. */
     private static final int CN_ALERT_MS = 500;
     private static final int CARD_CHECK_MS = 3_000;
+    private static final int EMPTY_CARD_MS = 2_000;
 
     // Karta artykułu (ar-e001) i „Kod ITM8 :” (ar-e006).
     private static final String ARTICLE_TAB = "mnTp_ARTICLE";
@@ -81,7 +82,6 @@ public final class CadPriorityMacro {
         out.add("WEBCLICK|" + WINDOW + "|" + ARTICLE_MENU_ITEM);
         out.add("SLEEP|" + AFTER_CONFIRM_MS);
         out.add("WEBWAIT|" + WINDOW + "|" + RESET + "||" + PAGE_TIMEOUT_MS);
-        out.addAll(clearCard());
         for (int index = 0; index < items.size(); index++) {
             out.addAll(steps(items.get(index), index + 1, items.size()));
         }
@@ -169,7 +169,7 @@ public final class CadPriorityMacro {
         out.add("WEBWAIT|" + WINDOW + "|" + RESET + "||" + PAGE_TIMEOUT_MS);
 
         out.add("LABEL|" + clear);
-        out.addAll(clearCard());
+        out.addAll(clearCard("pusta-" + card));
         out.add("LABEL|" + END + card);
         return out;
     }
@@ -205,12 +205,17 @@ public final class CadPriorityMacro {
                 "WEBIFVALUE|" + WINDOW + "|" + CARD_NAME + "|\\S|" + noCn + "|" + LOAD_TIMEOUT_MS);
     }
 
-    /** ZER. i pusta karta: bez tego wartości poprzedniego artykułu wyglądałyby na wczytane. */
-    private static List<String> clearCard() {
+    /**
+     * ZER. po skończonym artykule, przed następnym: bez tego jego wartości wyglądałyby na wczytane. Nie na początku:
+     * na karcie bez artykułu (świeżo otwartej albo z ITM8, którego nie ma) ZER. jest wyłączony.
+     */
+    private static List<String> clearCard(String empty) {
         return List.of(
+                "WEBIFVALUE|" + WINDOW + "|" + CARD_NAME + "|\\S|" + empty + "|" + EMPTY_CARD_MS,
                 "WEBCLICK|" + WINDOW + "|" + RESET,
                 "WEBVALUE|" + WINDOW + "|" + CARD_NAME + "|^$|" + PAGE_TIMEOUT_MS,
-                "WEBVALUE|" + WINDOW + "|" + CARD_ITM8 + "|^0*$|" + PAGE_TIMEOUT_MS);
+                "WEBVALUE|" + WINDOW + "|" + CARD_ITM8 + "|^0*$|" + PAGE_TIMEOUT_MS,
+                "LABEL|" + empty);
     }
 
     /**

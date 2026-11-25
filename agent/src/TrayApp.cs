@@ -85,12 +85,15 @@ internal sealed class TrayApp : ApplicationContext
         };
         versions.Start();
         exitRequest = Handover.Listen(() => Task.Run(ExitForNewVersionAsync));
+        settings.EnsureAutostart();
         autostart.Checked = AgentSettings.Autostart;
-        autostart.CheckedChanged += (_, _) =>
+        autostart.Click += (_, _) =>
         {
             try
             {
                 AgentSettings.AutostartPath = autostart.Checked ? versions.NewerPath ?? Application.ExecutablePath : null;
+                settings.AutostartOff = !autostart.Checked;
+                settings.Save();
             }
             catch (Exception error) { Log.Error("Autostart", error); }
         };
@@ -138,8 +141,7 @@ internal sealed class TrayApp : ApplicationContext
         UpdateIcon();
         if (!settings.HasKey)
         {
-            // Pierwsze uruchomienie: od razu okno ustawień, a autostart włączony (można go wyłączyć w menu).
-            try { AgentSettings.Autostart = true; autostart.Checked = true; } catch { }
+            // Pierwsze uruchomienie: od razu okno ustawień.
             ui.BeginInvoke(new Action(ShowSettings));
         }
         else

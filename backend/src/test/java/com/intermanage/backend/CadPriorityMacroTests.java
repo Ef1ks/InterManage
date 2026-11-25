@@ -42,6 +42,20 @@ class CadPriorityMacroTests {
                 "WEBKEY|Mercalys|txtZ1_CodeITM_TxtBox|^a99000800{Enter}");
     }
 
+    /** ZER. dopiero po artykule: na pustej karcie jest wyłączony (10023, 25.11.2026: makro stawało na początku). */
+    @Test
+    void clearsOnlyLoadedCard() {
+        List<String> lines = List.of(macro.split("\r\n"));
+        assertThat(lines.indexOf("WEBCLICK|Mercalys|btnB2_RAZ_LnkBouton"))
+                .isGreaterThan(lines.indexOf("WEBKEY|Mercalys|txtZ02_Itm_TxtBox|^a61509966{Tab}"));
+        for (int index = 0; index < lines.size(); index++) {
+            if (lines.get(index).equals("WEBCLICK|Mercalys|btnB2_RAZ_LnkBouton")) {
+                assertThat(lines.get(index - 1)).startsWith("WEBIFVALUE|Mercalys|txtZ6_Libelle_TxtBox|\\S|pusta-");
+            }
+        }
+        assertThat(lines).contains("LABEL|pusta-604", "LABEL|pusta-99000800");
+    }
+
     /** „Kody CN, GTU i Split Payment są wymagane” po wczytaniu karty: kod CN, zapis karty i dopiero ITM8. */
     @Test
     void entersCnCodeWhenCardRequiresIt() {

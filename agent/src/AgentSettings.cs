@@ -60,6 +60,12 @@ internal sealed class AgentSettings
     /// </summary>
     public bool UpdateOnStart { get; set; } = true;
 
+    /// <summary>
+    /// „Uruchamiaj z Windows” odznaczone ręcznie w menu. Bez tego brak wpisu w rejestrze to nie wybór człowieka (nie udał
+    /// się zapis albo wpis usunął inny program), więc agent przy starcie wpisuje się z powrotem.
+    /// </summary>
+    public bool AutostartOff { get; set; }
+
     private static string? Protect(string? value) => string.IsNullOrEmpty(value)
         ? null
         : Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), Entropy,
@@ -115,11 +121,7 @@ internal sealed class AgentSettings
         return uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback ? text : null;
     }
 
-    public static bool Autostart
-    {
-        get => AutostartPath != null;
-        set => AutostartPath = value ? System.Windows.Forms.Application.ExecutablePath : null;
-    }
+    public static bool Autostart => AutostartPath != null;
 
     /// <summary>Program uruchamiany z Windows (null = autostart wyłączony).</summary>
     public static string? AutostartPath
@@ -135,6 +137,23 @@ internal sealed class AgentSettings
             if (key == null) return;
             if (value != null) key.SetValue(RunValue, "\"" + value + "\"");
             else key.DeleteValue(RunValue, false);
+        }
+    }
+
+    /// <summary>Brakujący wpis autostartu wraca przy starcie agenta, o ile nikt go nie wyłączył w menu.</summary>
+    public void EnsureAutostart()
+    {
+        if (AutostartOff) return;
+        try
+        {
+            if (Autostart) return;
+            AutostartPath = System.Windows.Forms.Application.ExecutablePath;
+            if (Autostart) Log.Info("Autostart: nie było wpisu, włączono " + AutostartPath);
+            else Log.Warn("Autostart: Windows nie zapisał wpisu");
+        }
+        catch (Exception error)
+        {
+            Log.Warn("Autostart: " + error.Message);
         }
     }
 
