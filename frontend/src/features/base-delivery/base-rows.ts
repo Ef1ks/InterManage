@@ -1,4 +1,3 @@
-import type { ColumnKey } from '@/features/data-entry/grid-values'
 import {
   activePromoPrice,
   type DataEntryRow,
@@ -198,8 +197,3 @@ export function pluEans(delivery: BaseDelivery) {
   }
   return [...eans]
 }
-
-/** Pusta wartość w filtrze kolumny. */
-export const EMPTY_VALUE = '(puste)'
-
-export type ColumnFilters = Partial<Record<ColumnKey, string[]>>

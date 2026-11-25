@@ -137,7 +137,17 @@ import {
   ColumnFillDialog,
   type ColumnFillTarget,
 } from './column-fill'
-import { applyText, type Column, type ColumnKey, nomenclatureNames, pricingOf } from './grid-values'
+import { applyText, COLUMNS, type Column, type ColumnKey, nomenclatureNames, pricingOf } from './grid-values'
+import { ColumnFilter } from './ColumnFilter'
+import {
+  type ColumnFilters,
+  type ColumnSort,
+  columnValues,
+  isNumericColumn,
+  matchesColumns,
+  type SortDirection,
+  sortedRows,
+} from './column-filters'
 import { addTotals, differs, invoiceTotals, signedMoney } from './invoice-totals'
 import { type CatalogAddition, CatalogListDialog } from './CatalogListDialog'
 import { CorrectionBanner } from './CorrectionBanner'
@@ -449,7 +459,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     setPendingInvoice(null)
     setPickerOpen(false)
     setXmlOpenOpen(false)
-    setRowFilter(null)
+    resetView()
     const loaded = data.lines.map(rowFromLine)
     const base = mode === 'append' ? currentDraft().rows.filter((row) => row.ean !== '' || row.name !== '') : []
     // Dopisana faktura: tabela porównuje się z sumą obu dokumentów.
@@ -538,7 +548,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     if (draft) {
       const before = currentDraft()
       setXmlOpenOpen(false)
-      setRowFilter(null)
+      resetView()
       forgetSaved()
       setDraft(draft)
       refreshFromCatalog(draft.rows)
@@ -948,17 +958,38 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     .filter(Boolean)
     .join(' · ')
 
-  const toggleRowFilter = (kind: RowFilter['kind']) => {
-    if (rowFilter?.kind === kind) {
+  const applyRowFilter = (kind: RowFilter['kind'], columns: ColumnFilters) => {
+    if (kind === null && Object.keys(columns).length === 0) {
       setRowFilter(null)
       return
     }
     const all = currentDraft().rows
+    const quick = kind === 'deposit' ? missingDeposit : kind === 'margin' ? lowMargin : null
     setRowFilter({
       kind,
+      columns,
       known: new Set(all.map((row) => row.id)),
-      pass: new Set(all.filter(kind === 'deposit' ? missingDeposit : lowMargin).map((row) => row.id)),
+      pass: new Set(
+        all.filter((row) => (!quick || quick(row)) && matchesColumns(row, columns, pricing)).map((row) => row.id),
+      ),
     })
+  }
+  const toggleRowFilter = (kind: NonNullable<RowFilter['kind']>) =>
+    applyRowFilter(rowFilter?.kind === kind ? null : kind, rowFilter?.columns ?? {})
+
+  // ---------- sortowanie z filtra w nagłówku kolumny (jak w Excelu; Ctrl+Z cofa), puste zawsze na końcu.
+  // Sam klik w nagłówek dalej zaznacza kolumnę.
+
+  const [sort, setSort] = useState<ColumnSort | null>(null)
+  const sortRows = (key: ColumnKey, direction: SortDirection) => {
+    const column = COLUMNS.find((item) => item.key === key)
+    setSort({ key, direction })
+    setRows((current) => sortedRows(current, key, direction, column ? isNumericColumn(column) : false, pricing))
+  }
+  /** Nowa zawartość tabeli: bez filtrów i strzałki sortowania. */
+  const resetView = () => {
+    setRowFilter(null)
+    setSort(null)
   }
 
   // Plik .lst: zaznaczone artykuły, a bez zaznaczenia wszystkie widoczne (także po filtrze); tylko prawdziwe EAN-y.
@@ -1057,7 +1088,25 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     setFillTarget({ key, newCount: articles.filter((row) => !row.known).length, allCount: articles.length })
   }
 
-  const fillHeader = (column: Column) => <ColumnFillButton column={column} onOpen={openFill} />
+  const columnHeader = (column: Column) => (
+    <span className="flex items-center gap-0.5">
+      <ColumnFillButton column={column} onOpen={openFill} />
+      <ColumnFilter
+        label={column.title ?? column.header}
+        getValues={() => columnValues(currentDraft().rows, column, pricing)}
+        numeric={isNumericColumn(column)}
+        rule={rowFilter?.columns[column.key] ?? null}
+        onRuleChange={(rule) => {
+          const columns = { ...(rowFilter?.columns ?? {}) }
+          if (rule === null) delete columns[column.key]
+          else columns[column.key] = rule
+          applyRowFilter(rowFilter?.kind ?? null, columns)
+        }}
+        sort={sort?.key === column.key ? sort.direction : null}
+        onSort={(direction) => sortRows(column.key, direction)}
+      />
+    </span>
+  )
 
   const setAllQuantities = (quantity: number) =>
     changeAll(
@@ -1115,7 +1164,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const clearAll = () => {
     const before = currentDraft()
     forgetSaved()
-    setRowFilter(null)
+    resetView()
     setDraft(EMPTY_DATA_ENTRY)
     focusFirstEan()
     toast('Wyczyszczono tabelę', {
@@ -2146,7 +2195,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             onLinkArticle={openLink}
             onSplitQuantity={(row) => setSplitTargets([row])}
             stickyTop={`calc(3.5rem + ${toolbarHeight}px)`}
-            headerExtra={fillHeader}
+            headerExtra={columnHeader}
+            sort={sort}
           />
         )}
 
@@ -2381,8 +2431,16 @@ const NO_FILTER: string[] = []
 /** Przycisk pod „Lista”: trzy dzielą szerokość po równo, wysokość bierze z bloku. */
 const ROW_ACTION = 'h-full min-w-0 flex-1 rounded-md px-0'
 
-/** Filtr wierszy z chwili włączenia: wszystkie wtedy znane wiersze i te, które przeszły filtr. */
-type RowFilter = { kind: 'deposit' | 'margin'; known: Set<string>; pass: Set<string> }
+/**
+ * Filtr wierszy z chwili włączenia (szybki filtr z paska i filtry kolumn z nagłówków): wszystkie wtedy znane wiersze i
+ * te, które przeszły filtr.
+ */
+type RowFilter = {
+  kind: 'deposit' | 'margin' | null
+  columns: ColumnFilters
+  known: Set<string>
+  pass: Set<string>
+}
 
 /** Chwila zapisu pliku (poza komponentem: woła ją tylko obsługa kliknięcia). */
 const nowIso = () => new Date().toISOString()

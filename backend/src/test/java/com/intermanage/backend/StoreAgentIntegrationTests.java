@@ -255,6 +255,16 @@ class StoreAgentIntegrationTests {
         mvc.perform(get("/api/stores/" + storeId + "/agents/status").cookie(owner))
                 .andExpect(jsonPath("$.name").value("Biuro"));
 
+        // Preferowany jest najwyżej jeden: wybór drugiego zdejmuje pierwszego.
+        String kasaId = jdbc.queryForObject(
+                "select id::text from store_agents where store_id = ?::uuid and name = 'Kasa 1'", String.class, storeId);
+        for (String chosen : List.of(kasaId, biuroId)) {
+            mvc.perform(put("/api/stores/" + storeId + "/agents/" + chosen + "/preferred").cookie(owner).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"preferred\":true}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.agents[?(@.preferred == true)].id").value(chosen));
+        }
+
         // Wygasła dzierżawa: rolę bierze pierwszy zgłaszający się, a preferowany wraca do niej po powrocie.
         jdbc.update("update store_agent_leaders set expires_at = now() - interval '1 minute' where store_id = ?::uuid",
                 storeId);
@@ -504,7 +514,22 @@ class StoreAgentIntegrationTests {
         hello(key)
                 .andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_CADENCIER')].path").value("P:\\Raporty"))
                 .andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_CADENCIER')].pattern")
-                        .value("^(?!~\\$)obecne w cad.*\\.(?:xlsx|xlsm)$"));
+                        .value("^(?!~\\$)obecne w cad.*\\.(?:xlsx|xlsm)$"))
+                // Lista dostawców ma ścieżkę zapisu z góry, bez ustawień sklepu.
+                .andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_SUPPLIERS')].path")
+                        .value("P:\\Production\\INTERMANAGE\\DOSTAWCY"));
+        mvc.perform(get("/api/stores/" + storeId + "/imports/report-macro?kinds=SUPPLIERS").cookie(owner))
+                .andExpect(jsonPath("$.reports[0]").value("SUPPLIERS"))
+                .andExpect(jsonPath("$.files[0].fileName").value("DOSTAWCY.xlsx"));
+        // Własna ścieżka sklepu, a pusta wraca do domyślnej.
+        for (String[] path : new String[][] {{"P:\\\\Inny\\\\dost.xlsx", "P:\\Inny"},
+                {"", "P:\\Production\\INTERMANAGE\\DOSTAWCY"}}) {
+            mvc.perform(put("/api/stores/" + storeId + "/file-locations").cookie(owner).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"locations\":{\"import:SUPPLIERS:path\":\"" + path[0] + "\"}}"))
+                    .andExpect(status().isOk());
+            hello(key).andExpect(jsonPath("$.watches[?(@.kind == 'IMPORT_SUPPLIERS')].path").value(path[1]));
+        }
 
         Instant modified = Instant.now().minus(java.time.Duration.ofDays(2)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         String event = """
@@ -609,11 +634,50 @@ class StoreAgentIntegrationTests {
         mvc.perform(get("/api/stores/" + storeId + "/imports/agent-files").cookie(owner))
                 .andExpect(jsonPath("$[0].removedFromDiskAt").isNotEmpty());
 
+        // Lista dostawców idzie tą samą drogą i tym samym importem co z przeglądarki.
+        byte[] list = supplierReport(storeNumber);
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"events":[{"kind":"PRESENT","folderKey":"IMPORT_SUPPLIERS","fileName":"DOSTAWCY.xlsx",
+                                  "size":%d,"modified":"%s"}]}""".formatted(list.length, modified)))
+                .andExpect(jsonPath("$.requests[0].folderKey").value("IMPORT_SUPPLIERS"));
+        String supplierUpload = JsonPath.read(mvc.perform(post("/api/store-agent/reports")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"folderKey":"IMPORT_SUPPLIERS","fileName":"DOSTAWCY.xlsx","size":%d,"modified":"%s"}"""
+                                .formatted(list.length, modified)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.id");
+        mvc.perform(put("/api/store-agent/reports/" + supplierUpload + "/chunks/0")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM).content(list))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/store-agent/reports/" + supplierUpload + "/finish")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + key))
+                .andExpect(status().isAccepted());
+        String supplierStatus = null;
+        String supplierError = null;
+        for (int attempt = 0; attempt < 100 && !"IMPORTED".equals(supplierStatus)
+                && !"FAILED".equals(supplierStatus); attempt++) {
+            Thread.sleep(100);
+            supplierStatus = jdbc.queryForObject("select status from agent_report_files where id = ?::uuid",
+                    String.class, supplierUpload);
+            supplierError = jdbc.queryForObject("select error from agent_report_files where id = ?::uuid",
+                    String.class, supplierUpload);
+        }
+        assertThat(supplierStatus).as(supplierError).isEqualTo("IMPORTED");
+        assertThat(jdbc.queryForObject("select count(*) from suppliers where store_id = ?::uuid and code = '538'",
+                Integer.class, storeId)).isEqualTo(1);
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"events":[{"kind":"PRESENT","folderKey":"IMPORT_SUPPLIERS","fileName":"DOSTAWCY.xlsx",
+                                  "size":%d,"modified":"%s"}]}""".formatted(list.length, modified)))
+                .andExpect(jsonPath("$.requests.length()").value(0));
+
         // Aktualizacja przy starcie komputera: agent widzi swoje próby i dostaje makro z Mercalys dla raportów
         // z ustawieniami (przeglądarka dostaje to samo makro); raport bez numeru wydruku jest pominięty z powodem.
         mvc.perform(get("/api/store-agent/reports").header(HttpHeaders.AUTHORIZATION, "Bearer " + key))
-                .andExpect(jsonPath("$[0].fileName").value("obecne w cad.xlsx"))
-                .andExpect(jsonPath("$[0].status").value("IMPORTED"));
+                .andExpect(jsonPath("$[?(@.fileName == 'obecne w cad.xlsx' && @.status == 'IMPORTED')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.fileName == 'DOSTAWCY.xlsx' && @.status == 'IMPORTED')]").isNotEmpty());
         mvc.perform(post("/api/store-agent/report-macro").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"kinds\":[\"CADENCIER\"]}"))
                 .andExpect(status().isOk())
@@ -648,6 +712,21 @@ class StoreAgentIntegrationTests {
         }
         rows.add(new String[] {});
         rows.add(new String[] {"Ilość linii: :" + String.format("%06d", itm8s.length)});
+        return workbook(rows);
+    }
+
+    /** „Lista dostawców” jak z systemu sklepu. */
+    private static byte[] supplierReport(String storeNumber) throws IOException {
+        return workbook(List.of(
+                new String[] {"TRYTOMA  Sp. z o.o. - Numer punktu sprzedaży " + storeNumber},
+                new String[] {"Data : 25/11/2026 07:01:02"},
+                new String[] {"LISTA DOSTAWCÓW"},
+                new String[] {"Kod dost.", "Słowo klucz", "Nazwa firmy 1", "Nazwa firmy 2", "Kod NIP"},
+                new String[] {"538", "ITM", "ITM POLSKA", "", "7821977018"},
+                new String[] {"Ilość linii:  1"}));
+    }
+
+    private static byte[] workbook(List<String[]> rows) throws IOException {
         List<String> shared = new java.util.ArrayList<>();
         StringBuilder sheet = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");

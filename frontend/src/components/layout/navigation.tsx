@@ -325,12 +325,13 @@ const GROUPS: GroupSpec[] = [
         label: 'Ustawienia sklepu',
         description: 'Budżet rejonów, marże, ceny dostawców, sklepy zaprzyjaźnione, protokoły i zmiana cen.',
         icon: SettingsIcon,
-        // Budżet i marże (sprzedaż), sklepy zaprzyjaźnione (dokumenty), pliki PROTO (też wprowadzanie danych i garmaż).
+        // Budżet i marże (sprzedaż), sklepy zaprzyjaźnione (dokumenty), pliki PROTO (też wprowadzanie danych i garmaż), agent.
         visible: (me) =>
           canEditDocuments(me) ||
           hasPermission(me, 'SALES', 'EDIT') ||
           hasPermission(me, 'DATA_ENTRY', 'EDIT') ||
-          hasPermission(me, 'DELI_ORDERS', 'EDIT'),
+          hasPermission(me, 'DELI_ORDERS', 'EDIT') ||
+          hasPermission(me, 'STORE_AGENT'),
         badge: (me) => canEditDocuments(me) && <PartnerInvitationsBadge />,
       },
       {

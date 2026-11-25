@@ -52,6 +52,7 @@ public class StoreFileLocationService {
             if (base.equals(DefaultFolders.PROTO) || base.equals(DefaultFolders.PRODUCT_FILE)) continue;
             values.putIfAbsent(FOLDER_PREFIX + DefaultFolders.key(base, storeId), DefaultFolders.PATHS.get(base));
         }
+        DefaultFolders.FILES.forEach(values::putIfAbsent);
         return new StoreFileLocationsResponse(values);
     }
 
@@ -72,6 +73,9 @@ public class StoreFileLocationService {
             // Ścieżka równa domyślnej to domyślna: sklep nie ma wtedy własnej (zmiana domyślnej obejmie i jego).
             if (value != null && key.startsWith(FOLDER_PREFIX)
                     && DefaultFolders.same(value, DefaultFolders.of(key.substring(FOLDER_PREFIX.length())))) {
+                value = null;
+            }
+            if (value != null && DefaultFolders.same(value, DefaultFolders.FILES.get(key))) {
                 value = null;
             }
             StoreFileLocation location = saved.get(key);

@@ -27,6 +27,11 @@ public final class ProductCodeSources {
     public static final String GTIN = "GTIN";
     public static final String INDEX = "INDEX";
     public static final String NAME = "NAME";
+    /**
+     * Nazwa towaru zamiast EAN-u: kolumna dostaje nazwę z faktury, a artykuł tylko z przypięcia tej nazwy u dostawcy.
+     * Nie jest źródłem kodów ({@link #keys}), wybiera się ją tylko ręcznie.
+     */
+    public static final String PRODUCT_NAME = "PRODUCT_NAME";
     public static final String EXTRA = "EXTRA:";
 
     private static final Pattern DIGITS = Pattern.compile("(?<!\\d)\\d{8,14}(?!\\d)");
@@ -44,6 +49,7 @@ public final class ProductCodeSources {
             case GTIN -> "GTIN (pole EAN)";
             case INDEX -> "Indeks dostawcy";
             case NAME -> "Kod w nazwie";
+            case PRODUCT_NAME -> "Nazwa towaru";
             default -> "Dodatkowy opis: " + key.substring(EXTRA.length());
         };
     }
@@ -148,12 +154,13 @@ public final class ProductCodeSources {
         return keys.stream().map(key -> raw(line, key)).filter(Objects::nonNull).distinct().toList();
     }
 
-    /** Wartość pola źródła jak na fakturze (bez nazwy i AUTO); {@code null}, gdy pusta. */
+    /** Wartość pola źródła jak na fakturze (nazwa tylko przy {@link #PRODUCT_NAME}); {@code null}, gdy pusta. */
     private static String raw(KsefInvoiceReader.LineCodes line, String key) {
         String value = switch (key) {
             case GTIN -> line.gtin();
             case INDEX -> line.index();
             case AUTO, NAME -> null;
+            case PRODUCT_NAME -> line.name();
             default -> key.startsWith(EXTRA) ? line.extras().get(key.substring(EXTRA.length())) : null;
         };
         return value == null || value.isBlank() ? null : value.strip();

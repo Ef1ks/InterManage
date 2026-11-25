@@ -47,6 +47,7 @@ import com.intermanage.backend.product.service.ProductImportService;
 import com.intermanage.backend.promotion.service.PromotionImportService;
 import com.intermanage.backend.sales.service.SalesImportService;
 import com.intermanage.backend.store.service.StoreFileLocationService;
+import com.intermanage.backend.supplier.service.SupplierService;
 
 /**
  * Raporty Importu danych przez agenta sklepu (zamiast „Odśwież dane” w przeglądarce):
@@ -71,8 +72,8 @@ public class AgentReportService {
 
     /** Codzienne raporty w kolejności odświeżania (jak {@code DAILY_REPORTS} we froncie). */
     static final List<ImportReportKind> DAILY = List.of(ImportReportKind.PRODUCTS, ImportReportKind.PRODUCT_CODES,
-            ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER, ImportReportKind.SALES,
-            ImportReportKind.DOCUMENTS);
+            ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER, ImportReportKind.SUPPLIERS,
+            ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
 
     /** Raporty z okresem: makro zapisuje zaległość w częściach, więc wgrywamy każdy niewgrany plik. */
     private static final Set<ImportReportKind> PERIOD = Set.of(ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
@@ -103,6 +104,7 @@ public class AgentReportService {
     private final SalesImportService sales;
     private final DocumentService documents;
     private final CadencierService cadencier;
+    private final SupplierService suppliers;
     private final StoreAgentFeatureService features;
 
     /**
@@ -122,8 +124,8 @@ public class AgentReportService {
             StoreFileLocationService locations, ImportHistoryService history, ChunkedUploads uploads,
             LiveEvents live, StoreAgentMapper mapper, TransactionTemplate transaction, ProductImportService products,
             ProductCodeImportService productCodes, PromotionImportService promotions, SalesImportService sales,
-            DocumentService documents, CadencierService cadencier, ImportSlots slots,
-            StoreAgentFeatureService features) {
+            DocumentService documents, CadencierService cadencier, SupplierService suppliers,
+            ImportSlots slots, StoreAgentFeatureService features) {
         this.features = features;
         this.slots = slots;
         this.files = files;
@@ -140,6 +142,7 @@ public class AgentReportService {
         this.sales = sales;
         this.documents = documents;
         this.cadencier = cadencier;
+        this.suppliers = suppliers;
     }
 
     // --- Konfiguracja --------------------------------------------------------------------------------------------
@@ -562,6 +565,7 @@ public class AgentReportService {
             case SALES -> sales.importReport(storeId, file, null);
             case DOCUMENTS -> documents.importReport(storeId, file, null);
             case CADENCIER -> cadencier.importReport(storeId, file, null);
+            case SUPPLIERS -> suppliers.importReport(storeId, file, null);
             default -> throw ApiException.badRequest("Tego raportu agent nie wgrywa");
         }
     }

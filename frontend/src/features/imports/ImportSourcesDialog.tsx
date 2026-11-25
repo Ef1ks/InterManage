@@ -39,7 +39,7 @@ import type { ImportGuide } from '@/lib/types'
 
 /**
  * Ustawienia „Odśwież dane”: folder każdego codziennego raportu (wybrany raz w tej przeglądarce) i opcjonalna maska nazwy pliku, gdy w folderze leżą też inne pliki. Maski, ścieżki zapisu makr
- * i numery z Mercalys też są ścieżkami sklepu. Listy dostawców i nomenklatur wgrywa się tylko ręcznie.
+ * i numery z Mercalys też są ścieżkami sklepu. Listę nomenklatur wgrywa się tylko ręcznie.
  */
 export function ImportSourcesDialog({
   open,

@@ -2,8 +2,10 @@ package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
@@ -138,6 +140,39 @@ class PermissionRulesIntegrationTests {
         }
         mvc.perform(get("/api/stores/" + createStore() + "/reports").cookie(results))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void agentsAreAddedOnlyWithEditAndPreferredIsChosenWithView() throws Exception {
+        Cookie edit = employee("{\"STORE_AGENT\":\"EDIT\"}", storeId);
+        Cookie view = employee("{\"STORE_AGENT\":\"VIEW\"}", storeId);
+        Cookie other = employee("{\"DATA_ENTRY\":\"EDIT\"}", storeId);
+        String agent = "{\"name\":\"Biuro " + UUID.randomUUID() + "\"}";
+        for (Cookie denied : new Cookie[] {view, other}) {
+            mvc.perform(post(store("/agents")).cookie(denied).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(agent))
+                    .andExpect(status().isForbidden());
+        }
+        String body = mvc.perform(post(store("/agents")).cookie(edit).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(agent))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String agentPath = store("/agents/" + JsonPath.read(body, "$.agents[0].id"));
+
+        mvc.perform(get(store("/agents")).cookie(other)).andExpect(status().isForbidden());
+        mvc.perform(get(store("/agents")).cookie(view)).andExpect(status().isOk());
+        String preferred = "{\"preferred\":true}";
+        mvc.perform(put(agentPath + "/preferred").cookie(other).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(preferred))
+                .andExpect(status().isForbidden());
+        mvc.perform(put(agentPath + "/preferred").cookie(view).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(preferred))
+                .andExpect(status().isOk());
+        mvc.perform(delete(agentPath).cookie(view).with(csrf())).andExpect(status().isForbidden());
+        mvc.perform(put(store("/agents/settings")).cookie(view).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete(agentPath).cookie(edit).with(csrf())).andExpect(status().isOk());
     }
 
     @Test

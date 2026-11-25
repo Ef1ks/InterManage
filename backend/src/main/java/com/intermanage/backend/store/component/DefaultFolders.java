@@ -20,6 +20,12 @@ public final class DefaultFolders {
 
     /** Klucz bez sklepu → domyślna ścieżka, w kolejności strony „Ścieżki folderów”. */
     public static final Map<String, String> PATHS;
+    /**
+     * Domyślne ścieżki plików (klucz ze ścieżek sklepu, nie folder): zapis listy dostawców z Mercalys, żeby codzienny
+     * raport działał w każdym sklepie bez ustawiania.
+     */
+    public static final Map<String, String> FILES = Map.of("import:SUPPLIERS:path",
+            "P:\\Production\\INTERMANAGE\\DOSTAWCY\\DOSTAWCY.xlsx");
     /** Kolejność kluczy (Map.copyOf jej nie trzyma). */
     public static final List<String> ORDER;
 

@@ -9,8 +9,16 @@ import type { ImportReportKind } from '@/lib/types'
  * numery z Mercalys są ścieżkami sklepu na serwerze (`lib/store-locations`): ustawione raz działają u wszystkich.
  */
 
-/** Raporty wgrywane codziennie, w kolejności odświeżania. Listę dostawców i nomenklatur wgrywa się tylko ręcznie. */
-export const DAILY_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'CADENCIER', 'SALES', 'DOCUMENTS'] as const
+/** Raporty wgrywane codziennie, w kolejności odświeżania. Listę nomenklatur wgrywa się tylko ręcznie. */
+export const DAILY_REPORTS = [
+  'PRODUCTS',
+  'PRODUCT_CODES',
+  'PROMOTIONS',
+  'CADENCIER',
+  'SUPPLIERS',
+  'SALES',
+  'DOCUMENTS',
+] as const
 
 export type DailyReport = (typeof DAILY_REPORTS)[number]
 
@@ -36,6 +44,7 @@ export const REPORT_EXTENSIONS: Record<DailyReport, string[]> = {
   SALES: XLSX_EXTENSIONS,
   DOCUMENTS: XLSX_EXTENSIONS,
   CADENCIER: XLSX_EXTENSIONS,
+  SUPPLIERS: XLSX_EXTENSIONS,
 }
 
 /** Przykład maski w polu ustawień (nazwy plików z systemu sklepu). */
@@ -46,6 +55,7 @@ export const MASK_EXAMPLES: Record<DailyReport, string> = {
   SALES: 'sprzedaz*',
   DOCUMENTS: 'Zeszyt*',
   CADENCIER: 'obecne w cad*',
+  SUPPLIERS: 'dostawcy*',
 }
 
 export const sourceFolderKey = (storeId: string, kind: DailyReport) => `import:${storeId}:${kind}`
@@ -57,7 +67,7 @@ export type SourceMasks = Partial<Record<DailyReport, string>>
  * wspólna dla sklepu (ścieżki sklepu na serwerze). Makro zapisuje tam skoroszyt otwarty przyciskiem Excel w Mercalys, a „Odśwież
  * dane” bierze go z folderu raportu. Lista promocji jest drukowana tylko do PDF: zapisuje ją PDFSAVE (od wersji 49).
  */
-export const MACRO_REPORTS = ['PRODUCTS', 'PRODUCT_CODES', 'PROMOTIONS', 'CADENCIER', 'SALES', 'DOCUMENTS'] as const
+export const MACRO_REPORTS = DAILY_REPORTS
 
 export type MacroReport = (typeof MACRO_REPORTS)[number]
 

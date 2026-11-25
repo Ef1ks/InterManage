@@ -104,7 +104,7 @@ const REPORT_DESCRIPTIONS: Record<ImportReportKind, string> = {
   DOCUMENTS:
     'Statystyka Wejścia/Wyjścia: przyjęcia towaru, korekty, likwidacje, zwroty, przeniesienia stanów i inne dokumenty magazynowe. Te same dokumenty można wgrywać wielokrotnie - zostaną uzupełnione.',
   SUPPLIERS:
-    'Dostawcy z systemu sklepu. Wgraj listę ponownie, gdy dojdzie nowy dostawca albo zmienią się jego dane. Dostawcy, których zabraknie w nowym pliku, zostają w bazie.',
+    'Dostawcy z systemu sklepu z numerami, NIP-em i adresem (np. DOSTAWCY.xlsx). Wgrywaj ją codziennie, żeby nowy dostawca był od razu. Dostawcy, których zabraknie w nowym pliku, zostają w bazie.',
   CADENCIER:
     'Artykuły z formularza zamówień do bazy, kolumny ITM i EAN (np. obecne w cad.xlsx). Nowa lista zastępuje poprzednią w całości: raporty zakupu bazowego poza bazą, marż i zerówek, wprowadzanie danych (niebieska cena) i lista towarów biorą zawsze najnowszą.',
   NOMENCLATURES:
@@ -230,6 +230,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
     SALES: lastImportedAt(sales.data?.imports),
     DOCUMENTS: lastImportedAt(documents.data),
     CADENCIER: lastImportedAt(cadencier.data?.imports),
+    SUPPLIERS: lastImportedAt(suppliers.data?.imports),
   }
 
   /**
@@ -396,7 +397,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
     <>
       <PageHeader
         title="Import danych"
-        description={`Raporty z systemu sklepu ${storeLabel(store)}. Bazę danych, multikody, promocje, sprzedaż, dokumenty i listę cadencier wgrywaj codziennie, listy dostawców i nomenklatur wtedy, gdy się zmienią.`}
+        description={`Raporty z systemu sklepu ${storeLabel(store)}. Bazę danych, multikody, promocje, sprzedaż, dokumenty, listę cadencier i listę dostawców wgrywaj codziennie, listę nomenklatur wtedy, gdy się zmieni.`}
         actions={
           canImport && (
             <>
@@ -584,15 +585,13 @@ function StoreImports({ store }: { store: StoreSummary }) {
 
         <ReportCard
           {...cardProps('SUPPLIERS')}
+          generatedAt={suppliers.isPending ? undefined : (newestReport(suppliers.data?.imports) ?? null)}
           meta={
             suppliers.data && (
               <>
                 W bazie {numberFormat.format(suppliers.data.supplierCount)} dostawców
                 {suppliers.data.manualCount > 0 && (
                   <>, w tym {numberFormat.format(suppliers.data.manualCount)} dodanych ręcznie</>
-                )}
-                {newestReport(suppliers.data.imports) && (
-                  <> · lista z {formatReportDate(newestReport(suppliers.data.imports)!)}</>
                 )}
               </>
             )
@@ -673,7 +672,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
 
 /**
  * Kafel jednego raportu: tytuł z okienkiem opisu (znak zapytania), aktualność danych, stan w bazie i pole do
- * wgrania. Listy dostawców i nomenklatur wgrywa się tylko na życzenie, więc nie mają znacznika aktualności.
+ * wgrania. Listę nomenklatur wgrywa się tylko na życzenie, więc nie ma znacznika aktualności.
  */
 function ReportCard({
   kind,

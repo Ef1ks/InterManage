@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 
-import { useCurrentUser } from '@/features/auth/api'
+import { useCan } from '@/features/auth/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { rememberedAgentStatus, useAgentState } from '@/lib/store-agent'
@@ -12,7 +12,8 @@ import { cn } from '@/lib/utils'
  */
 export function AgentStatusDot() {
   const state = useAgentState()
-  const me = useCurrentUser()
+  const canSeeAgents = useCan('STORE_AGENT')
+  const canEditFeatures = useCan('DATA_ENTRY', 'EDIT')
   const store = useCurrentStore()
   const known = state && state.storeId === store?.id ? state.status : null
   const status = known ?? (store ? rememberedAgentStatus(store.id) : null)
@@ -32,7 +33,7 @@ export function AgentStatusDot() {
       )}
     />
   )
-  return me.owner ? (
+  return canSeeAgents || canEditFeatures ? (
     <Link to={storeSettingsPaths.agent} aria-label={label} title={label} className="grid size-6 place-items-center">
       {dot}
     </Link>

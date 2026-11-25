@@ -73,6 +73,8 @@ public final class StoreRoleDefaults {
         }
         // Wyniki wszystkich sklepów domyślnie ma tylko Aderon; innym rangom dokłada je sklep.
         result.remove(PermissionCategory.STORE_RESULTS);
+        // Agentów na komputerach (klucz daje zapis plików w folderach sklepu) dodaje tylko ten, komu to nadano.
+        result.remove(PermissionCategory.STORE_AGENT);
         return result;
     }
 

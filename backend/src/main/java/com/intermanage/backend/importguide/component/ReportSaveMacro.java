@@ -33,6 +33,8 @@ public final class ReportSaveMacro {
     public static final String OPENED_ON_KEY = "import:openedOn";
 
     private static final int PAGE_TIMEOUT_MS = 30_000;
+    /** Po kliku w menu na otwartej już karcie (ponowienie): bez przerwy Excel kliknąłby się na starej stronie. */
+    private static final int MENU_SLEEP_MS = 1_500;
     private static final int EXCEL_WAIT_MS = 600_000;
     private static final int LONG_EXCEL_WAIT_MS = 1_800_000;
     private static final int DOCUMENTS_EXCEL_WAIT_MS = 3_600_000;
@@ -50,7 +52,7 @@ public final class ReportSaveMacro {
     /** Raporty z makrem, w kolejności odświeżania. */
     public static final List<ImportReportKind> MACRO_REPORTS = List.of(ImportReportKind.PRODUCTS,
             ImportReportKind.PRODUCT_CODES, ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER,
-            ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
+            ImportReportKind.SUPPLIERS, ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
 
     /** Limit okresu jednego wydruku w Mercalys (miesiące). */
     static final Map<ImportReportKind, Integer> PERIOD_MONTHS = Map.of(ImportReportKind.SALES, 6,
@@ -59,7 +61,7 @@ public final class ReportSaveMacro {
     private static final Map<ImportReportKind, String> TITLES = Map.of(ImportReportKind.PRODUCTS, "Baza danych",
             ImportReportKind.PRODUCT_CODES, "Multikody", ImportReportKind.PROMOTIONS, "Lista promocji",
             ImportReportKind.SALES, "Raport sprzedaży", ImportReportKind.DOCUMENTS, "Raport dokumentów",
-            ImportReportKind.CADENCIER, "Obecne w cadencier");
+            ImportReportKind.CADENCIER, "Obecne w cadencier", ImportReportKind.SUPPLIERS, "Lista dostawców");
 
     private static final DateTimeFormatter TYPED = DateTimeFormatter.ofPattern("ddMMyyyy");
 
@@ -135,7 +137,7 @@ public final class ReportSaveMacro {
                 String path = partPath(settings.path().strip(), part + 1, parts.size());
                 files.add(new SavedFile(kind, path, path.substring(path.lastIndexOf('\\') + 1)));
                 int wait = switch (kind) {
-                    case CADENCIER -> EXCEL_WAIT_MS;
+                    case CADENCIER, SUPPLIERS -> EXCEL_WAIT_MS;
                     case DOCUMENTS -> DOCUMENTS_EXCEL_WAIT_MS;
                     default -> LONG_EXCEL_WAIT_MS;
                 };
@@ -413,6 +415,15 @@ public final class ReportSaveMacro {
                     "WEBCLICK|" + w + "|btnB2_Valider_LnkBouton",
                     "WEBPAGE|" + w + "|ar-e056|btnB5_Excel_LnkBouton|" + TABLE_TIMEOUT_MS,
                     "WEBCLICK|" + w + "|btnB5_Excel_LnkBouton");
+            // Obsługa → Dostawcy (jak makro nowego dostawcy) → Excel: zakres kodów zostaje domyślny, czyli cała lista.
+            case SUPPLIERS -> List.of(
+                    "WEBENSURE|" + w + "|mnTv_MAINTENANCE_ac-e001_Fournisseurs|mnTp_MAINTENANCE",
+                    "WEBCLICK|" + w + "|mnTv_MAINTENANCE_ac-e001_Fournisseurs",
+                    "SLEEP|" + MENU_SLEEP_MS,
+                    "WEBPAGE|" + w + "|ac-e001|btnB10_Excel_LnkBouton|" + PAGE_TIMEOUT_MS,
+                    "WEBCLICK|" + w + "|btnB10_Excel_LnkBouton",
+                    "WEBWAIT|" + w + "|lstZ2_FrsMax_TxtBox||" + PAGE_TIMEOUT_MS,
+                    "WEBCLICK|" + w + "|btnB2_Valider_LnkBouton");
             case PROMOTIONS -> {
                 // Data końca do = dziś + 2 lata (29 lutego przechodzi na 28).
                 int year = today.getYear() + 2;

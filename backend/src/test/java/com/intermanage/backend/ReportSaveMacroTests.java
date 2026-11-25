@@ -97,6 +97,30 @@ class ReportSaveMacroTests {
         assertThat(macro.substring(0, macro.indexOf("część 2 z 2"))).doesNotContain("#ALT|");
     }
 
+    /** Lista dostawców: po cadencier, a przed sprzedażą i dokumentami; cały zakres kodów do Excela. */
+    @Test
+    void supplierListIsSavedBetweenCadencierAndSales() {
+        Map<String, String> locations = Map.of("import:CADENCIER:path", "P:\\cad.xlsx", "import:CADENCIER:print", "98",
+                "import:CADENCIER:list", "1996", "import:SUPPLIERS:path", "P:\\DOSTAWCY\\DOSTAWCY.xlsx",
+                "import:SALES:path", "P:\\Sprzedaz.xlsx", "import:DOCUMENTS:path", "P:\\Dokumenty.xlsx",
+                "import:openedOn", "2026-11-20");
+
+        ReportSaveMacro.Result result = ReportSaveMacro.build(ReportSaveMacro.MACRO_REPORTS, locations,
+                new ImportCoverage(List.of(), List.of()), TODAY);
+
+        assertThat(result.reports()).containsExactly(ImportReportKind.CADENCIER, ImportReportKind.SUPPLIERS,
+                ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
+        assertThat(result.macro()).contains("#PART|3|Lista dostawców (2 z 4)\r\n"
+                + "WEBENSURE|Mercalys|mnTv_MAINTENANCE_ac-e001_Fournisseurs|mnTp_MAINTENANCE\r\n"
+                + "WEBCLICK|Mercalys|mnTv_MAINTENANCE_ac-e001_Fournisseurs\r\n"
+                + "SLEEP|1500\r\n"
+                + "WEBPAGE|Mercalys|ac-e001|btnB10_Excel_LnkBouton|30000\r\n"
+                + "WEBCLICK|Mercalys|btnB10_Excel_LnkBouton\r\n"
+                + "WEBWAIT|Mercalys|lstZ2_FrsMax_TxtBox||30000\r\n"
+                + "WEBCLICK|Mercalys|btnB2_Valider_LnkBouton\r\n"
+                + "EXCELSAVE|P:\\DOSTAWCY\\DOSTAWCY.xlsx|600000\r\n");
+    }
+
     @Test
     void reportWithoutSettingsIsSkippedWithReason() {
         Map<String, String> locations = Map.of("import:PRODUCTS:path", "P:\\Raporty\\baza.xlsx",
@@ -109,7 +133,7 @@ class ReportSaveMacroTests {
         assertThat(result.reports()).containsExactly(ImportReportKind.PROMOTIONS);
         assertThat(result.skipped()).extracting(ReportSaveMacro.Skipped::kind).containsExactly(
                 ImportReportKind.PRODUCTS, ImportReportKind.PRODUCT_CODES, ImportReportKind.CADENCIER,
-                ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
+                ImportReportKind.SUPPLIERS, ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
         // Lista promocji: data końca dziś + 2 lata, zapis PDF.
         assertThat(result.macro()).contains("#PART|3|Lista promocji\r\n", "#ENDPARTS\r\nWINMIN|",
                 "^a21112028{Tab}", "PDFSAVE|P:\\Raporty\\taryfy.pdf|1800000");

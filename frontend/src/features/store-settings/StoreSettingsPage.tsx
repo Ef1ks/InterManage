@@ -70,7 +70,7 @@ const FOLDER_KEY = /^folder:(?!import:)/
  * Ustawienia wybranego sklepu: kafelek na każde ustawienie, samo ustawienie na osobnej podstronie. Budżet rejonów
  * do podsumowania sprzedaży i strat i minimalna marża do raportu zakupu bazowego poza bazą ({@code SALES:EDIT}) i sklepy zaprzyjaźnione do ruchów międzymagazynowych
  * ({@code DOCUMENTS:EDIT}), pliki PROTO (edycja wprowadzania danych, dokumentów albo zamówień garmażu); każde tylko z jego
- * uprawnieniem.
+ * uprawnieniem. Agent sklepu ma własne uprawnienie ({@code STORE_AGENT}).
  */
 export function StoreSettingsPage() {
   const store = useCurrentStore()
@@ -81,7 +81,9 @@ export function StoreSettingsPage() {
   // Zużycie AI widzą ci, którzy mogą wołać model (uzupełnianie artykułów, odczyt WZ mięsa).
   const canEditMeat = useCan('MEAT_PURCHASES', 'EDIT')
   const canUseAi = canEditDataEntry || canEditMeat
-  const owner = useCurrentUser().owner
+  const canSeeAgents = useCan('STORE_AGENT')
+  // Ścieżki folderów i menu boczne zmienia każdy, kto ma tu jakieś ustawienie poza samym agentem.
+  const hasOtherSettings = canEditSales || canEditDocuments || canEditProto || canUseAi
   if (!store) {
     return (
       <>
@@ -90,13 +92,13 @@ export function StoreSettingsPage() {
       </>
     )
   }
-  if (!canEditSales && !canEditDocuments && !canEditProto && !canUseAi) {
+  if (!hasOtherSettings && !canSeeAgents) {
     return (
       <>
         <PageHeader title="Ustawienia sklepu" description={storeLabel(store)} />
         <FullPageMessage
           title="Brak uprawnień"
-          description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych albo zamówień garmażu."
+          description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych albo zamówień garmażu, albo dostępu do agenta sklepu."
           inline
         />
       </>
@@ -117,6 +119,8 @@ export function StoreSettingsPage() {
               canEditProto={canEditProto}
               canEditDataEntry={canEditDataEntry}
               canUseAi={canUseAi}
+              canSeeAgents={canSeeAgents}
+              hasOtherSettings={hasOtherSettings}
             />
           }
         />
@@ -270,28 +274,30 @@ export function StoreSettingsPage() {
             }
           />
         )}
-        <Route
-          path="sciezki"
-          element={
-            <section aria-labelledby="folders-heading" className="grid gap-4">
-              <BackToSettings />
-              <div>
-                <h2 id="folders-heading" className="text-lg font-semibold tracking-tight">
-                  Ścieżki folderów
-                </h2>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                  Wszystkie foldery w jednym miejscu: gdzie program sklepu wczytuje pliki z Intermanage i skąd
-                  Intermanage czyta ceny z kasy i dziennik ATHOS. Ścieżki są wspólne dla wszystkich sklepów i
-                  użytkowników, także dla agentów sklepów. Zapisują się po wyjściu z pola albo Enterze.
-                </p>
-              </div>
-              <div className="max-w-4xl">
-                <FolderPaths key={store.id} storeId={store.id} canEditProto={canEditProto} />
-              </div>
-            </section>
-          }
-        />
-        {(owner || canEditDataEntry) && (
+        {hasOtherSettings && (
+          <Route
+            path="sciezki"
+            element={
+              <section aria-labelledby="folders-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="folders-heading" className="text-lg font-semibold tracking-tight">
+                    Ścieżki folderów
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Wszystkie foldery w jednym miejscu: gdzie program sklepu wczytuje pliki z Intermanage i skąd
+                    Intermanage czyta ceny z kasy i dziennik ATHOS. Ścieżki są wspólne dla wszystkich sklepów i
+                    użytkowników, także dla agentów sklepów. Zapisują się po wyjściu z pola albo Enterze.
+                  </p>
+                </div>
+                <div className="max-w-4xl">
+                  <FolderPaths key={store.id} storeId={store.id} canEditProto={canEditProto} />
+                </div>
+              </section>
+            }
+          />
+        )}
+        {(canSeeAgents || canEditDataEntry) && (
           <Route
             path="agent"
             element={
@@ -308,33 +314,35 @@ export function StoreSettingsPage() {
                   </p>
                 </div>
                 <div className="grid max-w-2xl gap-4">
-                  {owner && <StoreAgentSettings key={store.id} storeId={store.id} />}
+                  {canSeeAgents && <StoreAgentSettings key={store.id} storeId={store.id} />}
                   {canEditDataEntry && <AgentFeatures key={`features-${store.id}`} storeId={store.id} />}
                 </div>
               </section>
             }
           />
         )}
-        <Route
-          path="menu-boczne"
-          element={
-            <section aria-labelledby="sidebar-heading" className="grid gap-4">
-              <BackToSettings />
-              <div>
-                <h2 id="sidebar-heading" className="text-lg font-semibold tracking-tight">
-                  Menu boczne
-                </h2>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                  Przeciągnij kategorie w kolejności, w jakiej mają stać w menu. Kolejność obowiązuje wszystkich w tym
-                  sklepie; każdy widzi tylko kategorie, do których ma dostęp.
-                </p>
-              </div>
-              <div className="max-w-md">
-                <SidebarOrderEditor key={store.id} storeId={store.id} />
-              </div>
-            </section>
-          }
-        />
+        {hasOtherSettings && (
+          <Route
+            path="menu-boczne"
+            element={
+              <section aria-labelledby="sidebar-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="sidebar-heading" className="text-lg font-semibold tracking-tight">
+                    Menu boczne
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Przeciągnij kategorie w kolejności, w jakiej mają stać w menu. Kolejność obowiązuje wszystkich w tym
+                    sklepie; każdy widzi tylko kategorie, do których ma dostęp.
+                  </p>
+                </div>
+                <div className="max-w-md">
+                  <SidebarOrderEditor key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         <Route path="*" element={<Navigate to={paths.overview} replace />} />
       </Routes>
     </>
@@ -365,6 +373,8 @@ function SettingsGrid({
   canEditProto,
   canEditDataEntry,
   canUseAi,
+  canSeeAgents,
+  hasOtherSettings,
 }: {
   storeId: string
   canEditSales: boolean
@@ -372,6 +382,8 @@ function SettingsGrid({
   canEditProto: boolean
   canEditDataEntry: boolean
   canUseAi: boolean
+  canSeeAgents: boolean
+  hasOtherSettings: boolean
 }) {
   const me = useCurrentUser()
   const budgets = useRegionBudgets(storeId, canEditSales)
@@ -381,7 +393,7 @@ function SettingsGrid({
   const proto = useProtoSettings(storeId, canEditProto)
   const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
   const aiUsage = useAiUsage(storeId, { from: `${currentMonth()}-01`, to: todayIso() }, canUseAi)
-  const agents = useStoreAgents(storeId, me.owner)
+  const agents = useStoreAgents(storeId, canSeeAgents)
   const locations = useStoreLocations(storeId)
   const activeAgents = agents.data?.agents.filter((agent) => !agent.deletedAt) ?? []
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
@@ -488,18 +500,20 @@ function SettingsGrid({
           }
         />
       )}
-      <SettingsTile
-        to={paths.folders}
-        icon={FolderTreeIcon}
-        title="Ścieżki folderów"
-        description="Wszystkie foldery w jednym miejscu, wspólne dla wszystkich sklepów: zapis plików dla programu sklepu i foldery, które czyta Intermanage."
-        status={
-          locations.data
-            ? `Wpisane ścieżki: ${Object.keys(locations.data).filter((key) => FOLDER_KEY.test(key)).length}`
-            : ' '
-        }
-      />
-      {(me.owner || canEditDataEntry) && (
+      {hasOtherSettings && (
+        <SettingsTile
+          to={paths.folders}
+          icon={FolderTreeIcon}
+          title="Ścieżki folderów"
+          description="Wszystkie foldery w jednym miejscu, wspólne dla wszystkich sklepów: zapis plików dla programu sklepu i foldery, które czyta Intermanage."
+          status={
+            locations.data
+              ? `Wpisane ścieżki: ${Object.keys(locations.data).filter((key) => FOLDER_KEY.test(key)).length}`
+              : ' '
+          }
+        />
+      )}
+      {(canSeeAgents || canEditDataEntry) && (
         <SettingsTile
           to={paths.agent}
           icon={HardDriveIcon}
@@ -518,13 +532,15 @@ function SettingsGrid({
           }
         />
       )}
-      <SettingsTile
-        to={paths.sidebar}
-        icon={PanelLeftIcon}
-        title="Menu boczne"
-        description="Kolejność kategorii w menu, wspólna dla całego sklepu."
-        status={hasCustomSidebarOrder(me.sidebarOrders[storeId]) ? 'Własna kolejność' : 'Kolejność domyślna'}
-      />
+      {hasOtherSettings && (
+        <SettingsTile
+          to={paths.sidebar}
+          icon={PanelLeftIcon}
+          title="Menu boczne"
+          description="Kolejność kategorii w menu, wspólna dla całego sklepu."
+          status={hasCustomSidebarOrder(me.sidebarOrders[storeId]) ? 'Własna kolejność' : 'Kolejność domyślna'}
+        />
+      )}
     </div>
   )
 }

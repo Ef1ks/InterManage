@@ -582,6 +582,40 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void productNameInsteadOfEanIsLinkedToArticleForSupplier() throws Exception {
+        // Nazwa zamiast EAN-u: w kolumnie nazwa także przy kodzie z kartoteki, artykuł dopiero po powiązaniu.
+        mvc.perform(get(url("/invoices/" + invoiceId + "?source=PRODUCT_NAME")).cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.source").value("PRODUCT_NAME"))
+                .andExpect(jsonPath("$.lines[0].ean").doesNotExist())
+                .andExpect(jsonPath("$.lines[0].product").doesNotExist())
+                .andExpect(jsonPath("$.lines[0].fallbackCode").value("Mleko 3,2% 1 l"))
+                .andExpect(jsonPath("$.lines[0].fallbackSource").value("Nazwa towaru"))
+                .andExpect(jsonPath("$.sources[?(@.key == 'PRODUCT_NAME')].filled").value(hasItem(8)))
+                .andExpect(jsonPath("$.sources[?(@.key == 'PRODUCT_NAME')].matched").value(hasItem(0)));
+
+        for (String name : List.of("Mleko 3,2% 1 l", "Wisła Pianka Pasek Pom pon magic 30g/30")) {
+            mvc.perform(post(url("/links")).with(csrf()).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"sellerNip\":\"" + SELLER_NIP + "\",\"code\":\"" + name
+                                    + "\",\"itm8\":\"0000000000102\"}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(get(url("/invoices/" + invoiceId + "?source=PRODUCT_NAME")).cookie(owner))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000102"))
+                .andExpect(jsonPath("$.lines[0].eanSource").value("LINK"))
+                .andExpect(jsonPath("$.lines[0].linkedCode").value("MLEKO 3,2% 1 L"))
+                .andExpect(jsonPath("$.lines[0].fallbackCode").doesNotExist())
+                .andExpect(jsonPath("$.lines[4].product.itm8").value("0000000000102"))
+                .andExpect(jsonPath("$.sources[?(@.key == 'PRODUCT_NAME')].matched").value(hasItem(2)));
+        // Bez tego wyboru EAN z kartoteki ma pierwszeństwo, a pozycja spoza kartoteki bierze przypiętą nazwę.
+        mvc.perform(get(url("/invoices/" + invoiceId)).cookie(owner))
+                .andExpect(jsonPath("$.lines[0].product.itm8").value("0000000000101"))
+                .andExpect(jsonPath("$.lines[0].eanSource").value("GTIN"))
+                .andExpect(jsonPath("$.lines[4].product.itm8").value("0000000000102"))
+                .andExpect(jsonPath("$.lines[4].eanSource").value("LINK"));
+    }
+
+    @Test
     void linkReplacesCatalogHitOfIncompleteEan() throws Exception {
         String productImport = jdbc.queryForObject("""
                 insert into product_imports (store_id, file_name, total_rows, created_count, updated_count,

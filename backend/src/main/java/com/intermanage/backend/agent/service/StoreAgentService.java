@@ -147,14 +147,17 @@ public class StoreAgentService {
 
     /**
      * Agent preferowany na głównego (np. komputer w biurze, nie kasa): odbiera rolę niepreferowanemu przy swoim
-     * najbliższym żądaniu. Kilku preferowanych: główny zostaje ten, który już nim jest.
+     * najbliższym żądaniu. Preferowany jest najwyżej jeden w sklepie, więc włączenie zdejmuje poprzedniego.
      */
     @Transactional
     public StoreAgentsResponse setPreferred(UUID storeId, UUID agentId, boolean preferred) {
-        StoreAgent agent = agents.findById(agentId)
+        agents.findById(agentId)
                 .filter(found -> found.getDeletedAt() == null && found.getStore().getId().equals(storeId))
                 .orElseThrow(() -> ApiException.notFound("Nie znaleziono agenta"));
-        agents.setPreferred(agent.getId(), preferred);
+        if (preferred) {
+            agents.clearPreferred(storeId);
+        }
+        agents.setPreferred(agentId, preferred);
         live.publish(storeId, "agent", Map.of("action", "preferred"));
         return list(storeId);
     }

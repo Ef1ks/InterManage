@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { useCan } from '@/features/auth/api'
 import { ApiError } from '@/lib/api'
 import type { StoreAgent } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -21,10 +22,12 @@ const dateTime = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyl
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
 /**
- * Agent sklepu (Ustawienia sklepu, tylko właściciel): wybór „pliki i foldery przez agenta / jak dotąd przez
- * przeglądarkę”, klucze agentów (pokazywane raz), stan online, wersja i komputer, powiadomienia systemowe.
+ * Agent sklepu (Ustawienia sklepu, `STORE_AGENT`): wybór „pliki i foldery przez agenta / jak dotąd przez
+ * przeglądarkę”, klucze agentów (pokazywane raz), stan online, wersja i komputer, powiadomienia systemowe. Podgląd
+ * widzi agentów i wybiera preferowanego, edycja dodaje i usuwa agentów i przełącza pracę przez agenta.
  */
 export function StoreAgentSettings({ storeId }: { storeId: string }) {
+  const canEdit = useCan('STORE_AGENT', 'EDIT')
   const agents = useStoreAgents(storeId)
   const add = useAddAgent(storeId)
   const remove = useRemoveAgent(storeId)
@@ -60,7 +63,10 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
     })
   }
 
-  const setPreferred = (agent: StoreAgent, value: boolean) =>
+  // Preferowany jest najwyżej jeden, więc „Cofnij” po wyborze oddaje to poprzedniemu.
+  const setPreferred = (agent: StoreAgent, value: boolean) => {
+    const previous = active.find((other) => other.preferred && other.id !== agent.id)
+    const undo = value && previous ? { id: previous.id, preferred: true } : { id: agent.id, preferred: !value }
     preferred.mutate(
       { id: agent.id, preferred: value },
       {
@@ -69,11 +75,12 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
             value
               ? `${agent.name} przejmie pilnowanie folderów, gdy tylko będzie online.`
               : `${agent.name} nie jest już preferowany.`,
-            { action: { label: 'Cofnij', onClick: () => preferred.mutate({ id: agent.id, preferred: !value }) } },
+            { action: { label: 'Cofnij', onClick: () => preferred.mutate(undo) } },
           ),
         onError: (error) => toast.error(errorMessage(error, 'Nie udało się zapisać ustawienia.')),
       },
     )
+  }
 
   const removeAgent = (agent: StoreAgent) =>
     remove.mutate(agent.id, {
@@ -99,7 +106,7 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
           <Switch
             aria-label="Praca z folderami przez agenta sklepu"
             checked={data.enabled}
-            disabled={enabled.isPending}
+            disabled={enabled.isPending || !canEdit}
             onCheckedChange={(checked) =>
               enabled.mutate(checked, {
                 onSuccess: () =>
@@ -145,7 +152,7 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
             <p className="text-sm text-muted-foreground">
               Pliki zapisuje każdy włączony komputer. Folderów pilnuje i dane z Mercalys aktualizuje tylko główny agent.
               Gdy zostanie wyłączony, przejmuje to inny komputer, a preferowany odbiera tę rolę od razu, gdy tylko jest
-              online. Jako preferowany zaznacz komputer w biurze, nie kasę.
+              online. Preferowany może być jeden: wybierz komputer w biurze, nie kasę.
             </p>
           )}
         </div>
@@ -206,40 +213,44 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
                     onCheckedChange={(checked) => setPreferred(agent, checked)}
                   />
                 </label>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Usuń agenta ${agent.name}`}
-                  title="Usuń agenta (klucz przestaje działać)"
-                  onClick={() => removeAgent(agent)}
-                  disabled={remove.isPending}
-                >
-                  <Trash2Icon aria-hidden />
-                </Button>
+                {canEdit && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Usuń agenta ${agent.name}`}
+                    title="Usuń agenta (klucz przestaje działać)"
+                    onClick={() => removeAgent(agent)}
+                    disabled={remove.isPending}
+                  >
+                    <Trash2Icon aria-hidden />
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
         )}
-        <Form
-          onSubmit={(event) => {
-            event.preventDefault()
-            submit()
-          }}
-        >
-          <TextField
-            label="Nazwa nowego agenta, np. Komputer biuro"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={100}
-          />
-          <FormActions>
-            <Button type="submit" loading={add.isPending} disabled={!name.trim()}>
-              <PlusIcon aria-hidden />
-              Dodaj agenta
-            </Button>
-          </FormActions>
-        </Form>
-        {removed.length > 0 && (
+        {canEdit && (
+          <Form
+            onSubmit={(event) => {
+              event.preventDefault()
+              submit()
+            }}
+          >
+            <TextField
+              label="Nazwa nowego agenta, np. Komputer biuro"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={100}
+            />
+            <FormActions>
+              <Button type="submit" loading={add.isPending} disabled={!name.trim()}>
+                <PlusIcon aria-hidden />
+                Dodaj agenta
+              </Button>
+            </FormActions>
+          </Form>
+        )}
+        {canEdit && removed.length > 0 && (
           <div className="grid gap-1 border-t pt-3">
             <p className="text-xs font-medium text-muted-foreground">Usunięci</p>
             {removed.map((agent) => (

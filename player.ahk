@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.69.0.0
+;@Ahk2Exe-SetVersion 0.70.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.69" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.70" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global PartMode := false ; trwa część makra z ponawianiem (#PART): błąd nie pokazuje okna, tylko wraca do PlayParts
@@ -326,11 +326,12 @@ WriteRemote(state, text) {
 ; Nieudana do końca zostaje w podsumowaniu, a makro robi następne. Starszy odtwarzacz widzi w # komentarze.
 ; Makro bez #PART działa jak dotąd.
 PlayParts(rawClip) {
-    plan := SplitParts(rawClip)
-    if (plan.parts.Length = 0) {
+    ; Przed podziałem (od 0.70): sklejanie 35 tys. linii makra ITM8 z cadencier trwało ponad 30 s, zanim coś ruszyło.
+    if !RegExMatch(rawClip, "im`a)^[ \t]*#PART\|\d+\|") {
         PlayMacro(rawClip)
         return
     }
+    plan := SplitParts(rawClip)
     done := ""
     failed := ""
     clean := false ; ekran Mercalys jest taki, jak zostawiła go poprzednia udana część

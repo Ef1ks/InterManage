@@ -57,7 +57,6 @@ import {
   BASE_COLUMNS,
   type Column,
   type ColumnKey,
-  cellText,
   nomenclatureNames,
   pricingOf,
 } from '@/features/data-entry/grid-values'
@@ -107,10 +106,8 @@ import { useUndoHistory, useUndoShortcuts } from '@/features/data-entry/undo-his
 
 import { useBaseDelivery, useMeaOverview, useUploadBaseDelivery } from './api'
 import {
-  type ColumnFilters,
   deliverySuppliers,
   documentPrice,
-  EMPTY_VALUE,
   isNewArticle,
   negativeMargin,
   newArticlesBySupplier,
@@ -127,7 +124,16 @@ import {
   viewRows,
 } from './base-rows'
 import { CarrierDialog } from './CarrierDialog'
-import { ColumnFilter, type FilterValue } from './ColumnFilter'
+import { ColumnFilter } from '@/features/data-entry/ColumnFilter'
+import {
+  type ColumnFilters,
+  type ColumnSort,
+  columnValues,
+  isNumericColumn,
+  matchesColumns,
+  type SortDirection,
+  sortedRows,
+} from '@/features/data-entry/column-filters'
 import { DeliveryPickerDialog } from './DeliveryPickerDialog'
 import { PortalDeliveryDialog } from './PortalDeliveryDialog'
 import { DifferencesDialog } from './DifferencesDialog'
@@ -196,9 +202,6 @@ const QUICK_FILTERS: Record<QuickFilter, (row: DataEntryRow) => boolean> = {
   deposit: (row) => depositError(row) !== null,
   vat: vatMismatch,
 }
-
-/** Sortowanie tabeli po kliknięciu nagłówka kolumny. */
-type SortState = { key: ColumnKey; direction: 'asc' | 'desc' }
 
 /**
  * Filtr zastosowany na wiersze z chwili zmiany filtra (jak w Excelu): wiersz poprawiony tak, że już nie pasuje, nie
@@ -316,9 +319,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   const passes = useCallback(
     (row: DataEntryRow, filters: ColumnFilters, quick: QuickFilter | null) => {
       if (quick && !QUICK_FILTERS[quick](row)) return false
-      return Object.entries(filters).every(([key, allowed]) =>
-        allowed.includes(cellText(row, key as ColumnKey, pricing) || EMPTY_VALUE),
-      )
+      return matchesColumns(row, filters, pricing)
     },
     [pricing],
   )
@@ -343,30 +344,20 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
 
   // ---------- sortowanie: klik w nagłówek układa wiersze tabeli (jak w Excelu; Ctrl+Z cofa), puste zawsze na końcu.
 
-  const [sort, setSort] = useState<SortState | null>(null)
+  const [sort, setSort] = useState<ColumnSort | null>(null)
   // Funkcje dla tabeli są stałe między odświeżeniami strony (np. przy każdym ruchu zaznaczenia), żeby tabela się wtedy
   // nie przerysowywała.
-  const sortBy = useCallback(
-    (key: ColumnKey) => {
-      const direction = sort?.key === key && sort.direction === 'asc' ? 'desc' : 'asc'
-      const numeric = BASE_COLUMNS.find((column) => column.key === key)?.align === 'right'
-      const sign = direction === 'asc' ? 1 : -1
+  const sortRows = useCallback(
+    (key: ColumnKey, direction: SortDirection) => {
+      const column = BASE_COLUMNS.find((item) => item.key === key)
       setSort({ key, direction })
-      // Tekst komórki liczony raz na wiersz, nie przy każdym porównaniu.
-      const texts = new Map(currentDraft().rows.map((row) => [row.id, cellText(row, key, pricing)]))
-      setRows((current) =>
-        [...current].sort((a, b) => {
-          const left = texts.get(a.id) ?? cellText(a, key, pricing)
-          const right = texts.get(b.id) ?? cellText(b, key, pricing)
-          if (left === '' || right === '') return left === right ? 0 : left === '' ? 1 : -1
-          const order = numeric
-            ? Number(left.replace(',', '.')) - Number(right.replace(',', '.'))
-            : left.localeCompare(right, 'pl', { numeric: true })
-          return order * sign
-        }),
-      )
+      setRows((current) => sortedRows(current, key, direction, column ? isNumericColumn(column) : false, pricing))
     },
-    [sort, pricing, currentDraft, setRows],
+    [pricing, setRows],
+  )
+  const sortBy = useCallback(
+    (key: ColumnKey) => sortRows(key, sort?.key === key && sort.direction === 'asc' ? 'desc' : 'asc'),
+    [sort, sortRows],
   )
 
   /** Nowa zawartość tabeli: bez filtrów i strzałki sortowania. */
@@ -392,44 +383,24 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
   )
 
   // Wartości kolumny do filtra liczone dopiero po otwarciu jego listy (z tabeli z tej chwili), nie przy każdej zmianie.
-  const columnValues = useCallback(
-    (column: Column): FilterValue[] => {
-      const counts = new Map<string, number>()
-      for (const row of currentDraft().rows) {
-        const value = cellText(row, column.key, pricing) || EMPTY_VALUE
-        counts.set(value, (counts.get(value) ?? 0) + 1)
-      }
-      const numeric = column.align === 'right'
-      return [...counts.entries()]
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) =>
-          a.value === EMPTY_VALUE
-            ? 1
-            : b.value === EMPTY_VALUE
-              ? -1
-              : numeric
-                ? Number(a.value.replace(',', '.')) - Number(b.value.replace(',', '.'))
-                : a.value.localeCompare(b.value, 'pl'),
-        )
-    },
-    [currentDraft, pricing],
-  )
-
   const headerExtra = useCallback(
     (column: Column) => (
       <ColumnFilter
         label={column.title ?? column.header}
-        getValues={() => columnValues(column)}
-        selected={applied?.filters[column.key] ?? null}
-        onChange={(selected) => {
+        getValues={() => columnValues(currentDraft().rows, column, pricing)}
+        numeric={isNumericColumn(column)}
+        rule={applied?.filters[column.key] ?? null}
+        onRuleChange={(rule) => {
           const filters = { ...(applied?.filters ?? {}) }
-          if (selected === null) delete filters[column.key]
-          else filters[column.key] = selected
+          if (rule === null) delete filters[column.key]
+          else filters[column.key] = rule
           applyFilter(filters, applied?.quick ?? null)
         }}
+        sort={sort?.key === column.key ? sort.direction : null}
+        onSort={(direction) => sortRows(column.key, direction)}
       />
     ),
-    [applied, applyFilter, columnValues],
+    [applied, applyFilter, currentDraft, pricing, sort, sortRows],
   )
 
   // ---------- dokument i nośniki

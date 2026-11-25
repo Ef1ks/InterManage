@@ -22,6 +22,7 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -130,9 +131,9 @@ public class DataEntryService {
 
     /**
      * Pozycje faktury (XML z bazy, za pierwszym razem z KSeF w granicach limitu pobrań) z artykułami z kartoteki.
-     * EAN pozycji z wybranego źródła ({@link ProductCodeSources}: AUTO, GTIN, INDEX, EXTRA:klucz, NAME); odpowiedź
-     * podaje też, ile pozycji ma kod w każdym źródle i ile z nich jest w kartotece. Faktura musi być widoczna w sklepie
-     * (IDWew), inaczej 404.
+     * EAN pozycji z wybranego źródła ({@link ProductCodeSources}: AUTO, GTIN, INDEX, EXTRA:klucz, NAME,
+     * PRODUCT_NAME); odpowiedź podaje też, ile pozycji ma kod w każdym źródle i ile z nich jest w kartotece. Faktura
+     * musi być widoczna w sklepie (IDWew), inaczej 404.
      */
     @Transactional
     public DataEntryInvoice invoice(UUID storeId, UUID invoiceId, String source) {
@@ -175,7 +176,8 @@ public class DataEntryService {
         }
         List<String> keys = ProductCodeSources.keys(codes);
         String chosen = source == null || source.isBlank() ? ProductCodeSources.AUTO : source.strip();
-        if (!ProductCodeSources.AUTO.equals(chosen) && !keys.contains(chosen)) {
+        boolean byName = ProductCodeSources.PRODUCT_NAME.equals(chosen);
+        if (!ProductCodeSources.AUTO.equals(chosen) && !byName && !keys.contains(chosen)) {
             throw ApiException.badRequest("Nieznane źródło kodu towaru: " + chosen);
         }
 
@@ -239,12 +241,23 @@ public class DataEntryService {
             // kodem sklepu.
             if (code != null) {
                 codesOfLine.add(DataEntryLinkService.code(code));
+            }
+            // Przy wybranej nazwie towaru liczy się tylko jej przypięcie: kody tego dostawcy mogą być błędne.
+            if (code != null && !byName) {
                 ProductCodeSources.rawCodes(lineCodes.get(i), keys).stream().map(DataEntryLinkService::code)
                         .filter(other -> !codesOfLine.contains(other)).forEach(codesOfLine::add);
+                // Przypięta nazwa działa też bez wyboru nazwy, ale na końcu i tylko bez trafienia w kartotece: pod
+                // jedną nazwą bywają na fakturze różne artykuły z dobrymi EAN-ami.
+                String name = DataEntryLinkService.code(lineCodes.get(i).name());
+                if ((ean == null || !inCatalog.test(ean)) && !name.isEmpty() && !codesOfLine.contains(name)) {
+                    codesOfLine.add(name);
+                }
             }
             linkCodes.add(codesOfLine);
         }
-        List<String> unmatched = linkCodes.stream().flatMap(List::stream).distinct().toList();
+        List<String> names = lineCodes.stream().map(line -> DataEntryLinkService.code(line.name())).toList();
+        List<String> unmatched = Stream.concat(linkCodes.stream().flatMap(List::stream), names.stream())
+                .filter(code -> !code.isEmpty()).distinct().toList();
         String sellerNip = DataEntryLinkService.digits(summary.sellerNip());
         Map<String, DataEntryProductLinkRepository.ActiveLink> linked = unmatched.isEmpty() || sellerNip.isEmpty()
                 ? Map.of()
@@ -300,12 +313,19 @@ public class DataEntryService {
                 counted.add(lines.get(i));
             }
         }
+        List<DataEntryInvoice.CodeSource> sources = new ArrayList<>();
+        ProductCodeSources.sources(lineCodes, inCatalog).forEach(item -> sources.add(
+                new DataEntryInvoice.CodeSource(item.key(), item.label(), item.filled(), item.matched())));
+        int named = (int) names.stream().filter(name -> !name.isEmpty()).count();
+        if (named > 0) {
+            sources.add(new DataEntryInvoice.CodeSource(ProductCodeSources.PRODUCT_NAME,
+                    ProductCodeSources.label(ProductCodeSources.PRODUCT_NAME), named,
+                    (int) names.stream().map(linked::get).filter(Objects::nonNull)
+                            .filter(link -> linkedProducts.containsKey(key(link.getEan()))).count()));
+        }
         return new LoadedInvoice(new DataEntryInvoice(summary.id(), summary.invoiceNumber(), summary.sellerName(),
-                summary.sellerNip(), summary.issueDate(), chosen, ProductCodeSources.sources(lineCodes, inCatalog).stream()
-                        .map(item -> new DataEntryInvoice.CodeSource(item.key(), item.label(), item.filled(),
-                                item.matched()))
-                        .toList(),
-                rows, total(invoice, counted, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
+                summary.sellerNip(), summary.issueDate(), chosen, List.copyOf(sources), rows,
+                total(invoice, counted, KsefInvoiceReader.TaxRow::net, KsefInvoiceReader.Line::net),
                 total(invoice, counted, KsefInvoiceReader.TaxRow::vat, KsefInvoiceReader.Line::vat), correction), lines);
     }
 

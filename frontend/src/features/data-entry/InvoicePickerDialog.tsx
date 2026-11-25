@@ -927,7 +927,9 @@ function SourceStep({
                     <span className="block text-xs text-muted-foreground tabular-nums">
                       {item.key === 'AUTO'
                         ? `Pierwszy kod znany w kartotece z dowolnego pola · ${item.matched} z ${total} w kartotece`
-                        : `Kod ma ${item.filled} z ${total} ${positions(total)} · ${item.matched} w kartotece`}
+                        : item.key === 'PRODUCT_NAME'
+                          ? `Zamiast EAN-u, do powiązania z artykułem · ${item.matched} z ${total} już powiązane`
+                          : `Kod ma ${item.filled} z ${total} ${positions(total)} · ${item.matched} w kartotece`}
                     </span>
                   </span>
                 </button>
@@ -945,7 +947,7 @@ function SourceStep({
               <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Pozycja z faktury</th>
-                  <th className="px-3 py-2 text-left font-medium">EAN</th>
+                  <th className="px-3 py-2 text-left font-medium">Kolumna EAN</th>
                   <th className="px-3 py-2 text-left font-medium">Kartoteka</th>
                 </tr>
               </thead>
@@ -959,7 +961,7 @@ function SourceStep({
                       {line.ean ??
                         (line.fallbackCode ? (
                           <span
-                            className="text-muted-foreground italic"
+                            className="block max-w-64 truncate text-muted-foreground italic"
                             title={`Nie EAN, kod z faktury: ${line.fallbackSource ?? ''}`}
                           >
                             {line.fallbackCode}
@@ -976,6 +978,8 @@ function SourceStep({
                     <td className="max-w-64 truncate px-3 py-1.5 text-muted-foreground">
                       {line.product ? (
                         <span className="text-foreground">{line.product.name}</span>
+                      ) : data.source === 'PRODUCT_NAME' ? (
+                        'do powiązania'
                       ) : line.ean || line.fallbackCode ? (
                         'nowy artykuł'
                       ) : (

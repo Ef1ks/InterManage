@@ -22,12 +22,13 @@ export type PermissionCategory =
   | 'STORE_LOG'
   | 'STORE_RESULTS'
   | 'CHAT'
+  | 'STORE_AGENT'
 
 /**
  * Kategorie, które są narzędziem z własną stroną (DASHBOARD to tylko zawartość pulpitu, CHAT to zarządzanie czatem,
- * z którego korzysta każdy).
+ * z którego korzysta każdy, a STORE_AGENT to kafelek w Ustawieniach sklepu).
  */
-export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD' | 'CHAT'>
+export type ToolCategory = Exclude<PermissionCategory, 'DASHBOARD' | 'CHAT' | 'STORE_AGENT'>
 
 export type PermissionLevel = 'VIEW' | 'EDIT'
 

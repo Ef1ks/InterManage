@@ -7,7 +7,8 @@ import java.util.UUID;
 
 /**
  * Faktura z KSeF wczytana do tabeli: pozycje w kolejności z faktury, bez wierszy "przed korektą". {@code source} to
- * użyte źródło EAN-u, a {@code sources} źródła do wyboru: w ilu pozycjach jest kod i ile z nich jest w kartotece.
+ * użyte źródło EAN-u, a {@code sources} źródła do wyboru: w ilu pozycjach jest kod i ile z nich jest w kartotece (przy
+ * PRODUCT_NAME: ile nazw jest już przypiętych u dostawcy).
  * {@code netTotal} i {@code vatTotal} to sumy z dokumentu (z podsumowania stawek, bez niego z pozycji), z którymi
  * tabela porównuje swoje sumy; {@code null}, gdy faktura ich nie podaje. {@code correction} tylko przy fakturze
  * korygującej z KSeF.

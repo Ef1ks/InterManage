@@ -38,6 +38,14 @@ public interface StoreAgentRepository extends JpaRepository<StoreAgent, UUID> {
             where id = :id""")
     int hello(UUID id, String version, String machineName, String machineUser);
 
+    /**
+     * Zdejmuje preferowanego w sklepie. Obejmuje wszystkie wiersze sklepu: dwa jednoczesne wybory czekają wtedy na
+     * siebie, a usunięty agent po przywróceniu nie jest drugim preferowanym.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(nativeQuery = true, value = "update store_agents set preferred = false where store_id = :storeId")
+    int clearPreferred(UUID storeId);
+
     /** Agent preferowany (odbiera rolę głównego agenta sklepu pozostałym). */
     @Modifying(clearAutomatically = true)
     @Query(nativeQuery = true, value = "update store_agents set preferred = :preferred where id = :id")

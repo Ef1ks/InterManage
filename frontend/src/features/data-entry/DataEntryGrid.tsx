@@ -665,12 +665,14 @@ export const DataEntryGrid = memo(function DataEntryGrid({
     )
 
   const onCopy = (event: React.ClipboardEvent) => {
+    if (outsideGrid(event)) return
     if (editing || picker) return
     event.preventDefault()
     event.clipboardData.setData('text/plain', selectionTsv())
   }
 
   const onPaste = (event: React.ClipboardEvent) => {
+    if (outsideGrid(event)) return
     if (editing || picker) return
     event.preventDefault()
     paste(event.clipboardData.getData('text/plain'))
@@ -745,7 +747,13 @@ export const DataEntryGrid = memo(function DataEntryGrid({
     frame = requestAnimationFrame(tick)
   }
 
+  // Okienka w nagłówkach (filtr kolumny) są w portalu, ale ich zdarzenia React przekazuje tabeli: klik, kopiowanie
+  // i wklejanie w ich polach nie dotyczą komórek.
+  const outsideGrid = (event: React.SyntheticEvent) =>
+    event.target instanceof Node && !gridRef.current?.contains(event.target)
+
   const onMouseDown = (event: React.MouseEvent) => {
+    if (outsideGrid(event)) return
     if (event.button !== 0) return
     const insert = (event.target as HTMLElement).closest<HTMLElement>('[data-row-insert]')
     if (insert) {
@@ -805,6 +813,7 @@ export const DataEntryGrid = memo(function DataEntryGrid({
   // Listy (nomenklatura, rodzaj): pierwsze kliknięcie tylko zaznacza komórkę (cała komórka ze strzałką jest polem
   // wyboru, więc Ctrl+C kopiuje jej wartość), kliknięcie w zaznaczoną otwiera listę. Przeciągnięcie zaznacza zakres jak zwykle.
   const onClick = (event: React.MouseEvent) => {
+    if (outsideGrid(event)) return
     const cell = cellFromEvent(event)
     if (!cell || event.shiftKey || editing || picker || !clickedActive.current) return
     const kind = columns[cell.c].kind
@@ -814,6 +823,7 @@ export const DataEntryGrid = memo(function DataEntryGrid({
   }
 
   const onDoubleClick = (event: React.MouseEvent) => {
+    if (outsideGrid(event)) return
     // W trakcie pisania w komórce podwójne kliknięcie działa jak w zwykłym polu (zaznacza słowo), a nie zaczyna
     // edycji od nowa (to cofałoby wpisane zmiany).
     if (event.target instanceof HTMLInputElement) return
@@ -1588,10 +1598,7 @@ function CellContent({
         // Kod skraca się wielokropkiem, żeby przy wąskiej kolumnie zostały widoczne ikony (błąd, przypięcie).
         <span className="flex min-w-0 items-center" title={error ?? row.ean}>
           {row.ean && row.eanFallback ? (
-            <span
-              className="min-w-0 truncate italic opacity-75"
-              title={`Brak EAN na fakturze, kod z pola: ${row.eanFallback}`}
-            >
+            <span className="min-w-0 truncate italic opacity-75" title={`To nie EAN, z faktury: ${row.eanFallback}`}>
               {row.ean}
             </span>
           ) : row.ean ? (

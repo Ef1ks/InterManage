@@ -140,7 +140,9 @@ public class ImportHistoryService {
                     .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
             case CADENCIER -> cadencier.findLatest(storeId, max).stream()
                     .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
-            case SUPPLIERS, NOMENCLATURES -> List.of();
+            case SUPPLIERS -> suppliers.findLatest(storeId, max).stream()
+                    .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
+            case NOMENCLATURES -> List.of();
         };
     }
 
