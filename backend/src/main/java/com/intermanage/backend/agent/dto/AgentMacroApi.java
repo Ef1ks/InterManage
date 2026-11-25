@@ -36,7 +36,8 @@ public final class AgentMacroApi {
     public record PollResponse(Offer offer) {
     }
 
-    public record Offer(UUID id, String title, String requestedBy, int countdownSeconds) {
+    /** {@code holdOnInput}: ruch myszy albo klawiatury zaczyna odliczanie od nowa (agent od 1.11.0). */
+    public record Offer(UUID id, String title, String requestedBy, int countdownSeconds, boolean holdOnInput) {
     }
 
     /**
@@ -77,6 +78,10 @@ public final class AgentMacroApi {
 
     /** Bon dostawy z bazy („Wprowadź dostawę” i „Zatwierdź”). */
     public record BaseDeliveryRequest(@NotNull UUID deliveryId, UUID agentId) {
+    }
+
+    /** {@code expected}: plik nowych artykułów wczyta komputer sklepu, więc o nic nie pytamy. */
+    public record ProductFileExpected(boolean expected) {
     }
 
     public record Job(UUID id, String kind, String title, String status, String computer, String requestedBy,

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { usePurchaseFileLines } from '@/features/deli-prices/api'
 import { formatMoney } from '@/features/deli-prices/format'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
+import { confirmArticleSave } from '@/lib/cancel-window'
 import { useProductFileFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
 import type { PurchaseFileLine } from '@/lib/types'
@@ -80,6 +81,7 @@ function FileForm({ storeId, onClose }: { storeId: string; onClose: () => void }
     try {
       // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
       const folderReady = await ensureFolderAccess(folder.key)
+      if (!(await confirmArticleSave(selected.length))) return
       const files: string[] = []
       for (const group of bySupplier) {
         const { fileName, blob } = await fetchPostedFile(

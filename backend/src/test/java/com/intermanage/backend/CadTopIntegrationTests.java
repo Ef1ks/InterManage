@@ -40,7 +40,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.intermanage.backend.auth.security.JwtService;
+import com.intermanage.backend.agent.service.CadPriorityMacroService;
 import com.intermanage.backend.cadtop.service.CadPriceService;
+import com.intermanage.backend.cadtop.service.CadPriorityService;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.component.XlsxWriter;
 import com.intermanage.backend.mea.component.MurphysoftClient;
@@ -76,6 +78,12 @@ class CadTopIntegrationTests {
 
     @Autowired
     CadPriceService prices;
+
+    @Autowired
+    CadPriorityService priorities;
+
+    @Autowired
+    CadPriorityMacroService cadMacros;
 
     @MockitoBean
     MurphysoftClient client;
@@ -248,8 +256,9 @@ class CadTopIntegrationTests {
                 .andExpect(jsonPath("$.setCount").value(2))
                 .andExpect(jsonPath("$.variantCount").value(1))
                 .andExpect(jsonPath("$.absentCount").value(1))
-                .andExpect(jsonPath("$.macroReady").value(false))
+                .andExpect(jsonPath("$.automatic").value(false))
                 .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.items[0].task").value("PRIORITY"))
                 .andExpect(jsonPath("$.items[0].itm8").value("0000099000600"))
                 .andExpect(jsonPath("$.items[0].topItm8").value("0000000000600"))
                 .andExpect(jsonPath("$.items[0].topKnown").value(true))
@@ -260,8 +269,15 @@ class CadTopIntegrationTests {
                 .andExpect(jsonPath("$.items[1].match").value("SCALE_CODE"));
 
         String body = "{\"items\":[{\"itm8\":\"0000099000600\",\"topItm8\":\"0000000000601\"}]}";
-        mvc.perform(post(url + "/macro").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                .content(body)).andExpect(status().isConflict());
+        String macro = mvc.perform(post(url + "/macro").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.macro", containsString("WEBKEY|Mercalys|txtZ1_CodeITM_TxtBox|^a99000600{Enter}")))
+                .andExpect(jsonPath("$.macro", containsString("WEBKEY|Mercalys|txtZ02_Itm_TxtBox|^a601{Tab}")))
+                .andExpect(jsonPath("$.report.items[0].run.source").value("MACRO"))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(post(url + "/runs/undo").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[\"" + JsonPath.read(macro, "$.runIds[0]") + "\"]}")).andExpect(status().isOk());
         mvc.perform(post(url + "/runs").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content(body.replace("0000000000601", "0000000000453"))).andExpect(status().isConflict());
         String result = mvc.perform(post(url + "/runs").cookie(owner).with(csrf())
@@ -269,7 +285,7 @@ class CadTopIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.report.items[0].status").value("WAITING"))
                 .andExpect(jsonPath("$.report.items[0].topItm8").value("0000000000601"))
-                .andExpect(jsonPath("$.report.items[0].run.macro").value(false))
+                .andExpect(jsonPath("$.report.items[0].run.source").value("MANUAL"))
                 .andReturn().getResponse().getContentAsString();
         String ids = "{\"ids\":[\"" + JsonPath.read(result, "$.runIds[0]") + "\"]}";
         mvc.perform(post(url + "/runs/undo").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
@@ -286,6 +302,106 @@ class CadTopIntegrationTests {
                 storeId);
         mvc.perform(get(url).cookie(owner)).andExpect(jsonPath("$.items", hasSize(1)))
                 .andExpect(jsonPath("$.items[0].itm8").value("0000099000800"));
+    }
+
+    /** Priorytetowy, ale nieaktywny; nieaktywna karta z innym ITM8; automat po aktualizacji i wynik makra. */
+    @Test
+    void inactiveCardsAreFixedByComputerAfterDataUpdate() throws Exception {
+        portalFile("htmldownload/261001_" + region + ".xlsx", write(TOP_HEADER, List.of(
+                topRow("900", "00000453", "5900000000453"), topRow("900", "00000600", "5900000000600"),
+                topRow("900", "00000700", "5900000000700"), topRow("900", "00000800", "5900000000800"),
+                topRow("900", "00000801", "5900000000800"))));
+        tops(file("cad900", "261001", "2026-10-01 10:00:00"));
+        upload(plan(List.of(entry("900", today.minusDays(3)), entry("901", today.plusDays(2)))))
+                .andExpect(status().isOk());
+        sync();
+        String productImport = productImport(today + " 00:00");
+        product("0000000000453", "5900000000453", productImport);
+        product("0000099000600", "5900000000600", productImport);
+        product("0000000000700", "5900000000700", productImport);
+        product("0000099000800", "5900000000800", productImport);
+        jdbc.update("update products set active = false where store_id = ?::uuid and itm8 in "
+                + "('0000099000600', '0000000000700')", storeId);
+
+        String url = "/api/stores/" + storeId + "/cadencier-priorities";
+        mvc.perform(get(url).cookie(owner)).andExpect(jsonPath("$.setCount").value(1))
+                .andExpect(jsonPath("$.items", hasSize(3)))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000099000600')].task", hasItem("PRIORITY_AND_ACTIVE")))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000000000700')].task", hasItem("ACTIVE")))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000000000700')].topItm8", hasItem("0000000000700")));
+
+        // Karta z dwoma ITM8 do wyboru czeka na człowieka.
+        UUID store = UUID.fromString(storeId);
+        assertThat(priorities.automaticItems(store, 60).orElseThrow().items())
+                .extracting(CadPriorityService.ChosenItem::topItm8)
+                .containsExactlyInAnyOrder("0000000000600", "0000000000700");
+        mvc.perform(put(url + "/automatic").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"enabled\":true}")).andExpect(jsonPath("$.automatic").value(true));
+
+        // Na wyłączony komputer automat niczego nie zleca; zgłoszony dostaje makro.
+        cadMacros.dispatchAfterUpdate();
+        assertThat(jobs()).isEmpty();
+        List<String> keys = JsonPath.read(mvc.perform(post("/api/stores/" + storeId + "/agents").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Kasa\"}"))
+                .andReturn().getResponse().getContentAsString(), "$.agents[?(@.key)].key");
+        String agent = keys.getFirst();
+        agentPost(agent, "/poll", "{\"idleSeconds\":900,\"locked\":false,\"playerRunning\":true,\"busy\":false}");
+        cadMacros.dispatchAfterUpdate();
+        assertThat(jobs()).hasSize(1);
+        String job = jobs().getFirst();
+        mvc.perform(get(url).cookie(owner))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000000000700')].status", hasItem("WAITING")))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000000000700')].run.source", hasItem("AGENT")));
+        agentPost(agent, "/poll", "{\"idleSeconds\":900,\"locked\":false,\"playerRunning\":true,\"busy\":false}")
+                .andExpect(jsonPath("$.offer.holdOnInput").value(true))
+                .andExpect(jsonPath("$.offer.requestedBy").value("Intermanage, po aktualizacji danych"));
+        agentPost(agent, "/" + job + "/start", "").andExpect(status().isOk());
+        agentPost(agent, "/" + job + "/finish", "{\"ok\":true,\"message\":\"Pominięto 99000600: ITM8 600 nie ma jeszcze "
+                + "w Mercalys\\n\"}").andExpect(status().isNoContent());
+        await("$.items[?(@.itm8 == '0000099000600')].status", "FAILED", url);
+        mvc.perform(get(url).cookie(owner))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000099000600')].run.failure",
+                        hasItem("ITM8 600 nie ma jeszcze w Mercalys")))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000000000700')].status", hasItem("WAITING")));
+        // Pominięty nie wraca sam, zrobiony czeka na raport.
+        assertThat(priorities.automaticItems(store, 60)).isEmpty();
+
+        // Następny raport: 700 znów nieaktywny, więc automat poprawia go jeszcze raz; błąd makra oddaje artykuł.
+        jdbc.update("update cad_priority_runs set created_at = created_at - interval '2 days' where store_id = ?::uuid "
+                + "and itm8 = '0000000000700'", storeId);
+        assertThat(priorities.automaticItems(store, 60).orElseThrow().items())
+                .extracting(item -> item.item().itm8()).containsExactly("0000000000700");
+        agentPost(agent, "/poll", "{\"idleSeconds\":900,\"locked\":false,\"playerRunning\":true,\"busy\":false}");
+        String remote = JsonPath.read(mvc.perform(post("/api/stores/" + storeId + "/agent-macros/cad-priorities")
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("""
+                                {"items":[{"itm8":"0000000000700","topItm8":"0000000000700"}]}"""))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OFFERED"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        agentPost(agent, "/" + remote + "/start", "").andExpect(status().isOk());
+        agentPost(agent, "/" + remote + "/finish", "{\"ok\":false,\"message\":\"Makro zatrzymane na linii 12:\"}");
+        await("$.items[?(@.itm8 == '0000000000700')].run.source", "AGENT", url);
+    }
+
+    private List<String> jobs() {
+        return jdbc.queryForList("select id::text from agent_macro_jobs where store_id = ?::uuid order by created_at",
+                String.class, storeId);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions agentPost(String key, String path, String body)
+            throws Exception {
+        return mvc.perform(post("/api/store-agent/macro-jobs" + path).header("Authorization", "Bearer " + key)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /** Wynik makra zapisuje się w tle po zatwierdzeniu transakcji. */
+    private void await(String path, String value, String url) throws Exception {
+        List<String> found = List.of();
+        for (int attempt = 0; attempt < 50 && !found.equals(List.of(value)); attempt++) {
+            Thread.sleep(100);
+            found = JsonPath.read(mvc.perform(get(url).cookie(owner)).andReturn().getResponse().getContentAsString(),
+                    path);
+        }
+        assertThat(found).containsExactly(value);
     }
 
     private String productImport(String generatedAt) {

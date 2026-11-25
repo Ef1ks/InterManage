@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { ApiError, api, fetchPostedFile, saveBlob } from '@/lib/api'
+import { confirmArticleSave } from '@/lib/cancel-window'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import {
   ensureFolderAccess,
@@ -23,8 +24,8 @@ type SavedFile = { fileName: string; downloaded: boolean }
 
 /**
  * Zapis tabeli: plik XML faktury do folderu z ustawień zapisu (bez obsługi folderów w przeglądarce: pobranie), potem
- * nowe i zmienione artykuły do pliku CADBEZP i zmienione ceny do pliku CTRLPRIX w folderze protokołów; ich błąd
- * nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a gdy w pliku CADBEZP są nowe
+ * zmienione ceny do pliku CTRLPRIX w folderze protokołów i, po 3 s na „Anuluj”, nowe i zmienione artykuły do pliku
+ * CADBEZP; ich błąd nie cofa zapisanego pliku XML. Na końcu jeden komunikat z listą zapisanych plików, a gdy w pliku CADBEZP są nowe
  * artykuły, pytanie, czy je wprowadzono (`draftDialog` do wyrenderowania): „Tak” dodaje je do bazy.
  */
 export function useXmlSave(storeId: string, onDraftsChanged?: (eans: string[]) => void) {
@@ -77,8 +78,6 @@ export function useXmlSave(storeId: string, onDraftsChanged?: (eans: string[]) =
         }
       }
       if (!inHistory) toast.warning(`Plik ${fileName} nie trafił do historii`)
-      const productFileSaved = productFile ? await saveProductFile(productFile, productFolderReady) : null
-      if (productFileSaved) saved.push(productFileSaved)
       let supplierCode: string | null = null
       if (priceControl) {
         const result = await savePriceControl(priceControl, protoFolderReady)
@@ -87,6 +86,12 @@ export function useXmlSave(storeId: string, onDraftsChanged?: (eans: string[]) =
           supplierCode = result.supplierCode
         }
       }
+      // Artykuły na końcu: reszta jest już zapisana, a je da się jeszcze anulować.
+      const productFileSaved =
+        productFile && (await confirmArticleSave(productFile.rows.length))
+          ? await saveProductFile(productFile, productFolderReady)
+          : null
+      if (productFileSaved) saved.push(productFileSaved)
       toast.success(`Zapisano pliki${supplierCode ? ` dla dostawcy ${supplierCode}` : ''}`, {
         description: (
           <span className="grid gap-0.5">
@@ -100,7 +105,7 @@ export function useXmlSave(storeId: string, onDraftsChanged?: (eans: string[]) =
         ),
         duration: 10_000,
       })
-      if (newArticles && productFileSaved) drafts.ask([{ ...newArticles, fileName: productFileSaved.fileName }])
+      if (newArticles && productFileSaved) void drafts.ask([{ ...newArticles, fileName: productFileSaved.fileName }])
       return fileName
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku XML', {
@@ -131,12 +136,14 @@ export function useXmlSave(storeId: string, onDraftsChanged?: (eans: string[]) =
     setSavingProducts(true)
     try {
       // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
-      const saved = await writeProductFile(file, await ensureFolderAccess(productFolder.key))
+      const folderReady = await ensureFolderAccess(productFolder.key)
+      if (!(await confirmArticleSave(file.rows.length))) return false
+      const saved = await writeProductFile(file, folderReady)
       toast.success(`Zapisano plik artykułów: ${file.rows.length}`, {
         description: `${saved.fileName}${saved.downloaded ? ' (pobrany: folder nowych artykułów nie jest wybrany w tej przeglądarce)' : ''}`,
         duration: 10_000,
       })
-      if (newArticles) drafts.ask([{ ...newArticles, fileName: saved.fileName }])
+      if (newArticles) void drafts.ask([{ ...newArticles, fileName: saved.fileName }])
       return true
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku nowych artykułów')

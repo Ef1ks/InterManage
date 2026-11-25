@@ -249,6 +249,11 @@ export function PriceControlFilesDialog({
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{title(file)}</p>
                     <p className="truncate text-xs text-muted-foreground">{details(file)}</p>
+                    {file.macroWaiting && (
+                      <span className="mt-1 mr-1 inline-block rounded-md bg-sky-200 px-1.5 py-0.5 text-xs font-medium text-sky-950 dark:bg-sky-900/70 dark:text-sky-100">
+                        wprowadzi ją komputer sklepu
+                      </span>
+                    )}
                     {status && (
                       <span
                         className={cn(

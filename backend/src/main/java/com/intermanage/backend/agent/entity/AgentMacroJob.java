@@ -87,8 +87,9 @@ public class AgentMacroJob {
     @Column(name = "result_codes", nullable = false, columnDefinition = "text[]")
     private List<String> resultCodes = new ArrayList<>();
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "created_by", nullable = false, updatable = false)
+    /** Puste = zlecił je serwer po aktualizacji danych. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by", updatable = false)
     private AppUser createdBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)

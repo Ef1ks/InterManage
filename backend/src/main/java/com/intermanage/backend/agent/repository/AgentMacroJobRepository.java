@@ -1,5 +1,6 @@
 package com.intermanage.backend.agent.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,6 +10,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.agent.entity.AgentMacroJob;
+import com.intermanage.backend.agent.entity.AgentMacroKind;
+import com.intermanage.backend.agent.entity.AgentMacroStatus;
 
 import jakarta.persistence.LockModeType;
 
@@ -22,6 +25,9 @@ public interface AgentMacroJobRepository extends JpaRepository<AgentMacroJob, UU
                 com.intermanage.backend.agent.entity.AgentMacroStatus.OFFERED,
                 com.intermanage.backend.agent.entity.AgentMacroStatus.RUNNING)""")
     List<AgentMacroJob> findActiveForUpdate(UUID storeId);
+
+    long countByStoreIdAndKindAndStatusAndCreatedByIsNullAndCreatedAtAfter(UUID storeId, AgentMacroKind kind,
+            AgentMacroStatus status, Instant after);
 
     Optional<AgentMacroJob> findByIdAndStoreId(UUID id, UUID storeId);
 }

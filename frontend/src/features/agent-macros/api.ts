@@ -28,6 +28,7 @@ export type MacroRequest =
   | { macro: 'itm8-collect'; deliveryId: string; agentId?: string }
   | { macro: 'itm8-apply'; deliveryId: string; codes: string[]; agentId?: string }
   | { macro: 'mea-codes'; codes: string[]; agentId?: string }
+  | { macro: 'cad-priorities'; items: { itm8: string; topItm8: string }[]; agentId?: string }
   | { macro: 'base-receive' | 'base-close'; deliveryId: string; agentId?: string }
 
 export const isActive = (job: AgentMacroJob) => job.status === 'OFFERED' || job.status === 'RUNNING'
@@ -56,9 +57,17 @@ export async function runMacro(
   return job
 }
 
-/** Ponowne wczytanie plików nowych artykułów z makra, które nie doszło do końca. */
+/** Ponowienie makra nowych artykułów albo zmian cen, które nie doszło do końca. */
 export const retryMacro = (storeId: string, id: string) =>
   api<AgentMacroJob>(`${path(storeId)}/${id}/retry`, { method: 'POST' })
+
+/** Pliki nieudanego makra wczytał człowiek: nowe artykuły trafiają do bazy jak po udanym makrze. */
+export const markLoadedByHand = (storeId: string, id: string) =>
+  api<void>(`${path(storeId)}/${id}/loaded`, { method: 'POST' })
+
+/** Czy zapisany przed chwilą plik artykułów wczyta komputer sklepu. */
+export const productFileExpected = (storeId: string, fileName: string) =>
+  api<{ expected: boolean }>(`${path(storeId)}/product-file?fileName=${encodeURIComponent(fileName)}`)
 
 export const cancelMacro = (storeId: string, id: string) =>
   api<AgentMacroJob>(`${path(storeId)}/${id}/cancel`, { method: 'POST' })

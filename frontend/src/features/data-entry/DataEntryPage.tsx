@@ -8,6 +8,7 @@ import {
   CircleCheckIcon,
   CombineIcon,
   DiffIcon,
+  EraserIcon,
   EyeIcon,
   EyeOffIcon,
   FileCodeIcon,
@@ -200,6 +201,7 @@ import {
   withSuggestion,
   withTrailingEmptyRow,
 } from './rows'
+import { useSaveShortcut } from './use-save-shortcut'
 import { useUndoHistory, useUndoShortcuts } from './undo-history'
 import { CloseInvoicesDialog } from './CloseInvoicesDialog'
 import { PluMacroDialog } from './PluMacroDialog'
@@ -291,6 +293,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     [currentDraft, setDraft],
   )
   useUndoShortcuts(history.undo, history.redo)
+  const saveButton = useRef<HTMLButtonElement>(null)
+  useSaveShortcut(saveButton)
   // Filtr „Brakująca kaucja” działa na wiersze z chwili włączenia: poprawiony wiersz nie znika, nowe są widoczne.
   const [rowFilter, setRowFilter] = useState<RowFilter | null>(null)
   const visibleOf = useCallback(
@@ -1487,7 +1491,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
           'Kliknij „Uzupełnij”: nazwa, marka, nomenklatura, rodzaj i waga dla nowych artykułów. Artykuły z kaucją dostają plakietkę, a „Brakująca kaucja” pokazuje tylko je.',
           'Skanujesz ręcznie? Wpisz albo zeskanuj EAN i Enter: od razu powstaje kolejny wiersz na następny kod.',
           'Popraw jak w Excelu: strzałki, Enter, pisanie albo F2, Ctrl+C / Ctrl+V, Ctrl+Z cofa, Ctrl+Y ponawia. Ctrl + plus wstawia wiersz nad bieżącym, a plus przy numerze wiersza pod nim. Żółte komórki wymagają wyboru.',
-          'Kliknij „Zapisz”: pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później: „Wczytaj” → „Wczytaj tymczasowe”.',
+          'Kliknij „Zapisz” (Ctrl+S): pliki trafiają od razu do folderów z ustawień zapisu (koło zębate, wybierasz je raz). Niedokończoną tabelę zapisz tymczasowo i wczytaj później: „Wczytaj” → „Wczytaj tymczasowe”.',
         ]}
       />
 
@@ -1530,7 +1534,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             onCreate={sellerToCreate ? () => setMercalysSupplierOpen(true) : undefined}
           />
         )}
-        <div className="flex shrink-0 gap-1.5" role="group" aria-label="Pliki">
+        <div className="flex shrink-0 gap-1.5" role="group" aria-label="Dokument i pliki">
           <ActionMenu
             label="Wczytaj"
             icon={<FileInputIcon />}
@@ -1782,6 +1786,56 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
               />
             </DropdownMenuGroup>
           </ActionMenu>
+          {rows.length > 0 && (
+            <div className={cn('flex', TILE_WIDTH)} role="group" aria-label="Zapis">
+              <Button
+                ref={saveButton}
+                className={cn(ACTION_TONES.save, ACTION_TILE, 'min-w-0 flex-1 rounded-r-none')}
+                onClick={onSaveClick}
+                loading={xmlSave.saving}
+                disabled={filled.length === 0}
+                title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu (Ctrl+S)"
+              >
+                <TileContent
+                  icon={saved && savedState ? <SavedStatus state={savedState} at={saved.at} /> : <FileCodeIcon />}
+                >
+                  Zapisz
+                </TileContent>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      className={cn(ACTION_TONES.save, '-ml-px h-auto w-7 rounded-l-none rounded-r-md px-0')}
+                      aria-label="Inne sposoby zapisu"
+                      loading={saveTemporaryXml.isPending}
+                      disabled={filled.length === 0}
+                    />
+                  }
+                >
+                  <ChevronDownIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-80">
+                  <ActionItem
+                    icon={<FileClockIcon />}
+                    label="Zapisz tymczasowo"
+                    hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Wczytaj tymczasowe” (10 ostatnich)"
+                    onClick={saveTemporary}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+          {rows.length > 0 && (
+            <Button
+              variant="outline"
+              className={cn(ACTION_TILE, 'ml-1.5 w-20 shrink-0 text-sm min-[106rem]:w-24 min-[106rem]:text-base')}
+              onClick={clearAll}
+              title="Czyści całą tabelę (Ctrl+Z cofa)"
+            >
+              <TileContent icon={<EraserIcon />}>Wyczyść</TileContent>
+            </Button>
+          )}
         </div>
         <div className={cn('grid w-28 shrink-0 gap-1', rows.length > 0 && 'grid-rows-[2fr_1fr]')}>
           <Button
@@ -2007,74 +2061,30 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         </div>
         {rows.length > 0 && (
           <div
-            className="flex shrink-0 flex-col items-center justify-center gap-2"
+            className="flex shrink-0 flex-col items-center justify-center gap-1"
             role="group"
             aria-label="Historia zmian"
           >
-            <Button variant="ghost" onClick={clearAll}>
-              Wyczyść
-            </Button>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={history.undo}
-                disabled={!history.canUndo}
-                aria-label="Cofnij"
-                title="Cofnij ostatnią zmianę (Ctrl+Z)"
-              >
-                <Undo2Icon />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={history.redo}
-                disabled={!history.canRedo}
-                aria-label="Ponów"
-                title="Ponów cofniętą zmianę (Ctrl+Y)"
-              >
-                <Redo2Icon />
-              </Button>
-            </div>
-          </div>
-        )}
-        {rows.length > 0 && (
-          <div className={cn('flex', TILE_WIDTH)} role="group" aria-label="Zapis">
             <Button
-              className={cn(ACTION_TONES.save, ACTION_TILE, 'min-w-0 flex-1 rounded-r-none')}
-              onClick={onSaveClick}
-              loading={xmlSave.saving}
-              disabled={filled.length === 0}
-              title="Zapisuje plik XML (z nowymi artykułami i zmianą cen) w folderach z ustawień zapisu"
+              variant="ghost"
+              size="icon"
+              onClick={history.undo}
+              disabled={!history.canUndo}
+              aria-label="Cofnij"
+              title="Cofnij ostatnią zmianę (Ctrl+Z)"
             >
-              <TileContent
-                icon={saved && savedState ? <SavedStatus state={savedState} at={saved.at} /> : <FileCodeIcon />}
-              >
-                Zapisz
-              </TileContent>
+              <Undo2Icon />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    className={cn(ACTION_TONES.save, '-ml-px h-auto w-7 rounded-l-none rounded-r-md px-0')}
-                    aria-label="Inne sposoby zapisu"
-                    loading={saveTemporaryXml.isPending}
-                    disabled={filled.length === 0}
-                  />
-                }
-              >
-                <ChevronDownIcon />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                <ActionItem
-                  icon={<FileClockIcon />}
-                  label="Zapisz tymczasowo"
-                  hint="Tabela na serwerze, bez pliku na dysku; wczytasz ją w „Wczytaj” → „Wczytaj tymczasowe” (10 ostatnich)"
-                  onClick={saveTemporary}
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={history.redo}
+              disabled={!history.canRedo}
+              aria-label="Ponów"
+              title="Ponów cofniętą zmianę (Ctrl+Y)"
+            >
+              <Redo2Icon />
+            </Button>
           </div>
         )}
       </CommandBar>

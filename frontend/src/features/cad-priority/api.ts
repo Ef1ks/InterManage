@@ -10,6 +10,23 @@ export function useCadPriorities(storeId: string) {
   return useQuery({ queryKey: key(storeId), queryFn: () => api<CadPriorityReport>(path(storeId)) })
 }
 
+/** Poprawianie po aktualizacji danych na komputerze sklepu. */
+export function useAutomaticCadPriorities(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      api<CadPriorityReport>(`${path(storeId)}/automatic`, { method: 'PUT', json: { enabled } }),
+    onSuccess: (report) => queryClient.setQueryData(key(storeId), report),
+    meta: { invalidates: false },
+  })
+}
+
+/** Lista od nowa, np. po makrze na komputerze sklepu. */
+export function useRefreshCadPriorities(storeId: string) {
+  const queryClient = useQueryClient()
+  return () => queryClient.invalidateQueries({ queryKey: key(storeId) })
+}
+
 export type CadPriorityChoice = { itm8: string; topItm8: string }
 
 /** Zlecenie zaznaczonych: makrem (treść wraca do schowka) albo jako ustawione ręcznie. */

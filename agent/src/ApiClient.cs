@@ -136,6 +136,8 @@ internal sealed class MacroFile
     public string Kind { get; set; } = "";
     public string Title { get; set; } = "";
     public string FileName { get; set; } = "";
+    /// <summary>Rodzaj i nazwa: raporty w różnych folderach bywają nazwane tak samo.</summary>
+    public string Key => Kind + "/" + FileName.ToLowerInvariant();
 }
 
 /// <summary>Odpowiedź na zgłoszenie stanu komputera: makro zaproponowane temu komputerowi albo nic.</summary>
@@ -150,6 +152,8 @@ internal sealed class MacroOffer
     public string Title { get; set; } = "";
     public string RequestedBy { get; set; } = "";
     public int CountdownSeconds { get; set; } = 5;
+    /// <summary>Ruch myszy albo klawiatury zaczyna odliczanie od nowa (zmiany cen, od 1.11.0).</summary>
+    public bool HoldOnInput { get; set; }
 }
 
 /// <summary>Treść zleconego makra (składa je serwer); agent dokłada do pierwszego polecenia hasło Mercalys.</summary>
@@ -173,6 +177,10 @@ internal sealed class MacroUpload
 /// <summary>Próba wgrania raportu przez agenta (stan z serwera).</summary>
 internal sealed class ReportAttempt
 {
+    public string Id { get; set; } = "";
+    public string Kind { get; set; } = "";
+    /// <summary>Nieudana próba, którą serwer sam powtórzy (błąd serwera, trwający import).</summary>
+    public bool Retryable { get; set; }
     public string FileName { get; set; } = "";
     public string Status { get; set; } = "";
     public string? Error { get; set; }

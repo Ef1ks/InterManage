@@ -28,6 +28,7 @@ import {
   useSalesArticle,
   useSalesHistory,
 } from '@/features/sales/api'
+import { displayCode } from '@/features/sales/nomenclature-levels'
 import { type DateRange, formatRange } from '@/features/sales/periods'
 import { addDays, addMonths, parseIsoDate, todayIso } from '@/lib/dates'
 import { marginOf, marginShare } from '@/lib/margin'
@@ -813,6 +814,8 @@ function ArticleFacts({
   const stock = article.stock
   const coverDays = stock != null && stock > 0 && cover && cover.daily > 0 ? stock / cover.daily : null
   const path = article.nomenclaturePath.map((item) => item.name.replace(/^\d+_/, '')).join(' › ')
+  // Kod najniższego poziomu parami cyfr, jak w kartotece: rejon, rodzina, podrodzina (24 10 05).
+  const pathCode = displayCode(article.nomenclaturePath.at(-1)?.code ?? '')
   // Marża od sprzedaży brutto (jak w Mercalys): cena zwykła i cena zakupu z kartoteki, przy promocji z kasy też na niej.
   // Cena zakupu z kartoteki bywa nieaktualna, więc liczy się ostatnia dostawa (PZ po korektach), a bez dostaw kartoteka.
   const lastPurchases = (deliveries.data ?? [])
@@ -943,7 +946,13 @@ function ArticleFacts({
         <Detail label="Marka">
           {article.brand?.trim() ? article.brand : <span className="text-muted-foreground">brak w kartotece</span>}
         </Detail>
-        {path && <Detail label="Nomenklatura">{path}</Detail>}
+        {path && (
+          <Detail label="Nomenklatura">
+            <span className="font-semibold whitespace-nowrap tabular-nums">{pathCode}</span>
+            <span className="text-muted-foreground"> · </span>
+            {path}
+          </Detail>
+        )}
         {article.caseSize != null && <Detail label="W kartonie">{formatQuantity(article.caseSize)}</Detail>}
         {article.vatPercent != null && <Detail label="VAT">{article.vatPercent}%</Detail>}
         <Detail label="Cadencier">

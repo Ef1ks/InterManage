@@ -37,9 +37,11 @@ import com.intermanage.backend.basedelivery.dto.MeaOverview;
 import com.intermanage.backend.basedelivery.service.BaseDeliveryService;
 import com.intermanage.backend.basedelivery.service.BaseReceivingService;
 import com.intermanage.backend.basedelivery.service.MeaCodeService;
+import com.intermanage.backend.cadtop.component.CadPriorityMacro;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.dataentry.component.PriceControlMacro;
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
 import com.intermanage.backend.store.repository.StoreRepository;
 
@@ -58,6 +60,10 @@ import com.intermanage.backend.store.repository.StoreRepository;
 public class AgentMacroService {
 
     public static final int COUNTDOWN_SECONDS = 5;
+    /** Pliki nowych artykułów: zapisujący miał już chwilę na „Anuluj” w przeglądarce. */
+    public static final int PRODUCT_FILES_COUNTDOWN_SECONDS = 2;
+    /** Zmiany cen: tyle bez ruchu przy komputerze. */
+    public static final int PRICE_CONTROL_COUNTDOWN_SECONDS = 2;
     /** Komputer bez ruchu myszy i klawiatury tyle czasu jest wolny (używane też dostają zlecenie, ale na końcu). */
     public static final Duration FREE_AFTER = Duration.ofMinutes(2);
     /** Tyle komputer ma na odliczanie i start (zgłoszenie co kilka sekund + odliczanie + zapas). */
@@ -65,13 +71,16 @@ public class AgentMacroService {
     /** Agent bez zgłoszenia tyle czasu w trakcie makra = komputer przestał odpowiadać. */
     public static final Duration LOST_AFTER = Duration.ofMinutes(2);
     public static final Duration RUN_TIMEOUT = Duration.ofHours(2);
-    /** Kody MEA: kilkadziesiąt kodów po 1-3 pliki, integracja jednego trwa do kilku minut. */
-    public static final Duration MEA_RUN_TIMEOUT = Duration.ofHours(6);
+    /** Kody MEA (integracja jednego pliku trwa do kilku minut) i ITM8 z cadencier (setki kart po ok. 10 s). */
+    public static final Duration LONG_RUN_TIMEOUT = Duration.ofHours(6);
 
     /** Makra dostawy z bazy: polecenia odtwarzacza od 0.67 i wysyłka bonów przez agenta od 1.8.0. */
     private static final Set<AgentMacroKind> BASE_KINDS = Set.of(AgentMacroKind.BASE_RECEIVE,
             AgentMacroKind.BASE_CLOSE);
     private static final int BASE_PLAYER_MINOR = 67;
+    /** Makra zlecane przez serwer po pojawieniu się pliku: wynik idzie w powiadomieniu. */
+    private static final Set<AgentMacroKind> SERVER_KINDS = Set.of(AgentMacroKind.PRODUCT_FILES,
+            AgentMacroKind.PRICE_CONTROL);
     private static final Pattern ORDER_CODE = Pattern.compile("(\\d{1,10})=(\\d{1,20})");
     private static final Pattern CLOSED_CODE = Pattern.compile("zamkniete=(\\d{1,20})");
 
@@ -80,7 +89,7 @@ public class AgentMacroService {
     }
 
     /** Makro sklepu się skończyło (wynik, błąd, anulowanie, brak komputera): może ruszyć następne. */
-    public record MacroEnded(UUID storeId) {
+    public record MacroEnded(UUID storeId, UUID jobId, AgentMacroKind kind, AgentMacroStatus status) {
     }
 
     private final AgentMacroJobRepository jobs;
@@ -190,6 +199,46 @@ public class AgentMacroService {
                 ProductFileMacro.build(files), null, files.size(), null, userId);
     }
 
+    /** Zmiany cen z folderu sklepu ({@link PriceControlMacroService}), na preferowanym komputerze. */
+    @Transactional
+    public AgentMacroApi.Job priceControl(UUID storeId, List<PriceControlMacro.File> files, UUID userId) {
+        int prices = files.stream().mapToInt(PriceControlMacro.File::lineCount).sum();
+        return create(storeId, AgentMacroKind.PRICE_CONTROL, "Zmiana cen (" + prices + ") · " + (files.size() == 1
+                ? files.getFirst().title() : "dokumenty: " + files.size()),
+                PriceControlMacro.build(files), null, files.size(), null, userId);
+    }
+
+    /** ITM8 z cadencier ({@link CadPriorityMacroService}); {@code userId} puste = samo, po aktualizacji danych. */
+    @Transactional
+    public AgentMacroApi.Job cadPriorities(UUID storeId, List<CadPriorityMacro.Item> items, UUID agentId,
+            UUID userId) {
+        return create(storeId, AgentMacroKind.CAD_PRIORITY, "ITM8 z cadencier (" + items.size() + ")",
+                CadPriorityMacro.build(items), null, items.size(), agentId, userId);
+    }
+
+    /** Czy któryś komputer sklepu może teraz dostać makro serwera (trwające makro sklepu odrzuci samo zlecenie). */
+    @Transactional(readOnly = true)
+    public boolean canRun(UUID storeId, AgentMacroKind kind) {
+        Instant now = Instant.now();
+        return eligible(storeId, true).stream()
+                .anyMatch(agent -> unavailable(states.get(agent.getId()).orElse(null), now, kind) == null);
+    }
+
+    /** Zmiany cen i automatyczne ITM8 z cadencier: preferowany komputer i chwila bez ruchu przed startem. */
+    private static boolean preferredOnly(AgentMacroJob job) {
+        return job.getKind() == AgentMacroKind.PRICE_CONTROL
+                || job.getKind() == AgentMacroKind.CAD_PRIORITY && job.getCreatedBy() == null;
+    }
+
+    /** Komputery, na które może iść makro: tylko preferowane, o ile sklep jakieś ma, albo wszystkie. */
+    private List<StoreAgent> eligible(UUID storeId, boolean preferredOnly) {
+        List<StoreAgent> active = agents.findByStore(storeId).stream()
+                .filter(agent -> agent.getDeletedAt() == null).toList();
+        List<StoreAgent> preferred = !preferredOnly ? List.of()
+                : active.stream().filter(StoreAgent::isPreferred).toList();
+        return preferred.isEmpty() ? active : preferred;
+    }
+
     /** Czy którykolwiek komputer sklepu zgłosił odtwarzacz w wersji co najmniej {@code 0.<minor>}. */
     @Transactional(readOnly = true)
     public boolean anyPlayer(UUID storeId, int minor) {
@@ -231,7 +280,7 @@ public class AgentMacroService {
             throw ApiException.notFound("Nie znaleziono komputera sklepu");
         }
         AgentMacroJob job = new AgentMacroJob(stores.getReferenceById(storeId), kind, title, macro, reference,
-                itemCount, targetAgentId, users.getReferenceById(userId));
+                itemCount, targetAgentId, userId == null ? null : users.getReferenceById(userId));
         offerNext(job, now);
         jobs.saveAndFlush(job);
         announce(job);
@@ -271,7 +320,7 @@ public class AgentMacroService {
             return new AgentMacroApi.PollResponse(null);
         }
         return new AgentMacroApi.PollResponse(new AgentMacroApi.Offer(offered.getId(), offered.getTitle(),
-                offered.getCreatedBy().getDisplayName(), COUNTDOWN_SECONDS));
+                requestedBy(offered), countdown(offered), preferredOnly(offered)));
     }
 
     /** Pracownik przy komputerze anulował odliczanie: zlecenie idzie do kolejnego komputera. */
@@ -343,8 +392,17 @@ public class AgentMacroService {
         return saved;
     }
 
+    private static int countdown(AgentMacroJob job) {
+        return switch (job.getKind()) {
+            case PRODUCT_FILES -> PRODUCT_FILES_COUNTDOWN_SECONDS;
+            case PRICE_CONTROL -> PRICE_CONTROL_COUNTDOWN_SECONDS;
+            default -> COUNTDOWN_SECONDS;
+        };
+    }
+
     private static Duration runTimeout(AgentMacroJob job) {
-        return job.getKind() == AgentMacroKind.MEA_CODES ? MEA_RUN_TIMEOUT : RUN_TIMEOUT;
+        return job.getKind() == AgentMacroKind.MEA_CODES || job.getKind() == AgentMacroKind.CAD_PRIORITY
+                ? LONG_RUN_TIMEOUT : RUN_TIMEOUT;
     }
 
     /** Wynik makra z odtwarzacza (zebrane kody przy „Zbierz brakujące ITM8”). */
@@ -406,8 +464,8 @@ public class AgentMacroService {
         UUID storeId = job.getStore().getId();
         Map<StoreAgent, AgentMachineStates.State> candidates = new LinkedHashMap<>();
         List<String> reasons = new ArrayList<>();
-        for (StoreAgent agent : agents.findByStore(storeId)) {
-            if (agent.getDeletedAt() != null || job.getDeclinedAgentIds().contains(agent.getId())
+        for (StoreAgent agent : eligible(storeId, preferredOnly(job))) {
+            if (job.getDeclinedAgentIds().contains(agent.getId())
                     || (job.getTargetAgentId() != null && !job.getTargetAgentId().equals(agent.getId()))) {
                 continue;
             }
@@ -494,14 +552,18 @@ public class AgentMacroService {
         fields.put("status", job.getStatus().name());
         fields.put("kind", job.getKind().name());
         // Powiadomienie o makrze zleconym przez serwer dostaje osoba, która zapisała plik.
-        fields.put("userId", job.getCreatedBy().getId());
-        if (job.getKind() == AgentMacroKind.PRODUCT_FILES && job.getResultMessage() != null) {
+        fields.put("userId", job.getCreatedBy() == null ? null : job.getCreatedBy().getId());
+        if (SERVER_KINDS.contains(job.getKind()) && job.getResultMessage() != null) {
             fields.put("message", job.getResultMessage());
         }
         live.publish(job.getStore().getId(), "agent-macro", fields);
         if (job.getStatus() != AgentMacroStatus.OFFERED && job.getStatus() != AgentMacroStatus.RUNNING) {
-            events.publishEvent(new MacroEnded(job.getStore().getId()));
+            events.publishEvent(new MacroEnded(job.getStore().getId(), job.getId(), job.getKind(), job.getStatus()));
         }
+    }
+
+    private static String requestedBy(AgentMacroJob job) {
+        return job.getCreatedBy() == null ? "Intermanage, po aktualizacji danych" : job.getCreatedBy().getDisplayName();
     }
 
     private AgentMacroApi.Job response(AgentMacroJob job) {
@@ -510,8 +572,8 @@ public class AgentMacroService {
         List<String> declined = job.getDeclinedAgentIds().stream()
                 .map(id -> agents.findById(id).map(AgentMacroService::label).orElse("komputer")).toList();
         return new AgentMacroApi.Job(job.getId(), job.getKind().name(), job.getTitle(), job.getStatus().name(),
-                computer, job.getCreatedBy().getDisplayName(), job.getCreatedAt(), job.getOfferedAt(),
-                job.getStartedAt(), job.getFinishedAt(), COUNTDOWN_SECONDS, declined, job.getResultMessage(),
+                computer, requestedBy(job), job.getCreatedAt(), job.getOfferedAt(),
+                job.getStartedAt(), job.getFinishedAt(), countdown(job), declined, job.getResultMessage(),
                 job.getResultCodes(), job.getItemCount());
     }
 }

@@ -3,6 +3,7 @@ package com.intermanage.backend.agent.controller;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,12 +11,18 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.agent.dto.AgentMacroApi;
+import com.intermanage.backend.agent.entity.AgentMacroKind;
 import com.intermanage.backend.agent.service.AgentMacroService;
+import com.intermanage.backend.agent.service.CadPriorityMacroService;
+import com.intermanage.backend.agent.service.PriceControlMacroService;
 import com.intermanage.backend.agent.service.ProductFileMacroService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.cadtop.dto.CadPriorityRequest;
 
 import jakarta.validation.Valid;
 
@@ -31,9 +38,12 @@ import jakarta.validation.Valid;
  * POST /api/stores/{storeId}/agent-macros/mea-codes         {codes, agentId?} wpisz kody MEA (z listy do wpisania)
  * POST /api/stores/{storeId}/agent-macros/base-receive      {deliveryId, agentId?} wprowadź dostawę z bazy do Mercalys
  * POST /api/stores/{storeId}/agent-macros/base-close        {deliveryId, agentId?} Nr BL i zakończenie dostaw bonu
+ * POST /api/stores/{storeId}/agent-macros/cad-priorities    {items, agentId?} ITM8 z cadencier: priorytet i aktywność
  * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
  * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
- * POST /api/stores/{storeId}/agent-macros/{id}/retry        ponownie wczytuje pliki nowych artykułów tego makra
+ * POST /api/stores/{storeId}/agent-macros/{id}/retry        ponawia makro nowych artykułów albo zmian cen
+ * POST /api/stores/{storeId}/agent-macros/{id}/loaded       pliki nieudanego makra wczytał człowiek
+ * GET  /api/stores/{storeId}/agent-macros/product-file?fileName=  czy zapisany plik wczyta komputer sklepu
  * </pre>
  */
 @RestController
@@ -49,7 +59,14 @@ public class AgentMacroController {
 
     private final ProductFileMacroService productFiles;
 
-    public AgentMacroController(AgentMacroService macros, ProductFileMacroService productFiles) {
+    private final PriceControlMacroService priceControl;
+
+    private final CadPriorityMacroService cadPriorities;
+
+    public AgentMacroController(AgentMacroService macros, ProductFileMacroService productFiles,
+            PriceControlMacroService priceControl, CadPriorityMacroService cadPriorities) {
+        this.cadPriorities = cadPriorities;
+        this.priceControl = priceControl;
         this.macros = macros;
         this.productFiles = productFiles;
     }
@@ -100,6 +117,14 @@ public class AgentMacroController {
         return macros.baseClose(storeId, request, principal.getId());
     }
 
+    @PostMapping("/cad-priorities")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job cadPriorities(@PathVariable UUID storeId,
+            @Valid @RequestBody CadPriorityRequest.Remote request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return cadPriorities.run(storeId, request, principal.getId());
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize(VIEW)
     public AgentMacroApi.Job get(@PathVariable UUID storeId, @PathVariable UUID id) {
@@ -113,10 +138,26 @@ public class AgentMacroController {
         return macros.cancel(storeId, id, principal.getId());
     }
 
+    @GetMapping("/product-file")
+    @PreAuthorize(VIEW)
+    public AgentMacroApi.ProductFileExpected productFile(@PathVariable UUID storeId, @RequestParam String fileName) {
+        return new AgentMacroApi.ProductFileExpected(productFiles.expected(storeId, fileName));
+    }
+
+    /** Jak „Tak” na pytanie o nowe artykuły, więc wystarcza praca w narzędziu. */
+    @PostMapping("/{id}/loaded")
+    @PreAuthorize(VIEW)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void loaded(@PathVariable UUID storeId, @PathVariable UUID id) {
+        productFiles.loadedByHand(storeId, id);
+    }
+
     @PostMapping("/{id}/retry")
     @PreAuthorize(EDIT)
     public AgentMacroApi.Job retry(@PathVariable UUID storeId, @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return productFiles.retry(storeId, id, principal.getId());
+        return macros.get(storeId, id).kind().equals(AgentMacroKind.PRICE_CONTROL.name())
+                ? priceControl.retry(storeId, id, principal.getId())
+                : productFiles.retry(storeId, id, principal.getId());
     }
 }

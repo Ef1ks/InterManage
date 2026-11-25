@@ -8,6 +8,7 @@ import {
   MenuIcon,
   MonitorIcon,
   MoonIcon,
+  SearchIcon,
   SunIcon,
   UsersRoundIcon,
 } from 'lucide-react'
@@ -31,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SwitchAccountDialog } from '@/features/auth/AccountSwitcher'
-import { useCurrentUser, useLogout } from '@/features/auth/api'
+import { useCan, useCurrentUser, useLogout } from '@/features/auth/api'
 import { useIdleLock } from '@/features/auth/use-idle-lock'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceControlWatcher } from '@/features/data-entry/price-control-watch'
@@ -45,8 +46,10 @@ import { useCurrentStore, useStoreFromAddress } from '@/features/stores/current-
 import { QuickTaskButton } from '@/features/tasks/QuickTaskButton'
 import { FeedbackButton } from '@/features/feedback/FeedbackButton'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
+import { TOOL_ROUTES } from '@/features/tools/categories'
 import { useCheckboxDragSelect } from '@/lib/use-checkbox-drag-select'
 import { historyIndex, recordLocation } from '@/lib/history-trail'
+import { useActivityTracking } from '@/lib/last-activity'
 import { THEME_LABELS, useThemeChoice, type ThemeChoice } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { closeMobileNav, toggleMobileNav } from '@/store/uiSlice'
@@ -62,6 +65,8 @@ export function AppLayout() {
   // Wiadomości na żywo sklepu i stan agenta sklepu (zapis plików i pilnowanie folderów przez agenta).
   useLiveEvents()
   // Obecność do czatu („online”, „ostatnio …”).
+  // Przed obecnością i blokadą, bo obie czytają zapisany ruch.
+  useActivityTracking()
   usePresenceHeartbeat()
   useWorkdayLock()
   useIdleLock()
@@ -203,6 +208,8 @@ function Sidebar() {
   const { pathname } = useLocation()
   const groups = useNavGroups(me)
   const current = locate(groups, pathname)?.group
+  const canSearchArticles = useCan('INVENTORY')
+  const dispatch = useAppDispatch()
 
   return (
     // Minimalna szerokość: przy rozszerzaniu paska treść od razu ma docelowy układ i odsłania się, zamiast się ściskać.
@@ -217,6 +224,17 @@ function Sidebar() {
       </div>
 
       <div className="grid gap-1">
+        {/* Skrót do Magazynu z kursorem w wyszukiwarce; na samym Magazynie zaczyna nowe szukanie. */}
+        {canSearchArticles && (
+          <SidebarLink
+            to={TOOL_ROUTES.INVENTORY.path}
+            state={{ focusSearch: true }}
+            icon={SearchIcon}
+            label="Szukaj artykułu"
+            active={false}
+            onClick={() => dispatch(closeMobileNav())}
+          />
+        )}
         <SidebarLink to="/" icon={LayoutDashboardIcon} label="Pulpit" active={pathname === '/'} />
         {groups.map((group) => {
           const target = groupTarget(group)
@@ -316,6 +334,8 @@ function SidebarLink({
   label,
   active,
   badge,
+  state,
+  onClick,
 }: {
   to: string
   icon: React.ComponentType<{ className?: string }>
@@ -324,10 +344,15 @@ function SidebarLink({
   active: boolean
   /** Np. licznik nowych zamówień, wyrównany do prawej. */
   badge?: React.ReactNode
+  /** Stan nawigacji dla strony docelowej. */
+  state?: unknown
+  onClick?: () => void
 }) {
   return (
     <Link
       to={to}
+      state={state}
+      onClick={onClick}
       title={label}
       aria-current={active ? 'page' : undefined}
       className={cn(

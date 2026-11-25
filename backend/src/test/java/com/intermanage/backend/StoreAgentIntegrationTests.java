@@ -515,6 +515,23 @@ class StoreAgentIntegrationTests {
                    "modified":"%s"}
                 ]}""";
         byte[] report = cadencierReport(storeNumber, "28/10/2026 15:02:59", "0000000001001", "0000000001002");
+        // Excel dopiero założył pusty plik: serwer go nie chce, a próba wysłania go (starszy agent) nic nie zapisuje.
+        Instant created = modified.minusMillis(200);
+        mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content(event.formatted(0, created, created)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requests.length()").value(0));
+        mvc.perform(post("/api/store-agent/reports").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"folderKey":"IMPORT_CADENCIER","fileName":"obecne w cad.xlsx","size":0,
+                                 "modified":"%s"}""".formatted(created)))
+                .andExpect(status().isConflict());
+        // Odrzucony niedopisany plik z datą o ułamek sekundy wcześniejszą nie blokuje gotowego.
+        jdbc.update("""
+                insert into agent_report_files (id, store_id, kind, file_name, file_modified, file_size, status, error,
+                    retryable, started_at, finished_at)
+                values (gen_random_uuid(), ?::uuid, 'CADENCIER', 'obecne w cad.xlsx', ?::timestamptz, 10, 'FAILED', 'x',
+                    false, now(), now())""", storeId, created.toString());
         mvc.perform(post("/api/store-agent/events").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(event.formatted(report.length, modified, modified)))

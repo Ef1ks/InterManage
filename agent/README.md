@@ -17,6 +17,15 @@ dysku sieciowego (`N:\…`), więc agent przejmuje styk z folderami sklepu:
   w folderze. Plik wrzucony ręcznie makra nie uruchamia. Pliki `CADBEZP*.xls` z poprzednich dni główny agent usuwa
   z tego folderu codziennie (treść zostaje na serwerze).
 
+- **wprowadza zmiany cen** (od wersji 1.11): gdy zmiana cen pojawi się w folderze, serwer zleca makro preferowanemu
+  komputerowi sklepu (bez preferowanego dowolnemu wolnemu). Okno „Zmiana cen za 2” rusza po 2 s bez ruchu myszy
+  i klawiatury (ruch zaczyna odliczanie od nowa, drżenie myszy do 8 pikseli się nie liczy, najdłużej 20 s); „Anuluj”
+  odkłada zmianę o 10 minut. Wyłączony albo zablokowany komputer dostaje ją, gdy wróci (do 24 h).
+- **ponawia aktualizację danych po błędzie** (od wersji 1.12, odtwarzacz od 0.69): plik, który się nie udał, makro robi
+  od nowa (do 3 prób) i przechodzi do następnych, a czego dalej brakuje albo co serwer odrzucił, agent drukuje jeszcze
+  raz. Okno aktualizacji ma „Przerwij” w trakcie i „Spróbuj ponownie” po błędzie (tylko brakujące raporty). Z odtwarzaczem
+  0.64-0.68 ponawia sam agent, nowym makrem od raportu z błędem. Raport wysyła dopiero, gdy Excel skończył go zapisywać.
+
 Agent działa tylko w sklepie, który w Intermanage wybrał **Ustawienia sklepu → Agent sklepu → Praca z folderami przez
 agenta**. Bez tego (albo gdy agent jest offline) wszystko działa jak dotąd, w przeglądarce.
 
@@ -79,7 +88,7 @@ Robi:
 - wykonuje **makra zlecone z przeglądarki** (od 1.7.0, na razie „Zbierz brakujące ITM8” i „Uzupełnij ITM8” z dostawy
   z bazy): czeka na makro jednym długim żądaniem (od 1.9.0; wcześniej pytał co 3 s) i zgłasza serwerowi, ile sekund nikt nie ruszał myszy i klawiatury, czy ekran jest zablokowany, czy
   działa AutoJob (od 0.64) i czy trwa makro. Serwer wybiera najdłużej nieużywany komputer, a agent pokazuje „Makro
-  rozpocznie się za 5…” (15 s, gdy ktoś ruszał komputer w ostatnich 2 min) z „Anuluj”, które oddaje makro kolejnemu
+  rozpocznie się za 5…” (pliki nowych artykułów 2 s) z „Anuluj”, które oddaje makro kolejnemu
   komputerowi (ruch myszy nie anuluje od 1.7.2). Wyłączony Mercalys makro uruchamia z położenia w ustawieniach agenta
   („Program Mercalys”), a nieznane agent bierze z działającego Mercalys,
   z `N:\AvisoConfig\UTILITAIRES\ClientLourd\Mercalys.exe` (od 1.7.3) albo ze skrótu na pulpicie. Treść

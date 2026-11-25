@@ -64,9 +64,11 @@ internal sealed class MacroForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(560, 340);
-        head.Text = "MAKRO ROZPOCZNIE SIĘ ZA";
+        head.Text = offer.HoldOnInput ? "ZMIANA CEN ZA" : "MAKRO ROZPOCZNIE SIĘ ZA";
         text.Text = offer.Title + "\nZlecone przez: " + offer.RequestedBy
-            + "\nMakro przejmie mysz i klawiaturę. Po anulowaniu przejdzie na inny komputer.";
+            + (offer.HoldOnInput
+                ? "\nCeny zaktualizują się same, gdy nikt nie rusza myszy ani klawiatury. Po anulowaniu spróbujemy za 10 minut."
+                : "\nMakro przejmie mysz i klawiaturę. Po anulowaniu przejdzie na inny komputer.");
         Controls.Add(text);
         Controls.Add(count);
         Controls.Add(head);

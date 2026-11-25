@@ -13,5 +13,9 @@ public enum AgentMacroKind {
     /** Dostawa z bazy: Nr BL w nagłówkach zamówień i zakończenie dostaw. */
     BASE_CLOSE,
     /** Pliki nowych i zmienionych artykułów, które agent właśnie zapisał w folderze sklepu (zleca je serwer). */
-    PRODUCT_FILES
+    PRODUCT_FILES,
+    /** Zmiany cen, które pojawiły się w folderze sklepu (zleca je serwer, na preferowanym komputerze). */
+    PRICE_CONTROL,
+    /** ITM8 z cadencier jako priorytetowe i aktywne; zleca je osoba albo serwer po aktualizacji danych. */
+    CAD_PRIORITY
 }

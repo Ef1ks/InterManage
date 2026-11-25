@@ -37,10 +37,14 @@ public interface PromoLeafletRepository extends JpaRepository<PromoLeaflet, UUID
                   and x.date_to >= cast(:dataFrom as date) and x.date_from <= cast(:dataTo as date)
             ), scale_codes as materialized (
                 select p.itm8, left(p.ean, 7) as scale
-                from products p where p.store_id = :storeId and p.ean ~ '^2[1-9][0-9]{10,11}$'
+                from products p
+                where p.store_id = :storeId and ltrim(p.ean, '0') >= '21' and ltrim(p.ean, '0') < '3'
+                  and p.ean ~ '^2[1-9][0-9]{10,11}$'
                 union
                 select p.itm8, ltrim(p.ean, '0')
-                from products p where p.store_id = :storeId and p.ean ~ '^0+2[1-9][0-9]{4}$'
+                from products p
+                where p.store_id = :storeId and ltrim(p.ean, '0') >= '21' and ltrim(p.ean, '0') < '3'
+                  and p.ean ~ '^0+2[1-9][0-9]{4}$'
                 union
                 select c.itm8, left(c.ean, 7)
                 from product_codes c where c.store_id = :storeId and c.current and c.ean ~ '^2[1-9][0-9]{10,11}$'

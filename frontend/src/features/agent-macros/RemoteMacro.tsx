@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { cancelMacro, isActive, type MacroRequest, runMacro } from './api'
 
 /** Makra, których podsumowanie warto pokazać także po udanym przebiegu. */
-const SHOWN_RESULTS: AgentMacroJob['kind'][] = ['MEA_CODES', 'BASE_RECEIVE', 'BASE_CLOSE']
+const SHOWN_RESULTS: AgentMacroJob['kind'][] = ['MEA_CODES', 'BASE_RECEIVE', 'BASE_CLOSE', 'CAD_PRIORITY']
 
 /** Stan zlecenia makra w oknie: jedno naraz, wynik zostaje do następnego zlecenia. */
 export function useRemoteMacro(storeId: string) {

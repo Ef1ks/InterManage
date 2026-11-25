@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Media;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -16,7 +15,9 @@ namespace Intermanage.Agent;
 /// blokada ekranu, odtwarzacz, trwające makro) i czeka na makro jednym długim żądaniem (od 1.9.0; wcześniej pytał co
 /// 3 s): serwer odpowiada od razu, gdy wybierze ten komputer, a zmianę stanu agent zgłasza nowym żądaniem. Serwer
 /// proponuje makro najdłużej nieużywanemu. Wtedy okno odlicza; „Anuluj” oddaje zlecenie kolejnemu komputerowi. Ruch myszy nie anuluje: drgająca mysz albo sięganie
-/// po przycisk zamykały okno od razu (07 w 10023, 24.11.2026), a komputer w użyciu dostaje dłuższe odliczanie.
+/// po przycisk zamykały okno od razu (07 w 10023, 24.11.2026). Czas odliczania podaje serwer
+/// (5 s, pliki nowych artykułów 2 s), bez względu na to, czy ktoś przy komputerze pracuje (od 1.10.1). Wyjątek: zmiany
+/// cen (od 1.11.0) ruszają dopiero po 2 s bez ruchu, a drżenie myszy o kilka pikseli się nie liczy (<see cref="InputWatch"/>).
 ///
 /// Makro składa serwer, wykonuje je odtwarzacz (schowek i lewy Alt+E, jak przy aktualizacji danych). Wynik i zebrane
 /// kody odtwarzacz zapisuje w pliku, na który wskazuje pierwsza linia makra (<c>#RESULT|id</c>, od 0.64; starszy
@@ -34,17 +35,10 @@ internal sealed class RemoteMacros : IDisposable
     private static readonly TimeSpan WaitAfterError = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan PlayerCheckEvery = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan PlayerSearchEvery = TimeSpan.FromSeconds(30);
-    /// <summary>Tyle odtwarzacz ma na podjęcie makra po Alt+E.</summary>
-    private static readonly TimeSpan PickUpTimeout = TimeSpan.FromSeconds(15);
-    /// <summary>Tyle bez procesu odtwarzacza w trakcie makra = ktoś go zamknął.</summary>
-    private static readonly TimeSpan PlayerGone = TimeSpan.FromSeconds(20);
-    private static readonly Version NeededPlayer = new(0, 64);
-    /// <summary>Odliczanie na komputerze, na którym ktoś ostatnio pracował (serwer czeka na start 30 s).</summary>
-    private const int BusyCountdownSeconds = 15;
+    private static readonly Version NeededPlayer = MacroPlayback.ResultsFrom;
     private const int InUseSeconds = 120;
-
-    /// <summary>Folder wyników; ten sam składa odtwarzacz (player.ahk, WriteRemote).</summary>
-    private static string ResultFolder => Path.Combine(AgentSettings.Folder, "makra");
+    /// <summary>Tyle najwyżej odliczanie czeka na chwilę bez ruchu (serwer czeka na start 30 s), potem makro odkładamy.</summary>
+    private static readonly TimeSpan LongestHold = TimeSpan.FromSeconds(20);
 
     private readonly AgentHost host;
     private readonly Control ui;
@@ -229,7 +223,7 @@ internal sealed class RemoteMacros : IDisposable
                 SystemSounds.Exclamation.Play();
                 return created;
             });
-            if (!await CountdownAsync(form, offer.CountdownSeconds, cancel).ConfigureAwait(false))
+            if (!await CountdownAsync(form, offer, cancel).ConfigureAwait(false))
             {
                 Log.Info("Makro z przeglądarki anulowane przy komputerze");
                 form.CloseNow();
@@ -276,18 +270,53 @@ internal sealed class RemoteMacros : IDisposable
         }
     }
 
-    /// <summary>Odliczanie; false = anulowane („Anuluj” albo zablokowany ekran).</summary>
-    private async Task<bool> CountdownAsync(MacroForm form, int seconds, CancellationToken cancel)
+    /// <summary>Odliczanie; false = anulowane („Anuluj”, zablokowany ekran albo ktoś cały czas pracuje).</summary>
+    private async Task<bool> CountdownAsync(MacroForm form, MacroOffer offer, CancellationToken cancel)
     {
-        if (MacroRunner.IdleSeconds() < InUseSeconds) seconds = Math.Max(seconds, BusyCountdownSeconds);
-        var end = DateTime.UtcNow.AddSeconds(Math.Max(1, Math.Min(seconds, 20)));
+        var length = TimeSpan.FromSeconds(Math.Max(1, Math.Min(offer.CountdownSeconds, 20)));
+        var giveUp = DateTime.UtcNow + LongestHold;
+        var end = DateTime.UtcNow + length;
+        var input = offer.HoldOnInput ? OnUi(() => new InputWatch()) : null;
         while (true)
         {
+            if (input != null && OnUi(input.Touched))
+            {
+                if (DateTime.UtcNow >= giveUp) return false;
+                end = DateTime.UtcNow + length;
+            }
             var left = end - DateTime.UtcNow;
             if (left <= TimeSpan.Zero) return true;
             form.Countdown((int)Math.Ceiling(left.TotalSeconds));
             await Task.Delay(100, cancel).ConfigureAwait(false);
             if (form.Cancelled || Locked) return false;
+        }
+    }
+
+    /// <summary>
+    /// Ruch myszy albo klawiatury w trakcie odliczania. Znamy tylko chwilę ostatniego ruchu i położenie kursora (samych
+    /// klawiszy nie czytamy: dla programu ochronnego sklepów to keylogger). Drgająca mysz zgłasza ruch bez przerwy, a
+    /// kursor stoi w miejscu, więc przesunięcie o kilka pikseli się nie liczy; gdy kursor drga, liczy się tylko mysz.
+    /// </summary>
+    private sealed class InputWatch
+    {
+        private const int Jitter = 8;
+        private uint lastInput = MacroRunner.LastInput();
+        private System.Drawing.Point anchor = Cursor.Position;
+        private bool trembling;
+
+        public bool Touched()
+        {
+            var now = MacroRunner.LastInput();
+            if (now == lastInput) return false;
+            lastInput = now;
+            var position = Cursor.Position;
+            if (Math.Abs(position.X - anchor.X) > Jitter || Math.Abs(position.Y - anchor.Y) > Jitter)
+            {
+                anchor = position;
+                return true;
+            }
+            if (position != anchor) trembling = true;
+            return !trembling; // kursor ani drgnął, a ruch był: klawisz albo kliknięcie
         }
     }
 
@@ -320,62 +349,21 @@ internal sealed class RemoteMacros : IDisposable
 
     private async Task<Result> PlayAsync(string id, MacroStart start, CancellationToken cancel)
     {
-        var key = Guid.Parse(id).ToString("N");
-        var file = Path.Combine(ResultFolder, key + ".txt");
-        Directory.CreateDirectory(ResultFolder);
-        CleanUp();
-        MercalysPath.Ensure();
-        // Treść z hasłem Mercalys tylko przez schowek, nigdy w pliku.
-        var password = settings().MercalysPassword;
-        var text = "#RESULT|" + key + "\r\n" + MacroRunner.WithPassword(start.Macro, start.OpenLine, password);
-        OnUi(() =>
+        var playback = await MacroPlayback.StartAsync(ui, Guid.Parse(id), start.Macro, start.OpenLine,
+            settings().MercalysPassword, cancel).ConfigureAwait(false);
+        if (playback == null)
         {
-            Clipboard.SetDataObject(text, true, 10, 100);
-            return true;
-        });
-        await Task.Delay(500, cancel).ConfigureAwait(false);
-        MacroRunner.PressAltE();
-
-        var pickUpUntil = DateTime.UtcNow + PickUpTimeout;
-        while (Read(file) == null)
-        {
-            if (DateTime.UtcNow > pickUpUntil)
-            {
-                // Niepodjęte makro nie może zostać w schowku: następny Alt+E pracownika by je uruchomił.
-                OnUi(() =>
-                {
-                    if (Clipboard.ContainsText() && Clipboard.GetText().StartsWith("#RESULT|" + key)) Clipboard.Clear();
-                    return true;
-                });
-                return new Result(false, "Odtwarzacz makr (AutoJob) nie podjął makra. Na komputerze może być otwarte okno "
-                    + "poprzedniego makra.");
-            }
-            await Task.Delay(300, cancel).ConfigureAwait(false);
+            return new Result(false, "Odtwarzacz makr (AutoJob) nie podjął makra. Na komputerze może być otwarte okno "
+                + "poprzedniego makra.");
         }
-
         var until = DateTime.UtcNow.AddMinutes(Math.Max(1, start.TimeoutMinutes - 1));
-        var playerSeen = DateTime.UtcNow;
-        var playerCheck = DateTime.UtcNow;
         while (true)
         {
             await Task.Delay(500, cancel).ConfigureAwait(false);
-            var read = Read(file);
-            if (read != null && read.State != "RUNNING")
+            var read = playback.Check();
+            if (read.State != MacroPlayback.PlayState.Running)
             {
-                TryDelete(file);
-                // Błąd cytuje linię makra, a w pierwszej jest hasło Mercalys: nie wysyłamy go na serwer.
-                var message = string.IsNullOrEmpty(password) ? read.Text : read.Text.Replace("|" + password, "|***");
-                return new Result(read.State == "OK", message, read.Codes);
-            }
-            if (DateTime.UtcNow - playerCheck > TimeSpan.FromSeconds(5))
-            {
-                playerCheck = DateTime.UtcNow;
-                if (MacroRunner.FindPlayer() != null) playerSeen = DateTime.UtcNow;
-                if (DateTime.UtcNow - playerSeen > PlayerGone)
-                {
-                    return new Result(false, "Odtwarzacz makr został zamknięty w trakcie makra. Sprawdź w Mercalys, co "
-                        + "zostało zrobione.");
-                }
+                return new Result(read.State == MacroPlayback.PlayState.Ok, read.Text, read.Codes);
             }
             if (DateTime.UtcNow > until)
             {
@@ -477,51 +465,6 @@ internal sealed class RemoteMacros : IDisposable
         public bool Ok { get; }
         public string Message { get; }
         public IReadOnlyList<string> Codes { get; }
-    }
-
-    private sealed class ResultFile
-    {
-        public string State = "";
-        public List<string> Codes = new();
-        public string Text = "";
-    }
-
-    private static ResultFile? Read(string path)
-    {
-        try
-        {
-            if (!File.Exists(path)) return null;
-            var lines = File.ReadAllText(path, Encoding.UTF8).Split(new[] { '\n' }, 3);
-            return new ResultFile
-            {
-                State = lines[0].Trim(),
-                Codes = lines.Length < 2 ? new List<string>() : lines[1].Split(',').Select(code => code.Trim())
-                    .Where(code => code.Length > 0).ToList(),
-                Text = lines.Length < 3 ? "" : lines[2].Trim(),
-            };
-        }
-        catch (IOException)
-        {
-            return null; // odtwarzacz właśnie podmienia plik
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Wyniki przerwanych makr (zamknięty agent) starsze niż doba.</summary>
-    private static void CleanUp()
-    {
-        foreach (var path in Directory.GetFiles(ResultFolder))
-        {
-            if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddDays(-1)) TryDelete(path);
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try { File.Delete(path); } catch (Exception) { /* sprzątnie następne makro */ }
     }
 
     private T OnUi<T>(Func<T> action) => (T)ui.Invoke(action);

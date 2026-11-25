@@ -40,6 +40,10 @@ public class ProductFileExport {
     @Column(nullable = false, updatable = false, columnDefinition = "text[]")
     private List<String> articles;
 
+    /** Artykuły pliku (JSON żądania); puste w plikach sprzed V192. */
+    @Column(updatable = false)
+    private String request;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -47,7 +51,8 @@ public class ProductFileExport {
     }
 
     public ProductFileExport(UUID storeId, String fileName, String contentSha256, String supplierCode,
-            List<String> articles) {
+            List<String> articles, String request) {
+        this.request = request;
         this.storeId = storeId;
         this.fileName = fileName;
         this.contentSha256 = contentSha256;
@@ -62,6 +67,14 @@ public class ProductFileExport {
 
     public UUID getId() {
         return id;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public String getRequest() {
+        return request;
     }
 
     public String getSupplierCode() {

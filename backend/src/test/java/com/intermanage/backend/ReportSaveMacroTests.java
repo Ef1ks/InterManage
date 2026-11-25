@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
@@ -86,7 +87,14 @@ class ReportSaveMacroTests {
         // Druga część: formularz zostaje, najpierw data max, potem min.
         String second = macro.substring(macro.indexOf("część 2 z 2"));
         assertThat(second.indexOf("txdZ25_DateMax_TxtBox|^a")).isLessThan(second.indexOf("txdZ23_DateMin_TxtBox|^a"));
-        assertThat(macro.split("mnTv_VENTE_ve-e048", -1)).hasSize(2);
+        String plain = macro.lines().filter(line -> !line.startsWith("#")).collect(Collectors.joining("\n"));
+        assertThat(plain.split("mnTv_VENTE_ve-e048", -1)).hasSize(2);
+        // Ponowienie po błędzie otwiera formularz z menu od nowa (odtwarzacz od 0.69): najpierw data min.
+        assertThat(second).contains("#ALT|WEBOPEN|Mercalys|mnTv_PILOTAGE_Etats|mnTv_VENTE_ve-e048",
+                "#ALT|EXCELSAVE|P:\\Raporty\\Dokumenty.xlsx|3600000");
+        assertThat(second.indexOf("#ALT|WEBKEY|Mercalys|txdZ23_DateMin_TxtBox"))
+                .isLessThan(second.indexOf("#ALT|WEBKEY|Mercalys|txdZ25_DateMax_TxtBox"));
+        assertThat(macro.substring(0, macro.indexOf("część 2 z 2"))).doesNotContain("#ALT|");
     }
 
     @Test
@@ -103,7 +111,8 @@ class ReportSaveMacroTests {
                 ImportReportKind.PRODUCTS, ImportReportKind.PRODUCT_CODES, ImportReportKind.CADENCIER,
                 ImportReportKind.SALES, ImportReportKind.DOCUMENTS);
         // Lista promocji: data końca dziś + 2 lata, zapis PDF.
-        assertThat(result.macro()).contains("^a21112028{Tab}", "PDFSAVE|P:\\Raporty\\taryfy.pdf|1800000");
+        assertThat(result.macro()).contains("#PART|3|Lista promocji\r\n", "#ENDPARTS\r\nWINMIN|",
+                "^a21112028{Tab}", "PDFSAVE|P:\\Raporty\\taryfy.pdf|1800000");
         assertThat(result.playerVersion()).isEqualTo("0.49");
     }
 }

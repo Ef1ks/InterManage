@@ -16,6 +16,8 @@ namespace Intermanage.Agent;
 internal sealed class ReportUploader
 {
     private const int ChunkAttempts = 4;
+    private static readonly TimeSpan SteadyFor = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SaveTimeout = TimeSpan.FromMinutes(1);
 
     private sealed class Item
     {
@@ -82,21 +84,49 @@ internal sealed class ReportUploader
         }
     }
 
+    /// <summary>
+    /// Data zmiany gotowego pliku. Excel najpierw zakłada pusty plik, a potem go zapisuje (na dysku sieciowym kilka
+    /// sekund), więc czekamy, aż niepusty plik przez <see cref="SteadyFor"/> ma ten sam rozmiar i datę. Pusty plik
+    /// wysłany za wcześnie serwer odrzucał, a raport danego dnia już nie wracał.
+    /// </summary>
+    private static async Task<DateTime?> WaitUntilSavedAsync(string path, CancellationToken cancel)
+    {
+        var until = DateTime.UtcNow + SaveTimeout;
+        (long Size, DateTime Modified)? previous = null;
+        while (true)
+        {
+            var current = await Disk.Run(() =>
+            {
+                var info = new FileInfo(path);
+                return info.Exists ? (info.Length, info.LastWriteTimeUtc) : (0L, DateTime.MinValue);
+            }, TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
+            if (current.Item1 > 0 && previous == current) return current.Item2;
+            if (current.Item2 == DateTime.MinValue || DateTime.UtcNow > until) return null;
+            previous = current;
+            await Task.Delay(SteadyFor, cancel).ConfigureAwait(false);
+        }
+    }
+
     private async Task UploadAsync(ApiClient api, Item item, CancellationToken cancel)
     {
-        DateTime modified;
+        DateTime? ready;
         try
         {
-            modified = await Disk.Run(() => File.GetLastWriteTimeUtc(item.Path), TimeSpan.FromSeconds(30), cancel)
-                .ConfigureAwait(false);
+            ready = await WaitUntilSavedAsync(item.Path, cancel).ConfigureAwait(false);
         }
         catch (Exception error) when (!(error is OperationCanceledException))
         {
             host.DiskProblem("Nie odczytano raportu " + item.FileName + ": " + error.Message);
             return;
         }
+        if (ready == null)
+        {
+            Log.Info("Raport " + item.FileName + " jest jeszcze zapisywany, pójdzie przy kolejnym przeglądzie");
+            return;
+        }
+        var modified = ready.Value;
         var content = await Disk.ReadWhenReady(item.Path, cancel).ConfigureAwait(false);
-        if (content == null) return;
+        if (content == null || content.Length == 0) return;
         // Excel jeszcze zapisuje: data zmiany inna niż przed odczytem, plik pójdzie przy kolejnym przeglądzie.
         var after = await Disk.Run(() => File.GetLastWriteTimeUtc(item.Path), TimeSpan.FromSeconds(30), cancel)
             .ConfigureAwait(false);

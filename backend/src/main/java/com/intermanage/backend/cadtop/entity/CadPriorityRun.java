@@ -25,7 +25,12 @@ public class CadPriorityRun {
 
     /** Nazwy trafiają do bazy. */
     public enum Source {
-        MACRO, MANUAL
+        /** Makro do schowka albo na komputer sklepu, zlecone przez osobę. */
+        MACRO,
+        /** Oznaczone jako ustawione ręcznie. */
+        MANUAL,
+        /** Makro zlecone przez serwer po aktualizacji danych (bez osoby). */
+        AGENT
     }
 
     @Id
@@ -59,6 +64,14 @@ public class CadPriorityRun {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** Makro na komputerze sklepu, które to ustawia (puste = makro ze schowka albo ręcznie). */
+    @Column(name = "job_id", updatable = false)
+    private UUID jobId;
+
+    /** Dlaczego makro pominęło artykuł. */
+    @Column(length = 300)
+    private String failure;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "deleted_by")
     private AppUser deletedBy;
@@ -70,7 +83,8 @@ public class CadPriorityRun {
     }
 
     public CadPriorityRun(Store store, String topItm8, String itm8, String ean, String nrCad, Source source,
-            AppUser by) {
+            UUID jobId, AppUser by) {
+        this.jobId = jobId;
         this.store = store;
         this.topItm8 = topItm8;
         this.itm8 = itm8;
@@ -81,6 +95,11 @@ public class CadPriorityRun {
         this.createdAt = Instant.now();
     }
 
+    public void fail(String reason) {
+        failure = reason.length() > 300 ? reason.substring(0, 300) : reason;
+    }
+
+    /** {@code by} puste: makro nie doszło do skutku. */
     public void delete(AppUser by) {
         if (deletedAt == null) {
             deletedAt = Instant.now();
@@ -91,6 +110,10 @@ public class CadPriorityRun {
     public void restore() {
         deletedAt = null;
         deletedBy = null;
+    }
+
+    public String getFailure() {
+        return failure;
     }
 
     public UUID getId() {

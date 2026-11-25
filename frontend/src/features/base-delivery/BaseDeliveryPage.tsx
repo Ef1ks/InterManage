@@ -90,6 +90,7 @@ import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchNamedFile, fetchPostedFile, saveBlob } from '@/lib/api'
 import { setFileQueueDocument } from '@/lib/file-queue'
 import { addDays, todayIso } from '@/lib/dates'
+import { confirmArticleSave } from '@/lib/cancel-window'
 import { useProductFileFolder, useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
 import type { BaseDelivery, StoreSummary, Supplier } from '@/lib/types'
@@ -777,6 +778,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
     setSaving('articles')
     try {
       const folderReady = await ensureFolderAccess(productFolder.key)
+      if (!(await confirmArticleSave(groups.reduce((sum, group) => sum + group.rows.length, 0)))) return false
       const saved: string[] = []
       const savedFiles: SavedProductFile[] = []
       for (const group of groups) {
@@ -808,7 +810,7 @@ function StoreBaseDelivery({ store }: { store: StoreSummary }) {
         }
       }
       toast.success(title, { description: saved.join(', '), duration: 10_000 })
-      productDrafts.ask(savedFiles)
+      void productDrafts.ask(savedFiles)
       return true
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się zapisać pliku nowych artykułów')

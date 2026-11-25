@@ -117,6 +117,7 @@ internal static class MacroRunner
     private const byte LeftAlt = 0xA4;
     private const byte KeyE = 0x45;
     private const uint KeyUp = 0x0002;
+    private const byte Escape = 0x1B;
 
     /// <summary>Lewy Alt+E jak pracownik: odtwarzacz wykonuje makro ze schowka po puszczeniu Alta.</summary>
     public static void PressAltE()
@@ -125,6 +126,13 @@ internal static class MacroRunner
         keybd_event(KeyE, 0, 0, UIntPtr.Zero);
         keybd_event(KeyE, 0, KeyUp, UIntPtr.Zero);
         keybd_event(LeftAlt, 0, KeyUp, UIntPtr.Zero);
+    }
+
+    /// <summary>Esc zatrzymuje trwające makro odtwarzacza.</summary>
+    public static void PressEsc()
+    {
+        keybd_event(Escape, 0, 0, UIntPtr.Zero);
+        keybd_event(Escape, 0, KeyUp, UIntPtr.Zero);
     }
 
     /// <summary>Chwila ostatniego ruchu myszy albo klawiatury (licznik milisekund Windows).</summary>

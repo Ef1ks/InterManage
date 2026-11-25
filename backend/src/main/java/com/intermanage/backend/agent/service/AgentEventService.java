@@ -38,7 +38,7 @@ import com.intermanage.backend.product.service.PriceFileService;
  * <ul>
  * <li>TRACEART: nowe nazwy → {@link PriceFileService#pending}, czyli prośba o pliki, których sklep jeszcze nie ma;
  * <li>CTRLPRIX: nazwa z końcówką .TraiteN → {@link DataEntryPriceControlService#seen} (program sklepu wczytał
- * zmianę cen), z wiadomością na żywo {@code price-control};
+ * zmianę cen), z wiadomością na żywo {@code price-control}, a .traite0 (czeka) → {@link PriceControlMacroService};
  * <li>ATHOS: zmieniony {@code Histo.Log} nowszy niż ostatnio wczytany → prośba o plik;
  * <li>raporty Importu danych ({@code IMPORT_…}): {@link AgentReportService#handle}.
  * </ul>
@@ -59,9 +59,12 @@ public class AgentEventService {
     private final MeaAthosService athos;
     private final LiveEvents live;
     private final AgentReportService reports;
+    private final PriceControlMacroService priceControlMacros;
 
     public AgentEventService(PriceFileService priceFiles, DataEntryPriceControlService priceControl,
-            MeaAthosService athos, LiveEvents live, AgentReportService reports) {
+            MeaAthosService athos, LiveEvents live, AgentReportService reports,
+            PriceControlMacroService priceControlMacros) {
+        this.priceControlMacros = priceControlMacros;
         this.priceFiles = priceFiles;
         this.priceControl = priceControl;
         this.athos = athos;
@@ -118,6 +121,8 @@ public class AgentEventService {
         }
         if (!processed.isEmpty()) {
             seenPriceControl(storeId, processed);
+            priceControlMacros.seenWaiting(storeId, processed.entrySet().stream()
+                    .filter(entry -> entry.getValue() == 0).map(Map.Entry::getKey).toList());
         }
         if (athosName != null) {
             MeaAthosStatus status = athos.status(storeId);

@@ -1,8 +1,10 @@
 package com.intermanage.backend.cadtop.repository;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -23,15 +25,27 @@ public interface CadPriorityRunRepository extends JpaRepository<CadPriorityRun, 
     @Query("select r from CadPriorityRun r where r.store.id = :storeId and r.id in :ids")
     List<CadPriorityRun> findInStore(UUID storeId, Collection<UUID> ids);
 
+    List<CadPriorityRun> findByJobIdAndDeletedAtIsNull(UUID jobId);
+
+    /** Karty, których zlecenie ktoś cofnął po tej chwili: automat nie zleca ich od razu z powrotem. */
+    @Query("""
+            select r.itm8 from CadPriorityRun r
+            where r.store.id = :storeId and r.deletedBy is not null and r.deletedAt > :since""")
+    Set<String> findWithdrawnSince(UUID storeId, Instant since);
+
     interface Counts {
         int getTop();
 
         /** Artykuły TOP, których ITM8 nie jest priorytetowym ITM8 żadnej karty z najnowszego raportu kartoteki. */
         int getMissing();
+
+        /** Priorytetowe, ale nieaktywne. */
+        int getInactive();
     }
 
     @Query(value = """
-            select count(*) as top, count(*) filter (where p.id is null) as missing
+            select count(*) as top, count(*) filter (where p.id is null) as missing,
+                   count(*) filter (where p.active = false) as inactive
             from cad_top_articles t
             left join products p on p.store_id = :storeId and p.itm8 = t.itm8 and p.last_seen_import_id = :importId
             where t.file_id = :fileId
@@ -124,4 +138,19 @@ public interface CadPriorityRunRepository extends JpaRepository<CadPriorityRun, 
             order by p.name, p.itm8, b.rank, t.purchase_price desc nulls last, t.itm8
             """, nativeQuery = true)
     List<Match> findMatches(UUID storeId, UUID fileId, UUID importId);
+
+    /** Karty z priorytetowym ITM8 z cadencier, które według najnowszego raportu kartoteki są nieaktywne. */
+    @Query(value = """
+            select t.itm8 as "topItm8", t.ean as "topEan", t.name as "topName", t.brand as "topBrand",
+                   t.top_mark as "topMark", t.purchase_price as "topPurchasePrice", t.sale_price as "topSalePrice",
+                   0 as rank, p.itm8 as itm8, p.ean as ean, p.name as name, p.brand as brand,
+                   p.subfamily_code as "subfamilyCode", p.supplier as supplier, p.stock as stock,
+                   p.sale_price as "salePrice", p.purchase_price as "purchasePrice", p.active as active,
+                   true as "topKnown", false as "otherTop"
+            from cad_top_articles t
+            join products p on p.store_id = :storeId and p.itm8 = t.itm8 and p.last_seen_import_id = :importId
+            where t.file_id = :fileId and p.active = false
+            order by p.name, p.itm8
+            """, nativeQuery = true)
+    List<Match> findInactive(UUID storeId, UUID fileId, UUID importId);
 }

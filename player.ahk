@@ -3,15 +3,20 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.68.0.0
+;@Ahk2Exe-SetVersion 0.69.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.68" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.69" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
+global PartMode := false ; trwa część makra z ponawianiem (#PART): błąd nie pokazuje okna, tylko wraca do PlayParts
+global PartError := ""
+global PartReport := ""
+global FailedBooks := [] ; skoroszyty, których EXCELSAVE nie zapisał: ponowienie je zamyka
+global FailedPdfs := [] ; to samo dla okien PDF po PDFSAVE
 global MacroRunning := false ; Esc działa tylko w trakcie makra
 ; Makro zlecone przez agenta sklepu (od 0.64): pierwsza linia #RESULT|<id> i wynik w pliku <id>.txt w folderze agenta.
 ; Makro podaje sam identyfikator, nie ścieżkę, więc tekst ze Schowka nie wskaże cudzego pliku.
@@ -226,7 +231,7 @@ DescribeGridRows(doc) {
 ; powtórzyć zamknięcia dostawy ani przeceny.
 #HotIf !MacroRunning && ClipboardHasMacro()
 <!e:: {
-    global MacroRunning
+    global MacroRunning, PartMode
     macro := Trim(A_Clipboard)
     A_Clipboard := ""
     MacroRunning := true
@@ -241,7 +246,7 @@ DescribeGridRows(doc) {
     if (RemoteId != "")
         WriteRemote("RUNNING", "")
     try {
-        PlayMacro(macro)
+        PlayParts(macro)
         FinishRemote("OK", "")
     } catch as problem {
         if (RemoteId = "")
@@ -249,6 +254,7 @@ DescribeGridRows(doc) {
         FinishRemote("ERROR", problem.Message)
     } finally {
         RemoteId := ""
+        PartMode := false
         MacroRunning := false
         A_IconTip := IdleTip
         if AgentMode
@@ -260,6 +266,10 @@ DescribeGridRows(doc) {
 #HotIf MacroRunning
 Esc:: {
     FinishRemote("ERROR", "Makro zatrzymane klawiszem Esc na komputerze. Sprawdź w Mercalys, co zostało zrobione.")
+    if (RemoteId != "") { ; wynik pokazuje agent, a otwarte okno blokowałoby kolejne makro (od 0.69)
+        Reload
+        return
+    }
     MsgBox "Makro zatrzymane. Sprawdź w Mercalys, co zostało zrobione.", "Makro zatrzymane", "Icon!" AlwaysOnTop
     Reload
 }
@@ -268,6 +278,14 @@ Esc:: {
 ; Okno makra. Makro zlecone przez agenta nie pokazuje okien (nikt by ich nie zamknął, a odtwarzacz czekałby w nieskończoność):
 ; treść idzie do pliku wyniku, a pokazuje ją agent i przeglądarka zlecającego.
 MacroBox(text, title := "", options := "") {
+    global PartError, PartReport
+    if PartMode { ; część makra z ponawianiem (PlayParts): o błędzie decyduje ona, a nie okno
+        if (title = "Makro zakończone")
+            PartReport := text
+        else
+            PartError := text
+        return
+    }
     if (RemoteId != "") {
         FinishRemote(title = "Makro zakończone" ? "OK" : "ERROR", text)
         return
@@ -298,6 +316,156 @@ WriteRemote(state, text) {
         FileAppend state "`n" list "`n" text, temp, "UTF-8-RAW"
         FileMove temp, folder "\" RemoteId ".txt", 1
     }
+}
+
+; --- Makro w częściach (od 0.69), np. codzienne raporty: błąd jednego pliku nie zatrzymuje reszty ---
+
+; Linie #PART|próby|nazwa zaczynają część (do następnej #PART albo #ENDPARTS), linie przed pierwszą #PART to początek
+; (WINOPEN z logowaniem). Część z błędem zaczyna się od nowa: po sprzątnięciu komunikatów Mercalys, niezapisanego
+; skoroszytu i PDF-a, z początkiem i z linii #ALT|…, gdy część je ma (zwykłe linie liczą na ekran po poprzedniej części).
+; Nieudana do końca zostaje w podsumowaniu, a makro robi następne. Starszy odtwarzacz widzi w # komentarze.
+; Makro bez #PART działa jak dotąd.
+PlayParts(rawClip) {
+    plan := SplitParts(rawClip)
+    if (plan.parts.Length = 0) {
+        PlayMacro(rawClip)
+        return
+    }
+    done := ""
+    failed := ""
+    clean := false ; ekran Mercalys jest taki, jak zostawiła go poprzednia udana część
+    for part in plan.parts {
+        started := A_TickCount
+        attempt := 0
+        Loop {
+            attempt += 1
+            PartStatus(part.name, attempt, part.tries)
+            fresh := !clean
+            body := fresh && part.alt != "" ? part.alt : part.body
+            problem := PlayPart((fresh ? plan.head : "") body, &summary)
+            if (problem = "") {
+                clean := true
+                done .= summary
+                break
+            }
+            clean := false
+            shown := CleanAfterFailure()
+            if (shown != "")
+                problem .= "`nKomunikat Mercalys: " shown
+            ; Samo czekanie na Excela trwa do godziny, więc po 90 minutach części już nie zaczynamy od nowa.
+            if (attempt >= part.tries || A_TickCount - started > 5400000) {
+                failed .= part.name " (próby: " attempt "):`n" problem "`n`n"
+                break
+            }
+            Sleep 5000 * attempt
+        }
+    }
+    if (failed != "") {
+        MacroBox "Nie udało się:`n" failed done, "Makro zakończone z błędami", "Icon!" AlwaysOnTop
+        return
+    }
+    PlayPart(plan.tail, &summary)
+    if (done != "")
+        MacroBox done, "Makro zakończone", "Iconi" AlwaysOnTop
+    else
+        Notify "Zakończono", "Makro ze schowka zostało wykonane."
+}
+
+SplitParts(rawClip) {
+    plan := {head: "", parts: [], tail: ""}
+    part := ""
+    ended := false
+    for line in StrSplit(rawClip, "`n", "`r") {
+        text := Trim(line)
+        if RegExMatch(text, "i)^#PART\|(\d+)\|(.*)$", &match) {
+            part := {name: match[2], tries: Max(1, Integer(match[1])), body: "", alt: ""}
+            plan.parts.Push(part)
+        } else if RegExMatch(text, "i)^#ENDPARTS\s*$")
+            ended := true
+        else if ended
+            plan.tail .= text "`n"
+        else if !IsObject(part)
+            plan.head .= text "`n"
+        else if RegExMatch(text, "i)^#ALT\|(.*)$", &match)
+            part.alt .= match[1] "`n"
+        else
+            part.body .= text "`n"
+    }
+    return plan
+}
+
+; Jedna część; "" = udana, inaczej opis błędu. Także błąd, którego polecenie nie przewidziało.
+PlayPart(text, &summary) {
+    global PartMode := true
+    global PartError := ""
+    global PartReport := ""
+    try {
+        PlayMacro(text)
+    } catch as problem {
+        PartError := problem.Message
+    }
+    PartMode := false
+    summary := PartReport
+    return PartError
+}
+
+; Która część i próba: dla agenta w pliku wyniku, dla pracownika w podpowiedzi ikony, a ponowienie w powiadomieniu.
+PartStatus(name, attempt, tries) {
+    text := name (attempt > 1 ? ", próba " attempt " z " tries : "")
+    if (RemoteId != "" && !RemoteFinished)
+        WriteRemote("RUNNING", text)
+    A_IconTip := SubStr("Makro: " text ". Esc zatrzymuje", 1, 120)
+    if (attempt > 1)
+        Notify "Błąd, ponawiam: " text
+}
+
+; Po błędzie części: komunikaty Mercalys zasłaniają ekran, a skoroszyt albo PDF z nieudanego zapisu przeszkodziłby
+; następnej próbie (ta sama nazwa, to samo okno). Cudzych okien i skoroszytów nie ruszamy. Zwraca treść komunikatów.
+CleanAfterFailure() {
+    global FailedBooks, FailedPdfs
+    shown := ""
+    for winClass in ["Internet Explorer_TridentDlgFrame", "#32770"] {
+        for hwnd in WinGetList("ahk_class " winClass " ahk_exe Mercalys.exe") {
+            text := ""
+            try {
+                for doc in HtmlDocuments(hwnd)
+                    text .= " " doc.body.innerText
+            }
+            if (Trim(text) = "") {
+                try text := WinGetText(hwnd)
+            }
+            text := SubStr(RegExReplace(Trim(text), "\s+", " "), 1, 300)
+            if (text != "")
+                shown .= (shown = "" ? "" : "; ") text
+            try WinClose hwnd
+            WinWaitClose("ahk_id " hwnd, , 5)
+        }
+    }
+    for item in FailedBooks {
+        alerts := true
+        try alerts := item.app.DisplayAlerts
+        try item.app.DisplayAlerts := false
+        try item.book.Close(false)
+        try item.app.DisplayAlerts := alerts
+        count := -1
+        try count := item.app.Workbooks.Count
+        if (count = 0) {
+            try item.app.Quit()
+        }
+    }
+    FailedBooks := []
+    for hwnd in FailedPdfs {
+        for other in WinGetList("ahk_class #32770") {
+            ; GW_OWNER: okno „Zapisz jako” tego PDF-a
+            if (DllCall("GetWindow", "Ptr", other, "UInt", 4, "Ptr") = hwnd) {
+                try WinClose other
+            }
+        }
+        try WinClose hwnd
+        WinWaitClose("ahk_id " hwnd, , 5)
+    }
+    FailedPdfs := []
+    return shown
 }
 
 PlayMacro(rawClip) {
@@ -1076,7 +1244,7 @@ PlayMacro(rawClip) {
     
     if (report != "")
         MacroBox report, "Makro zakończone", "Iconi" AlwaysOnTop
-    else
+    else if !PartMode
         Notify "Zakończono", "Makro ze schowka zostało wykonane."
 }
 
@@ -1375,6 +1543,8 @@ ExcelSaveWorkbook(item, path, format, seen) {
     }
     if (message != "") {
         try app.DisplayAlerts := alerts
+        if PartMode
+            FailedBooks.Push(item)
         return "Excel nie zapisał pliku `"" path "`":`n" message
     }
     try seen[app.Hwnd ":" wb.FullName] := true
@@ -1493,6 +1663,8 @@ PdfSave(path, timeoutMs, seen) {
         Sleep 500
     }
     seen[hwnd ":" title] := true
+    if PartMode ; zdejmie je dopiero udany zapis
+        FailedPdfs.Push(hwnd)
     Sleep 2000 ; dokument jeszcze się wczytuje
 
     ; Najpierw kopia pliku, który otworzył Acrobat (bez okien), a bez niego „Zapisz jako”.
@@ -1513,6 +1685,8 @@ PdfSave(path, timeoutMs, seen) {
         return "Nie powstał plik `"" path "`".`nOkno PDF: " title
     try WinClose hwnd
     WinWaitClose("ahk_id " hwnd, , 5)
+    if (PartMode && FailedPdfs.Length > 0)
+        FailedPdfs.Pop()
     return ""
 }
 

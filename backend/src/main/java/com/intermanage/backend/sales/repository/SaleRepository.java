@@ -328,6 +328,13 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
             nativeQuery = true)
     String tuneForReport();
 
+    /**
+     * Do końca transakcji bez złączeń przez sortowanie: przy przeszacowanych sumach artykułów planista sortował po
+     * tekście ITM8 setki tysięcy wierszy, a haszowanie małych tabel (ceny, promocje) trwa ułamek tego.
+     */
+    @Query(value = "select set_config('enable_mergejoin', 'off', true)", nativeQuery = true)
+    String avoidMergeJoin();
+
     /** Sprzedaż jednego dnia; dni bez sprzedaży nie ma w wyniku. */
     interface DayRow {
         LocalDate getSaleDate();
@@ -646,9 +653,14 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
      * ({@link PromoLeafletRepository#ARTICLE_PERIODS}), w formularzu MEA (ITM8 promocyjny, równoległy albo EAN
      * artykułu, jak plakietki gazetek w porównaniu) albo jego cena dnia była poniżej {@code priceFactor} × cena zwykła
      * (rozpoznanie jak w skuteczności promocji, łapie też promocje z kasy i przeceny). Bez rejonów 90 i 91, z filtrem
-     * nomenklatury porównania. Ceny zwykłe i promocje czyta tylko dla dwóch okresów, nie dla roku między nimi
-     * (rok do roku za miesiąc na produkcji ok. 2,3 s, za dzień ok. 0,9 s). {@code dataFrom}-{@code dataTo} obejmuje oba
-     * okresy (gazetki sklepu).
+     * nomenklatury porównania. Ceny zwykłe i promocje czyta tylko dla dwóch okresów, nie dla roku między nimi.
+     * {@code dataFrom}-{@code dataTo} obejmuje oba okresy (gazetki sklepu).
+     * <p>
+     * Sprzedaż dni przechodzi raz: cena zwykła ({@code reference}) i dni promocji artykułu ({@code promo}, jeden
+     * wielozakres dat na artykuł) dochodzą złączeniami po ITM8. Poprzednio dni promocji wracały złączeniem do tej samej
+     * sprzedaży, a planista przeszacowywał je tak, że 10 tys. wierszy szło przez 2048 partii na dysku. Wołać po
+     * {@link #tuneForReport} i {@link #avoidMergeJoin}. Na produkcji rok do roku: dzień ok. 0,4 s, tydzień ok. 0,5 s,
+     * miesiąc ok. 0,9 s, rok ok. 8 s.
      */
     @Query(value = "with leaflet as (" + PromoLeafletRepository.ARTICLE_PERIODS + """
             ), days as (
@@ -656,7 +668,7 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                        s.margin_value as margin,
                        case when s.quantity > 0 and s.sale_value_gross > 0
                             then s.sale_value_gross / s.quantity end as price,
-                       cast(date_trunc('month', s.sale_date) as date) as month
+                       cast(date_trunc('month', cast(s.sale_date as timestamp)) as date) as month
                 from sales_by_article s
                 where s.store_id = :storeId
                   and s.sale_date between cast(:previousFrom as date) and cast(:previousTo as date)
@@ -664,30 +676,31 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                 select 'c', s.itm8, s.sale_date, s.sale_value_gross, s.sale_value_net, s.margin_value,
                        case when s.quantity > 0 and s.sale_value_gross > 0
                             then s.sale_value_gross / s.quantity end,
-                       cast(date_trunc('month', s.sale_date) as date)
+                       cast(date_trunc('month', cast(s.sale_date as timestamp)) as date)
                 from sales_by_article s
                 where s.store_id = :storeId
                   and s.sale_date between cast(:currentFrom as date) and cast(:currentTo as date)
-            ), reference as (
-                select itm8, month,
-                       max(price) filter (where sale_days >= :minReferenceDays)
-                           over (partition by itm8 order by month
-                                 range between interval '2 month' preceding and current row) as price
-                from sales_month_prices
-                where store_id = :storeId
-                  and (month between cast(date_trunc('month', cast(:previousFrom as date)) - interval '2 month' as date)
-                                 and cast(:previousTo as date)
-                       or month between cast(date_trunc('month', cast(:currentFrom as date)) - interval '2 month' as date)
-                                    and cast(:currentTo as date))
+            ), months as materialized (
+                select distinct cast(g as date) as month
+                from (values (cast(:previousFrom as timestamp), cast(:previousTo as timestamp)),
+                             (cast(:currentFrom as timestamp), cast(:currentTo as timestamp))) v(date_from, date_to),
+                     generate_series(date_trunc('month', v.date_from), v.date_to, interval '1 month') g
+            ), reference as materialized (
+                select r.itm8, m.month, max(r.price) as price
+                from months m
+                join sales_month_prices r on r.store_id = :storeId and r.sale_days >= :minReferenceDays
+                     and r.month in (m.month, cast(m.month - interval '1 month' as date),
+                                     cast(m.month - interval '2 month' as date))
+                group by r.itm8, m.month
             ), mea_docs as (
                 select id, promo_from, promo_to from mea_documents
                 where promo_from <= cast(:previousTo as date) and promo_to >= cast(:previousFrom as date)
                    or promo_from <= cast(:currentTo as date) and promo_to >= cast(:currentFrom as date)
             ), mea_lines as (
-                select l.mea_itm8, ltrim(l.parallel_itm8, '0') as parallel, ltrim(btrim(l.ean), '0') as ean,
+                select l.mea_itm8, ltrim(l.parallel_itm8, '0') as parallel, ltrim(l.ean, '0') as ean,
                        d.promo_from, d.promo_to
                 from mea_docs d join mea_document_lines l on l.document_id = d.id
-            ), spans as materialized (
+            ), spans as (
                 select p.itm8, p.start_date as date_from, p.effective_end as date_to
                 from promotions p
                 where p.store_id = :storeId
@@ -703,33 +716,33 @@ public interface SaleRepository extends JpaRepository<Sale, Sale.Key> {
                 where m.parallel ~ '^[0-9]+$'
                 union
                 select p.itm8, m.promo_from, m.promo_to
-                from mea_lines m join products p on p.store_id = :storeId and ltrim(btrim(p.ean), '0') = m.ean
+                from mea_lines m join products p on p.store_id = :storeId and ltrim(p.ean, '0') = m.ean
                 where m.ean <> ''
                 union
                 select c.itm8, m.promo_from, m.promo_to
                 from mea_lines m join product_codes c on c.store_id = :storeId and c.current
-                                                      and ltrim(btrim(c.ean), '0') = m.ean
+                                                      and ltrim(c.ean, '0') = m.ean
                 where m.ean <> ''
-            ), counted as (
-                select d.* from days d
+            ), promo as materialized (
+                select itm8, range_agg(daterange(date_from, date_to, '[]')) as days
+                from spans
+                where date_from <= date_to
+                group by itm8
+            ), articles as (
+                select d.period, d.itm8, sum(d.gross) as gross, sum(d.net) as net, sum(d.margin) as margin
+                from days d
                 left join products p on p.store_id = :storeId and p.itm8 = d.itm8
+                left join reference r on r.itm8 = d.itm8 and r.month = d.month
+                left join promo x on x.itm8 = d.itm8
                 where """ + COUNTED + """
                   and """ + IN_CODES + """
-            ), promo_days as (
-                select d.period, d.itm8, d.sale_date
-                from counted d join reference r on r.itm8 = d.itm8 and r.month = d.month
-                where d.price < r.price * :priceFactor
-                union
-                select d.period, d.itm8, d.sale_date
-                from counted d join spans x on x.itm8 = d.itm8
-                where d.sale_date between x.date_from and x.date_to
+                  and (d.price < r.price * :priceFactor or x.days @> d.sale_date)
+                group by d.period, d.itm8
             )
-            select d.period as period, coalesce(sum(d.gross), 0) as saleValueGross,
-                   coalesce(sum(d.net), 0) as saleValueNet, coalesce(sum(d.margin), 0) as marginValue,
-                   count(distinct d.itm8) as articles
-            from promo_days x
-            join counted d on d.period = x.period and d.itm8 = x.itm8 and d.sale_date = x.sale_date
-            group by d.period
+            select period, coalesce(sum(gross), 0) as saleValueGross, coalesce(sum(net), 0) as saleValueNet,
+                   coalesce(sum(margin), 0) as marginValue, count(*) as articles
+            from articles
+            group by period
             """, nativeQuery = true)
     List<PromotionSales> sumPromotionSales(UUID storeId, LocalDate previousFrom, LocalDate previousTo,
             LocalDate currentFrom, LocalDate currentTo, LocalDate dataFrom, LocalDate dataTo, BigDecimal priceFactor,

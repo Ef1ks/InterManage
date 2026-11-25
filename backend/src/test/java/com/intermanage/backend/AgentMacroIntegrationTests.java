@@ -38,6 +38,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import com.intermanage.backend.agent.component.AgentMachineStates;
 import com.intermanage.backend.agent.service.AgentMacroWaitService;
+import com.intermanage.backend.agent.service.PriceControlMacroService;
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.common.component.XlsWriter;
 import com.jayway.jsonpath.JsonPath;
@@ -54,7 +55,8 @@ import jakarta.servlet.http.Cookie;
         "app.bootstrap.owner-password=haslo-wlasciciela",
         "app.ksef.sync-enabled=false",
         "app.agent.product-file-macro.enabled=true",
-        "app.agent.product-file-macro.delay=PT0.2S"
+        "app.agent.product-file-macro.delay=PT0.2S",
+        "app.agent.price-control-macro.delay=PT0.2S"
 })
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, RecordingAccountMailer.Config.class})
@@ -80,6 +82,9 @@ class AgentMacroIntegrationTests {
 
     @Autowired
     XlsWriter xlsWriter;
+
+    @Autowired
+    PriceControlMacroService priceControlMacros;
 
     @Autowired
     PasswordEncoder passwordEncoder;
@@ -361,8 +366,12 @@ class AgentMacroIntegrationTests {
         saveFile(kasa, "data-entry-product-file", "1");
         saveFile(kasa, "data-entry-product-file", "2");
         String job = awaitProductJob(0);
+        // Plik wczyta komputer, więc przeglądarka o nic nie pyta.
+        expected("CADBEZP-GOBARTO-1.xls", true);
+        expected("CADBEZP-OBCY.xls", false);
         mvc.perform(get(base() + "/" + job).cookie(owner))
                 .andExpect(jsonPath("$.kind").value("PRODUCT_FILES"))
+                .andExpect(jsonPath("$.countdownSeconds").value(2))
                 .andExpect(jsonPath("$.status").value("OFFERED"))
                 .andExpect(jsonPath("$.computer").value("Kasa"));
         String started = agentPost(kasa, "/macro-jobs/" + job + "/start", "").andExpect(status().isOk())
@@ -391,12 +400,25 @@ class AgentMacroIntegrationTests {
         int before = productJobs().size();
         agentPost(kasa, "/macro-jobs/" + job + "/finish", "{\"ok\":true,\"message\":\"\"}")
                 .andExpect(status().isNoContent());
+        // Udane makro samo dodaje nowe artykuły do bazy (bez pytania), nieudane nie.
+        for (int i = 0; i < 50 && drafts() == 0; i++) {
+            Thread.sleep(100);
+        }
+        assertThat(drafts()).isEqualTo(1);
+        jdbc.update("update product_drafts set removed_at = now(), removed_reason = 'CANCELLED' where store_id = ?::uuid",
+                storeId);
         String next = awaitProductJob(before);
         // Odmowa jedynego komputera: ponowić da się z przeglądarki, te same pliki.
         agentPost(kasa, "/macro-jobs/" + next + "/decline", "{}").andExpect(status().isNoContent());
         mvc.perform(get(base() + "/" + next).cookie(owner)).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
         mvc.perform(post(base() + "/" + next + "/retry").cookie(employee("{\"DATA_ENTRY\":\"VIEW\"}")).with(csrf()))
                 .andExpect(status().isForbidden());
+        assertThat(drafts()).isZero();
+        // Wczytane ręcznie: artykuły dodaje człowiek, też bez prawa zlecania makr.
+        mvc.perform(post(base() + "/" + next + "/loaded").cookie(employee("{\"DATA_ENTRY\":\"VIEW\"}")).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertThat(drafts()).isEqualTo(1);
+        mvc.perform(post(base() + "/" + job + "/loaded").cookie(owner).with(csrf())).andExpect(status().isConflict());
         poll(kasa, "0.68");
         String again = JsonPath.read(mvc.perform(post(base() + "/" + next + "/retry").cookie(owner).with(csrf()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OFFERED"))
@@ -410,6 +432,119 @@ class AgentMacroIntegrationTests {
                 select count(*) from store_file_queue where store_id = ?::uuid
                   and macro_requested_at is not null and macro_job_id is null""", Integer.class, storeId))
                 .isZero();
+    }
+
+    /** Zmiana cen w folderze sklepu sama zleca makro na preferowanym komputerze, po „Anuluj” wraca za 10 minut. */
+    @Test
+    void priceChangeInFolderStartsMacroOnPreferredComputer() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/stores/" + storeId + "/agents/settings").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+                .andExpect(status().isOk());
+        String kasa = addAgent("Kasa");
+        String biuro = addAgent("Biuro");
+        String biuroId = jdbc.queryForObject("select id from store_agents where store_id = ?::uuid and name = 'Biuro'",
+                String.class, storeId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/stores/" + storeId + "/agents/" + biuroId + "/preferred").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"preferred\":true}"))
+                .andExpect(status().isOk());
+        poll(kasa, 3000, false, true);
+        // Preferowany komputer wyłączony: zmiana czeka, choć kasa jest wolna.
+        String first = priceChange();
+        saveFile(kasa, "deli-order-proto", first, new byte[] {1, 2, 3});
+        Thread.sleep(600);
+        assertThat(priceJobs()).isEmpty();
+        priceControl().andExpect(jsonPath("$.pending[0].macroWaiting").value(true));
+
+        poll(biuro, 5, false, true);
+        priceControlMacros.dispatchWaiting();
+        String job = priceJobs().getFirst();
+        poll(kasa, 3000, false, true).andExpect(jsonPath("$.offer").doesNotExist());
+        poll(biuro, 5, false, true).andExpect(jsonPath("$.offer.id").value(job))
+                .andExpect(jsonPath("$.offer.countdownSeconds").value(2))
+                .andExpect(jsonPath("$.offer.holdOnInput").value(true));
+        // „Anuluj” na preferowanym nie przenosi makra na kasę, a zmiana wraca do czekania.
+        agentPost(biuro, "/macro-jobs/" + job + "/decline", "{}").andExpect(status().isNoContent());
+        mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        for (int i = 0; i < 50 && waitingForMacro() == 0; i++) {
+            Thread.sleep(100);
+        }
+        assertThat(waitingForMacro()).isEqualTo(1);
+        poll(biuro, 5, false, true);
+        priceControlMacros.dispatchWaiting();
+        assertThat(priceJobs()).hasSize(1);
+        jdbc.update("update data_entry_price_control_files set macro_retry_at = now() where store_id = ?::uuid", storeId);
+
+        // Druga zmiana, zapisana z przeglądarki: główny agent widzi ją w folderze. Obie idą jednym makrem.
+        Thread.sleep(1100);
+        String second = priceChange();
+        poll(biuro, 5, false, true);
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"CREATED","folderKey":"CTRLPRIX","fileName":"%s"},
+                  {"kind":"PRESENT","folderKey":"CTRLPRIX","fileName":"CTRLPRIX_20200101_101010_OBCY_x.traite0"}]}"""
+                .formatted(second)).andExpect(status().isOk());
+        for (int i = 0; i < 50 && priceJobs().size() < 2; i++) {
+            Thread.sleep(100);
+        }
+        String next = priceJobs().get(1);
+        String macro = JsonPath.read(agentPost(biuro, "/macro-jobs/" + next + "/start", "").andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind").value("PRICE_CONTROL"))
+                .andReturn().getResponse().getContentAsString(), "$.macro");
+        assertThat(macro).startsWith("# Wprowadzenie zmian cen: 2 ")
+                .contains("WINOPEN|Mercalys ahk_exe Mercalys.exe\r\n").contains("LABEL|zmiana-cen-2\r\n")
+                .endsWith("WINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
+        priceControl().andExpect(jsonPath("$.pending[0].macroWaiting").value(false));
+        mvc.perform(post(base() + "/" + next + "/retry").cookie(owner).with(csrf())).andExpect(status().isConflict());
+
+        // Pierwszą program sklepu wczytał, potem makro stanęło: ponowienie obejmuje tylko drugą.
+        agentPost(biuro, "/events", "{\"events\":[{\"kind\":\"RENAMED\",\"folderKey\":\"CTRLPRIX\",\"fileName\":\"%s\"}]}"
+                .formatted(first.replace(".traite0", ".Traite1"))).andExpect(status().isOk());
+        agentPost(biuro, "/macro-jobs/" + next + "/finish", "{\"ok\":false,\"message\":\"Błąd makra\"}")
+                .andExpect(status().isNoContent());
+        Thread.sleep(600);
+        assertThat(priceJobs()).hasSize(2);
+        poll(biuro, 5, false, true);
+        mvc.perform(post(base() + "/" + next + "/retry").cookie(employee("{\"DATA_ENTRY\":\"VIEW\"}")).with(csrf()))
+                .andExpect(status().isForbidden());
+        String again = JsonPath.read(mvc.perform(post(base() + "/" + next + "/retry").cookie(owner).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.itemCount").value(1))
+                .andExpect(jsonPath("$.computer").value("Biuro"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        agentPost(biuro, "/macro-jobs/" + again + "/start", "").andExpect(status().isOk());
+        agentPost(biuro, "/macro-jobs/" + again + "/finish", "{\"ok\":true,\"message\":\"\"}")
+                .andExpect(status().isNoContent());
+        // Kolejny przegląd folderu nie zleca drugi raz tego samego pliku.
+        agentPost(biuro, "/events", "{\"events\":[{\"kind\":\"PRESENT\",\"folderKey\":\"CTRLPRIX\",\"fileName\":\"%s\"}]}"
+                .formatted(second)).andExpect(status().isOk());
+        Thread.sleep(600);
+        assertThat(priceJobs()).hasSize(3);
+    }
+
+    private String priceChange() throws Exception {
+        String disposition = mvc.perform(post("/api/stores/" + storeId + "/data-entry/export/price-control")
+                        .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rows\":[{\"ean\":\"5904634010327\",\"salePrice\":4.99}]}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getHeader(HttpHeaders.CONTENT_DISPOSITION);
+        return disposition.replaceAll(".*filename=\"([^\"]+)\".*", "$1");
+    }
+
+    private ResultActions priceControl() throws Exception {
+        return mvc.perform(get("/api/stores/" + storeId + "/data-entry/price-control-files").cookie(owner))
+                .andExpect(status().isOk());
+    }
+
+    private List<String> priceJobs() {
+        return jdbc.queryForList("""
+                select id::text from agent_macro_jobs where store_id = ?::uuid and kind = 'PRICE_CONTROL'
+                order by created_at""", String.class, storeId);
+    }
+
+    private int waitingForMacro() {
+        return jdbc.queryForObject("""
+                select count(*) from data_entry_price_control_files
+                where store_id = ?::uuid and macro_requested_at is not null and macro_job_id is null""",
+                Integer.class, storeId);
     }
 
     /** Dostawca spoza wgranej listy, założony w Mercalys makrem: numer z ostatniej rezerwacji po NIP-ie. */
@@ -452,6 +587,18 @@ class AgentMacroIntegrationTests {
             wait.getAsyncResult(5_000);
         }
         agentPost(key, "/file-queue/" + id + "/saved", "").andExpect(status().isNoContent());
+    }
+
+    private void expected(String fileName, boolean value) throws Exception {
+        mvc.perform(get(base() + "/product-file").param("fileName", fileName).cookie(owner))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.expected").value(value));
+    }
+
+    /** Oczekujące szkice artykułów sklepu. */
+    private int drafts() {
+        return jdbc.queryForObject("""
+                select count(*) from product_drafts where store_id = ?::uuid and removed_at is null
+                  and matched_product_id is null""", Integer.class, storeId);
     }
 
     private List<String> productJobs() {

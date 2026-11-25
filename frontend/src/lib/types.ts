@@ -1580,6 +1580,8 @@ export type CadPriorityItem = {
   salePrice: number | null
   purchasePrice: number | null
   active: boolean
+  /** Co jest do zrobienia na karcie. */
+  task: 'PRIORITY' | 'ACTIVE' | 'PRIORITY_AND_ACTIVE'
   match: 'MAIN_EAN' | 'MULTI_CODE' | 'SCALE_CODE'
   /** ITM8 z cadencier był kiedyś w kartotece sklepu. */
   topKnown: boolean
@@ -1587,7 +1589,15 @@ export type CadPriorityItem = {
   alternatives: { itm8: string; name: string; purchasePrice: number | null }[]
   /** FAILED: zlecono, ale nowszy raport kartoteki dalej ma inny ITM8. */
   status: 'TODO' | 'WAITING' | 'FAILED'
-  run: { id: string; macro: boolean; createdAt: string; createdBy: string | null } | null
+  run: {
+    id: string
+    /** `AGENT`: zlecił sam serwer po aktualizacji danych. */
+    source: 'MACRO' | 'MANUAL' | 'AGENT'
+    createdAt: string
+    createdBy: string | null
+    /** Dlaczego makro pominęło artykuł. */
+    failure: string | null
+  } | null
 }
 
 export type CadPriorityReport = {
@@ -1598,7 +1608,8 @@ export type CadPriorityReport = {
   setCount: number
   variantCount: number
   absentCount: number
-  macroReady: boolean
+  /** Po aktualizacji danych poprawia je komputer sklepu. */
+  automatic: boolean
   items: CadPriorityItem[]
 }
 
@@ -3681,6 +3692,8 @@ export type PriceControlFileItem = {
   /** N z końcówki .TraiteN: ile razy program sklepu przetworzył plik (puste przy ręcznym oznaczeniu). */
   processedCount: number | null
   loadedBy: string | null
+  /** Zmianę wprowadzi sam komputer sklepu (agent), gdy będzie wolny. */
+  macroWaiting: boolean
 }
 
 /** Zmiany cen sklepu: wszystkie niewgrane (od najstarszego) i ostatnie wgrane. */
@@ -5462,7 +5475,7 @@ export type AgentComputer = {
 /** Makro zlecone na wolnym komputerze sklepu. */
 export type AgentMacroJob = {
   id: string
-  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES' | 'BASE_RECEIVE' | 'BASE_CLOSE' | 'PRODUCT_FILES'
+  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES' | 'BASE_RECEIVE' | 'BASE_CLOSE' | 'PRODUCT_FILES' | 'CAD_PRIORITY'
   title: string
   status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
   computer: string | null

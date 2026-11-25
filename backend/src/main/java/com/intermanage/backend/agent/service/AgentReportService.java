@@ -325,8 +325,12 @@ public class AgentReportService {
         List<SeenFile> candidates = new ArrayList<>();
         List<SeenFile> delete = new ArrayList<>();
         for (SeenFile file : seen) {
+            // Excel zakłada pusty plik i dopiero go zapisuje: pustego nie bierzemy, pójdzie po zmianie.
+            if (file.size() <= 0) {
+                continue;
+            }
             List<AgentReportFile> tries = attempts.getOrDefault(file.name().toLowerCase(Locale.ROOT), List.of())
-                    .stream().filter(attempt -> sameModified(attempt.getFileModified(), file.modified())).toList();
+                    .stream().filter(attempt -> sameFile(attempt, file)).toList();
             Instant importedAt = importedAt(file, imports, tries);
             if (importedAt != null) {
                 // Wgrany przed dzisiejszym dniem: następnego dnia plik idzie z folderu.
@@ -407,6 +411,14 @@ public class AgentReportService {
         }
         return attempt.getStatus() == AgentReportFile.Status.IMPORTING
                 || touched.isAfter(Instant.now().minus(UPLOAD_STALE));
+    }
+
+    /**
+     * Próba tego samego pliku: data zmiany i rozmiar. Sama data nie wystarcza, bo plik wysłany w chwili, gdy Excel go
+     * zakładał (0 bajtów), ma datę o ułamek sekundy wcześniejszą od gotowego i jego odrzucenie blokowało gotowy plik.
+     */
+    private static boolean sameFile(AgentReportFile attempt, SeenFile file) {
+        return sameModified(attempt.getFileModified(), file.modified()) && attempt.getFileSize() == file.size();
     }
 
     /** Daty zmiany z dokładnością do sekundy (dysk sieciowy i serializacja potrafią uciąć ułamki). */
@@ -619,7 +631,7 @@ public class AgentReportService {
             return new AgentReportFileResponse(response.id(), response.kind(), response.fileName(),
                     response.fileModified(), response.fileSize(), "INTERRUPTED",
                     "Przerwane (restart serwera albo zerwane połączenie agenta), plik pójdzie ponownie",
-                    response.startedAt(), response.finishedAt(), response.removedFromDiskAt());
+                    response.startedAt(), response.finishedAt(), response.removedFromDiskAt(), false);
         }
         return response;
     }

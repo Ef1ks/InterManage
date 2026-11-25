@@ -948,6 +948,12 @@ const CORRECTION_SCREEN = {
   priceField: 'txpZ16_PAUnitaireHT_TxtBox',
   closeButton: 'btnB3_Cloturer_LnkBouton',
   closeText: 'zatwierdzi',
+  /**
+   * „Sprzedaż ze stratą ! Minimalna cena sprzedaży jest … Czy potwierdzasz stratną sprzedaż ?”: tylko czasem, zaraz po
+   * zapisie ceny zakupu. Samo okno pytania w tytule: w głównym oknie brak przycisku oznacza wolny przegląd strony.
+   */
+  lossWindow: 'okno dialogowe strony',
+  lossText: 'Minimalna cena;ze strat',
 } as const
 
 /** Pierwsze okno po Zakończ znika, a drugie pojawia się razem z PDF-em. */
@@ -1037,6 +1043,10 @@ export function correctionArticleLines(
   )
   return out
 }
+
+/** Pytanie o sprzedaż ze stratą po zapisie pozycji = Tak; bez pytania makro czeka tylko `timeoutMs`. */
+export const correctionLossLine = (timeoutMs: number) =>
+  `WEBDIALOG|${CORRECTION_SCREEN.lossWindow}|${CORRECTION_SCREEN.lossText}|Oui|${timeoutMs}`
 
 /** Zakończenia nie da się cofnąć, więc decyduje pracownik; „Nie” zostawia otwarty dokument do sprawdzenia. */
 export function correctionFinishLines(bonNumber: string, count: number) {
@@ -1369,6 +1379,11 @@ const PRICE_CONTROL_SCREEN = {
 /** Opracowanie dużego pliku i wyrównanie cen potrafią trwać. */
 const PRICE_CONTROL_TIMEOUT_MS = 120000
 const PRICE_CONTROL_ALERT_MS = 15000
+
+/*
+ * To samo makro składa serwer dla agenta (backend: dataentry/component/PriceControlMacro), więc zmiana ekranów Mercalys
+ * to zmiana w obu miejscach.
+ */
 
 /** Plik zmiany cen do opracowania: czas z nazwy pliku (jak w historii Mercalys) i liczba cen. */
 export type PriceControlMacroFile = {

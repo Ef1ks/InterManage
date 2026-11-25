@@ -219,6 +219,7 @@ public class SalesReportService {
         ReportPeriod.check(currentFrom, currentTo, ReportPeriod.MAX_DAYS, "Aktualny okres");
         String[] codes = filterCodes(filter);
         sales.tuneForReport();
+        sales.avoidMergeJoin();
         LocalDate from = previousFrom.isBefore(currentFrom) ? previousFrom : currentFrom;
         LocalDate to = previousTo.isAfter(currentTo) ? previousTo : currentTo;
         BigDecimal previous = BigDecimal.ZERO;

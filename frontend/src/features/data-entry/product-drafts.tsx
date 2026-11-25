@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import {
@@ -12,7 +12,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { productFileExpected } from '@/features/agent-macros/api'
 import { ApiError, api } from '@/lib/api'
+import { onDraftsChanged, productFilesToast } from '@/lib/draft-events'
 import { useHiddenHint } from '@/lib/use-hidden-hint'
 
 import type { ProductFilePayload } from './api'
@@ -30,7 +32,8 @@ export const PRODUCT_DRAFT_PROMPT = 'product-draft-prompt'
 
 /**
  * Pytanie po zapisie plików CADBEZP z nowymi artykułami (sama zmiana artykułów z kartoteki o nic nie pyta), czy
- * wprowadzono je w programie sklepu. „Tak” zapisuje je jako szkice w bazie: kolejny raport kartoteki dopisze resztę
+ * wprowadzono je w programie sklepu. Plik, który wczytuje komputer sklepu (agent), o nic nie pyta: artykuły dodaje
+ * serwer, gdy makro się skończy (`use-live-events`). „Tak” zapisuje je jako szkice w bazie: kolejny raport kartoteki dopisze resztę
  * danych (ITM8, stan…), a artykuł, którego w nim nie będzie, usunie. Zwraca `ask` do wywołania po zapisie i okno do
  * wyrenderowania. Po dodaniu i po „Cofnij” odświeża zapytania, a `onChanged` dostaje EAN-y z plików, żeby tabela bez
  * zapytania o dokument (wprowadzanie danych) mogła zmienić swoje wiersze.
@@ -96,10 +99,40 @@ export function useProductDraftConfirm(storeId: string, onChanged?: (eans: strin
     }
   }
 
-  const ask = (saved: SavedProductFile[]) => {
+  // Artykuły dodane po wczytaniu na komputerze sklepu (albo cofnięte z powiadomienia): tabela sprawdza EAN-y od nowa.
+  const changedRef = useRef(onChanged)
+  useEffect(() => {
+    changedRef.current = onChanged
+  })
+  useEffect(
+    () =>
+      onDraftsChanged((changedStore, eans) => {
+        if (changedStore === storeId) changedRef.current?.(eans)
+      }),
+    [storeId],
+  )
+
+  const ask = async (saved: SavedProductFile[]) => {
     if (saved.length === 0) return
-    if (promptOff) void confirm(saved)
-    else setFiles(saved)
+    // Plik, który wczyta komputer sklepu, nie wymaga pytania: artykuły doda serwer po zakończeniu makra.
+    const expected = await Promise.all(
+      saved.map((file) =>
+        productFileExpected(storeId, file.fileName).then(
+          (result) => result.expected,
+          () => false,
+        ),
+      ),
+    )
+    const manual = saved.filter((_, index) => !expected[index])
+    if (manual.length < saved.length) {
+      toast.loading('Czekam, aż komputer sklepu wczyta nowe artykuły…', {
+        id: productFilesToast(storeId),
+        duration: 60_000,
+      })
+    }
+    if (manual.length === 0) return
+    if (promptOff) void confirm(manual)
+    else setFiles(manual)
   }
 
   const supplierCodes = [...new Set(files?.flatMap((file) => file.supplierCode ?? []) ?? [])]

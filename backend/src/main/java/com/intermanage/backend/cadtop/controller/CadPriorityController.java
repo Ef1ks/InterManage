@@ -7,6 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,13 +20,15 @@ import com.intermanage.backend.cadtop.service.CadPriorityService;
 import jakarta.validation.Valid;
 
 /**
- * ITM8 z cadencier do ustawienia jako priorytetowe (Zakupy).
+ * ITM8 z cadencier do ustawienia jako priorytetowe i aktywne (Zakupy). Makro na komputerze sklepu zleca
+ * {@code POST .../agent-macros/cad-priorities}.
  *
  * <pre>
  * GET  /api/stores/{storeId}/cadencier-priorities           lista artykułów ze stanem zlecenia
  * POST /api/stores/{storeId}/cadencier-priorities/macro     {items:[{itm8, topItm8}]} makro do Mercalys
  * POST /api/stores/{storeId}/cadencier-priorities/runs      to samo, ustawione ręcznie
  * POST /api/stores/{storeId}/cadencier-priorities/runs/undo|restore   {ids}
+ * PUT  /api/stores/{storeId}/cadencier-priorities/automatic {enabled} poprawianie po aktualizacji danych (EDIT)
  * </pre>
  */
 @RestController
@@ -34,6 +37,9 @@ public class CadPriorityController {
 
     private static final String VIEW =
             "hasAuthority('DATA_ENTRY:VIEW') and @storeAccess.canAccess(authentication, #storeId)";
+
+    private static final String EDIT =
+            "hasAuthority('DATA_ENTRY:EDIT') and @storeAccess.canAccess(authentication, #storeId)";
 
     private final CadPriorityService service;
 
@@ -45,6 +51,14 @@ public class CadPriorityController {
     @PreAuthorize(VIEW)
     public CadPriorityReport report(@PathVariable UUID storeId) {
         return service.report(storeId);
+    }
+
+    @PutMapping("/automatic")
+    @PreAuthorize(EDIT)
+    public CadPriorityReport automatic(@PathVariable UUID storeId,
+            @Valid @RequestBody CadPriorityRequest.Automatic request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.setAutomatic(storeId, request.enabled(), principal.getId());
     }
 
     @PostMapping("/macro")

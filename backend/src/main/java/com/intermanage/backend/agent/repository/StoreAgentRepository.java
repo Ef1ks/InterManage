@@ -88,6 +88,13 @@ public interface StoreAgentRepository extends JpaRepository<StoreAgent, UUID> {
                    or update_started_at < now() - interval '4 hours')""")
     int startUpdate(UUID storeId, UUID agentId);
 
+    /** Czy któryś komputer sklepu prowadzi teraz aktualizację danych z Mercalys. */
+    @Query(nativeQuery = true, value = """
+            select exists (select 1 from store_agent_leaders
+                           where store_id = :storeId and update_agent_id is not null
+                             and update_started_at >= now() - interval '4 hours')""")
+    boolean isUpdating(UUID storeId);
+
     @Modifying
     @Query(nativeQuery = true, value = """
             update store_agent_leaders set update_agent_id = null

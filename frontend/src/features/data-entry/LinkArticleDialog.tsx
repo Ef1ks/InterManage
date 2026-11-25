@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatPrice, formatQuantity } from '@/features/documents/format'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
+import { displayCode } from '@/features/sales/nomenclature-levels'
 import { ApiError } from '@/lib/api'
 import type { CorrectionDeliveryLine, DataEntryCatalogArticle, DataEntryCatalogProduct } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -203,13 +204,14 @@ function LinkContent({
                       {[line.brand, `EAN ${line.ean}`].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  {itm8 && <ArticleStatsButton article={{ itm8, name: line.name, ean: line.ean, brand: line.brand }} />}
                   <span className="text-right text-sm whitespace-nowrap tabular-nums">
                     {line.quantity !== null && formatQuantity(line.quantity)}
                     {line.purchasePrice !== null && ` × ${formatPrice(line.purchasePrice)} zł`}
                   </span>
+                  {itm8 && <ArticleStatsButton article={{ itm8, name: line.name, ean: line.ean, brand: line.brand }} />}
                   <Button
                     size="sm"
+                    className="w-22"
                     onClick={() => pick({ itm8, ean: line.articleEan ?? '' })}
                     loading={pending === itm8}
                     disabled={pending !== null && pending !== itm8}
@@ -239,12 +241,21 @@ function LinkContent({
               return (
                 <li key={item.itm8} className={cn('flex items-center gap-4 px-4 py-2.5', current && 'bg-muted/60')}>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{item.name}</span>
+                    <span className="flex items-baseline gap-2">
+                      <span className="truncate text-sm font-medium">{item.name}</span>
+                      {item.subfamilyCode && (
+                        <span
+                          className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                          title={item.subfamilyName ?? undefined}
+                        >
+                          {displayCode(item.subfamilyCode)}
+                        </span>
+                      )}
+                    </span>
                     <span className="block truncate text-xs text-muted-foreground tabular-nums">
                       {[item.brand, `EAN ${item.ean}`, item.supplier].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <ArticleStatsButton article={item} />
                   <span className="text-right text-xs text-muted-foreground tabular-nums">
                     {item.purchasePrice !== null && (
                       <span className="block text-sm text-foreground" title="Cena zakupu netto z kartoteki">
@@ -262,8 +273,11 @@ function LinkContent({
                       </span>
                     )}
                   </span>
+                  {/* Za liczbami, przy przycisku stałej szerokości: ikona stoi w każdym wierszu w tym samym miejscu. */}
+                  <ArticleStatsButton article={item} />
                   <Button
                     size="sm"
+                    className="w-22"
                     variant={current ? 'outline' : 'default'}
                     onClick={() => pick(item)}
                     loading={pending === item.itm8}

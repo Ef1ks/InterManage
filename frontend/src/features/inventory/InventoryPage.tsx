@@ -1,6 +1,6 @@
 import { ArrowLeftIcon, PackageSearchIcon, SlidersHorizontalIcon } from 'lucide-react'
-import { type ClipboardEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { type ClipboardEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
@@ -59,6 +59,15 @@ function StoreInventory({ store }: { store: StoreSummary }) {
   const filters = readFilters(params)
   const overview = useSalesReportsOverview(store.id)
   const jumped = useRef(false)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const location = useLocation()
+
+  // Wejście z lupy w menu bocznym: kursor od razu w wyszukiwarce. Klucz wpisu historii, żeby działało też kolejne
+  // kliknięcie lupy na tej samej stronie; zmiany filtrów zastępują adres bez tego stanu.
+  const focusSearch = (location.state as { focusSearch?: boolean } | null)?.focusSearch === true
+  useEffect(() => {
+    if (focusSearch) searchInput.current?.focus({ preventScroll: true })
+  }, [focusSearch, location.key])
 
   // Po przejściu z pola kodu nowa karta zaczyna się od góry. W efekcie, bo ScrollRestoration przywraca pozycję
   // po każdej zmianie adresu na tej samej ścieżce.
@@ -98,6 +107,7 @@ function StoreInventory({ store }: { store: StoreSummary }) {
           query={query}
           debouncedQuery={debouncedQuery}
           onQueryChange={setQuery}
+          inputRef={searchInput}
           filters={filters}
           onFiltersChange={(next) => setParams((current) => writeFilters(current, next), { replace: true })}
           selected={selected}
@@ -251,6 +261,7 @@ function ProductList({
   query,
   debouncedQuery,
   onQueryChange,
+  inputRef,
   filters,
   onFiltersChange,
   selected,
@@ -261,6 +272,7 @@ function ProductList({
   query: string
   debouncedQuery: string
   onQueryChange: (value: string) => void
+  inputRef: RefObject<HTMLInputElement | null>
   filters: ProductFilters
   onFiltersChange: (filters: ProductFilters) => void
   selected: string | null
@@ -319,6 +331,7 @@ function ProductList({
             className="min-w-0 flex-1"
             value={query}
             onChange={onQueryChange}
+            inputRef={inputRef}
             placeholder="Szukaj: nazwa, marka, EAN, ITM8"
           />
           <Button

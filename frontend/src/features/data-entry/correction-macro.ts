@@ -2,6 +2,7 @@ import type { CorrectionDeliveryLine } from '@/lib/types'
 
 import {
   correctionArticleLines,
+  correctionLossLine,
   correctionBonLine,
   correctionFinishLines,
   correctionStartLines,
@@ -27,6 +28,8 @@ export const CORRECTION_MACRO_CONFIG = {
   afterEan: 800,
   /** Krócej niż 300 ms program nie nadąża między ilością a ceną. */
   afterQuantity: 300,
+  /** Pytanie o sprzedaż ze stratą pojawia się od razu po zapisie ceny. */
+  lossDialog: 200,
   /** Po ostatnim Enterze program zapisuje pozycję: przy krótszej przerwie nie nadążał z kolejnym numerem bonu. */
   afterPrice: 1000,
   /** Program sklepu dostaje cenę z taką liczbą miejsc po przecinku. */
@@ -379,7 +382,11 @@ export function buildCorrectionMacro(
         },
         { load: c.load, afterEan: c.afterEan, afterQuantity: c.afterQuantity },
       ),
-      `SLEEP|${c.afterPrice}`,
+      correctionLossLine(c.lossDialog),
+      // Przerwa w dwóch częściach: spóźnione pytanie o stratę zamyka się w połowie, bez wydłużania makra.
+      `SLEEP|${c.afterPrice / 2}`,
+      correctionLossLine(0),
+      `SLEEP|${c.afterPrice / 2}`,
     )
   }
   out.push(...correctionFinishLines(bonNumbers, items.length))

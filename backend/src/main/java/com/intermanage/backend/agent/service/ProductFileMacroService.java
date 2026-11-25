@@ -1,9 +1,13 @@
 package com.intermanage.backend.agent.service;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -13,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -46,6 +51,8 @@ public class ProductFileMacroService {
     private static final Logger log = LoggerFactory.getLogger(ProductFileMacroService.class);
     /** Dłużej czekający plik ktoś zwykle wczytał już ręcznie (najdłuższe makro, kody MEA, trwa do 6 godzin). */
     static final Duration MAX_WAIT = Duration.ofHours(7);
+    /** „Przed chwilą zapisany plik” w pytaniu przeglądarki ({@link #expected}). */
+    private static final Duration RECENT = Duration.ofMinutes(5);
 
     private final AgentMacroService macros;
     private final AgentMacroJobRepository jobs;
@@ -102,9 +109,19 @@ public class ProductFileMacroService {
         }
     }
 
-    /** Koniec innego makra sklepu: pliki zapisane w jego trakcie. */
+    /** Koniec makra sklepu: artykuły z plików, które wczytało, i pliki zapisane w jego trakcie. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void afterMacro(AgentMacroService.MacroEnded event) {
+        if (event.kind() == AgentMacroKind.PRODUCT_FILES && event.status() == AgentMacroStatus.DONE) {
+            Thread.ofVirtual().name("product-file-drafts-" + event.storeId()).start(() -> {
+                try {
+                    transaction.executeWithoutResult(status -> addDrafts(event.storeId(), event.jobId()));
+                } catch (RuntimeException e) {
+                    log.warn("Nie udało się dodać do bazy artykułów wczytanych na komputerze sklepu {}",
+                            event.storeId(), e);
+                }
+            });
+        }
         if (enabled) {
             later(event.storeId());
         }
@@ -133,18 +150,67 @@ public class ProductFileMacroService {
         run(storeId, files, files.getLast().getCreatedBy());
     }
 
+    /**
+     * Czy plik zapisany przed chwilą wczyta komputer sklepu: wtedy nikogo nie trzeba pytać o nowe artykuły, bo doda je
+     * koniec makra ({@link #addDrafts}). Plik, którego agent jeszcze nie zapisał, liczy się, gdy agent jest online.
+     */
+    @Transactional(readOnly = true)
+    public boolean expected(UUID storeId, String fileName) {
+        if (!enabled || !agents.enabled(storeId) || !macros.anyPlayer(storeId, ProductFileMacro.PLAYER_MINOR)) {
+            return false;
+        }
+        StoreFileQueueItem item = queue.findFirstByStoreIdAndFolderKeyAndFileNameOrderByCreatedAtDesc(storeId,
+                DefaultFolders.PRODUCT_FILE, fileName).orElse(null);
+        if (item == null || item.getRemovedAt() != null || item.getCreatedAt().isBefore(Instant.now().minus(RECENT))) {
+            return false;
+        }
+        if (item.getSavedAt() != null) {
+            return queue.countMacroRequested(item.getId()) > 0;
+        }
+        return agents.status(storeId).active() && productFiles.exported(storeId, fileName, item.getContent())
+                .filter(export -> ProductFileMacro.supplierCode(export.getSupplierCode()) != null).isPresent();
+    }
+
+    /** Makro się nie udało, a pliki wczytał człowiek: artykuły dodaje tak samo jak udane makro. */
+    public void loadedByHand(UUID storeId, UUID jobId) {
+        transaction.executeWithoutResult(status -> {
+            unfinished(storeId, jobId);
+            addDrafts(storeId, jobId);
+        });
+    }
+
+    private AgentMacroJob unfinished(UUID storeId, UUID jobId) {
+        AgentMacroJob job = jobs.findByIdAndStoreId(jobId, storeId)
+                .filter(found -> found.getKind() == AgentMacroKind.PRODUCT_FILES)
+                .orElseThrow(() -> ApiException.notFound("Nie znaleziono makra"));
+        if (job.getStatus() == AgentMacroStatus.OFFERED || job.getStatus() == AgentMacroStatus.RUNNING
+                || job.getStatus() == AgentMacroStatus.DONE || queue.findMacroFiles(jobId).isEmpty()) {
+            throw ApiException.conflict("Te pliki są już wczytane albo wczytuje je inne makro");
+        }
+        return job;
+    }
+
+    /** Nowe artykuły z plików makra zostają szkicami do kolejnego raportu kartoteki (jak „Tak” w przeglądarce). */
+    private void addDrafts(UUID storeId, UUID jobId) {
+        AgentMacroJob job = jobs.findByIdAndStoreId(jobId, storeId).orElseThrow();
+        Map<String, UUID> latest = new LinkedHashMap<>();
+        queue.findMacroFiles(jobId).forEach(file -> latest.put(file.getFileName(), file.getExportId()));
+        List<UUID> created = new ArrayList<>();
+        Set<String> eans = new LinkedHashSet<>();
+        for (ProductFileExport export : productFiles.exported(latest.values())) {
+            productFiles.confirm(storeId, export, job.getCreatedBy().getId())
+                    .ifPresent(result -> created.addAll(result.createdIds()));
+            export.getArticles().forEach(article -> eans.add(article.split(";", 2)[0]));
+        }
+        live.publish(storeId, "agent-macro", Map.of("id", jobId, "kind", AgentMacroKind.PRODUCT_FILES.name(),
+                "status", "DRAFTS", "userId", job.getCreatedBy().getId(), "draftIds", created, "eans", eans));
+    }
+
     /** Ponowne wczytanie plików makra, które nie doszło do końca (np. żaden komputer nie był wolny). */
     public AgentMacroApi.Job retry(UUID storeId, UUID jobId, UUID userId) {
         return transaction.execute(status -> {
-            AgentMacroJob job = jobs.findByIdAndStoreId(jobId, storeId)
-                    .filter(found -> found.getKind() == AgentMacroKind.PRODUCT_FILES)
-                    .orElseThrow(() -> ApiException.notFound("Nie znaleziono makra"));
-            List<StoreFileQueueRepository.MacroFile> files = queue.findMacroFiles(jobId);
-            if (files.isEmpty() || job.getStatus() == AgentMacroStatus.OFFERED
-                    || job.getStatus() == AgentMacroStatus.RUNNING || job.getStatus() == AgentMacroStatus.DONE) {
-                throw ApiException.conflict("Te pliki są już wczytane albo wczytuje je inne makro");
-            }
-            return run(storeId, files, userId);
+            unfinished(storeId, jobId);
+            return run(storeId, queue.findMacroFiles(jobId), userId);
         });
     }
 

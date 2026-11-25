@@ -41,6 +41,12 @@ public final class ReportSaveMacro {
     private static final int TABLE_TIMEOUT_MS = 1_800_000;
     private static final int DOCUMENTS_OVERLAP_DAYS = 2;
 
+    /**
+     * Ile razy odtwarzacz (od 0.69) próbuje zapisać jeden plik, zanim przejdzie do następnego. Linie {@code #PART},
+     * {@code #ALT} (kroki ponowienia) i {@code #ENDPARTS} są komentarzami dla starszego odtwarzacza.
+     */
+    private static final int PART_ATTEMPTS = 3;
+
     /** Raporty z makrem, w kolejności odświeżania. */
     public static final List<ImportReportKind> MACRO_REPORTS = List.of(ImportReportKind.PRODUCTS,
             ImportReportKind.PRODUCT_CODES, ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER,
@@ -121,12 +127,11 @@ public final class ReportSaveMacro {
             for (int part = 0; part < parts.size(); part++) {
                 Period period = parts.get(part);
                 String emptyLabel = "pusty-" + (index + 1) + "-" + (part + 1);
-                List<String> steps = openSteps(kind, settings, period, emptyLabel, part > 0, today);
+                boolean continuing = part > 0;
+                List<String> steps = new ArrayList<>(openSteps(kind, settings, period, emptyLabel, continuing, today));
                 String partLabel = parts.size() > 1 && period != null
                         ? ", część " + (part + 1) + " z " + parts.size() + ": " + period.from() + " - " + period.to()
                         : "";
-                lines.add("# " + title + step + partLabel);
-                lines.addAll(steps);
                 String path = partPath(settings.path().strip(), part + 1, parts.size());
                 files.add(new SavedFile(kind, path, path.substring(path.lastIndexOf('\\') + 1)));
                 int wait = switch (kind) {
@@ -134,12 +139,22 @@ public final class ReportSaveMacro {
                     case DOCUMENTS -> DOCUMENTS_EXCEL_WAIT_MS;
                     default -> LONG_EXCEL_WAIT_MS;
                 };
-                lines.add((kind == ImportReportKind.PROMOTIONS ? "PDFSAVE|" : "EXCELSAVE|") + path + "|" + wait);
+                List<String> save = new ArrayList<>();
+                save.add((kind == ImportReportKind.PROMOTIONS ? "PDFSAVE|" : "EXCELSAVE|") + path + "|" + wait);
                 if (kind == ImportReportKind.SALES) {
-                    lines.add("LABEL|" + emptyLabel);
+                    save.add("LABEL|" + emptyLabel);
+                }
+                lines.add("#PART|" + PART_ATTEMPTS + "|" + title + step + partLabel);
+                lines.addAll(steps);
+                lines.addAll(save);
+                if (kind == ImportReportKind.DOCUMENTS && continuing) {
+                    // Po błędzie formularz nie stoi już na poprzedniej części: ponowienie otwiera go z menu od nowa.
+                    openSteps(kind, settings, period, emptyLabel, false, today).forEach(line -> lines.add("#ALT|" + line));
+                    save.forEach(line -> lines.add("#ALT|" + line));
                 }
             }
         }
+        lines.add("#ENDPARTS");
         lines.add("WINMIN|" + PROGRAM_WINDOW);
         return new Result(String.join("\r\n", lines) + "\r\n", List.copyOf(ready), List.copyOf(skipped),
                 List.copyOf(files), version);

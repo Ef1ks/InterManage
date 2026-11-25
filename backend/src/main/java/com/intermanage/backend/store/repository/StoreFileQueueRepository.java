@@ -2,6 +2,7 @@ package com.intermanage.backend.store.repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -206,6 +207,13 @@ public interface StoreFileQueueRepository extends JpaRepository<StoreFileQueueIt
             order by q.macro_requested_at, q.id
             for update""")
     List<MacroFile> findMacroFiles(UUID jobId);
+
+    Optional<StoreFileQueueItem> findFirstByStoreIdAndFolderKeyAndFileNameOrderByCreatedAtDesc(UUID storeId,
+            String folderKey, String fileName);
+
+    @Query(nativeQuery = true, value = """
+            select count(*) from store_file_queue where id = :id and macro_requested_at is not null""")
+    long countMacroRequested(UUID id);
 
     @Modifying
     @Query(nativeQuery = true, value = "update store_file_queue set macro_job_id = :jobId where id in (:ids)")

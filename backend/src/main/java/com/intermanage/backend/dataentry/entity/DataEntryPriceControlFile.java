@@ -1,5 +1,6 @@
 package com.intermanage.backend.dataentry.entity;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -23,6 +24,9 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "data_entry_price_control_files")
 public class DataEntryPriceControlFile {
+
+    /** Tyle najwyżej zmiana cen czeka na komputer sklepu (noc, niedziela); starszą ktoś wprowadza ręcznie. */
+    public static final Duration MACRO_WAIT = Duration.ofHours(24);
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
@@ -84,6 +88,16 @@ public class DataEntryPriceControlFile {
     @JoinColumn(name = "deleted_by")
     private AppUser deletedBy;
 
+    /** Plik pojawił się w folderze sklepu: zmianę wprowadzi makro (do tego czasu {@code macroJobId} jest puste). */
+    @Column(name = "macro_requested_at")
+    private Instant macroRequestedAt;
+
+    @Column(name = "macro_job_id")
+    private UUID macroJobId;
+
+    @Column(name = "macro_retry_at")
+    private Instant macroRetryAt;
+
     protected DataEntryPriceControlFile() {
     }
 
@@ -129,6 +143,29 @@ public class DataEntryPriceControlFile {
     /** Ponowny zapis pod nową nazwą (z bieżącą godziną): folder sprawdza już tę nazwę. */
     public void rename(String newName) {
         fileName = newName;
+        macroRequestedAt = null;
+        macroJobId = null;
+        macroRetryAt = null;
+    }
+
+    /** Plik pojawił się w folderze; wczytany, usunięty albo już zlecony zostaje bez zmian. */
+    public void requestMacro() {
+        if (macroRequestedAt == null && loadedAt == null && deletedAt == null) {
+            macroRequestedAt = Instant.now();
+        }
+    }
+
+    public void assignMacro(UUID jobId) {
+        macroJobId = jobId;
+        macroRetryAt = null;
+    }
+
+    /** Nikt nie podjął makra („Anuluj”, ktoś pracuje): zmiana znów czeka, nie wcześniej niż {@code retryAt}. */
+    public void putOffMacro(Instant retryAt) {
+        if (loadedAt == null && deletedAt == null) {
+            macroJobId = null;
+            macroRetryAt = retryAt;
+        }
     }
 
     public void markLoaded(AppUser by) {
@@ -169,6 +206,18 @@ public class DataEntryPriceControlFile {
 
     public String getSupplierCode() {
         return supplierCode;
+    }
+
+    public String getSupplierName() {
+        return supplierName;
+    }
+
+    public String getInvoiceNumber() {
+        return invoiceNumber;
+    }
+
+    public AppUser getCreatedBy() {
+        return createdBy;
     }
 
     public String getFileName() {

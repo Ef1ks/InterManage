@@ -37,6 +37,8 @@ import com.intermanage.backend.supplier.entity.Supplier;
 import com.intermanage.backend.supplier.repository.MercalysSupplierCreationRepository;
 import com.intermanage.backend.supplier.repository.SupplierRepository;
 
+import tools.jackson.databind.json.JsonMapper;
+
 /**
  * Plik nowych i zmienionych artykułów (CADBEZP) przy zapisie pliku XML faktury; przeglądarka zapisuje go w folderze
  * z ustawień sklepu. Sam plik niczego nie zapisuje w bazie: dopiero gdy pracownik potwierdzi, że program sklepu go
@@ -57,10 +59,12 @@ public class DataEntryProductFileService {
 
     private final ProductFileExportRepository exports;
     private final MercalysSupplierCreationRepository creations;
+    private final JsonMapper json;
 
     public DataEntryProductFileService(XlsWriter xlsWriter, SupplierRepository suppliers,
             ProductDraftRepository drafts, StoreRepository stores, AppUserRepository users,
-            ProductFileExportRepository exports, MercalysSupplierCreationRepository creations) {
+            ProductFileExportRepository exports, MercalysSupplierCreationRepository creations, JsonMapper json) {
+        this.json = json;
         this.exports = exports;
         this.creations = creations;
         this.xlsWriter = xlsWriter;
@@ -75,7 +79,7 @@ public class DataEntryProductFileService {
         byte[] content = xlsWriter.write("Arkusz1", ProductFile.HEADERS, ProductFile.rows(request.rows()));
         String fileName = ProductFile.fileName(supplierName(storeId, request), request.invoiceNumber());
         exports.save(new ProductFileExport(storeId, fileName, sha256(content), supplierCode(storeId, request),
-                ProductFile.articles(request.rows())));
+                ProductFile.articles(request.rows()), json.writeValueAsString(request)));
         return new DataEntryService.ExportFile(fileName, content);
     }
 
@@ -173,6 +177,13 @@ public class DataEntryProductFileService {
                 text(file.invoiceNumber()), request.fileName().strip(), previous.get(ean), user)));
         drafts.saveAll(created);
         return new ProductDraftResult(created.stream().map(ProductDraft::getId).toList(), known.size(), withoutEan);
+    }
+
+    /** To samo dla wydanego pliku, który wczytało makro: bez pytania pracownika. Pusto w plikach sprzed V192. */
+    @Transactional
+    public Optional<ProductDraftResult> confirm(UUID storeId, ProductFileExport export, UUID userId) {
+        return export.getRequest() == null ? Optional.empty() : Optional.of(confirm(storeId, new ProductDraftRequest(
+                export.getFileName(), json.readValue(export.getRequest(), ProductFileRequest.class)), userId));
     }
 
     /** „Cofnij” potwierdzenia: szkice dostają znacznik, a szkice, które zastąpiły, wracają do oczekujących. */

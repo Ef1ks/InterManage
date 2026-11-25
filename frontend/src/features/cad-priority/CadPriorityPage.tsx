@@ -1,10 +1,10 @@
-import { ArrowRightIcon, CheckIcon, PlayIcon, TriangleAlertIcon, Undo2Icon } from 'lucide-react'
+import { ArrowRightIcon, CheckIcon, ClipboardCopyIcon, TriangleAlertIcon, Undo2Icon } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { CopyButton } from '@/components/CopyButton'
-import { SegmentedField } from '@/components/form'
+import { SegmentedField, SwitchField } from '@/components/form'
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { HowTo } from '@/components/HowTo'
 import { LoadingPanel } from '@/components/LoadingPanel'
@@ -15,6 +15,9 @@ import { SortableHead } from '@/components/SortableHead'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useAgentComputers } from '@/features/agent-macros/api'
+import { RemoteMacroButton, RemoteMacroStatus, useRemoteMacro } from '@/features/agent-macros/RemoteMacro'
+import { useCan } from '@/features/auth/api'
 import { countFormat, formatDocumentDate, formatMoney, formatPrice, formatQuantity } from '@/features/documents/format'
 import { ArticleStatsButton } from '@/features/sales/ArticleStatsButton'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
@@ -26,9 +29,16 @@ import type { CadPriorityItem, CadPriorityReport, StoreSummary } from '@/lib/typ
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
 
-import { useCadPriorities, useRunCadPriorities, useUndoCadPriorities } from './api'
+import {
+  useAutomaticCadPriorities,
+  useCadPriorities,
+  useRefreshCadPriorities,
+  useRunCadPriorities,
+  useUndoCadPriorities,
+} from './api'
 
 type View = 'todo' | 'waiting'
+type TaskFilter = 'all' | 'priority' | 'active'
 type SortKey = 'name' | 'itm8' | 'topItm8' | 'stock' | 'topSale'
 
 const SORT: SortAccessors<CadPriorityItem, SortKey> = {
@@ -41,15 +51,28 @@ const SORT: SortAccessors<CadPriorityItem, SortKey> = {
 
 const shortItm8 = (itm8: string) => itm8.replace(/^0+(?=\d)/, '')
 const pill = 'inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap'
-/** Nieaktywną kartę i kartę z kilkoma ITM8 do wyboru zaznacza człowiek. */
-const selectedByDefault = (item: CadPriorityItem) => item.active && item.alternatives.length === 0
+/** Kartę z kilkoma ITM8 do wyboru i pominiętą przez makro zaznacza człowiek. */
+const selectedByDefault = (item: CadPriorityItem) => item.alternatives.length === 0 && !item.run?.failure
+
+const TASKS: Record<CadPriorityItem['task'], { label: string; className: string }> = {
+  PRIORITY: {
+    label: 'ustaw priorytet',
+    className: 'bg-indigo-200 text-indigo-950 dark:bg-indigo-900/70 dark:text-indigo-100',
+  },
+  ACTIVE: { label: 'aktywuj', className: 'bg-teal-200 text-teal-950 dark:bg-teal-900/70 dark:text-teal-100' },
+  PRIORITY_AND_ACTIVE: {
+    label: 'ustaw priorytet i aktywuj',
+    className: 'bg-fuchsia-200 text-fuchsia-950 dark:bg-fuchsia-900/70 dark:text-fuchsia-100',
+  },
+}
 
 const errorText = (error: unknown) => (error instanceof ApiError ? error.message : 'Brak połączenia z serwerem')
 
 /**
  * Artykuły, w których ITM8 z obowiązującego cadencier nie jest priorytetowy, choć ich EAN jest w kartotece sklepu
- * (zwykle pod lokalnym ITM8). Ustawia się je makrem w Mercalys albo ręcznie, a wynik widać w następnym raporcie
- * kartoteki: ustawiony artykuł znika, nieustawiony wraca z ostrzeżeniem.
+ * (zwykle pod lokalnym ITM8), albo jest priorytetowy, ale nieaktywny. Poprawia je makro w Mercalys (tu albo na
+ * komputerze sklepu, także samo po aktualizacji danych) albo człowiek, a wynik widać w następnym raporcie kartoteki:
+ * ustawiony artykuł znika, nieustawiony wraca z ostrzeżeniem.
  */
 export function CadPriorityPage() {
   const store = useCurrentStore()
@@ -75,9 +98,10 @@ function StorePriorities({ store }: { store: StoreSummary }) {
         className="mb-4"
         title="Jak ustawić ITM8 z cadencier"
         steps={[
-          'Lista pokazuje artykuły z obowiązującego cadencier, których EAN jest w kartotece sklepu, ale priorytetowy jest inny ITM8.',
-          'Zaznacz artykuły i kliknij „Wykonaj makro”: makro ustawia w Mercalys ITM8 z cadencier jako priorytetowy.',
+          'Lista pokazuje artykuły z obowiązującego cadencier, w których priorytetowy jest inny ITM8 albo ITM8 z cadencier jest nieaktywny.',
+          'Zaznacz artykuły i wybierz „Wykonaj na wolnym komputerze” albo „Makro do Mercalys” (Alt+E na tym komputerze). Makro zaznacza na karcie Priorytetowy i Aktywny.',
           'Artykuły przechodzą do „Czekają na raport”. Po wgraniu nowej bazy danych ustawione znikają, a nieustawione wracają na listę.',
+          'Z włączonym „Poprawiaj po aktualizacji danych” robi to codziennie sam komputer sklepu.',
         ]}
       />
       {report.isError ? (
@@ -103,6 +127,12 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
   const [sort, setSort] = useState<SortState<SortKey>>({ key: 'name', direction: 'asc' })
   const [checks, setChecks] = useState<Map<string, boolean>>(new Map())
   const [choices, setChoices] = useState<Map<string, string>>(new Map())
+  const [task, setTask] = useState<TaskFilter>('all')
+  const canEdit = useCan('DATA_ENTRY', 'EDIT')
+  const { data: computers = [] } = useAgentComputers(storeId, canEdit)
+  const remote = useRemoteMacro(storeId)
+  const refresh = useRefreshCadPriorities(storeId)
+  const automatic = useAutomaticCadPriorities(storeId)
   const run = useRunCadPriorities(storeId)
   const undo = useUndoCadPriorities(storeId)
 
@@ -111,26 +141,28 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
   const shown = useMemo(
     () =>
       sortRows(
-        (view === 'todo' ? todo : waiting).filter((item) =>
-          matchesSearch(
-            [
-              item.name,
-              item.brand,
-              item.ean,
-              item.itm8,
-              item.topItm8,
-              item.topName,
-              item.topEan,
-              item.supplier,
-              ...item.alternatives.map((alternative) => alternative.itm8),
-            ],
-            query,
-          ),
+        (view === 'todo' ? todo : waiting).filter(
+          (item) =>
+            (task === 'all' || (task === 'active') === (item.task === 'ACTIVE')) &&
+            matchesSearch(
+              [
+                item.name,
+                item.brand,
+                item.ean,
+                item.itm8,
+                item.topItm8,
+                item.topName,
+                item.topEan,
+                item.supplier,
+                ...item.alternatives.map((alternative) => alternative.itm8),
+              ],
+              query,
+            ),
         ),
         SORT,
         sort,
       ),
-    [view, todo, waiting, query, sort],
+    [view, todo, waiting, task, query, sort],
   )
   const isChecked = (item: CadPriorityItem) => checks.get(item.itm8) ?? selectedByDefault(item)
   const check = (items: CadPriorityItem[], value: boolean) =>
@@ -158,12 +190,26 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
     toast.error(errorText(error))
   }
 
+  const chosenItems = () => chosen.map((item) => ({ itm8: item.itm8, topItm8: choices.get(item.itm8) ?? item.topItm8 }))
+
+  const startRemotely = async (agentId?: string) => {
+    await remote.run({ macro: 'cad-priorities', items: chosenItems(), agentId })
+    // Wynik artykułów serwer zapisuje tuż po makrze; potem i tak przyjdzie wiadomość na żywo.
+    await refresh()
+  }
+
+  const switchAutomatic = (enabled: boolean) =>
+    automatic.mutate(enabled, {
+      onSuccess: () =>
+        toast.success(
+          enabled ? 'Włączono poprawianie po aktualizacji danych' : 'Wyłączono poprawianie po aktualizacji',
+        ),
+      onError,
+    })
+
   const start = async (macro: boolean) => {
     try {
-      const result = await run.mutateAsync({
-        macro,
-        items: chosen.map((item) => ({ itm8: item.itm8, topItm8: choices.get(item.itm8) ?? item.topItm8 })),
-      })
+      const result = await run.mutateAsync({ macro, items: chosenItems() })
       const undoAction = {
         label: 'Cofnij',
         onClick: () => undoRuns(result.runIds, 'Artykuły wróciły do ustawienia'),
@@ -212,12 +258,23 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
         <span>
           Cadencier <span className="font-medium text-foreground">{report.nrCad}</span>
           {report.from && ` od ${formatDocumentDate(report.from)}`}: {countFormat.format(report.topCount)} artykułów,{' '}
-          {countFormat.format(report.setCount)} z priorytetowym ITM8
+          {countFormat.format(report.setCount)} z priorytetowym i aktywnym ITM8
           {report.variantCount > 0 && `, ${report.variantCount} ma inny ITM8 z tego cadencier (np. paletowy)`}
           {report.absentCount > 0 && `, ${countFormat.format(report.absentCount)} poza kartoteką sklepu`}
         </span>
         <ReportFreshness generatedAt={report.catalogGeneratedAt} />
       </div>
+
+      {canEdit && (
+        <SwitchField
+          className="mb-3 bg-card"
+          label="Poprawiaj po aktualizacji danych"
+          description="Codziennie po wgraniu nowej bazy danych preferowany komputer sklepu sam poprawia priorytet i aktywność. Artykuły z kilkoma ITM8 do wyboru czekają na Twój wybór."
+          checked={report.automatic}
+          onCheckedChange={switchAutomatic}
+          disabled={automatic.isPending}
+        />
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <SegmentedField<View>
@@ -239,6 +296,16 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
             { value: 'waiting', label: `Czekają na raport (${waiting.length})` },
           ]}
         />
+        <SegmentedField<TaskFilter>
+          label="Do zrobienia"
+          value={task}
+          onChange={setTask}
+          options={[
+            { value: 'all', label: 'Wszystko' },
+            { value: 'priority', label: 'Priorytet' },
+            { value: 'active', label: 'Tylko aktywność' },
+          ]}
+        />
         <div className="min-w-64 flex-1">
           <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: nazwa, EAN, ITM8, marka, dostawca" />
         </div>
@@ -254,32 +321,40 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
               Ustawione ręcznie ({chosen.length})
             </Button>
             <Button
-              disabled={!report.macroReady || chosen.length === 0}
+              variant="outline"
+              disabled={chosen.length === 0 || remote.busy}
               loading={run.isPending}
-              title={report.macroReady ? undefined : 'Makro czeka na kroki w Mercalys'}
+              title="Makro do schowka: lewy Alt+E uruchamia je w Mercalys na tym komputerze"
               onClick={() => void start(true)}
             >
-              <PlayIcon />
-              Wykonaj makro ({chosen.length})
+              <ClipboardCopyIcon />
+              Makro do Mercalys ({chosen.length})
             </Button>
+            {canEdit && computers.length > 0 && (
+              <RemoteMacroButton
+                computers={computers}
+                label={`Wykonaj na wolnym komputerze (${chosen.length})`}
+                busy={remote.busy}
+                disabled={chosen.length === 0 || remote.busy}
+                onRun={(agentId) => void startRemotely(agentId)}
+              />
+            )}
           </div>
         )}
       </div>
-      {view === 'todo' && !report.macroReady && (
-        <p className="mb-3 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
-          <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
-          „Wykonaj makro” włączy się, gdy dojdą kroki w Mercalys. Do tego czasu ustaw ITM8 w Mercalys i kliknij
-          „Ustawione ręcznie”.
-        </p>
+      {remote.job && (
+        <div className="mb-3">
+          <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />
+        </div>
       )}
 
       {shown.length === 0 ? (
         <Card className="items-center gap-1 px-6 py-10 text-center">
           <p className="font-medium">
-            {query
-              ? 'Brak artykułów dla tego wyszukiwania'
+            {query || task !== 'all'
+              ? 'Brak artykułów dla tych filtrów'
               : view === 'todo'
-                ? 'Wszystkie ITM8 z cadencier są priorytetowe'
+                ? 'Wszystkie ITM8 z cadencier są priorytetowe i aktywne'
                 : 'Nic nie czeka na raport kartoteki'}
           </p>
         </Card>
@@ -443,14 +518,14 @@ function PriorityRow({
           <WaitingRun item={item} onUndo={onUndo} />
         ) : (
           <span className="flex flex-wrap gap-1">
+            <span className={cn(pill, TASKS[item.task].className)}>{TASKS[item.task].label}</span>
             {item.status === 'FAILED' && item.run && (
-              <span className={cn(pill, 'bg-red-200 text-red-950 dark:bg-red-900/70 dark:text-red-100')}>
-                nieustawione po zleceniu z {dateTime(item.run.createdAt)}
-              </span>
-            )}
-            {!item.active && (
-              <span className={cn(pill, 'bg-stone-200 text-stone-900 dark:bg-stone-800 dark:text-stone-100')}>
-                karta nieaktywna
+              <span
+                className={cn(pill, 'bg-red-200 whitespace-normal text-red-950 dark:bg-red-900/70 dark:text-red-100')}
+              >
+                {item.run.failure
+                  ? `makro pominęło ${dateTime(item.run.createdAt)}: ${item.run.failure}`
+                  : `nieustawione po zleceniu z ${dateTime(item.run.createdAt)}`}
               </span>
             )}
             {options.length > 1 && (
@@ -458,7 +533,7 @@ function PriorityRow({
                 {options.length} ITM8 z tym EAN-em: wybierz
               </span>
             )}
-            {item.topKnown && (
+            {item.topKnown && item.task !== 'ACTIVE' && (
               <span
                 className={cn(pill, 'bg-sky-200 text-sky-950 dark:bg-sky-900/70 dark:text-sky-100')}
                 title="Ten ITM8 był już w kartotece sklepu, ale nie ma go w ostatnim raporcie"
@@ -483,7 +558,7 @@ function WaitingRun({ item, onUndo }: { item: CadPriorityItem; onUndo: () => voi
   return (
     <span className="flex items-center gap-2 text-sm">
       <span>
-        {item.run.macro ? 'makro' : 'ręcznie'} {dateTime(item.run.createdAt)}
+        {RUN_LABELS[item.run.source]} {dateTime(item.run.createdAt)}
         {item.run.createdBy && <span className="block text-xs text-muted-foreground">{item.run.createdBy}</span>}
       </span>
       <Button variant="ghost" size="sm" className="ml-auto" onClick={onUndo}>
@@ -493,6 +568,8 @@ function WaitingRun({ item, onUndo }: { item: CadPriorityItem; onUndo: () => voi
     </span>
   )
 }
+
+const RUN_LABELS = { MACRO: 'makro', MANUAL: 'ręcznie', AGENT: 'po aktualizacji danych' } as const
 
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString('pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
