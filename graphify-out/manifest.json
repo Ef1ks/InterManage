@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795606038.7273998,
-    "seen": 1795606232.9782672,
-    "ast_hash": "e8c4ca2304ed81d1cec1f5cf87993056",
+    "mtime": 1795608046.211537,
+    "seen": 1795608183.4136665,
+    "ast_hash": "b0342497bcec70a2f85d54b70166114c",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -4446,9 +4446,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/DataEntryPage.tsx": {
-    "mtime": 1795603451.397616,
-    "seen": 1795603656.7971027,
-    "ast_hash": "ddd5a6a08e91c948831a0be2af0a3625",
+    "mtime": 1795607518.6774385,
+    "seen": 1795607608.5265932,
+    "ast_hash": "2f89ac0034f2451cbdbd4030f17d0e73",
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/GridPickers.tsx": {
@@ -4620,9 +4620,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/duplicates.ts": {
-    "mtime": 1794774259.7179685,
-    "seen": 1794804560.0741324,
-    "ast_hash": "5f65cfd9e1266b856c830d52668fae8b",
+    "mtime": 1795607519.1854596,
+    "seen": 1795607608.5306172,
+    "ast_hash": "a49c4aa4cc0031a304f0ada8c2d56781",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/ProtoFile.java": {
@@ -14796,9 +14796,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/component/CadPriorityMacro.java": {
-    "mtime": 1795601979.1181884,
-    "seen": 1795602288.9266298,
-    "ast_hash": "090229d10e9a156aaab50bd175c66523",
+    "mtime": 1795608046.209538,
+    "seen": 1795608183.0850286,
+    "ast_hash": "c879f7c623b5af071f3f119cfaab668a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/controller/CadPriorityController.java": {
@@ -15024,9 +15024,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/CadPriorityMacroTests.java": {
-    "mtime": 1795602164.909896,
-    "seen": 1795602289.1269555,
-    "ast_hash": "00d9fda78f54ac488e36cef20a874558",
+    "mtime": 1795608046.209538,
+    "seen": 1795608183.2900157,
+    "ast_hash": "412354d94647bac02cceed9badc69fe7",
     "semantic_hash": ""
   },
   "agent/src/MacroPlayback.cs": {

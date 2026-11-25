@@ -37,20 +37,28 @@ export function duplicateGroups(rows: DataEntryRow[]) {
   return [...groups.values()].filter((group) => group.length > 1)
 }
 
+/**
+ * Grupy do połączenia przy zapisie: tylko prawdziwy EAN. Kod zastępczy z faktury (indeks, nazwa) bywa ten sam przy
+ * różnych artykułach, więc takie wiersze łączy się tylko ręcznie.
+ */
+export function eanDuplicateGroups(rows: DataEntryRow[]) {
+  return duplicateGroups(rows.filter((row) => !row.eanFallback))
+}
+
 /** Grupy, w których ten sam EAN ma różne ceny zakupu. */
 export function priceConflicts(rows: DataEntryRow[]) {
   return duplicateGroups(rows).filter((group) => new Set(group.map((row) => row.unitNet)).size > 1)
 }
 
-/** Cena średnia ważona ilością (wartość netto / ilość); bez ilości zwykła średnia cen. */
+/** Cena średnia ważona ilością (wartość netto / ilość); bez ilości albo z ceną na minusie zwykła średnia cen. */
 function averagePrice(group: DataEntryRow[]) {
   const priced = group.filter((row) => row.unitNet !== null)
   if (priced.length === 0) return null
   const quantity = priced.reduce((sum, row) => sum + (row.quantity ?? 0), 0)
-  const allCounted = priced.every((row) => row.quantity !== null && row.quantity > 0)
+  const value = priced.reduce((sum, row) => sum + (row.quantity ?? 0) * (row.unitNet ?? 0), 0)
   const average =
-    allCounted && quantity > 0
-      ? priced.reduce((sum, row) => sum + (row.quantity ?? 0) * (row.unitNet ?? 0), 0) / quantity
+    quantity !== 0 && value / quantity >= 0
+      ? value / quantity
       : priced.reduce((sum, row) => sum + (row.unitNet ?? 0), 0) / priced.length
   return Math.round(average * 10000) / 10000
 }
@@ -67,12 +75,22 @@ export function withAveragedPrices(rows: DataEntryRow[]) {
 
 /** Wiersze z tym samym EAN-em złączone w pierwszy z nich: ilości zsumowane, cena średnia. */
 export function withMergedDuplicates(rows: DataEntryRow[]) {
+  return withMergedGroups(rows, duplicateGroups(rows))
+}
+
+/** To samo przy zapisie: tylko wiersze z prawdziwym EAN-em ({@link eanDuplicateGroups}). */
+export function withMergedEans(rows: DataEntryRow[]) {
+  return withMergedGroups(rows, eanDuplicateGroups(rows))
+}
+
+function withMergedGroups(rows: DataEntryRow[], groups: DataEntryRow[][]) {
   const merged = new Map<string, DataEntryRow>()
   const removed = new Set<string>()
-  for (const group of duplicateGroups(rows)) {
+  for (const group of groups) {
     const [first, ...rest] = group
     const counted = group.filter((row) => row.quantity !== null)
-    const quantity = counted.length === 0 ? null : Math.round(counted.reduce((sum, row) => sum + (row.quantity ?? 0), 0) * 1000) / 1000
+    const quantity =
+      counted.length === 0 ? null : Math.round(counted.reduce((sum, row) => sum + (row.quantity ?? 0), 0) * 1000) / 1000
     merged.set(first.id, { ...first, quantity, unitNet: averagePrice(group) })
     for (const row of rest) removed.add(row.id)
   }

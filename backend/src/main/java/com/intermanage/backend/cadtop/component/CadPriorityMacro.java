@@ -22,7 +22,9 @@ import com.intermanage.backend.importguide.component.ReportSaveMacro;
  * bo bez dostawcy, opakowania i ceny powstałby pusty wpis.
  *
  * <p>Karta bez kodu CN pokazuje przy wczytaniu „Kody CN, GTU i Split Payment są wymagane”: makro zamyka komunikat,
- * wpisuje w „Kod CN:” (ar-e131) kod {@value #CN}, zapisuje kartę i dopiero potem przechodzi do ITM8.
+ * wpisuje w „Kod CN:” (ar-e131) kod {@value #CN}, zapisuje kartę i dopiero potem przechodzi do ITM8. Zamiast niego
+ * bywa „VAT tego artykułu VAT 5 % nie jest już dozwolony przez dowiązany kod CN…”: kod CN wpisuje się tak samo, a po
+ * powrocie na kartę w „Kod VAT” kod stawki z komunikatu ({@link #VAT_RATES}).
  */
 public final class CadPriorityMacro {
 
@@ -62,6 +64,16 @@ public final class CadPriorityMacro {
     private static final String CN_BACK = "btn_Retour_LnkBouton";
     /** Ekran kodu CN odpowiada szybko (sprawdzone 25.11.2026), więc krótsze przerwy niż przy zapisie karty. */
     private static final int CN_STEP_MS = 500;
+    /** „VAT tego artykułu VAT 5 % nie jest już dozwolony przez dowiązany kod CN…” (skan 25.11.2026). */
+    private static final String VAT_ALERT = "dozwolony";
+    private static final String CARD_VAT = "lstZ22_CodeTVA_TxtBox";
+    private static final int NEXT_ALERT_MS = 100;
+
+    /** Stawka z komunikatu i jej kod w Mercalys ({@code products.vat_code}). */
+    private record VatRate(int percent, int code) {
+    }
+
+    private static final List<VatRate> VAT_RATES = List.of(new VatRate(5, 6), new VatRate(8, 2), new VatRate(23, 1));
     /** Pytania po Zatwierdź na karcie: zapis i, czasem, sprzedaż ze stratami. */
     private static final String CARD_SAVE_QUESTIONS = "zachowa;stratami";
     private static final String CARD_APPROVE = "btnB6_Valider_LnkBouton";
@@ -114,6 +126,9 @@ public final class CadPriorityMacro {
         String cnCheck = "cn-" + card;
         String cnReady = "cn-jest-" + card;
         String noCn = "brak-cn-" + card;
+        String cnSave = "zapis-cn-" + card;
+        String cnOnly = "sam-cn-" + card;
+        String noVat = "brak-vat-" + card;
         String change = "zmien-" + card;
         String question = "pytanie-" + card;
         String back = "powrot-" + card;
@@ -134,9 +149,24 @@ public final class CadPriorityMacro {
         // Komunikat o kodach CN może wstrzymać wczytanie karty, więc brak nazwy rozstrzyga się dopiero po nim.
         out.add("WEBIFVALUE|" + WINDOW + "|" + CARD_NAME + "|\\S|" + cnCheck + "|" + LOAD_TIMEOUT_MS);
         out.add("LABEL|" + cnCheck);
-        out.add("IFDIALOG|" + ALERT + "|Kody CN|Fermer|" + cnReady + "|" + CN_ALERT_MS);
+        out.add("WEBIFSEEN|" + ALERT + "|Fermer|" + cnReady + "|" + CN_ALERT_MS);
+        for (VatRate rate : VAT_RATES) {
+            String otherRate = "nie-vat" + rate.percent() + "-" + card;
+            out.add("IFDIALOG|" + ALERT + "|VAT " + rate.percent() + " %|Fermer|" + otherRate + "|" + NEXT_ALERT_MS);
+            out.addAll(checkCard(ean, noCard, otherEan, LOAD_TIMEOUT_MS));
+            out.addAll(enterCn(noCn));
+            out.addAll(enterVat(rate.code(), noVat));
+            out.add(jump(cnSave, "VAT z komunikatu na karcie " + card + ": " + rate.percent() + " %"));
+            out.add("LABEL|" + otherRate);
+        }
+        out.add("IFDIALOG|" + ALERT + "|" + VAT_ALERT + "|Fermer|" + cnOnly + "|" + NEXT_ALERT_MS);
+        out.add(jump(clear, skippedLine(card, "komunikat o VAT ze stawką, której makro nie zna")));
+        out.add("LABEL|" + cnOnly);
+        out.add("IFDIALOG|" + ALERT + "|Kody CN|Fermer|" + cnReady + "|" + NEXT_ALERT_MS);
         out.addAll(checkCard(ean, noCard, otherEan, LOAD_TIMEOUT_MS));
         out.addAll(enterCn(noCn));
+        out.add("LABEL|" + cnSave);
+        out.addAll(saveCard(noCn));
         out.add("LABEL|" + cnReady);
         out.addAll(checkCard(ean, noCard, otherEan, CARD_CHECK_MS));
         out.add("WEBCLICK|" + WINDOW + "|" + ITM8_BUTTON);
@@ -187,6 +217,9 @@ public final class CadPriorityMacro {
         out.add("LABEL|" + noCn);
         out.add("WEBDIALOG|" + ALERT + "|CN;GTU;Split;stawk|Fermer|1500");
         out.add(jump(leave, skippedLine(card, "nie udało się wpisać kodu CN na karcie")));
+        out.add("LABEL|" + noVat);
+        out.add("WEBDIALOG|" + ALERT + "|" + VAT_ALERT + ";stawk|Fermer|1500");
+        out.add(jump(leave, skippedLine(card, "karta nie przyjęła stawki VAT z komunikatu")));
         out.add("LABEL|" + creates);
         out.add("WEBDIALOG|" + DIALOG + "|Utworzy|Non|3000");
         out.add(jump(leave, skippedLine(card, "ITM8 " + top + " nie ma jeszcze na tej karcie w Mercalys")));
@@ -239,8 +272,8 @@ public final class CadPriorityMacro {
     }
 
     /**
-     * „Kod CN:” z karty (ar-e131, skan 25.11.2026): kod w polu, Enter, Enter, Tak, Powrót, potem zapis karty. Kod
-     * sprawdza się na ekranie CN przed zapisem, bo karta pola z kodem nie ma.
+     * „Kod CN:” z karty (ar-e131, skan 25.11.2026): kod w polu, Enter, Enter, Tak, Powrót na kartę, którą zapisuje
+     * dopiero {@link #saveCard}.
      */
     private static List<String> enterCn(String noCn) {
         return List.of(
@@ -256,7 +289,21 @@ public final class CadPriorityMacro {
                 "SLEEP|" + CN_STEP_MS,
                 "WEBCLICK|" + WINDOW + "|" + CN_BACK,
                 "WEBDIALOG|" + DIALOG + "|zachowa;zapis|Oui|1500",
-                "WEBIFSEEN|" + WINDOW + "|" + RESET + "|" + noCn + "|" + PAGE_TIMEOUT_MS,
+                "WEBIFSEEN|" + WINDOW + "|" + RESET + "|" + noCn + "|" + PAGE_TIMEOUT_MS);
+    }
+
+    /** Kod stawki z komunikatu w „Kod VAT” na karcie, po wyjściu z ekranu kodu CN; karta może o nią znów zapytać. */
+    private static List<String> enterVat(int code, String noVat) {
+        return List.of(
+                "WEBDIALOG|" + ALERT + "|" + VAT_ALERT + "|Fermer|" + CN_STEP_MS,
+                "WEBKEY|" + WINDOW + "|" + CARD_VAT + "|^a" + code + "{Tab}",
+                "SLEEP|" + CN_STEP_MS,
+                "WEBDIALOG|" + ALERT + "|" + VAT_ALERT + ";" + LOSS_ALERT + "|Fermer|" + CN_STEP_MS,
+                "WEBIFVALUE|" + WINDOW + "|" + CARD_VAT + "|^\\s*0*" + code + "\\s*$|" + noVat + "|5000");
+    }
+
+    private static List<String> saveCard(String noCn) {
+        return List.of(
                 "WEBCLICK|" + WINDOW + "|" + CARD_APPROVE,
                 // Rzadko przed albo po „Czy zachować wpis?” przychodzi „Sprzedaż ze stratami! … Czy potwierdzasz”
                 // (BoiteConfirmation, Tak / Nie): oba pytania zatwierdza się Tak, w dowolnej kolejności.

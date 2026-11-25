@@ -69,7 +69,8 @@ class CadPriorityMacroTests {
     void entersCnCodeWhenCardRequiresIt() {
         assertThat(List.of(macro.split("\r\n"))).containsSubsequence(
                 "WEBKEY|Mercalys|txtZ1_CodeITM_TxtBox|^a604{Enter}",
-                "IFDIALOG|okno dialogowe strony|Kody CN|Fermer|cn-jest-604|500",
+                "WEBIFSEEN|okno dialogowe strony|Fermer|cn-jest-604|500",
+                "IFDIALOG|okno dialogowe strony|Kody CN|Fermer|cn-jest-604|100",
                 "WEBIFVALUE|Mercalys|txtZ4_CodeEAN_TxtBox|^0*5900983005014$|inny-ean-604|3000",
                 "WEBCLICK|Mercalys|Lnk_CodeCN_LnkAviso",
                 "WEBPAGE|Mercalys|ar-e131|txt_CodeCn_TxtBox|30000",
@@ -84,6 +85,29 @@ class CadPriorityMacroTests {
                 "WEBDIALOG|Les Mousquetaires|zachowa;stratami|Oui|1500",
                 "LABEL|cn-jest-604",
                 "WEBCLICK|Mercalys|lnkZ1_CodeITM_LnkAviso");
+    }
+
+    /** „VAT … 5 % nie jest już dozwolony przez dowiązany kod CN”: kod CN, potem kod stawki z komunikatu i zapis karty. */
+    @Test
+    void setsVatFromAlertAfterCnCode() {
+        assertThat(List.of(macro.split("\r\n"))).containsSubsequence(
+                "IFDIALOG|okno dialogowe strony|VAT 5 %|Fermer|nie-vat5-604|100",
+                "WEBIFVALUE|Mercalys|txtZ4_CodeEAN_TxtBox|^0*5900983005014$|inny-ean-604|3000",
+                "WEBKEY|Mercalys|txt_CodeCn_TxtBox|^a99999980",
+                "WEBCLICK|Mercalys|btn_Retour_LnkBouton",
+                "WEBKEY|Mercalys|lstZ22_CodeTVA_TxtBox|^a6{Tab}",
+                "WEBIFVALUE|Mercalys|lstZ22_CodeTVA_TxtBox|^\\s*0*6\\s*$|brak-vat-604|5000",
+                "WEBIFSEEN|ahk_id 1|brak|zapis-cn-604|0|VAT z komunikatu na karcie 604: 5 %",
+                "IFDIALOG|okno dialogowe strony|VAT 8 %|Fermer|nie-vat8-604|100",
+                "WEBKEY|Mercalys|lstZ22_CodeTVA_TxtBox|^a2{Tab}",
+                "IFDIALOG|okno dialogowe strony|VAT 23 %|Fermer|nie-vat23-604|100",
+                "WEBKEY|Mercalys|lstZ22_CodeTVA_TxtBox|^a1{Tab}",
+                "IFDIALOG|okno dialogowe strony|dozwolony|Fermer|sam-cn-604|100",
+                "LABEL|sam-cn-604",
+                "LABEL|zapis-cn-604",
+                "WEBCLICK|Mercalys|btnB6_Valider_LnkBouton",
+                "LABEL|cn-jest-604");
+        assertThat(CadPriorityMacro.skipped("VAT z komunikatu na karcie 604: 5 %")).isEmpty();
     }
 
     /** Odtwarzacz szuka etykiety tylko w przód, a linie dzieli po znaku |. */

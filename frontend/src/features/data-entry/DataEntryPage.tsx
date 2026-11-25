@@ -125,9 +125,11 @@ import {
 import { DataEntryGrid, type GridHandle } from './DataEntryGrid'
 import {
   duplicateGroups,
+  eanDuplicateGroups,
   priceConflicts,
   withAveragedPrices,
   withMergedDuplicates,
+  withMergedEans,
   withSyncedDuplicates,
 } from './duplicates'
 import {
@@ -1147,7 +1149,6 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
   const conflicts = priceConflicts(rows)
   const duplicates = duplicateGroups(rows)
-  const duplicateRows = duplicates.reduce((sum, group) => sum + group.length, 0)
 
   const averagePrices = () =>
     changeAll(
@@ -1155,11 +1156,12 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       `Uśredniono ceny ${conflicts.length} ${conflicts.length === 1 ? 'artykułu' : 'artykułów'}`,
     )
 
-  const mergeDuplicates = () =>
-    changeAll(
-      withMergedDuplicates,
-      `Połączono ${duplicateRows} ${pieces(duplicateRows)} w ${duplicates.length} ${duplicates.length === 1 ? 'wiersz' : 'wiersze'}`,
-    )
+  const mergedMessage = (groups: DataEntryRow[][]) => {
+    const count = groups.reduce((sum, group) => sum + group.length, 0)
+    return `Połączono ${count} ${pieces(count)} w ${groups.length} ${groups.length === 1 ? 'wiersz' : 'wiersze'}`
+  }
+
+  const mergeDuplicates = () => changeAll(withMergedDuplicates, mergedMessage(duplicates))
 
   const clearAll = () => {
     const before = currentDraft()
@@ -1486,7 +1488,15 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
     if (hasProblems) setCheckOpen(true)
     else void runSave()
   }
+  // Program sklepu bierze z pozycji z tym samym EAN-em cenę pierwszej, więc zapis sam łączy je w jeden wiersz i klika
+  // „Zapisz” jeszcze raz, po przerysowaniu z połączoną tabelą. Korekta zostaje: jej makro potrzebuje każdej pozycji.
   const onSaveClick = () => {
+    const toMerge = invoice?.correction ? [] : eanDuplicateGroups(rows)
+    if (toMerge.length > 0) {
+      changeAll(withMergedEans, mergedMessage(toMerge))
+      setTimeout(() => saveButton.current?.click(), 0)
+      return
+    }
     if (saved) setResaveOpen(true)
     else checkAndSave()
   }
